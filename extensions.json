@@ -1,0 +1,18 @@
+{
+    "recommendations": [
+        "yzhang.markdown-all-in-one",
+		"eamodio.gitlens",
+        "dbaeumer.vscode-eslint",
+        "github.vscode-pull-request-github",
+        "orta.vscode-jest",
+        "ms-python.vscode-pylance",
+        "ms-python.python",
+        "redhat.vscode-yaml",
+        "atlassian.atlascode",
+        "psioniq.psi-header",
+        "github.copilot",
+        "ms-vscode-remote.remote-containers",
+        "batisteo.vscode-django",
+        "ms-azuretools.vscode-docker"
+    ]
+}
