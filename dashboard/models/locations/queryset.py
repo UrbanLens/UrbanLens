@@ -15,7 +15,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import logging
 # Django Imports
-from djangofoundry import models
 # App Imports
 from dashboard.models import abstract
 

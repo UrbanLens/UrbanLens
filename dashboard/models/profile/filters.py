@@ -4,4 +4,4 @@ from .model import Profile
 class ProfileFilter(filters.FilterSet):
     class Meta:
         model = Profile
-        fields = ['user', 'bio', 'birthdate', 'location']
+        fields = ['user']

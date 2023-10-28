@@ -15,9 +15,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import logging
 # Django Imports
-from django.db.models import Index
+from django.db.models import Index, CASCADE
 # 3rd Party Imports
-from djangofoundry.models.fields import CharField, DecimalField, InsertedNowField, UpdatedNowField
+from djangofoundry.models.fields import CharField, DecimalField, InsertedNowField, UpdatedNowField, ForeignKey
 # App Imports
 from dashboard.models import abstract
 from dashboard.models.locations.queryset import Manager
@@ -36,9 +36,7 @@ class Location(abstract.Model):
     name = CharField(max_length=255)
     latitude = DecimalField(max_digits=9, decimal_places=6)
     longitude = DecimalField(max_digits=9, decimal_places=6)
-    created = InsertedNowField()
-    updated = UpdatedNowField()
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='locations')
+    profile = ForeignKey(Profile, on_delete=CASCADE, related_name='locations')
 
     objects = Manager()
 

@@ -19,6 +19,7 @@ import logging
 from django.db.utils import IntegrityError
 # Lib Imports
 from djangofoundry.models import Model as FoundryModel
+from djangofoundry.models.fields import InsertedNowField, UpdatedNowField
 from djangofoundry.mixins.dirtyfields import DirtyFields
 # App Imports
 from dashboard.models.abstract.queue import Queue
@@ -36,6 +37,8 @@ class Model(FoundryModel):
 	'''
 	A base model that all other models in this app inherit from.
 	'''
+	created = InsertedNowField()
+	updated = UpdatedNowField()
 	queue: Queue = Queue()
 	objects: Manager = Manager()
 
