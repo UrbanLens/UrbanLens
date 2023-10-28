@@ -1,0 +1,39 @@
+{% load render_bundle from webpack_loader %}
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Dashboard View</title>
+    
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+
+    {% load static %}
+    <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">
+    <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}" />
+
+    <!-- Compiled and minified JavaScript -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"
+        integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+    <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
+
+    <!--Let browser know website is optimized for mobile-->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+
+<body>
+
+        {% block top-content %}{% endblock %}
+        <div id="svelte-app" />
+        {% block bottom-content %}{% endblock %}
+    
+        <!--  Scripts-->
+        <script>
+                var csrftoken = '{{ csrf_token }}';
+        </script>
+        <script src="{% static 'dashboard/js/index.js' %}" type="module"></script>
+        {% block scripts %}{% endblock %}
+
+</body>
+</html>
