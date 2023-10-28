@@ -36,3 +36,4 @@ bin/conf/
 *.sqlite3-journal
 *db.sqlite3
 pgsql
+.aider*
