@@ -21,6 +21,7 @@ from djangofoundry.models.fields import CharField, DecimalField, InsertedNowFiel
 # App Imports
 from dashboard.models import abstract
 from dashboard.models.locations.queryset import Manager
+from dashboard.models.profile.model import Profile
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.
@@ -37,6 +38,7 @@ class Location(abstract.Model):
     longitude = DecimalField(max_digits=9, decimal_places=6)
     created = InsertedNowField()
     updated = UpdatedNowField()
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='locations')
 
     objects = Manager()
 
