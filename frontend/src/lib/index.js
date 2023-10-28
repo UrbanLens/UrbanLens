@@ -1,7 +1,5 @@
-import App from '../App.svelte';
+import { start } from '@sveltejs/kit/ssr';
 
-const app = new App({
+start({
   target: document.getElementById('svelte-app'),
 });
-
-export default app;
