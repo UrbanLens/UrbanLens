@@ -1,0 +1,38 @@
+# Server state - Could contain sensitive details
+*.log
+
+# Compiled code
+__pycache__/
+.pytest_cache
+*.pyc
+**/frontend/static/
+
+# Libraries (npm, etc)
+node_modules
+package-lock.json
+venv/
+
+# Temporary files
+*.out
+UrbanLens/errors.log
+
+# Outdated, deprecated, etc
+**/_deprecated*
+sample_data.py
+old/
+
+# VSCode stuff per user
+.vscode
+.favorites.json
+notes/
+.coverage
+
+# Secrets, authentication, etc
+.env
+Credentials.yaml
+bin/conf/
+
+# Database files
+*.sqlite3-journal
+*db.sqlite3
+pgsql

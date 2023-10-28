@@ -1,0 +1,118 @@
+################################################################################
+#                                                                              #
+# Metadata:                                                                    #
+#                                                                              #
+#     File: .prospector.yaml                                                   #
+#     Project: UrbanLens                                                       #
+#     Author: Jess Mann                                                        #
+#     Email: jess@manlyphotos.com                                              #
+#                                                                              #
+#     -----                                                                    #
+#                                                                              #
+#     Copyright (c) 2023 UrbanLens                                             #
+################################################################################
+output-format: text
+
+strictness: veryhigh
+test-warnings: true
+doc-warnings: false
+member-warnings: true
+
+uses:
+  - django
+
+pep8:
+  full: true
+  disable:
+    - D100
+    - D101
+    - D102
+    - D103
+    - D105
+    - D205
+    - D400
+    - F401 # imported but unused
+    - W191 # indentation contains tabs
+    - W292 # no newline at end of file
+    - W391 # blank line at end of file
+    - E128 # continuation line under-indented for visual indent
+    - E201 # whitespace after '('
+    - E202 # whitespace before ')'
+    - E203 # whitespace before ':'
+    - E251 # unexpected spaces around keyword / parameter equals
+    - E261 # at least two spaces before inline comment
+    - E302 # expected 2 blank lines, found 1
+    - E303 # too many blank lines (3)
+    - E305 # expected 2 blank lines after class or function definition, found 1
+    - N802 # function name should be lowercase, breaks on tests
+    - N815 # mixedCase variable in function scope
+  options:
+    max-line-length: 500
+    indent-size: 1
+    indent-style: tab
+
+pyflakes:
+  disable:
+    - F999
+
+
+pylint:
+  options:
+    max-line-length: 500
+    indent-size: 1
+    indent-style: tab
+  disable:
+    - too-few-public-methods
+    - invalid-name
+    - no-self-use
+    - no-member
+    - raw-checker-failed
+    - bad-inline-option
+    - locally-disabled
+    - file-ignored
+    - suppressed-message
+    - useless-suppression
+    - deprecated-pragma
+    - use-symbolic-message-instead
+    - missing-function-docstring
+    - redundant-returns-doc
+    - pointless-string-statement
+    - multiple-imports
+    - missing-final-newline
+    - empty-comment
+    - too-few-public-methods
+    - too-many-lines
+    - broad-exception-caught
+    - logging-fstring-interpolation
+    - too-many-ancestors
+    - too-many-arguments
+    - trailing-newlines
+    - too-many-instance-attributes
+    - unnecessary-pass
+
+dodgy:
+  run: true
+
+ignore-paths:
+  - node_modules
+  - venv
+  - env
+  - .env
+  - .venv
+  - manage.py
+  - Boilerplate
+  - .vscode
+  - docs
+  - old
+  - pgsql
+  - MockData
+  - dashboard/migrations
+  - template_blank.py
+
+ignore-patterns:
+  - .+[\\/]migrations(/|\\|$)
+  - .+[\\/]settings(/|\\|$)
+  - .+[\\/]downloads(/|\\|$)
+  - .+[\\/]logs(/|\\|$)
+  - .+[\\/]node_modules(/|\\|$)
+  - .+[\\/]_pycache_(/|\\|$)
