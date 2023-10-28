@@ -2,7 +2,7 @@
  *                                                                             *
  * Metadata:                                                                   *
  *                                                                             *
- * 	File: index.test.js                                                        *
+ * 	File: types.js                                                             *
  * 	Project: rita                                                              *
  * 	Created: 02 Oct 2023                                                       *
  * 	Author: Jess Mann                                                          *
@@ -17,13 +17,24 @@
  *                                                                             *
  * 	Copyright (c) 2023 Jess Mann                                               *
  *******************************************************************************/
+/**
+ * @typedef {Object} RitaModel
+ * @property {number} id
+ */
 
 /**
-import { describe, it, expect } from 'vitest';
+ * @typedef {RitaModel & Object} PersonModel
+ * @property {string} name
+ */
 
-describe('sum test', () => {
-	it('adds 1 + 2 to equal 3', () => {
-		expect(1 + 2).toBe(3);
-	});
-});
-*/
+/**
+ * @typedef {RitaModel & Object} DocumentModel
+ * @property {string} title
+ */
+
+/**
+ * @typedef {RitaModel & Object} CaseModel
+ * @property {string} title
+ */
+
+export { };
