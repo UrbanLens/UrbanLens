@@ -4,4 +4,4 @@ from .model import Profile
 class ProfileFilter(filters.FilterSet):
     class Meta:
         model = Profile
-        fields = ['user']
+        fields = ['user', 'icon', 'categories', 'priority', 'last_visited']
