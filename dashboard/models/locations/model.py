@@ -38,6 +38,7 @@ class Location(abstract.Model):
 
     name = CharField(max_length=255)
     icon = CharField(max_length=255)
+    description = CharField(max_length=500, null=True, blank=True)
     categories = ManyToManyField(Category)
     priority = IntegerField()
     last_visited = DateTimeField(null=True, blank=True)
