@@ -33,7 +33,14 @@ class Location(abstract.Model):
     """
     Records location data.
     """
+    from django.db.models import DateTimeField, IntegerField, ManyToManyField
+    from dashboard.models.categories.model import Category
+
     name = CharField(max_length=255)
+    icon = CharField(max_length=255)
+    categories = ManyToManyField(Category)
+    priority = IntegerField()
+    last_visited = DateTimeField(null=True, blank=True)
     latitude = DecimalField(max_digits=9, decimal_places=6)
     longitude = DecimalField(max_digits=9, decimal_places=6)
     profile = ForeignKey(Profile, on_delete=CASCADE, related_name='locations')
@@ -46,5 +53,9 @@ class Location(abstract.Model):
 
         indexes = [
             Index(fields=['name']),
+            Index(fields=['icon']),
+            Index(fields=['categories']),
+            Index(fields=['priority']),
+            Index(fields=['last_visited']),
             Index(fields=['latitude', 'longitude']),
         ]
