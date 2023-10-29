@@ -36,6 +36,13 @@ class Location(abstract.Model):
     from django.db.models import DateTimeField, IntegerField, ManyToManyField
     from dashboard.models.categories.model import Category
 
+    VISITED = 1
+    WISH_TO_VISIT = 2
+    STATUS_CHOICES = [
+        (VISITED, 'Visited'),
+        (WISH_TO_VISIT, 'Wish to Visit'),
+    ]
+
     name = CharField(max_length=255)
     icon = CharField(max_length=255)
     description = CharField(max_length=500, null=True, blank=True)
@@ -46,6 +53,7 @@ class Location(abstract.Model):
     longitude = DecimalField(max_digits=9, decimal_places=6)
     profile = ForeignKey(Profile, on_delete=CASCADE, related_name='locations')
     pin_icon = ImageField(upload_to='pin_icons/', null=True, blank=True)
+    status = IntegerField(choices=STATUS_CHOICES, default=WISH_TO_VISIT)
 
     objects = Manager()
 

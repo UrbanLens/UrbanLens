@@ -21,12 +21,14 @@ class LocationViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user, profile=self.request.user.profile)
+        serializer.save(user=self.request.user, profile=self.request.user.profile, status=self.request.data.get('status', Location.WISH_TO_VISIT))
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         if instance.user != request.user:
             return Response(status=status.HTTP_403_FORBIDDEN)
+        instance.status = request.data.get('status', instance.status)
+        instance.save()
         return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
