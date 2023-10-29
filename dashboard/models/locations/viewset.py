@@ -8,9 +8,8 @@ class LocationViewSet(viewsets.ModelViewSet):
     filter_class = LocationFilter
     def get_queryset(self):
         queryset = Location.objects.filter(user=self.request.user)
-        category = self.request.query_params.get('category', None)
-        if category is not None:
-            queryset = queryset.filter(categories__name=category)
+        filter_backends = [filters.DjangoFilterBackend]
+        filterset_class = LocationFilter
         return queryset
     serializer_class = LocationSerializer
 
