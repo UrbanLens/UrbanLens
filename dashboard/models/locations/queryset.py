@@ -14,7 +14,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import logging
+from datetime import datetime
 # Django Imports
+from django.db.models import Q
 # App Imports
 from dashboard.models import abstract
 
@@ -22,9 +24,6 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
-
-from django.db.models import Q
-from datetime import datetime
 
 class QuerySet(abstract.QuerySet):
     '''
