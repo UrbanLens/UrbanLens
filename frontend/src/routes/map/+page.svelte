@@ -42,9 +42,6 @@
     	lat = map.getCenter().lat;
   }
 
-	let selectedLocation = null;
-	let showLocationModal = false;
-
 	onMount(async () => {
 		const initialState = { lng: lng, lat: lat, zoom: zoom };
 
@@ -69,7 +66,15 @@
   let showModal = false;
   let filterModal = false;
   let locationName = '';
+  let locationIcon = '';
   let locationDescription = '';
+  let locationCategories = '';
+  let locationPriority = 0;
+  let locationLastVisited = '';
+  let locationLatitude = 0;
+  let locationLongitude = 0;
+  let locationProfile = '';
+  let locationPinIcon = '';
   let selectedCategory = '';
   let categories = [];
 
