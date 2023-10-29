@@ -88,6 +88,13 @@
     Longitude: {lng.toFixed(4)} | Latitude: {lat.toFixed(4)} | Zoom: {zoom.toFixed(2)}
   </div>
   <div class="map-wrap">
-    <div class="map" bind:this={mapContainer} />
+    <div class="map" bind:this={mapContainer} on:contextmenu|preventDefault={showContextMenu} />
+    {#if contextMenuVisible}
+      <div class="context-menu" style="top: {contextMenuY}px; left: {contextMenuX}px;">
+        <ul>
+          <li on:click={addLocation}>Add a location</li>
+        </ul>
+      </div>
+    {/if}
   </div>
 </div>
