@@ -2,8 +2,10 @@ from rest_framework import viewsets, status
 from rest_framework.response import Response
 from .model import Location
 from .serializer import LocationSerializer
+from .filterset import LocationFilter
 
 class LocationViewSet(viewsets.ModelViewSet):
+    filter_class = LocationFilter
     def get_queryset(self):
         return Location.objects.filter(user=self.request.user)
     serializer_class = LocationSerializer
