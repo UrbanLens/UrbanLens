@@ -20,6 +20,11 @@ class LocationViewSet(viewsets.ModelViewSet):
         logger.info(f"Create request initiated by user {request.user.id}")
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        latitude = serializer.validated_data.get('latitude')
+        longitude = serializer.validated_data.get('longitude')
+        nearby_locations = Location.objects.nearby_locations(latitude, longitude, radius=0.1)  # radius in km
+        if nearby_locations.exists():
+            return Response({"detail": "A location already exists within a small radius."}, status=status.HTTP_400_BAD_REQUEST)
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
         logger.info(f"Location created with id {serializer.data['id']}")

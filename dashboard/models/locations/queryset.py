@@ -63,6 +63,21 @@ class QuerySet(abstract.QuerySet):
     def by_updated_year(self, year):
         return self.filter(updated__year=year)
 
+    def nearby_locations(self, latitude, longitude, radius):
+        from django.db.models import F
+        from math import radians, sin, cos, sqrt, atan2
+        R = 6371  # radius of the Earth in km
+        lat1 = radians(latitude)
+        lon1 = radians(longitude)
+        lat2 = radians(F('latitude'))
+        lon2 = radians(F('longitude'))
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+        a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+        c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        distance = R * c
+        return self.filter(distance__lte=radius)
+
 class Manager(abstract.Manager.from_queryset(QuerySet)):
     '''
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
