@@ -48,8 +48,12 @@ for route, viewset in routes.items():
 	else:
 		router.register(route, viewset)
 
+from dashboard.views import login, logout
+
 urlpatterns = [
 	path('rest/', include(router.urls)),
+	path('api/login', login, name='login'),
+	path('api/logout', logout, name='logout'),
 	
 	# Send everything else to svelte
 	re_path(r'^.*$', SvelteController.as_view(), name="svelte"),

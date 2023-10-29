@@ -5,6 +5,11 @@
 
 <Header />
 
+<nav>
+  <a href="/login">Login</a>
+  <a href="/logout">Logout</a>
+</nav>
+
 <main style="padding: 20px;">
   <slot />
 </main>
