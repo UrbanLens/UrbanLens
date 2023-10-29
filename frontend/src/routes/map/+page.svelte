@@ -95,14 +95,30 @@
 <div>
   <div class="sidebar">
     Longitude: {lng.toFixed(4)} | Latitude: {lat.toFixed(4)} | Zoom: {zoom.toFixed(2)}
-    <button on:click={showFilterModal}>Filter</button>
+    <button on:click={() => filterModal = true}>Filter</button>
   </div>
   <script>
     let showModal = false;
     let filterModal = false;
     let locationName = '';
     let locationDescription = '';
-    let selectedCategory = ''; 
+    let selectedCategory = '';
+    let categories = [];
+
+    onMount(async () => {
+      const response = await fetch('/api/categories', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        categories = await response.json();
+      } else {
+        console.error('Failed to load categories');
+      }
+    });
 
     async function submitLocation() {
       const response = await fetch('/api/locations', {
@@ -149,6 +165,19 @@
         <input type="text" bind:value={locationProfile} placeholder="Profile" />
         <input type="file" bind:value={locationPinIcon} placeholder="Pin icon" />
         <button on:click={submitLocation}>Submit</button>
+      </div>
+    {/if}
+    {#if filterModal}
+      <div class="modal">
+        <h2>Filter locations</h2>
+        <select bind:value={selectedCategory}>
+          <option value="">-- Select a category --</option>
+          {#each categories as category}
+            <option value={category.id}>{category.name}</option>
+          {/each}
+        </select>
+        <button on:click={() => filterLocations(selectedCategory)}>Apply filter</button>
+        <button on:click={() => filterModal = false}>Close</button>
       </div>
     {/if}
   </div>
