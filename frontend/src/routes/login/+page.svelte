@@ -11,10 +11,21 @@
     });
   });
 
+  let savedPlaces = [];
+
   const login = () => {
     auth2.signIn().then(googleUser => {
       const id_token = googleUser.getAuthResponse().id_token;
       // Send the ID token to your server
+
+      // Fetch the list of saved places for the user
+      fetch('/api/saved-places', {
+        headers: {
+          'Authorization': `Bearer ${id_token}`
+        }
+      })
+      .then(response => response.json())
+      .then(data => savedPlaces = data);
     });
   };
 </script>
