@@ -60,36 +60,40 @@
 			updateData();
 		})
 
-		const response = await fetch('/api/locations', {
-			method: 'GET',
-			headers: {
-				'Content-Type': 'application/json'
-			}
-		});
-
-		if (response.ok) {
-			const locations = await response.json();
-			locations.forEach(location => {
-				const marker = new mapbox.Marker()
-					.setLngLat([location.lng, location.lat])
-					.addTo(map);
-
-				marker.getElement().addEventListener('click', () => {
-					selectedLocation = location;
-					showLocationModal = true;
-				});
-			});
-		} else {
-			console.error('Failed to load locations');
-		}
-	});
-
-
 	onDestroy(() => {
 		if (map) {
       map.remove();
     }
-	});
+  });
+
+  let showModal = false;
+  let filterModal = false;
+  let locationName = '';
+  let locationDescription = '';
+  let selectedCategory = '';
+  let categories = [];
+
+  async function submitLocation() {
+    const response = await fetch('/api/locations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${user.token}`
+      },
+      body: JSON.stringify({ name: locationName, description: locationDescription, lat, lng })
+    });
+
+    if (response.ok) {
+      showModal = false;
+    } else {
+      console.error('Failed to add location');
+    }
+  }
+
+  function addLocation() {
+    showModal = true;
+  }
+});
 </script>
 
 <div>
@@ -97,50 +101,6 @@
     Longitude: {lng.toFixed(4)} | Latitude: {lat.toFixed(4)} | Zoom: {zoom.toFixed(2)}
     <button on:click={() => filterModal = true}>Filter</button>
   </div>
-  <script>
-    let showModal = false;
-    let filterModal = false;
-    let locationName = '';
-    let locationDescription = '';
-    let selectedCategory = '';
-    let categories = [];
-
-    onMount(async () => {
-      const response = await fetch('/api/categories', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        categories = await response.json();
-      } else {
-        console.error('Failed to load categories');
-      }
-    });
-
-    async function submitLocation() {
-      const response = await fetch('/api/locations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}` // assuming user.token contains the JWT token
-        },
-        body: JSON.stringify({ name: locationName, description: locationDescription, lat, lng })
-      });
-
-      if (response.ok) {
-        showModal = false;
-      } else {
-        console.error('Failed to add location');
-      }
-    }
-
-    function addLocation() {
-      showModal = true;
-    }
-  </script>
 
   <div class="map-wrap">
     <div class="map" bind:this={mapContainer} on:contextmenu|preventDefault={showContextMenu} />
