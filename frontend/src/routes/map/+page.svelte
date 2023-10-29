@@ -42,6 +42,7 @@
   }
 
 	let selectedLocation = null;
+	let showLocationModal = false;
 
 	onMount(async () => {
 		const initialState = { lng: lng, lat: lat, zoom: zoom };
@@ -74,6 +75,7 @@
 
 				marker.getElement().addEventListener('click', () => {
 					selectedLocation = location;
+					showLocationModal = true;
 				});
 			});
 		} else {
