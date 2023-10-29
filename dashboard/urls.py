@@ -27,6 +27,7 @@ from django.urls import path, include, re_path
 from rest_framework import routers
 from dashboard.controllers.svelte import SvelteController
 from dashboard.models import categories, comments, images, locations, profile
+from dashboard.controllers import login, logout
 
 app_name = 'dashboard'
 
@@ -48,7 +49,6 @@ for route, viewset in routes.items():
 	else:
 		router.register(route, viewset)
 
-from dashboard.views import login, logout
 
 urlpatterns = [
 	path('rest/', include(router.urls)),
