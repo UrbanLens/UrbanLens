@@ -5,3 +5,6 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = ['user', 'created', 'updated', 'avatar']
+        extra_kwargs = {
+            'avatar': {'read_only': True}
+        }

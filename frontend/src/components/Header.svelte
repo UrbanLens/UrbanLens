@@ -6,7 +6,11 @@
         <div class="nav-wrapper container">
             <a href="/dashboard" id="logo-container" class="brand-logo">UrbanLens</a>
             <ul class="right hide-on-med-and-down">
-                <li><a href="/profile"><i class="material-icons material-symbols-outlined left">account_circle</i>Profile</a></li>
+                {#if $user && $user.avatar}
+                    <li><a href="/profile"><img src={$user.avatar} alt="User avatar" class="circle responsive-img" style="width: 50px; height: 50px;"></a></li>
+                {:else}
+                    <li><a href="/profile"><i class="material-icons material-symbols-outlined left">account_circle</i>Profile</a></li>
+                {/if}
                 <li><a href="/map"><i class="material-icons material-symbols-outlined left">map</i>Map</a></li>
             </ul>
 
