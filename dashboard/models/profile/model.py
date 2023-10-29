@@ -9,6 +9,8 @@ from django.db.models import ImageField
 class Profile(Model):
     user = OneToOneField(User, on_delete=CASCADE)
     avatar = ImageField(upload_to='avatars/', null=True, blank=True)
+    instagram = CharField(max_length=255, null=True, blank=True)
+    discord = CharField(max_length=255, null=True, blank=True)
 
     objects = Manager()
 
