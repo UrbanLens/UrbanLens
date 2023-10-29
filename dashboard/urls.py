@@ -32,7 +32,7 @@ app_name = 'dashboard'
 
 # Define all our REST API routes
 routes = {
-	'categories': categories.viewset.CategoryViewSet,
+	'categories': categories.CategoryViewSet,
 	'comments': comments.CommentViewSet,
 	'images': images.ImageViewSet,
 	'locations': locations.LocationViewSet,
