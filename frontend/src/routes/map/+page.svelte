@@ -1,30 +1,75 @@
+<style>
+  .map {
+		position: absolute;
+		width: 100%;
+		height: 100%;
+	}
+  .sidebar {
+    background-color: rgba(35, 55, 75, 0.9);
+    color: #fff;
+    padding: 6px 12px;
+    font-family: monospace;
+    z-index: 1;
+    position: absolute;
+    top: 0;
+    left: 0;
+    margin: 12px;
+    border-radius: 4px;
+  }
+</style>
+
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import mapbox from 'mapbox-gl';
+	import "../../../node_modules/mapbox-gl/dist/mapbox-gl.css"
 
+  /**
+   * @type {mapbox.Map}
+   */
   let map;
-  let center = [40.730610, -73.935242]; // New York coordinates
+  /**
+   * @type {HTMLDivElement}
+   */
+  let mapContainer;
+  let lat = 42.65698624597273;
+  let lng = -73.75144231302086;
+  let zoom = 9;
 
-  onMount(async () => {
-    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
-    map = new mapboxgl.Map({
-      container: 'map',
-      style: 'mapbox://styles/mapbox/streets-v11',
-      center: center,
-      zoom: 12
-    });
+  function updateData() {
+    	zoom = map.getZoom();
+    	lng = map.getCenter().lng;
+    	lat = map.getCenter().lat;
+  }
 
-    new mapboxgl.Marker()
-      .setLngLat(center)
-      .addTo(map);
-  });
+	onMount(() => {
+		const initialState = { lng: lng, lat: lat, zoom: zoom };
+
+		map = new mapbox.Map({
+			container: mapContainer,
+			accessToken: import.meta.env.VITE_MAPBOX_API_TOKEN,
+			style: `mapbox://styles/mapbox/outdoors-v11`,
+			center: [initialState.lng, initialState.lat],
+			zoom: initialState.zoom,
+		});
+
+		map.on('move', () => {
+			updateData();
+		})
+	});
+
+
+	onDestroy(() => {
+		if (map) {
+      map.remove();
+    }
+	});
 </script>
 
-<div class="section no-pad-bot" id="index-banner">
-  <div class="container">
-    <h1 class="header center orange-text">Map</h1>
+<div>
+  <div class="sidebar">
+    Longitude: {lng.toFixed(4)} | Latitude: {lat.toFixed(4)} | Zoom: {zoom.toFixed(2)}
   </div>
-</div>
-
-<div class="container">
-  <div id="map" style="height: 500px;"></div>
+  <div class="map-wrap">
+    <div class="map" bind:this={mapContainer} />
+  </div>
 </div>

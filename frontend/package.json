@@ -40,7 +40,8 @@
 	"dependencies": {
 		"@svelteuidev/composables": "^0.15.3",
 		"@svelteuidev/core": "^0.15.3",
-		"svelte-google-maps": "^0.2.0",
+		"dotenv": "^16.3.1",
+		"mapbox-gl": "^2.15.0",
 		"svelte-routing": "^2.5.0"
 	}
 }
