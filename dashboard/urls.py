@@ -25,5 +25,32 @@ from __future__ import annotations
 from django.urls import path, include, re_path
 # 3rd Party imports
 from rest_framework import routers
+from dashboard.controllers.svelte import SvelteController
+from dashboard.models import categories, comments, images, locations, profile
 
 app_name = 'dashboard'
+
+# Define all our REST API routes
+routes = {
+	'categories': categories.viewset.CategoryViewSet,
+	'comments': comments.CommentViewSet,
+	'images': images.ImageViewSet,
+	'locations': locations.LocationViewSet,
+	'profile': profile.ProfileViewSet,
+}
+# Use the default router to define endpoints
+router = routers.DefaultRouter()
+
+# Register each viewset with the router
+for route, viewset in routes.items():
+	if hasattr(viewset, 'basename'):
+		router.register(route, viewset, basename = getattr(viewset, 'basename'))
+	else:
+		router.register(route, viewset)
+
+urlpatterns = [
+	path('rest/', include(router.urls)),
+	
+	# Send everything else to svelte
+	re_path(r'^.*$', SvelteController.as_view(), name="svelte"),
+]
