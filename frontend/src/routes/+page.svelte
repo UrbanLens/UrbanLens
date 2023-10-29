@@ -1,31 +1,17 @@
 <script>
+  import { Button, Typography, LayoutGrid } from 'svelte-material-ui';
 </script>
 
-<div class="section no-pad-bot" id="index-banner">
-  <div class="container">
-      <h1 class="header center orange-text">Urban Lens</h1>
-  </div>
-</div>
-
-<div class="container">
-  <div class="section">
-    <div class="row">
-      <div class="col s12 m4">
-        <div class="icon-block">
-          <h2 class="center light-blue-text head-icon"><i class="material-icons material-symbols-outlined">account_circle</i></h2>
-          <div class="row center">
-            <a href="/account" class="btn-large waves-effect waves-light orange">Account</a>
-          </div>
-        </div>
-      </div>
-      <div class="col s12 m4">
-        <div class="icon-block">
-          <h2 class="center light-blue-text head-icon"><i class="material-icons material-symbols-outlined">map</i></h2>
-          <div class="row center">
-            <a href="/map" class="btn-large waves-effect waves-light orange">Map</a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+<LayoutGrid style="height: 100vh; width: 100%;">
+  <LayoutGrid.Inner>
+    <LayoutGrid.Cell span="12">
+      <Typography variant="headline4" class="center-text">Urban Lens</Typography>
+    </LayoutGrid.Cell>
+    <LayoutGrid.Cell span="6">
+      <Button component="a" href="/account" raised>Account</Button>
+    </LayoutGrid.Cell>
+    <LayoutGrid.Cell span="6">
+      <Button component="a" href="/map" raised>Map</Button>
+    </LayoutGrid.Cell>
+  </LayoutGrid.Inner>
+</LayoutGrid>
