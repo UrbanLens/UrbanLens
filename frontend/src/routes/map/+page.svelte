@@ -32,18 +32,31 @@
    * @type {HTMLDivElement}
    */
   let mapContainer;
-  let lat = 42.65698624597273;
-  let lng = -73.75144231302086;
+  let lat;
+  let lng;
   let zoom = 9;
 
   function updateData() {
-    	zoom = map.getZoom();
-    	lng = map.getCenter().lng;
-    	lat = map.getCenter().lat;
+    zoom = map.getZoom();
+    lng = map.getCenter().lng;
+    lat = map.getCenter().lat;
   }
 
-	onMount(async () => {
-		const initialState = { lng: lng, lat: lat, zoom: zoom };
+  onMount(async () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((position) => {
+        lat = position.coords.latitude;
+        lng = position.coords.longitude;
+      }, () => {
+        lat = 42.65698624597273;
+        lng = -73.75144231302086;
+      });
+    } else {
+      lat = 42.65698624597273;
+      lng = -73.75144231302086;
+    }
+
+    const initialState = { lng: lng, lat: lat, zoom: zoom };
 
 		map = new mapbox.Map({
 			container: mapContainer,
