@@ -1,4 +1,22 @@
 <script>
+  import { onMount } from 'svelte';
+  import { user } from '../stores/user.js';
+
+  onMount(async () => {
+    const response = await fetch('/api/profile', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      user.set(data);
+    } else {
+      console.error('Failed to load user data');
+    }
+  });
 </script>
 
 <header>
