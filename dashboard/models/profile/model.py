@@ -1,5 +1,5 @@
 from django.contrib.auth.models import User
-from django.db.models import CASCADE, Index
+from django.db.models import CASCADE, Index, ManyToManyField
 from djangofoundry.models import OneToOneField, TextField, DateField, CharField, DateTimeField
 from dashboard.models.abstract.model import Model
 from dashboard.models.profile.queryset import Manager
@@ -11,6 +11,7 @@ class Profile(Model):
     avatar = ImageField(upload_to='avatars/', null=True, blank=True)
     instagram = CharField(max_length=255, null=True, blank=True)
     discord = CharField(max_length=255, null=True, blank=True)
+    friends = ManyToManyField('self', blank=True)
 
     objects = Manager()
 
