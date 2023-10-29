@@ -17,24 +17,5 @@
  *                                                                             *
  * 	Copyright (c) 2023 Jess Mann                                               *
  *******************************************************************************/
-/**
- * @typedef {Object} RitaModel
- * @property {number} id
- */
-
-/**
- * @typedef {RitaModel & Object} PersonModel
- * @property {string} name
- */
-
-/**
- * @typedef {RitaModel & Object} DocumentModel
- * @property {string} title
- */
-
-/**
- * @typedef {RitaModel & Object} CaseModel
- * @property {string} title
- */
 
 export { };
