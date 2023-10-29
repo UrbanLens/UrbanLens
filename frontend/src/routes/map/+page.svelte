@@ -4,7 +4,7 @@
     top: 0;
     bottom: 0;
     width: 100%;
-    height: calc(100vh - 60px); /* Adjust based on the height of your header and footer */
+    height: calc(100vh - 60px); 
   }
   .sidebar {
     background-color: rgba(35, 55, 75, 0.7); /* Make the sidebar slightly opaque */
@@ -13,7 +13,7 @@
     font-family: monospace;
     z-index: 1;
     position: absolute;
-    top: 10px; /* Position the sidebar at the top left of the map */
+    top: 10px; 
     left: 10px;
     border-radius: 4px;
   }
