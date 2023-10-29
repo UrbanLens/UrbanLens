@@ -52,6 +52,7 @@ from dashboard.views import login, logout
 
 urlpatterns = [
 	path('rest/', include(router.urls)),
+	path('api/locations', LocationViewSet.as_view({'get': 'list'}), name='locations'),
 	path('api/login', login, name='login'),
 	path('api/logout', logout, name='logout'),
 	

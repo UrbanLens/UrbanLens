@@ -41,7 +41,7 @@
     	lat = map.getCenter().lat;
   }
 
-	onMount(() => {
+	onMount(async () => {
 		const initialState = { lng: lng, lat: lat, zoom: zoom };
 
 		map = new mapbox.Map({
@@ -55,6 +55,24 @@
 		map.on('move', () => {
 			updateData();
 		})
+
+		const response = await fetch('/api/locations', {
+			method: 'GET',
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		});
+
+		if (response.ok) {
+			const locations = await response.json();
+			locations.forEach(location => {
+				new mapbox.Marker()
+					.setLngLat([location.lng, location.lat])
+					.addTo(map);
+			});
+		} else {
+			console.error('Failed to load locations');
+		}
 	});
 
 
