@@ -6,6 +6,7 @@ class Category(abstract.Model):
     Records category data.
     """
     name = CharField(max_length=255)
+    icon = CharField(max_length=255)
 
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_categories'
