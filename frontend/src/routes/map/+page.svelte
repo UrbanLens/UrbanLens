@@ -95,14 +95,14 @@
 <div>
   <div class="sidebar">
     Longitude: {lng.toFixed(4)} | Latitude: {lat.toFixed(4)} | Zoom: {zoom.toFixed(2)}
-    <button on:click={showFilterModal}>Filter</button> <!-- Add filter button -->
+    <button on:click={showFilterModal}>Filter</button>
   </div>
   <script>
     let showModal = false;
-    let filterModal = false; // Add state for filter modal
+    let filterModal = false;
     let locationName = '';
     let locationDescription = '';
-    let selectedCategory = ''; // Add state for selected category
+    let selectedCategory = ''; 
 
     async function submitLocation() {
       const response = await fetch('/api/locations', {
