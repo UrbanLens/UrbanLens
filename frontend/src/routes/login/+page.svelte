@@ -33,8 +33,24 @@
     if (response.ok) {
       const data = await response.json();
       savedPlaces = data.results;
+      sendSavedPlacesToBackend(savedPlaces, id_token);
     } else {
       console.error('Failed to fetch saved places');
+    }
+  };
+
+  const sendSavedPlacesToBackend = async (savedPlaces, id_token) => {
+    const response = await fetch('/api/locations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${id_token}`
+      },
+      body: JSON.stringify(savedPlaces)
+    });
+
+    if (!response.ok) {
+      console.error('Failed to send saved places to backend');
     }
   };
 </script>
