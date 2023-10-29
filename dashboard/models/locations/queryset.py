@@ -52,44 +52,17 @@ class QuerySet(abstract.QuerySet):
     def by_name(self, name):
         return self.filter(name__icontains=name)
 
-    def by_description(self, description):
-        return self.filter(description__icontains=description)
-
-    def by_icon(self, icon):
-        return self.filter(icon=icon)
-
     def by_profile(self, profile):
         return self.filter(profile=profile)
 
     def by_user(self, user):
         return self.filter(user=user)
 
-    def by_created_date(self, created_date):
-        return self.filter(created__date=created_date)
-
-    def by_updated_date(self, updated_date):
-        return self.filter(updated__date=updated_date)
-
-    def by_pin_icon(self, pin_icon):
-        return self.filter(pin_icon=pin_icon)
-
     def by_created_year(self, year):
         return self.filter(created__year=year)
 
     def by_updated_year(self, year):
         return self.filter(updated__year=year)
-
-    def by_created_month(self, month):
-        return self.filter(created__month=month)
-
-    def by_updated_month(self, month):
-        return self.filter(updated__month=month)
-
-    def by_created_day(self, day):
-        return self.filter(created__day=day)
-
-    def by_updated_day(self, day):
-        return self.filter(updated__day=day)
 
 class Manager(abstract.Manager.from_queryset(QuerySet)):
     '''
