@@ -96,7 +96,8 @@
       const response = await fetch('/api/locations', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}` // assuming user.token contains the JWT token
         },
         body: JSON.stringify({ name: locationName, description: locationDescription, lat, lng })
       });
