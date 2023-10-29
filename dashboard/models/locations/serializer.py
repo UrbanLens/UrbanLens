@@ -4,7 +4,7 @@ from .model import Location
 class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
-        fields = ['name', 'icon', 'categories', 'priority', 'last_visited', 'latitude', 'longitude', 'created', 'updated', 'profile', 'user', 'status']
+        fields = ['name', 'icon', 'categories', 'priority', 'last_visited', 'latitude', 'longitude', 'created', 'updated', 'profile', 'user', 'status', 'tags']
 
     def create(self, validated_data):
         user = validated_data.pop('user')

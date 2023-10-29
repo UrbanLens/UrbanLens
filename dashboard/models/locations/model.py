@@ -53,7 +53,11 @@ class Location(abstract.Model):
     longitude = DecimalField(max_digits=9, decimal_places=6)
     profile = ForeignKey(Profile, on_delete=CASCADE, related_name='locations')
     pin_icon = ImageField(upload_to='pin_icons/', null=True, blank=True)
+    from django.db.models import ManyToManyField
+    from dashboard.models.tags.model import Tag
+
     status = IntegerField(choices=STATUS_CHOICES, default=WISH_TO_VISIT)
+    tags = ManyToManyField(Tag, blank=True)
 
     objects = Manager()
 
