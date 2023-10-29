@@ -87,6 +87,32 @@
   <div class="sidebar">
     Longitude: {lng.toFixed(4)} | Latitude: {lat.toFixed(4)} | Zoom: {zoom.toFixed(2)}
   </div>
+  <script>
+    let showModal = false;
+    let locationName = '';
+    let locationDescription = '';
+
+    async function submitLocation() {
+      const response = await fetch('/api/locations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name: locationName, description: locationDescription, lat, lng })
+      });
+
+      if (response.ok) {
+        showModal = false;
+      } else {
+        console.error('Failed to add location');
+      }
+    }
+
+    function addLocation() {
+      showModal = true;
+    }
+  </script>
+
   <div class="map-wrap">
     <div class="map" bind:this={mapContainer} on:contextmenu|preventDefault={showContextMenu} />
     {#if contextMenuVisible}
@@ -94,6 +120,14 @@
         <ul>
           <li on:click={addLocation}>Add a location</li>
         </ul>
+      </div>
+    {/if}
+    {#if showModal}
+      <div class="modal">
+        <h2>Add a location</h2>
+        <input type="text" bind:value={locationName} placeholder="Location name" />
+        <input type="text" bind:value={locationDescription} placeholder="Location description" />
+        <button on:click={submitLocation}>Submit</button>
       </div>
     {/if}
   </div>
