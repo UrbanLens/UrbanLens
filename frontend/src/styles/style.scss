@@ -42,11 +42,12 @@ a:visited {
 }
 
 body {
-	main {
-		display: flex;
-		min-height: 100vh;
-		flex-direction: column;
-	}
+  main {
+    display: flex;
+    min-height: 100vh;
+    flex-direction: column;
+    position: relative; /* Make the main tag a positioned ancestor for the map */
+  }
 }
 
 header {

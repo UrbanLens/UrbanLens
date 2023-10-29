@@ -1,19 +1,20 @@
 <style>
   .map {
-		position: absolute;
-		width: 100%;
-		height: 100%;
-	}
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    height: calc(100vh - 60px); /* Adjust based on the height of your header and footer */
+  }
   .sidebar {
-    background-color: rgba(35, 55, 75, 0.9);
+    background-color: rgba(35, 55, 75, 0.7); /* Make the sidebar slightly opaque */
     color: #fff;
     padding: 6px 12px;
     font-family: monospace;
     z-index: 1;
     position: absolute;
-    top: 0;
-    left: 0;
-    margin: 12px;
+    top: 10px; /* Position the sidebar at the top left of the map */
+    left: 10px;
     border-radius: 4px;
   }
 </style>
