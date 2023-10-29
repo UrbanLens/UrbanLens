@@ -41,6 +41,8 @@
     	lat = map.getCenter().lat;
   }
 
+	let selectedLocation = null;
+
 	onMount(async () => {
 		const initialState = { lng: lng, lat: lat, zoom: zoom };
 
@@ -66,9 +68,13 @@
 		if (response.ok) {
 			const locations = await response.json();
 			locations.forEach(location => {
-				new mapbox.Marker()
+				const marker = new mapbox.Marker()
 					.setLngLat([location.lng, location.lat])
 					.addTo(map);
+
+				marker.getElement().addEventListener('click', () => {
+					selectedLocation = location;
+				});
 			});
 		} else {
 			console.error('Failed to load locations');
