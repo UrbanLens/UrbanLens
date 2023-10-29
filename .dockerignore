@@ -9,9 +9,9 @@ node_modules/
 docs/
 *~
 .vscode/
-dist/ 
+dist/
 build/
-.cache 
+.cache
 *_cache/
 *.log
 *.out

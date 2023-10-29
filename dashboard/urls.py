@@ -5,13 +5,13 @@
 
 		File: urls.py
 		Project: UrbanLens
-		
+
 		Author: Jess Mann
 		Email: jess@manlyphotos.com
 
 		-----
 
-		
+
 		Modified By: Jess Mann
 
 		-----
@@ -55,7 +55,7 @@ urlpatterns = [
 	path('api/locations', LocationViewSet.as_view({'get': 'list'}), name='locations'),
 	path('api/login', login, name='login'),
 	path('api/logout', logout, name='logout'),
-	
+
 	# Send everything else to svelte
 	re_path(r'^.*$', SvelteController.as_view(), name="svelte"),
 ]

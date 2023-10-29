@@ -4,13 +4,13 @@
 
 		File: exceptions.py
 		Project: Urban Lens
-		
+
 		Author: Jess Mann
 		Email: jess@manlyphotos.com
 
 		-----
 
-		
+
 		Modified By: Jess Mann
 
 		-----

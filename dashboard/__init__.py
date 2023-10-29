@@ -9,5 +9,5 @@
 
 		-----
 
-		Copyright (c) 2023 Urban Lens 
+		Copyright (c) 2023 Urban Lens
 """

@@ -4,18 +4,18 @@
 
 		File: routers.py
 		Project: UrbanLens
-		
+
 		Author: Jess Mann
 		Email: jess@manlyphotos.com
 
 		-----
 
-		
+
 		Modified By: Jess Mann
 
 		-----
 
-		Copyright (c) 2023 Urban Lens 
+		Copyright (c) 2023 Urban Lens
 """
 from django.urls import path
 from .consumers import RequestStatusConsumer

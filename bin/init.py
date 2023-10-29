@@ -14,7 +14,7 @@
  *                                                                             *
  * 	-----                                                                      *
  *                                                                             *
- * 	
+ *
  * 	Modified By: Jess Mann                                                     *
  *                                                                             *
  * 	-----                                                                      *
@@ -69,7 +69,7 @@ class DjangoProjectInitializer:
 	@property
 	def db_host(self) -> str:
 		return self._db_host
-	
+
 	@db_host.setter
 	def db_host(self, value : str):
 		# Strip special characters from the host
@@ -82,7 +82,7 @@ class DjangoProjectInitializer:
 	@property
 	def db_port(self) -> int:
 		return self._db_port
-	
+
 	@db_port.setter
 	def db_port(self, value : int):
 		# validate that value is a number
@@ -95,7 +95,7 @@ class DjangoProjectInitializer:
 	@property
 	def db_name(self) -> str:
 		return self._db_name
-	
+
 	@db_name.setter
 	def db_name(self, value : str):
 		# Strip special characters from the name
@@ -108,7 +108,7 @@ class DjangoProjectInitializer:
 	@property
 	def db_user(self) -> str:
 		return self._db_user
-	
+
 	@db_user.setter
 	def db_user(self, value : str):
 		# Strip special characters from the user
@@ -121,7 +121,7 @@ class DjangoProjectInitializer:
 	@property
 	def db_pass(self) -> str:
 		return self._db_pass
-	
+
 	@db_pass.setter
 	def db_pass(self, value : str):
 		# Strip special characters from the pass
@@ -130,11 +130,11 @@ class DjangoProjectInitializer:
 			# Only log the "safe" value to prevent injection attacks into the logfile
 			logger.error(f'Invalid database password. Stripped special characters.')
 			raise UnrecoverableError("Invalid database password.")
-		
+
 	@property
 	def environment(self) -> str:
 		return self._environment
-	
+
 	@environment.setter
 	def environment(self, value : str):
 		# Ensure environment is a known option
@@ -219,7 +219,7 @@ class DjangoProjectInitializer:
 		if self.check_db():
 			logger.info('Database UrbanLens already exists.')
 			return
-		
+
 		logger.info('Database UrbanLens does not exist. Creating...')
 
 		# Create the database
@@ -229,7 +229,7 @@ class DjangoProjectInitializer:
 		except subprocess.CalledProcessError as e:
 			logger.error('Error creating database UrbanLens: %s', e)
 			raise UnrecoverableError() from e
-		
+
 		if not self.check_db():
 			logger.error('Database UrbanLens was not created.')
 			raise UnrecoverableError('Database UrbanLens was not created.')
@@ -286,15 +286,15 @@ class DjangoProjectInitializer:
 
 
 			# Set datacache properties
-			props = { 
-				'db_host': 'Host',  
+			props = {
+				'db_host': 'Host',
 				'db_port': 'Port',
 				'db_name': 'Database',
 				'db_user': 'Username',
 				'db_pass': 'Password',
 			}
 
-			for prop_key, data_key in props.items(): 
+			for prop_key, data_key in props.items():
 				prop = getattr(self, prop_key)
 				if prop:
 					data['DB']['datacache'][data_key] = prop
@@ -391,7 +391,7 @@ class DjangoProjectInitializer:
 		Raises:
 			UnrecoverableError: if the frontend fails to build
 		"""
-		# First, ensure that all directories for build files exist. 
+		# First, ensure that all directories for build files exist.
 		# This is necessary because the build process will not create them, and will fail if they do not exist.
 		apps = [ 'dashboard', 'peoplesoft', 'core' ]
 		dirs = []
@@ -417,7 +417,7 @@ class DjangoProjectInitializer:
 					command = ['npm', 'run', 'build']
 				case _:
 					command = ['npm', 'run', 'deploy']
-				
+
 			# Run the build
 			subprocess.run(command, check=True, cwd='/rita/UrbanLens')
 			'''
@@ -435,10 +435,10 @@ class DjangoProjectInitializer:
 					if line and re.search(r'webpack [\d.]+ compiled successfully in \d+ ms', content):
 						logger.info('Webpack complete')
 						break
-				
+
 				time.sleep(0.1)
 			'''
-				
+
 			logger.debug('Collecting static files...')
 			# Collect static files for django
 			subprocess.run(['python', 'manage.py', 'collectstatic', '--noinput'], check=True, cwd='/rita/UrbanLens')
@@ -545,7 +545,7 @@ class DjangoProjectInitializer:
 		if not os.path.exists('/root/.ssh/id_rsa') or not os.path.exists('/root/.ssh/id_rsa.pub'):
 			logger.error('SSH keys do not exist.')
 			return False
-		
+
 		# Check that the keys are valid for gitlab
 		server = 'gitlab.com'
 		try:
@@ -580,7 +580,7 @@ class DjangoProjectInitializer:
 		except subprocess.CalledProcessError:
 			logger.debug('Database %s does not exist.', self.db_name)
 			return False
-		
+
 		return True
 
 	def initialize_project(self):
@@ -633,8 +633,8 @@ def main():
 	Run the initializer.
 	"""
 	logging.basicConfig(
-			level=logging.INFO, 
-			format='%(asctime)s - %(levelname)s - %(message)s', 
+			level=logging.INFO,
+			format='%(asctime)s - %(levelname)s - %(message)s',
 			handlers=[
 				logging.StreamHandler(),
 				logging.FileHandler(os.path.join('/var', 'log', 'rita', 'init.log')),

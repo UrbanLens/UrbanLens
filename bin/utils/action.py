@@ -7,13 +7,13 @@
 
 		File: action.py
 		Project: Urban Lens
-		
+
 		Author: Alexander Lanin, Tim, Jess Mann
 		Email: jess@manlyphotos.com
 
 		-----
 
-		
+
 		Modified By: Jess Mann
 
 		-----

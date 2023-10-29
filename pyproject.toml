@@ -543,7 +543,7 @@ column_limit = 250
 # must ignore this until yapf supports match/case from python 3.11
 [tool.yapfignore]
 ignore_patterns = [
-  "src/scripts/db.py", 
+  "src/scripts/db.py",
 ]
 
 [build-system]
