@@ -95,8 +95,8 @@
     }
   }
 
-  async function filterLocations(category) {
-    const response = await fetch(`/api/locations?category=${category}`, {
+  async function filterLocations(category, name, priority, latitude, longitude) {
+    const response = await fetch(`/api/locations?category=${category}&name=${name}&priority=${priority}&latitude=${latitude}&longitude=${longitude}`, {
       headers: {
         'Authorization': `Bearer ${user.token}`
       },
@@ -156,7 +156,11 @@
             <option value={category.id}>{category.name}</option>
           {/each}
         </select>
-        <button on:click={() => filterLocations(selectedCategory)}>Apply filter</button>
+        <input type="text" bind:value={filterName} placeholder="Name" />
+        <input type="number" bind:value={filterPriority} placeholder="Priority" />
+        <input type="number" bind:value={filterLatitude} placeholder="Latitude" />
+        <input type="number" bind:value={filterLongitude} placeholder="Longitude" />
+        <button on:click={() => filterLocations(selectedCategory, filterName, filterPriority, filterLatitude, filterLongitude)}>Apply filter</button>
         <button on:click={() => filterModal = false}>Close</button>
       </div>
     {/if}
