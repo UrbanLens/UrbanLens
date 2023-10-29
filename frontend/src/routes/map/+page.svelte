@@ -126,7 +126,15 @@
       <div class="modal">
         <h2>Add a location</h2>
         <input type="text" bind:value={locationName} placeholder="Location name" />
+        <input type="text" bind:value={locationIcon} placeholder="Location icon" />
         <input type="text" bind:value={locationDescription} placeholder="Location description" />
+        <input type="text" bind:value={locationCategories} placeholder="Location categories" />
+        <input type="number" bind:value={locationPriority} placeholder="Location priority" />
+        <input type="date" bind:value={locationLastVisited} placeholder="Last visited" />
+        <input type="number" bind:value={locationLatitude} placeholder="Latitude" />
+        <input type="number" bind:value={locationLongitude} placeholder="Longitude" />
+        <input type="text" bind:value={locationProfile} placeholder="Profile" />
+        <input type="file" bind:value={locationPinIcon} placeholder="Pin icon" />
         <button on:click={submitLocation}>Submit</button>
       </div>
     {/if}
