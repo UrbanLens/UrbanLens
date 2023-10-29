@@ -6,7 +6,6 @@ def populate_categories(apps, schema_editor):
         {'name': 'Church', 'icon': 'church'},
         {'name': 'Warehouse', 'icon': 'warehouse'},
         {'name': 'Power Plant', 'icon': 'power'},
-        # Add more categories here
     ]
     for category in categories:
         Category.objects.create(**category)

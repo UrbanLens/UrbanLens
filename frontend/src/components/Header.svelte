@@ -1,9 +1,17 @@
 <script>
+  import TopAppBar, {
+    Row,
+    Section,
+    Title,
+  } from '@smui/top-app-bar';
+  import IconButton from '@smui/icon-button';
   import { onMount } from 'svelte';
   import { user } from '../stores/user.js';
 
+  let topAppBar;
+
   onMount(async () => {
-    const response = await fetch('/api/profile', {
+    const response = await fetch('http://localhost:8000/rest/profile', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
@@ -19,24 +27,22 @@
   });
 </script>
 
-<header>
-    <nav class="blue darken-3">
-        <div class="nav-wrapper container">
-            <a href="/dashboard" id="logo-container" class="brand-logo">UrbanLens</a>
-            <ul class="right hide-on-med-and-down">
-                {#if $user && $user.avatar}
-                    <li><a href="/profile"><img src={$user.avatar} alt="User avatar" class="circle responsive-img" style="width: 50px; height: 50px;"></a></li>
-                {:else}
-                    <li><a href="/profile"><i class="material-icons material-symbols-outlined left">account_circle</i>Profile</a></li>
-                {/if}
-                <li><a href="/map"><i class="material-icons material-symbols-outlined left">map</i>Map</a></li>
-            </ul>
+<div class="header">
+  <TopAppBar bind:this={topAppBar} variant="standard">
+    <Row>
+      <Section>
+        <IconButton class="material-icons">menu</IconButton>
+        <Title>Urban Lens</Title>
+      </Section>
 
-            <ul id="nav-mobile" class="sidenav">
-                <li><a href="/profile"><i class="material-icons material-symbols-outlined left">account_circle</i>Profile</a></li>
-                <li><a href="/map"><i class="material-icons material-symbols-outlined left">map</i>Map</a></li>
-            </ul>
-            <a href="#top" data-target="nav-mobile" class="sidenav-trigger"><i class="material-icons">menu</i></a>
-        </div>
-    </nav>
-</header>
+      <Section align="end" toolbar>
+        {#if $user && $user.avatar}
+          <IconButton><img src={$user.avatar} alt="User avatar" class="circle responsive-img" style="width: 50px; height: 50px;"></IconButton>
+        {:else}
+          <IconButton class="material-icons">account_circle</IconButton>
+        {/if}
+        <IconButton class="material-icons">map</IconButton>
+      </Section>
+    </Row>
+  </TopAppBar>
+</div>

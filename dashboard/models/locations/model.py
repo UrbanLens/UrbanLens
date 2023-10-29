@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 import logging
 # Django Imports
 from django.db.models import Index, CASCADE
+from django.forms import ImageField
 # 3rd Party Imports
 from djangofoundry.models.fields import CharField, DecimalField, InsertedNowField, UpdatedNowField, ForeignKey
 # App Imports
