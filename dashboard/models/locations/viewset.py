@@ -7,7 +7,11 @@ from .filterset import LocationFilter
 class LocationViewSet(viewsets.ModelViewSet):
     filter_class = LocationFilter
     def get_queryset(self):
-        return Location.objects.filter(user=self.request.user)
+        queryset = Location.objects.filter(user=self.request.user)
+        category = self.request.query_params.get('category', None)
+        if category is not None:
+            queryset = queryset.filter(categories__name=category)
+        return queryset
     serializer_class = LocationSerializer
 
     def create(self, request, *args, **kwargs):

@@ -95,6 +95,21 @@
     }
   }
 
+  async function filterLocations(category) {
+    const response = await fetch(`/api/locations?category=${category}`, {
+      headers: {
+        'Authorization': `Bearer ${user.token}`
+      },
+    });
+
+    if (response.ok) {
+      const locations = await response.json();
+      // TODO: Update the map with the filtered locations
+    } else {
+      console.error('Failed to filter locations');
+    }
+  }
+
   function addLocation() {
     showModal = true;
   }
