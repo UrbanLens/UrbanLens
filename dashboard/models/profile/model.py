@@ -4,8 +4,11 @@ from djangofoundry.models import OneToOneField, TextField, DateField, CharField,
 from dashboard.models.abstract.model import Model
 from dashboard.models.profile.queryset import Manager
 
+from django.db.models import ImageField
+
 class Profile(Model):
     user = OneToOneField(User, on_delete=CASCADE)
+    avatar = ImageField(upload_to='avatars/', null=True, blank=True)
 
     objects = Manager()
 
