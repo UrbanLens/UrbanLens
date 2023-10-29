@@ -1,29 +1,25 @@
 <script>
-  let username = '';
-  let password = '';
+  import { onMount } from 'svelte';
 
-  const login = async () => {
-    const response = await fetch('/api/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ username, password })
+  let auth2;
+
+  onMount(() => {
+    gapi.load('auth2', () => {
+      auth2 = gapi.auth2.init({
+        client_id: 'YOUR_CLIENT_ID',
+      });
     });
+  });
 
-    if (response.ok) {
-      // Redirect to home page
-      window.location.href = '/';
-    } else {
-      // Show error message
-      console.error('Login failed');
-    }
+  const login = () => {
+    auth2.signIn().then(googleUser => {
+      const id_token = googleUser.getAuthResponse().id_token;
+      // Send the ID token to your server
+    });
   };
 </script>
 
 <div>
   <h1>Login</h1>
-  <input type="text" bind:value={username} placeholder="Username" />
-  <input type="password" bind:value={password} placeholder="Password" />
-  <button on:click={login}>Login</button>
+  <button on:click={login}>Login with Google</button>
 </div>
