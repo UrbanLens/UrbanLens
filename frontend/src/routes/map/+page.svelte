@@ -1,20 +1,21 @@
 <script>
   import { onMount } from 'svelte';
-  import { Map, Marker } from 'svelte-google-maps';
 
   let map;
-  let center = { lat: 40.730610, lng: -73.935242 }; // New York coordinates
+  let center = [40.730610, -73.935242]; // New York coordinates
 
   onMount(async () => {
-    map = new google.maps.Map(document.getElementById('map'), {
-      center,
+    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+    map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/mapbox/streets-v11',
+      center: center,
       zoom: 12
     });
 
-    new google.maps.Marker({
-      position: center,
-      map: map
-    });
+    new mapboxgl.Marker()
+      .setLngLat(center)
+      .addTo(map);
   });
 </script>
 
