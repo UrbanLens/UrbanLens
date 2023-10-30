@@ -40,8 +40,6 @@ app_name = 'dashboard'
 # Define all our REST API routes
 routes = {
 	'categories': CategoryViewSet,
-	'comments': CommentViewSet,
-	'images': ImageViewSet,
 	'locations': LocationViewSet,
 	'profiles': ProfileViewSet,
 }
@@ -52,15 +50,13 @@ router = routers.DefaultRouter()
 # Register each viewset with the router
 for route, viewset in routes.items():
 	if hasattr(viewset, 'basename'):
-		logger.critical('Adding route %s with basename %s', route, getattr(viewset, 'basename'))
 		router.register(route, viewset, basename = getattr(viewset, 'basename'))
 	else:
-		logger.critical('Adding route %s', route)
 		router.register(route, viewset)
 
 urlpatterns = [
 	path('rest/', include(router.urls)),
-	path('api/locations', locations.LocationViewSet.as_view({'get': 'list'}), name='locations'),
+	#path('api/locations', locations.LocationViewSet.as_view({'get': 'list'}), name='locations'),
 	#path('api/login', login, name='login'),
 	#path('api/logout', logout, name='logout'),
 

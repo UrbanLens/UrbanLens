@@ -74,7 +74,6 @@ class Location(abstract.Model):
         indexes = [
             Index(fields=['name']),
             Index(fields=['icon']),
-            Index(fields=['categories']),
             Index(fields=['priority']),
             Index(fields=['last_visited']),
             Index(fields=['latitude', 'longitude']),

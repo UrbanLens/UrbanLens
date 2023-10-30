@@ -1,4 +1,3 @@
-from dashboard.models.images.filterset import ImageFilter
 from dashboard.models.images.viewset import ImageViewSet
 from dashboard.models.images.model import Image
 from dashboard.models.images.queryset import QuerySet, Manager

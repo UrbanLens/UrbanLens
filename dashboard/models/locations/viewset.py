@@ -8,9 +8,11 @@ from .serializer import LocationSerializer
 logger = logging.getLogger(__name__)
 
 class LocationViewSet(viewsets.ModelViewSet):
+    serializer_class = LocationSerializer
+    basename = 'locations'
+
     def get_queryset(self):
         return Location.objects.filter(user=self.request.user)
-    serializer_class = LocationSerializer
 
     def create(self, request, *args, **kwargs):
         logger.info(f"Create request initiated by user {request.user.id}")

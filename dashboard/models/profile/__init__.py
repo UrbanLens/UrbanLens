@@ -1,4 +1,3 @@
-from dashboard.models.profile.filterset import ProfileFilter
 from dashboard.models.profile.viewset import ProfileViewSet
 from dashboard.models.profile.model import Profile
 from dashboard.models.profile.queryset import QuerySet, Manager
