@@ -18,11 +18,11 @@ import logging
 from django.db.models import Index, CASCADE
 from django.forms import ImageField
 # 3rd Party Imports
-from djangofoundry.models.fields import CharField, DecimalField, InsertedNowField, UpdatedNowField, ForeignKey
+from djangofoundry.models.fields import CharField, DecimalField, ForeignKey
 # App Imports
 from dashboard.models import abstract
 from dashboard.models.locations.queryset import Manager
-from dashboard.models.profile.model import Profile
+from dashboard.models.tags.model import Tag
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.
@@ -52,13 +52,18 @@ class Location(abstract.Model):
     last_visited = DateTimeField(null=True, blank=True)
     latitude = DecimalField(max_digits=9, decimal_places=6)
     longitude = DecimalField(max_digits=9, decimal_places=6)
-    profile = ForeignKey(Profile, on_delete=CASCADE, related_name='locations')
-    pin_icon = ImageField(upload_to='pin_icons/', null=True, blank=True)
-    from django.db.models import ManyToManyField
-    from dashboard.models.tags.model import Tag
-
+    pin_icon = ImageField()
     status = IntegerField(choices=STATUS_CHOICES, default=WISH_TO_VISIT)
-    tags = ManyToManyField(Tag, blank=True)
+
+    profile = ForeignKey(
+        'dashboard.Profile', 
+        on_delete=CASCADE, 
+        related_name='locations'
+    )
+    tags = ManyToManyField(
+        Tag,
+        blank=True
+    )
 
     objects = Manager()
 

@@ -1,11 +1,9 @@
-from django_filters import rest_framework as filters
-from django_filters import CharFilter, BooleanFilter, NumberFilter, MethodFilter
+import django_filters
+from django_filters import CharFilter, NumberFilter
 from .model import Location
 
-class LocationFilter(filters.FilterSet):
+class LocationFilter(django_filters.FilterSet):
     categories = CharFilter(method='by_category')
-    never_visited = MethodFilter(method='never_visited')
-    not_visited_this_year = MethodFilter(method='not_visited_this_year')
     by_priority = NumberFilter(method='by_priority')
     by_latitude = NumberFilter(method='by_latitude')
     by_longitude = NumberFilter(method='by_longitude')
@@ -15,4 +13,18 @@ class LocationFilter(filters.FilterSet):
 
     class Meta:
         model = Location
-        fields = ['name', 'icon', 'categories', 'priority', 'last_visited', 'latitude', 'longitude', 'never_visited', 'not_visited_this_year', 'by_priority', 'by_latitude', 'by_longitude', 'by_name', 'by_created_year', 'by_updated_year']
+        fields = [
+            'name',
+            'icon',
+            'categories',
+            'priority',
+            'last_visited',
+            'latitude',
+            'longitude',
+            'by_priority',
+            'by_latitude',
+            'by_longitude',
+            'by_name',
+            'by_created_year',
+            'by_updated_year',
+        ]

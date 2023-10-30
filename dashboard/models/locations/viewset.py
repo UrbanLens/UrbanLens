@@ -1,24 +1,16 @@
 import logging
-from rest_framework import viewsets, status, pagination
+from rest_framework import viewsets, status
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from .model import Location
 from .serializer import LocationSerializer
-from .filterset import LocationFilter
 
 logger = logging.getLogger(__name__)
 
 class LocationViewSet(viewsets.ModelViewSet):
-    filter_class = LocationFilter
     def get_queryset(self):
-        queryset = Location.objects.filter(user=self.request.user)
-        filter_backends = [DjangoFilterBackend]
-        filterset_class = LocationFilter
-        return queryset
+        return Location.objects.filter(user=self.request.user)
     serializer_class = LocationSerializer
-
-    import logging
-    logger = logging.getLogger(__name__)
 
     def create(self, request, *args, **kwargs):
         logger.info(f"Create request initiated by user {request.user.id}")

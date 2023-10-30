@@ -1,13 +1,18 @@
-from django.db.models import ImageField, ForeignKey, CASCADE
+from __future__ import annotations
+from django.db.models import ImageField, CASCADE
+from djangofoundry.models import ForeignKey
 from dashboard.models import abstract
-from dashboard.models.locations.model import Location
 
 class Image(abstract.Model):
     """
     Records image data.
     """
-    image = ImageField(upload_to='images/')
-    location = ForeignKey(Location, on_delete=CASCADE, related_name='images')
+    image = ImageField()
+    location = ForeignKey(
+        'dashboard.Location', 
+        on_delete=CASCADE, 
+        related_name='images'
+    )
 
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_images'

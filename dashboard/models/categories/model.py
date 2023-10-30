@@ -1,4 +1,5 @@
-from django.db.models import CharField
+from __future__ import annotations
+from djangofoundry.models import CharField
 from dashboard.models import abstract
 
 class Category(abstract.Model):

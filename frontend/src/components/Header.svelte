@@ -7,6 +7,7 @@
   import IconButton from '@smui/icon-button';
   import { onMount } from 'svelte';
   import { user } from '../stores/user.js';
+	import {AutoAdjust} from '@smui/top-app-bar';
 
   let topAppBar;
 
@@ -37,12 +38,15 @@
 
       <Section align="end" toolbar>
         {#if $user && $user.avatar}
-          <IconButton><img src={$user.avatar} alt="User avatar" class="circle responsive-img" style="width: 50px; height: 50px;"></IconButton>
+          <IconButton href="profile"><img src={$user.avatar} alt="User avatar" class="circle responsive-img" style="width: 50px; height: 50px;"></IconButton>
         {:else}
-          <IconButton class="material-icons">account_circle</IconButton>
+          <IconButton href="profile" class="material-icons">account_circle</IconButton>
         {/if}
-        <IconButton class="material-icons">map</IconButton>
+        <IconButton href="/map" class="material-icons">map</IconButton>
       </Section>
     </Row>
   </TopAppBar>
+  <AutoAdjust {topAppBar}>
+    <!-- Spacer -->
+  </AutoAdjust>
 </div>

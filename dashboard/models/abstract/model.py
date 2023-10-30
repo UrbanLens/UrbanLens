@@ -55,3 +55,4 @@ class Model(FoundryModel):
 				A list of indexes to create on the table
 		"""
 		abstract = True
+		app_label = 'dashboard'

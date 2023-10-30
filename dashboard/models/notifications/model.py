@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 # Django Imports
 from django.db.models import Index
 # 3rd Party Imports
-from djangofoundry.models.fields import CharField, PickledObjectField, InsertedNowField, UpdatedNowField
+from djangofoundry.models.fields import CharField, PickledObjectField
 # App Imports
 from dashboard.models import abstract
 from dashboard.models.notifications.meta import Status, Importance, NotificationType
@@ -55,8 +55,6 @@ class NotificationLog(abstract.Model):
 	notificaiton_type = CharField(max_length=17, choices=NotificationType.choices, default=NotificationType.ERROR)
 	message = CharField(max_length=50000, blank=True)
 	reference_model = PickledObjectField()
-	created = InsertedNowField()
-	updated = UpdatedNowField()
 
 	objects = Manager()
 
