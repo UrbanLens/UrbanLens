@@ -1,7 +1,33 @@
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    model.py                                                                                             *
+*        Path:    /model.py                                                                                            *
+*        Project: images                                                                                               *
+*        Version: <<projectversion>>                                                                                   *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 Urban Lens                                                                                 *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2023-12-24     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 from __future__ import annotations
 from django.db.models import ImageField, CASCADE
 from djangofoundry.models import ForeignKey
 from dashboard.models import abstract
+from dashboard.models.images.queryset import Manager
 
 class Image(abstract.Model):
     """
@@ -13,6 +39,8 @@ class Image(abstract.Model):
         on_delete=CASCADE, 
         related_name='images'
     )
+
+    objects = Manager()
 
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_images'

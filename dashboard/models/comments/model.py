@@ -1,7 +1,33 @@
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    model.py                                                                                             *
+*        Path:    /model.py                                                                                            *
+*        Project: comments                                                                                             *
+*        Version: <<projectversion>>                                                                                   *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 Urban Lens                                                                                 *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2023-12-24     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 from __future__ import annotations
 from django.db.models import CASCADE
 from djangofoundry.models import CharField, ForeignKey
 from dashboard.models import abstract
+from dashboard.models.comments.queryset import Manager
 
 class Comment(abstract.Model):
     """
@@ -19,6 +45,8 @@ class Comment(abstract.Model):
         on_delete=CASCADE, 
         related_name='comments'
     )
+
+    objects = Manager()
 
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_comments'

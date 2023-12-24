@@ -1,16 +1,43 @@
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    viewset.py                                                                                           *
+*        Path:    /viewset.py                                                                                          *
+*        Project: locations                                                                                            *
+*        Version: <<projectversion>>                                                                                   *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 Urban Lens                                                                                 *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2023-12-24     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 import logging
 from rest_framework import viewsets, status
 from rest_framework.response import Response
-from .model import Location
-from .serializer import LocationSerializer
+from dashboard.models.locations.model import Location
+from dashboard.models.locations.serializer import LocationSerializer
 
 logger = logging.getLogger(__name__)
 
 class LocationViewSet(viewsets.ModelViewSet):
     serializer_class = LocationSerializer
-    basename = 'locations'
+    basename = 'location'
 
     def get_queryset(self):
+        if not self.request:
+            return Location.objects.none()
         return Location.objects.filter(user=self.request.user)
 
     def create(self, request, *args, **kwargs):

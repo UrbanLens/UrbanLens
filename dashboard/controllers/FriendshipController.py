@@ -40,4 +40,4 @@ def request_friend(request):
 @login_required
 def list_friends(request):
     friends = Friendship.objects.filter(user=request.user)
-    return render(request, 'dashboard/view_friends.html', {'friends': friends})
+    return render(request, 'dashboard/pages/profile/view_friends.html', {'friends': friends})

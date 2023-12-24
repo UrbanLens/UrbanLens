@@ -91,13 +91,7 @@ class QuerySet(abstract.QuerySet):
         c = 2 * atan2(sqrt(a), sqrt(1 - a))
         distance = R * c
         return self.filter(distance__lte=distance)
-
-class Manager(abstract.Manager.from_queryset(QuerySet)):
-    '''
-    A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
-    '''
-
-class QuerySet(abstract.QuerySet):
+    
     def filter_by_criteria(self, criteria):
         query = Q()
         if 'date_added' in criteria and criteria['date_added']:
@@ -109,3 +103,9 @@ class QuerySet(abstract.QuerySet):
             for tag in tags:
                 query &= Q(tags__name__in=[tag])
         return self.filter(query)
+
+
+class Manager(abstract.Manager.from_queryset(QuerySet)):
+    '''
+    A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
+    '''

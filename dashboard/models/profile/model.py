@@ -26,15 +26,13 @@
 from __future__ import annotations
 from django.contrib.auth.models import User
 from django.db.models import CASCADE, Index
+from django.db.models import ImageField
 from djangofoundry.models import OneToOneField, CharField
-from dashboard.models.abstract.model import Model
+from dashboard.models import abstract
 from dashboard.models.profile.queryset import Manager
 
-from django.db.models import ImageField
 
-class Profile(Model):
-    def __str__(self):
-        return self.user.username
+class Profile(abstract.Model):
     avatar = ImageField()
     instagram = CharField(max_length=255, null=True, blank=True)
     discord = CharField(max_length=255, null=True, blank=True)
@@ -46,7 +44,10 @@ class Profile(Model):
 
     objects = Manager()
 
-    class Meta(Model.Meta):
+    def __str__(self):
+        return self.user.username
+
+    class Meta(abstract.Model.Meta):
         db_table = 'dashboard_profiles'
 
         indexes = [

@@ -41,7 +41,7 @@ def view_map(request):
     locations = Location.objects.all()
     reviews = Review.objects.filter(location__in=locations)
     form = ReviewForm()
-    return render(request, 'dashboard/map.html', {'locations': locations, 'reviews': reviews, 'form': form})
+    return render(request, 'dashboard/pages/map/index.html', {'locations': locations, 'reviews': reviews, 'form': form})
 
 def edit_pin(request, location_id):
     location = Location.objects.get(id=location_id)

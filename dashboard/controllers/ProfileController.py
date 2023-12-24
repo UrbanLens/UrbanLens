@@ -31,7 +31,7 @@ from dashboard.models.profile.model import Profile
 @login_required
 def view_profile(request):
     profile = get_object_or_404(Profile, user=request.user)
-    return render(request, 'dashboard/view_profile.html', {'profile': profile})
+    return render(request, 'dashboard/pages/profile/view_profile.html', {'profile': profile})
 
 @login_required
 def edit_profile(request):
@@ -43,4 +43,4 @@ def edit_profile(request):
             return redirect('view_profile')
     else:
         form = ProfileForm(instance=profile)
-    return render(request, 'dashboard/edit_profile.html', {'form': form})
+    return render(request, 'dashboard/pages/profile/edit_profile.html', {'form': form})

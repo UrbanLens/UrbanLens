@@ -1,0 +1,51 @@
+{
+    "name": "urbanlens",
+    "version": "1.0.0",
+    "description": "Mapping for Urban Explorers",
+    "main": "index.js",
+    "scripts": {
+        "db": "python bin/db.py start",
+        "migrate": "python manage.py makemigrations & python manage.py migrate",
+        "sass": "sass dashboard/frontend/sass:dashboard/frontend/static/dashboard --watch",
+        "bun": "bun build dashboard/frontend/ts/index.tsx --outdir dashboard/frontend/static/dashboard/js --target browser"
+    },
+    "author": "Jess Mann",
+    "license": "N/A",
+    "devDependencies": {
+        "bun-types": "latest"
+    },
+    "peerDependencies": {
+        "typescript": "^5.0.0"
+    },
+    "dependencies": {
+        "bun": "^1.0.15",
+        "dotenv": "^10.0.0",
+        "dotenv-expand": "^5.1.0",
+        "postcss": "^8.4.16",
+        "postcss-flexbugs-fixes": "^5.0.2",
+        "postcss-loader": "^7.0.1",
+        "postcss-normalize": "^10.0.1",
+        "postcss-preset-env": "^7.0.1",
+        "sass": "^1.69.5",
+        "sass-loader": "^12.3.0",
+        "semver": "^7.3.5",
+        "typescript": "^5.0.0",
+        "yarn": "^1.22.19"
+    },
+    "browserslist": {
+        "production": [
+            ">0.2%",
+            "not dead",
+            "not op_mini all"
+        ],
+        "development": [
+            "last 2 chrome versions",
+            "last 2 firefox versions",
+            "last 2 safari versions",
+            "last 2 ios versions",
+            "last 1 android version",
+            "last 1 chromeandroid version",
+            "ie 11"
+        ]
+    }
+}

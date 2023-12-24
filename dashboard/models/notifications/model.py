@@ -1,25 +1,29 @@
-"""
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    model.py                                                                                             *
+*        Path:    /model.py                                                                                            *
+*        Project: notifications                                                                                        *
+*        Version: <<projectversion>>                                                                                   *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 Urban Lens                                                                                 *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2023-12-24     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 
-	TODO:
-		Prefetching
-
-	Metadata:
-
-		File: request.py
-		Project: UrbanLens
-
-		Author: Jess Mann
-		Email: jess@manlyphotos.com
-
-		-----
-
-
-		Modified By: Jess Mann
-
-		-----
-
-		Copyright (c) 2023 UrbanLens
-"""
 # Generic imports
 from __future__ import annotations
 import logging
@@ -36,7 +40,6 @@ from dashboard.models.notifications.queryset import Manager
 if TYPE_CHECKING:
 	# Imports required for type checking, but not program execution.
 	pass
-
 
 #
 # Set up logging for this module. __name__ includes the namespace (e.g. dashboard.models.cases).

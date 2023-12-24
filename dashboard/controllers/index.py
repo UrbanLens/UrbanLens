@@ -7,9 +7,9 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    model.py                                                                                             *
-*        Path:    /model.py                                                                                            *
-*        Project: tags                                                                                                 *
+*        File:    IndexController.py                                                                                   *
+*        Path:    /index.py                                                                                            *
+*        Project: controllers                                                                                          *
 *        Version: <<projectversion>>                                                                                   *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
@@ -23,13 +23,14 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
+# Generic imports
 from __future__ import annotations
-from djangofoundry.models import CharField
-from dashboard.models import abstract
 
-class Tag(abstract.Model):
-    name = CharField(max_length=255)
+from djangofoundry.controllers import ListController
 
-    class Meta(abstract.Model.Meta):
-        db_table = 'dashboard_tags'
-        get_latest_by = 'updated'
+class IndexController(ListController):
+    template_name = "dashboard/pages/home/index.html"
+
+    def get_queryset(self):
+        return {}
