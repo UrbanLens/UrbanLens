@@ -3,6 +3,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from dashboard.models.locations.model import Location
 from dashboard.models.categories.model import Category
 from dashboard.models.images.model import Image
+from dashboard.models.tags.model import Tag
 from django.urls import reverse
 
 def view_map(request):
@@ -17,6 +18,10 @@ def edit_pin(request, location_id):
         location.description = request.POST.get('description')
         location.latitude = request.POST.get('latitude')
         location.longitude = request.POST.get('longitude')
+        tags = request.POST.get('tags').split(',')
+        for tag_name in tags:
+            tag, created = Tag.objects.get_or_create(name=tag_name)
+            location.tags.add(tag)
         icon = request.FILES.get('icon', None)
         if icon:
             location.icon = icon
@@ -34,8 +39,12 @@ def add_pin(request):
         description = request.POST.get('description')
         latitude = request.POST.get('latitude')
         longitude = request.POST.get('longitude')
+        tags = request.POST.get('tags').split(',')
         icon = request.FILES.get('icon', None)
-        Location.objects.create(name=name, description=description, latitude=latitude, longitude=longitude, icon=icon)
+        location = Location.objects.create(name=name, description=description, latitude=latitude, longitude=longitude, icon=icon)
+        for tag_name in tags:
+            tag, created = Tag.objects.get_or_create(name=tag_name)
+            location.tags.add(tag)
         return HttpResponse(status=200)
     else:
         # Render the add form
