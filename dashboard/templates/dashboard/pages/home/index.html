@@ -1,7 +1,14 @@
 {% extends "dashboard/themes/default.html" %}
 {% block top-content %}
-    <!-- Add htmx attributes here for interactivity -->
+    <nav>
+        <a href="#" hx-get="/home" hx-swap="outerHTML">Home</a>
+        <a href="#" hx-get="/about" hx-swap="outerHTML">About</a>
+        <a href="#" hx-get="/contact" hx-swap="outerHTML">Contact</a>
+    </nav>
+    <div class="hero-image" style="background-image: url('{{ hero_image_url }}');"></div>
 {% endblock %}
 {% block bottom-content %}
-    <!-- Add htmx attributes here for interactivity -->
+    <div class="project-description">
+        {{ project_description }}
+    </div>
 {% endblock %}

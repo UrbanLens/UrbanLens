@@ -32,5 +32,8 @@ from djangofoundry.controllers import ListController
 class IndexController(ListController):
     template_name = "dashboard/pages/home/index.html"
 
-    def get_queryset(self):
-        return {}
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['project_description'] = "This is a stylish and modern homepage for our project."
+        context['hero_image_url'] = "/static/images/hero.jpg"
+        return context
