@@ -69,5 +69,9 @@ urlpatterns = [
 	path('map/search/', MapController.search_pins, name='search_pins'),
 	path('map/upload_image/<int:location_id>/', MapController.upload_image, name='upload_image'),
 	path('map/change_category/<int:location_id>/', MapController.change_category, name='change_category'),
-	re_path(r'^.*$', lambda request, exception: redirect('/'), name='404')
+	from dashboard.controllers.ProfileController import view_profile, edit_profile
+
+	re_path(r'^.*$', lambda request, exception: redirect('/'), name='404'),
+	path('profile/', view_profile, name='view_profile'),
+	path('profile/edit/', edit_profile, name='edit_profile')
 ]
