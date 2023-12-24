@@ -37,3 +37,6 @@ bin/conf/
 *db.sqlite3
 pgsql
 .aider*
+
+# Exclude settings file with sensitive information
+bin/settings.py

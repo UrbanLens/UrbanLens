@@ -31,6 +31,12 @@ from .types import *
 
 SETTINGS_PATH : str = '../conf/settings.yaml'
 
+# Add placeholders for new API keys and endpoints
+INSTAGRAM_ACCESS_TOKEN = 'your-instagram-access-token-placeholder'
+INSTAGRAM_GRAPH_URL = 'your-instagram-graph-url-placeholder'
+GOOGLE_LENS_API_KEY = 'your-google-lens-api-key-placeholder'
+GOOGLE_LENS_URL = 'your-google-lens-url-placeholder'
+
 class Settings:
 	"""
 	Settings for our application (used in /bin files only).
