@@ -55,6 +55,12 @@ class Location(abstract.Model):
     pin_icon = ImageField()
     status = IntegerField(choices=STATUS_CHOICES, default=WISH_TO_VISIT)
 
+    def change_category(self, category_id):
+        category = Category.objects.get(id=category_id)
+        self.categories.clear()
+        self.categories.add(category)
+        self.save()
+
     profile = ForeignKey(
         'dashboard.Profile', 
         on_delete=CASCADE, 

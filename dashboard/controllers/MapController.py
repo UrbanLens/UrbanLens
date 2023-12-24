@@ -3,6 +3,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from dashboard.models.locations.model import Location
 from dashboard.models.categories.model import Category
 from dashboard.models.images.model import Image
+from django.urls import reverse
 
 def view_map(request):
     locations = Location.objects.all()
@@ -20,7 +21,8 @@ def edit_pin(request, location_id):
         return HttpResponseRedirect(reverse('view_map'))
     else:
         # Render the edit form
-        return render(request, 'dashboard/edit_location.html', {'location': location})
+        categories = Category.objects.all()
+        return render(request, 'dashboard/edit_location.html', {'location': location, 'categories': categories})
 
 def add_pin(request):
     if request.method == 'POST':
@@ -46,5 +48,14 @@ def upload_image(request, location_id):
         location = Location.objects.get(id=location_id)
         Image.objects.create(image=image, location=location)
         return HttpResponse(status=200)
+    else:
+        return HttpResponse(status=405)
+
+def change_category(request, location_id):
+    if request.method == 'POST':
+        category_id = request.POST.get('category')
+        location = Location.objects.get(id=location_id)
+        location.change_category(category_id)
+        return HttpResponseRedirect(reverse('view_map'))
     else:
         return HttpResponse(status=405)

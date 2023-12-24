@@ -68,5 +68,6 @@ urlpatterns = [
 	path('map/add/', MapController.add_pin, name='add_pin'),
 	path('map/search/', MapController.search_pins, name='search_pins'),
 	path('map/upload_image/<int:location_id>/', MapController.upload_image, name='upload_image'),
+	path('map/change_category/<int:location_id>/', MapController.change_category, name='change_category'),
 	re_path(r'^.*$', lambda request, exception: redirect('/'), name='404')
 ]
