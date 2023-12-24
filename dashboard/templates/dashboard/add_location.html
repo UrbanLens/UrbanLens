@@ -8,7 +8,26 @@
         <button>Add Pin</button>
     </div>
     <div id="addPinModal">
-	    <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">                                                        <label for="name">Name:</label><br>                                                                                                                            <input type="text" id="name" name="name"><br>                                                                                                                  <label for="description">Description:</label><br>                                                                                                              <input type="text" id="description" name="description"><br>                                                                                                    <label for="latitude">Latitude:</label><br>                                                                                                                    <input type="text" id="latitude" name="latitude"><br>                                                                                                          <label for="longitude">Longitude:</label><br>                                                                                                                  <input type="text" id="longitude" name="longitude"><br>                                                                                                        <input type="submit" value="Submit">                                                                                                                       </form>
+	    <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
+	        <label for="name">Name:</label><br>
+	        <input type="text" id="name" name="name"><br>
+	        <label for="description">Description:</label><br>
+	        <input type="text" id="description" name="description"><br>
+	        <label for="latitude">Latitude:</label><br>
+	        <input type="text" id="latitude" name="latitude"><br>
+	        <label for="longitude">Longitude:</label><br>
+	        <input type="text" id="longitude" name="longitude"><br>
+	        <label for="icon">Icon:</label><br>
+	        <select id="icon" name="icon">
+	            <option value="church">Church</option>
+	            <option value="factory">Factory</option>
+	            <option value="home">Home</option>
+	            <!-- Add more options as needed -->
+	        </select><br>
+	        <label for="custom_icon">Or upload a custom icon:</label><br>
+	        <input type="file" id="custom_icon" name="custom_icon"><br>
+	        <input type="submit" value="Submit">
+	    </form>
     </div>
 </body>
 </html>
