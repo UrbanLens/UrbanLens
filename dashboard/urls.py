@@ -68,5 +68,21 @@ urlpatterns = [
 	path('map/edit/<int:pin_id>/', MapController.edit_pin, name='edit_pin'),
 	path('map/add/', MapController.add_pin, name='add_pin'),
 	path('map/search/', MapController.search_pins, name='search_pins'),
-	re_path(r'^.*$', lambda request, exception: redirect('/'), name='404')
+	path('map/upload_image/<int:location_id>/', MapController.upload_image, name='upload_image'),
+	path('map/change_category/<int:location_id>/', MapController.change_category, name='change_category'),
+	from dashboard.controllers import MapController, ProfileController
+
+	re_path(r'^.*$', lambda request, exception: redirect('/'), name='404'),
+	path('profile/', ProfileController.view_profile, name='view_profile'),
+	path('profile/edit/', ProfileController.edit_profile, name='edit_profile'),
+	path('map/advanced_search/', MapController.advanced_search, name='advanced_search'),
+	path('map/add_review/<int:location_id>/', MapController.add_review, name='add_review')
+]
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('friendship/request', views.request_friend, name='request_friend'),
+    path('friendship/list', views.list_friends, name='list_friends'),
+    # other paths...
 ]

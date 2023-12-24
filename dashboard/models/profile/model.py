@@ -33,6 +33,8 @@ from dashboard.models.profile.queryset import Manager
 from django.db.models import ImageField
 
 class Profile(Model):
+    def __str__(self):
+        return self.user.username
     avatar = ImageField()
     instagram = CharField(max_length=255, null=True, blank=True)
     discord = CharField(max_length=255, null=True, blank=True)

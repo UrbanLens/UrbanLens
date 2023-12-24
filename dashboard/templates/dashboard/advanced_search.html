@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Advanced Search</title>
+</head>
+<body>
+    <div hx-get="{% url 'advanced_search' %}" hx-trigger="click" hx-target="#advancedSearchModal" hx-swap="outerHTML">
+        <button>Advanced Search</button>
+    </div>
+    <div id="advancedSearchModal">
+        <form method="POST" hx-post="{% url 'advanced_search' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <input type="submit" value="Submit">
+        </form>
+    </div>
+</body>
+</html>
