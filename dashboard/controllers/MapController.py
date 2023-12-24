@@ -72,3 +72,18 @@ def change_category(request, location_id):
         return HttpResponseRedirect(reverse('view_map'))
     else:
         return HttpResponse(status=405)
+from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+from dashboard.forms.advanced_search import AdvancedSearchForm
+from dashboard.models.locations.model import Location
+
+@login_required
+def advanced_search(request):
+    if request.method == 'POST':
+        form = AdvancedSearchForm(request.POST)
+        if form.is_valid():
+            locations = Location.objects.filter_by_criteria(form.cleaned_data)
+            return render(request, 'dashboard/view_map.html', {'locations': locations})
+    else:
+        form = AdvancedSearchForm()
+    return render(request, 'dashboard/advanced_search.html', {'form': form})

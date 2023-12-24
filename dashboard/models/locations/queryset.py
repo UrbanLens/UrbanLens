@@ -82,3 +82,17 @@ class Manager(abstract.Manager.from_queryset(QuerySet)):
     '''
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
     '''
+from django.db.models import Q
+
+class QuerySet(models.QuerySet):
+    def filter_by_criteria(self, criteria):
+        query = Q()
+        if 'date_added' in criteria and criteria['date_added']:
+            query &= Q(created__date=criteria['date_added'])
+        if 'popularity' in criteria and criteria['popularity']:
+            query &= Q(popularity__gte=criteria['popularity'])
+        if 'tags' in criteria and criteria['tags']:
+            tags = criteria['tags'].split(',')
+            for tag in tags:
+                query &= Q(tags__name__in=[tag])
+        return self.filter(query)
