@@ -4,7 +4,7 @@
     <title>Edit Pin</title>
 </head>
 <body>
-    <form id="editPinForm" method="POST">
+    <form method="POST" hx-post="{% url 'edit_pin' location.id %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
         <label for="name">Name:</label><br>
         <input type="text" id="name" name="name" value="{{ location.name }}"><br>
         <label for="description">Description:</label><br>
@@ -13,21 +13,7 @@
         <input type="text" id="latitude" name="latitude" value="{{ location.latitude }}"><br>
         <label for="longitude">Longitude:</label><br>
         <input type="text" id="longitude" name="longitude" value="{{ location.longitude }}"><br>
-        <input type="button" id="submitBtn" value="Submit">
+        <input type="submit" value="Submit">
     </form>
-    <script>
-        $(document).ready(function() {
-            $('#submitBtn').click(function() {
-                $.ajax({
-                    url: "{% url 'edit_pin' location.id %}",
-                    type: "POST",
-                    data: $('#editPinForm').serialize(),
-                    success: function(response) {
-                        // Update the map or do something
-                    }
-                });
-            });
-        });
-    </script>
 </body>
 </html>
