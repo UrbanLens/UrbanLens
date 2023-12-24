@@ -59,12 +59,13 @@ for route, viewset in routes.items():
 	else:
 		router.register(route, viewset)
 
+from dashboard.controllers import MapController
+
 urlpatterns = [
 	path('rest/', include(router.urls)),
-	#path('api/locations', locations.LocationViewSet.as_view({'get': 'list'}), name='locations'),
-	#path('api/login', login, name='login'),
-	#path('api/logout', logout, name='logout'),
-
-	# Otherwise, return 404
+	path('map/', MapController.view_map, name='view_map'),
+	path('map/edit/<int:pin_id>/', MapController.edit_pin, name='edit_pin'),
+	path('map/add/', MapController.add_pin, name='add_pin'),
+	path('map/search/', MapController.search_pins, name='search_pins'),
 	re_path(r'^.*$', lambda request, exception: redirect('/'), name='404')
 ]
