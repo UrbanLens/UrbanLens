@@ -35,3 +35,4 @@ rich
 psycopg2-binary
 django-picklefield
 statsmodels
+sphinx
