@@ -17,6 +17,9 @@ def edit_pin(request, location_id):
         location.description = request.POST.get('description')
         location.latitude = request.POST.get('latitude')
         location.longitude = request.POST.get('longitude')
+        icon = request.FILES.get('icon', None)
+        if icon:
+            location.icon = icon
         location.save()
         return HttpResponseRedirect(reverse('view_map'))
     else:
@@ -31,7 +34,8 @@ def add_pin(request):
         description = request.POST.get('description')
         latitude = request.POST.get('latitude')
         longitude = request.POST.get('longitude')
-        Location.objects.create(name=name, description=description, latitude=latitude, longitude=longitude)
+        icon = request.FILES.get('icon', None)
+        Location.objects.create(name=name, description=description, latitude=latitude, longitude=longitude, icon=icon)
         return HttpResponse(status=200)
     else:
         # Render the add form

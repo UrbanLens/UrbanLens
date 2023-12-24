@@ -53,6 +53,7 @@ class Location(abstract.Model):
     latitude = DecimalField(max_digits=9, decimal_places=6)
     longitude = DecimalField(max_digits=9, decimal_places=6)
     pin_icon = ImageField()
+    icon = ImageField(null=True, blank=True)
     status = IntegerField(choices=STATUS_CHOICES, default=WISH_TO_VISIT)
 
     def change_category(self, category_id):
