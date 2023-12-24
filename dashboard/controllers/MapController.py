@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect
 from django.http import HttpResponse, HttpResponseRedirect
 from dashboard.models.locations.model import Location
 from dashboard.models.categories.model import Category
+from dashboard.models.images.model import Image
 
 def view_map(request):
     locations = Location.objects.all()
@@ -38,3 +39,12 @@ def search_pins(request):
     query = request.GET.get('q')
     locations = Location.objects.filter(name__icontains=query)
     return render(request, 'dashboard/map.html', {'locations': locations})
+
+def upload_image(request, location_id):
+    if request.method == 'POST':
+        image = request.FILES.get('image')
+        location = Location.objects.get(id=location_id)
+        Image.objects.create(image=image, location=location)
+        return HttpResponse(status=200)
+    else:
+        return HttpResponse(status=405)
