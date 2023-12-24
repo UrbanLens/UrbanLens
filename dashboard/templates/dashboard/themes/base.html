@@ -21,7 +21,9 @@
 </head>
 
 <body>
-    <!-- Updated base template with new header and footer goes here -->
+    {% include 'dashboard/partials/header.html' %}
+    {% block content %}{% endblock %}
+    {% include 'dashboard/partials/footer.html' %}
 
     <!--  Scripts-->
     <script>
