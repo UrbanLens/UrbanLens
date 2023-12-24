@@ -13,6 +13,13 @@
         <input type="text" id="latitude" name="latitude" value="{{ location.latitude }}"><br>
         <label for="longitude">Longitude:</label><br>
         <input type="text" id="longitude" name="longitude" value="{{ location.longitude }}"><br>
+        <label for="category">Category:</label><br>
+        <select id="category" name="category">
+            {% for category in categories %}
+                <option value="{{ category.id }}" {% if category in location.categories.all %}selected{% endif %}>{{ category.name }}</option>
+            {% endfor %}
+        </select><br>
+        <button hx-post="{% url 'change_category' location.id %}" hx-trigger="click" hx-target="#map" hx-swap="outerHTML">Change Category</button>
         <input type="submit" value="Submit">
     </form>
 </body>
