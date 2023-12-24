@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Map</title>
+</head>
+<body>
+    <div id="map">
+        <!-- Map goes here -->
+    </div>
+    <div hx-get="/add_pin" hx-trigger="click" hx-target="#map" hx-swap="outerHTML">
+        <button>Add Pin</button>
+    </div>
+    <div hx-get="/search_pins" hx-trigger="click" hx-target="#map" hx-swap="outerHTML">
+        <button>Search Pins</button>
+    </div>
+</body>
+</html>
