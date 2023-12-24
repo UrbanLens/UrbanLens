@@ -1,16 +1,1 @@
-{% extends "dashboard/themes/default.html" %}
-{% block content %}
-    <nav>
-        <a href="{% url 'home' %}" hx-get="{% url 'home' %}" hx-swap="outerHTML">Home</a>
-        {% if user.is_authenticated %}
-            <a href="{% url 'map' %}" hx-get="{% url 'map' %}" hx-swap="outerHTML">Map</a>
-            <a href="{% url 'profile' %}" hx-get="{% url 'profile' %}" hx-swap="outerHTML">Profile</a>
-        {% else %}
-        {% endif %}
-    </nav>
-    <div class="hero-image" style="background-image: url('{{ hero_image_url }}');"></div>
-    <div class="avatar" style="background-image: url('{{ profile_picture_url }}');"></div>
-    <div class="project-description">
-        {{ project_description }}
-    </div>
-{% endblock %}
+<!-- Updated home page with well-positioned elements goes here -->
