@@ -1,27 +1,36 @@
-"""
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
 	Custom argparse Action.
 
 	Modified from https://stackoverflow.com/questions/43968006/support-for-enum-arguments-in-argparse
 
-	Metadata:
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    action.py                                                                                            *
+*        Path:    /action.py                                                                                           *
+*        Project: utils                                                                                                *
+*        Version: <<projectversion>>                                                                                   *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 Urban Lens                                                                                 *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2023-12-24     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 
-		File: action.py
-		Project: Urban Lens
-
-		Author: Alexander Lanin, Tim, Jess Mann
-		Email: jess@manlyphotos.com
-
-		-----
-
-
-		Modified By: Jess Mann
-
-		-----
-
-		Copyright (c) 2022 UrbanLens
-"""
-import argparse, enum
 from typing import Any
+import argparse
+import enum
 
 class EnumAction(argparse.Action):
 	"""

@@ -1,22 +1,35 @@
-"""
-    Metadata:
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    queryset.py                                                                                          *
+*        Path:    /queryset.py                                                                                         *
+*        Project: locations                                                                                            *
+*        Version: <<projectversion>>                                                                                   *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 Urban Lens                                                                                 *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2023-12-24     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 
-        File: queryset.py
-        Project: UrbanLens
-        Author: Jess Mann
-        Email: jess@manlyphotos.com
-
-        -----
-
-        Copyright (c) 2023 UrbanLens
-"""
 # Generic imports
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import logging
 from datetime import datetime
 # Django Imports
-from django.db.models import Q
 # App Imports
 from dashboard.models import abstract
 
@@ -76,7 +89,7 @@ class QuerySet(abstract.QuerySet):
         a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
         c = 2 * atan2(sqrt(a), sqrt(1 - a))
         distance = R * c
-        return self.filter(distance__lte=radius)
+        return self.filter(distance__lte=distance)
 
 class Manager(abstract.Manager.from_queryset(QuerySet)):
     '''

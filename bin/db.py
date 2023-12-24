@@ -1,24 +1,35 @@
-"""
-
-	Metadata:
-
-		File: db.py
-		Project: Urban Lens
-		Author: Jess Mann
-		Email: jess@manlyphotos.com
-
-		-----
-
-		Modified By: Jess Mann
-
-		-----
-
-		Copyright (c) 2022 UrbanLens
-"""
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    db.py                                                                                                *
+*        Path:    /db.py                                                                                               *
+*        Project: bin                                                                                                  *
+*        Version: <<projectversion>>                                                                                   *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 Urban Lens                                                                                 *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2023-12-24     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 #!/usr/bin/env python
 
 # Generic imports
-import argparse, textwrap, os, re
+import argparse
+import textwrap
+import os
+import re
 from enum import Enum
 import subprocess
 from shutil import which
@@ -402,6 +413,7 @@ def main():
 		case _:
 			print("Error: Unknown action. Try --help to see how to call this script.")
 
+	logger.debug('Result is %s', result)
 	exit()
 
 if __name__ == '__main__':

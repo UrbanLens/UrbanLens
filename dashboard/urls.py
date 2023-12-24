@@ -37,6 +37,7 @@ from dashboard.models.locations import LocationViewSet
 from dashboard.models.comments import CommentViewSet
 from dashboard.models.images import ImageViewSet
 from dashboard.models.profile import ProfileViewSet
+from dashboard.controllers import MapController
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,8 @@ routes = {
 	'categories': CategoryViewSet,
 	'locations': LocationViewSet,
 	'profiles': ProfileViewSet,
+	'comments': CommentViewSet,
+	'images': ImageViewSet
 }
 # Use the default router to define endpoints
 
@@ -58,8 +61,6 @@ for route, viewset in routes.items():
 		router.register(route, viewset, basename = getattr(viewset, 'basename'))
 	else:
 		router.register(route, viewset)
-
-from dashboard.controllers import MapController
 
 urlpatterns = [
 	path('rest/', include(router.urls)),

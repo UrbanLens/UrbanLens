@@ -1,33 +1,39 @@
-"""
-
-	Metadata:
-
-		File: settings.py
-		Project: Urban Lens
-
-		Author: Jess Mann
-		Email: jess@manlyphotos.com
-
-		-----
-
-
-		Modified By: Jess Mann
-
-		-----
-
-		Copyright (c) 2022 UrbanLens
-"""
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    settings.py                                                                                          *
+*        Path:    /settings.py                                                                                         *
+*        Project: utils                                                                                                *
+*        Version: <<projectversion>>                                                                                   *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 Urban Lens                                                                                 *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2023-12-24     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 # Generic imports
 from __future__ import annotations
 import os
-from typing import Any, Optional, TypedDict, Literal
+from typing import Any
 import yaml
 from yaml.loader import SafeLoader
 import logging
 import logging.config
 # App imports
 from .exceptions import FileEmptyError
-from .types import *
+from .types import SettingsFile, SettingsLog
 
 SETTINGS_PATH : str = '../conf/settings.yaml'
 

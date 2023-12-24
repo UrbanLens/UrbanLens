@@ -1,18 +1,31 @@
-"""
+"""*********************************************************************************************************************
+*                                                                                                                      *
 
-	Metadata:
-
-		File: manage.py
-		Project: UrbanLens
-		Author: Jess Mann
-		Email: jess@manlyphotos.com
-
-		-----
-
-		Copyright (c) 2023 UrbanLens
-"""
+Django's command-line utility for administrative tasks.
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    manage.py                                                                                            *
+*        Path:    /manage.py                                                                                           *
+*        Project: UL                                                                                                   *
+*        Version: <<projectversion>>                                                                                   *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 Urban Lens                                                                                 *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2023-12-24     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 #!/usr/bin/env python
-"""Django's command-line utility for administrative tasks."""
 import os
 import sys
 

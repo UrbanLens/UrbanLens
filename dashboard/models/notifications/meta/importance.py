@@ -19,7 +19,6 @@
 """
 # Generic imports
 from __future__ import annotations
-from django.utils.translation import gettext as _
 from djangofoundry.models.choices import TextChoices
 
 class Importance(TextChoices):

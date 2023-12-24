@@ -1,22 +1,29 @@
-"""
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    apps.py                                                                                              *
+*        Path:    /apps.py                                                                                             *
+*        Project: dashboard                                                                                            *
+*        Version: <<projectversion>>                                                                                   *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 Urban Lens                                                                                 *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2023-12-24     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 
-	Metadata:
-
-		File: apps.py
-		Project: UrbanLens
-
-		Author: Jess Mann
-		Email: jess@manlyphotos.com
-
-		-----
-
-
-		Modified By: Jess Mann
-
-		-----
-
-		Copyright (c) 2023 UrbanLens
-"""
 # Generic imports
 from __future__ import annotations
 from django.apps import AppConfig

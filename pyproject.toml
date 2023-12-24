@@ -549,3 +549,40 @@ ignore_patterns = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+
+[tool.ruff]
+# Basic configuration options
+line-length = 250
+include = ["**/*.py"]
+exclude = [
+    "node_modules",
+    "venv",
+    "env",
+    ".env",
+    ".venv",
+    "manage.py",
+    ".vscode",
+    "pgsql",
+    "migrations/",
+    "logs/",
+    "config/",
+    "downloads/",
+    "docs/",
+    "migrations/"
+]
+
+# Advanced configuration options
+extend-exclude = [
+    "migrations",
+    "settings",
+    "downloads",
+    "logs",
+    "node_modules",
+    "webpack",
+    "_pycache_",
+    "tests",
+    "__init__.py"
+]
+#max-complexity = 10
+show-source = true

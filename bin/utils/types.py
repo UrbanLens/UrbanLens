@@ -20,7 +20,7 @@
 # Generic imports
 from __future__ import annotations
 from enum import Enum
-from typing import Any, TypedDict
+from typing import TypedDict
 
 class LoggerLevels(Enum):
 	DEBUG = 'debug'

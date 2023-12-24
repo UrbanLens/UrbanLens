@@ -1,4 +1,4 @@
-from rest_framework import viewsets, pagination
+from rest_framework import viewsets
 from .model import Comment
 from .serializer import CommentSerializer
 

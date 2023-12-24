@@ -1,38 +1,45 @@
-"""
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                
 	This script should start up our app and manage it, without having to interact with django's manage.py script.
 
 	This allows us to abstract django away, while also giving us additional tools specific to our project.
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    app.py                                                                                               *
+*        Path:    /app.py                                                                                              *
+*        Project: bin                                                                                                  *
+*        Version: <<projectversion>>                                                                                   *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 Urban Lens                                                                                 *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2023-12-24     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 
-	Metadata:
-
-		File: app.py
-		Project: Urban Lens
-		Author: Jess Mann
-		Email: jess@manlyphotos.com
-
-		-----
-
-		Modified By: Jess Mann
-
-		-----
-
-		Copyright (c) 2022 UrbanLens
-"""
 #!/usr/bin/env python
 
 # Generic imports
 from __future__ import annotations
-import argparse, textwrap, os, re, sys
-from enum import Enum
-from argparse import RawTextHelpFormatter
+import argparse
+import re
+import sys
 import subprocess
-from typing import Any, Callable, Optional
-from shutil import which
+from typing import Any
 from djangofoundry import scripts
 from djangofoundry.scripts import app
 # Our imports
-from utils.action import EnumAction
-from utils.exceptions import *
+from utils.exceptions import DbStartError, UnsupportedCommandError
 from utils.settings import Settings
 
 logger = Settings.getLogger(__name__)
@@ -204,14 +211,14 @@ def main():
 
 			if result is not None:
 				logger.debug(f'App returned ({result})')
-		except UnsupportedCommandError as e:
+		except UnsupportedCommandError:
 			logger.error("Error: Unknown action. Try --help to see how to call this script.")
 			exit()
 
-	except KeyboardInterrupt as e:
-		logger.info(f'Shutting down server...')
+	except KeyboardInterrupt:
+		logger.info('Shutting down server...')
 		exit()
-	except DbStartError as e:
+	except DbStartError:
 		logger.error('Could not start DB. Cannot continue')
 		exit()
 

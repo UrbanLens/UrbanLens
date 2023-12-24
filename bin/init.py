@@ -28,11 +28,9 @@ import os
 import sys
 import re
 import argparse
-import time
 from typing import Optional
 import yaml
 from pathlib import Path
-from getpass import getpass
 import subprocess
 import logging
 from init_bash import BashInit
@@ -89,7 +87,7 @@ class DjangoProjectInitializer:
 		try:
 			self._db_port = int(value)
 		except ValueError:
-			logger.error(f'Invalid port number')
+			logger.error('Invalid port number')
 			raise UnrecoverableError()
 
 	@property
@@ -128,7 +126,7 @@ class DjangoProjectInitializer:
 		self._db_pass = re.sub(r'[^a-zA-Z0-9!@#$^*()_-]', '', value)
 		if value != self._db_pass:
 			# Only log the "safe" value to prevent injection attacks into the logfile
-			logger.error(f'Invalid database password. Stripped special characters.')
+			logger.error('Invalid database password. Stripped special characters.')
 			raise UnrecoverableError("Invalid database password.")
 
 	@property
