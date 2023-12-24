@@ -7,10 +7,10 @@
     <div id="map">
         <!-- Map goes here -->
     </div>
-    <div hx-get="/add_pin" hx-trigger="click" hx-target="#map" hx-swap="outerHTML">
+    <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#map" hx-swap="outerHTML">
         <button>Add Pin</button>
     </div>
-    <div hx-get="/search_pins" hx-trigger="click" hx-target="#map" hx-swap="outerHTML">
+    <div hx-get="{% url 'search_pins' %}" hx-trigger="click" hx-target="#map" hx-swap="outerHTML">
         <button>Search Pins</button>
     </div>
 </body>

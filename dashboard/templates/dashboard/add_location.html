@@ -4,7 +4,7 @@
     <title>Add Pin</title>
 </head>
 <body>
-    <form method="POST" hx-post="/add_pin" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
+    <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
         <label for="name">Name:</label><br>
         <input type="text" id="name" name="name"><br>
         <label for="description">Description:</label><br>

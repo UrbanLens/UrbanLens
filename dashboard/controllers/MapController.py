@@ -16,7 +16,7 @@ def edit_pin(request, location_id):
         location.latitude = request.POST.get('latitude')
         location.longitude = request.POST.get('longitude')
         location.save()
-        return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+        return HttpResponse(status=200)
     else:
         # Render the edit form
         return render(request, 'dashboard/edit_location.html', {'location': location})
