@@ -18,10 +18,10 @@
 # 	Copyright (c) 2023 Urban Lens                                              #
 ################################################################################
 ## About
-This project is a comprehensive web application built with Django. It leverages the power of several other technologies including Prospector for Python static analysis, ESLint for JavaScript linting, pre-commit for managing and maintaining multi-language pre-commit hooks, and MaterializeCSS for responsive front-end design.
+UrbanLens is a web-based mapping application designed for photographers and urban explorers, focusing on organizing and sharing unique urban locations responsibly. It leverages the power of several other technologies including Ruff for Python static analysis, HTMX for interactivity, pre-commit for managing and maintaining multi-language pre-commit hooks.
 
 ## Project Structure
-The project is structured following the standard Django project layout. It consists of several Django apps each serving a specific function within the project.
+The project is structured following the standard Django project layout. It consists of several Django apps each serving a specific function within the project. The main features include User Authentication, Personalized Map Interface, Location Pinning, Location Details and Notes, Social Integration, and Trip Planning Tools.
 
 ## Setup
 To set up the project, follow these steps:
