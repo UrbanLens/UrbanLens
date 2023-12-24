@@ -6,9 +6,14 @@ from dashboard.models.images.model import Image
 from dashboard.models.tags.model import Tag
 from django.urls import reverse
 
+from dashboard.forms.review import ReviewForm
+from dashboard.models.reviews.model import Review
+
 def view_map(request):
     locations = Location.objects.all()
-    return render(request, 'dashboard/map.html', {'locations': locations})
+    reviews = Review.objects.filter(location__in=locations)
+    form = ReviewForm()
+    return render(request, 'dashboard/map.html', {'locations': locations, 'reviews': reviews, 'form': form})
 
 def edit_pin(request, location_id):
     location = Location.objects.get(id=location_id)
@@ -87,3 +92,17 @@ def advanced_search(request):
     else:
         form = AdvancedSearchForm()
     return render(request, 'dashboard/advanced_search.html', {'form': form})
+from django.contrib.auth.decorators import login_required
+
+@login_required
+def add_review(request, location_id):
+    if request.method == 'POST':
+        form = ReviewForm(request.POST)
+        if form.is_valid():
+            review = form.save(commit=False)
+            review.user = request.user
+            review.location = Location.objects.get(id=location_id)
+            review.save()
+            return HttpResponse(status=200)
+    else:
+        return HttpResponse(status=405)

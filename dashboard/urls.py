@@ -74,5 +74,6 @@ urlpatterns = [
 	re_path(r'^.*$', lambda request, exception: redirect('/'), name='404'),
 	path('profile/', ProfileController.view_profile, name='view_profile'),
 	path('profile/edit/', ProfileController.edit_profile, name='edit_profile'),
-	path('map/advanced_search/', MapController.advanced_search, name='advanced_search')
+	path('map/advanced_search/', MapController.advanced_search, name='advanced_search'),
+	path('map/add_review/<int:location_id>/', MapController.add_review, name='add_review')
 ]
