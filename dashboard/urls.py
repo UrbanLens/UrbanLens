@@ -1,32 +1,37 @@
-"""
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    urls.py                                                                                              *
+*        Path:    /urls.py                                                                                             *
+*        Project: dashboard                                                                                            *
+*        Version: <<projectversion>>                                                                                   *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 Urban Lens                                                                                 *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2023-12-24     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 
-
-	Metadata:
-
-		File: urls.py
-		Project: UrbanLens
-
-		Author: Jess Mann
-		Email: jess@manlyphotos.com
-
-		-----
-
-
-		Modified By: Jess Mann
-
-		-----
-
-		Copyright (c) 2023 UrbanLens
-
-"""
 # Generic imports
 from __future__ import annotations
 import logging
+from django.shortcuts import redirect
 # Django imports
 from django.urls import path, include, re_path
 # 3rd Party imports
 from rest_framework import routers
-from dashboard.controllers.svelte import SvelteController
 from dashboard.models.categories import CategoryViewSet
 from dashboard.models.locations import LocationViewSet
 from dashboard.models.comments import CommentViewSet
@@ -60,6 +65,6 @@ urlpatterns = [
 	#path('api/login', login, name='login'),
 	#path('api/logout', logout, name='logout'),
 
-	# Send everything else to svelte
-	re_path(r'^.*$', SvelteController.as_view(), name="svelte"),
+	# Otherwise, return 404
+	re_path(r'^.*$', lambda request, exception: redirect('/'), name='404')
 ]
