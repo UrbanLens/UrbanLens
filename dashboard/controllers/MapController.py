@@ -29,10 +29,10 @@ def add_pin(request):
         latitude = request.POST.get('latitude')
         longitude = request.POST.get('longitude')
         Location.objects.create(name=name, description=description, latitude=latitude, longitude=longitude)
-        return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+        return HttpResponse(status=200)
     else:
         # Render the add form
-        return render(request, 'dashboard/add_location.html')
+        return render(request, 'dashboard/add_location.html', {'hx': True})
 
 def search_pins(request):
     query = request.GET.get('q')
