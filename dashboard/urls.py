@@ -77,3 +77,11 @@ urlpatterns = [
 	path('map/advanced_search/', MapController.advanced_search, name='advanced_search'),
 	path('map/add_review/<int:location_id>/', MapController.add_review, name='add_review')
 ]
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('friendship/request', views.request_friend, name='request_friend'),
+    path('friendship/list', views.list_friends, name='list_friends'),
+    # other paths...
+]
