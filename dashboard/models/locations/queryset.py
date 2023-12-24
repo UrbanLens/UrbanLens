@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING
 import logging
 from datetime import datetime
 # Django Imports
+from django.db.models import Q
 # App Imports
 from dashboard.models import abstract
 
@@ -95,9 +96,8 @@ class Manager(abstract.Manager.from_queryset(QuerySet)):
     '''
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
     '''
-from django.db.models import Q
 
-class QuerySet(models.QuerySet):
+class QuerySet(abstract.QuerySet):
     def filter_by_criteria(self, criteria):
         query = Q()
         if 'date_added' in criteria and criteria['date_added']:

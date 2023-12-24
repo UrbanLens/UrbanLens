@@ -26,14 +26,16 @@
 from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse
+from django.contrib.auth.decorators import login_required
+
 from dashboard.models.locations.model import Location
 from dashboard.models.categories.model import Category
 from dashboard.models.images.model import Image
 from dashboard.models.tags.model import Tag
-from django.urls import reverse
-
 from dashboard.forms.review import ReviewForm
 from dashboard.models.reviews.model import Review
+from dashboard.forms.advanced_search import AdvancedSearchForm
+
 
 def view_map(request):
     locations = Location.objects.all()
@@ -103,10 +105,6 @@ def change_category(request, location_id):
         return HttpResponseRedirect(reverse('view_map'))
     else:
         return HttpResponse(status=405)
-from django.shortcuts import render
-from django.contrib.auth.decorators import login_required
-from dashboard.forms.advanced_search import AdvancedSearchForm
-from dashboard.models.locations.model import Location
 
 @login_required
 def advanced_search(request):
@@ -118,7 +116,6 @@ def advanced_search(request):
     else:
         form = AdvancedSearchForm()
     return render(request, 'dashboard/advanced_search.html', {'form': form})
-from django.contrib.auth.decorators import login_required
 
 @login_required
 def add_review(request, location_id):

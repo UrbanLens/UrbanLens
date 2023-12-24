@@ -1,15 +1,29 @@
-"""
-    Metadata:
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    model.py                                                                                             *
+*        Path:    /model.py                                                                                            *
+*        Project: locations                                                                                            *
+*        Version: <<projectversion>>                                                                                   *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 Urban Lens                                                                                 *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2023-12-24     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 
-        File: model.py
-        Project: UrbanLens
-        Author: Jess Mann
-        Email: jess@manlyphotos.com
-
-        -----
-
-        Copyright (c) 2023 UrbanLens
-"""
 # Generic imports
 from __future__ import annotations
 from typing import TYPE_CHECKING
@@ -21,6 +35,7 @@ from django.forms import ImageField
 from djangofoundry.models.fields import CharField, DecimalField, ForeignKey
 # App Imports
 from dashboard.models import abstract
+from dashboard.models.categories.model import Category
 from dashboard.models.locations.queryset import Manager
 from dashboard.models.tags.model import Tag
 
