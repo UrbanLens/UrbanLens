@@ -16,11 +16,6 @@ venv/
 *.out
 UrbanLens/errors.log
 
-# Outdated, deprecated, etc
-**/_deprecated*
-sample_data.py
-old/
-
 # VSCode stuff per user
 .vscode
 .favorites.json
@@ -31,12 +26,10 @@ notes/
 .env
 Credentials.yaml
 bin/conf/
+bin/settings.py
 
 # Database files
 *.sqlite3-journal
 *db.sqlite3
 pgsql
 .aider*
-
-# Exclude settings file with sensitive information
-bin/settings.py
