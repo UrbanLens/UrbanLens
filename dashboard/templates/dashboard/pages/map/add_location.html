@@ -1,13 +1,4 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Add Pin</title>
-</head>
-<body>
-    <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="outerHTML">
-        <button>Add Pin</button>
-    </div>
-    <div id="addPinModal" hx-boost="true">
+
 	    <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
 	        <label for="name">Name:</label><br>
 	        <input type="text" id="name" name="name" autocomplete="name"><br>
@@ -29,12 +20,8 @@
 	            <option value="shopping_mall">Shopping Mall</option>
 	            <option value="hotel">Hotel</option>
 	            <option value="stadium">Stadium</option>
-	            <!-- Add more options as needed -->
 	        </select><br>
 	        <label for="custom_icon">Or upload a custom icon:</label><br>
 	        <input type="file" id="custom_icon" name="custom_icon" autocomplete="custom_icon"><br>
 	        <input type="submit" value="Submit">
 	    </form>
-    </div>
-</body>
-</html>
