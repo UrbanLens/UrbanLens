@@ -1,11 +1,18 @@
+// Define primary and primary colors based on material design color palette
+$primary-color: #2196F3;
+$secondary-color: #FFC107;
+$dark-neutral-color: #424242;
+$light-neutral-color: #FAFAFA;
+$inactive-button-color: #424242;
+
 
 .nav-wrapper {
     // Material dark grey
-    background-color: #424242;
+    background-color: $dark-neutral-color;
 }
 
 .page-footer {
-    background-color: #424242
+    background-color: $dark-neutral-color;
 }
 
 div.container {
@@ -32,7 +39,8 @@ footer {
 }
 
 .map-button {
-    background-color: rgba(255, 255, 255, 0.7);
+    background-color: $light-neutral-color;
+    opacity: 0.8;
     border: none;
     color: black;
     padding: 10px 20px;
@@ -46,8 +54,7 @@ footer {
 }
 
 .map-button:hover {
-    background-color: white;
-    color: black;
+    opacity: 1;
 }
 nav .brand-logo {
     padding: 0.25rem;
@@ -58,7 +65,9 @@ nav .brand-logo {
         border-radius: 50%; 
         overflow: hidden; 
     }
-}.dialog {
+}
+
+.dialog {
     position: fixed;
     top: 50%;
     left: 50%;
@@ -77,13 +86,13 @@ nav .brand-logo {
     border: none;
     border-radius: 5px;
     color: white;
-    background-color: #4CAF50;
+    background-color: $inactive-button-color;
     cursor: pointer;
     transition: background-color 0.3s ease;
 }
 
 .file-button:hover {
-    background-color: #45a049;
+    background-color: $primary-color;
 }
 
 .submit-button {
@@ -93,11 +102,11 @@ nav .brand-logo {
     border: none;
     border-radius: 5px;
     color: white;
-    background-color: #008CBA;
+    background-color: $inactive-button-color;
     cursor: pointer;
     transition: background-color 0.3s ease;
 }
 
 .submit-button:hover {
-    background-color: #007B9E;
+    background-color: $primary-color;
 }
