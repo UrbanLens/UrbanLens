@@ -132,8 +132,10 @@ def add_review(request, location_id):
         return HttpResponse(status=405)
 
 def get_map_data():
-    # Assuming that the map data is stored in a variable `map_data`
-    map_data = Location.objects.values('latitude', 'longitude', 'name', 'description')  # Replace this with the actual function to get the map data
+    map_data = Location.objects.values('latitude', 'longitude', 'name', 'description')
+    if not map_data:
+        # Default map data
+        map_data = [{'latitude': 51.505, 'longitude': -0.09, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
     return map_data
 
 def init_map(request):
