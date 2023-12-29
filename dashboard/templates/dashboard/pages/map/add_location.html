@@ -1,5 +1,6 @@
 
 	    <div class="dialog">
+	        <h2>Add a new location</h2>
 	        <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
 				<label for="name">Name:</label><br>
 				<input type="text" id="name" name="name" autocomplete="name" required><br>
