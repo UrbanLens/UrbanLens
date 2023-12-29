@@ -10,8 +10,8 @@
 
 {% block content %}
 <div class="container">
-    <div id="map"></div>
-    <div class="map-buttons">
+    <div id="map">
+        <div class="map-buttons">
         <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
             <button class="map-button">Add Pin</button>
         </div>
