@@ -1,9 +1,19 @@
+
+.nav-wrapper {
+    // Material dark grey
+    background-color: #424242;
+}
+
+.page-footer {
+    background-color: #424242
+}
+
 div.container {
     width: 100%;
     max-width: 100%;
     height: calc(100vh - 60px - 60px); /* Adjust the height of the container to be 100% of the viewport height minus the header and footer heights */
-    display: flex; /* Add flex display to the container */
-    flex-direction: column; /* Make the container's main axis vertical */
+    display: flex; 
+    flex-direction: column; 
 }
 
 #map {
@@ -12,7 +22,7 @@ div.container {
 }
 
 footer {
-    height: 60px; /* Set a fixed height for the footer */
+    height: 60px;
 }
 .map-buttons {
     position: absolute;
