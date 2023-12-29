@@ -11,11 +11,13 @@
 {% block content %}
 <div class="container">
     <div id="map"></div>
-    <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
-        <button>Add Pin</button>
-    </div>
-    <div hx-get="{% url 'search_pins' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
-        <button>Search Pins</button>
+    <div class="map-buttons">
+        <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
+            <button class="map-button">Add Pin</button>
+        </div>
+        <div hx-get="{% url 'search_pins' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
+            <button class="map-button">Search Pins</button>
+        </div>
     </div>
     {% for location in locations %}
     <div>

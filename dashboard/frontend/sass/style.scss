@@ -15,3 +15,28 @@ footer {
     max-height: 60px; /* Set a maximum height for the footer */
     overflow: auto; /* Prevent content from overflowing */
 }
+.map-buttons {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1000;
+}
+
+.map-button {
+    background-color: rgba(255, 255, 255, 0.7);
+    border: none;
+    color: black;
+    padding: 10px 20px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    transition-duration: 0.4s;
+    cursor: pointer;
+}
+
+.map-button:hover {
+    background-color: white;
+    color: black;
+}
