@@ -39,8 +39,13 @@ footer {
     background-color: white;
     color: black;
 }
-.brand-logo {
-    max-width: 50px; /* Adjust as needed */
-    border-radius: 50%; /* Make the logo display as a circle */
-    overflow: hidden; /* Ensure the logo is constrained to the circle */
+nav .brand-logo {
+    padding: 0.25rem;
+
+    img {
+        max-width: 50px;
+        max-height: 50px;
+        border-radius: 50%; 
+        overflow: hidden; 
+    }
 }

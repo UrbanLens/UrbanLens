@@ -23,9 +23,7 @@
 </head>
 
 <body>
-    <header>
-        <img src="/static/logo.png" alt="Logo">
-    </header>
+    {% include 'dashboard/partials/header.html' %}
     {% block content %}{% endblock %}
     {% include 'dashboard/partials/footer.html' %}
 
