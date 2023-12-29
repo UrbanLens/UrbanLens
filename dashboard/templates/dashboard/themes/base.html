@@ -4,6 +4,7 @@
 <head>
     <meta charset="utf-8">
     <title>Dashboard View</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
 
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0" />
     <!-- Compiled and minified CSS -->
@@ -22,7 +23,9 @@
 </head>
 
 <body>
-    {% include 'dashboard/partials/header.html' %}
+    <header>
+        <img src="/static/logo.png" alt="Logo">
+    </header>
     {% block content %}{% endblock %}
     {% include 'dashboard/partials/footer.html' %}
 
