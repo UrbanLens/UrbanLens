@@ -70,6 +70,7 @@ urlpatterns = [
 	path('map/search/', MapController.search_pins, name='search_pins'),
 	path('map/upload_image/<int:location_id>/', MapController.upload_image, name='upload_image'),
 	path('map/change_category/<int:location_id>/', MapController.change_category, name='change_category'),
+	path('map/init/', MapController.init_map, name='init_map'),
 
 	path('profile/', ProfileController.view_profile, name='view_profile'),
 	path('profile/edit/', ProfileController.edit_profile, name='edit_profile'),
