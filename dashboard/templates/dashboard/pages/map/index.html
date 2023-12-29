@@ -4,8 +4,8 @@
 <div class="container">
     <div class="section">
         <div class="row">
-            <div class="col s12 m4">
-                <div id="map" style="height: 500px;"></div>
+            <div class="col">
+                <div id="map"></div>
                 <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
                     <button>Add Pin</button>
                 </div>
