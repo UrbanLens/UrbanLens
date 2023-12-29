@@ -1,6 +1,7 @@
 
 	    <div class="dialog">
-	        <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
+	        <div class="dialog">
+	            <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
 	        <label for="name">Name:</label><br>
 	        <input type="text" id="name" name="name" autocomplete="name" required><br>
 	        <label for="description">Description:</label><br>
@@ -25,4 +26,5 @@
 	        <label for="custom_icon">Or upload a custom icon:</label><br>
 	        <input type="file" id="custom_icon" name="custom_icon" autocomplete="custom_icon"><br>
 	        <input type="submit" value="Submit">
-	    </form>
+	        </form>
+	    </div>
