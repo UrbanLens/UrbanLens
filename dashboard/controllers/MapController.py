@@ -8,9 +8,9 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    MapController.py                                                                                     *
-*        Path:    /MapController.py                                                                                    *
-*        Project: controllers                                                                                          *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/controllers/MapController.py                                                              *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
@@ -135,7 +135,7 @@ def get_map_data():
     map_data = Location.objects.values('latitude', 'longitude', 'name', 'description')
     if not map_data:
         # Default map data
-        map_data = [{'latitude': 51.505, 'longitude': -0.09, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
+        map_data = [{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
     return map_data
 
 def init_map(request):

@@ -1,37 +1,44 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<style>
+    div.section {
+        height: 100vh;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <div class="section">
-        <div class="row">
-            <div class="col">
-                <div id="map"></div>
-                <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
-                    <button>Add Pin</button>
-                </div>
-                <div hx-get="{% url 'search_pins' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
-                    <button>Search Pins</button>
-                </div>
+        <div id="map"></div>
+            <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
+                <button>Add Pin</button>
             </div>
-            {% for location in locations %}
-            <div>
-                <h2>{{ location.name }}</h2>
-                {% for review in reviews %}
-                {% if review.location.id == location.id %}
-                <div>
-                    <p>{{ review.user.username }} rated this location {{ review.rating }} out of 5</p>
-                    <p>{{ review.review }}</p>
-                </div>
-                {% endif %}
-                {% endfor %}
-                <form method="POST" hx-post="{% url 'add_review' location.id %}" hx-trigger="submit">
-                    {% csrf_token %}
-                    {{ form.as_p }}
-                    <input type="submit" value="Submit">
-                </form>
+            <div hx-get="{% url 'search_pins' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
+                <button>Search Pins</button>
             </div>
-            {% endfor %}
         </div>
+        {% for location in locations %}
+        <div>
+            <h2>{{ location.name }}</h2>
+            {% for review in reviews %}
+            {% if review.location.id == location.id %}
+            <div>
+                <p>{{ review.user.username }} rated this location {{ review.rating }} out of 5</p>
+                <p>{{ review.review }}</p>
+            </div>
+            {% endif %}
+            {% endfor %}
+            <form method="POST" hx-post="{% url 'add_review' location.id %}" hx-trigger="submit">
+                {% csrf_token %}
+                {{ form.as_p }}
+                <input type="submit" value="Submit">
+            </form>
+        </div>
+        {% endfor %}
     </div>
 </div>
 {% endblock %}
@@ -39,8 +46,7 @@
 {% block scripts %}
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-    var map = L.map('map').setView([51.505, -0.09], 13);
-    map.invalidateSize();
+    var map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
     map.invalidateSize();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
