@@ -1,5 +1,6 @@
 
-	    <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
+	    <div class="dialog">
+	        <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
 	        <label for="name">Name:</label><br>
 	        <input type="text" id="name" name="name" autocomplete="name" required><br>
 	        <label for="description">Description:</label><br>
