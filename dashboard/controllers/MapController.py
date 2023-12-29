@@ -82,12 +82,12 @@ def add_pin(request):
         return HttpResponse(status=200)
     else:
         # Render the add form
-        return render(request, 'dashboard/add_location.html', {'hx': True})
+        return render(request, 'dashboard/pages/map/add_location.html', {'hx': True})
 
 def search_pins(request):
     query = request.GET.get('q')
     locations = Location.objects.filter(name__icontains=query)
-    return render(request, 'dashboard/map.html', {'locations': locations})
+    return render(request, 'dashboard/pages/map/map.html', {'locations': locations})
 
 def upload_image(request, location_id):
     if request.method == 'POST':
