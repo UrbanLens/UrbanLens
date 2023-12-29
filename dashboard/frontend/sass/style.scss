@@ -110,3 +110,21 @@ nav .brand-logo {
 .submit-button:hover {
     background-color: $primary-color;
 }
+/* Styles for custom icon dropdown */
+.icon-dropdown {
+    display: none;
+}
+
+.icon-dropdown-display {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+    gap: 10px;
+}
+
+.icon-dropdown-display label {
+    display: block;
+    width: 50px;
+    height: 50px;
+    background-size: cover;
+    cursor: pointer;
+}

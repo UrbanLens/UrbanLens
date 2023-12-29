@@ -23,3 +23,23 @@
 				<input type="submit" value="Submit" class="submit-button">
 	        </form>
 	    </div>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var select = document.getElementById('icon');
+        var display = document.createElement('div');
+        display.className = 'icon-dropdown-display';
+
+        for (var i = 0; i < select.options.length; i++) {
+            var option = select.options[i];
+            var label = document.createElement('label');
+            label.style.backgroundImage = 'url(path_to_icons/' + option.value + '.png)';
+            label.title = option.text;
+            label.addEventListener('click', function() {
+                select.value = option.value;
+            });
+            display.appendChild(label);
+        }
+
+        select.parentNode.insertBefore(display, select.nextSibling);
+    });
+</script>
