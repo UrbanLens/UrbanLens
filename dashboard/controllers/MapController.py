@@ -130,7 +130,11 @@ def add_review(request, location_id):
     else:
         return HttpResponse(status=405)
 
-def init_map(request):
+def get_map_data():
     # Assuming that the map data is stored in a variable `map_data`
-    map_data = get_map_data()  # Replace this with the actual function to get the map data
-    return HttpResponse(map_data, content_type='application/json')
+    map_data = Location.objects.values('latitude', 'longitude', 'name', 'description')  # Replace this with the actual function to get the map data
+    return map_data
+
+def init_map(request):
+    map_data = get_map_data()
+    return HttpResponse(json.dumps(list(map_data)), content_type='application/json')
