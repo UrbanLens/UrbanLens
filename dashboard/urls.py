@@ -32,10 +32,10 @@ from django.shortcuts import redirect
 from django.urls import path, include, re_path
 # 3rd Party imports
 from rest_framework import routers
-from dashboard.models.categories import CategoryViewSet
+#from dashboard.models.categories import CategoryViewSet
 from dashboard.models.locations import LocationViewSet
-from dashboard.models.comments import CommentViewSet
-from dashboard.models.images import ImageViewSet
+#from dashboard.models.comments import CommentViewSet
+#from dashboard.models.images import ImageViewSet
 from dashboard.models.profile import ProfileViewSet
 from dashboard.controllers import MapController, ProfileController, FriendshipController
 from dashboard.controllers.index import IndexController
