@@ -1,15 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <title>Request Friendship</title>
-    <script src="https://unpkg.com/htmx.org@1.6.1"></script>
-</head>
-<body>
+<div class="dialog">
     <h1>Request Friendship</h1>
     <form hx-post="/friendship/request" hx-swap="outerHTML">
         <label for="friend_username">Friend's Username:</label>
         <input type="text" id="friend_username" name="friend_username" required>
         <button type="submit">Send Request</button>
     </form>
-</body>
-</html>
+</div>

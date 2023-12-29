@@ -1,18 +1,7 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Edit Profile</title>
-</head>
-<body>
-    <div hx-get="{% url 'edit_profile' %}" hx-trigger="click" hx-target="#editProfileModal" hx-swap="outerHTML">
-        <button>Edit Profile</button>
-    </div>
-    <div id="editProfileModal">
+<div class="dialog">
         <form method="POST" hx-post="{% url 'edit_profile' %}" hx-trigger="submit" hx-target="#profile" hx-swap="outerHTML">
             {% csrf_token %}
             {{ form.as_p }}
             <input type="submit" value="Submit">
         </form>
     </div>
-</body>
-</html>
