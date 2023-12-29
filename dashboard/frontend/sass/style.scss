@@ -2,12 +2,13 @@ div.container {
     width: 100%;
     max-width: 100%;
     height: calc(100vh - 60px - 60px); /* Adjust the height of the container to be 100% of the viewport height minus the header and footer heights */
+    display: flex; /* Add flex display to the container */
+    flex-direction: column; /* Make the container's main axis vertical */
 }
 
 #map {
-    min-height: 500px;
+    flex-grow: 1; /* Allow the map to grow to fill available space */
     width: 100%;
-    height: 100%; /* The height of the map is 100% of its parent container */
 }
 
 footer {
