@@ -6,13 +6,13 @@
         <!--   Icon Section   -->
         <div class="row">
             <div class="col s12 m4">
-                <div id="map">
-                    <!-- Map goes here -->
+                <div id="map" hx-get="{% url 'init_map' %}" hx-trigger="load" hx-swap="outerHTML">
+                    <!-- Map will be initialized here -->
                 </div>
-                <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#map" hx-swap="outerHTML">
+                <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
                     <button>Add Pin</button>
                 </div>
-                <div hx-get="{% url 'search_pins' %}" hx-trigger="click" hx-target="#map" hx-swap="outerHTML">
+                <div hx-get="{% url 'search_pins' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
                     <button>Search Pins</button>
                 </div>
             </div>
