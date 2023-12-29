@@ -12,5 +12,6 @@ div.container {
 }
 
 footer {
-    height: 60px; /* Set a fixed height for the footer */
+    max-height: 60px; /* Set a maximum height for the footer */
+    overflow: auto; /* Prevent content from overflowing */
 }
