@@ -10,7 +10,7 @@
 <div class="container">
     <div id="map">
         <div class="map-buttons">
-            <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
+            <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="outerHTML">
                 <button class="map-button">Add Pin</button>
             </div>
             <div hx-get="{% url 'search_pins' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
@@ -43,6 +43,7 @@
 <script>
     document.addEventListener('htmx:configRequest', (event) => {
         event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+        console.log("htmx is loaded");
     });
 
     var map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);

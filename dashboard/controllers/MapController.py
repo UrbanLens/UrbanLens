@@ -82,7 +82,7 @@ def add_pin(request):
         return HttpResponse(status=200)
     else:
         # Render the add form
-        return render(request, 'dashboard/pages/map/add_location.html', {'hx': True})
+        return render(request, 'dashboard/pages/map/add_location.html')
 
 def search_pins(request):
     query = request.GET.get('q')
