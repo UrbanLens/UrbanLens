@@ -8,7 +8,7 @@
 
 {% block content %}
 <div class="container">
-    <div id="map" hx-boost="true">
+    <div id="map" hx-boost="true" hx-target="#map">
         <div class="map-buttons">
             <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="outerHTML">
                 <button class="map-button">Add Pin</button>
