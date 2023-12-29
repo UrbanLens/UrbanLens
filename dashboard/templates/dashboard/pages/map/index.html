@@ -45,6 +45,18 @@
         maxZoom: 19,
     }).addTo(map);
 
+    // Update the Leaflet icon URLs
+    var newIcon = L.icon({
+        iconUrl: '/static/leaflet/images/marker-icon.png',
+        shadowUrl: '/static/leaflet/images/marker-shadow.png',
+        iconSize: [25, 41], // size of the icon
+        shadowSize: [41, 41], // size of the shadow
+        iconAnchor: [12, 41], // point of the icon which will correspond to marker's location
+        shadowAnchor: [12, 41],  // the same for the shadow
+        popupAnchor: [1, -34] // point from which the popup should open relative to the iconAnchor
+    });
+    L.Marker.prototype.options.icon = newIcon;
+
     fetch("{% url 'init_map' %}")
         .then(response => response.json())
         .then(data => {
