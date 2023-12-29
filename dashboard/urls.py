@@ -63,7 +63,7 @@ for route, viewset in routes.items():
 
 urlpatterns = [
 	path('rest/', include(router.urls)),
-	re_path('^/?$', IndexController.as_view(), name='home'),
+	re_path('^$', IndexController.as_view(), name='home'),
 	path('map/', MapController.view_map, name='view_map'),
 	path('map/edit/<int:pin_id>/', MapController.edit_pin, name='edit_pin'),
 	path('map/add/', MapController.add_pin, name='add_pin'),
