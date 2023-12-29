@@ -40,21 +40,19 @@
 {% block extra_js %}
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-    document.addEventListener('htmx:afterOnLoad', function () {
-        var map = L.map('map').setView([51.505, -0.09], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-        }).addTo(map);
+    var map = L.map('map').setView([51.505, -0.09], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+    }).addTo(map);
 
-        fetch("{% url 'init_map' %}")
-            .then(response => response.json())
-            .then(data => {
-                data.forEach(pin => {
-                    L.marker([pin.latitude, pin.longitude]).addTo(map)
-                        .bindPopup(`<b>${pin.name}</b><br>${pin.description}`);
-                });
+    fetch("{% url 'init_map' %}")
+        .then(response => response.json())
+        .then(data => {
+            data.forEach(pin => {
+                L.marker([pin.latitude, pin.longitude]).addTo(map)
+                    .bindPopup(`<b>${pin.name}</b><br>${pin.description>`);
             });
-    });
+        });
 </script>
 {% endblock %}
 
