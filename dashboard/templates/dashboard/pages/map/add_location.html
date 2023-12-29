@@ -11,18 +11,13 @@
 				<label for="longitude">Longitude:</label><br>
 				<input type="text" id="longitude" name="longitude" autocomplete="longitude" pattern="^-?([1-8]?[1-9]|[1-9]0)\.{1}\d{1,6}" required><br>
 				<label for="icon">Icon:</label><br>
-				<select id="icon" name="icon" autocomplete="icon">
-					<option value="church">Church</option>
-					<option value="factory">Factory</option>
-					<option value="home">Home</option>
-					<option value="hospital">Hospital</option>
-					<option value="school">School</option>
-					<option value="warehouse">Warehouse</option>
-					<option value="office_building">Office Building</option>
-					<option value="shopping_mall">Shopping Mall</option>
-					<option value="hotel">Hotel</option>
-					<option value="stadium">Stadium</option>
-				</select><br>
+				<div id="icon" name="icon" autocomplete="icon">
+					<input type="radio" id="church" name="icon" value="church">
+					<label for="church"><img src="path_to_church_icon" alt="Church"></label>
+					<input type="radio" id="factory" name="icon" value="factory">
+					<label for="factory"><img src="path_to_factory_icon" alt="Factory"></label>
+					<!-- Repeat for each icon -->
+				</div><br>
 				<label for="custom_icon">Or upload a custom icon:</label><br>
 				<input type="file" id="custom_icon" name="custom_icon" autocomplete="custom_icon" class="file-button"><br>
 				<input type="submit" value="Submit" class="submit-button">
