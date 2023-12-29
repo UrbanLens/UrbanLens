@@ -68,18 +68,25 @@ def edit_pin(request, location_id):
 
 def add_pin(request):
     if request.method == 'POST':
-        # Create a new location based on the form data
-        name = request.POST.get('name')
-        description = request.POST.get('description')
-        latitude = request.POST.get('latitude')
-        longitude = request.POST.get('longitude')
-        tags = request.POST.get('tags').split(',')
-        icon = request.FILES.get('icon', None)
-        location = Location.objects.create(name=name, description=description, latitude=latitude, longitude=longitude, icon=icon)
-        for tag_name in tags:
-            tag, created = Tag.objects.get_or_create(name=tag_name)
-            location.tags.add(tag)
-        return HttpResponse(status=200)
+        try:
+            # Create a new location based on the form data
+            name = request.POST.get('name')
+            description = request.POST.get('description')
+            latitude = request.POST.get('latitude')
+            longitude = request.POST.get('longitude')
+            tags = request.POST.get('tags')
+            if tags is not None:
+                tags = tags.split(',')
+            else:
+                tags = []
+            icon = request.FILES.get('icon', None)
+            location = Location.objects.create(name=name, description=description, latitude=latitude, longitude=longitude, icon=icon)
+            for tag_name in tags:
+                tag, created = Tag.objects.get_or_create(name=tag_name)
+                location.tags.add(tag)
+            return HttpResponse(status=200)
+        except Exception as e:
+            return HttpResponse(f"Error: {str(e)}", status=400)
     else:
         # Render the add form
         return render(request, 'dashboard/pages/map/add_location.html')
