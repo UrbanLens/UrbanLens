@@ -1,6 +1,6 @@
 
 	    <div id="screen" style="display: none; position: fixed; width: 100%; height: 100%; top: 0; left: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 999;"></div>
-	    <div class="dialog" id="dialog">
+	    <div class="dialog" id="addPinModal">
 	        <button id="closeDialog" style="float: right;">X</button>
 	        <h2>Add Location</h2>
 	        <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
@@ -35,9 +35,8 @@
 				      selectedIconInput.value = e.target.dataset.value;
 				    }
 				  });
-				});
 
-				const dialog = document.getElementById('dialog');
+				const dialog = document.getElementById('addPinModal');
 				const screen = document.getElementById('screen');
 				const closeDialog = document.getElementById('closeDialog');
 				const latitudeInput = document.getElementById('latitude');
@@ -70,6 +69,8 @@
 				  longitudeInput.value = lng;
 				  dialog.style.display = 'block';
 				  screen.style.display = 'block';
+				});
+
 				});
 				</script>
 				<input type="hidden" id="selectedIcon" name="icon">
