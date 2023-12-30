@@ -25,52 +25,50 @@
 					<i class="fa fa-store" data-value="store"></i>
 					<i class="fa fa-bolt" data-value="power"></i>
 				</div>
-				<script>
-				const iconGrid = document.getElementById('iconGrid');
-				const selectedIconInput = document.getElementById('selectedIcon');
-				const dialog = document.getElementById('addPinModal');
-				const screen = document.getElementById('screen');
-				const closeDialog = document.getElementById('closeDialog');
-				const latitudeInput = document.getElementById('latitude');
-				const longitudeInput = document.getElementById('longitude');
-
-				iconGrid.addEventListener('click', (e) => {
-					if (e.target.tagName === 'I') {
-						selectedIconInput.value = e.target.dataset.value;
-					}
-				});
-
-				closeDialog.addEventListener('click', (e) => {
-				  e.stopPropagation();
-				  dialog.style.display = 'none';
-				  screen.style.display = 'none';
-				  var pin = map.getLayerById('pin');
-				  if (pin) {
-				    map.removeLayer(pin);
-				  }
-				});
-
-				screen.addEventListener('click', (e) => {
-				  e.stopPropagation();
-				  dialog.style.display = 'none';
-				  screen.style.display = 'none';
-				  if (pin) {
-				    map.removeLayer(pin);
-				    pin = null;
-				  }
-				});
-
-				map.on('click', function(e) {
-				  var lat = e.latlng.lat;
-				  var lng = e.latlng.lng;
-				  latitudeInput.value = lat;
-				  longitudeInput.value = lng;
-				  dialog.style.display = 'block';
-				  screen.style.display = 'block';
-				});
-				</script>
 				<input type="hidden" id="selectedIcon" name="icon">
 
 				<input type="submit" value="Submit" class="submit-button">
 	        </form>
+
+			<script>
+				function initializeDialog() {
+					const iconGrid = document.getElementById('iconGrid');
+					const selectedIconInput = document.getElementById('selectedIcon');
+					const dialog = document.getElementById('addPinModal');
+					const screen = document.getElementById('screen');
+					const closeDialog = document.getElementById('closeDialog');
+					const latitudeInput = document.getElementById('latitude');
+					const longitudeInput = document.getElementById('longitude');
+
+					iconGrid.addEventListener('click', (e) => {
+						if (e.target.tagName === 'I') {
+							selectedIconInput.value = e.target.dataset.value;
+						}
+					});
+
+					closeDialog.addEventListener('click', (e) => {
+						e.stopPropagation();
+						dialog.style.display = 'none';
+						screen.style.display = 'none';
+						const pin = map.getLayerById('pin');
+						if (pin) {
+							map.removeLayer(pin);
+						}
+					});
+
+					screen.addEventListener('click', (e) => {
+						e.stopPropagation();
+						dialog.style.display = 'none';
+						screen.style.display = 'none';
+						const pin = map.getLayerById('pin');
+						if (pin) {
+							map.removeLayer(pin);
+						}
+					});
+				}
+				document.addEventListener('dialogLoaded', function () {
+					initializeDialog();
+				});			
+			</script>
+
 	    </div>

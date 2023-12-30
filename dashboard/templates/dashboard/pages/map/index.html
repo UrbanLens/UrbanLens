@@ -56,6 +56,14 @@
         console.log("htmx is loaded");
     });
 
+    document.body.addEventListener('htmx:afterOnLoad', function () {
+        // Dispatch a custom event after the dialog is loaded
+        setTimeout(() => {
+            const event = new Event('dialogLoaded');
+            document.dispatchEvent(event);
+        }, 250);
+    });
+
     var map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
     var pin;
     map.on('click', function(e) {
@@ -102,5 +110,7 @@
                     .bindPopup('<b>${pin.name}</b><br>${pin.description>');
             });
         });
+
 </script>
+
 {% endblock %}
