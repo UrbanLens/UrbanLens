@@ -61,7 +61,7 @@
     map.on('click', function(e) {
         var lat = e.latlng.lat;
         var lng = e.latlng.lng;
-        pin = L.marker([lat, lng]).addTo(map);
+        pin = L.marker([lat, lng], {id: 'pin'}).addTo(map);
         var addPinButton = document.querySelector('.map-button');
         if (addPinButton) {
             addPinButton.click();

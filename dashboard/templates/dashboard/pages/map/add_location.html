@@ -47,9 +47,9 @@
 				  e.stopPropagation();
 				  dialog.style.display = 'none';
 				  screen.style.display = 'none';
+				  var pin = map.getLayerById('pin');
 				  if (pin) {
 				    map.removeLayer(pin);
-				    pin = null;
 				  }
 				});
 
