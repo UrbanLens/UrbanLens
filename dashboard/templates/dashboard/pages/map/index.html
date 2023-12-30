@@ -62,7 +62,9 @@
         var lng = e.latlng.lng;
         var pin = L.marker([lat, lng]).addTo(map);
         var addPinButton = document.querySelector('.map-button');
+        var screen = document.getElementById('screen');
         if (addPinButton) {
+            screen.style.display = 'block';
             addPinButton.click();
             document.body.addEventListener('htmx:afterOnLoad', function() {
                 var latitudeInput = document.querySelector('#latitude');
