@@ -4,8 +4,6 @@
 	        <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
 				<label for="name">Name:</label><br>
 				<input type="text" id="name" name="name" autocomplete="name" required><br>
-				<label for="description">Description:</label><br>
-				<input type="text" id="description" name="description" autocomplete="description"><br>
 				<label for="address">Address:</label><br>
 				<input type="text" id="address" name="address" autocomplete="address" pattern="^[a-zA-Z0-9\s,.' -]*$" required><br>
 				<div id="iconGrid" class="icon-grid">

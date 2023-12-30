@@ -75,7 +75,6 @@ def add_pin(request):
         try:
             # Create a new location based on the form data
             name = request.POST.get('name')
-            description = request.POST.get('description')
             latitude = request.POST.get('latitude')
             longitude = request.POST.get('longitude')
             address = request.POST.get('address')
@@ -95,7 +94,7 @@ def add_pin(request):
                 if not latitude or not longitude:
                     return HttpResponse("Error: Unable to convert address to lat/lng.", status=400)
 
-            location = Location.objects.create(name=name, description=description, latitude=latitude, longitude=longitude, icon=icon)
+            location = Location.objects.create(name=name, latitude=latitude, longitude=longitude, icon=icon)
             for tag_name in tags:
                 tag, created = Tag.objects.get_or_create(name=tag_name)
                 location.tags.add(tag)
