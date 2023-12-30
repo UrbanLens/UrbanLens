@@ -1,5 +1,5 @@
 
-	    <div id="screen" style="display: none; position: fixed; width: 100%; height: 100%; top: 0; left: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 999;"></div>
+	    <div id="screen" style="position: fixed; width: 100%; height: 100%; top: 0; left: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 999;"></div>
 	    <div class="dialog" id="addPinModal">
 	        <button id="closeDialog" style="float: right;">X</button>
 	        <h2>Add Location</h2>
@@ -31,14 +31,28 @@
 	        </form>
 
 			<script>
+				function closeDialog() {
+					const dialog = document.getElementById('addPinModal');
+					const screen = document.getElementById('screen');
+
+					if (screen) {
+						screen.style.display = 'none';
+						screen.remove();
+					}
+					dialog.style.display = 'none';
+
+					const pin = window.pin;
+					if (pin) {
+						map.removeLayer(pin);
+					}
+				}
+
 				function initializeDialog() {
 					const iconGrid = document.getElementById('iconGrid');
 					const selectedIconInput = document.getElementById('selectedIcon');
 					const dialog = document.getElementById('addPinModal');
 					const screen = document.getElementById('screen');
-					const closeDialog = document.getElementById('closeDialog');
-					const latitudeInput = document.getElementById('latitude');
-					const longitudeInput = document.getElementById('longitude');
+					const closeDialogButton = document.getElementById('closeDialog');
 
 					iconGrid.addEventListener('click', (e) => {
 						if (e.target.tagName === 'I') {
@@ -46,29 +60,10 @@
 						}
 					});
 
-					closeDialog.addEventListener('click', (e) => {
-						e.stopPropagation();
-						dialog.style.display = 'none';
-						screen.style.display = 'none';
-						const pin = window.pin;
-						if (pin) {
-							map.removeLayer(pin);
-						}
-					});
-
-					screen.addEventListener('click', (e) => {
-						e.stopPropagation();
-						dialog.style.display = 'none';
-						screen.style.display = 'none';
-						const pin = map.getLayerById('pin');
-						if (pin) {
-							map.removeLayer(pin);
-						}
-					});
+					screen.addEventListener('click', () => closeDialog());
+					closeDialogButton.addEventListener('click', () => closeDialog());
 				}
-				document.addEventListener('dialogLoaded', function () {
-					initializeDialog();
-				});			
+				document.addEventListener('dialogLoaded', () => initializeDialog());		
 			</script>
 
 	    </div>

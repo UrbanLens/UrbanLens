@@ -64,23 +64,21 @@
         }, 250);
     });
 
-    var map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
+    const map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
     window.pin = null;
     map.on('click', function(e) {
-        var lat = e.latlng.lat;
-        var lng = e.latlng.lng;
+        const lat = e.latlng.lat;
+        const lng = e.latlng.lng;
         window.pin = L.marker([lat, lng], {id: 'pin'}).addTo(map);
-        var addPinButton = document.querySelector('.map-button');
+        const addPinButton = document.querySelector('.map-button');
         if (addPinButton) {
             addPinButton.click();
             document.body.addEventListener('htmx:afterOnLoad', function() {
-                var screen = document.getElementById('screen');
-                var latitudeInput = document.querySelector('#latitude');
-                var longitudeInput = document.querySelector('#longitude');
+                const latitudeInput = document.querySelector('#latitude');
+                const longitudeInput = document.querySelector('#longitude');
                 if (latitudeInput && longitudeInput) {
                     latitudeInput.value = lat;
                     longitudeInput.value = lng;
-                    screen.style.display = 'block';
                 }
             }, { once: true });
         }
