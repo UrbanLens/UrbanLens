@@ -62,8 +62,6 @@
         var lng = e.latlng.lng;
         var pin = L.marker([lat, lng]).addTo(map);
         document.querySelector('.map-button').click();
-        document.getElementById('latitude').value = lat;
-        document.getElementById('longitude').value = lng;
     });
     map.invalidateSize();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {

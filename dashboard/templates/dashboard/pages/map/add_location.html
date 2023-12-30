@@ -38,6 +38,8 @@
 
 				const dialog = document.getElementById('dialog');
 				const closeDialog = document.getElementById('closeDialog');
+				const latitudeInput = document.getElementById('latitude');
+				const longitudeInput = document.getElementById('longitude');
 
 				window.addEventListener('click', (e) => {
 				  if (e.target === dialog) {
@@ -48,6 +50,13 @@
 				closeDialog.addEventListener('click', (e) => {
 				  e.stopPropagation();
 				  dialog.style.display = 'none';
+				});
+
+				map.on('click', function(e) {
+				  var lat = e.latlng.lat;
+				  var lng = e.latlng.lng;
+				  latitudeInput.value = lat;
+				  longitudeInput.value = lng;
 				});
 				</script>
 				<input type="hidden" id="selectedIcon" name="icon">
