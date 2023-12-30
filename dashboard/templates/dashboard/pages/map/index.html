@@ -61,25 +61,14 @@
         var lat = e.latlng.lat;
         var lng = e.latlng.lng;
         var pin = L.marker([lat, lng]).addTo(map);
-        var dialog = document.querySelector('#dialog');
-        if (dialog) {
-            dialog.style.display = 'block';
+        var addPinButton = document.querySelector('.map-button');
+        if (addPinButton) {
+            addPinButton.click();
             var latitudeInput = document.querySelector('#latitude');
             var longitudeInput = document.querySelector('#longitude');
             if (latitudeInput && longitudeInput) {
                 latitudeInput.value = lat;
                 longitudeInput.value = lng;
-            }
-        } else {
-            var addPinModal = document.querySelector('#addPinModal');
-            if (addPinModal) {
-                addPinModal.style.display = 'block';
-                var latitudeInput = document.querySelector('#latitude');
-                var longitudeInput = document.querySelector('#longitude');
-                if (latitudeInput && longitudeInput) {
-                    latitudeInput.value = lat;
-                    longitudeInput.value = lng;
-                }
             }
         }
     });
