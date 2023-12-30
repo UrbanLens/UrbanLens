@@ -64,14 +64,22 @@
         var dialog = document.querySelector('#dialog');
         if (dialog) {
             dialog.style.display = 'block';
-            document.querySelector('#latitude').value = lat;
-            document.querySelector('#longitude').value = lng;
+            var latitudeInput = document.querySelector('#latitude');
+            var longitudeInput = document.querySelector('#longitude');
+            if (latitudeInput && longitudeInput) {
+                latitudeInput.value = lat;
+                longitudeInput.value = lng;
+            }
         } else {
             var addPinModal = document.querySelector('#addPinModal');
             if (addPinModal) {
                 addPinModal.style.display = 'block';
-                document.querySelector('#latitude').value = lat;
-                document.querySelector('#longitude').value = lng;
+                var latitudeInput = document.querySelector('#latitude');
+                var longitudeInput = document.querySelector('#longitude');
+                if (latitudeInput && longitudeInput) {
+                    latitudeInput.value = lat;
+                    longitudeInput.value = lng;
+                }
             }
         }
     });
