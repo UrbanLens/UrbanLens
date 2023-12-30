@@ -44,14 +44,14 @@
 				const longitudeInput = document.getElementById('longitude');
 
 				screen.addEventListener('click', () => {
-				  dialog.style.display = 'none';
-				  screen.style.display = 'none';
+				  dialog.style.display = '';
+				  screen.style.display = '';
 				});
 
 				closeDialog.addEventListener('click', (e) => {
 				  e.stopPropagation();
-				  dialog.style.display = 'none';
-				  screen.style.display = 'none';
+				  dialog.style.display = '';
+				  screen.style.display = '';
 				});
 
 				map.on('click', function(e) {
