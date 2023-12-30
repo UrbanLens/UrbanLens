@@ -26,13 +26,13 @@
 					<i class="fa fa-bolt" data-value="power"></i>
 				</div>
 				<script>
-				let iconGrid = iconGrid || document.getElementById('iconGrid');
-				let selectedIconInput = selectedIconInput || document.getElementById('selectedIcon');
-				let dialog = dialog || document.getElementById('addPinModal');
-				let screen = screen || document.getElementById('screen');
-				let closeDialog = closeDialog || document.getElementById('closeDialog');
-				let latitudeInput = latitudeInput || document.getElementById('latitude');
-				let longitudeInput = longitudeInput || document.getElementById('longitude');
+				const iconGrid = document.getElementById('iconGrid');
+				const selectedIconInput = document.getElementById('selectedIcon');
+				const dialog = document.getElementById('addPinModal');
+				const screen = document.getElementById('screen');
+				const closeDialog = document.getElementById('closeDialog');
+				const latitudeInput = document.getElementById('latitude');
+				const longitudeInput = document.getElementById('longitude');
 
 				iconGrid.addEventListener('click', (e) => {
 					if (e.target.tagName === 'I') {
