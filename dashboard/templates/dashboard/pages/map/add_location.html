@@ -50,7 +50,7 @@
 						e.stopPropagation();
 						dialog.style.display = 'none';
 						screen.style.display = 'none';
-						const pin = map.getLayerById('pin');
+						const pin = window.pin;
 						if (pin) {
 							map.removeLayer(pin);
 						}
