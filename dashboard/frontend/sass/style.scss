@@ -111,17 +111,13 @@ nav .brand-logo {
     background-color: $primary-color;
 }
 /* Styles for custom icon dropdown */
-.icon-dropdown {
-    display: none;
-}
-
-.icon-dropdown-display {
+.icon-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
     gap: 10px;
 }
 
-.icon-dropdown-display label {
+.icon-item {
     display: flex;
     justify-content: center;
     align-items: center;
@@ -129,10 +125,7 @@ nav .brand-logo {
     height: 50px;
     cursor: pointer;
 }
-.icon-dropdown-display .material-icons {
-    font-size: 24px;
-}
-
-select#icon {
-    display: block;
+.icon-item img {
+    width: 100%;
+    height: auto;
 }
