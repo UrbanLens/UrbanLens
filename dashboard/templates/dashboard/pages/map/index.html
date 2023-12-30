@@ -66,6 +66,13 @@
             dialog.style.display = 'block';
             document.querySelector('#latitude').value = lat;
             document.querySelector('#longitude').value = lng;
+        } else {
+            var addPinModal = document.querySelector('#addPinModal');
+            if (addPinModal) {
+                addPinModal.style.display = 'block';
+                document.querySelector('#latitude').value = lat;
+                document.querySelector('#longitude').value = lng;
+            }
         }
     });
     map.invalidateSize();
