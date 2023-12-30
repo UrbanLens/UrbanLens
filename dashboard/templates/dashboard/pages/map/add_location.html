@@ -1,5 +1,6 @@
 
-	    <div class="dialog">
+	    <div class="dialog" id="dialog">
+	        <button id="closeDialog" style="float: right;">X</button>
 	        <h2>Add Location</h2>
 	        <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
 				<label for="name">Name:</label><br>
