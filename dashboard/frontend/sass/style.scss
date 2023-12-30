@@ -19,7 +19,7 @@ $selected-color: #2196F3;
 div.container {
     width: 100%;
     max-width: 100%;
-    height: calc(100vh - 60px - 60px); /* Adjust the height of the container to be 100% of the viewport height minus the header and footer heights */
+    height: calc(100vh - 4rem - 4rem); /* Adjust the height of the container to be 100% of the viewport height minus the header and footer heights */
     display: flex; 
     flex-direction: column; 
 }
@@ -29,9 +29,25 @@ div.container {
     width: 100%;
 }
 
-footer {
-    height: 60px;
+nav, footer, .page-footer {
+    height: 4rem;
+    line-height: 4rem;
+    padding: 0;
+    margin: 0;
+
+    h1, h2, h3, h4, h5 {
+        margin: 0;
+        padding: 0;
+        line-height: 4rem;
+        font-size: 1rem;
+    }
+
+    #github {
+        float: right;
+        margin-right: 1rem;
+    }
 }
+
 .map-buttons {
     position: absolute;
     top: 10px;
