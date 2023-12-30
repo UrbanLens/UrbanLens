@@ -55,14 +55,10 @@
         const closeDialog = document.getElementById('closeDialog');
 
         window.addEventListener('click', (e) => {
+            e.stopPropagation();
             if (e.target === dialog) {
                 dialog.style.display = 'none';
             }
-        });
-
-        closeDialog.addEventListener('click', (e) => {
-            e.stopPropagation();
-            dialog.style.display = 'none';
         });
     });
 
