@@ -24,6 +24,10 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 import json
+
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
+
 from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse
@@ -74,12 +78,23 @@ def add_pin(request):
             description = request.POST.get('description')
             latitude = request.POST.get('latitude')
             longitude = request.POST.get('longitude')
+            address = request.POST.get('address')
             tags = request.POST.get('tags')
             if tags is not None:
                 tags = tags.split(',')
             else:
                 tags = []
             icon = request.FILES.get('icon', None)
+
+            if not latitude or not longitude:
+                if not address:
+                    return HttpResponse("Error: No address or lat/lon provided.", status=400)
+                
+                # Convert address into lat/lng
+                (latitude, longitude) = get_location_by_address(address)
+                if not latitude or not longitude:
+                    return HttpResponse("Error: Unable to convert address to lat/lng.", status=400)
+
             location = Location.objects.create(name=name, description=description, latitude=latitude, longitude=longitude, icon=icon)
             for tag_name in tags:
                 tag, created = Tag.objects.get_or_create(name=tag_name)
@@ -148,3 +163,16 @@ def get_map_data():
 def init_map(request):
     map_data = get_map_data()
     return HttpResponse(json.dumps(list(map_data)), content_type='application/json')
+
+def get_location_by_address(address):
+    try:
+        geolocator = Nominatim(user_agent="geoapiExercises")
+        location = geolocator.geocode(address)
+        if location:
+            return (location.latitude, location.longitude)
+        
+    except GeocoderTimedOut:
+        raise Exception("Geocoder service timed out.")
+    except GeocoderUnavailable:
+        raise Exception("Geocoder service unavailable.")
+    return (None, None)

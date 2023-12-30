@@ -4,7 +4,8 @@ $secondary-color: #FFC107;
 $dark-neutral-color: #424242;
 $light-neutral-color: #FAFAFA;
 $inactive-button-color: #424242;
-
+$highlight-color: #FFC107;
+$selected-color: #2196F3;
 
 .nav-wrapper {
     // Material dark grey
@@ -115,17 +116,24 @@ nav .brand-logo {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
     gap: 10px;
+
+    i {
+        cursor: pointer;
+        font-size: 24px; 
+        text-align: center;
+
+        &:hover {
+            color: $highlight-color;
+        }
+
+        &.selected {
+            color: $selected-color; 
+        }
+    }
 }
 
-.icon-item {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 50px;
-    height: 50px;
-    cursor: pointer;
-}
-.icon-item img {
-    width: 100%;
-    height: auto;
+.dialog {
+    .submit-button {
+        float: right;
+    }
 }

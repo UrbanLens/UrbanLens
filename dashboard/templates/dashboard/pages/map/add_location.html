@@ -1,54 +1,40 @@
 
 	    <div class="dialog">
-	        <h2>Add a new location</h2>
+	        <h2>Add Location</h2>
 	        <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
 				<label for="name">Name:</label><br>
 				<input type="text" id="name" name="name" autocomplete="name" required><br>
 				<label for="description">Description:</label><br>
 				<input type="text" id="description" name="description" autocomplete="description"><br>
-				<label for="latitude">Latitude:</label><br>
-				<input type="text" id="latitude" name="latitude" autocomplete="latitude" pattern="^-?([1-8]?[1-9]|[1-9]0)\.{1}\d{1,6}" required><br>
-				<label for="longitude">Longitude:</label><br>
-				<input type="text" id="longitude" name="longitude" autocomplete="longitude" pattern="^-?([1-8]?[1-9]|[1-9]0)\.{1}\d{1,6}" required><br>
-				<label for="icon">Icon:</label><br>
-				<select id="icon" name="icon" class="icon-dropdown" autocomplete="icon">
-					<option value="church">church</option>
-					<option value="factory">factory</option>
-					<option value="fire_station">fire_station</option>
-					<option value="hospital">hospital</option>
-					<option value="library">library</option>
-					<option value="museum">museum</option>
-					<option value="park">park</option>
-					<option value="police">police</option>
-					<option value="school">school</option>
-					<option value="store">store</option>
-					<option value="power">power</option>
-				</div><br>
-				<label for="custom_icon">Or upload a custom icon:</label><br>
-				<input type="file" id="custom_icon" name="custom_icon" autocomplete="custom_icon" class="file-button"><br>
+				<label for="address">Address:</label><br>
+				<input type="text" id="address" name="address" autocomplete="address" pattern="^[a-zA-Z0-9\s,.' -]*$" required><br>
+				<div id="iconGrid" class="icon-grid">
+					<i class="fa fa-church" data-value="church"></i>
+					<i class="fa fa-industry" data-value="factory"></i>
+					<i class="fa fa-fire-extinguisher" data-value="fire_station"></i>
+					<i class="fa fa-hospital-symbol" data-value="hospital"></i>
+					<i class="fa fa-book" data-value="library"></i>
+					<i class="fa fa-landmark" data-value="museum"></i>
+					<i class="fa fa-tree" data-value="park"></i>
+					<i class="fa fa-shield-alt" data-value="police"></i>
+					<i class="fa fa-school" data-value="school"></i>
+					<i class="fa fa-store" data-value="store"></i>
+					<i class="fa fa-bolt" data-value="power"></i>
+				</div>
+				<input type="hidden" id="selectedIcon" name="icon">
+
 				<input type="submit" value="Submit" class="submit-button">
 	        </form>
 	    </div>
 <script>
-	document.addEventListener('DOMContentLoaded', function () {
-		var select = document.getElementById('icon');
-		var display = document.createElement('div');
-		display.className = 'icon-dropdown-display';
+document.addEventListener('DOMContentLoaded', () => {
+  const iconGrid = document.getElementById('iconGrid');
+  const selectedIconInput = document.getElementById('selectedIcon');
 
-		for (var i = 0; i < select.options.length; i++) {
-			var option = select.options[i];
-			var label = document.createElement('label');
-			var icon = document.createElement('i');
-			icon.className = 'material-icons';
-			icon.textContent = option.value;
-			label.appendChild(icon);
-			label.title = option.text;
-			label.addEventListener('click', function () {
-				select.value = option.value;
-			});
-			display.appendChild(label);
-		}
-
-		select.parentNode.insertBefore(display, select.nextSibling);
-	});
+  iconGrid.addEventListener('click', (e) => {
+    if (e.target.tagName === 'I') {
+      selectedIconInput.value = e.target.dataset.value;
+    }
+  });
+});
 </script>
