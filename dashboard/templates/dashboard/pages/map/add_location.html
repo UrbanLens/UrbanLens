@@ -11,12 +11,18 @@
 				<label for="longitude">Longitude:</label><br>
 				<input type="text" id="longitude" name="longitude" autocomplete="longitude" pattern="^-?([1-8]?[1-9]|[1-9]0)\.{1}\d{1,6}" required><br>
 				<label for="icon">Icon:</label><br>
-				<div id="icon" name="icon" autocomplete="icon">
-					<input type="radio" id="church" name="icon" value="church">
-					<label for="church"><i class="material-icons">church</i></label>
-					<input type="radio" id="factory" name="icon" value="factory">
-					<label for="factory"><i class="material-icons">factory</i></label>
-					<!-- Repeat for each icon -->
+				<select id="icon" name="icon" class="icon-dropdown" autocomplete="icon">
+					<option value="church">church</option>
+					<option value="factory">factory</option>
+					<option value="fire_station">fire_station</option>
+					<option value="hospital">hospital</option>
+					<option value="library">library</option>
+					<option value="museum">museum</option>
+					<option value="park">park</option>
+					<option value="police">police</option>
+					<option value="school">school</option>
+					<option value="store">store</option>
+					<option value="power">power</option>
 				</div><br>
 				<label for="custom_icon">Or upload a custom icon:</label><br>
 				<input type="file" id="custom_icon" name="custom_icon" autocomplete="custom_icon" class="file-button"><br>
@@ -24,22 +30,25 @@
 	        </form>
 	    </div>
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        var select = document.getElementById('icon');
-        var display = document.createElement('div');
-        display.className = 'icon-dropdown-display';
+	document.addEventListener('DOMContentLoaded', function () {
+		var select = document.getElementById('icon');
+		var display = document.createElement('div');
+		display.className = 'icon-dropdown-display';
 
-        for (var i = 0; i < select.options.length; i++) {
-            var option = select.options[i];
-            var label = document.createElement('label');
-            label.style.backgroundImage = 'url(path_to_icons/' + option.value + '.png)';
-            label.title = option.text;
-            label.addEventListener('click', function() {
-                select.value = option.value;
-            });
-            display.appendChild(label);
-        }
+		for (var i = 0; i < select.options.length; i++) {
+			var option = select.options[i];
+			var label = document.createElement('label');
+			var icon = document.createElement('i');
+			icon.className = 'material-icons';
+			icon.textContent = option.value;
+			label.appendChild(icon);
+			label.title = option.text;
+			label.addEventListener('click', function () {
+				select.value = option.value;
+			});
+			display.appendChild(label);
+		}
 
-        select.parentNode.insertBefore(display, select.nextSibling);
-    });
+		select.parentNode.insertBefore(display, select.nextSibling);
+	});
 </script>
