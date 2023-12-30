@@ -64,12 +64,14 @@
         var addPinButton = document.querySelector('.map-button');
         if (addPinButton) {
             addPinButton.click();
-            var latitudeInput = document.querySelector('#latitude');
-            var longitudeInput = document.querySelector('#longitude');
-            if (latitudeInput && longitudeInput) {
-                latitudeInput.value = lat;
-                longitudeInput.value = lng;
-            }
+            document.body.addEventListener('htmx:afterOnLoad', function() {
+                var latitudeInput = document.querySelector('#latitude');
+                var longitudeInput = document.querySelector('#longitude');
+                if (latitudeInput && longitudeInput) {
+                    latitudeInput.value = lat;
+                    longitudeInput.value = lng;
+                }
+            }, { once: true });
         }
     });
     map.invalidateSize();
