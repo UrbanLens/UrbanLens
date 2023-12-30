@@ -35,13 +35,8 @@
 					const dialog = document.getElementById('addPinModal');
 					const screen = document.getElementById('screen');
 
-					if (window.pin) {
-						console.log('Removing most recent pin')
-						console.log('map ', window.map);
-						console.log('pin ', window.pin);
-						window.map.removeLayer(window.pin);
-						window.pin = null;
-					}
+					const closeEvent = new CustomEvent('closeDialog');
+					document.dispatchEvent(closeEvent);
 
 					if (screen) {
 						screen.style.display = 'none';
