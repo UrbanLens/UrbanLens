@@ -60,7 +60,7 @@
         var lat = e.latlng.lat;
         var lng = e.latlng.lng;
         var pin = L.marker([lat, lng]).addTo(map);
-        document.getElementById('addPinModal').click();
+        document.querySelector('.map-button').click();
         document.getElementById('latitude').value = lat;
         document.getElementById('longitude').value = lng;
     });
