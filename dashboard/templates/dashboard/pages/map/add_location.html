@@ -47,12 +47,20 @@
 				  e.stopPropagation();
 				  dialog.style.display = 'none';
 				  screen.style.display = 'none';
+				  if (pin) {
+				    map.removeLayer(pin);
+				    pin = null;
+				  }
 				});
 
 				screen.addEventListener('click', (e) => {
 				  e.stopPropagation();
 				  dialog.style.display = 'none';
 				  screen.style.display = 'none';
+				  if (pin) {
+				    map.removeLayer(pin);
+				    pin = null;
+				  }
 				});
 
 				map.on('click', function(e) {

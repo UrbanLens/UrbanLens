@@ -57,10 +57,11 @@
     });
 
     var map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
+    var pin;
     map.on('click', function(e) {
         var lat = e.latlng.lat;
         var lng = e.latlng.lng;
-        var pin = L.marker([lat, lng]).addTo(map);
+        pin = L.marker([lat, lng]).addTo(map);
         var addPinButton = document.querySelector('.map-button');
         if (addPinButton) {
             addPinButton.click();
