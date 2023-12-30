@@ -67,6 +67,7 @@
     const map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
     window.pin = null;
     map.on('click', function(e) {
+        console.log('Map clicked');
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
         if (window.pin) {
