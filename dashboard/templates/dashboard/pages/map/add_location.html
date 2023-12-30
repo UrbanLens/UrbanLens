@@ -26,7 +26,11 @@
 					<i class="fa fa-bolt" data-value="power"></i>
 				</div>
 				<script>
-				document.body.addEventListener('htmx:afterOnLoad', () => {
+				var observer = new MutationObserver(function(mutations) {
+				  mutations.forEach(function(mutation) {
+				    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+				      var newNode = mutation.addedNodes[0];
+				      if (newNode.id === 'addPinModal') {
 					console.log('htmx:afterOnLoad');
 				  const iconGrid = document.getElementById('iconGrid');
 				  const selectedIconInput = document.getElementById('selectedIcon');
