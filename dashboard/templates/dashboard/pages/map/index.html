@@ -60,7 +60,8 @@
             }
         });
 
-        closeDialog.addEventListener('click', () => {
+        closeDialog.addEventListener('click', (e) => {
+            e.stopPropagation();
             dialog.style.display = 'none';
         });
     });
