@@ -50,17 +50,6 @@
 {% block scripts %}
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const dialog = document.getElementById('dialog');
-        const closeDialog = document.getElementById('closeDialog');
-
-        window.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (e.target === dialog) {
-                dialog.style.display = 'none';
-            }
-        });
-    });
 
     document.addEventListener('htmx:configRequest', (event) => {
         event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';

@@ -34,20 +34,20 @@
 				      selectedIconInput.value = e.target.dataset.value;
 				    }
 				  });
+				});
 
-				  const dialog = document.getElementById('dialog');
-				  const closeDialog = document.getElementById('closeDialog');
+				const dialog = document.getElementById('dialog');
+				const closeDialog = document.getElementById('closeDialog');
 
-				  window.addEventListener('click', (e) => {
-				    if (e.target === dialog) {
-				      dialog.style.display = 'none';
-				    }
-				  });
-
-				  closeDialog.addEventListener('click', (e) => {
-				    e.stopPropagation();
+				window.addEventListener('click', (e) => {
+				  if (e.target === dialog) {
 				    dialog.style.display = 'none';
-				  });
+				  }
+				});
+
+				closeDialog.addEventListener('click', (e) => {
+				  e.stopPropagation();
+				  dialog.style.display = 'none';
 				});
 				</script>
 				<input type="hidden" id="selectedIcon" name="icon">
