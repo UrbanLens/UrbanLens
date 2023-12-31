@@ -67,23 +67,12 @@
         }, 250);
     });
 
-    document.addEventListener('closeDialog', function() {
-        if (window.pin) {
-            console.log('Removing most recent pin')
-            console.log('map ', window.map);
-            console.log('pin ', window.pin);
-            window.map.removeLayer(window.pin);
-            window.pin = null;
-        }
-    });
-
     map.on('click', function(e) {
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
         window.pin = L.marker([lat, lng], {id: 'pin'}).addTo(map);
         const addPinButton = document.querySelector('.map-button');
         if (addPinButton) {
-            addPinButton.click();
             document.body.addEventListener('htmx:afterOnLoad', function() {
                 const latitudeInput = document.querySelector('#latitude');
                 const longitudeInput = document.querySelector('#longitude');
@@ -92,6 +81,7 @@
                     longitudeInput.value = lng;
                 }
             }, { once: true });
+            addPinButton.click();
         }
     });
     map.invalidateSize();
