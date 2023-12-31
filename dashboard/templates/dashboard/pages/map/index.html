@@ -67,22 +67,41 @@
         }, 250);
     });
 
-    map.on('click', function(e) {
+    map.on('contextmenu', function(e) {
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
-        window.pin = L.marker([lat, lng], {id: 'pin'}).addTo(map);
-        const addPinButton = document.querySelector('.map-button');
-        if (addPinButton) {
-            document.body.addEventListener('htmx:afterOnLoad', function() {
-                const latitudeInput = document.querySelector('#latitude');
-                const longitudeInput = document.querySelector('#longitude');
-                if (latitudeInput && longitudeInput) {
-                    latitudeInput.value = lat;
-                    longitudeInput.value = lng;
-                }
-            }, { once: true });
-            addPinButton.click();
-        }
+
+        // Create context menu
+        const contextMenu = document.createElement('div');
+        contextMenu.style.position = 'absolute';
+        contextMenu.style.top = `${e.originalEvent.y}px`;
+        contextMenu.style.left = `${e.originalEvent.x}px`;
+        contextMenu.style.backgroundColor = 'white';
+        contextMenu.style.border = '1px solid black';
+        contextMenu.style.zIndex = 10000;
+
+        // Create "Add Pin" option
+        const addPinOption = document.createElement('button');
+        addPinOption.innerText = 'Add Pin';
+        addPinOption.addEventListener('click', function() {
+            window.pin = L.marker([lat, lng], {id: 'pin'}).addTo(map);
+            const addPinButton = document.querySelector('.map-button');
+            if (addPinButton) {
+                document.body.addEventListener('htmx:afterOnLoad', function() {
+                    const latitudeInput = document.querySelector('#latitude');
+                    const longitudeInput = document.querySelector('#longitude');
+                    if (latitudeInput && longitudeInput) {
+                        latitudeInput.value = lat;
+                        longitudeInput.value = lng;
+                    }
+                }, { once: true });
+                addPinButton.click();
+            }
+            document.body.removeChild(contextMenu);
+        });
+
+        contextMenu.appendChild(addPinOption);
+        document.body.appendChild(contextMenu);
     });
     map.invalidateSize();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
