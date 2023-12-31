@@ -13,17 +13,43 @@
 				<label for="address">Address:</label><br>
 				<input type="text" id="address" name="address" autocomplete="address" pattern="^[a-zA-Z0-9\s,.' -]*$"><br>
 				<div id="iconGrid" class="icon-grid">
-					<i class="fa fa-church" data-value="church"></i>
-					<i class="fa fa-industry" data-value="factory"></i>
-					<i class="fa fa-fire-extinguisher" data-value="fire_station"></i>
-					<i class="fa fa-hospital-symbol" data-value="hospital"></i>
-					<i class="fa fa-book" data-value="library"></i>
-					<i class="fa fa-landmark" data-value="museum"></i>
-					<i class="fa fa-tree" data-value="park"></i>
-					<i class="fa fa-shield-alt" data-value="police"></i>
-					<i class="fa fa-school" data-value="school"></i>
-					<i class="fa fa-store" data-value="store"></i>
-					<i class="fa fa-bolt" data-value="power"></i>
+					<i class="bank"></i>
+					<i class="car"></i>
+					<i class="church"></i>
+					<i class="firehouse"></i>
+					<i class="hospital"></i>
+					<i class="military"></i>
+					<i class="plane"></i>
+					<i class="school"></i>
+					<i class="tunnel"></i>
+					<i class="boat"></i>
+					<i class="castle"></i>
+					<i class="dam"></i>
+					<i class="graffiti"></i>
+					<i class="house"></i>
+					<i class="museum"></i>
+					<i class="powerplant"></i>
+					<i class="statue"></i>
+					<i class="bridge"></i>
+					<i class="cave"></i>
+					<i class="factory"></i>
+					<i class="graveyard"></i>
+					<i class="library"></i>
+					<i class="park"></i>
+					<i class="prison"></i>
+					<i class="train"></i>
+					<!-- 
+					<i class="windmill"></i>
+					<i class="lighthouse"></i>
+					<i class="water-tower"></i>
+					<i class="barn"></i>
+					<i class="silo"></i>
+					<i class="police-station"></i>
+					<i class="farm"></i>
+					<i class="stadium"></i>
+					<i class="theater"></i>
+					<i class="construction"></i>
+					-->
 				</div>
 				<input type="hidden" id="selectedIcon" name="icon">
 
@@ -39,8 +65,6 @@
 						console.log('Removing most recent pin')
 						console.log('map ', window.map);
 						console.log('pin ', window.pin);
-						// TODO: NONE OF THESE WORK TO REMOVE THE PIN???
-						// https://leafletjs.com/reference.html#marker
 						window.pin.remove();
 						window.pin.closePopup();
 						window.pin.closeTooltip();
