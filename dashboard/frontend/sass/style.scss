@@ -153,3 +153,130 @@ nav .brand-logo {
         float: right;
     }
 }
+#iconGrid {
+    i {
+        width: 3rem;
+        height: 3rem;
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        opacity: 0.8;
+    }
+    i:hover {
+        opacity: 1; 
+        filter: invert(0%) sepia(100%) saturate(100%) hue-rotate(130deg) brightness(100%) contrast(100%);
+    }
+    i.selected, i:focus {
+        opacity: 1;
+        filter: invert(0%) sepia(100%) saturate(100%) hue-rotate(0deg) brightness(100%) contrast(100%);
+    }
+}
+i.bank {
+    background-image: url("/static/icons/bank.png");
+}
+i.car {
+    background-image: url("/static/icons/car.png");
+}
+i.church {
+    background-image: url("/static/icons/church.png");
+}
+i.firehouse {
+    background-image: url("/static/icons/firehouse.png");
+}
+i.hospital {
+    background-image: url("/static/icons/hospital.png");
+}
+i.military {
+    background-image: url("/static/icons/military.png");
+}
+i.plane {
+    background-image: url("/static/icons/plane.png");
+}
+
+i.school {
+    background-image: url("/static/icons/school.png");
+}
+i.tunnel {
+    background-image: url("/static/icons/tunnel.png");
+}
+i.boat {
+    background-image: url("/static/icons/boat.png");
+}
+i.castle {
+    background-image: url("/static/icons/castle.png");
+}
+i.dam {
+    background-image: url("/static/icons/dam.png");
+}
+i.graffiti {
+    background-image: url("/static/icons/graffiti.png");
+}
+i.house {
+    background-image: url("/static/icons/house.png");
+}
+i.museum {
+    background-image: url("/static/icons/museum.png");
+}
+i.powerplant {
+    background-image: url("/static/icons/powerplant.png");
+}
+i.statue {
+    background-image: url("/static/icons/statue.png");
+}
+i.bridge {
+    background-image: url("/static/icons/bridge.png");
+}
+i.cave {
+    background-image: url("/static/icons/cave.png");
+}
+i.factory {
+    background-image: url("/static/icons/factory.png");
+}
+i.graveyard {
+    background-image: url("/static/icons/graveyard.png");
+}
+i.library {
+    background-image: url("/static/icons/library.png");
+}
+i.park {
+    background-image: url("/static/icons/park.png");
+}
+i.prison {
+    background-image: url("/static/icons/prison.png");
+}
+i.train {
+    background-image: url("/static/icons/train.png");
+}
+i.windmill {
+    background-image: url("/static/icons/windmill.png");
+}
+i.lighthouse {
+    background-image: url("/static/icons/lighthouse.png");
+}
+i.water_tower {
+    background-image: url("/static/icons/water_tower.png");
+}
+i.barn {
+    background-image: url("/static/icons/barn.png");
+}
+i.silo {
+    background-image: url("/static/icons/silo.png");
+}
+i.police_station {
+    background-image: url("/static/icons/police_station.png");
+}
+i.farm {
+    background-image: url("/static/icons/farm.png");
+}
+i.stadium {
+    background-image: url("/static/icons/stadium.png");
+}
+i.theater {
+    background-image: url("/static/icons/theater.png");
+}
+i.construction {
+    background-image: url("/static/icons/construction.png");
+}
