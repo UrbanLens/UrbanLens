@@ -35,15 +35,24 @@
 					const dialog = document.getElementById('addPinModal');
 					const screen = document.getElementById('screen');
 
-					const closeEvent = new CustomEvent('closeDialog');
-					document.dispatchEvent(closeEvent);
+					if (window.pin) {
+						console.log('Removing most recent pin')
+						console.log('map ', window.map);
+						console.log('pin ', window.pin);
+						// TODO: NONE OF THESE WORK TO REMOVE THE PIN???
+						// https://leafletjs.com/reference.html#marker
+						window.pin.remove();
+						window.pin.closePopup();
+						window.pin.closeTooltip();
+						window.map.removeLayer(window.pin);
+						window.pin = null;
+					}
 
 					if (screen) {
 						screen.style.display = 'none';
 						screen.remove();
 					}
 					dialog.style.display = 'none';
-
 				}
 
 				function initializeDialog() {
