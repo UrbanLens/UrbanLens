@@ -68,6 +68,9 @@
                 input.name = field.parentNode.dataset.name;
                 field.replaceWith(input);
                 input.focus();
+                input.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                });
                 input.addEventListener('keydown', function (e) {
                     if (e.key === 'Enter') {
                         const value = this.value;
