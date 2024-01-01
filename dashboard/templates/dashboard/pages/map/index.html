@@ -64,8 +64,8 @@
             span.addEventListener('click', function (e) {
                 e.stopPropagation();
                 const field = this;
-                let value = field.innerText;
-                let initialValue = value;
+                const initialValue = field.innerText;
+                let value = initialValue;
                 const name = field.parentNode.dataset.name;
                 let input;
 
@@ -112,6 +112,7 @@
                 }
 
                 input.name = name;
+                input.dataset.initialValue = initialValue;
                 field.replaceWith(input);
                 input.focus();
                 
@@ -123,7 +124,7 @@
                         value = null;
                     }
                     data[this.name] = value;
-                    if (value !== this.defaultValue) {
+                    if (value !== this.dataset.initialValue) {
                         fetch(`/dashboard/rest/locations/${locationId}/`, {
                             method: 'PATCH',
                             headers: {
