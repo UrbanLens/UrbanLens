@@ -142,9 +142,7 @@
                         console.log('value is the same as initial value, skipping save');
                         return;
                     }
-
-                    console.log(value);
-                    console.log(initialValue);
+                    
                     fetch(`/dashboard/rest/locations/${locationId}/`, {
                         method: 'PATCH',
                         headers: {
