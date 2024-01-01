@@ -89,6 +89,8 @@
                     });
                     // Ensure the dropdown is visible
                     input.style.display = 'block';
+                    // Add event listener to trigger save function when a new option is selected
+                    input.addEventListener('change', saveInputValue);
                 } else if (name == "last_visited") {
                     if (value == "never") {
                         value = new Date().toLocaleDateString();
