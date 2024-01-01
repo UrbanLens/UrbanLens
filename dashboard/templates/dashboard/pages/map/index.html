@@ -34,6 +34,7 @@
     map.on('popupopen', function() {
         document.querySelectorAll('.pin-popup .stars input').forEach(function(input) {
             input.addEventListener('change', function() {
+                console.log('star change');
                 const field = this;
                 const value = field.value;
                 const locationId = field.closest('.pin-popup').dataset.id;
@@ -59,18 +60,19 @@
             });
         });
 
-        document.querySelectorAll('.pin-popup span.value').forEach(function (p) {
-            p.addEventListener('click', function () {
+        document.querySelectorAll('.pin-popup span.value').forEach(function (span) {
+            span.addEventListener('click', function (e) {
+                e.stopPropagation();
                 const field = this;
                 const value = field.innerText;
                 const input = document.createElement('input');
                 input.value = value;
                 input.name = field.parentNode.dataset.name;
-                field.replaceWith(input);
-                input.focus();
                 input.addEventListener('click', function (e) {
                     e.stopPropagation();
                 });
+                field.replaceWith(input);
+                input.focus();
                 input.addEventListener('keydown', function (e) {
                     if (e.key === 'Enter') {
                         const value = this.value;
