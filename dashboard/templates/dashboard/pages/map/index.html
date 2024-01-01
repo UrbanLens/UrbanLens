@@ -168,10 +168,12 @@
                     }
                 }
 
+                let escapePressed = false;
                 input.addEventListener('keydown', function (e) {
                     if (e.key === 'Enter') {
                         saveInputValue.call(this);
                     } else if (e.key === 'Escape') {
+                        escapePressed = true;
                         const span = document.createElement('span');
                         span.classList.add('value');
                         span.innerText = initialValue;
@@ -180,7 +182,7 @@
                 });
 
                 input.addEventListener('blur', function () {
-                    if (this.value !== value && document.body.contains(this)) {
+                    if (!escapePressed && this.value !== value && document.body.contains(this)) {
                         saveInputValue.call(this);
                     }
                 });
