@@ -12,8 +12,10 @@
                 {{ profile.user.first_name|first }}
             </div>
         {% endif %}
-        <button id="upload-avatar-button" class="btn btn-primary">Upload</button>
-        <input type="file" id="avatar-file-input" style="display: none;">
+        <div id="upload-avatar-button" class="upload-button">
+            <i class="material-icons">file_upload</i>
+            <input type="file" id="avatar-file-input" style="display: none;">
+        </div>
     </div>
 
     <p class="light">
