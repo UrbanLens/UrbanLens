@@ -29,7 +29,7 @@
 <script>
     console.log('script tag');
     document.addEventListener('dialogLoaded', function() {
-        console.log('adding event listener');
+        console.log('Event listener for dialogLoaded added');
         document.querySelectorAll('.stars input').forEach(function(starInput) {
             starInput.addEventListener('change', function() {
                 console.log('star input changed');
@@ -69,6 +69,7 @@
         // Dispatch a custom event after the dialog is loaded
         setTimeout(() => {
             const event = new Event('dialogLoaded');
+            console.log('Dispatching dialogLoaded event');
             document.dispatchEvent(event);
         }, 250);
     });
