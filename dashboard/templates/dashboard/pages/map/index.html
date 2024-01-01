@@ -13,7 +13,7 @@
 {% block content %}
 <div id="map" hx-boost="true">
     <div class="map-buttons">
-        <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="outerHTML">
+        <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="outerHTML" hx-swap-oob="true">
             <button class="map-button">Add Pin</button>
         </div>
         <div hx-get="{% url 'search_pins' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
