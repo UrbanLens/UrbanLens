@@ -168,6 +168,7 @@ i.pin {
     justify-content: center;
     border-radius: 50%;
     opacity: 0.8;
+    background-image: url("/static/icons/house.png");
 }
 i.pin:hover {
     opacity: 1; 
@@ -354,8 +355,18 @@ i.construction {
         color: red;
     }
 
-    &.priority-0 {
+    &.rating-undefined, &.rating-0 {
         label {
+            color: lightgrey;
+        }
+    }
+
+    &:hover {
+        label {
+            color: red;
+        }
+
+        label:hover ~ label {
             color: lightgrey;
         }
     }

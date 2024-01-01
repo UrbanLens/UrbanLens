@@ -301,19 +301,15 @@
         .then(response => response.json())
         .then(data => {
             data.forEach(pin => {
-                let marker; 
+                let marker = L.marker([pin.latitude, pin.longitude]); 
                 // if there is an icon, use it in a divIcon
                 if (pin.icon) {
-                    const icon = L.divIcon({
+                    marker.setIcon(L.divIcon({
                         className: pin.icon,
                         html: `<i class="pin ${pin.icon}"></i>`,
                         iconSize: [30, 42],
                         iconAnchor: [15, 42]
-                    });
-                    marker = L.marker([pin.latitude, pin.longitude], {icon});
-                } else {
-                    // otherwise, use the default icon
-                    marker = L.marker([pin.latitude, pin.longitude]);
+                    }));
                 }
                 marker.addTo(map).bindPopup(`
                     <div class="pin-popup" data-id="${pin.id}">
