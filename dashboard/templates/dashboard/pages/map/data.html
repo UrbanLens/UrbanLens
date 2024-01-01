@@ -23,7 +23,11 @@
                 <span class="value">{{ location.get_status_display }}</span>
             </div>
             <div class="last-visited" data-name="last_visited">
-                <span class="value">{{ location.last_visited|date:"F j, Y" if location.last_visited else "never" }}</span>
+                {% if location.last_visited %}
+                    <span class="value">{{ location.last_visited|date:"F j, Y" }}</span>
+                {% else %}
+                    <span class="value">never</span>
+                {% endif %}
             </div>
             <button onclick="deletePin(this)">Delete Pin</button>
         </div>
