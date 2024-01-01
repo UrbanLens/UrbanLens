@@ -94,10 +94,14 @@
                     const day = date.getDate();
                     input.value = `${year}-${month < 10 ? '0' : ''}${month}-${day < 10 ? '0' : ''}${day}`;
 
+                    let firstInput = true;
                     input.addEventListener('keydown', function (e) {
-                        if ((e.key === 'Backspace' || e.key === 'Delete') && this.value) {
+                        if (firstInput && (e.key === 'Backspace' || e.key === 'Delete')) {
                             e.preventDefault();
                             this.value = '';
+                            firstInput = false;
+                        } else {
+                            firstInput = false;
                         }
                     });
                 } else {
