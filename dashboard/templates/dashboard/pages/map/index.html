@@ -32,7 +32,7 @@
     window.pin = null;
 
     map.on('popupopen', function() {
-        document.querySelectorAll('.pin-popup input, .pin-popup textarea').forEach(function(input) {
+        document.querySelectorAll('.pin-popup .stars input').forEach(function(input) {
             input.addEventListener('change', function() {
                 const field = this;
                 const value = field.value;
