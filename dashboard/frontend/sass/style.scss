@@ -370,4 +370,18 @@ i.construction {
             color: lightgrey;
         }
     }
+}.delete-button {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: $dark-neutral-color;
+    opacity: 0.6;
+    transition: opacity 0.3s ease;
+    font-size: 24px;
+}
+
+.delete-button:hover {
+    opacity: 1;
 }
