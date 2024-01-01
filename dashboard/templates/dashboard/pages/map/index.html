@@ -64,7 +64,7 @@
             span.addEventListener('click', function (e) {
                 e.stopPropagation();
                 const field = this;
-                const value = field.innerText;
+                let value = field.innerText;
                 const name = field.parentNode.dataset.name;
                 let input;
 
@@ -135,7 +135,13 @@
                         toastr.success(`${this.name.charAt(0).toUpperCase() + this.name.slice(1)} updated successfully`);
                         const span = document.createElement('span');
                         span.classList.add('value');
-                        span.innerText = this.value;
+
+                        if (this.name === 'last_visited') {
+                            span.innerText = this.value && this.value !== 'never' ? new Date(this.value).toLocaleDateString() : 'never';
+                        } else {
+                            span.innerText = this.value;
+                        }
+
                         this.replaceWith(span);
                     })
                     .catch((error) => {
