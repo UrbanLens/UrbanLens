@@ -88,7 +88,9 @@ class Location(abstract.Model):
         self.save()
 
     def __str__(self):
-        return f"Name: {self.name}\nDescription: {self.description or ''}\nPriority: {self.priority}\nLast Visited: {self.last_visited}\nStatus: {LocationStatus(self.status).label}\nCategories: {', '.join([str(category) for category in self.categories.all()])}\nTags: {', '.join([str(tag) for tag in self.tags.all()])}"
+        categories = ', '.join([str(category) for category in self.categories.all()]) if self.categories.all() else []
+        tags = ', '.join([str(tag) for tag in self.tags.all()]) if self.tags.all() else []
+        return f"Name: {self.name}\nDescription: {self.description or ''}\nPriority: {self.priority}\nLast Visited: {self.last_visited}\nStatus: {LocationStatus(self.status).label}\nCategories: {categories}\nTags: {tags}"
 
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_locations'
