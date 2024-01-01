@@ -94,6 +94,26 @@ class Location(abstract.Model):
         tags = ', '.join([str(tag) for tag in self.tags.all()]) if self.tags.all() else []
         return f"Name: {self.name}\nDescription: {self.description or ''}\nPriority: {self.priority}\nLast Visited: {self.last_visited}\nStatus: {LocationStatus(self.status).label}\nCategories: {categories}\nTags: {tags}"
 
+    def to_json(self):
+        """
+        Returns a dictionary that can be JSON serialized.
+        """
+        return {
+            'id': self.id,
+            'name': self.name,
+            'icon': self.icon,
+            'description': self.description,
+            'priority': self.priority,
+            'last_visited': self.last_visited.isoformat() if self.last_visited else None,
+            'latitude': float(self.latitude),
+            'longitude': float(self.longitude),
+            'pin_icon': self.pin_icon.url if self.pin_icon else None,
+            'status': self.status,
+            'profile': self.profile.id,
+            'categories': [category.id for category in self.categories.all()],
+            'tags': [tag.id for tag in self.tags.all()],
+        }
+
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_locations'
         get_latest_by = 'updated'
