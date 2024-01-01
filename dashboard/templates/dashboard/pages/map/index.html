@@ -32,29 +32,43 @@
     window.pin = null;
 
     map.on('popupopen', function() {
-        document.querySelectorAll('.pin-popup input, .pin-popup textarea').forEach(function(input) {
-            input.addEventListener('change', function() {
+        document.querySelectorAll('.pin-popup p').forEach(function(p) {
+            p.addEventListener('click', function() {
                 const field = this;
-                const value = field.value;
-                const locationId = field.closest('.pin-popup').dataset.id;
-                const data = {};
-                data[field.name] = value;
-                fetch(`/dashboard/rest/locations/${locationId}/`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ csrf_token }}',
-                    },
-                    body: JSON.stringify(data),
-                })
-                .then(response => response.json())
-                .then(data => {
-                    console.log(`${field.name} updated successfully`);
-                    toastr.success(`${field.name.charAt(0).toUpperCase() + field.name.slice(1)} updated successfully`);
-                })
-                .catch((error) => {
-                    console.error('Error:', error);
-                    toastr.error(`Failed to update ${field.name}`);
+                const value = field.innerText;
+                const input = document.createElement('input');
+                input.value = value;
+                input.name = field.dataset.name;
+                field.replaceWith(input);
+                input.focus();
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        const value = this.value;
+                        const locationId = this.closest('.pin-popup').dataset.id;
+                        const data = {};
+                        data[this.name] = value;
+                        fetch(`/dashboard/rest/locations/${locationId}/`, {
+                            method: 'PATCH',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': '{{ csrf_token }}',
+                            },
+                            body: JSON.stringify(data),
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            console.log(`${this.name} updated successfully`);
+                            toastr.success(`${this.name.charAt(0).toUpperCase() + this.name.slice(1)} updated successfully`);
+                            const p = document.createElement('p');
+                            p.innerText = this.value;
+                            p.dataset.name = this.name;
+                            this.replaceWith(p);
+                        })
+                        .catch((error) => {
+                            console.error('Error:', error);
+                            toastr.error(`Failed to update ${this.name}`);
+                        });
+                    }
                 });
             });
         });
