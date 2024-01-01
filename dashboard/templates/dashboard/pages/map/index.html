@@ -73,35 +73,41 @@
                 });
                 field.replaceWith(input);
                 input.focus();
+                function saveInputValue() {
+                    const value = this.value;
+                    const locationId = this.closest('.pin-popup').dataset.id;
+                    const data = {};
+                    data[this.name] = value;
+                    fetch(`/dashboard/rest/locations/${locationId}/`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': '{{ csrf_token }}',
+                        },
+                        body: JSON.stringify(data),
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log(`${this.name} updated successfully`);
+                        toastr.success(`${this.name.charAt(0).toUpperCase() + this.name.slice(1)} updated successfully`);
+                        const span = document.createElement('span');
+                        span.classList.add('value');
+                        span.innerText = this.value;
+                        this.replaceWith(span);
+                    })
+                    .catch((error) => {
+                        console.error('Error:', error);
+                        toastr.error(`Failed to update ${this.name}`);
+                    });
+                }
+
                 input.addEventListener('keydown', function (e) {
                     if (e.key === 'Enter') {
-                        const value = this.value;
-                        const locationId = this.closest('.pin-popup').dataset.id;
-                        const data = {};
-                        data[this.name] = value;
-                        fetch(`/dashboard/rest/locations/${locationId}/`, {
-                            method: 'PATCH',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRFToken': '{{ csrf_token }}',
-                            },
-                            body: JSON.stringify(data),
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            console.log(`${this.name} updated successfully`);
-                            toastr.success(`${this.name.charAt(0).toUpperCase() + this.name.slice(1)} updated successfully`);
-                            const span = document.createElement('span');
-                            span.classList.add('value');
-                            span.innerText = this.value;
-                            this.replaceWith(span);
-                        })
-                        .catch((error) => {
-                            console.error('Error:', error);
-                            toastr.error(`Failed to update ${this.name}`);
-                        });
+                        saveInputValue.call(this);
                     }
                 });
+
+                input.addEventListener('blur', saveInputValue);
             });
         });
     });
