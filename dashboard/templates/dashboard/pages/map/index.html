@@ -125,6 +125,9 @@
                     }
                     data[this.name] = value;
                     if (value !== this.dataset.initialValue) {
+                        console.log('value != initialValue');
+                        console.log(value);
+                        console.log(this.dataset.initialValue);
                         fetch(`/dashboard/rest/locations/${locationId}/`, {
                             method: 'PATCH',
                             headers: {
