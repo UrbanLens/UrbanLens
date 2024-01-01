@@ -56,6 +56,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         locations = Location.objects.all()
         return render(request, 'dashboard/pages/map/index.html', {'locations': locations})
 
+    def view_location(self, request, location_id, *args, **kwargs):
+        location = Location.objects.get(id=location_id)
+        return render(request, 'dashboard/pages/location/index.html', {'location': location})
+        locations = Location.objects.all()
+        return render(request, 'dashboard/pages/map/index.html', {'locations': locations})
+
     def edit_pin(self, request, location_id, *args, **kwargs):
         location = Location.objects.get(id=location_id)
         # Update the location based on the form data
