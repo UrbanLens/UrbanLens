@@ -28,8 +28,8 @@
 {% block scripts %}
 <script>
     console.log('script tag');
-    document.addEventListener('dialogLoaded', function() {
-        console.log('adding event listener');
+    map.on('popupopen', function() {
+        console.log('popup opened');
         document.querySelectorAll('.stars input').forEach(function(starInput) {
             starInput.addEventListener('change', function() {
                 console.log('star input changed');
