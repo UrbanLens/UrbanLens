@@ -3,7 +3,7 @@
 	    <div class="dialog" id="addPinModal">
 	        <button id="closeDialog" style="float: right;">X</button>
 	        <h2>Add Location</h2>
-	        <form method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
+	        <form id="addPinForm" method="POST" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
 				<label for="name">Name:</label><br>
 				<input type="text" id="name" name="name" autocomplete="name" required><br>
 				<label for="latitude">Latitude:</label><br>
@@ -51,7 +51,7 @@
 				</div>
 				<input type="hidden" id="selectedIcon" name="icon">
 
-				<input type="submit" value="Submit" class="submit-button">
+				<input type="button" id="submitAddPinForm" value="Submit" class="submit-button">
 	        </form>
 
 			<script>
@@ -111,7 +111,30 @@
 					screen.addEventListener('click', () => closeDialog());
 					closeDialogButton.addEventListener('click', () => closeDialog());
 				}
-				document.addEventListener('dialogLoaded', () => initializeDialog());		
+				document.addEventListener('dialogLoaded', () => initializeDialog());
+
+				// AJAX form submission
+				document.getElementById('submitAddPinForm').addEventListener('click', function(e) {
+					e.preventDefault();
+					const form = document.getElementById('addPinForm');
+					const formData = new FormData(form);
+					fetch(form.action, {
+						method: 'POST',
+						body: formData,
+						headers: {
+							'X-CSRFToken': '{{ csrf_token }}'
+						}
+					})
+					.then(response => {
+						if (!response.ok) {
+							throw new Error('Network response was not ok');
+						}
+						closeDialog();
+					})
+					.catch(error => {
+						console.error('There has been a problem with your fetch operation:', error);
+					});
+				});
 			</script>
 
 	    </div>
