@@ -86,5 +86,6 @@ urlpatterns = [
 		#path('reject/<int:profile_id>', FriendshipController.reject_friend, name='reject_friend'),
 		path('request/<int:profile_id>', friendship.RequestFriendView.as_view(), name='request_friend'),
 	])),
-	path('', include('social_django.urls', namespace='social'))
+	path('', include('social_django.urls', namespace='social')),
+	re_path('.*', TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name='404')
 ]
