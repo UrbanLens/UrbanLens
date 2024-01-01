@@ -146,7 +146,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data()
-        return render(request, 'dashboard/pages/map/data.html', {'map_data': map_data})
+        return render(request, 'dashboard/templates/dashboard/pages/map/data.html', {'map_data': map_data})
 
     def get_map_data(self):
         map_data = Location.objects.all()

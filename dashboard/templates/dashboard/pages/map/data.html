@@ -1,4 +1,5 @@
 
+<script>
 {% for location in map_data %}
     var marker = L.marker([{{ location.latitude }}, {{ location.longitude }}]).addTo(map);
     marker.bindPopup(`
@@ -28,3 +29,4 @@
         </div>
     `);
 {% endfor %}
+</script>
