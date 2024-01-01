@@ -3,7 +3,6 @@
 
 # Compiled code
 __pycache__/
-.pytest_cache
 *.pyc
 **/frontend/static/
 
@@ -14,6 +13,8 @@ venv/
 
 # Temporary files
 *.out
+.pytest_cache
+.ruff_cache
 UrbanLens/errors.log
 
 # VSCode stuff per user
