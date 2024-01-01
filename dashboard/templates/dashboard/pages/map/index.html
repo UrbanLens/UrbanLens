@@ -317,8 +317,8 @@
                 }
                 marker.addTo(map).bindPopup(`
                     <div class="pin-popup" data-id="${pin.id}">
-                        <h2>${pin.name}</h2>
-                        <p>${pin.description || ''}</p>
+                        <div data-name="title">${pin.name}</div>
+                        <div data-name="description">${pin.description || ''}</div>
                         <div class="stars rating-${pin.rating}">
                             <input type="radio" name="star" class="star-1" id="star-1" value="1" ${pin.rating >= 1 ? 'checked' : ''} />
                             <label class="star-1" for="star-1">★</label>
