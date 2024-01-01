@@ -60,8 +60,12 @@
             });
         });
         
-        document.querySelectorAll('.pin-popup span.value').forEach(function (span) {
-            span.addEventListener('click', function (e) {
+        document.querySelectorAll('.pin-popup').forEach(function (popup) {
+            popup.addEventListener('click', function (e) {
+                if (!e.target.matches('span.value')) {
+                    return;
+                }
+                const span = e.target;
                 e.stopPropagation();
                 const field = this;
                 const initialValue = field.innerText;
