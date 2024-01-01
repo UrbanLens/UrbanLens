@@ -55,16 +55,18 @@
 	        </form>
 
 			<script>
-				function closeDialog() {
+				function closeDialog( removePin = true ) {
 					const dialog = document.getElementById('addPinModal');
 					const screen = document.getElementById('screen');
 
-					if (window.pin) {
-						window.pin.remove();
-						window.pin.closePopup();
-						window.pin.closeTooltip();
-						window.map.removeLayer(window.pin);
-						window.pin = null;
+					if (removePin) {
+						if (window.pin) {
+							window.pin.remove();
+							window.pin.closePopup();
+							window.pin.closeTooltip();
+							window.map.removeLayer(window.pin);
+							window.pin = null;
+						}
 					}
 
 					if (screen) {
@@ -99,8 +101,6 @@
 									iconSize: [30, 42],
 									iconAnchor: [15, 42]
 								}));
-								console.log('updated icon to: ', iconName);
-								console.log('icon is now: ', window.pin.options.icon.options.html);
 							}
 						}
 					});
@@ -126,7 +126,7 @@
 						if (!response.ok) {
 							throw new Error('Network response was not ok');
 						}
-						closeDialog();
+						closeDialog(false);
 					})
 					.catch(error => {
 						console.error('There has been a problem with your fetch operation:', error);

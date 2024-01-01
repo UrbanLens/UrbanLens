@@ -21,24 +21,6 @@
         </div>
     </div>
 </div>
-{% for location in locations %}
-<div>
-    <h2>{{ location.name }}</h2>
-    {% for review in reviews %}
-    {% if review.location.id == location.id %}
-    <div>
-        <p>{{ review.user.username }} rated this location {{ review.rating }} out of 5</p>
-        <p>{{ review.review }}</p>
-    </div>
-    {% endif %}
-    {% endfor %}
-    <form method="POST" hx-post="{% url 'add_review' location.id %}" hx-trigger="submit">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <input type="submit" value="Submit">
-    </form>
-</div>
-{% endfor %}
 <div id="addPinModal"></div>
 {% endblock %}
 
@@ -139,7 +121,7 @@
                     // otherwise, use the default icon
                     marker = L.marker([pin.latitude, pin.longitude]);
                 }
-                marker.addTo(map).bindPopup('<b>${pin.name}</b><br>${pin.description}');
+                marker.addTo(map).bindPopup(`<b>${pin.name}</b><br>${pin.description}`);
             });
         });
 

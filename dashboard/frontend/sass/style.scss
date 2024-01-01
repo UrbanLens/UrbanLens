@@ -314,14 +314,15 @@ i.construction {
         color: $light-neutral-color;
         padding: 5px;
         border-radius: 50%;
-        opacity: 0.1;
+        display: none;
         i {
             font-size: 1.2em;
         }
     }
     &:hover {
         #upload-avatar-button {
-            opacity: 1;
+            cursor: pointer;
+            display: block;
         }
     }
 }

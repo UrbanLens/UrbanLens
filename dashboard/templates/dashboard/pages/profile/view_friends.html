@@ -1,8 +1,7 @@
-
-    <div id="friend_list" hx-get="/friendship/list" hx-trigger="load" hx-swap="outerHTML">
-        {% for friendship in friends %}
-            <p>{{ friendship.friend.username }}</p>
-        {% empty %}
-            <p>You have no friends yet.</p>
-        {% endfor %}
-    </div>
+<div id="friend_list" hx-get="/dashboard/friendship/list/" hx-trigger="load" hx-swap="outerHTML">
+    {% for friendship in friends %}
+        <p>{{ friendship.friend.username }}</p>
+    {% empty %}
+        <p>You have no friends yet.</p>
+    {% endfor %}
+</div>

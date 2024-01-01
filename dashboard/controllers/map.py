@@ -24,6 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 import json
+import logging
 
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
@@ -44,6 +45,8 @@ from dashboard.forms.advanced_search import AdvancedSearchForm
 
 from django.views import View
 from django.contrib.auth.mixins import LoginRequiredMixin
+
+logger = logging.getLogger(__name__)
 
 class ViewMapView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
@@ -87,6 +90,7 @@ class AddPinView(LoginRequiredMixin, View):
         return render(request, 'dashboard/pages/map/add_location.html')
 
     def post(self, request, *args, **kwargs):
+        logger.info('Adding a new pin!')
         try:
             # Create a new location based on the form data
             name = request.POST.get('name')
@@ -113,7 +117,9 @@ class AddPinView(LoginRequiredMixin, View):
             for tag_name in tags:
                 tag, created = Tag.objects.get_or_create(name=tag_name)
                 location.tags.add(tag)
-            location.save()  # Ensure the new location is saved to the database
+            location.save()
+            logger.info('New location created: %s', location.name)
+            logger.info('Profile is %s', request.user.profile)
             return HttpResponse(status=200)
         except Exception as e:
             raise e from e

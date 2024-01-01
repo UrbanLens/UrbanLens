@@ -8,9 +8,9 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    FriendshipController.py                                                                              *
-*        Path:    /FriendshipController.py                                                                             *
-*        Project: controllers                                                                                          *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/controllers/friendship.py                                                                 *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
