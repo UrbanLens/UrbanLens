@@ -174,6 +174,9 @@ class InitMapView(LoginRequiredMixin, View):
         if not map_data:
             # Default map data
             map_data = [{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
+        else:
+            # Convert Decimal fields to float
+            map_data = [{'latitude': float(location['latitude']), 'longitude': float(location['longitude']), 'name': location['name'], 'description': location['description']} for location in map_data]
         return map_data
 
     def get(self, request, *args, **kwargs):
