@@ -14,7 +14,7 @@
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -38,6 +38,8 @@ from djangofoundry.models import TextChoices
 # App Imports
 from dashboard.models import abstract
 from dashboard.models.locations.queryset import Manager
+from django.contrib.gis.geos import Point
+from location_field.models.spatial import LocationField
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.
@@ -65,6 +67,8 @@ class Location(abstract.Model):
     custom_icon = ImageField()
     icon = CharField(max_length=255, null=True, blank=True)
     status = CharField(choices=LocationStatus.choices, default=LocationStatus.WISH_TO_VISIT)
+    location = LocationField(based_fields=['name'], zoom=7, default=Point(1.0, 1.0))
+
 
     profile = ForeignKey(
         'dashboard.Profile', 
