@@ -125,12 +125,12 @@
                         if (value === '' || value === 'never') {
                             value = null;
                         } else {
-                            value = new Date(value).toISOString();
+                            value = new Date(value).toISOString().split('T')[0];
                         }
                         if (initialValue === '' || initialValue === 'never') {
                             initialValue = null;
                         } else {
-                            initialValue = new Date(initialValue).toISOString();
+                            initialValue = new Date(initialValue).toISOString().split('T')[0];
                         }
                     }
                     data[this.name] = value;
