@@ -124,7 +124,10 @@
                         value = null;
                     }
                     data[this.name] = value;
-                    if (value !== this.dataset.initialValue) {
+                    if (this.name === 'last_visited') {
+                        const dateValue = new Date(value).toLocaleDateString();
+                        const dateInitialValue = new Date(this.dataset.initialValue).toLocaleDateString();
+                        if (dateValue !== dateInitialValue) {
                         console.log('value != initialValue');
                         console.log(value);
                         console.log(this.dataset.initialValue);
