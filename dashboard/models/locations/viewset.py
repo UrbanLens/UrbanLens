@@ -62,10 +62,11 @@ class LocationViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         if instance.user != request.user:
             return Response(status=status.HTTP_403_FORBIDDEN)
-        instance.status = request.data.get('status', instance.status)
-        instance.save()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
         logger.info(f"Location with id {instance.id} updated")
-        return super().update(request, *args, **kwargs)
+        return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
         logger.info(f"Delete request initiated by user {request.user.id}")
