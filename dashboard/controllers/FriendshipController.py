@@ -24,20 +24,20 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from django.shortcuts import render
-from django.contrib.auth.decorators import login_required
+from django.views import View
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse
 from django.contrib.auth.models import User
 from dashboard.models.friendship.model import Friendship
 
-@login_required
-def request_friend(request):
-    if request.method == 'POST':
+class RequestFriendView(LoginRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
         friend_username = request.POST.get('friend_username')
         friend = User.objects.get(username=friend_username)
         Friendship.objects.create(user=request.user, friend=friend)
         return HttpResponse('Friend request sent.')
 
-@login_required
-def list_friends(request):
-    friends = Friendship.objects.filter(user=request.user)
-    return render(request, 'dashboard/pages/profile/view_friends.html', {'friends': friends})
+class ListFriendsView(LoginRequiredMixin, View):
+    def get(self, request, *args, **kwargs):
+        friends = Friendship.objects.filter(user=request.user)
+        return render(request, 'dashboard/pages/profile/view_friends.html', {'friends': friends})
