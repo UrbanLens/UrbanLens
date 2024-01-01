@@ -53,10 +53,6 @@ class Location(abstract.Model):
     """
     Records location data.
     """
-
-    def __str__(self):
-        return f"Name: {self.name}\nDescription: {self.description or ''}\nPriority: {self.priority}\nLast Visited: {self.last_visited}\nStatus: {LocationStatus(self.status).label}\nCategories: {', '.join([str(category) for category in self.categories.all()])}\nTags: {', '.join([str(tag) for tag in self.tags.all()])}"
-
     name = CharField(max_length=255)
     icon = CharField(max_length=255, null=True, blank=True)
     description = CharField(max_length=500, null=True, blank=True)
@@ -90,6 +86,9 @@ class Location(abstract.Model):
         self.categories.clear()
         self.categories.add(category)
         self.save()
+
+    def __str__(self):
+        return f"Name: {self.name}\nDescription: {self.description or ''}\nPriority: {self.priority}\nLast Visited: {self.last_visited}\nStatus: {LocationStatus(self.status).label}\nCategories: {', '.join([str(category) for category in self.categories.all()])}\nTags: {', '.join([str(tag) for tag in self.tags.all()])}"
 
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_locations'
