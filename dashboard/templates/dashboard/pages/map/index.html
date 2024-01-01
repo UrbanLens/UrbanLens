@@ -62,7 +62,7 @@
         
         document.querySelectorAll('.pin-popup').forEach(function (popup) {
             popup.addEventListener('click', function (e) {
-                if (!e.target.matches('span.value') && !e.target.matches('span.label')) {
+                if (!e.target.matches('span.value')) {
                     return;
                 }
                 e.stopPropagation();
