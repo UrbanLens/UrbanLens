@@ -66,6 +66,13 @@ class Location(abstract.Model):
     icon = CharField(max_length=255, null=True, blank=True)
     status = CharField(choices=LocationStatus.choices, default=LocationStatus.WISH_TO_VISIT)
 
+    @property
+    def rating(self):
+        reviews = Review.objects.filter(location=self)
+        if reviews.exists():
+            return round(reviews.aggregate(Avg('rating'))['rating__avg'], 1)
+        return 0
+
     profile = ForeignKey(
         'dashboard.Profile', 
         on_delete=CASCADE, 

@@ -32,7 +32,7 @@ from dashboard.models.locations.model import Location
 class Review(abstract.Model):
     user = ForeignKey(User, on_delete=CASCADE)
     location = ForeignKey(Location, on_delete=CASCADE)
-    rating = IntegerField()
+    rating = IntegerField(validators=[MinValueValidator(0), MaxValueValidator(5)])
     review = TextField()
 
     class Meta(abstract.Model.Meta):

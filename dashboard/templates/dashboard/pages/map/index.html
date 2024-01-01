@@ -319,16 +319,16 @@
                     <div class="pin-popup" data-id="${pin.id}">
                         <h2>${pin.name}</h2>
                         <p>${pin.description || ''}</p>
-                        <div class="stars priority-${pin.priority}">
-                            <input type="radio" name="star" class="star-1" id="star-1" value="1" ${pin.priority == 1 ? 'checked' : ''} />
+                        <div class="stars rating-${pin.rating}">
+                            <input type="radio" name="star" class="star-1" id="star-1" value="1" ${pin.rating >= 1 ? 'checked' : ''} />
                             <label class="star-1" for="star-1">★</label>
-                            <input type="radio" name="star" class="star-2" id="star-2" value="2" ${pin.priority == 2 ? 'checked' : ''} />
+                            <input type="radio" name="star" class="star-2" id="star-2" value="2" ${pin.rating >= 2 ? 'checked' : ''} />
                             <label class="star-2" for="star-2">★</label>
-                            <input type="radio" name="star" class="star-3" id="star-3" value="3" ${pin.priority == 3 ? 'checked' : ''} />
+                            <input type="radio" name="star" class="star-3" id="star-3" value="3" ${pin.rating >= 3 ? 'checked' : ''} />
                             <label class="star-3" for="star-3">★</label>
-                            <input type="radio" name="star" class="star-4" id="star-4" value="4" ${pin.priority == 4 ? 'checked' : ''} />
+                            <input type="radio" name="star" class="star-4" id="star-4" value="4" ${pin.rating >= 4 ? 'checked' : ''} />
                             <label class="star-4" for="star-4">★</label>
-                            <input type="radio" name="star" class="star-5" id="star-5" value="5" ${pin.priority == 5 ? 'checked' : ''} />
+                            <input type="radio" name="star" class="star-5" id="star-5" value="5" ${pin.rating == 5 ? 'checked' : ''} />
                             <label class="star-5" for="star-5">★</label>
                         </div>
                         <div data-name="last_visited"><span class="label">Last Visited:</span> <span class="value">${pin.last_visited}</span></div>
