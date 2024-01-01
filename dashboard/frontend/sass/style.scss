@@ -343,12 +343,21 @@ i.construction {
     input:checked ~ label,
     label:hover,
     label:hover ~ label {
-        color: gold;
+        color: lightgray;
     }
     input:checked + label:hover,
     input:checked ~ label:hover,
     label:hover ~ input:checked ~ label,
     input:checked ~ label:hover ~ label {
+        color: lightgray;
+    }
+    input:checked ~ label,
+    input:checked ~ label:hover,
+    input:checked ~ label:hover ~ label {
+        color: gold;
+    }
+    label:hover,
+    label:hover ~ label {
         color: gold;
     }
 }
