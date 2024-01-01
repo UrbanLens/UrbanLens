@@ -356,45 +356,9 @@
         });
     }
 
-    fetch("{% url 'init_map' %}")
-        .then(response => response.json())
-        .then(data => {
-            data.forEach(pin => {
-                let marker = L.marker([pin.latitude, pin.longitude]); 
-                // if there is an icon, use it in a divIcon
-                if (pin.icon) {
-                    marker.setIcon(L.divIcon({
-                        className: pin.icon,
-                        html: `<i class="pin ${pin.icon}"></i>`,
-                        iconSize: [30, 42],
-                        iconAnchor: [15, 42]
-                    }));
-                }
-                marker.addTo(map).bindPopup(`
-                    <div class="pin-popup" data-id="${pin.id}">
-                        <div data-name="title">${pin.name}</div>
-                        <div data-name="description">${pin.description || ''}</div>
-                        <div class="stars rating-${pin.rating}">
-                            <input type="radio" name="star" class="star-1" id="star-1" value="1" ${pin.rating >= 1 ? 'checked' : ''} />
-                            <label class="star-1" for="star-1">★</label>
-                            <input type="radio" name="star" class="star-2" id="star-2" value="2" ${pin.rating >= 2 ? 'checked' : ''} />
-                            <label class="star-2" for="star-2">★</label>
-                            <input type="radio" name="star" class="star-3" id="star-3" value="3" ${pin.rating >= 3 ? 'checked' : ''} />
-                            <label class="star-3" for="star-3">★</label>
-                            <input type="radio" name="star" class="star-4" id="star-4" value="4" ${pin.rating >= 4 ? 'checked' : ''} />
-                            <label class="star-4" for="star-4">★</label>
-                            <input type="radio" name="star" class="star-5" id="star-5" value="5" ${pin.rating == 5 ? 'checked' : ''} />
-                            <label class="star-5" for="star-5">★</label>
-                        </div>
-                        <div data-name="last_visited"><span class="label">Last Visited:</span> <span class="value">${pin.last_visited && pin.last_visited !== 'never' ? new Date(pin.last_visited).toLocaleDateString() : 'never'}</span></div>
-                        <div data-name="status"><span class="label">Status:</span> <span class="value">${pin.status}</span></div>
-                        <div data-name="categories"><span class="label">Categories:</span> <span class="value">${pin.categories}</span></div>
-                        <div data-name="tags"><span class="label">Tags:</span> <span class="value">${pin.tags}</span> <button class="add-tag-button">+</button></div>
-                        <button class="delete-button" onclick="deletePin(this)"><i class="material-icons">delete</i></button>
-                    </div>
-                `);
-            });
-        });
+    <div hx-get="{% url 'init_map' %}" hx-trigger="load" hx-swap="outerHTML">
+        <!-- Placeholder for map data -->
+    </div>
 
 </script>
 
