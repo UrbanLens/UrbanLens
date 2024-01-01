@@ -65,8 +65,7 @@ class LocationViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        status = serializer.validated_data.get('status', LocationStatus.NOT_VISITED)
-        self.perform_update(serializer, status)
+        self.perform_update(serializer)
         logger.info(f"Location with id {instance.id} updated")
         return Response(serializer.data)
 
