@@ -71,11 +71,13 @@ class Location(abstract.Model):
     )
     categories = ManyToManyField(
         'dashboard.Category', 
-        blank=True
+        blank=True,
+        default=list
     )
     tags = ManyToManyField(
         'dashboard.Tag',
-        blank=True
+        blank=True,
+        default=list
     )
 
     objects = Manager()
