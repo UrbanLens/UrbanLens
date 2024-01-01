@@ -331,7 +331,7 @@
                             <input type="radio" name="star" class="star-5" id="star-5" value="5" ${pin.rating == 5 ? 'checked' : ''} />
                             <label class="star-5" for="star-5">★</label>
                         </div>
-                        <div data-name="last_visited"><span class="label">Last Visited:</span> <span class="value">${new Date(pin.last_visited).toLocaleDateString()}</span></div>
+                        <div data-name="last_visited"><span class="label">Last Visited:</span> <span class="value">${pin.last_visited && pin.last_visited !== 'never' ? new Date(pin.last_visited).toLocaleDateString() : 'never'}</span></div>
                         <div data-name="status"><span class="label">Status:</span> <span class="value">${pin.status}</span></div>
                         <div data-name="categories"><span class="label">Categories:</span> <span class="value">${pin.categories}</span></div>
                         <div data-name="tags"><span class="label">Tags:</span> <span class="value">${pin.tags}</span> <button class="add-tag-button">+</button></div>
