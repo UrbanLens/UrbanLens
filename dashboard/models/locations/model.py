@@ -39,7 +39,7 @@ from djangofoundry.models import TextChoices
 from dashboard.models import abstract
 from dashboard.models.locations.queryset import Manager
 from django.contrib.gis.geos import Point
-from location_field.models.spatial import LocationField
+from django.contrib.gis.db.models import PointField
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.
@@ -67,7 +67,7 @@ class Location(abstract.Model):
     custom_icon = ImageField()
     icon = CharField(max_length=255, null=True, blank=True)
     status = CharField(choices=LocationStatus.choices, default=LocationStatus.WISH_TO_VISIT)
-    location = LocationField(based_fields=['name'], zoom=7, default=Point(1.0, 1.0))
+    location = PointField(default=Point(1.0, 1.0))
 
 
     profile = ForeignKey(
