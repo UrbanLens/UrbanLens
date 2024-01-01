@@ -37,23 +37,6 @@
             // TODO: Update the priority on the server
             console.log('New priority: ' + value);
         });
-        $('.stars input').on('mouseover', function() {
-            const star = $(this);
-            star.prevAll().addBack().each(function() {
-                $(this).nextAll('label').css('color', 'lightgray');
-                $(this).prevAll('label').css('color', 'gold');
-            });
-        });
-        $('.stars').on('mouseout', function() {
-            const stars = $(this);
-            stars.find('input').each(function() {
-                const star = $(this);
-                if (!star.is(':checked')) {
-                    star.nextAll('label').css('color', 'lightgray');
-                    star.prevAll('label').css('color', 'gold');
-                }
-            });
-        });
     });
 </script>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -151,7 +134,6 @@
         .then(response => response.json())
         .then(data => {
             data.forEach(pin => {
-                console.log('Found a pin!', pin);
                 let marker; 
                 // if there is an icon, use it in a divIcon
                 if (pin.icon) {
