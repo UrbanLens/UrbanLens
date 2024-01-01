@@ -126,6 +126,7 @@
         .then(response => response.json())
         .then(data => {
             data.forEach(pin => {
+                console.log('Found a pin!', pin);
                 let marker; 
                 // if there is an icon, use it in a divIcon
                 if (pin.icon) {
@@ -147,8 +148,8 @@
                         <p>Priority: ${pin.priority}</p>
                         <p>Last Visited: ${pin.last_visited}</p>
                         <p>Status: ${pin.status}</p>
-                        <p>Categories: ${pin.categories.join(', ')}</p>
-                        <p>Tags: ${pin.tags.join(', ')}</p>
+                        <p>Categories: ${pin.categories}</p>
+                        <p>Tags: ${pin.tags}</p>
                         <button class="edit-button">Edit</button>
                         <button class="delete-button">Delete</button>
                     </div>
