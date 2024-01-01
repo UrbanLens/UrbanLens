@@ -107,7 +107,7 @@ class Location(abstract.Model):
             'last_visited': self.last_visited.isoformat() if self.last_visited else "never",
             'latitude': float(self.latitude),
             'longitude': float(self.longitude),
-            'status': self.status,
+            'status': LocationStatus(self.status).label,
             'profile': self.profile.id,
             'categories': [category.id for category in self.categories.all()],
             'tags': [tag.id for tag in self.tags.all()],
