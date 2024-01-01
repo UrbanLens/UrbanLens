@@ -32,27 +32,29 @@
     window.pin = null;
 
     map.on('popupopen', function() {
-        document.querySelectorAll('.stars input').forEach(function(starInput) {
-            starInput.addEventListener('change', function() {
-                const star = this;
-                const value = star.value;
-                const locationId = star.closest('.pin-popup').dataset.id;
+        document.querySelectorAll('.pin-popup input, .pin-popup textarea').forEach(function(input) {
+            input.addEventListener('change', function() {
+                const field = this;
+                const value = field.value;
+                const locationId = field.closest('.pin-popup').dataset.id;
+                const data = {};
+                data[field.name] = value;
                 fetch(`/dashboard/rest/locations/${locationId}/`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRFToken': '{{ csrf_token }}',
                     },
-                    body: JSON.stringify({ priority: value }),
+                    body: JSON.stringify(data),
                 })
                 .then(response => response.json())
                 .then(data => {
-                    console.log('priority updated successfully');
-                    toastr.success('Priority updated successfully');
+                    console.log(`${field.name} updated successfully`);
+                    toastr.success(`${field.name.charAt(0).toUpperCase() + field.name.slice(1)} updated successfully`);
                 })
                 .catch((error) => {
                     console.error('Error:', error);
-                    toastr.error('Failed to update priority');
+                    toastr.error(`Failed to update ${field.name}`);
                 });
             });
         });

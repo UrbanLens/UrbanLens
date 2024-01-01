@@ -66,6 +66,7 @@ class LocationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
+        logger.info(f"Location with id {instance.id} updated")
         return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
