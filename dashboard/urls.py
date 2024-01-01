@@ -75,7 +75,7 @@ urlpatterns = [
 		path('upload_image/<int:location_id>/', map.UploadImageView.as_view(), name='upload_image'),
 		path('change_category/<int:location_id>/', map.ChangeCategoryView.as_view(), name='change_category'),
 		#path('delete/<int:location_id>/', MapController.delete_pin, name='delete_pin'),
-		path('add_review/<int:location_id>/', map.AddReviewView.as_view(), name='add_review'),
+		#path('add_review/<int:location_id>/', map.AddReviewView.as_view(), name='add_review'),
 	])),
 	path('profile/', include([
 		path('', profile.ViewProfileView.as_view(), name='view_profile'),

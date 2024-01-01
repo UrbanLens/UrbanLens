@@ -32,17 +32,20 @@
 <script>
     $(document).ready(function() {
         $('.stars input').on('change', function() {
+            console.log('star input changed');
             const star = $(this);
             const value = star.val();
             const locationId = star.closest('.pin-popup').data('location-id');
             $.ajax({
-                url: `/api/locations/${locationId}/`,
+                url: `/dashboard/rest/locations/${locationId}/`,
                 type: 'PATCH',
                 data: { priority: value },
                 success: function() {
+                    console.log('priority updated successfully');
                     toastr.success('Priority updated successfully');
                 },
                 error: function() {
+                    console.log('failed to update priority');
                     toastr.error('Failed to update priority');
                 }
             });
@@ -179,7 +182,6 @@
                         <p>Status: ${pin.status}</p>
                         <p>Categories: ${pin.categories}</p>
                         <p>Tags: ${pin.tags}</p>
-                        <button class="edit-button">Edit</button>
                         <button class="delete-button">Delete</button>
                     </div>
                 `);

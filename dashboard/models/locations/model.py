@@ -46,8 +46,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 class LocationStatus(TextChoices):
-    VISITED = 1
-    WISH_TO_VISIT = 2
+    NOT_VISITED = 'not visited'
+    VISITED = 'visited'
+    WISH_TO_VISIT = 'wish to visit'
+    DEMOLISHED = 'demolished'
 
 class Location(abstract.Model):
     """
@@ -62,7 +64,7 @@ class Location(abstract.Model):
     longitude = DecimalField(max_digits=9, decimal_places=6)
     pin_icon = ImageField()
     icon = CharField(max_length=255, null=True, blank=True)
-    status = IntegerField(choices=LocationStatus.choices, default=LocationStatus.WISH_TO_VISIT)
+    status = CharField(choices=LocationStatus.choices, default=LocationStatus.WISH_TO_VISIT)
 
     profile = ForeignKey(
         'dashboard.Profile', 
@@ -107,7 +109,7 @@ class Location(abstract.Model):
             'last_visited': self.last_visited.isoformat() if self.last_visited else "never",
             'latitude': float(self.latitude),
             'longitude': float(self.longitude),
-            'status': LocationStatus(self.status).label,
+            'status': LocationStatus.get_name(self.status) or LocationStatus.NOT_VISITED,
             'profile': self.profile.id,
             'categories': [category.id for category in self.categories.all()],
             'tags': [tag.id for tag in self.tags.all()],

@@ -51,9 +51,7 @@ logger = logging.getLogger(__name__)
 class ViewMapView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         locations = Location.objects.all()
-        reviews = Review.objects.filter(location__in=locations)
-        form = ReviewForm()
-        return render(request, 'dashboard/pages/map/index.html', {'locations': locations, 'reviews': reviews, 'form': form})
+        return render(request, 'dashboard/pages/map/index.html', {'locations': locations})
 
     def post(self, request, *args, **kwargs):
         # Handle the post request here
@@ -157,33 +155,15 @@ class AdvancedSearchView(LoginRequiredMixin, View):
         form = AdvancedSearchForm()
         return render(request, 'dashboard/advanced_search.html', {'form': form})
 
-class AddReviewView(LoginRequiredMixin, View):
-    def post(self, request, location_id, *args, **kwargs):
-        form = ReviewForm(request.POST)
-        if form.is_valid():
-            review = form.save(commit=False)
-            review.user = request.user
-            review.location = Location.objects.get(id=location_id)
-            review.save()
-            return HttpResponse(status=200)
-
-class GetMapDataView(LoginRequiredMixin, View):
-    def get(self, request, *args, **kwargs):
-        map_data = Location.objects.values('latitude', 'longitude', 'name', 'description')
-        if not map_data:
-            # Default map data
-            map_data = [{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
-        return map_data
-
 class InitMapView(LoginRequiredMixin, View):
     def get_map_data(self):
-        map_data = Location.objects.values('latitude', 'longitude', 'name', 'description')
+        map_data = Location.objects.all()
         if not map_data:
             # Default map data
             map_data = [{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
         else:
-            # Convert Decimal fields to float
-            map_data = [{'latitude': float(location['latitude']), 'longitude': float(location['longitude']), 'name': location['name'], 'description': location['description']} for location in map_data]
+            map_data = [pin.to_json() for pin in map_data]
+
         return map_data
 
     def get(self, request, *args, **kwargs):

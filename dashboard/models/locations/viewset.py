@@ -8,13 +8,13 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    viewset.py                                                                                           *
-*        Path:    /viewset.py                                                                                          *
-*        Project: locations                                                                                            *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/models/locations/viewset.py                                                               *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -26,7 +26,7 @@
 import logging
 from rest_framework import viewsets, status
 from rest_framework.response import Response
-from dashboard.models.locations.model import Location
+from dashboard.models.locations.model import Location, LocationStatus
 from dashboard.models.locations.serializer import LocationSerializer
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class LocationViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         latitude = serializer.validated_data.get('latitude')
         longitude = serializer.validated_data.get('longitude')
-        nearby_locations = Location.objects.nearby_locations(latitude, longitude, radius=0.1)  # radius in km
+        nearby_locations = Location.objects.nearby_locations(latitude, longitude, radius=0.1)
         if nearby_locations.exists():
             return Response({"detail": "A location already exists within a small radius."}, status=status.HTTP_400_BAD_REQUEST)
         self.perform_create(serializer)
@@ -55,7 +55,7 @@ class LocationViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user, profile=self.request.user.profile, status=self.request.data.get('status', Location.WISH_TO_VISIT))
+        serializer.save(user=self.request.user, profile=self.request.user.profile, status=self.request.data.get('status', LocationStatus.NOT_VISITED))
 
     def update(self, request, *args, **kwargs):
         logger.info(f"Update request initiated by user {request.user.id}")

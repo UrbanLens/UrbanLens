@@ -336,28 +336,18 @@ i.construction {
         display: none;
     }
     label {
-        color: lightgray;
+        color: gold;
         font-size: 20px;
         padding: 0 1px;
     }
-    input:checked ~ label,
-    label:hover,
-    label:hover ~ label {
-        color: lightgray;
+
+    /** Nothing checked */
+    input:not(:checked) ~ label {
+        color: lightgrey;
     }
-    input:checked + label:hover,
-    input:checked ~ label:hover,
-    label:hover ~ input:checked ~ label,
-    input:checked ~ label:hover ~ label {
-        color: lightgray;
-    }
-    input:checked ~ label,
-    input:checked ~ label:hover,
-    input:checked ~ label:hover ~ label {
-        color: gold;
-    }
-    label:hover,
-    label:hover ~ label {
-        color: gold;
+
+    /** Hovered star is highlighted */
+    input:not(:checked) ~ label:hover {
+        color: red;
     }
 }
