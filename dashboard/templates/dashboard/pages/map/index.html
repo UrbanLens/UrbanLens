@@ -47,12 +47,19 @@
         }, 250);
     });
 
+    // Remove any existing context menu before creating a new one
+    const existingContextMenu = document.getElementById('contextMenu');
+    if (existingContextMenu) {
+        document.body.removeChild(existingContextMenu);
+    }
+
     map.on('contextmenu', function(e) {
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
 
         // Create context menu
         const contextMenu = document.createElement('div');
+        contextMenu.id = 'contextMenu';
         contextMenu.style.position = 'absolute';
         contextMenu.style.top = `${e.originalEvent.y}px`;
         contextMenu.style.left = `${e.originalEvent.x}px`;
@@ -85,6 +92,14 @@
 
         contextMenu.appendChild(addPinOption);
         document.body.appendChild(contextMenu);
+
+        // Add event listener to document to close context menu when clicking outside of it
+        document.addEventListener('click', function(event) {
+            const isClickInside = contextMenu.contains(event.target);
+            if (!isClickInside) {
+                contextMenu.remove();
+            }
+        });
     });
     map.invalidateSize();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
