@@ -23,24 +23,27 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from django.shortcuts import redirect, render, get_object_or_404
-from django.contrib.auth.decorators import login_required
+from django.shortcuts import redirect, render
+from django.views import View
+from django.contrib.auth.mixins import LoginRequiredMixin
 from dashboard.forms.profile import ProfileForm
 from dashboard.models.profile.model import Profile
 
-@login_required
-def view_profile(request):
-    profile = get_object_or_404(Profile, user=request.user)
-    return render(request, 'dashboard/pages/profile/view_profile.html', {'profile': profile})
+class ViewProfileView(LoginRequiredMixin, View):
+    def get(self, request, *args, **kwargs):
+        profile = Profile.objects.get(user=request.user)
+        return render(request, 'dashboard/pages/profile/view_profile.html', {'profile': profile})
 
-@login_required
-def edit_profile(request):
-    profile = get_object_or_404(Profile, user=request.user)
-    if request.method == 'POST':
+class EditProfileView(LoginRequiredMixin, View):
+    def get(self, request, *args, **kwargs):
+        profile = Profile.objects.get(user=request.user)
+        form = ProfileForm(instance=profile)
+        return render(request, 'dashboard/pages/profile/edit_profile.html', {'form': form})
+
+    def post(self, request, *args, **kwargs):
+        profile = Profile.objects.get(user=request.user)
         form = ProfileForm(request.POST, instance=profile)
         if form.is_valid():
             form.save()
             return redirect('view_profile')
-    else:
-        form = ProfileForm(instance=profile)
-    return render(request, 'dashboard/pages/profile/edit_profile.html', {'form': form})
+        return render(request, 'dashboard/pages/profile/edit_profile.html', {'form': form})
