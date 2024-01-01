@@ -42,12 +42,14 @@ from dashboard.models.reviews.model import Review
 from dashboard.forms.advanced_search import AdvancedSearchForm
 
 
+@login_required
 def view_map(request):
     locations = Location.objects.all()
     reviews = Review.objects.filter(location__in=locations)
     form = ReviewForm()
     return render(request, 'dashboard/pages/map/index.html', {'locations': locations, 'reviews': reviews, 'form': form})
 
+@login_required
 def edit_pin(request, location_id):
     location = Location.objects.get(id=location_id)
     if request.method == 'POST':
@@ -70,46 +72,52 @@ def edit_pin(request, location_id):
         categories = Category.objects.all()
         return render(request, 'dashboard/edit_location.html', {'location': location, 'categories': categories})
 
+
+@login_required
 def add_pin(request):
-    if request.method == 'POST':
-        try:
-            # Create a new location based on the form data
-            name = request.POST.get('name')
-            latitude = request.POST.get('latitude')
-            longitude = request.POST.get('longitude')
-            address = request.POST.get('address')
-            tags = request.POST.get('tags')
-            if tags is not None:
-                tags = tags.split(',')
-            else:
-                tags = []
-            icon = request.FILES.get('icon', None)
-
-            if not latitude or not longitude:
-                if not address:
-                    return HttpResponse("Error: No address or lat/lon provided.", status=400)
-                
-                # Convert address into lat/lng
-                (latitude, longitude) = get_location_by_address(address)
-                if not latitude or not longitude:
-                    return HttpResponse("Error: Unable to convert address to lat/lng.", status=400)
-
-            location = Location.objects.create(name=name, latitude=latitude, longitude=longitude, icon=icon)
-            for tag_name in tags:
-                tag, created = Tag.objects.get_or_create(name=tag_name)
-                location.tags.add(tag)
-            return HttpResponse(status=200)
-        except Exception as e:
-            return HttpResponse(f"Error: {str(e)}", status=400)
-    else:
+    if request.method == "GET":
         # Render the add form
         return render(request, 'dashboard/pages/map/add_location.html')
+    
+    try:
+        # Create a new location based on the form data
+        name = request.POST.get('name')
+        latitude = request.POST.get('latitude')
+        longitude = request.POST.get('longitude')
+        address = request.POST.get('address', None)
+        tags = request.POST.get('tags')
+        if tags is not None:
+            tags = tags.split(',')
+        else:
+            tags = []
+        icon = request.POST.get('icon', None)
 
+        if not latitude or not longitude:
+            if not address:
+                return HttpResponse("Error: No address or lat/lon provided.", status=400)
+            
+            # Convert address into lat/lng
+            (latitude, longitude) = get_location_by_address(address)
+            if not latitude or not longitude:
+                return HttpResponse("Error: Unable to convert address to lat/lng.", status=400)
+
+        location = Location.objects.create(name=name, latitude=latitude, longitude=longitude, icon=icon, profile=request.user.profile)
+        for tag_name in tags:
+            tag, created = Tag.objects.get_or_create(name=tag_name)
+            location.tags.add(tag)
+        return HttpResponse(status=200)
+    except Exception as e:
+        raise e from e
+        return HttpResponse(f"Error: {str(e)}", status=400)
+
+
+@login_required
 def search_pins(request):
     query = request.GET.get('q')
     locations = Location.objects.filter(name__icontains=query)
     return render(request, 'dashboard/pages/map/map.html', {'locations': locations})
 
+@login_required
 def upload_image(request, location_id):
     if request.method == 'POST':
         image = request.FILES.get('image')
@@ -119,6 +127,7 @@ def upload_image(request, location_id):
     else:
         return HttpResponse(status=405)
 
+@login_required
 def change_category(request, location_id):
     if request.method == 'POST':
         category_id = request.POST.get('category')
@@ -152,6 +161,7 @@ def add_review(request, location_id):
     else:
         return HttpResponse(status=405)
 
+@login_required
 def get_map_data():
     map_data = Location.objects.values('latitude', 'longitude', 'name', 'description')
     if not map_data:
@@ -159,10 +169,13 @@ def get_map_data():
         map_data = [{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
     return map_data
 
+@login_required
 def init_map(request):
     map_data = get_map_data()
     return HttpResponse(json.dumps(list(map_data)), content_type='application/json')
 
+
+@login_required
 def get_location_by_address(address):
     try:
         geolocator = Nominatim(user_agent="geoapiExercises")
