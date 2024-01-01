@@ -81,6 +81,19 @@ class GooglePlacesGateway(Gateway):
         response.raise_for_status()
         return response.content  # Returns the raw bytes of the image.
     
+    def get_recent_search_results(self, location_name):
+        search_url = 'https://maps.googleapis.com/maps/api/place/findplacefromtext/json'
+        params = {
+            'input': location_name,
+            'inputtype': 'textquery',
+            'fields': 'formatted_address,name,rating,opening_hours,geometry',
+            'key': self.api_key
+        }
+        
+        response = self.session.get(search_url, params=params)
+        response.raise_for_status()
+        return response.json().get('candidates', [])
+    
     def autocomplete(self, input_text):
         autocomplete_url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json'
         params = {

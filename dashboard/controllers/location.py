@@ -68,7 +68,7 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         google_places_images = google_places_gateway.get_data(location.latitude, location.longitude, radius=1000)
 
         # Fetch the most recent search results for the location
-        recent_search_results = location.search_results.order_by('-searched_at')[:10]
+        recent_search_results = google_places_gateway.get_recent_search_results(location.name)
 
         return render(request, 'dashboard/pages/location/index.html', {
             'location': location,
