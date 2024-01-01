@@ -1,0 +1,21 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="section">
+    <h1 class="center">{{ location.name }}</h1>
+
+    <div class="location-details">
+        <p><strong>Description:</strong> {{ location.description }}</p>
+        <p><strong>Rating:</strong> {{ location.rating }}</p>
+        <p><strong>Status:</strong> {{ location.status }}</p>
+        <p><strong>Categories:</strong> {{ location.categories }}</p>
+        <p><strong>Last Visited:</strong> {{ location.last_visited }}</p>
+        <p><strong>Tags:</strong> {{ location.tags }}</p>
+    </div>
+
+    <div class="location-map">
+        <h2>Location on Map</h2>
+        <!-- Map integration goes here -->
+    </div>
+</div>
+{% endblock %}
