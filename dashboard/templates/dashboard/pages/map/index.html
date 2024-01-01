@@ -65,7 +65,7 @@
         console.log("htmx is loaded");
     });
 
-    document.body.addEventListener('htmx:afterOnLoad', function () {
+    document.body.addEventListener('htmx:afterSwap', function () {
         // Dispatch a custom event after the dialog is loaded
         setTimeout(() => {
             const event = new Event('dialogLoaded');
