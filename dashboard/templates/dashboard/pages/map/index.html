@@ -31,16 +31,17 @@
     window.map = map;
     window.pin = null;
 
-    map.on('popupopen', function(e) {
-        e.popup._contentNode.querySelectorAll('.stars input').forEach(function(starInput) {
+    map.on('popupopen', function() {
+        document.querySelectorAll('.stars input').forEach(function(starInput) {
             starInput.addEventListener('change', function() {
                 const star = this;
                 const value = star.value;
-                const locationId = e.popup._source.options.locationId;
+                const locationId = star.closest('.pin-popup').dataset.id;
                 fetch(`/dashboard/rest/locations/${locationId}/`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}',
                     },
                     body: JSON.stringify({ priority: value }),
                 })
@@ -161,10 +162,10 @@
                     marker = L.marker([pin.latitude, pin.longitude]);
                 }
                 marker.addTo(map).bindPopup(`
-                    <div class="pin-popup">
+                    <div class="pin-popup" data-id="${pin.id}">
                         <h2>${pin.name}</h2>
                         <p>${pin.description || ''}</p>
-                        <div class="stars">
+                        <div class="stars priority-${pin.priority}">
                             <input type="radio" name="star" class="star-1" id="star-1" value="1" ${pin.priority == 1 ? 'checked' : ''} />
                             <label class="star-1" for="star-1">★</label>
                             <input type="radio" name="star" class="star-2" id="star-2" value="2" ${pin.priority == 2 ? 'checked' : ''} />
@@ -175,7 +176,6 @@
                             <label class="star-4" for="star-4">★</label>
                             <input type="radio" name="star" class="star-5" id="star-5" value="5" ${pin.priority == 5 ? 'checked' : ''} />
                             <label class="star-5" for="star-5">★</label>
-                            <span></span>
                         </div>
                         <p>Last Visited: ${pin.last_visited}</p>
                         <p>Status: ${pin.status}</p>

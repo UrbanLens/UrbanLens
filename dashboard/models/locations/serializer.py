@@ -8,13 +8,13 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    serializer.py                                                                                        *
-*        Path:    /serializer.py                                                                                       *
-*        Project: locations                                                                                            *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/models/locations/serializer.py                                                            *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -29,7 +29,7 @@ from dashboard.models.locations.model import Location
 class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
-        fields = ['name', 'icon', 'categories', 'priority', 'last_visited', 'latitude', 'longitude', 'created', 'updated', 'profile', 'user', 'status', 'tags']
+        fields = ['name', 'icon', 'categories', 'priority', 'last_visited', 'latitude', 'longitude', 'created', 'updated', 'profile', 'status', 'tags']
 
     def create(self, validated_data):
         user = validated_data.pop('user')

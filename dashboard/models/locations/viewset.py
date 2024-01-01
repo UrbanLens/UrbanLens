@@ -33,12 +33,12 @@ logger = logging.getLogger(__name__)
 
 class LocationViewSet(viewsets.ModelViewSet):
     serializer_class = LocationSerializer
-    basename = 'location'
+    basename = 'locations'
 
     def get_queryset(self):
         if not self.request:
             return Location.objects.none()
-        return Location.objects.filter(user=self.request.user)
+        return Location.objects.filter(profile__user=self.request.user)
 
     def create(self, request, *args, **kwargs):
         logger.info(f"Create request initiated by user {request.user.id}")
@@ -58,20 +58,21 @@ class LocationViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user, profile=self.request.user.profile, status=self.request.data.get('status', LocationStatus.NOT_VISITED))
 
     def update(self, request, *args, **kwargs):
-        logger.info(f"Update request initiated by user {request.user.id}")
         instance = self.get_object()
-        if instance.user != request.user:
+        logger.info(f"Update request initiated by user {request.user.id}")
+        if instance.profile.user != request.user:
+            logger.error(f"User %s attempted to update location %s, but does not have permission", request.user.id, instance.id)
             return Response(status=status.HTTP_403_FORBIDDEN)
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-        logger.info(f"Location with id {instance.id} updated")
         return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
         logger.info(f"Delete request initiated by user {request.user.id}")
         instance = self.get_object()
-        if instance.user != request.user:
+        if instance.profile.user != request.user:
+            logger.error(f"User %s attempted to delete location %s, but does not have permission", request.user.id, instance.id)
             return Response(status=status.HTTP_403_FORBIDDEN)
         logger.info(f"Location with id {instance.id} deleted")
         return super().destroy(request, *args, **kwargs)

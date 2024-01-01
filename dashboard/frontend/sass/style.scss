@@ -329,25 +329,36 @@ i.construction {
 
 .stars {
     display: inline-block;
-    font-size: 0; /* hide whitespace */
+    font-size: 0;
+    /* hide whitespace */
     cursor: pointer;
-    
+
     input {
         display: none;
     }
+
     label {
         color: gold;
         font-size: 20px;
         padding: 0 1px;
     }
 
-    /** Nothing checked */
-    input:not(:checked) ~ label {
+    input:checked ~ label {
         color: lightgrey;
     }
 
-    /** Hovered star is highlighted */
-    input:not(:checked) ~ label:hover {
+
+    input:checked + label {
+        color: gold;
+    }
+
+    input:hover + label {
         color: red;
+    }
+
+    &.priority-0 {
+        label {
+            color: lightgrey;
+        }
     }
 }
