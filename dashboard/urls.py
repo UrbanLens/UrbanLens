@@ -30,7 +30,7 @@ import logging
 from django.shortcuts import redirect
 # Django imports
 from django.urls import path, include, re_path
-from django.conf.urls import url
+from django.urls import path
 # 3rd Party imports
 from rest_framework import routers
 #from dashboard.models.categories import CategoryViewSet
@@ -86,6 +86,6 @@ urlpatterns = [
 		#path('reject/<int:profile_id>', FriendshipController.reject_friend, name='reject_friend'),
 		path('request/<int:profile_id>', friendship.RequestFriendView.as_view(), name='request_friend'),
 	])),
-	url('', include('social_django.urls', namespace='social')),
+	path('', include('social_django.urls', namespace='social')),
 	re_path(r'^.*$', lambda request, exception: redirect('/'), name='404'),
 ]
