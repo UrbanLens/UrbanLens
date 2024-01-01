@@ -31,12 +31,12 @@ from dashboard.models.profile.model import Profile
 
 class ViewProfileView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
-        profile = Profile.objects.get(user=request.user)
+        profile, created = Profile.objects.get_or_create(user=request.user)
         return render(request, 'dashboard/pages/profile/view_profile.html', {'profile': profile})
 
 class EditProfileView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
-        profile = Profile.objects.get(user=request.user)
+        profile, created = Profile.objects.get_or_create(user=request.user)
         form = ProfileForm(instance=profile)
         return render(request, 'dashboard/pages/profile/edit_profile.html', {'form': form})
 
