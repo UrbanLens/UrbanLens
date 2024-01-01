@@ -113,6 +113,7 @@ class AddPinView(LoginRequiredMixin, View):
             for tag_name in tags:
                 tag, created = Tag.objects.get_or_create(name=tag_name)
                 location.tags.add(tag)
+            location.save()  # Ensure the new location is saved to the database
             return HttpResponse(status=200)
         except Exception as e:
             raise e from e
