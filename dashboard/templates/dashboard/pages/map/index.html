@@ -153,7 +153,13 @@
                         },
                         body: JSON.stringify(data),
                     })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        } else {
+                            return response.json();
+                        }
+                    })
                     .then(data => {
                         console.log(`${name} updated successfully`);
                         toastr.success(`${name.charAt(0).toUpperCase() + name.slice(1)} updated successfully`);
