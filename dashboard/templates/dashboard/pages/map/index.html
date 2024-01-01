@@ -138,6 +138,52 @@
                 });
 
                 input.addEventListener('blur', saveInputValue);
+
+                document.querySelectorAll('.pin-popup .add-tag-button').forEach(function (button) {
+                    button.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        const button = this;
+                        const input = document.createElement('input');
+                        input.name = 'tags';
+                        button.replaceWith(input);
+                        input.focus();
+                        function saveInputValue() {
+                            const value = this.value;
+                            const locationId = this.closest('.pin-popup').dataset.id;
+                            const data = {};
+                            data[this.name] = value;
+                            fetch(`/dashboard/rest/locations/${locationId}/`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRFToken': '{{ csrf_token }}',
+                                },
+                                body: JSON.stringify(data),
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                console.log(`${this.name} updated successfully`);
+                                toastr.success(`${this.name.charAt(0).toUpperCase() + this.name.slice(1)} updated successfully`);
+                                const button = document.createElement('button');
+                                button.classList.add('add-tag-button');
+                                button.innerText = '+';
+                                this.replaceWith(button);
+                            })
+                            .catch((error) => {
+                                console.error('Error:', error);
+                                toastr.error(`Failed to update ${this.name}`);
+                            });
+                        }
+
+                        input.addEventListener('keydown', function (e) {
+                            if (e.key === 'Enter') {
+                                saveInputValue.call(this);
+                            }
+                        });
+
+                        input.addEventListener('blur', saveInputValue);
+                    });
+                });
             });
         });
     });
@@ -264,7 +310,7 @@
                         <div data-name="last_visited"><span class="label">Last Visited:</span> <span class="value">${pin.last_visited}</span></div>
                         <div data-name="status"><span class="label">Status:</span> <span class="value">${pin.status}</span></div>
                         <div data-name="categories"><span class="label">Categories:</span> <span class="value">${pin.categories}</span></div>
-                        <div data-name="tags"><span class="label">Tags:</span> <span class="value">${pin.tags}</span></div>
+                        <div data-name="tags"><span class="label">Tags:</span> <span class="value">${pin.tags}</span> <button class="add-tag-button">+</button></div>
                         <button class="delete-button">Delete</button>
                     </div>
                 `);
