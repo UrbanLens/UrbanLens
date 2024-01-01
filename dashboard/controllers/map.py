@@ -14,7 +14,7 @@
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -34,6 +34,8 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 
+from rest_framework.viewsets import GenericViewSet
+
 from dashboard.models.locations.model import Location
 from dashboard.models.categories.model import Category
 from dashboard.models.images.model import Image
@@ -48,14 +50,10 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 
 logger = logging.getLogger(__name__)
 
-class MapController(LoginRequiredMixin, View):
+class MapController(LoginRequiredMixin, GenericViewSet):
     def view_map(self, request, *args, **kwargs):
         locations = Location.objects.all()
         return render(request, 'dashboard/pages/map/index.html', {'locations': locations})
-
-    def post_view_map(self, request, *args, **kwargs):
-        # Handle the post request here
-        return HttpResponse(status=200)
 
     def edit_pin(self, request, location_id, *args, **kwargs):
         location = Location.objects.get(id=location_id)
@@ -117,7 +115,6 @@ class MapController(LoginRequiredMixin, View):
             logger.info('Profile is %s', request.user.profile)
             return HttpResponse(status=200)
         except Exception as e:
-            raise e from e
             return HttpResponse(f"Error: {str(e)}", status=400)
 
     def search_pins(self, request, *args, **kwargs):

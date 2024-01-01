@@ -8,13 +8,13 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    model.py                                                                                             *
-*        Path:    /model.py                                                                                            *
-*        Project: reviews                                                                                              *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/models/reviews/model.py                                                                   *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -25,6 +25,7 @@
 *********************************************************************************************************************"""
 from django.contrib.auth.models import User
 from django.db.models import CASCADE
+from django.core.validators import MinValueValidator, MaxValueValidator
 from djangofoundry.models.fields import ForeignKey, IntegerField, TextField
 from dashboard.models import abstract
 from dashboard.models.locations.model import Location

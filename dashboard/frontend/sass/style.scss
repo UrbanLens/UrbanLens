@@ -167,7 +167,7 @@ i.pin {
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    opacity: 0.8;
+    opacity: 0.7;
     background-image: url("/static/icons/house.png");
 }
 i.pin:hover {
@@ -340,6 +340,10 @@ i.construction {
         color: gold;
         font-size: 20px;
         padding: 0 1px;
+
+        &:hover {
+            cursor: pointer;
+        }
     }
 
     input:checked ~ label {
@@ -377,11 +381,17 @@ i.construction {
     background: none;
     border: none;
     color: $dark-neutral-color;
-    opacity: 0.6;
+    opacity: 0.05;
     transition: opacity 0.3s ease;
     font-size: 24px;
 }
-
-.delete-button:hover {
-    opacity: 1;
+.leaflet-popup:hover {
+    .delete-button {
+        opacity: 0.6;
+        
+        &:hover {
+            opacity: 1;
+            cursor: pointer;
+        }
+    }
 }

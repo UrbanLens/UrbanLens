@@ -82,14 +82,17 @@
                         input.appendChild(optionElement);
                     });
                 } else if (name == "last_visited") {
-                    // If the field is last_visited, create a date input element
+                    if (value == "never") {
+                        value = new Date().toLocaleDateString();
+                    }
                     input = document.createElement('input');
                     input.type = 'date';
-                    const today = new Date();
-                    const year = today.getFullYear();
-                    const month = ("0" + (today.getMonth() + 1)).slice(-2);
-                    const day = ("0" + today.getDate()).slice(-2);
-                    input.value = `${year}-${month}-${day}`;
+                    // year-month-day with 0 prefixes
+                    const date = new Date(value);
+                    const year = date.getFullYear();
+                    const month = date.getMonth() + 1;
+                    const day = date.getDate();
+                    input.value = `${year}-${month < 10 ? '0' : ''}${month}-${day < 10 ? '0' : ''}${day}`;
                 } else {
                     // Otherwise, create an input element
                     input = document.createElement('input');

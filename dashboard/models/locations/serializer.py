@@ -29,7 +29,7 @@ from dashboard.models.locations.model import Location
 class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
-        fields = ['name', 'icon', 'categories', 'priority', 'last_visited', 'latitude', 'longitude', 'created', 'updated', 'profile', 'status', 'tags']
+        fields = ['name', 'icon', 'categories', 'last_visited', 'latitude', 'longitude', 'created', 'updated', 'profile', 'status', 'tags']
 
     def create(self, validated_data):
         user = validated_data.pop('user')

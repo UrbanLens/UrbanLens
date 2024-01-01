@@ -14,7 +14,7 @@
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -62,16 +62,9 @@ class Location(abstract.Model):
     last_visited = DateTimeField(null=True, blank=True)
     latitude = DecimalField(max_digits=9, decimal_places=6)
     longitude = DecimalField(max_digits=9, decimal_places=6)
-    pin_icon = ImageField()
+    custom_icon = ImageField()
     icon = CharField(max_length=255, null=True, blank=True)
     status = CharField(choices=LocationStatus.choices, default=LocationStatus.WISH_TO_VISIT)
-
-    @property
-    def rating(self):
-        reviews = Review.objects.filter(location=self)
-        if reviews.exists():
-            return round(reviews.aggregate(Avg('rating'))['rating__avg'], 1)
-        return 0
 
     profile = ForeignKey(
         'dashboard.Profile', 
