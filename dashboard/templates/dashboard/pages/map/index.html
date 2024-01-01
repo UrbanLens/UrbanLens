@@ -20,6 +20,7 @@
         color: lightgray;
         font-size: 20px;
         padding: 0 1px; /* space out the stars */
+        display: none; /* hide the text number */
     }
     .stars label:before {
         content: "★";
@@ -72,7 +73,10 @@
         $('.stars input').on('mouseover', function() {
             const star = $(this);
             star.prevAll().addBack().each(function() {
-                $(this).next('label').css('color', 'gold');
+                $(this).nextAll('label').css('color', 'lightgray');
+                $(this).prevAll().addBack().each(function() {
+                    $(this).next('label').css('color', 'gold');
+                });
             });
         });
         $('.stars').on('mouseout', function() {
