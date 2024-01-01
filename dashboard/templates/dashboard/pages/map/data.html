@@ -30,7 +30,7 @@
                 <span class="value">{{ location.last_visited }}</span>
             </div>
             <div class="tags">{{ location.tags }}</div>
-            <a href="{% url 'dashboard:view_location' location.id %}" class="view-full-location">View Full Details</a>
+            <a href="{% url 'view_location' location.id %}" class="view-full-location">View Full Details</a>
             <button class="delete-button" onclick="deletePin(this)"><i class="material-icons">delete</i></button>
         </div>
     `);

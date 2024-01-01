@@ -34,3 +34,4 @@ bin/settings.py
 *db.sqlite3
 pgsql
 .aider*
+*.swp

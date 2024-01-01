@@ -14,7 +14,7 @@
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -39,7 +39,7 @@ from dashboard.models.locations import LocationViewSet
 #from dashboard.models.comments import CommentViewSet
 #from dashboard.models.images import ImageViewSet
 from dashboard.models.profile import ProfileViewSet
-from dashboard.controllers import friendship, map, profile
+from dashboard.controllers import friendship, map, location, profile
 from dashboard.controllers.index import IndexController
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,6 @@ urlpatterns = [
 	path('rest/', include(router.urls)),
 	re_path('^$', IndexController.as_view(), name='home'),
 	path('map/', include([
-	    path('location/<int:location_id>/', map.LocationController.as_view(), name='view_location'),
 		path('', map.MapController.as_view({'get': 'view_map'}), name='view_map'),
 		path('init/', map.MapController.as_view({'get': 'init_map'}), name='init_map'),
 		path('add/', map.MapController.as_view({'get': 'add_pin', 'post': 'post_add_pin'}), name='add_pin'),
@@ -77,6 +76,7 @@ urlpatterns = [
 		path('change_category/<int:location_id>/', map.MapController.as_view({'post': 'change_category'}), name='change_category'),
 		#path('delete/<int:location_id>/', MapController.delete_pin, name='delete_pin'),
 		#path('add_review/<int:location_id>/', map.MapController.as_view(), name='add_review'),
+		path('location/<int:location_id>/', location.LocationController.as_view({'get': 'view'}), name='view_location'),
 	])),
 	path('profile/', include([
 		path('', profile.ViewProfileView.as_view(), name='view_profile'),

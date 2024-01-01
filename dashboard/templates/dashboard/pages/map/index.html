@@ -18,6 +18,9 @@
             <button class="map-button">Search Pins</button>
         </div>
     </div>
+
+    <div hx-get="{% url 'init_map' %}" hx-trigger="load" hx-swap="outerHTML">
+    </div>
 </div>
 <div id="addPinModal"></div>
 {% endblock %}
@@ -50,6 +53,7 @@
                 })
                 .then(response => response.json())
                 .then(data => {
+                    this.closest('.stars').classList.remove('rating-0', 'rating-1', 'rating-2', 'rating-3', 'rating-4', 'rating-5');
                     console.log(`${field.name} updated successfully`);
                     toastr.success(`${field.name.charAt(0).toUpperCase() + field.name.slice(1)} updated successfully`);
                 })
@@ -355,10 +359,6 @@
             toastr.error(`Failed to delete location`);
         });
     }
-
-    <div hx-get="{% url 'init_map' %}" hx-trigger="load" hx-swap="outerHTML">
-        <!-- Placeholder for map data -->
-    </div>
 
 </script>
 
