@@ -133,10 +133,19 @@
                 input.addEventListener('keydown', function (e) {
                     if (e.key === 'Enter') {
                         saveInputValue.call(this);
+                    } else if (e.key === 'Escape') {
+                        const span = document.createElement('span');
+                        span.classList.add('value');
+                        span.innerText = value;
+                        this.replaceWith(span);
                     }
                 });
 
-                input.addEventListener('blur', saveInputValue);
+                input.addEventListener('blur', function () {
+                    if (this.value !== value) {
+                        saveInputValue.call(this);
+                    }
+                });
 
                 document.querySelectorAll('.pin-popup .add-tag-button').forEach(function (button) {
                     button.addEventListener('click', function (e) {
