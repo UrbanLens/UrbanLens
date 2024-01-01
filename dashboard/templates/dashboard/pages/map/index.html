@@ -273,6 +273,30 @@
     });
     L.Marker.prototype.options.icon = newIcon;
 
+    function deletePin(button) {
+        const locationId = button.closest('.pin-popup').dataset.id;
+        fetch(`/dashboard/rest/locations/${locationId}/`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+            },
+        })
+        .then(response => {
+            if (response.ok) {
+                console.log(`Location with id ${locationId} deleted successfully`);
+                toastr.success(`Location deleted successfully`);
+                window.location.reload();
+            } else {
+                console.error(`Failed to delete location with id ${locationId}`);
+                toastr.error(`Failed to delete location`);
+            }
+        })
+        .catch((error) => {
+            console.error('Error:', error);
+            toastr.error(`Failed to delete location`);
+        });
+    }
+
     fetch("{% url 'init_map' %}")
         .then(response => response.json())
         .then(data => {
@@ -311,7 +335,7 @@
                         <div data-name="status"><span class="label">Status:</span> <span class="value">${pin.status}</span></div>
                         <div data-name="categories"><span class="label">Categories:</span> <span class="value">${pin.categories}</span></div>
                         <div data-name="tags"><span class="label">Tags:</span> <span class="value">${pin.tags}</span> <button class="add-tag-button">+</button></div>
-                        <button class="delete-button">Delete</button>
+                        <button class="delete-button" onclick="deletePin(this)">Delete</button>
                     </div>
                 `);
             });
