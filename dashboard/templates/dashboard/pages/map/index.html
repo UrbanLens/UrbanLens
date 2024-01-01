@@ -77,12 +77,16 @@
                 // If the field is status, create a select element
                 if (name === 'status') {
                     input = document.createElement('select');
-                    const options = ['visited', 'not_visited', 'wish_to_visit'];
+                    const options = [
+                        { display: 'Visited', value: 'visited' },
+                        { display: 'Not Visited', value: 'not_visited' },
+                        { display: 'Wish to Visit', value: 'wish_to_visit' }
+                    ];
                     options.forEach(function (option) {
                         const optionElement = document.createElement('option');
-                        optionElement.value = option;
-                        optionElement.innerText = option;
-                        if (option === value) {
+                        optionElement.value = option.value;
+                        optionElement.innerText = option.display;
+                        if (option.value === value) {
                             optionElement.selected = true;
                         }
                         input.appendChild(optionElement);
