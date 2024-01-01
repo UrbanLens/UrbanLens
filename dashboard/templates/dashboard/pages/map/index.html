@@ -26,25 +26,30 @@
 
 {% block scripts %}
 <script>
-    $(document).ready(function() {
+    document.addEventListener('dialogLoaded', function() {
         console.log('adding event listener');
-        $('.stars input').on('change', function() {
-            console.log('star input changed');
-            const star = $(this);
-            const value = star.val();
-            const locationId = star.closest('.pin-popup').data('location-id');
-            $.ajax({
-                url: `/dashboard/rest/locations/${locationId}/`,
-                type: 'PATCH',
-                data: { priority: value },
-                success: function() {
+        document.querySelectorAll('.stars input').forEach(function(starInput) {
+            starInput.addEventListener('change', function() {
+                console.log('star input changed');
+                const star = this;
+                const value = star.value;
+                const locationId = star.closest('.pin-popup').dataset.locationId;
+                fetch(`/dashboard/rest/locations/${locationId}/`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ priority: value }),
+                })
+                .then(response => response.json())
+                .then(data => {
                     console.log('priority updated successfully');
                     toastr.success('Priority updated successfully');
-                },
-                error: function() {
-                    console.log('failed to update priority');
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
                     toastr.error('Failed to update priority');
-                }
+                });
             });
         });
     });
