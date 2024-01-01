@@ -87,6 +87,8 @@
                         }
                         input.appendChild(optionElement);
                     });
+                    // Ensure the dropdown is visible
+                    input.style.display = 'block';
                 } else if (name == "last_visited") {
                     if (value == "never") {
                         value = new Date().toLocaleDateString();
