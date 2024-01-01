@@ -29,7 +29,7 @@
 <script>
     console.log('script tag');
     document.addEventListener('dialogLoaded', function() {
-        console.log('Event listener for dialogLoaded added');
+        console.log('adding event listener');
         document.querySelectorAll('.stars input').forEach(function(starInput) {
             starInput.addEventListener('change', function() {
                 console.log('star input changed');
@@ -55,7 +55,7 @@
             });
         });
     });
-
+    
     const map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
     window.map = map;
     window.pin = null;
@@ -65,11 +65,10 @@
         console.log("htmx is loaded");
     });
 
-    document.body.addEventListener('htmx:afterSwap', function () {
+    document.body.addEventListener('htmx:afterOnLoad', function () {
         // Dispatch a custom event after the dialog is loaded
         setTimeout(() => {
             const event = new Event('dialogLoaded');
-            console.log('Dispatching dialogLoaded event');
             document.dispatchEvent(event);
         }, 250);
     });
