@@ -118,19 +118,26 @@
                 
                 function saveInputValue() {
                     let value = this.value;
+                    let initialValue = this.dataset.initialValue;
                     const locationId = this.closest('.pin-popup').dataset.id;
                     const data = {};
-                    if (this.name === 'last_visited' && value === '') {
-                        value = null;
+                    if (this.name === 'last_visited') {
+                        if (value === '' || value === 'never') {
+                            value = null;
+                        } else {
+                            value = new Date(value).toISOString();
+                        }
+                        if (initialValue === '' || initialValue === 'never') {
+                            initialValue = null;
+                        } else {
+                            initialValue = new Date(initialValue).toISOString();
+                        }
                     }
                     data[this.name] = value;
-                    if (this.name === 'last_visited') {
-                        const dateValue = new Date(value).toLocaleDateString();
-                        const dateInitialValue = new Date(this.dataset.initialValue).toLocaleDateString();
-                        if (dateValue !== dateInitialValue) {
-                        console.log('value != initialValue');
+
+                    if (value !== initialValue) {
                         console.log(value);
-                        console.log(this.dataset.initialValue);
+                        console.log(initialValue);
                         fetch(`/dashboard/rest/locations/${locationId}/`, {
                             method: 'PATCH',
                             headers: {
