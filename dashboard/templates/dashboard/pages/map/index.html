@@ -31,12 +31,12 @@
     window.map = map;
     window.pin = null;
 
-    map.on('popupopen', function() {
-        document.querySelectorAll('.stars input').forEach(function(starInput) {
+    map.on('popupopen', function(e) {
+        e.popup._contentNode.querySelectorAll('.stars input').forEach(function(starInput) {
             starInput.addEventListener('change', function() {
                 const star = this;
                 const value = star.value;
-                const locationId = star.closest('.pin-popup').dataset.locationId;
+                const locationId = e.popup._source.options.locationId;
                 fetch(`/dashboard/rest/locations/${locationId}/`, {
                     method: 'PATCH',
                     headers: {
