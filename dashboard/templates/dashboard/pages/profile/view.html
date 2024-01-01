@@ -1,0 +1,18 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="section">
+    <div class="icon-block">
+        <h2 class="center brown-text"><i class="material-icons">account_circle</i></h2>
+        <h5 class="center">User Profile</h5>
+
+        <p class="light">
+            <strong>Username:</strong> {{ profile.user.username }}<br>
+            <strong>Email:</strong> {{ profile.user.email }}<br>
+            <strong>First Name:</strong> {{ profile.user.first_name }}<br>
+            <strong>Last Name:</strong> {{ profile.user.last_name }}<br>
+            <!-- Add more fields as needed -->
+        </p>
+    </div>
+</div>
+{% endblock %}
