@@ -1,0 +1,29 @@
+{% for location in map_data %}
+    var marker = L.marker([{{ location.latitude }}, {{ location.longitude }}]).addTo(map);
+    marker.bindPopup(`
+        <div class="pin-popup" data-id="{{ location.id }}">
+            <h2>{{ location.name }}</h2>
+            <p>{{ location.description }}</p>
+            <div class="stars">
+                <input type="radio" id="star5" name="rating" value="5" {% if location.rating == 5 %}checked{% endif %} /><label for="star5" title="Rocks!">5 stars</label>
+                <input type="radio" id="star4" name="rating" value="4" {% if location.rating == 4 %}checked{% endif %} /><label for="star4" title="Pretty good">4 stars</label>
+                <input type="radio" id="star3" name="rating" value="3" {% if location.rating == 3 %}checked{% endif %} /><label for="star3" title="Meh">3 stars</label>
+                <input type="radio" id="star2" name="rating" value="2" {% if location.rating == 2 %}checked{% endif %} /><label for="star2" title="Kinda bad">2 stars</label>
+                <input type="radio" id="star1" name="rating" value="1" {% if location.rating == 1 %}checked{% endif %} /><label for="star1" title="Sucks big time">1 star</label>
+            </div>
+            <div class="tags">
+                {% for tag in location.tags.all %}
+                    <span class="tag">{{ tag.name }}</span>
+                {% endfor %}
+                <button class="add-tag-button">+</button>
+            </div>
+            <div class="status" data-name="status">
+                <span class="value">{{ location.get_status_display }}</span>
+            </div>
+            <div class="last-visited" data-name="last_visited">
+                <span class="value">{{ location.last_visited|date:"F j, Y" if location.last_visited else "never" }}</span>
+            </div>
+            <button onclick="deletePin(this)">Delete Pin</button>
+        </div>
+    `);
+{% endfor %}
