@@ -34,8 +34,18 @@
         $('.stars input').on('change', function() {
             const star = $(this);
             const value = star.val();
-            // TODO: Update the priority on the server
-            console.log('New priority: ' + value);
+            const locationId = star.closest('.pin-popup').data('location-id');
+            $.ajax({
+                url: `/api/locations/${locationId}/`,
+                type: 'PATCH',
+                data: { priority: value },
+                success: function() {
+                    toastr.success('Priority updated successfully');
+                },
+                error: function() {
+                    toastr.error('Failed to update priority');
+                }
+            });
         });
     });
 </script>
