@@ -14,7 +14,7 @@
         {% endif %}
         <form id="upload-avatar-form" method="post" enctype="multipart/form-data">
             {% csrf_token %}
-            <div id="upload-avatar-button" class="upload-button">
+            <div id="upload-avatar-button" class="upload-button" onclick="document.getElementById('avatar-file-input').click();">
                 <i class="material-icons">file_upload</i>
                 <input type="file" id="avatar-file-input" name="avatar" onchange="this.form.submit()" style="display: none;">
             </div>
