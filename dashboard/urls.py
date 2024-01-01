@@ -86,6 +86,6 @@ urlpatterns = [
 		#path('reject/<int:profile_id>', FriendshipController.reject_friend, name='reject_friend'),
 		path('request/<int:profile_id>', friendship.RequestFriendView.as_view(), name='request_friend'),
 	])),
-	url('', include('social_django.urls', namespace='social')),  # <- Here
+	url('', include('social_django.urls', namespace='social')),
 	re_path(r'^.*$', lambda request, exception: redirect('/'), name='404'),
 ]
