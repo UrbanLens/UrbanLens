@@ -30,7 +30,7 @@
 
 {% block scripts %}
 <script>
-    $(document).ready(function() {
+    document.addEventListener('dialogLoaded', function() {
         $('.stars input').on('change', function() {
             console.log('star input changed');
             const star = $(this);
