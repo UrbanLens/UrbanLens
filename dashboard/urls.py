@@ -82,7 +82,7 @@ urlpatterns = [
 		path('edit/', profile.EditProfileView.as_view(), name='edit_profile'),
 	])),
 	path('friendship/', include([
-		path('', friendship.ListFriendsView.as_view(), name='list_friends'),
+		path('list/', friendship.ListFriendsView.as_view(), name='list_friends'),
 		#path('accept/<int:profile_id>', FriendshipController.accept_friend, name='accept_friend'),
 		#path('reject/<int:profile_id>', FriendshipController.reject_friend, name='reject_friend'),
 		path('request/<int:profile_id>', friendship.RequestFriendView.as_view(), name='request_friend'),

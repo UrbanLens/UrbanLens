@@ -22,6 +22,7 @@ div.container {
     height: calc(100vh - 4rem - 4rem); /* Adjust the height of the container to be 100% of the viewport height minus the header and footer heights */
     display: flex; 
     flex-direction: column; 
+    position: relative;
 }
 
 div.section {
@@ -283,7 +284,9 @@ i.construction {
     background-image: url("/static/icons/construction.png");
 }
 .avatar {
-    position: relative;
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
     width: 100px;
     height: 100px;
     border-radius: 50%;
@@ -299,8 +302,8 @@ i.construction {
         display: flex;
         align-items: center;
         justify-content: center;
-        background-color: #ccc;
-        color: #fff;
+        background-color: $dark-neutral-color;
+        color: $light-neutral-color;
         font-size: 2em;
     }
     #upload-avatar-button {
@@ -308,17 +311,17 @@ i.construction {
         bottom: 0;
         right: 0;
         background: rgba(0,0,0,0.5);
-        color: #fff;
+        color: $light-neutral-color;
         padding: 5px;
         border-radius: 50%;
-        display: none;
+        opacity: 0.1;
         i {
             font-size: 1.2em;
         }
     }
     &:hover {
         #upload-avatar-button {
-            display: block;
+            opacity: 1;
         }
     }
 }
