@@ -12,10 +12,13 @@
                 {{ profile.user.first_name|first }}
             </div>
         {% endif %}
-        <div id="upload-avatar-button" class="upload-button">
-            <i class="material-icons">file_upload</i>
-            <input type="file" id="avatar-file-input" style="display: none;">
-        </div>
+        <form id="upload-avatar-form" method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div id="upload-avatar-button" class="upload-button">
+                <i class="material-icons">file_upload</i>
+                <input type="file" id="avatar-file-input" name="avatar" onchange="this.form.submit()" style="display: none;">
+            </div>
+        </form>
     </div>
 
     <p class="light">

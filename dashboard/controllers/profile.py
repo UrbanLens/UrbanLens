@@ -42,7 +42,7 @@ class EditProfileView(LoginRequiredMixin, View):
 
     def post(self, request, *args, **kwargs):
         profile = Profile.objects.get(user=request.user)
-        form = ProfileForm(request.POST, instance=profile)
+        form = ProfileForm(request.POST, request.FILES, instance=profile)
         if form.is_valid():
             form.save()
             return redirect('view_profile')
