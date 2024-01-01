@@ -48,17 +48,16 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 
 logger = logging.getLogger(__name__)
 
-class ViewMapView(LoginRequiredMixin, View):
-    def get(self, request, *args, **kwargs):
+class MapController(LoginRequiredMixin, View):
+    def view_map(self, request, *args, **kwargs):
         locations = Location.objects.all()
         return render(request, 'dashboard/pages/map/index.html', {'locations': locations})
 
-    def post(self, request, *args, **kwargs):
+    def post_view_map(self, request, *args, **kwargs):
         # Handle the post request here
         return HttpResponse(status=200)
 
-class EditPinView(LoginRequiredMixin, View):
-    def post(self, request, location_id, *args, **kwargs):
+    def edit_pin(self, request, location_id, *args, **kwargs):
         location = Location.objects.get(id=location_id)
         # Update the location based on the form data
         location.name = request.POST.get('name')
@@ -75,19 +74,17 @@ class EditPinView(LoginRequiredMixin, View):
         location.save()
         return HttpResponseRedirect(reverse('view_map'))
 
-    def get(self, request, location_id, *args, **kwargs):
+    def get_edit_pin(self, request, location_id, *args, **kwargs):
         location = Location.objects.get(id=location_id)
         # Render the edit form
         categories = Category.objects.all()
         return render(request, 'dashboard/edit_location.html', {'location': location, 'categories': categories})
 
-
-class AddPinView(LoginRequiredMixin, View):
-    def get(self, request, *args, **kwargs):
+    def add_pin(self, request, *args, **kwargs):
         # Render the add form
         return render(request, 'dashboard/pages/map/add_location.html')
 
-    def post(self, request, *args, **kwargs):
+    def post_add_pin(self, request, *args, **kwargs):
         logger.info('Adding a new pin!')
         try:
             # Create a new location based on the form data
@@ -123,39 +120,37 @@ class AddPinView(LoginRequiredMixin, View):
             raise e from e
             return HttpResponse(f"Error: {str(e)}", status=400)
 
-
-class SearchPinsView(LoginRequiredMixin, View):
-    def get(self, request, *args, **kwargs):
+    def search_pins(self, request, *args, **kwargs):
         query = request.GET.get('q')
         locations = Location.objects.filter(name__icontains=query)
         return render(request, 'dashboard/pages/map/map.html', {'locations': locations})
 
-class UploadImageView(LoginRequiredMixin, View):
-    def post(self, request, location_id, *args, **kwargs):
+    def upload_image(self, request, location_id, *args, **kwargs):
         image = request.FILES.get('image')
         location = Location.objects.get(id=location_id)
         Image.objects.create(image=image, location=location)
         return HttpResponse(status=200)
 
-class ChangeCategoryView(LoginRequiredMixin, View):
-    def post(self, request, location_id, *args, **kwargs):
+    def change_category(self, request, location_id, *args, **kwargs):
         category_id = request.POST.get('category')
         location = Location.objects.get(id=location_id)
         location.change_category(category_id)
         return HttpResponseRedirect(reverse('view_map'))
 
-class AdvancedSearchView(LoginRequiredMixin, View):
-    def post(self, request, *args, **kwargs):
+    def post_advanced_search(self, request, *args, **kwargs):
         form = AdvancedSearchForm(request.POST)
         if form.is_valid():
             locations = Location.objects.filter_by_criteria(form.cleaned_data)
             return render(request, 'dashboard/view_map.html', {'locations': locations})
 
-    def get(self, request, *args, **kwargs):
+    def get_advanced_search(self, request, *args, **kwargs):
         form = AdvancedSearchForm()
         return render(request, 'dashboard/advanced_search.html', {'form': form})
 
-class InitMapView(LoginRequiredMixin, View):
+    def init_map(self, request, *args, **kwargs):
+        map_data = self.get_map_data()
+        return HttpResponse(json.dumps(list(map_data)), content_type='application/json')
+
     def get_map_data(self):
         map_data = Location.objects.all()
         if not map_data:
@@ -165,10 +160,6 @@ class InitMapView(LoginRequiredMixin, View):
             map_data = [pin.to_json() for pin in map_data]
 
         return map_data
-
-    def get(self, request, *args, **kwargs):
-        map_data = self.get_map_data()
-        return HttpResponse(json.dumps(list(map_data)), content_type='application/json')
 
 
 @login_required
