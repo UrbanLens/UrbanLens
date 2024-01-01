@@ -65,12 +65,13 @@
                 if (!e.target.matches('span.value')) {
                     return;
                 }
-                const span = e.target;
                 e.stopPropagation();
-                const field = this;
-                const initialValue = field.innerText;
+                
+                const span = e.target;
+                const popup = span.closest('.pin-popup');
+                const initialValue = span.innerText;
                 let value = initialValue;
-                const name = field.parentNode.dataset.name;
+                const name = span.parentNode.dataset.name;
                 let input;
 
                 // If the field is status, create a select element
@@ -103,7 +104,7 @@
                     input.addEventListener('keydown', function (e) {
                         if (firstInput && (e.key === 'Backspace' || e.key === 'Delete')) {
                             e.preventDefault();
-                            this.value = '';
+                            input.value = '';
                             firstInput = false;
                         } else {
                             firstInput = false;
@@ -117,76 +118,73 @@
 
                 input.name = name;
                 input.dataset.initialValue = initialValue;
-                field.replaceWith(input);
+                span.replaceWith(input);
                 input.focus();
                 
                 function saveInputValue() {
-                    let value = this.value;
-                    let initialValue = this.dataset.initialValue;
-                    const locationId = this.closest('.pin-popup').dataset.id;
+                    let value = input.value;
+                    const locationId = popup.dataset.id;
                     const data = {};
-                    if (this.name === 'last_visited') {
-                        if (value === '' || value === 'never') {
+                    if (name === 'last_visited') {
+                        if (value === '' || value === 'never' || value === undefined) {
                             value = null;
                         } else {
                             value = new Date(value).toISOString().split('T')[0];
                         }
-                        if (initialValue === '' || initialValue === 'never') {
-                            initialValue = null;
+                    }
+                    data[name] = value;
+
+                    if ((value || 'never') === initialValue) {
+                        console.log('value is the same as initial value, skipping save');
+                        return;
+                    }
+
+                    console.log(value);
+                    console.log(initialValue);
+                    fetch(`/dashboard/rest/locations/${locationId}/`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': '{{ csrf_token }}',
+                        },
+                        body: JSON.stringify(data),
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log(`${name} updated successfully`);
+                        toastr.success(`${name.charAt(0).toUpperCase() + name.slice(1)} updated successfully`);
+                        const span = document.createElement('span');
+                        span.classList.add('value');
+
+                        if (name === 'last_visited') {
+                            span.innerText = value && value !== 'never' ? new Date(value).toLocaleDateString() : 'never';
                         } else {
-                            initialValue = new Date(initialValue).toISOString().split('T')[0];
+                            span.innerText = value;
                         }
-                    }
-                    data[this.name] = value;
 
-                    if (value !== initialValue) {
-                        console.log(value);
-                        console.log(initialValue);
-                        fetch(`/dashboard/rest/locations/${locationId}/`, {
-                            method: 'PATCH',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRFToken': '{{ csrf_token }}',
-                            },
-                            body: JSON.stringify(data),
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            console.log(`${this.name} updated successfully`);
-                            toastr.success(`${this.name.charAt(0).toUpperCase() + this.name.slice(1)} updated successfully`);
-                            const span = document.createElement('span');
-                            span.classList.add('value');
-
-                            if (this.name === 'last_visited') {
-                                span.innerText = this.value && this.value !== 'never' ? new Date(this.value).toLocaleDateString() : 'never';
-                            } else {
-                                span.innerText = this.value;
-                            }
-
-                            this.replaceWith(span);
-                        })
-                        .catch((error) => {
-                            console.error('Error:', error);
-                            toastr.error(`Failed to update ${this.name}`);
-                        });
-                    }
+                        input.replaceWith(span);
+                    })
+                    .catch((error) => {
+                        console.error('Error:', error);
+                        toastr.error(`Failed to update ${name}`);
+                    });
                 }
 
                 input.addEventListener('keydown', function (e) {
                     if (e.key === 'Enter') {
-                        saveInputValue.call(this);
+                        saveInputValue.call(input);
                     } else if (e.key === 'Escape') {
-                        this.value = this.dataset.initialValue;
+                        value = initialValue;
                         const span = document.createElement('span');
                         span.classList.add('value');
-                        span.innerText = this.dataset.initialValue;
-                        this.replaceWith(span);
+                        span.innerText = initialValue;
+                        input.replaceWith(span);
                     }
                 });
 
                 input.addEventListener('blur', function () {
-                    if (this.value !== this.dataset.initialValue && document.body.contains(this)) {
-                        saveInputValue.call(this);
+                    if (value !== initialValue && document.body.contains(input)) {
+                        saveInputValue.call(input);
                     }
                 });
 

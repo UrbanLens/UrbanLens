@@ -30,6 +30,19 @@ To set up the project, follow these steps:
 3. Set up the database by running `python manage.py migrate`.
 4. Collect static files by running `python manage.py collectstatic`.
 
+## TODO
+* Allow using emojis as pin icons from a standard emoji pack
+* Allow uploading custom images for pin icons
+* Search functionality
+* Load external data about a location
+* Location view page
+* Comments on a location
+* Integration with discord
+* Google maps import
+* Google maps export
+* Trip planning
+* Messages between users
+
 ## Running the Project
 To run the project, use the command `python manage.py runserver`. This will start the Django development server on your local machine.
 
