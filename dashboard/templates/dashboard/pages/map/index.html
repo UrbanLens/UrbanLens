@@ -3,6 +3,7 @@
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 {% endblock %}
 
 {% block title %}Map{% endblock %}
@@ -26,6 +27,7 @@
 
 {% block scripts %}
 <script>
+    console.log('script tag');
     document.addEventListener('dialogLoaded', function() {
         console.log('adding event listener');
         document.querySelectorAll('.stars input').forEach(function(starInput) {
@@ -53,9 +55,7 @@
             });
         });
     });
-</script>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script>
+    
     const map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
     window.map = map;
     window.pin = null;
