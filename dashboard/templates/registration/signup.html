@@ -1,10 +1,12 @@
 {% extends "dashboard/themes/base.html" %}
 
 {% block content %}
+<div class="section">
   <h2>Sign up</h2>
   <form method="post">
   {% csrf_token %}
     {{ form.as_p }}
     <button type="submit">Sign up</button>
   </form>
+</div>
 {% endblock %}

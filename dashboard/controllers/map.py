@@ -8,7 +8,7 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    MapController.py                                                                                     *
-*        Path:    /dashboard/controllers/MapController.py                                                              *
+*        Path:    /dashboard/controllers/map.py                                                                        *
 *        Project: urbanlens                                                                                            *
 *        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
@@ -165,8 +165,15 @@ class GetMapDataView(LoginRequiredMixin, View):
         return map_data
 
 class InitMapView(LoginRequiredMixin, View):
+    def get_map_data(self):
+        map_data = Location.objects.values('latitude', 'longitude', 'name', 'description')
+        if not map_data:
+            # Default map data
+            map_data = [{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
+        return map_data
+
     def get(self, request, *args, **kwargs):
-        map_data = get_map_data()
+        map_data = self.get_map_data()
         return HttpResponse(json.dumps(list(map_data)), content_type='application/json')
 
 

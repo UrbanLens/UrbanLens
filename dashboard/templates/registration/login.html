@@ -1,10 +1,14 @@
 {% extends "dashboard/themes/base.html" %}
 
 {% block content %}
-  <h2>Login</h2>
-  <form method="post">
-  {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Login</button>
-  </form>
+<div class="section">
+    <h2>Login</h2>
+    <form method="post">
+    {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Login</button>
+    </form>
+    <p>Don't have an account? <a href="{% url 'signup' %}">Sign up</a></p>
+    <p>Forgot password? <a href="{% url 'password_reset' %}">Reset password</a></p>
+</div>
 {% endblock %}

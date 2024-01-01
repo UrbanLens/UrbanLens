@@ -37,7 +37,7 @@ from dashboard.models.locations import LocationViewSet
 #from dashboard.models.comments import CommentViewSet
 #from dashboard.models.images import ImageViewSet
 from dashboard.models.profile import ProfileViewSet
-from dashboard.controllers import MapController, ProfileController, FriendshipController
+from dashboard.controllers import friendship, map, profile
 from dashboard.controllers.index import IndexController
 
 logger = logging.getLogger(__name__)
@@ -64,19 +64,26 @@ for route, viewset in routes.items():
 urlpatterns = [
 	path('rest/', include(router.urls)),
 	re_path('^$', IndexController.as_view(), name='home'),
-	path('map/', MapController.view_map, name='view_map'),
-	path('map/edit/<int:pin_id>/', MapController.edit_pin, name='edit_pin'),
-	path('map/add/', MapController.add_pin, name='add_pin'),
-	path('map/search/', MapController.search_pins, name='search_pins'),
-	path('map/upload_image/<int:location_id>/', MapController.upload_image, name='upload_image'),
-	path('map/change_category/<int:location_id>/', MapController.change_category, name='change_category'),
-	path('map/init/', MapController.init_map, name='init_map'),
-
-	path('profile/', ProfileController.view_profile, name='view_profile'),
-	path('profile/edit/', ProfileController.edit_profile, name='edit_profile'),
-	path('map/advanced_search/', MapController.advanced_search, name='advanced_search'),
-	path('map/add_review/<int:location_id>/', MapController.add_review, name='add_review'),
-    path('friendship/request', FriendshipController.request_friend, name='request_friend'),
-    path('friendship/list', FriendshipController.list_friends, name='list_friends'),
+	path('map/', include([
+		path('', map.ViewMapView.as_view(), name='view_map'),
+		path('init/', map.InitMapView.as_view(), name='init_map'),
+		path('add/', map.AddPinView.as_view(), name='add_pin'),
+		path('edit/<int:pin_id>/', map.EditPinView.as_view(), name='edit_pin'),
+		path('search/', map.SearchPinsView.as_view(), name='search_pins'),
+		path('upload_image/<int:location_id>/', map.UploadImageView.as_view(), name='upload_image'),
+		path('change_category/<int:location_id>/', map.ChangeCategoryView.as_view(), name='change_category'),
+		#path('delete/<int:location_id>/', MapController.delete_pin, name='delete_pin'),
+		path('add_review/<int:location_id>/', map.AddReviewView.as_view(), name='add_review'),
+	])),
+	path('profile/', include([
+		path('', profile.ViewProfileView.as_view(), name='view_profile'),
+		path('edit/', profile.EditProfileView.as_view(), name='edit_profile'),
+	])),
+	path('friendship/', include([
+		path('', friendship.ListFriendsView.as_view(), name='list_friends'),
+		#path('accept/<int:profile_id>', FriendshipController.accept_friend, name='accept_friend'),
+		#path('reject/<int:profile_id>', FriendshipController.reject_friend, name='reject_friend'),
+		path('request/<int:profile_id>', friendship.RequestFriendView.as_view(), name='request_friend'),
+	])),
 	re_path(r'^.*$', lambda request, exception: redirect('/'), name='404'),
 ]

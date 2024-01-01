@@ -1,10 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <title>View Friends</title>
-    <script src="https://unpkg.com/htmx.org@1.6.1"></script>
-</head>
-<body>
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="section">
     <h1>Your Friends</h1>
     <div id="friend_list" hx-get="/friendship/list" hx-trigger="load" hx-swap="outerHTML">
         {% for friendship in friends %}
@@ -13,5 +10,5 @@
             <p>You have no friends yet.</p>
         {% endfor %}
     </div>
-</body>
-</html>
+</div>
+{% endblock %}

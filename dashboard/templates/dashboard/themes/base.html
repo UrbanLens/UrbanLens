@@ -25,7 +25,10 @@
 
 <body>
     {% include 'dashboard/partials/header.html' %}
-    {% block content %}{% endblock %}
+
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
     {% include 'dashboard/partials/footer.html' %}
 
     <!--  Scripts-->

@@ -10,45 +10,43 @@
 				<input type="text" id="latitude" name="latitude" autocomplete="latitude" pattern="^-?([1-8]?[1-9]|[1-9]0)\.{1}\d{1,6}" readonly><br> 
 				<label for="longitude">Longitude:</label><br>
 				<input type="text" id="longitude" name="longitude" autocomplete="longitude" pattern="^-?([1-8]?[1-9]|[1-9]0)\.{1}\d{1,6}" readonly><br>
-				<label for="address">Address:</label><br>
-				<input type="text" id="address" name="address" autocomplete="address" pattern="^[a-zA-Z0-9\s,.' -]*$"><br>
 				<div id="iconGrid" class="icon-grid">
-					<i class="bank"></i>
-					<i class="car"></i>
-					<i class="church"></i>
-					<i class="firehouse"></i>
-					<i class="hospital"></i>
-					<i class="military"></i>
-					<i class="plane"></i>
-					<i class="school"></i>
-					<i class="tunnel"></i>
-					<i class="boat"></i>
-					<i class="castle"></i>
-					<i class="dam"></i>
-					<i class="graffiti"></i>
-					<i class="house"></i>
-					<i class="museum"></i>
-					<i class="powerplant"></i>
-					<i class="statue"></i>
-					<i class="bridge"></i>
-					<i class="cave"></i>
-					<i class="factory"></i>
-					<i class="graveyard"></i>
-					<i class="library"></i>
-					<i class="park"></i>
-					<i class="prison"></i>
-					<i class="train"></i>
+					<i class="pin bank"></i>
+					<i class="pin car"></i>
+					<i class="pin church"></i>
+					<i class="pin firehouse"></i>
+					<i class="pin hospital"></i>
+					<i class="pin military"></i>
+					<i class="pin plane"></i>
+					<i class="pin school"></i>
+					<i class="pin tunnel"></i>
+					<i class="pin boat"></i>
+					<i class="pin castle"></i>
+					<i class="pin dam"></i>
+					<i class="pin graffiti"></i>
+					<i class="pin house"></i>
+					<i class="pin museum"></i>
+					<i class="pin powerplant"></i>
+					<i class="pin statue"></i>
+					<i class="pin bridge"></i>
+					<i class="pin cave"></i>
+					<i class="pin factory"></i>
+					<i class="pin graveyard"></i>
+					<i class="pin library"></i>
+					<i class="pin park"></i>
+					<i class="pin prison"></i>
+					<i class="pin train"></i>
 					<!-- 
-					<i class="windmill"></i>
-					<i class="lighthouse"></i>
-					<i class="water-tower"></i>
-					<i class="barn"></i>
-					<i class="silo"></i>
-					<i class="police-station"></i>
-					<i class="farm"></i>
-					<i class="stadium"></i>
-					<i class="theater"></i>
-					<i class="construction"></i>
+					<i class="pin windmill"></i>
+					<i class="pin lighthouse"></i>
+					<i class="pin water-tower"></i>
+					<i class="pin barn"></i>
+					<i class="pin silo"></i>
+					<i class="pin police-station"></i>
+					<i class="pin farm"></i>
+					<i class="pin stadium"></i>
+					<i class="pin theater"></i>
+					<i class="pin construction"></i>
 					-->
 				</div>
 				<input type="hidden" id="selectedIcon" name="icon">
@@ -89,6 +87,24 @@
 					iconGrid.addEventListener('click', (e) => {
 						if (e.target.tagName === 'I') {
 							selectedIconInput.value = e.target.dataset.value;
+							// Remove "selected" class from all icons
+							document.querySelectorAll('#iconGrid i').forEach(icon => {
+								icon.classList.remove('selected');
+							});
+							// Add "selected" class to clicked icon
+							e.target.classList.add('selected');
+							// Update window.pin to use this icon
+							if (window.pin) {
+								const iconName = e.target.classList[1];
+								window.pin.setIcon(L.divIcon({
+									className: iconName,
+									html: `<i class="pin ${iconName}"></i>`,
+									iconSize: [30, 42],
+									iconAnchor: [15, 42]
+								}));
+								console.log('updated icon to: ', iconName);
+								console.log('icon is now: ', window.pin.options.icon.options.html);
+							}
 						}
 					});
 

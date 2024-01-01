@@ -24,6 +24,10 @@ div.container {
     flex-direction: column; 
 }
 
+div.section {
+    padding: 1rem;
+}
+
 #map {
     flex-grow: 1; /* Allow the map to grow to fill available space */
     width: 100%;
@@ -153,26 +157,24 @@ nav .brand-logo {
         float: right;
     }
 }
-#iconGrid {
-    i {
-        width: 3rem;
-        height: 3rem;
-        background-size: 100% 100%;
-        background-repeat: no-repeat;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 50%;
-        opacity: 0.8;
-    }
-    i:hover {
-        opacity: 1; 
-        filter: invert(0%) sepia(100%) saturate(100%) hue-rotate(130deg) brightness(100%) contrast(100%);
-    }
-    i.selected, i:focus {
-        opacity: 1;
-        filter: invert(0%) sepia(100%) saturate(100%) hue-rotate(0deg) brightness(100%) contrast(100%);
-    }
+i.pin {
+    width: 3rem;
+    height: 3rem;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    opacity: 0.8;
+}
+i.pin:hover {
+    opacity: 1; 
+    filter: invert(0%) sepia(100%) saturate(100%) hue-rotate(130deg) brightness(100%) contrast(100%);
+}
+i.pin.selected, i.pin:focus {
+    opacity: 1;
+    filter: invert(0%) sepia(100%) saturate(100%) hue-rotate(0deg) brightness(100%) contrast(100%);
 }
 i.bank {
     background-image: url("/static/icons/bank.png");

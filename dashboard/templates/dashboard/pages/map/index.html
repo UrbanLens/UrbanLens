@@ -11,36 +11,34 @@
 
 
 {% block content %}
-<div class="container">
-    <div id="map" hx-boost="true">
-        <div class="map-buttons">
-            <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="outerHTML">
-                <button class="map-button">Add Pin</button>
-            </div>
-            <div hx-get="{% url 'search_pins' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
-                <button class="map-button">Search Pins</button>
-            </div>
+<div id="map" hx-boost="true">
+    <div class="map-buttons">
+        <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="outerHTML">
+            <button class="map-button">Add Pin</button>
+        </div>
+        <div hx-get="{% url 'search_pins' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
+            <button class="map-button">Search Pins</button>
         </div>
     </div>
-    {% for location in locations %}
-    <div>
-        <h2>{{ location.name }}</h2>
-        {% for review in reviews %}
-        {% if review.location.id == location.id %}
-        <div>
-            <p>{{ review.user.username }} rated this location {{ review.rating }} out of 5</p>
-            <p>{{ review.review }}</p>
-        </div>
-        {% endif %}
-        {% endfor %}
-        <form method="POST" hx-post="{% url 'add_review' location.id %}" hx-trigger="submit">
-            {% csrf_token %}
-            {{ form.as_p }}
-            <input type="submit" value="Submit">
-        </form>
-    </div>
-    {% endfor %}
 </div>
+{% for location in locations %}
+<div>
+    <h2>{{ location.name }}</h2>
+    {% for review in reviews %}
+    {% if review.location.id == location.id %}
+    <div>
+        <p>{{ review.user.username }} rated this location {{ review.rating }} out of 5</p>
+        <p>{{ review.review }}</p>
+    </div>
+    {% endif %}
+    {% endfor %}
+    <form method="POST" hx-post="{% url 'add_review' location.id %}" hx-trigger="submit">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <input type="submit" value="Submit">
+    </form>
+</div>
+{% endfor %}
 <div id="addPinModal"></div>
 {% endblock %}
 
@@ -84,7 +82,10 @@
         const addPinOption = document.createElement('button');
         addPinOption.innerText = 'Add Pin';
         addPinOption.addEventListener('click', function() {
-            window.pin = L.marker([lat, lng], {id: 'pin'}).addTo(map);
+            const selectedIcon = document.querySelector('#iconGrid .selected');
+            const iconUrl = selectedIcon ? selectedIcon.dataset.url : 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png';
+            const icon = L.icon({ iconUrl, iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] });
+            window.pin = L.marker([lat, lng], {id: 'pin', icon}).addTo(map);
             const addPinButton = document.querySelector('.map-button');
             if (addPinButton) {
                 document.body.addEventListener('htmx:afterOnLoad', function() {
@@ -124,8 +125,21 @@
         .then(response => response.json())
         .then(data => {
             data.forEach(pin => {
-                L.marker([pin.latitude, pin.longitude]).addTo(map)
-                    .bindPopup('<b>${pin.name}</b><br>${pin.description>');
+                let marker; 
+                // if there is an icon, use it in a divIcon
+                if (pin.icon) {
+                    const icon = L.divIcon({
+                        className: pin.icon,
+                        html: `<i class="pin ${pin.icon}"></i>`,
+                        iconSize: [30, 42],
+                        iconAnchor: [15, 42]
+                    });
+                    marker = L.marker([pin.latitude, pin.longitude], {icon});
+                } else {
+                    // otherwise, use the default icon
+                    marker = L.marker([pin.latitude, pin.longitude]);
+                }
+                marker.addTo(map).bindPopup('<b>${pin.name}</b><br>${pin.description}');
             });
         });
 

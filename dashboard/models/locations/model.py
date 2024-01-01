@@ -8,9 +8,9 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    model.py                                                                                             *
-*        Path:    /model.py                                                                                            *
-*        Project: locations                                                                                            *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/models/locations/model.py                                                                 *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
@@ -57,19 +57,22 @@ class Location(abstract.Model):
     name = CharField(max_length=255)
     icon = CharField(max_length=255, null=True, blank=True)
     description = CharField(max_length=500, null=True, blank=True)
-    categories = ManyToManyField('dashboard.Category', blank=True)
     priority = IntegerField(default=0)
     last_visited = DateTimeField(null=True, blank=True)
     latitude = DecimalField(max_digits=9, decimal_places=6)
     longitude = DecimalField(max_digits=9, decimal_places=6)
     pin_icon = ImageField()
-    icon = ImageField()
+    icon = CharField(max_length=255, null=True, blank=True)
     status = IntegerField(choices=LocationStatus.choices, default=LocationStatus.WISH_TO_VISIT)
 
     profile = ForeignKey(
         'dashboard.Profile', 
         on_delete=CASCADE, 
         related_name='locations'
+    )
+    categories = ManyToManyField(
+        'dashboard.Category', 
+        blank=True
     )
     tags = ManyToManyField(
         'dashboard.Tag',
@@ -91,7 +94,6 @@ class Location(abstract.Model):
 
         indexes = [
             Index(fields=['name']),
-            #Index(fields=['icon']),
             Index(fields=['priority']),
             Index(fields=['last_visited']),
             Index(fields=['latitude', 'longitude']),
