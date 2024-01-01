@@ -17,5 +17,12 @@
         <h2>Location on Map</h2>
         <!-- Map integration goes here -->
     </div>
+
+    <div class="recent-search-results">
+        <h2>Recent Search Results</h2>
+        {% for result in recent_search_results %}
+            <p>{{ result.searched_at }}: {{ result.result }}</p>
+        {% endfor %}
+    </div>
 </div>
 {% endblock %}

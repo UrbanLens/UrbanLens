@@ -67,8 +67,12 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         smithsonian_images = smithsonian_gateway.get_data(location.name)
         google_places_images = google_places_gateway.get_data(location.latitude, location.longitude, radius=1000)
 
+        # Fetch the most recent search results for the location
+        recent_search_results = location.search_results.order_by('-searched_at')[:10]
+
         return render(request, 'dashboard/pages/location/index.html', {
             'location': location,
             'smithsonian_images': smithsonian_images,
             'google_places_images': google_places_images,
+            'recent_search_results': recent_search_results,
         })
