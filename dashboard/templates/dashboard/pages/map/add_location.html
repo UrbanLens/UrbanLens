@@ -3,7 +3,7 @@
 	    <div class="dialog" id="addPinModal">
 	        <button id="closeDialog" style="float: right;">X</button>
 	        <h2>Add Location</h2>
-	        <form id="addPinForm" method="POST" action="{% url 'add_pin' %}" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
+	        <form id="addPinForm" method="POST" action="{% url 'add_pin' %}" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML" hx-swap-oob="true">
 				<label for="name">Name:</label><br>
 				<input type="text" id="name" name="name" autocomplete="name" required><br>
 				<label for="latitude">Latitude:</label><br>
