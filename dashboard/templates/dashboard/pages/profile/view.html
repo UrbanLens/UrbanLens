@@ -5,7 +5,13 @@
     <h1 class="center">Profile</h1>
 
     <div class="avatar">
-        <img src="{{ profile.avatar.url }}" alt="Avatar" />
+        {% if profile.avatar %}
+            <img src="{{ profile.avatar.url }}" alt="Avatar" />
+        {% else %}
+            <div class="avatar-placeholder">
+                {{ profile.user.first_name|first }}
+            </div>
+        {% endif %}
     </div>
 
     <p class="light">
