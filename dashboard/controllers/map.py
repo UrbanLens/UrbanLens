@@ -23,6 +23,7 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+from datetime import datetime
 import json
 import logging
 
@@ -146,7 +147,36 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data()
-        return render(request, 'dashboard/templates/dashboard/pages/map/data.html', {'map_data': map_data})
+
+        # Preprocess data into strings
+        for pin in map_data:
+            if pin['description'] is None:
+                pin['description'] = ''
+
+            # Turn arrays into csv
+            if pin['tags']:
+                pin['tags'] = ', '.join(pin['tags'])
+            else:
+                pin['tags'] = ''
+            if pin['categories']:
+                pin['categories'] = ', '.join(pin['categories'])
+            else:
+                pin['categories'] = ''
+
+            # Last visited = None => Never
+            if not pin['last_visited'] or pin['last_visited'] == 'never':
+                pin['last_visited'] = 'Never'
+            else:
+                try:
+                    # Dates look like this: 2023-01-02T00:00:00+00:00
+                    pin['last_visited'] = datetime.strptime(pin['last_visited'], '%Y-%m-%dT%H:%M:%S%z').strftime('%Y-%m-%d')
+                except ValueError:
+                    logger.warning('Unable to parse date: %s', pin['last_visited'])
+
+            if pin['status']:
+                pin['status'] = pin['status'].replace('_', ' ').capitalize()
+
+        return render(request, 'dashboard/pages/map/data.html', {'map_data': map_data})
 
     def get_map_data(self):
         map_data = Location.objects.all()
