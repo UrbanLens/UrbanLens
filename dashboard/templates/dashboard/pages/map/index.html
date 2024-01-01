@@ -121,6 +121,7 @@
                         value = null;
                     }
                     data[this.name] = value;
+                    if (value !== this.defaultValue) {
                     fetch(`/dashboard/rest/locations/${locationId}/`, {
                         method: 'PATCH',
                         headers: {
@@ -148,6 +149,7 @@
                         console.error('Error:', error);
                         toastr.error(`Failed to update ${this.name}`);
                     });
+                }
                 }
 
                 input.addEventListener('keydown', function (e) {
