@@ -8,9 +8,9 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    ProfileController.py                                                                                 *
-*        Path:    /ProfileController.py                                                                                *
-*        Project: controllers                                                                                          *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/controllers/profile.py                                                                    *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
@@ -32,13 +32,13 @@ from dashboard.models.profile.model import Profile
 class ViewProfileView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         profile, created = Profile.objects.get_or_create(user=request.user)
-        return render(request, 'dashboard/pages/profile/view_profile.html', {'profile': profile})
+        return render(request, 'dashboard/pages/profile/view.html', {'profile': profile})
 
 class EditProfileView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         profile, created = Profile.objects.get_or_create(user=request.user)
         form = ProfileForm(instance=profile)
-        return render(request, 'dashboard/pages/profile/edit_profile.html', {'form': form})
+        return render(request, 'dashboard/pages/profile/edit.html', {'form': form})
 
     def post(self, request, *args, **kwargs):
         profile = Profile.objects.get(user=request.user)
@@ -46,4 +46,4 @@ class EditProfileView(LoginRequiredMixin, View):
         if form.is_valid():
             form.save()
             return redirect('view_profile')
-        return render(request, 'dashboard/pages/profile/edit_profile.html', {'form': form})
+        return render(request, 'dashboard/pages/profile/edit.html', {'form': form})
