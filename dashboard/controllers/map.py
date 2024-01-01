@@ -52,6 +52,10 @@ class ViewMapView(LoginRequiredMixin, View):
         form = ReviewForm()
         return render(request, 'dashboard/pages/map/index.html', {'locations': locations, 'reviews': reviews, 'form': form})
 
+    def post(self, request, *args, **kwargs):
+        # Handle the post request here
+        return HttpResponse(status=200)
+
 class EditPinView(LoginRequiredMixin, View):
     def post(self, request, location_id, *args, **kwargs):
         location = Location.objects.get(id=location_id)
