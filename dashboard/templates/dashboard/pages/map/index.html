@@ -114,9 +114,12 @@
                 field.replaceWith(input);
                 input.focus();
                 function saveInputValue() {
-                    const value = this.value;
+                    let value = this.value;
                     const locationId = this.closest('.pin-popup').dataset.id;
                     const data = {};
+                    if (this.name === 'last_visited' && value === '') {
+                        value = null;
+                    }
                     data[this.name] = value;
                     fetch(`/dashboard/rest/locations/${locationId}/`, {
                         method: 'PATCH',
