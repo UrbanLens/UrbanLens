@@ -180,7 +180,7 @@
                 });
 
                 input.addEventListener('blur', function () {
-                    if (this.value !== value) {
+                    if (this.value !== value && document.body.contains(this)) {
                         saveInputValue.call(this);
                     }
                 });
