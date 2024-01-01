@@ -30,6 +30,7 @@ import logging
 from django.shortcuts import redirect
 # Django imports
 from django.urls import path, include, re_path
+from django.views.generic import TemplateView
 from django.urls import path
 # 3rd Party imports
 from rest_framework import routers
