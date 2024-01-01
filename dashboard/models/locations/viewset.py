@@ -35,6 +35,9 @@ class LocationViewSet(viewsets.ModelViewSet):
     serializer_class = LocationSerializer
     basename = 'locations'
 
+    def perform_update(self, serializer):
+        serializer.save()
+
     def get_queryset(self):
         if not self.request:
             return Location.objects.none()
