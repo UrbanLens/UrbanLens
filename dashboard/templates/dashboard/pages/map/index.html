@@ -140,7 +140,19 @@
                     // otherwise, use the default icon
                     marker = L.marker([pin.latitude, pin.longitude]);
                 }
-                marker.addTo(map).bindPopup(`<b>${pin.name}</b>`);
+                marker.addTo(map).bindPopup(`
+                    <div class="pin-popup">
+                        <h2>${pin.name}</h2>
+                        <p>${pin.description || ''}</p>
+                        <p>Priority: ${pin.priority}</p>
+                        <p>Last Visited: ${pin.last_visited}</p>
+                        <p>Status: ${pin.status}</p>
+                        <p>Categories: ${pin.categories.join(', ')}</p>
+                        <p>Tags: ${pin.tags.join(', ')}</p>
+                        <button class="edit-button">Edit</button>
+                        <button class="delete-button">Delete</button>
+                    </div>
+                `);
             });
         });
 
