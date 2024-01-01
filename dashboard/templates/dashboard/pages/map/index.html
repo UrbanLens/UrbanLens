@@ -93,6 +93,13 @@
                     const month = date.getMonth() + 1;
                     const day = date.getDate();
                     input.value = `${year}-${month < 10 ? '0' : ''}${month}-${day < 10 ? '0' : ''}${day}`;
+
+                    input.addEventListener('keydown', function (e) {
+                        if ((e.key === 'Backspace' || e.key === 'Delete') && this.value) {
+                            e.preventDefault();
+                            this.value = '';
+                        }
+                    });
                 } else {
                     // Otherwise, create an input element
                     input = document.createElement('input');
