@@ -47,13 +47,12 @@
         }, 250);
     });
 
-    // Remove any existing context menu before creating a new one
-    const existingContextMenu = document.getElementById('contextMenu');
-    if (existingContextMenu) {
-        document.body.removeChild(existingContextMenu);
-    }
-
     map.on('contextmenu', function(e) {
+        // Remove any existing context menu before creating a new one
+        const existingContextMenu = document.getElementById('contextMenu');
+        if (existingContextMenu) {
+            document.body.removeChild(existingContextMenu);
+        }
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
 
