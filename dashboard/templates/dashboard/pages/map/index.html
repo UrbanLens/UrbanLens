@@ -65,12 +65,42 @@
                 e.stopPropagation();
                 const field = this;
                 const value = field.innerText;
-                const input = document.createElement('input');
-                input.value = value;
-                input.name = field.parentNode.dataset.name;
-                input.addEventListener('click', function (e) {
-                    e.stopPropagation();
-                });
+                const name = field.parentNode.dataset.name;
+                let input;
+
+                // If the field is status, create a select element
+                if (name === 'status') {
+                    input = document.createElement('select');
+                    const options = ['Visited', 'Not Visited', 'Want to Visit'];
+                    options.forEach(function (option) {
+                        const optionElement = document.createElement('option');
+                        optionElement.value = option;
+                        optionElement.innerText = option;
+                        if (option === value) {
+                            optionElement.selected = true;
+                        }
+                        input.appendChild(optionElement);
+                    });
+                } else if (name == "last_visited") {
+                    // If the field is last_visited, create a date input element
+                    input = document.createElement('input');
+                    input.type = 'date';
+                    if (value) {
+                        input.value = value;
+                    } else {
+                        const today = new Date();
+                        const year = today.getFullYear();
+                        const month = today.getMonth() + 1;
+                        const day = today.getDate();
+                        input.value = `${year}-${month}-${day}`;
+                    }
+                } else {
+                    // Otherwise, create an input element
+                    input = document.createElement('input');
+                    input.value = value;
+                }
+
+                input.name = name;
                 field.replaceWith(input);
                 input.focus();
                 function saveInputValue() {
@@ -231,15 +261,8 @@
                             <input type="radio" name="star" class="star-5" id="star-5" value="5" ${pin.priority == 5 ? 'checked' : ''} />
                             <label class="star-5" for="star-5">★</label>
                         </div>
-                        <div data-name="last_visited"><span class="label">Last Visited:</span> <input type="date" class="value" name="last_visited" value="${pin.last_visited}"></div>
-                        <div data-name="status"><span class="label">Status:</span> 
-                            <select class="value" name="status">
-                                <option value="not visited" ${pin.status == 'not visited' ? 'selected' : ''}>Not Visited</option>
-                                <option value="visited" ${pin.status == 'visited' ? 'selected' : ''}>Visited</option>
-                                <option value="wish to visit" ${pin.status == 'wish to visit' ? 'selected' : ''}>Wish to Visit</option>
-                                <option value="demolished" ${pin.status == 'demolished' ? 'selected' : ''}>Demolished</option>
-                            </select>
-                        </div>
+                        <div data-name="last_visited"><span class="label">Last Visited:</span> <span class="value">${pin.last_visited}</span></div>
+                        <div data-name="status"><span class="label">Status:</span> <span class="value">${pin.status}</span></div>
                         <div data-name="categories"><span class="label">Categories:</span> <span class="value">${pin.categories}</span></div>
                         <div data-name="tags"><span class="label">Tags:</span> <span class="value">${pin.tags}</span></div>
                         <button class="delete-button">Delete</button>
