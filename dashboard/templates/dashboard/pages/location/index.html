@@ -18,22 +18,9 @@
         <!-- Map integration goes here -->
     </div>
 
-    <div class="smithsonian">
-        <!-- [
-            {'title': "Columnea 'Campus Sunset'", 'url': None, 'thumbnail': None}, 
-            {'title': 'Calophyllum inophyllum L.', 'url': 'https://ids.si.edu/ids/deliveryService/id/ark:/65665/m39851075d3599483397693eacf141ceea', 'thumbnail': 'https://ids.si.edu/ids/deliveryService/id/ark:/65665/m39851075d3599483397693eacf141ceea/90'}
-        ] -->
+    <div hx-get="{% url 'dashboard:location-smithsonian' location.id %}" hx-trigger="load" class="smithsonian">
         <h2>Smithsonian Images</h2>
-        {% for image in images %}
-            {% if image.url == None %}
-                {% continue %}
-            {% endif %}
-            
-            <div class="smithsonian-image">
-                <a href="{{ image.url }}" target="_blank">{{ image.title }}</a>
-                <img src="{{ image.thumbnail }}" alt="{{ image.title }}" />
-            </div>
-        {% endfor %}
+        <div class="loading">Loading...</div>
     </div>
 
     <div class="recent-search-results">
