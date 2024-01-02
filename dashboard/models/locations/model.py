@@ -31,15 +31,16 @@ import logging
 # Django Imports
 from django.db.models import Index, CASCADE
 from django.forms import ImageField
+from django.contrib.gis.geos import Point
+from django.contrib.gis.db.models import PointField
 # 3rd Party Imports
-from djangofoundry.models.fields import CharField, DecimalField, ForeignKey, IntegerField, DateTimeField, ManyToManyField
-from djangofoundry.models import TextChoices
+from django.db.models.fields import CharField, DecimalField, IntegerField, DateTimeField
+from django.db.models import ForeignKey, ManyToManyField
 
 # App Imports
 from dashboard.models import abstract
+from dashboard.models.abstract.choices import TextChoices
 from dashboard.models.locations.queryset import Manager
-from django.contrib.gis.geos import Point
-from django.contrib.gis.db.models import PointField
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.
@@ -67,8 +68,7 @@ class Location(abstract.Model):
     custom_icon = ImageField()
     icon = CharField(max_length=255, null=True, blank=True)
     status = CharField(choices=LocationStatus.choices, default=LocationStatus.WISH_TO_VISIT)
-    location = PointField(default=Point(1.0, 1.0))
-
+    location = PointField(geography=True, default=Point(0, 0))
 
     profile = ForeignKey(
         'dashboard.Profile', 
@@ -113,7 +113,7 @@ class Location(abstract.Model):
             'last_visited': self.last_visited.isoformat() if self.last_visited else "never",
             'latitude': float(self.latitude),
             'longitude': float(self.longitude),
-            'status': LocationStatus.get_name(self.status) or LocationStatus.NOT_VISITED,
+            'status': LocationStatus.get_name(self.status) or LocationStatus.NOT_VISITED.label,
             'profile': self.profile.id,
             'categories': [category.id for category in self.categories.all()],
             'tags': [tag.id for tag in self.tags.all()],

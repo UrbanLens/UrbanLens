@@ -23,7 +23,7 @@
 *        2024-01-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from abc import ABC, abstractmethod
+from abc import ABC
 
 class Gateway(ABC):
     """

@@ -8,13 +8,13 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    model.py                                                                                             *
-*        Path:    /model.py                                                                                            *
-*        Project: notifications                                                                                        *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/models/notifications/model.py                                                             *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 # Django Imports
 from django.db.models import Index
 # 3rd Party Imports
-from djangofoundry.models.fields import CharField, PickledObjectField
+from django.db.models.fields import CharField
 # App Imports
 from dashboard.models import abstract
 from dashboard.models.notifications.meta import Status, Importance, NotificationType
@@ -57,7 +57,6 @@ class NotificationLog(abstract.Model):
 	importance = CharField(max_length=17, choices=Importance.choices, default=Importance.LOWEST)
 	notificaiton_type = CharField(max_length=17, choices=NotificationType.choices, default=NotificationType.ERROR)
 	message = CharField(max_length=50000, blank=True)
-	reference_model = PickledObjectField()
 
 	objects = Manager()
 

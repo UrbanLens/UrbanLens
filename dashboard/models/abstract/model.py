@@ -1,24 +1,37 @@
-"""
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    model.py                                                                                             *
+*        Path:    /dashboard/models/abstract/model.py                                                                  *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2024-01-01     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 
-	Metadata:
-		File: abstract.py
-		Project: UrbanLens
-		Author: Jess Mann
-		Contact: jess@manlyphotos.com
-		-----
-		Copyright (c) 2023 UrbanLens
-"""
 # Generic imports
 from __future__ import annotations
 import logging
 # Django Imports
+from django.db import models as django_models
 # Lib Imports
-from djangofoundry.models import Model as FoundryModel
-from djangofoundry.models.fields import InsertedNowField, UpdatedNowField
 # App Imports
-from dashboard.models.abstract.queue import Queue
 from dashboard.models.abstract.queryset import Manager
-
 
 #
 # Set up logging for this module. __name__ includes the namespace (e.g. dashboard.models.cases).
@@ -27,16 +40,16 @@ from dashboard.models.abstract.queryset import Manager
 #
 logger = logging.getLogger(__name__)
 
-class Model(FoundryModel):
+class Model(django_models.Model):
 	'''
 	A base model that all other models in this app inherit from.
 	'''
-	created = InsertedNowField()
-	updated = UpdatedNowField()
-	queue: Queue = Queue()
+	created = django_models.DateTimeField(auto_now_add=True)
+	updated = django_models.DateTimeField(auto_now=True)
 	objects: Manager = Manager()
+	postgres: Manager = Manager()
 
-	class Meta(FoundryModel.Meta):
+	class Meta:
 		"""
 		Metadata about this model (such as the table name)
 

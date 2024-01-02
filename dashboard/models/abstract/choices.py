@@ -7,8 +7,8 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    maps.py                                                                                              *
-*        Path:    /dashboard/services/google/maps.py                                                                   *
+*        File:    choices.py                                                                                           *
+*        Path:    /dashboard/models/abstract/choices.py                                                                *
 *        Project: urbanlens                                                                                            *
 *        Version: 1.0.0                                                                                                *
 *        Created: 2024-01-01                                                                                           *
@@ -23,43 +23,49 @@
 *        2024-01-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-import requests
-from dashboard.services.gateway import Gateway
 
-class GoogleMapsGateway(Gateway):
-    """
-    Gateway for the Google Maps API.
-    """
+# Generic imports
+from __future__ import annotations
+# Django Imports
+from django.db import models
 
-    def __init__(self, api_key):
-        self.api_key = api_key
-        self.session = requests.Session()
+class TextChoices(models.TextChoices):
+	'''
+	Override the default TextChoices in django to provide extra functionality without substantively changing its usecase
+	'''
+	@classmethod
+	def valid(cls, choice_name: str) -> bool:
+		'''
+		Convenience method
+		Determine if a given choice is valid
+		'''
+		option = choice_name.capitalize()
+		return option in cls.values
 
-    def get_directions(self, origin, destination, mode='driving'):
-        """
-        Get directions from origin to destination.
-        """
-        directions_url = 'https://maps.googleapis.com/maps/api/directions/json'
-        params = {
-            'origin': origin,
-            'destination': destination,
-            'mode': mode,
-            'key': self.api_key
-        }
-        response = self.session.get(directions_url, params=params)
-        response.raise_for_status()
-        return response.json()
+	@classmethod
+	def invalid(cls, choice_name: str) -> bool:
+		'''
+		Convenience method
+		Determine if a given choice is valid
+		'''
+		option = choice_name.capitalize()
+		return option not in cls.values
 
-    def find_place(self, input_text, input_type='textquery'):
-        """
-        Find a place using the Google Maps Places API.
-        """
-        place_url = 'https://maps.googleapis.com/maps/api/place/findplacefromtext/json'
-        params = {
-            'input': input_text,
-            'inputtype': input_type,
-            'key': self.api_key
-        }
-        response = self.session.get(place_url, params=params)
-        response.raise_for_status()
-        return response.json()
+	@classmethod
+	def get_name(cls, choice: str) -> str | None:
+		'''
+		Convenience method
+		Get the name of the choice, given a value
+		'''
+		# Make sure choice is lowercase
+		value = choice.lower()
+
+		# Iterate over all choices
+		for member in cls:
+			# Check values
+			if member.value == value:
+				# Return the first one found
+				return member.name
+
+		# None found
+		return None

@@ -14,7 +14,7 @@
 *        Created: 2023-12-31                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -27,10 +27,12 @@
 from django.contrib.auth.forms import UserCreationForm
 from django.urls import reverse_lazy
 from django.views import generic
-from django.shortcuts import render, redirect
+from django.shortcuts import redirect
 from social_django.utils import load_strategy, load_backend
 from social_core.exceptions import MissingBackend
 from django.contrib.auth import login
+
+from dashboard.models.profile import Profile
 
 class SignupView(generic.CreateView):
     form_class = UserCreationForm
@@ -43,8 +45,12 @@ def social_auth(request, backend):
         backend = load_backend(strategy=strategy, name=backend, redirect_uri=None)
     except MissingBackend:
         return redirect('signup')
+    
     user = backend.complete_user_authentication(request)
     if user and user.is_active:
+        # Create a profile for the user
+        Profile.objects.get_or_create(user=user)
+
         login(request, user)
         return redirect('home')
     else:

@@ -18,9 +18,27 @@
         <!-- Map integration goes here -->
     </div>
 
+    <div class="smithsonian">
+        <!-- [
+            {'title': "Columnea 'Campus Sunset'", 'url': None, 'thumbnail': None}, 
+            {'title': 'Calophyllum inophyllum L.', 'url': 'https://ids.si.edu/ids/deliveryService/id/ark:/65665/m39851075d3599483397693eacf141ceea', 'thumbnail': 'https://ids.si.edu/ids/deliveryService/id/ark:/65665/m39851075d3599483397693eacf141ceea/90'}
+        ] -->
+        <h2>Smithsonian Images</h2>
+        {% for image in images %}
+            {% if image.url == None %}
+                {% continue %}
+            {% endif %}
+            
+            <div class="smithsonian-image">
+                <a href="{{ image.url }}" target="_blank">{{ image.title }}</a>
+                <img src="{{ image.thumbnail }}" alt="{{ image.title }}" />
+            </div>
+        {% endfor %}
+    </div>
+
     <div class="recent-search-results">
         <h2>Recent Search Results</h2>
-        {% for result in recent_search_results %}
+        {% for result in search_results %}
             <p>{{ result.searched_at }}: {{ result.result }}</p>
         {% endfor %}
     </div>

@@ -1,23 +1,28 @@
-"""
-
-	Metadata:
-
-		File: dbrouters.py
-		Project: UrbanLens
-
-		Author: Jess Mann
-		Email: jess@manlyphotos.com
-
-		-----
-
-
-		Modified By: Jess Mann
-
-		-----
-
-		Copyright (c) 2023 UrbanLens
-
-"""
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    dbrouters.py                                                                                         *
+*        Path:    /dashboard/dbrouters.py                                                                              *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2024-01-01     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 # Generic imports
 from __future__ import annotations
 import logging
@@ -30,19 +35,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 class DBRouter:
-	route_app_labels = {'dashboard'}
+	route_app_labels = ['dashboard']
 
 	def db_for_read(self, model, **hints):
 		""" reading Model from default """
+		default = None
 		if model._meta.app_label in self.route_app_labels:
-			return getattr(model, "_database", "default")
-		return None
+			default = "default"
+		return getattr(model, "_database", default)
 
 	def db_for_write(self, model, **hints):
 		""" writing Model to default """
+		default = None
 		if model._meta.app_label in self.route_app_labels:
-			return getattr(model, "_database", "default")
-		return None
+			default = "default"
+		return getattr(model, "_database", default)
 
 	def allow_relation(self, obj1, obj2, **hints):
 		return True

@@ -26,7 +26,8 @@
 from django.contrib.auth.models import User
 from django.db.models import CASCADE
 from django.core.validators import MinValueValidator, MaxValueValidator
-from djangofoundry.models.fields import ForeignKey, IntegerField, TextField
+from django.db.models.fields import IntegerField, TextField
+from django.db.models.fields.related import ForeignKey
 from dashboard.models import abstract
 from dashboard.models.locations.model import Location
 

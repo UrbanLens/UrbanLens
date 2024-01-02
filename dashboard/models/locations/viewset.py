@@ -61,7 +61,7 @@ class LocationViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         logger.info(f"Update request initiated by user {request.user.id}")
         if instance.profile.user != request.user:
-            logger.error(f"User %s attempted to update location %s, but does not have permission", request.user.id, instance.id)
+            logger.error("User %s attempted to update location %s, but does not have permission", request.user.id, instance.id)
             return Response(status=status.HTTP_403_FORBIDDEN)
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -73,7 +73,7 @@ class LocationViewSet(viewsets.ModelViewSet):
         logger.info(f"Delete request initiated by user {request.user.id}")
         instance = self.get_object()
         if instance.profile.user != request.user:
-            logger.error(f"User %s attempted to delete location %s, but does not have permission", request.user.id, instance.id)
+            logger.error("User %s attempted to delete location %s, but does not have permission", request.user.id, instance.id)
             return Response(status=status.HTTP_403_FORBIDDEN)
         logger.info(f"Location with id {instance.id} deleted")
         return super().destroy(request, *args, **kwargs)

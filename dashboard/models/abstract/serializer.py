@@ -1,28 +1,34 @@
-"""
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    serializer.py                                                                                        *
+*        Path:    /dashboard/models/abstract/serializer.py                                                             *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2024-01-01     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 
-	Metadata:
-
-		File: serializer.py
-		Project: UrbanLens
-
-		Author: Jess Mann
-		Email: jess@manlyphotos.com
-
-		-----
-
-
-		Modified By: Jess Mann
-
-		-----
-
-		Copyright (c) 2023 UrbanLens
-"""
 # Generic imports
 from __future__ import annotations
 from rest_framework import serializers
-from djangofoundry import models
 
-class Serializer(models.Serializer):
+class Serializer(serializers.Serializer):
 	id = serializers.ReadOnlyField()
 
 	def __init__(self, *args, **kwargs):
@@ -58,7 +64,7 @@ class Serializer(models.Serializer):
 				fields.remove(field)
 		return fields
 
-	class Meta(models.Serializer.Meta):
+	class Meta:
 		fields = [
 			'id'
 		]

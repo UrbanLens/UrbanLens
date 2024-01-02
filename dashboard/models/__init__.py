@@ -8,13 +8,13 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    __init__.py                                                                                          *
-*        Path:    /__init__.py                                                                                         *
-*        Project: models                                                                                               *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/models/__init__.py                                                                        *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -25,7 +25,7 @@
 *********************************************************************************************************************"""
 
 # Abstract Base Classes
-from dashboard.models.abstract import Model, QuerySet, Manager, ViewSet, Serializer, Queue
+from dashboard.models.abstract import Model, QuerySet, Manager, ViewSet, Serializer
 from dashboard.models.categories import Category
 from dashboard.models.comments import Comment
 from dashboard.models.profile import Profile

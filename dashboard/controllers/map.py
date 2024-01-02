@@ -24,7 +24,6 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from datetime import datetime
-import json
 import logging
 
 from geopy.geocoders import Nominatim
@@ -41,12 +40,9 @@ from dashboard.models.locations.model import Location
 from dashboard.models.categories.model import Category
 from dashboard.models.images.model import Image
 from dashboard.models.tags.model import Tag
-from dashboard.forms.review import ReviewForm
-from dashboard.models.reviews.model import Review
 from dashboard.forms.advanced_search import AdvancedSearchForm
 
 
-from django.views import View
 from django.contrib.auth.mixins import LoginRequiredMixin
 
 logger = logging.getLogger(__name__)
@@ -54,6 +50,7 @@ logger = logging.getLogger(__name__)
 class MapController(LoginRequiredMixin, GenericViewSet):
     def view_map(self, request, *args, **kwargs):
         locations = Location.objects.all()
+
         return render(request, 'dashboard/pages/map/index.html', {'locations': locations})
 
     def edit_pin(self, request, location_id, *args, **kwargs):
@@ -84,7 +81,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return render(request, 'dashboard/pages/map/add_location.html')
 
     def post_add_pin(self, request, *args, **kwargs):
-        logger.info('Adding a new pin!')
+        logger.critical('Adding a new pin!')
         try:
             # Create a new location based on the form data
             name = request.POST.get('name')
@@ -112,10 +109,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 tag, created = Tag.objects.get_or_create(name=tag_name)
                 location.tags.add(tag)
             location.save()
-            logger.info('New location created: %s', location.name)
-            logger.info('Profile is %s', request.user.profile)
+            logger.critical('New location created: %s', location.name)
+            logger.critical('Profile is %s', request.user.profile)
             return HttpResponse(status=200)
         except Exception as e:
+            raise e from e
             return HttpResponse(f"Error: {str(e)}", status=400)
 
     def search_pins(self, request, *args, **kwargs):
@@ -150,15 +148,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         # Preprocess data into strings
         for pin in map_data:
-            if pin['description'] is None:
+            if 'description' in pin and pin['description'] is None:
                 pin['description'] = ''
 
             # Turn arrays into csv
-            if pin['tags']:
+            if 'tags' in pin and pin['tags']:
                 pin['tags'] = ', '.join(pin['tags'])
             else:
                 pin['tags'] = ''
-            if pin['categories']:
+            if 'categories' in pin and pin['categories']:
                 pin['categories'] = ', '.join(pin['categories'])
             else:
                 pin['categories'] = ''

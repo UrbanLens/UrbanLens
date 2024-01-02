@@ -8,13 +8,13 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    model.py                                                                                             *
-*        Path:    /model.py                                                                                            *
-*        Project: friendship                                                                                           *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/models/friendship/model.py                                                                *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -26,7 +26,7 @@
 from __future__ import annotations
 from django.db.models import CASCADE
 from django.contrib.auth.models import User
-from djangofoundry.models import ForeignKey
+from django.db.models import ForeignKey
 from dashboard.models.abstract.model import Model
 from dashboard.models.friendship.queryset import Manager
 

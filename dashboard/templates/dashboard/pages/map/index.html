@@ -19,7 +19,7 @@
         </div>
     </div>
 
-    <div hx-get="{% url 'init_map' %}" hx-trigger="load" hx-swap="outerHTML">
+    <div id="map-body" hx-get="{% url 'init_map' %}" hx-trigger="load" hx-swap="outerHTML">
     </div>
 </div>
 <div id="addPinModal"></div>

@@ -26,8 +26,6 @@
 
 from dashboard.services.gateway import Gateway
 import requests
-from django.conf import settings
-from dashboard.models.locations import Location
 
 class SmithsonianGateway(Gateway):
     """
