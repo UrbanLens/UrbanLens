@@ -18,7 +18,7 @@
         <!-- Map integration goes here -->
     </div>
 
-    <div hx-get="{% url 'dashboard:location-smithsonian' location.id %}" hx-trigger="load" class="smithsonian">
+    <div hx-get="{% url 'smithsonian_images' location.id %}" hx-trigger="load" class="smithsonian">
         <h2>Smithsonian Images</h2>
         <div class="loading">Loading...</div>
     </div>

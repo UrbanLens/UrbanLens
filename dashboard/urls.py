@@ -74,8 +74,11 @@ urlpatterns = [
 		path('change_category/<int:location_id>/', map.MapController.as_view({'post': 'change_category'}), name='change_category'),
 		#path('delete/<int:location_id>/', MapController.delete_pin, name='delete_pin'),
 		#path('add_review/<int:location_id>/', map.MapController.as_view(), name='add_review'),
-		path('location/<int:location_id>/', location.LocationController.as_view({'get': 'view'}), name='view_location'),
-		path('location/<int:location_id>/smithsonian/', location.LocationController.as_view({'get': 'get_smithsonian_images'}), name='location-smithsonian'),
+		path('location/', include([
+			path('<int:location_id>/', location.LocationController.as_view({'get': 'view'}), name='view_location'),
+			path('<int:location_id>/smithsonian/', location.LocationController.as_view({'get': 'get_smithsonian_images'}), name='smithsonian_images'),
+			path('<int:location_id>/google/', location.LocationController.as_view({'get': 'get_google_images'}), name='google_images'),
+		])),
 	])),
 	path('profile/', include([
 		path('', profile.ViewProfileView.as_view(), name='view_profile'),

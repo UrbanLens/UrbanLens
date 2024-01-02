@@ -1,4 +1,11 @@
-<!-- This is a placeholder for the Smithsonian images. You will need to replace this with the actual HTML needed to display the images. -->
 <div id="smithsonian-images">
-    <!-- Smithsonian images will be loaded here -->
+    <h2>Smithsonian Images</h2>
+    {% for image in images %}
+        {% if image.url != None %}
+            <div class="smithsonian-image">
+                <a href="{{ image.url }}" target="_blank">{{ image.title }}</a>
+                <img src="{{ image.thumbnail }}" alt="{{ image.title }}" />
+            </div>
+        {% endif %}
+    {% endfor %}
 </div>
