@@ -24,6 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
+from django.core.cache import cache
 from dashboard.services.gateway import Gateway
 import requests
 
@@ -37,15 +38,23 @@ class SmithsonianGateway(Gateway):
         self.base_url = "https://api.si.edu/openaccess/api/v1.0/search"
 
     def get_data(self, search_term):
-        params = {
-            "api_key": self.api_key,
-            "q": search_term,
-            "online_media_type": "Images"
-        }
-        response = requests.get(self.base_url, params=params)
-        response.raise_for_status()  # Will raise an HTTPError for bad requests
+        # Create a unique cache key based on the search term
+        cache_key = f'smithsonian_{search_term}'
+        # Try to get the data from the cache
+        data = cache.get(cache_key)
+        # If the data is not in the cache
+        if data is None:
+            params = {
+                "api_key": self.api_key,
+                "q": search_term,
+                "online_media_type": "Images"
+            }
+            response = requests.get(self.base_url, params=params)
+            response.raise_for_status()  # Will raise an HTTPError for bad requests
 
-        data = response.json()
+            data = response.json()
+            # Store the data in the cache for 24 hours (86400 seconds)
+            cache.set(cache_key, data, 86400)
         return self.parse_response(data)
 
     def parse_response(self, data):
