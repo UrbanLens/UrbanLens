@@ -26,6 +26,7 @@
 
 import requests
 from dashboard.services.gateway import Gateway
+from dashboard.models.locations.model import GeocodedLocation
 
 class GoogleGeocodingGateway(Gateway):
     def __init__(self, api_key):
@@ -47,7 +48,6 @@ class GoogleGeocodingGateway(Gateway):
             place_name = results[0].get('formatted_address')
 
         # Save the geocoded data to the database
-        from dashboard.models.locations.model import GeocodedLocation
         GeocodedLocation.objects.create(
             latitude=latitude,
             longitude=longitude,
