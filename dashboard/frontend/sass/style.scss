@@ -14,12 +14,14 @@ $selected-color: #2196F3;
 
 .page-footer {
     background-color: $dark-neutral-color;
+    position: sticky;
+    bottom: 0;
 }
 
 div.container {
     width: 100%;
     max-width: 100%;
-    height: calc(100vh - 4rem - 4rem); /* Adjust the height of the container to be 100% of the viewport height minus the header and footer heights */
+    min-height: calc(100vh - 4rem - 4rem); /* Adjust the height of the container to be at least 100% of the viewport height minus the header and footer heights */
     display: flex; 
     flex-direction: column; 
     position: relative;
