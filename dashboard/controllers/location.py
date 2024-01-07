@@ -44,6 +44,10 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
     """
     Controller for the location page
     """
+    def view(self, request, *args, **kwargs):
+        # Add your code here to handle the request
+        pass
+
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data()
 
