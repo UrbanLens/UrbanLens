@@ -11,12 +11,12 @@
     <h1 class="center">{{ location.name }}</h1>
 
     <div class="location-details">
-        <p><strong>Description:</strong> {{ location.description }}</p>
-        <p><strong>Rating:</strong> {{ location.rating }}</p>
-        <p><strong>Status:</strong> {{ location.status }}</p>
-        <p><strong>Categories:</strong> {{ location.categories }}</p>
-        <p><strong>Last Visited:</strong> {{ location.last_visited }}</p>
-        <p><strong>Tags:</strong> {{ location.tags }}</p>
+        <p><strong>Description:</strong> {{ location.description if location.description else 'No description provided' }}</p>
+        <p><strong>Rating:</strong> {{ location.rating if location.rating else 'No rating' }}</p>
+        <p><strong>Status:</strong> {{ location.status if location.status else 'No status' }}</p>
+        <p><strong>Categories:</strong> {{ location.categories if location.categories else 'No categories' }}</p>
+        <p><strong>Last Visited:</strong> {{ location.last_visited if location.last_visited else 'Never visited' }}</p>
+        <p><strong>Tags:</strong> {{ location.tags if location.tags else 'No tags' }}</p>
     </div>
 
     <div class="location-map">
