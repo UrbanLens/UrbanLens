@@ -23,8 +23,8 @@
 *        2024-01-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+from datetime import datetime
 import logging
-
 
 from django.shortcuts import render
 from django.http import HttpResponse
@@ -45,8 +45,12 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
     Controller for the location page
     """
     def view(self, request, *args, **kwargs):
-        # Add your code here to handle the request
-        pass
+        """
+        View the location page
+        """
+        location = Location.objects.get(id=kwargs['location_id'])
+
+        return render(request, 'dashboard/pages/location/index.html', { 'location': location })
 
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data()

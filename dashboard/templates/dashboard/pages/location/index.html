@@ -1,5 +1,11 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="section">
     <h1 class="center">{{ location.name }}</h1>
@@ -17,7 +23,7 @@
         <h2>Location on Map</h2>
         <div id="map" style="height: 400px;"></div>
         <script>
-            const map = L.map('map').setView([{{ location.latitude }}, {{ location.longitude }}], 13);
+            const map = L.map('map').setView(["{{ location.latitude }}", "{{ location.longitude }}"], 13);
             window.map = map;
             window.pin = null;
             map.invalidateSize();
