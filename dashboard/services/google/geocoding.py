@@ -34,24 +34,31 @@ class GoogleGeocodingGateway(Gateway):
         self.base_url = "https://maps.googleapis.com/maps/api/geocode/json"
 
     def get_place_name(self, latitude, longitude):
-        params = {
-            "latlng": f"{latitude},{longitude}",
-            "key": self.api_key
-        }
-        response = requests.get(self.base_url, params=params)
-        response.raise_for_status()
+        # Check if the geocoded data for the given latitude and longitude already exists in the database
+        geocoded_location = GeocodedLocation.objects.filter(latitude=latitude, longitude=longitude).first()
+        if geocoded_location:
+            # If it does, return the cached data
+            return geocoded_location.place_name
+        else:
+            # If it doesn't, make a request to the Google Geocoding API
+            params = {
+                "latlng": f"{latitude},{longitude}",
+                "key": self.api_key
+            }
+            response = requests.get(self.base_url, params=params)
+            response.raise_for_status()
 
-        results = response.json().get('results', [])
-        place_name = None
-        if results:
-            # Typically, the first result is the most relevant
-            place_name = results[0].get('formatted_address')
+            results = response.json().get('results', [])
+            place_name = None
+            if results:
+                # Typically, the first result is the most relevant
+                place_name = results[0].get('formatted_address')
 
-        # Save the geocoded data to the database
-        GeocodedLocation.objects.create(
-            latitude=latitude,
-            longitude=longitude,
-            place_name=place_name
-        )
+            # Save the geocoded data to the database
+            GeocodedLocation.objects.create(
+                latitude=latitude,
+                longitude=longitude,
+                place_name=place_name
+            )
 
-        return place_name
+            return place_name
