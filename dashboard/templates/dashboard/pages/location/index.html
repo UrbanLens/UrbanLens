@@ -16,7 +16,7 @@
         {% if location.status %}<p><strong>Status:</strong> {{ location.status }}{% else %}No status</p>{% endif %}
         <p><strong>Categories:</strong> {% if location.categories %}{{ location.categories }}{% else %}No categories{% endif %}</p>
         <p><strong>Last Visited:</strong> {% if location.last_visited %}{{ location.last_visited }}{% else %}Never visited{% endif %}</p>
-        <p><strong>Tags:</strong> {% if location.tags %}{{ location.tags }}{% else %}No tags{% endif %}</p>
+        <p><strong>Tags:</strong> {% if location.tags.all %}{{ location.tags.all }}{% else %}No tags{% endif %}</p>
     </div>
 
     <div class="location-map">
