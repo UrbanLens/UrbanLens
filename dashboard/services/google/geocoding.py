@@ -41,7 +41,17 @@ class GoogleGeocodingGateway(Gateway):
         response.raise_for_status()
 
         results = response.json().get('results', [])
+        place_name = None
         if results:
             # Typically, the first result is the most relevant
-            return results[0].get('formatted_address')
-        return None
+            place_name = results[0].get('formatted_address')
+
+        # Save the geocoded data to the database
+        from dashboard.models.locations.model import GeocodedLocation
+        GeocodedLocation.objects.create(
+            latitude=latitude,
+            longitude=longitude,
+            place_name=place_name
+        )
+
+        return place_name

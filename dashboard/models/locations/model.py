@@ -129,3 +129,17 @@ class Location(abstract.Model):
             Index(fields=['last_visited']),
             Index(fields=['latitude', 'longitude']),
         ]
+class GeocodedLocation(abstract.Model):
+    """
+    Records geocoded location data.
+    """
+    latitude = DecimalField(max_digits=9, decimal_places=6)
+    longitude = DecimalField(max_digits=9, decimal_places=6)
+    place_name = CharField(max_length=255)
+
+    class Meta(abstract.Model.Meta):
+        db_table = 'dashboard_geocoded_locations'
+        get_latest_by = 'updated'
+        indexes = [
+            Index(fields=['latitude', 'longitude']),
+        ]
