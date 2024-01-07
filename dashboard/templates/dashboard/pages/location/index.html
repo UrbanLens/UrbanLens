@@ -31,6 +31,9 @@
                 maxZoom: 19,
             }).addTo(map);
 
+            // Add a marker for the location
+            L.marker(["{{ location.latitude }}", "{{ location.longitude }}"]).addTo(map);
+
             // Update the Leaflet icon URLs
             var newIcon = L.icon({
                 iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
