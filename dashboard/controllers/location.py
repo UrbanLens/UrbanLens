@@ -44,39 +44,48 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
     """
     Controller for the location page
     """
-    def view(self, request, location_id, *args, **kwargs):
-        """
-        Renders the location page.
-        """
-        # Get the location
-        try:
-            location : Location = Location.objects.get(id=location_id)
-        except Location.DoesNotExist:
-            return HttpResponse("Location does not exist", status=404)
+    def init_map(self, request, *args, **kwargs):
+        map_data = self.get_map_data()
 
-        # Instantiate the SmithsonianGateway with the API key
-        smithsonian_gateway = SmithsonianGateway(settings.SMITHSONIAN_API_KEY)
-        google_places_gateway = GooglePlacesGateway(settings.GOOGLE_PLACES_API_KEY)
+        # Preprocess data into strings
+        for pin in map_data:
+            if 'description' in pin and pin['description'] is None:
+                pin['description'] = ''
 
-        # Smithsonian images will be loaded via htmx
-        '''
-        Sample smithsonian data: 
-        [{'title': "Columnea 'Campus Sunset'", 'url': None, 'thumbnail': None}, {'title': 'Bicyclus campus', 'url': None, 'thumbnail': None}, {'title': 'Pacific studies', 'url': None, 'thumbnail': None}, {'title': 'Terry Adkins : sculpture and painting, East Campus Galleries, Valencia Community College', 'url': None, 'thumbnail': None}, {'title': 'Rethinking campus life new perspectives on the history of college students in the United States Christine A. Ogren, Marc A. VanOverbeke, editors', 'url': None, 'thumbnail': None}, {'title': 'Plestiodon fasciatus', 'url': None, 'thumbnail': None}, {'title': 'Osmorhiza occidentalis (Nutt.) Torr.', 'url': 'https://ids.si.edu/ids/deliveryService/id/ark:/65665/m34b0d78659a4b4a69aaa8ed3053d1945c', 'thumbnail': 'https://ids.si.edu/ids/deliveryService/id/ark:/65665/m34b0d78659a4b4a69aaa8ed3053d1945c/90'}, {'title': 'Heteropterys sp.', 'url': None, 'thumbnail': None}, {'title': 'Murraya exotica L.', 'url': 'https://ids.si.edu/ids/deliveryService/id/ark:/65665/m384104033839044758020f2f5203a0554', 'thumbnail': 'https://ids.si.edu/ids/deliveryService/id/ark:/65665/m384104033839044758020f2f5203a0554/90'}, {'title': 'Calophyllum inophyllum L.', 'url': 'https://ids.si.edu/ids/deliveryService/id/ark:/65665/m39851075d3599483397693eacf141ceea', 'thumbnail': 'https://ids.si.edu/ids/deliveryService/id/ark:/65665/m39851075d3599483397693eacf141ceea/90'}]
-        '''
-        #google_places_images = google_places_gateway.get_data(location.latitude, location.longitude, radius=1000)
-        #logger.critical('Google Places: %s', google_places_images)
+            # Turn arrays into csv
+            if 'tags' in pin and pin['tags']:
+                pin['tags'] = ', '.join(pin['tags'])
+            else:
+                pin['tags'] = ''
+            if 'categories' in pin and pin['categories']:
+                pin['categories'] = ', '.join(pin['categories'])
+            else:
+                pin['categories'] = ''
 
-        # Fetch the most recent search results for the location
-        #recent_search_results = google_places_gateway.get_recent_search_results(location.name)
-        #logger.critical('Recent search results: %s', recent_search_results)
+            # Last visited = None => Never
+            if not pin['last_visited'] or pin['last_visited'] == 'never':
+                pin['last_visited'] = 'Never'
+            else:
+                try:
+                    # Dates look like this: 2023-01-02T00:00:00+00:00
+                    pin['last_visited'] = datetime.strptime(pin['last_visited'], '%Y-%m-%dT%H:%M:%S%z').strftime('%Y-%m-%d')
+                except ValueError:
+                    logger.warning('Unable to parse date: %s', pin['last_visited'])
 
-        return render(request, 'dashboard/pages/location/index.html', {
-            'location': location,
-            'latitude': location.latitude,
-            'longitude': location.longitude,
-            #'google_places': google_places_images,
-            #'search_results': recent_search_results,
-        })
+            if pin['status']:
+                pin['status'] = pin['status'].replace('_', ' ').capitalize()
+
+        return render(request, 'dashboard/pages/map/data.html', {'map_data': map_data})
+
+    def get_map_data(self):
+        map_data = Location.objects.all()
+        if not map_data:
+            # Default map data
+            map_data = [{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
+        else:
+            map_data = [pin.to_json() for pin in map_data]
+
+        return map_data
 
     def get_smithsonian_images(self, request, location_id, *args, **kwargs):
         """
