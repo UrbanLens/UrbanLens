@@ -72,6 +72,8 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
 
         return render(request, 'dashboard/pages/location/index.html', {
             'location': location,
+            'latitude': location.latitude,
+            'longitude': location.longitude,
             #'google_places': google_places_images,
             #'search_results': recent_search_results,
         })
