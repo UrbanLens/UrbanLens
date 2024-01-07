@@ -112,5 +112,5 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         smithsonian_images = smithsonian_gateway.get_data(location.name)
 
         return render(request, 'dashboard/pages/location/smithsonian.html', {
-            'smithsonian': smithsonian_images,
+            'images': smithsonian_images,
         })

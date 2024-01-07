@@ -1,11 +1,15 @@
 <div id="smithsonian-images">
     <h2>Smithsonian Images</h2>
-    {% for image in images %}
-        {% if image.url != None %}
-            <div class="smithsonian-image">
-                <a href="{{ image.url }}" target="_blank">{{ image.title }}</a>
-                <img src="{{ image.thumbnail }}" alt="{{ image.title }}" />
-            </div>
-        {% endif %}
-    {% endfor %}
+    {% if images %}
+        {% for image in images %}
+            {% if image.url != None %}
+                <div class="smithsonian-image">
+                    <a href="{{ image.url }}" target="_blank">{{ image.title }}</a>
+                    <img src="{{ image.thumbnail }}" alt="{{ image.title }}" />
+                </div>
+            {% endif %}
+        {% endfor %}
+    {% else %}
+        <p>None</p>
+    {% endif %}
 </div>

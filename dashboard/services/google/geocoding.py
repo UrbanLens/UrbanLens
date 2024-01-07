@@ -7,11 +7,11 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    smithsonian.py                                                                                       *
-*        Path:    /dashboard/services/smithsonian.py                                                                   *
+*        File:    geocoding.py                                                                                         *
+*        Path:    /dashboard/services/google/geocoding.py                                                              *
 *        Project: urbanlens                                                                                            *
 *        Version: 1.0.0                                                                                                *
-*        Created: 2024-01-01                                                                                           *
+*        Created: 2024-01-07                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
 *        Copyright (c) 2024 Urban Lens                                                                                 *
@@ -20,61 +20,28 @@
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2024-01-01     By Jess Mann                                                                                   *
+*        2024-01-07     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-from django.core.cache import cache
-from dashboard.services.gateway import Gateway
 import requests
-from django.conf import settings
+from dashboard.services.gateway import Gateway
 
-class SmithsonianGateway(Gateway):
-    """
-    Gateway for the Smithsonian Open Access API.
-    """
-
+class GoogleGeocodingGateway(Gateway):
     def __init__(self, api_key):
         self.api_key = api_key
-        self.base_url = "https://api.si.edu/openaccess/api/v1.0/search"
+        self.base_url = "https://maps.googleapis.com/maps/api/geocode/json"
 
-    def get_data(self, search_term):
-        # Create a unique cache key based on the search term
-        cache_key = f'smithsonian_{search_term}'
-        # Try to get the data from the cache
-        data = cache.get(cache_key)
-        # If the data is not in the cache
-        if data is None:
-            params = {
-                "api_key": self.api_key,
-                "q": search_term,
-                "online_media_type": "Images"
-            }
-            response = requests.get(self.base_url, params=params)
-            response.raise_for_status()  # Will raise an HTTPError for bad requests
+    def get_place_name(self, latitude, longitude):
+        params = {
+            "latlng": f"{latitude},{longitude}",
+            "key": self.api_key
+        }
+        response = requests.get(self.base_url, params=params)
+        response.raise_for_status()
 
-            data = response.json()
-            # Store the data in the cache for 24 hours (86400 seconds)
-            cache.set(cache_key, data, 86400)
-        return self.parse_response(data)
-    
-    def get_images_by_coordinates(self, latitude, longitude):
-        from dashboard.services.google.geocoding import GoogleGeocodingGateway
-
-        # Get the place name from the coordinates
-        google_gateway = GoogleGeocodingGateway(settings.GOOGLE_MAPS_API_KEY)
-        place_name = google_gateway.get_place_name(latitude, longitude)
-
-        # Get the images from the Smithsonian API
-        return self.get_data(place_name)
-
-    def parse_response(self, data):
-        images = []
-        for record in data.get('response', {}).get('rows', []):
-            image_data = {
-                'title': record.get('title'),
-                'url': record.get('content', {}).get('descriptiveNonRepeating', {}).get('online_media', {}).get('media', [{}])[0].get('content'),
-                'thumbnail': record.get('content', {}).get('descriptiveNonRepeating', {}).get('online_media', {}).get('media', [{}])[0].get('thumbnail')
-            }
-            images.append(image_data)
-        return images
+        results = response.json().get('results', [])
+        if results:
+            # Typically, the first result is the most relevant
+            return results[0].get('formatted_address')
+        return None
