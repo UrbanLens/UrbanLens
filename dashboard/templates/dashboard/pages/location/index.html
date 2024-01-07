@@ -11,9 +11,9 @@
     <h1 class="center">{{ location.name }}</h1>
 
     <div class="location-details">
-        <p><strong>Description:</strong> {% if location.description %}{{ location.description }}{% else %}No description provided{% endif %}</p>
+        {% if location.description %}<p><strong>Description:</strong> {{ location.description }}</p>{% endif %}
         <p><strong>Rating:</strong> {% if location.rating %}{{ location.rating }}{% else %}No rating{% endif %}</p>
-        <p><strong>Status:</strong> {% if location.status %}{{ location.status }}{% else %}No status{% endif %}</p>
+        {% if location.status %}<p><strong>Status:</strong> {{ location.status }}{% else %}No status</p>{% endif %}
         <p><strong>Categories:</strong> {% if location.categories %}{{ location.categories }}{% else %}No categories{% endif %}</p>
         <p><strong>Last Visited:</strong> {% if location.last_visited %}{{ location.last_visited }}{% else %}Never visited{% endif %}</p>
         <p><strong>Tags:</strong> {% if location.tags %}{{ location.tags }}{% else %}No tags{% endif %}</p>
