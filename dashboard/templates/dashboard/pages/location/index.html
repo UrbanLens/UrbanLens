@@ -17,6 +17,7 @@
         <p><strong>Categories:</strong> {% if location.categories.all %}{{ location.categories.all }}{% else %}No categories{% endif %}</p>
         <p><strong>Last Visited:</strong> {% if location.last_visited %}{{ location.last_visited }}{% else %}Never visited{% endif %}</p>
         <p><strong>Tags:</strong> {% if location.tags.all %}{{ location.tags.all }}{% else %}No tags{% endif %}</p>
+        <p><strong>Place Name:</strong> {% if location.place_name %}{{ location.place_name }}{% else %}No place name{% endif %}</p>
     </div>
 
     <div class="location-map">
