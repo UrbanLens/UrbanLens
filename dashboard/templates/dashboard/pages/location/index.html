@@ -11,12 +11,12 @@
     <h1 class="center">{{ location.name }}</h1>
 
     <div class="location-details">
-        <p><strong>Description:</strong> {{ location.description if location.description else 'No description provided' }}</p>
-        <p><strong>Rating:</strong> {{ location.rating if location.rating else 'No rating' }}</p>
-        <p><strong>Status:</strong> {{ location.status if location.status else 'No status' }}</p>
-        <p><strong>Categories:</strong> {{ location.categories if location.categories else 'No categories' }}</p>
-        <p><strong>Last Visited:</strong> {{ location.last_visited if location.last_visited else 'Never visited' }}</p>
-        <p><strong>Tags:</strong> {{ location.tags if location.tags else 'No tags' }}</p>
+        <p><strong>Description:</strong> {% if location.description %}{{ location.description }}{% else %}No description provided{% endif %}</p>
+        <p><strong>Rating:</strong> {% if location.rating %}{{ location.rating }}{% else %}No rating{% endif %}</p>
+        <p><strong>Status:</strong> {% if location.status %}{{ location.status }}{% else %}No status{% endif %}</p>
+        <p><strong>Categories:</strong> {% if location.categories %}{{ location.categories }}{% else %}No categories{% endif %}</p>
+        <p><strong>Last Visited:</strong> {% if location.last_visited %}{{ location.last_visited }}{% else %}Never visited{% endif %}</p>
+        <p><strong>Tags:</strong> {% if location.tags %}{{ location.tags }}{% else %}No tags{% endif %}</p>
     </div>
 
     <div class="location-map">
