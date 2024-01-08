@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trip Details</title>
+</head>
+<body>
+    <h1>Trip Details</h1>
+    <p>Trip ID: {{ trip.id }}</p>
+    <p>Trip Name: {{ trip.name }}</p>
+    <p>Start Date: {{ trip.start_date }}</p>
+    <p>End Date: {{ trip.end_date }}</p>
+    <p>Locations: </p>
+    <ul>
+    {% for location in trip.locations.all %}
+        <li>{{ location.name }}</li>
+    {% endfor %}
+    </ul>
+    <p>Users: </p>
+    <ul>
+    {% for user in trip.users.all %}
+        <li>{{ user.username }}</li>
+    {% endfor %}
+    </ul>
+</body>
+</html>
