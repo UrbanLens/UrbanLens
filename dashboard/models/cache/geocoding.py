@@ -7,32 +7,44 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    __init__.py                                                                                          *
-*        Path:    /dashboard/models/__init__.py                                                                        *
+*        File:    geocoding.py                                                                                         *
+*        Path:    /dashboard/models/cache/geocoding.py                                                                 *
 *        Project: urbanlens                                                                                            *
 *        Version: 1.0.0                                                                                                *
-*        Created: 2023-12-24                                                                                           *
+*        Created: 2024-01-07                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
+*        2024-01-07     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-# Abstract Base Classes
-from dashboard.models.abstract import Model, QuerySet, Manager, ViewSet, Serializer
-from dashboard.models.categories import Category
-from dashboard.models.comments import Comment
-from dashboard.models.profile import Profile
-from dashboard.models.friendship import Friendship
-from dashboard.models.images import Image
-from dashboard.models.locations import Location
-from dashboard.models.notifications import NotificationLog
-from dashboard.models.reviews import Review
-from dashboard.models.tags import Tag
-from dashboard.models.cache import GeocodedLocation
+# Generic imports
+from __future__ import annotations
+# Django Imports
+from django.db.models import Index
+# 3rd Party Imports
+from django.db.models.fields import CharField, DecimalField
+
+# App Imports
+from dashboard.models import abstract
+
+class GeocodedLocation(abstract.Model):
+    """
+    Records geocoded location data.
+    """
+    latitude = DecimalField(max_digits=9, decimal_places=6)
+    longitude = DecimalField(max_digits=9, decimal_places=6)
+    place_name = CharField(max_length=255, null=True, blank=True)
+
+    class Meta(abstract.Model.Meta):
+        db_table = 'dashboard_geocoded_locations'
+        get_latest_by = 'updated'
+        indexes = [
+            Index(fields=['latitude', 'longitude']),
+        ]

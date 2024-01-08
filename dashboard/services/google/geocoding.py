@@ -25,8 +25,11 @@
 *********************************************************************************************************************"""
 
 import requests
+import logging
 from dashboard.services.gateway import Gateway
-from dashboard.models.locations.model import GeocodedLocation
+from dashboard.models.cache import GeocodedLocation
+
+logger = logging.getLogger(__name__)
 
 class GoogleGeocodingGateway(Gateway):
     def __init__(self, api_key):
@@ -34,6 +37,11 @@ class GoogleGeocodingGateway(Gateway):
         self.base_url = "https://maps.googleapis.com/maps/api/geocode/json"
 
     def get_place_name(self, latitude, longitude):
+
+        if not latitude or not longitude:
+            logger.error('Latitude and longitude must be provided to get_place_name.')
+            return None
+
         # Check if the geocoded data for the given latitude and longitude already exists in the database
         geocoded_location = GeocodedLocation.objects.filter(latitude=latitude, longitude=longitude).first()
         if geocoded_location:

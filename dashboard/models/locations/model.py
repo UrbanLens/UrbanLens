@@ -28,6 +28,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import logging
+from django.conf import settings
 # Django Imports
 from django.db.models import Index, CASCADE
 from django.forms import ImageField
@@ -41,6 +42,7 @@ from django.db.models import ForeignKey, ManyToManyField
 from dashboard.models import abstract
 from dashboard.models.abstract.choices import TextChoices
 from dashboard.models.locations.queryset import Manager
+from dashboard.services.google.geocoding import GoogleGeocodingGateway
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.
@@ -88,6 +90,13 @@ class Location(abstract.Model):
 
     objects = Manager()
 
+    @property
+    def place_name(self):
+        """
+        Returns the place name of the location.
+        """
+        return GoogleGeocodingGateway(settings.GOOGLE_MAPS_API_KEY).get_place_name(self.latitude, self.longitude)
+
     def change_category(self, category_id):
         from dashboard.models.categories.model import Category
         category = Category.objects.get(id=category_id)
@@ -108,6 +117,7 @@ class Location(abstract.Model):
             'id': self.id,
             'name': self.name,
             'icon': self.icon,
+            'place_name': self.place_name,
             'description': self.description,
             'priority': self.priority,
             'last_visited': self.last_visited.isoformat() if self.last_visited else "never",
@@ -127,19 +137,5 @@ class Location(abstract.Model):
             Index(fields=['name']),
             Index(fields=['priority']),
             Index(fields=['last_visited']),
-            Index(fields=['latitude', 'longitude']),
-        ]
-class GeocodedLocation(abstract.Model):
-    """
-    Records geocoded location data.
-    """
-    latitude = DecimalField(max_digits=9, decimal_places=6)
-    longitude = DecimalField(max_digits=9, decimal_places=6)
-    place_name = CharField(max_length=255)
-
-    class Meta(abstract.Model.Meta):
-        db_table = 'dashboard_geocoded_locations'
-        get_latest_by = 'updated'
-        indexes = [
             Index(fields=['latitude', 'longitude']),
         ]

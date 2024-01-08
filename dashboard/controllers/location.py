@@ -35,8 +35,6 @@ from rest_framework.viewsets import GenericViewSet
 
 from dashboard.models.locations.model import Location
 from dashboard.services.smithsonian import SmithsonianGateway
-from dashboard.services.google import GooglePlacesGateway
-
 
 logger = logging.getLogger(__name__)
 
