@@ -61,12 +61,14 @@
         </script>
     </div>
 
-    <div hx-get="{% url 'smithsonian_images' location.id %}" hx-trigger="load" class="smithsonian">
+    <div hx-get="{% url 'smithsonian_images' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="smithsonian">
         <div class="loading">Loading...</div>
+        <div class="error" style="display: none;">An error occurred. Please try again later.</div>
     </div>
 
-    <div hx-get="{% url 'location.web_search' location.id %}" hx-trigger="load" class="location.web_search">
+    <div hx-get="{% url 'location.web_search' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="location.web_search">
         <div class="loading">Loading...</div>
+        <div class="error" style="display: none;">An error occurred. Please try again later.</div>
     </div>
 </div>
 {% endblock %}
