@@ -1,5 +1,6 @@
-<div id="smithsonian-images">
+<div>
     <h2>Smithsonian Images</h2>
+    <div id="smithsonian-images">
     {% if images %}
         {% for image in images %}
             {% if image.url != None %}
@@ -12,4 +13,5 @@
     {% else %}
         <p>None</p>
     {% endif %}
+    </div>
 </div>
