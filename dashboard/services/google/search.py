@@ -37,7 +37,7 @@ class GoogleCustomSearchGateway(Gateway):
         #self.cx = cx
         self.base_url = "https://www.googleapis.com/customsearch/v1"
 
-    def search(self, query, num=20):
+    def search(self, query : str, max_results : int = 20) -> dict:
         """
         Perform a search using the Google Custom Search API.
         """
@@ -45,7 +45,7 @@ class GoogleCustomSearchGateway(Gateway):
             'key': self.api_key,
             #'cx': self.cx,
             'q': query,
-            'num': min(num, 20)
+            'num': min(max_results, 20)
         }
         response = requests.get(self.base_url, params=params)
         response.raise_for_status()

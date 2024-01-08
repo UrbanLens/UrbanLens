@@ -30,6 +30,7 @@ from django.shortcuts import render
 from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.conf import settings
+from requests.exceptions import HTTPError
 
 from rest_framework.viewsets import GenericViewSet
 
@@ -125,9 +126,13 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Location does not exist", status=404)
 
         # Instantiate the GoogleCustomSearchGateway with the API key
-        google_gateway = GoogleCustomSearchGateway()
+        try:
+            google_gateway = GoogleCustomSearchGateway()
 
-        # Get web search results from the Google Custom Search API
-        search_results = google_gateway.search(location.name)
+            # Get web search results from the Google Custom Search API
+            search_results = google_gateway.search(location.name)
+        except HTTPError as e:
+            logger.error('Unable to contact Google Search API. Is the API Key valid? Exception ---> %s', e)
+            return HttpResponse("Unable to search. This is unlikely to be resolved by multiple requests.", status=500)
 
         return render(request, 'dashboard/pages/location/web_search.html', { 'search_results': search_results })

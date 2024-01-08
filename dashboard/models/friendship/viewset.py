@@ -8,13 +8,13 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    viewset.py                                                                                           *
-*        Path:    /viewset.py                                                                                          *
-*        Project: friendship                                                                                           *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/models/friendship/viewset.py                                                              *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -36,16 +36,25 @@ class FriendshipViewSet(viewsets.ModelViewSet):
     serializer_class = FriendshipSerializer
 
     def create(self, request, *args, **kwargs):
-        friend = Profile.objects.get(id=request.data.get('friend_id'))
-        if Friendship.objects.filter(user=request.user, friend=friend).exists():
-            return Response({"detail": "Friendship already exists"}, status=status.HTTP_400_BAD_REQUEST)
-        Friendship.objects.create(user=request.user, friend=friend)
-        return Response({"detail": "Friendship created"}, status=status.HTTP_201_CREATED)
-
+        from_profile = Profile.objects.get(pk=request.data['from_profile'])
+        to_profile = Profile.objects.get(pk=request.data['to_profile'])
+        friendship = Friendship.objects.create(from_profile=from_profile, to_profile=to_profile, relationship_type=request.data['relationship_type'])
+        friendship.save()
+        return Response(status=status.HTTP_201_CREATED)
+    
+    def update(self, request, *args, **kwargs):
+        friendship = self.get_object()
+        friendship.status = request.data['status']
+        friendship.save()
+        return Response(status=status.HTTP_200_OK)
+    
     def destroy(self, request, *args, **kwargs):
-        friend = Profile.objects.get(id=request.data.get('friend_id'))
-        friendship = Friendship.objects.filter(user=request.user, friend=friend)
-        if not friendship.exists():
-            return Response({"detail": "Friendship does not exist"}, status=status.HTTP_400_BAD_REQUEST)
+        friendship = self.get_object()
         friendship.delete()
-        return Response({"detail": "Friendship deleted"}, status=status.HTTP_204_NO_CONTENT)
+        return Response(status=status.HTTP_200_OK)
+    
+    def get_queryset(self):
+        user = self.request.user
+        if not user.is_authenticated:
+            return Friendship.objects.none()
+        return Friendship.objects.filter(from_profile__user=user)

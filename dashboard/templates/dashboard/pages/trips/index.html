@@ -17,8 +17,8 @@
     </ul>
     <p>Users: </p>
     <ul>
-    {% for user in trip.users.all %}
-        <li>{{ user.username }}</li>
+    {% for profile in trip.profiles.all %}
+        <li>{{ profile.user.username }}</li>
     {% endfor %}
     </ul>
 </body>

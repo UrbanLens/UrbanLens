@@ -8,13 +8,13 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    serializer.py                                                                                        *
-*        Path:    /serializer.py                                                                                       *
-*        Project: friendship                                                                                           *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/models/friendship/serializer.py                                                           *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -29,4 +29,4 @@ from dashboard.models.friendship.model import Friendship
 class FriendshipSerializer(serializers.ModelSerializer):
     class Meta:
         model = Friendship
-        fields = ['user', 'friend']
+        fields = ['from_profile', 'to_profile', 'relationship_type', 'status']

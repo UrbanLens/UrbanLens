@@ -53,7 +53,7 @@ class Trip(abstract.Model):
     start_date = DateTimeField(null=True, blank=True)
     end_date = DateTimeField(null=True, blank=True)
 
-    users = ManyToManyField(
+    profiles = ManyToManyField(
         Profile,
         blank=True,
         related_name='trips',

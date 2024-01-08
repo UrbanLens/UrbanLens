@@ -83,13 +83,16 @@ urlpatterns = [
 	])),
 	path('profile/', include([
 		path('', profile.ViewProfileView.as_view(), name='view_profile'),
-		path('edit/', profile.EditProfileView.as_view(), name='edit_profile'),
+		path('edit/', profile.EditProfileView.as_view(), name='profile.edit'),
 	])),
 	path('friendship/', include([
-		path('list/', friendship.ListFriendsView.as_view(), name='list_friends'),
-		#path('accept/<int:profile_id>', FriendshipController.accept_friend, name='accept_friend'),
-		#path('reject/<int:profile_id>', FriendshipController.reject_friend, name='reject_friend'),
-		path('request/<int:profile_id>', friendship.RequestFriendView.as_view(), name='request_friend'),
+		path('list/<int:profile_id>', friendship.FriendController.as_view({'get':'friend_list'}), name='friend.list'),
+		path('request/<int:profile_id>', friendship.FriendController.as_view({'post': 'request_friend'}), name='friend.request'),
+		path('accept/<int:profile_id>', friendship.FriendController.as_view({'post': 'accept_friend'}), name='friend.accept'),
+		path('reject/<int:profile_id>', friendship.FriendController.as_view({'post': 'reject_friend'}), name='friend.reject'),
+		path('remove/<int:profile_id>', friendship.FriendController.as_view({'post': 'remove_friend'}), name='friend.remove'),
+		path('block/<int:profile_id>', friendship.FriendController.as_view({'post': 'block_friend'}), name='friend.block'),
+		path('mute/<int:profile_id>', friendship.FriendController.as_view({'post': 'mute_friend'}), name='friend.mute'),
 	])),
 	path('', include('social_django.urls', namespace='social')),
 	re_path('.*', TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name='404')

@@ -36,6 +36,12 @@ class TripViewSet(viewsets.ModelViewSet):
     serializer_class = TripSerializer
     basename = 'trips'
 
+    def get_queryset(self):
+        user = self.request.user
+        if not user.is_authenticated:
+            return Trip.objects.none()
+        return Trip.objects.filter(profiles__user=user)
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
@@ -43,18 +49,16 @@ class TripViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
-    def get_queryset(self):
-        user = self.request.user
-        if not user.is_authenticated:
-            return Trip.objects.none()
-        return Trip.objects.filter(profiles__user=user)
-
-    @action(detail=True, methods=['post'])
     def remove_user(self, request, pk=None):
         trip = self.get_object()
         user = request.user
         if user in trip.profiles.all():
             trip.profiles.remove(user.profile)
+
+            # If the trip is empty, delete it
+            if trip.profiles.count() < 1:
+                trip.delete()
+
             return Response({'status': 'user removed'})
         else:
-            return Response({'status': 'user not in trip'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'status': 'user is not in trip'}, status=status.HTTP_400_BAD_REQUEST)

@@ -24,6 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
+from dashboard.models.abstract.choices import TextChoices
 from dashboard.models.abstract.queryset import Manager, QuerySet
 from dashboard.models.abstract.model import Model
 from dashboard.models.abstract.viewset import ViewSet
