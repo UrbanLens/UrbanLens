@@ -78,6 +78,7 @@ urlpatterns = [
 			path('<int:location_id>/', location.LocationController.as_view({'get': 'view'}), name='view_location'),
 			path('<int:location_id>/smithsonian/', location.LocationController.as_view({'get': 'get_smithsonian_images'}), name='smithsonian_images'),
 			path('<int:location_id>/google/', location.LocationController.as_view({'get': 'get_google_images'}), name='google_images'),
+			path('<int:location_id>/search/', location.LocationController.as_view({'get': 'web_search'}), name='location.web_search'),
 		])),
 	])),
 	path('profile/', include([

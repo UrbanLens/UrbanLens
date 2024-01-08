@@ -1,7 +1,7 @@
 <div>
+    {% if images %}
     <h2>Smithsonian Images</h2>
     <div id="smithsonian-images">
-    {% if images %}
         {% for image in images %}
             {% if image.url != None %}
                 <div class="smithsonian-image">
@@ -10,8 +10,6 @@
                 </div>
             {% endif %}
         {% endfor %}
-    {% else %}
-        <p>None</p>
-    {% endif %}
     </div>
+    {% endif %}
 </div>

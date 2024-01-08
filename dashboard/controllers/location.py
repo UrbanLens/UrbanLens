@@ -35,6 +35,7 @@ from rest_framework.viewsets import GenericViewSet
 
 from dashboard.models.locations.model import Location
 from dashboard.services.smithsonian import SmithsonianGateway
+from dashboard.services.google.search import GoogleCustomSearchGateway
 
 logger = logging.getLogger(__name__)
 
@@ -112,3 +113,21 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         return render(request, 'dashboard/pages/location/smithsonian.html', {
             'images': smithsonian_images,
         })
+
+    def web_search(self, request, location_id, *args, **kwargs):
+        """
+        Returns the web search results for a location.
+        """
+        # Get the location
+        try:
+            location : Location = Location.objects.get(id=location_id)
+        except Location.DoesNotExist:
+            return HttpResponse("Location does not exist", status=404)
+
+        # Instantiate the GoogleCustomSearchGateway with the API key
+        google_gateway = GoogleCustomSearchGateway()
+
+        # Get web search results from the Google Custom Search API
+        search_results = google_gateway.search(location.name)
+
+        return render(request, 'dashboard/pages/location/web_search.html', { 'search_results': search_results })

@@ -62,15 +62,11 @@
     </div>
 
     <div hx-get="{% url 'smithsonian_images' location.id %}" hx-trigger="load" class="smithsonian">
-        <h2>Smithsonian Images</h2>
         <div class="loading">Loading...</div>
     </div>
 
-    <div class="recent-search-results">
-        <h2>Recent Search Results</h2>
-        {% for result in search_results %}
-            <p>{{ result.searched_at }}: {{ result.result }}</p>
-        {% endfor %}
+    <div hx-get="{% url 'location_related_search' location.id %}" hx-trigger="load" class="location.web_search">
+        <div class="loading">Loading...</div>
     </div>
 </div>
 {% endblock %}
