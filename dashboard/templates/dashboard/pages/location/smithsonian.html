@@ -4,8 +4,8 @@
         {% for image in images %}
             {% if image.url != None %}
                 <div class="smithsonian-image">
-                    <a href="{{ image.url }}" target="_blank">{{ image.title }}</a>
                     <img src="{{ image.thumbnail }}" alt="{{ image.title }}" />
+                    <a href="{{ image.url }}" target="_blank">{{ image.title }}</a>
                 </div>
             {% endif %}
         {% endfor %}
