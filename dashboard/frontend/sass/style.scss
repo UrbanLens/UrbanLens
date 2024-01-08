@@ -429,5 +429,12 @@ i.construction {
 .details-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(33%, 1fr));
     gap: 20px;
+    justify-content: stretch;
+}
+
+.field-label {
+    display: inline-block;
+    width: 100px;
 }

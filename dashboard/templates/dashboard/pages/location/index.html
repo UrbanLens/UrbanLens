@@ -11,13 +11,13 @@
     <h1 class="center">{{ location.name }}</h1>
 
     <div class="location-details modern-style details-grid">
-        {% if location.description %}<div><strong>Description:</strong> {{ location.description }}</div>{% endif %}
-        <div><strong>Rating:</strong> {% if location.rating %}{{ location.rating }}{% else %}No rating{% endif %}</div>
-        {% if location.status %}<div><strong>Status:</strong> {{ location.status }}</div>{% else %}<div>No status</div>{% endif %}
-        <div><strong>Categories:</strong> {% if location.categories.all %}{{ location.categories.all }}{% else %}No categories{% endif %}</div>
-        <div><strong>Last Visited:</strong> {% if location.last_visited %}{{ location.last_visited }}{% else %}Never visited{% endif %}</div>
-        <div><strong>Tags:</strong> {% if location.tags.all %}{{ location.tags.all }}{% else %}No tags{% endif %}</div>
-        <div><strong>Place Name:</strong> {% if location.place_name %}{{ location.place_name }}{% else %}No place name{% endif %}</div>
+        {% if location.description %}<div><span class="field-label"><strong>Description:</strong></span> {{ location.description }}</div>{% endif %}
+        <div><span class="field-label"><strong>Rating:</strong></span> {% if location.rating %}{{ location.rating }}{% else %}No rating{% endif %}</div>
+        {% if location.status %}<div><span class="field-label"><strong>Status:</strong></span> {{ location.status }}</div>{% else %}<div>No status</div>{% endif %}
+        <div><span class="field-label"><strong>Categories:</strong></span> {% if location.categories.all %}{{ location.categories.all }}{% else %}No categories{% endif %}</div>
+        <div><span class="field-label"><strong>Last Visited:</strong></span> {% if location.last_visited %}{{ location.last_visited }}{% else %}Never visited{% endif %}</div>
+        <div><span class="field-label"><strong>Tags:</strong></span> {% if location.tags.all %}{{ location.tags.all }}{% else %}No tags{% endif %}</div>
+        <div><span class="field-label"><strong>Place Name:</strong></span> {% if location.place_name %}{{ location.place_name }}{% else %}No place name{% endif %}</div>
     </div>
 
     <div class="location-map">
