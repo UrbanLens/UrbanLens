@@ -29,6 +29,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import logging
 # Django Imports
+from django.contrib.auth.models import User
 from django.db.models import Index, CASCADE
 from django.db.models.fields import CharField, DateTimeField
 from django.db.models import ForeignKey, ManyToManyField
@@ -51,6 +52,13 @@ class Trip(abstract.Model):
     description = CharField(max_length=500, null=True, blank=True)
     start_date = DateTimeField(null=True, blank=True)
     end_date = DateTimeField(null=True, blank=True)
+
+    users = ManyToManyField(
+        User,
+        blank=True,
+        related_name='trips',
+        on_delete=CASCADE
+    )
 
     locations = ManyToManyField(
         'dashboard.Location', 
