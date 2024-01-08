@@ -11,41 +11,37 @@ class TripController(LoginRequiredMixin, GenericViewSet):
     """
     Controller for the trip planning page
     """
+    from dashboard.models.trips.model import Trip
+
     def view(self, request, *args, **kwargs):
         """
         View the trip page
         """
-        # TODO: Fetch the trip based on kwargs['trip_id'] and pass it to the template.
-        # This may involve fetching the trip from the database and then passing it to the render() call.
+        trip = Trip.objects.get(id=kwargs['trip_id'])
+        return render(request, 'dashboard/pages/trip/index.html', { 'trip': trip })
 
-        return render(request, 'dashboard/pages/trip/index.html', { 'trip': None })
-
-    def get_trip_data(self):
+    def get_trip_data(self, trip_id):
         """
         Fetch trip data.
         """
-        # TODO: Implement the logic for fetching trip data.
-        # This may involve fetching the trip from the database and then returning it in the appropriate format.
-
-        return []
+        trip = Trip.objects.get(id=trip_id)
+        return trip.to_json()
 
     def get_trip_users(self, request, trip_id, *args, **kwargs):
         """
         Fetch users associated with a trip.
         """
-        # TODO: Implement the logic for fetching users associated with a trip.
-        # This may involve fetching the users from the database and then returning them in the appropriate format.
-
-        return HttpResponse("Fetching trip users not yet implemented", status=501)
+        trip = Trip.objects.get(id=trip_id)
+        users = [user.to_json() for user in trip.users.all()]
+        return HttpResponse(users, status=200)
 
     def get_trip_locations(self, request, trip_id, *args, **kwargs):
         """
         Fetch locations associated with a trip.
         """
-        # TODO: Implement the logic for fetching locations associated with a trip.
-        # This may involve fetching the locations from the database and then returning them in the appropriate format.
-
-        return HttpResponse("Fetching trip locations not yet implemented", status=501)
+        trip = Trip.objects.get(id=trip_id)
+        locations = [location.to_json() for location in trip.locations.all()]
+        return HttpResponse(locations, status=200)
 
     def plan_trip(self, request, *args, **kwargs):
         """
