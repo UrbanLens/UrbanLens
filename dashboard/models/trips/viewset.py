@@ -24,6 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 import logging
+from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from dashboard.models.trips.model import Trip
@@ -36,6 +37,7 @@ class TripViewSet(viewsets.ModelViewSet):
     basename = 'trips'
 
     def get_queryset(self):
-        if not self.request:
+        user = self.request.user
+        if not user.is_authenticated:
             return Trip.objects.none()
-        return Trip.objects.all()
+        return Trip.objects.filter(profiles__user=user)
