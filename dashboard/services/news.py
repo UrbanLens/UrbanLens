@@ -8,7 +8,7 @@ class NewsGateway(Gateway):
     
     def __init__(self, api_key):
         self.api_key = api_key
-        self.base_url = 'https://newsapi.org/v2/everything'  # Replace with the actual base URL of your News API
+        self.base_url = 'https://newsapi.google.com/v2/everything'  # Google News API URL
 
     def get_news(self, location):
         """
