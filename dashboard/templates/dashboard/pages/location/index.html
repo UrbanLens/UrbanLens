@@ -23,42 +23,6 @@
     <div class="location-map">
         <h2>Map</h2>
         <div id="map" style="height: 400px;"></div>
-        <script>
-            const map = L.map('map').setView(["{{ location.latitude }}", "{{ location.longitude }}"], 13);
-            window.map = map;
-            window.pin = null;
-            map.invalidateSize();
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-            }).addTo(map);
-
-            // Add a marker for the location
-            L.marker(["{{ location.latitude }}", "{{ location.longitude }}"]).addTo(map);
-
-            // Update the Leaflet icon URLs
-            var newIcon = L.icon({
-                iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-                iconSize: [25, 41], 
-                shadowSize: [41, 41], 
-                iconAnchor: [12, 41], 
-                shadowAnchor: [12, 41],  
-                popupAnchor: [1, -34] 
-            });
-            L.Marker.prototype.options.icon = newIcon; 
-            document.addEventListener('htmx:configRequest', (event) => {
-                event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
-                console.log("htmx is loaded");
-            });
-
-            document.body.addEventListener('htmx:afterOnLoad', function () {
-                // Dispatch a custom event after the dialog is loaded
-                setTimeout(() => {
-                    const event = new Event('dialogLoaded');
-                    document.dispatchEvent(event);
-                }, 250);
-            });
-        </script>
     </div>
 
     <div hx-get="{% url 'smithsonian_images' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="smithsonian">
@@ -71,4 +35,43 @@
         <div class="error" style="display: none;">An error occurred. Please try again later.</div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        const map = L.map('map').setView(["{{ location.latitude }}", "{{ location.longitude }}"], 13);
+        window.map = map;
+        window.pin = null;
+        map.invalidateSize();
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+        }).addTo(map);
+
+        // Add a marker for the location
+        L.marker(["{{ location.latitude }}", "{{ location.longitude }}"]).addTo(map);
+
+        // Update the Leaflet icon URLs
+        var newIcon = L.icon({
+            iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+            iconSize: [25, 41],
+            shadowSize: [41, 41],
+            iconAnchor: [12, 41],
+            shadowAnchor: [12, 41],
+            popupAnchor: [1, -34]
+        });
+        L.Marker.prototype.options.icon = newIcon;
+        document.addEventListener('htmx:configRequest', (event) => {
+            event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+            console.log("htmx is loaded");
+        });
+
+        document.body.addEventListener('htmx:afterOnLoad', function () {
+            // Dispatch a custom event after the dialog is loaded
+            setTimeout(() => {
+                const event = new Event('dialogLoaded');
+                document.dispatchEvent(event);
+            }, 250);
+        });
+    </script>
 {% endblock %}
