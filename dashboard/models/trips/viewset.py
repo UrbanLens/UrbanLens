@@ -48,3 +48,13 @@ class TripViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Trip.objects.none()
         return Trip.objects.filter(profiles__user=user)
+
+    @action(detail=True, methods=['post'])
+    def remove_user(self, request, pk=None):
+        trip = self.get_object()
+        user = request.user
+        if user in trip.profiles.all():
+            trip.profiles.remove(user.profile)
+            return Response({'status': 'user removed'})
+        else:
+            return Response({'status': 'user not in trip'}, status=status.HTTP_400_BAD_REQUEST)
