@@ -65,7 +65,7 @@
         <div class="loading">Loading...</div>
     </div>
 
-    <div hx-get="{% url 'location_related_search' location.id %}" hx-trigger="load" class="location.web_search">
+    <div hx-get="{% url 'location.web_search' location.id %}" hx-trigger="load" class="location.web_search">
         <div class="loading">Loading...</div>
     </div>
 </div>
