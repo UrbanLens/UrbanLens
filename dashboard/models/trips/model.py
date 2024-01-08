@@ -29,7 +29,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import logging
 # Django Imports
-from django.contrib.auth.models import User
 from django.db.models import Index, CASCADE
 from django.db.models.fields import CharField, DateTimeField
 from django.db.models import ForeignKey, ManyToManyField
@@ -37,6 +36,7 @@ from django.db.models import ForeignKey, ManyToManyField
 # App Imports
 from dashboard.models import abstract
 from dashboard.models.locations.queryset import Manager
+from dashboard.models.profile import Profile
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.
@@ -54,7 +54,7 @@ class Trip(abstract.Model):
     end_date = DateTimeField(null=True, blank=True)
 
     users = ManyToManyField(
-        User,
+        Profile,
         blank=True,
         related_name='trips',
         on_delete=CASCADE
@@ -82,7 +82,6 @@ class Trip(abstract.Model):
             'description': self.description,
             'start_date': self.start_date.isoformat() if self.start_date else "never",
             'end_date': self.end_date.isoformat() if self.end_date else "never",
-            'profile': self.profile.id,
             'locations': [location.id for location in self.locations.all()],
         }
 
