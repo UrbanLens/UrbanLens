@@ -129,6 +129,15 @@ class Location(abstract.Model):
             'tags': [tag.id for tag in self.tags.all()],
         }
 
+    @property
+    def rating(self):
+        from dashboard.models.reviews.model import Review
+        user = getattr(self, '_current_user', None)
+        if user:
+            review = Review.objects.filter(location=self, user=user).first()
+            return review.rating if review else 0
+        return 0
+
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_locations'
         get_latest_by = 'updated'
