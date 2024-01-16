@@ -118,15 +118,17 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             raise e from e
             return HttpResponse(f"Error: {str(e)}", status=400)
 
-    def search_pins(self, request, *args, **kwargs):
-        return render(request, 'dashboard/pages/map/search.html')
+    def search_map(self, request, *args, **kwargs):
+        from dashboard.forms.search import SearchForm
+        search_form = SearchForm()
+        return render(request, 'dashboard/pages/map/search.html', {'form': search_form})
 
-    def search_pins_post(self, request, *args, **kwargs):
-        query = request.GET.get('q')
-        if not query:
-            return HttpResponse(status=400)
-        locations = Location.objects.filter(name__icontains=query)
-        return render(request, 'dashboard/pages/map/map.html', {'locations': locations})
+    def search_map_post(self, request, *args, **kwargs):
+        from dashboard.forms.search import SearchForm
+        search_form = SearchForm(request.POST)
+        if search_form.is_valid():
+            locations = Location.objects.filter_by_criteria(search_form.cleaned_data)
+            return render(request, 'dashboard/pages/map/index.html', {'locations': locations})
 
     def upload_image(self, request, location_id, *args, **kwargs):
         image = request.FILES.get('image')

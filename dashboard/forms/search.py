@@ -7,14 +7,14 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    profile.py                                                                                           *
-*        Path:    /dashboard/forms/profile.py                                                                          *
+*        File:    search.py                                                                                            *
+*        Path:    /dashboard/forms/search.py                                                                           *
 *        Project: urbanlens                                                                                            *
 *        Version: 1.0.0                                                                                                *
-*        Created: 2023-12-24                                                                                           *
+*        Created: 2024-01-16                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -24,16 +24,36 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from django import forms
-from dashboard.models.profile.model import Profile
+from dashboard.models.locations.model import Location, LocationStatus
 from dashboard.models.categories.model import Category
 from dashboard.models.tags.model import Tag
 from django.db.models import Q
 
+class SearchForm(forms.Form):
+    name = forms.CharField(required=False)
+    rating = forms.ChoiceField(choices=[1,2,3,4,5], required=False)
+    categories = forms.ModelMultipleChoiceField(
+        queryset=Category.objects.all(),
+        widget=forms.CheckboxSelectMultiple,
+        required=False
+    )
+    tags = forms.ModelMultipleChoiceField(
+        queryset=Tag.objects.all(),
+        widget=forms.CheckboxSelectMultiple,
+        required=False
+    )
+    status = forms.ChoiceField(choices=LocationStatus.choices, required=False)
 
-RATING_CHOICES = [(i, str(i)) for i in range(1, 6)]  # Assuming the rating is from 1 to 5
-
-class ProfileForm(forms.ModelForm):
-    class Meta:
-        model = Profile
-        fields = ['avatar', 'instagram', 'discord']
-
+    def search(self):
+        query = Q()
+        if self.cleaned_data['name']:
+            query &= Q(name__icontains=self.cleaned_data['name'])
+        if self.cleaned_data['rating']:
+            query &= Q(review__rating=self.cleaned_data['rating'])
+        if self.cleaned_data['categories']:
+            query &= Q(categories__in=self.cleaned_data['categories'])
+        if self.cleaned_data['tags']:
+            query &= Q(tags__in=self.cleaned_data['tags'])
+        if self.cleaned_data['status']:
+            query &= Q(status=self.cleaned_data['status'])
+        return query

@@ -7,14 +7,14 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    profile.py                                                                                           *
-*        Path:    /dashboard/forms/profile.py                                                                          *
+*        File:    __init__.py                                                                                          *
+*        Path:    /dashboard/forms/__init__.py                                                                         *
 *        Project: urbanlens                                                                                            *
 *        Version: 1.0.0                                                                                                *
-*        Created: 2023-12-24                                                                                           *
+*        Created: 2024-01-16                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -23,17 +23,6 @@
 *        2024-01-16     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from django import forms
-from dashboard.models.profile.model import Profile
-from dashboard.models.categories.model import Category
-from dashboard.models.tags.model import Tag
-from django.db.models import Q
-
-
-RATING_CHOICES = [(i, str(i)) for i in range(1, 6)]  # Assuming the rating is from 1 to 5
-
-class ProfileForm(forms.ModelForm):
-    class Meta:
-        model = Profile
-        fields = ['avatar', 'instagram', 'discord']
-
+from dashboard.forms.profile import ProfileForm
+from dashboard.forms.search import SearchForm
+from dashboard.forms.review import ReviewForm

@@ -14,7 +14,7 @@
         <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="outerHTML" hx-swap-oob="true">
             <button id="add-pin-button" class="map-button">Add Pin</button>
         </div>
-        <div hx-get="{% url 'search_pins' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
+        <div hx-get="{% url 'search_map' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
             <button id="search-pins-button" class="map-button">Search Pins</button>
         </div>
     </div>
