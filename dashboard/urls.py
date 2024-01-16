@@ -66,6 +66,8 @@ for route, viewset in routes.items():
 urlpatterns = [
     path('rest/reviews/create_or_update/<int:pk>/', ReviewViewSet.as_view({'patch': 'create_or_update'}), name='review-create-or-update'),
 	path('rest/', include(router.urls)),
+    path('location/<int:location_id>/satellite_view/', location.LocationController.as_view({'get': 'satellite_view'}), name='location_satellite_view'),
+    path('location/<int:location_id>/street_view/', location.LocationController.as_view({'get': 'street_view'}), name='location_street_view'),
 	re_path('^$', IndexController.as_view(), name='home'),
 	path('map/', include([
 		path('', map.MapController.as_view({'get': 'view_map'}), name='view_map'),
