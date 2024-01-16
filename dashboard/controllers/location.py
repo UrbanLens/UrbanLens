@@ -37,6 +37,7 @@ from rest_framework.viewsets import GenericViewSet
 from dashboard.models.locations.model import Location
 from dashboard.services.smithsonian import SmithsonianGateway
 from dashboard.services.google.search import GoogleCustomSearchGateway
+from dashboard.services.google.maps import GoogleMapsGateway
 
 logger = logging.getLogger(__name__)
 
@@ -136,3 +137,37 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Unable to search. This is unlikely to be resolved by multiple requests.", status=500)
 
         return render(request, 'dashboard/pages/location/web_search.html', { 'search_results': search_results })
+
+    def satellite_view(self, request, *args, **kwargs):
+        """
+        Returns the satellite view image for a location.
+        """
+        try:
+            location = Location.objects.get(id=kwargs['location_id'])
+        except Location.DoesNotExist:
+            return HttpResponse("Location does not exist", status=404)
+
+        # Instantiate the GoogleMapsGateway with the API key
+        google_maps_gateway = GoogleMapsGateway(settings.GOOGLE_MAPS_API_KEY)
+
+        # Get the satellite view image from the Google Maps API
+        satellite_image = google_maps_gateway.get_satellite_view(location.latitude, location.longitude)
+
+        return HttpResponse(satellite_image, content_type="image/jpeg")
+
+    def street_view(self, request, *args, **kwargs):
+        """
+        Returns the street view image for a location.
+        """
+        try:
+            location = Location.objects.get(id=kwargs['location_id'])
+        except Location.DoesNotExist:
+            return HttpResponse("Location does not exist", status=404)
+
+        # Instantiate the GoogleMapsGateway with the API key
+        google_maps_gateway = GoogleMapsGateway(settings.GOOGLE_MAPS_API_KEY)
+
+        # Get the street view image from the Google Maps API
+        street_view_image = google_maps_gateway.get_street_view(location.latitude, location.longitude)
+
+        return HttpResponse(street_view_image, content_type="image/jpeg")
