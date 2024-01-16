@@ -84,6 +84,12 @@ urlpatterns = [
 			path('<int:location_id>/search/', location.LocationController.as_view({'get': 'web_search'}), name='location.web_search'),
     		path('<int:location_id>/satellite_view/', location.LocationController.as_view({'get': 'satellite_view_google_image'}), name='location_satellite_view'),
     		path('<int:location_id>/street_view/', location.LocationController.as_view({'get': 'street_view'}), name='location_street_view'),
+			path('import/', include([
+				path('csv/', location.LocationController.as_view({'get': 'import_csv'}), name='location.import.csv'),
+				path('csv/upload/', location.LocationController.as_view({'post': 'upload_csv'}), name='location.upload.csv'),
+				path('kml/', location.LocationController.as_view({'get': 'import_kml'}), name='location.import.kml'),
+				path('kml/upload/', location.LocationController.as_view({'post': 'upload_kml'}), name='location.upload.kml'),
+			]), name='location.import'),
 		])),
 	])),
 	path('profile/', include([

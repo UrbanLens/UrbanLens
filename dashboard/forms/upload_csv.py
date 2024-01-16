@@ -7,8 +7,8 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    __init__.py                                                                                          *
-*        Path:    /dashboard/forms/__init__.py                                                                         *
+*        File:    upload_csv.py                                                                                        *
+*        Path:    /dashboard/forms/upload_csv.py                                                                       *
 *        Project: urbanlens                                                                                            *
 *        Version: 1.0.0                                                                                                *
 *        Created: 2024-01-16                                                                                           *
@@ -23,7 +23,8 @@
 *        2024-01-16     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from dashboard.forms.profile import ProfileForm
-from dashboard.forms.search import SearchForm
-from dashboard.forms.review import ReviewForm
-from dashboard.forms.upload_csv import CSVUploadForm
+from django import forms
+
+class CSVUploadForm(forms.Form):    
+    title = forms.CharField(max_length=50)
+    file = forms.FileField()

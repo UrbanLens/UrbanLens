@@ -31,13 +31,20 @@ from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.conf import settings
 from requests.exceptions import HTTPError
+from icecream import ic
+import csv
+from io import StringIO
 
 from rest_framework.viewsets import GenericViewSet
+from rest_framework.decorators import action
+from django.http import JsonResponse
+from rest_framework.exceptions import ValidationError
 
 from dashboard.models.locations.model import Location
 from dashboard.services.smithsonian import SmithsonianGateway
 from dashboard.services.google.search import GoogleCustomSearchGateway
 from dashboard.services.google.maps import GoogleMapsGateway
+from dashboard.forms.upload_csv import CSVUploadForm
 
 logger = logging.getLogger(__name__)
 
@@ -171,3 +178,70 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         street_view_image = google_maps_gateway.get_street_view(location.latitude, location.longitude)
 
         return HttpResponse(street_view_image, content_type="image/jpeg")
+    
+    @action(detail=True, methods=['get'])
+    def import_csv(self, request, *args, **kwargs):
+        """
+        View the import CSV page
+        """
+        return render(request, 'dashboard/pages/location/import/csv.html', { 'form': CSVUploadForm() })
+
+    def upload_csv(self, request, *args, **kwargs):
+        """
+        Upload a CSV file
+        """
+        try:
+            # Print the request.POST keys
+            ic(request.POST.keys())
+            ic(request.FILES.keys())
+
+            form = CSVUploadForm(request.POST, request.FILES)
+            if form.is_valid():
+                csv_file = form.cleaned_data['file']
+
+                # Read the file
+                csv_file_contents = csv_file.read().decode('utf-8')
+
+                from dashboard.services.google.maps import GoogleMapsGateway
+
+                # Instantiate the GoogleMapsGateway with the API key
+                google_maps_gateway = GoogleMapsGateway(settings.GOOGLE_MAPS_API_KEY)
+
+                # Get the locations from the CSV file
+                locations = google_maps_gateway.import_locations_from_csv(csv_file_contents, request.user.profile)
+
+                return JsonResponse({'locations': locations})
+            else:
+                return JsonResponse({'error': 'Invalid form'}, status=400)
+
+        except ValidationError as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+    
+    @action(detail=True, methods=['get'])
+    def import_kml(self, request, *args, **kwargs):
+        """
+        View the import KML page
+        """
+        return render(request, 'dashboard/pages/location/import/kml.html')
+    
+    @action(detail=True, methods=['post'])
+    def upload_kml(self, request, *args, **kwargs):
+        """
+        Upload a KML file
+        """
+        # Get the file from the request
+        kml_file = request.FILES['kml_file']
+
+        # Read the file
+        kml_file_contents = kml_file.read().decode('utf-8')
+
+        from dashboard.services.google.maps import GoogleMapsGateway
+
+        # Instantiate the GoogleMapsGateway with the API key
+        google_maps_gateway = GoogleMapsGateway(settings.GOOGLE_MAPS_API_KEY)
+
+        # Get the locations from the KML file
+        locations = google_maps_gateway.import_locations_from_kml(kml_file_contents, request.user.profile)
+
+        return JsonResponse({'locations': locations})

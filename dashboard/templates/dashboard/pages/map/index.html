@@ -26,7 +26,7 @@
         <div>
             <button id="toggle-pins-button" title="Hide Pins" onclick="togglePins()"></button>
         </div>
-        <div hx-get="{% url 'import_pins' %}" hx-trigger="click" hx-target="#importPinsModal" hx-swap="outerHTML" hx-swap-oob="true">
+        <div hx-get="{% url 'location.import.csv' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
             <button id="import-pins-button" title="Import Pins"></button>
         </div>
     </div>

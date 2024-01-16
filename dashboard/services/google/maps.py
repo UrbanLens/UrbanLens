@@ -178,13 +178,13 @@ class GoogleMapsGateway(Gateway):
 
     
     @classmethod
-    def import_locations_from_csv(cls, csv_data: str, user_profile: 'Profile'):
+    def import_locations_from_csv(cls, csv_data: str, user_profile: 'Profile') -> list[Location]:
         """
         Imports locations from a CSV file and bulk creates Location objects.
         """
+        locations = []
         try:
             reader = csv.DictReader(csv_data.splitlines())
-            locations = []
 
             for row in reader:
                 # Extract coordinates from URL if available
@@ -204,6 +204,8 @@ class GoogleMapsGateway(Gateway):
         except Exception as e:
             logger.error("Failed to import locations from CSV: %s", str(e))
             raise
+
+        return locations
 
     @staticmethod
     def extract_coordinates_from_url(url: str):

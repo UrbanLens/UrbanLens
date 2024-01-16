@@ -1,0 +1,9 @@
+<div id="upload_csv" class="dialog">
+    <h2>Upload CSV</h2>
+    <form id="upload_csv_form" action="{% url 'location.upload.csv' %}" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.file.label_tag }} {{ form.file }}
+        {{ form.file.errors }}
+        <input type="submit" value="Upload">
+    </form>
+</div>
