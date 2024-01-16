@@ -31,7 +31,7 @@ from django.db.models import Q
 
 class SearchForm(forms.Form):
     name = forms.CharField(required=False)
-    rating = forms.ChoiceField(choices=[1,2,3,4,5], required=False)
+    rating = forms.ChoiceField(choices=[('', 'Any'), (1, '1'), (2, '2'), (3, '3'), (4, '4'), (5, '5')], required=False)
     categories = forms.ModelMultipleChoiceField(
         queryset=Category.objects.all(),
         widget=forms.CheckboxSelectMultiple,
