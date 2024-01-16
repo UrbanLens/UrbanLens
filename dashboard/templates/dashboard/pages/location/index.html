@@ -25,6 +25,16 @@
         <div id="map" style="height: 400px;"></div>
     </div>
 
+    <div class="location-satellite-view">
+        <h2>Satellite View</h2>
+        <img src="{% url 'location_satellite_view' location.id %}" alt="Satellite view of {{ location.name }}" style="width: 100%; max-width: 600px; height: auto;">
+    </div>
+
+    <div class="location-street-view">
+        <h2>Street View</h2>
+        <img src="{% url 'location_street_view' location.id %}" alt="Street view of {{ location.name }}" style="width: 100%; max-width: 600px; height: auto;">
+    </div>
+
     <div hx-get="{% url 'smithsonian_images' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="smithsonian">
         <div class="loading">Loading...</div>
         <div class="error" style="display: none;">An error occurred. Please try again later.</div>
