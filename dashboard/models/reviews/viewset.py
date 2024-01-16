@@ -69,7 +69,6 @@ class ReviewViewSet(viewsets.ModelViewSet):
         location_id = pk
         data = request.data.copy()
         data['user'] = request.user
-        data['user'] = request.user.id
         data['location'] = location_id
 
         review, created = Review.objects.get_or_create(
