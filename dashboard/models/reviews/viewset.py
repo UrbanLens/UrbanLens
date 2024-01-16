@@ -26,6 +26,7 @@
 import logging
 from rest_framework import viewsets, status
 from rest_framework.response import Response
+from rest_framework.decorators import action
 from dashboard.models.reviews.model import Review
 from dashboard.models.reviews.serializer import ReviewSerializer
 
