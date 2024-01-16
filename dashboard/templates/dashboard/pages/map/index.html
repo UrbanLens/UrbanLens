@@ -54,7 +54,7 @@
                 .then(response => response.json())
                 .then(data => {
                     this.closest('.stars').classList.remove('rating-0', 'rating-1', 'rating-2', 'rating-3', 'rating-4', 'rating-5');
-                    console.log(`${field.name} updated successfully`);
+                    console.log(`${field.name} updated successfully`, data);
                     toastr.success(`${field.name.charAt(0).toUpperCase() + field.name.slice(1)} updated successfully`);
                 })
                 .catch((error) => {

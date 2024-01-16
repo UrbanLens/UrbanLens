@@ -7,14 +7,14 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    model.py                                                                                             *
-*        Path:    /dashboard/models/reviews/model.py                                                                   *
+*        File:    viewset.py                                                                                           *
+*        Path:    /dashboard/models/reviews/viewset.py                                                                 *
 *        Project: urbanlens                                                                                            *
 *        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -23,29 +23,51 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from django.contrib.auth.models import User
-from django.db.models import CASCADE
-from django.core.validators import MinValueValidator, MaxValueValidator
-from django.db.models.fields import IntegerField, TextField
-from django.db.models.fields.related import ForeignKey
-from dashboard.models import abstract
-from dashboard.models.reviews.queryset import Manager
-from dashboard.models.locations.model import Location
+import logging
+from rest_framework import viewsets, status
+from rest_framework.response import Response
+from dashboard.models.reviews.model import Review
+from dashboard.models.reviews.serializer import ReviewSerializer
 
-class Review(abstract.Model):
-    rating = IntegerField(validators=[MinValueValidator(0), MaxValueValidator(5)])
-    review = TextField()
+logger = logging.getLogger(__name__)
 
-    user = ForeignKey(
-        User, 
-        on_delete=CASCADE
-    )
-    location = ForeignKey(
-        Location, 
-        on_delete=CASCADE
-    )
+class ReviewViewSet(viewsets.ModelViewSet):
+    serializer_class = ReviewSerializer
+    basename = 'reviews'
 
-    objects = Manager()
+    def get_queryset(self):
+        if not self.request:
+            return Review.objects.none()
+        return Review.objects.filter(user=self.request.user)
+    
+    def create(self, request, *args, **kwargs):
+        logger.info(f"Create request initiated by user {request.user.id}")
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        logger.info(f"Review created with id {serializer.data['id']}")
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
-    class Meta(abstract.Model.Meta):
-        unique_together = ('user', 'location')
+    def update(self, request, *args, **kwargs):
+        logger.info(f"Update request initiated by user {request.user.id}")
+        instance = self.get_object()
+        if instance.user != request.user:
+            logger.error("User %s attempted to update review %s, but does not have permission", request.user.id, instance.id)
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        logger.info(f"Review with id {instance.id} updated")
+        return Response(serializer.data)
+    
+    def destroy(self, request, *args, **kwargs):
+        logger.info(f"Delete request initiated by user {request.user.id}")
+        instance = self.get_object()
+        if instance.user != request.user:
+            logger.error("User %s attempted to delete review %s, but does not have permission", request.user.id, instance.id)
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        logger.info(f"Review with id {instance.id} deleted")
+        return super().destroy(request, *args, **kwargs)

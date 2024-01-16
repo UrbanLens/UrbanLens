@@ -36,6 +36,7 @@ from rest_framework import routers
 from dashboard.models.locations import LocationViewSet
 #from dashboard.models.comments import CommentViewSet
 #from dashboard.models.images import ImageViewSet
+from dashboard.models.reviews import ReviewViewSet
 from dashboard.models.profile import ProfileViewSet
 from dashboard.controllers import friendship, map, location, profile
 from dashboard.controllers.index import IndexController
@@ -49,6 +50,7 @@ routes = {
 	#'categories': CategoryViewSet,
 	'locations': LocationViewSet,
 	'profiles': ProfileViewSet,
+	'reviews': ReviewViewSet,
 	#'comments': CommentViewSet,
 	#'images': ImageViewSet
 }

@@ -6,9 +6,9 @@
   <form method="post">
   {% csrf_token %}
     {{ form.as_p }}
-    <button type="submit">Sign up</button>
-    <a href="{% url 'social:begin' 'google-oauth2' %}">Sign up with Google</a>
-    <a href="{% url 'social:begin' 'discord' %}">Sign up with Discord</a>
+    <button type="submit" class="auth-button">Sign up</button>
+    <a href="{% url 'social:begin' 'google-oauth2' %}" class="auth-button google-button">Sign up with Google</a>
+    <a href="{% url 'social:begin' 'discord' %}" class="auth-button discord-button">Sign up with Discord</a>
   </form>
 </div>
 {% endblock %}
