@@ -8,13 +8,13 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    queryset.py                                                                                          *
-*        Path:    /queryset.py                                                                                         *
-*        Project: locations                                                                                            *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/models/locations/queryset.py                                                              *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -26,7 +26,7 @@
 
 # Generic imports
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 import logging
 from datetime import datetime
 # Django Imports
@@ -104,6 +104,23 @@ class QuerySet(abstract.QuerySet):
                 query &= Q(tags__name__in=[tag])
         return self.filter(query)
 
+    def rated(self, rating) -> Self:
+        """
+        Filters locations by the review.rating field
+        """
+        return self.filter(reviews__rating=rating)
+    
+    def rated_over(self, rating) -> Self:
+        """
+        Filters locations by the review.rating field
+        """
+        return self.filter(reviews__rating__gte=rating)
+    
+    def rated_under(self, rating) -> Self:
+        """
+        Filters locations by the review.rating field
+        """
+        return self.filter(reviews__rating__lte=rating)
 
 class Manager(abstract.Manager.from_queryset(QuerySet)):
     '''

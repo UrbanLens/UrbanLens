@@ -12,10 +12,10 @@
 <div id="map" hx-boost="true">
     <div class="map-buttons">
         <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="outerHTML" hx-swap-oob="true">
-            <button class="map-button">Add Pin</button>
+            <button id="add-pin-button" class="map-button">Add Pin</button>
         </div>
         <div hx-get="{% url 'search_pins' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
-            <button class="map-button">Search Pins</button>
+            <button id="search-pins-button" class="map-button">Search Pins</button>
         </div>
     </div>
 
@@ -37,7 +37,6 @@
     map.on('popupopen', function() {
         document.querySelectorAll('.pin-popup .stars input').forEach(function(input) {
             input.addEventListener('change', function() {
-                console.log('star change');
                 const field = this;
                 const value = field.value;
                 const locationId = field.closest('.pin-popup').dataset.id;
@@ -254,7 +253,6 @@
 
     document.addEventListener('htmx:configRequest', (event) => {
         event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
-        console.log("htmx is loaded");
     });
 
     document.body.addEventListener('htmx:afterOnLoad', function () {

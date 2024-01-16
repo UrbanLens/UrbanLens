@@ -109,6 +109,17 @@ class Location(abstract.Model):
         tags = ', '.join([str(tag) for tag in self.tags.all()]) if self.tags.all() else []
         return f"Name: {self.name}\nDescription: {self.description or ''}\nPriority: {self.priority}\nLast Visited: {self.last_visited}\nStatus: {LocationStatus(self.status).label}\nCategories: {categories}\nTags: {tags}"
 
+    @property
+    def rating(self):
+        try:
+            review = self.reviews.all().latest()
+            if review:
+                return review.rating
+        except Exception:
+            logger.debug('no rating found for location %s', self.id)
+
+        return 0
+
     def to_json(self):
         """
         Returns a dictionary that can be JSON serialized.
@@ -126,17 +137,9 @@ class Location(abstract.Model):
             'status': LocationStatus.get_name(self.status) or LocationStatus.NOT_VISITED.label,
             'profile': self.profile.id,
             'categories': [category.id for category in self.categories.all()],
+            'rating': self.rating,
             'tags': [tag.id for tag in self.tags.all()],
         }
-
-    @property
-    def rating(self):
-        from dashboard.models.reviews.model import Review
-        user = getattr(self, '_current_user', None)
-        if user:
-            review = Review.objects.filter(location=self, user=user).first()
-            return review.rating if review else 0
-        return 0
 
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_locations'

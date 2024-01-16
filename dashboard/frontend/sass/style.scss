@@ -77,6 +77,10 @@ nav, footer, .page-footer {
     cursor: pointer;
 }
 
+#add-pin-button {
+    display: none;
+}
+
 .map-button:hover {
     opacity: 1;
 }

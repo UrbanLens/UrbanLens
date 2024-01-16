@@ -29,7 +29,7 @@ from dashboard.models.reviews.model import Review
 class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Review
-        fields = ['user', 'location', 'rating', 'review']
+        fields = ['id', 'user', 'location', 'rating', 'review']
 
     def create(self, validated_data):
         user = validated_data.pop('user')

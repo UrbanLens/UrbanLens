@@ -38,14 +38,17 @@ class Review(abstract.Model):
 
     user = ForeignKey(
         User, 
-        on_delete=CASCADE
+        on_delete=CASCADE,
+        related_name='reviews'
     )
     location = ForeignKey(
         Location, 
-        on_delete=CASCADE
+        on_delete=CASCADE,
+        related_name='reviews'
     )
 
     objects = Manager()
 
     class Meta(abstract.Model.Meta):
         unique_together = ('user', 'location')
+        get_latest_by = 'created'

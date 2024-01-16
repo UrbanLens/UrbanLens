@@ -8,13 +8,13 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    filterset.py                                                                                         *
-*        Path:    /filterset.py                                                                                        *
-*        Project: locations                                                                                            *
-*        Version: <<projectversion>>                                                                                   *
+*        Path:    /dashboard/models/locations/filterset.py                                                             *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -35,6 +35,9 @@ class LocationFilter(django_filters.FilterSet):
     by_name = CharFilter(method='by_name')
     by_created_year = NumberFilter(method='by_created_year')
     by_updated_year = NumberFilter(method='by_updated_year')
+    rated = NumberFilter(method='rated')
+    rated_over = NumberFilter(method='rated_over')
+    rated_under = NumberFilter(method='rated_under')
 
     class Meta:
         model = Location
@@ -46,6 +49,9 @@ class LocationFilter(django_filters.FilterSet):
             'last_visited',
             'latitude',
             'longitude',
+            'rated',
+            'rated_over',
+            'rated_under',
             'by_priority',
             'by_latitude',
             'by_longitude',

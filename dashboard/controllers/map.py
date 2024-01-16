@@ -94,6 +94,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             else:
                 tags = []
             icon = request.POST.get('icon', None)
+            logger.critical('ADDING PIN, icon is %s', icon)
+            logger.critical('POST is %s', request.POST)
 
             if not latitude or not longitude:
                 if not address:
@@ -117,7 +119,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(f"Error: {str(e)}", status=400)
 
     def search_pins(self, request, *args, **kwargs):
+        return render(request, 'dashboard/pages/map/search.html')
+
+    def search_pins_post(self, request, *args, **kwargs):
         query = request.GET.get('q')
+        if not query:
+            return HttpResponse(status=400)
         locations = Location.objects.filter(name__icontains=query)
         return render(request, 'dashboard/pages/map/map.html', {'locations': locations})
 
