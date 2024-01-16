@@ -64,6 +64,7 @@ for route, viewset in routes.items():
 		router.register(route, viewset)
 
 urlpatterns = [
+    path('rest/reviews/create_or_update/<int:pk>/', ReviewViewSet.as_view({'patch': 'create_or_update'}), name='review-create-or-update'),
 	path('rest/', include(router.urls)),
 	re_path('^$', IndexController.as_view(), name='home'),
 	path('map/', include([
