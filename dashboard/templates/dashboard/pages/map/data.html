@@ -34,7 +34,9 @@
             </div>
         `;
 
-        marker.addTo(map).bindPopup(popupContent);
+        // Add it to the pinsLayerGroup
+        marker.addTo(window.pinsLayerGroup).bindPopup(popupContent);
+
     }
 
     {% for location in map_data %}

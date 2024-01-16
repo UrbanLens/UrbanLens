@@ -493,9 +493,13 @@ i.construction {
         height: 4rem;
         border: 0.5rem solid #000;
         border-radius: 25%;
-        opacity: 0.3;
+        opacity: 0.2;
         display: inline-block;
         transition-duration: 0.4s;
+
+        &.active {
+            opacity: 0.8;
+        }
 
         &:hover {
             cursor: pointer;
@@ -513,6 +517,10 @@ i.construction {
     #satellite-button {
         // Use the icon /static/dashboard/images/satellite.png
         background-image: url("/static/dashboard/images/satellite.png");
+    }
+    #toggle-pins-button {
+        // Use the icon /static/dashboard/images/pins.png
+        background-image: url("/static/dashboard/images/pins.png");
     }
 
     #add-pin-button {

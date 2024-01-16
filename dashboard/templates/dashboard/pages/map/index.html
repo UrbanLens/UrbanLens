@@ -15,16 +15,16 @@
             <button id="add-pin-button" class="map-button">Add Pin</button>
         </div>
         <div hx-get="{% url 'search_map' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
-            <button id="search-pins-button" class="map-button">Search</button>
+            <button id="search-pins-button" title="Search" class="map-button"></button>
         </div>
         <div>
-            <button id="topography-button" onclick="toggleTopographyView()">Topography</button>
+            <button id="topography-button" title="Topography View" onclick="toggleTopographyView()"></button>
         </div>
         <div>
-            <button id="satellite-button" onclick="toggleSatelliteView()">Satellite</button>
+            <button id="satellite-button" title="Satellite view" onclick="toggleSatelliteView()"></button>
         </div>
         <div>
-            <button id="toggle-pins-button" onclick="togglePins()">Pins</button>
+            <button id="toggle-pins-button" title="Hide Pins" onclick="togglePins()"></button>
         </div>
     </div>
 
@@ -40,11 +40,12 @@
 {% block scripts %}
 <script>
     let pinsVisible = true;
-    const pinsLayerGroup = L.layerGroup().addTo(map);
 
     const map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
     window.map = map;
     window.pin = null;
+
+    var pinsLayerGroup = L.layerGroup().addTo(map);
 
     const standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
@@ -342,9 +343,6 @@
         });
     });
     map.invalidateSize();
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-    }).addTo(map);
 
     function togglePins() {
         if (pinsVisible) {
@@ -353,6 +351,7 @@
             pinsLayerGroup.addTo(map);
         }
         pinsVisible = !pinsVisible;
+        document.querySelector('#toggle-pins-button').classList.toggle('active');
     }
 
     function toggleMapView( layer ) {
@@ -369,10 +368,12 @@
 
     function toggleTopographyView() {
         toggleMapView(topographyLayer);
+        document.querySelector('#topography-button').classList.toggle('active');
     }
 
     function toggleSatelliteView() {
         toggleMapView(satelliteLayer);
+        document.querySelector('#satellite-button').classList.toggle('active');
     }
 
     // Update the Leaflet icon URLs
