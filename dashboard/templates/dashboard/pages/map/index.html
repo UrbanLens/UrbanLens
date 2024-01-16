@@ -15,7 +15,13 @@
             <button id="add-pin-button" class="map-button">Add Pin</button>
         </div>
         <div hx-get="{% url 'search_map' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
-            <button id="search-pins-button" class="map-button">Search Pins</button>
+            <button id="search-pins-button" class="map-button">Search</button>
+        </div>
+        <div>
+            <button onclick="toggleTopographyView()">Topography</button>
+        </div>
+        <div>
+            <button onclick="toggleSatelliteView()">Satellite</button>
         </div>
     </div>
 
@@ -33,6 +39,17 @@
     const map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
     window.map = map;
     window.pin = null;
+
+    const standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+    }).addTo(map);
+    const topographyLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+    });
+    // ESRI Satellite tile layer
+    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    });
 
     map.on('popupopen', function() {
         document.querySelectorAll('.pin-popup .stars input').forEach(function(input) {
@@ -322,6 +339,28 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
     }).addTo(map);
+
+    function toggleMapView( layer ) {
+        // Check if this layer is already present
+        if (map.hasLayer(layer)) {
+            return;
+        }
+
+        // Remove all other layers
+        map.eachLayer(function (layer) {
+            map.removeLayer(layer);
+        });
+        // Add the selected layer
+        layer.addTo(map);
+    }
+
+    function toggleTopographyView() {
+        toggleMapView(topographyLayer);
+    }
+
+    function toggleSatelliteView() {
+        toggleMapView(satelliteLayer);
+    }
 
     // Update the Leaflet icon URLs
     var newIcon = L.icon({

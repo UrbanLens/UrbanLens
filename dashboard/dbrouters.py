@@ -40,7 +40,6 @@ class DBRouter:
 	def db_for_read(self, model, **hints):
 		""" reading Model from default """
 		default = None
-		logger.critical('checking read on model %s', model)
 		if model._meta.app_label in self.route_app_labels:
 			default = "default"
 		return getattr(model, "_database", default)

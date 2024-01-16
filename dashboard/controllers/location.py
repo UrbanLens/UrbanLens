@@ -51,7 +51,7 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         """
         location = Location.objects.get(id=kwargs['location_id'])
 
-        return render(request, 'dashboard/pages/location/index.html', { 'location': location })
+        return render(request, 'dashboard/pages/location/index.html', { 'location': location, 'google_maps_api_key': settings.GOOGLE_MAPS_API_KEY })
 
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data()
@@ -138,7 +138,7 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
 
         return render(request, 'dashboard/pages/location/web_search.html', { 'search_results': search_results })
 
-    def satellite_view(self, request, *args, **kwargs):
+    def satellite_view_google_image(self, request, *args, **kwargs):
         """
         Returns the satellite view image for a location.
         """

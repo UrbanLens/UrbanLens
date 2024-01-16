@@ -34,7 +34,7 @@ class GoogleCustomSearchGateway(Gateway):
 
     def __init__(self):
         self.api_key = settings.GOOGLE_SEARCH_API_KEY
-        #self.cx = cx
+        self.cx = settings.GOOGLE_SEARCH_TENANT
         self.base_url = "https://www.googleapis.com/customsearch/v1"
 
     def search(self, query : str, max_results : int = 20) -> dict:
@@ -43,7 +43,7 @@ class GoogleCustomSearchGateway(Gateway):
         """
         params = {
             'key': self.api_key,
-            #'cx': self.cx,
+            'cx': self.cx,
             'q': query,
             'num': min(max_results, 20)
         }
