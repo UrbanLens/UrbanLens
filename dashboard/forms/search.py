@@ -44,7 +44,7 @@ class SearchForm(forms.Form):
     )
     status = forms.ChoiceField(choices=LocationStatus.choices, required=False)
 
-    def search(self):
+    def get_search_query(self):
         query = Q()
         if self.cleaned_data['name']:
             query &= Q(name__icontains=self.cleaned_data['name'])
@@ -56,4 +56,4 @@ class SearchForm(forms.Form):
             query &= Q(tags__in=self.cleaned_data['tags'])
         if self.cleaned_data['status']:
             query &= Q(status=self.cleaned_data['status'])
-        return query
+        return Location.objects.filter(query)
