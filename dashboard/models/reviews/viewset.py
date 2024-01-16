@@ -44,7 +44,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def create(self, request, location_id, *args, **kwargs):
         logger.info(f"Create request initiated by user {request.user.id}")
         data = request.data
-        data['user'] = request.user.id
+        data['user'] = request.user
         data['location'] = location_id
         # Check if the review already exists for the given location and user
         review, created = Review.objects.get_or_create(
@@ -67,7 +67,8 @@ class ReviewViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['patch'], url_path='create_or_update', url_name='create_or_update')
     def create_or_update(self, request, pk=None):
         location_id = pk
-        data = request.data
+        data = request.data.copy()
+        data['user'] = request.user
         data['user'] = request.user.id
         data['location'] = location_id
 
