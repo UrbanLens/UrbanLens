@@ -40,10 +40,11 @@
                 console.log('star change');
                 const field = this;
                 const value = field.value;
-                const locationId = field.closest('.pin-popup').dataset.id;
+                const locationId = field.closest('.pin-popup').dataset.locationId;
                 const data = {};
                 data[field.name] = value;
-                fetch(`/dashboard/rest/reviews/${locationId}/`, {
+                // Use the correct URL pattern for creating or updating reviews
+                fetch(`/dashboard/rest/reviews/create_or_update/${locationId}/`, {
                     method: data[field.name] ? 'PATCH' : 'POST',
                     headers: {
                         'Content-Type': 'application/json',

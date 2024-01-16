@@ -45,9 +45,21 @@ class ReviewViewSet(viewsets.ModelViewSet):
         data = request.data
         data['user'] = request.user.id
         data['location'] = location_id
-        serializer = self.get_serializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+        # Check if the review already exists for the given location and user
+        review, created = Review.objects.get_or_create(
+            user=request.user,
+            location_id=location_id,
+            defaults=data
+        )
+        if not created:
+            for key, value in data.items():
+                setattr(review, key, value)
+            review.save()
+            serializer = self.get_serializer(review)
+        else:
+            serializer = self.get_serializer(data=data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
         logger.info(f"Review created with id {serializer.data['id']}")
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     
