@@ -67,7 +67,6 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def create_or_update(self, request, pk=None):
         location_id = pk
         data = request.data.copy()
-        data['user'] = request.user
         data['location_id'] = location_id
 
         review, created = Review.objects.get_or_create(
@@ -76,15 +75,12 @@ class ReviewViewSet(viewsets.ModelViewSet):
             defaults=data
         )
 
-        if not created:
-            for key, value in data.items():
-                setattr(review, key, value)
-            review.save()
+        if created:
             serializer = self.get_serializer(review)
         else:
-            serializer = self.get_serializer(data=data)
+            serializer = self.get_serializer(review, data=data, partial=True)
             serializer.is_valid(raise_exception=True)
-            self.perform_create(serializer)
+            review = serializer.save()
 
         return Response(serializer.data, status=status.HTTP_200_OK if not created else status.HTTP_201_CREATED)
 
