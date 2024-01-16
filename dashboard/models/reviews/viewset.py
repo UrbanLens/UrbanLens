@@ -35,7 +35,6 @@ logger = logging.getLogger(__name__)
 class ReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ReviewSerializer
     basename = 'reviews'
-
     def get_queryset(self):
         if not self.request:
             return Review.objects.none()
@@ -69,7 +68,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
         location_id = pk
         data = request.data.copy()
         data['user'] = request.user
-        data['location'] = location_id
+        data['location_id'] = location_id
 
         review, created = Review.objects.get_or_create(
             user=request.user,
