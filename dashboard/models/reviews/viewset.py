@@ -40,10 +40,11 @@ class ReviewViewSet(viewsets.ModelViewSet):
             return Review.objects.none()
         return Review.objects.filter(user=self.request.user)
     
-    def create(self, request, *args, **kwargs):
+    def create(self, request, location_id, *args, **kwargs):
         logger.info(f"Create request initiated by user {request.user.id}")
         data = request.data
         data['user'] = request.user.id
+        data['location'] = location_id
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
