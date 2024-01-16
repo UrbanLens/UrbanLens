@@ -522,6 +522,10 @@ i.construction {
         // Use the icon /static/dashboard/images/pins.png
         background-image: url("/static/dashboard/images/pins.png");
     }
+    #import-pins-button {
+        // Use the icon /static/dashboard/images/import.png
+        background-image: url("/static/dashboard/images/import.png");
+    }
 
     #add-pin-button {
         display: none;

@@ -46,7 +46,7 @@ from dashboard.services.google.geocoding import GoogleGeocodingGateway
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.
-    pass
+    from dashboard.models.profile import Profile
 
 logger = logging.getLogger(__name__)
 

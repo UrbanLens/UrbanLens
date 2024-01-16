@@ -26,19 +26,18 @@
         <div>
             <button id="toggle-pins-button" title="Hide Pins" onclick="togglePins()"></button>
         </div>
+        <div hx-get="{% url 'import_pins' %}" hx-trigger="click" hx-target="#importPinsModal" hx-swap="outerHTML" hx-swap-oob="true">
+            <button id="import-pins-button" title="Import Pins"></button>
+        </div>
     </div>
 
     <div id="map-body" hx-get="{% url 'init_map' %}" hx-trigger="load" hx-swap="outerHTML">
     </div>
-    <div hx-get="{% url 'import_pins' %}" hx-trigger="click" hx-target="#importPinsModal" hx-swap="outerHTML" hx-swap-oob="true">
-        <button id="import-pins-button" title="Import Pins">Import</button>
-    </div>
+
 </div>
 <div id="addPinModal"></div>
 <div id="importPinsModal"></div>
 {% endblock %}
-
-
 
 
 {% block scripts %}

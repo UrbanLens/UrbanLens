@@ -23,9 +23,18 @@
 *        2024-01-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+from __future__ import annotations
 import requests
 import logging
+
+import csv
+from fastkml import kml
+from django.contrib.gis.geos import fromstr
+from io import StringIO
+
 from dashboard.services.gateway import Gateway
+from dashboard.models.locations import Location
+from dashboard.models.profile import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -137,3 +146,74 @@ class GoogleMapsGateway(Gateway):
         y = math.sin(dLng) * math.cos(lat2)
         heading = math.degrees(math.atan2(y, x))
         return (heading + 360) % 360
+    
+    @classmethod
+    def import_locations_from_kml(cls, kml_data : dict, user_profile : 'Profile'):
+        """
+        Imports locations from a KML file and bulk creates Location objects.
+        """
+        try:
+            k = kml.KML()
+            k.from_string(kml_data)
+
+            locations = []
+            for feature in k.features():
+                for placemark in feature.features():
+                    coords = placemark.geometry.coords[0]
+                    location = Location(
+                        profile=user_profile,
+                        name=placemark.name,
+                        description=placemark.description,
+                        latitude=coords[1],
+                        longitude=coords[0],
+                        location=fromstr(f"POINT({coords[0]} {coords[1]})", srid=4326)
+                    )
+                    locations.append(location)
+
+            Location.objects.bulk_create(locations)
+            logger.info(f"Imported {len(locations)} locations from KML file.")
+        except Exception as e:
+            logger.error("Failed to import locations from KML: %s", str(e))
+            raise
+
+    
+    @classmethod
+    def import_locations_from_csv(cls, csv_data: str, user_profile: 'Profile'):
+        """
+        Imports locations from a CSV file and bulk creates Location objects.
+        """
+        try:
+            reader = csv.DictReader(csv_data.splitlines())
+            locations = []
+
+            for row in reader:
+                # Extract coordinates from URL if available
+                latitude, longitude = cls.extract_coordinates_from_url(row.get('URL', ''))
+                location = Location(
+                    profile=user_profile,
+                    name=row.get('Title', ''),
+                    description=row.get('Note', '') + " " + row.get('Comment', '').strip(),
+                    latitude=latitude,
+                    longitude=longitude,
+                    location=fromstr(f"POINT({longitude} {latitude})", srid=4326) if latitude and longitude else None
+                )
+                locations.append(location)
+
+            Location.objects.bulk_create(locations)
+            logger.info(f"Imported {len(locations)} locations from CSV file.")
+        except Exception as e:
+            logger.error("Failed to import locations from CSV: %s", str(e))
+            raise
+
+    @staticmethod
+    def extract_coordinates_from_url(url: str):
+        """
+        Extracts latitude and longitude from a Google Maps URL.
+        """
+        try:
+            # Extract the part of the URL that contains the coordinates
+            coords_part = url.split('/place/')[1].split('/data')[0]
+            coords = coords_part.split(',')[0:2]
+            return float(coords[0]), float(coords[1])
+        except Exception:
+            return None, None
