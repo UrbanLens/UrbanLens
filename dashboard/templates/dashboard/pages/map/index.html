@@ -18,10 +18,10 @@
             <button id="search-pins-button" class="map-button">Search</button>
         </div>
         <div>
-            <button onclick="toggleTopographyView()">Topography</button>
+            <button id="topography-button" onclick="toggleTopographyView()">Topography</button>
         </div>
         <div>
-            <button onclick="toggleSatelliteView()">Satellite</button>
+            <button id="satellite-button" onclick="toggleSatelliteView()">Satellite</button>
         </div>
     </div>
 
@@ -343,13 +343,11 @@
     function toggleMapView( layer ) {
         // Check if this layer is already present
         if (map.hasLayer(layer)) {
+            // Turn it off, and the standard layer back on
+            map.removeLayer(layer);
             return;
         }
 
-        // Remove all other layers
-        map.eachLayer(function (layer) {
-            map.removeLayer(layer);
-        });
         // Add the selected layer
         layer.addTo(map);
     }

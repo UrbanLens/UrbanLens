@@ -82,7 +82,7 @@ urlpatterns = [
 			path('<int:location_id>/smithsonian/', location.LocationController.as_view({'get': 'get_smithsonian_images'}), name='smithsonian_images'),
 			path('<int:location_id>/google/', location.LocationController.as_view({'get': 'get_google_images'}), name='google_images'),
 			path('<int:location_id>/search/', location.LocationController.as_view({'get': 'web_search'}), name='location.web_search'),
-    		path('<int:location_id>/satellite_view/', location.LocationController.as_view({'get': 'satellite_view'}), name='location_satellite_view'),
+    		path('<int:location_id>/satellite_view/', location.LocationController.as_view({'get': 'satellite_view_google_image'}), name='location_satellite_view'),
     		path('<int:location_id>/street_view/', location.LocationController.as_view({'get': 'street_view'}), name='location_street_view'),
 		])),
 	])),

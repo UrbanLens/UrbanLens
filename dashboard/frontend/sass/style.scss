@@ -55,35 +55,6 @@ nav, footer, .page-footer {
     }
 }
 
-.map-buttons {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    z-index: 1000;
-}
-
-.map-button {
-    background-color: $light-neutral-color;
-    opacity: 0.8;
-    border: none;
-    color: black;
-    padding: 10px 20px;
-    text-align: center;
-    text-decoration: none;
-    display: inline-block;
-    font-size: 16px;
-    margin: 4px 2px;
-    transition-duration: 0.4s;
-    cursor: pointer;
-}
-
-#add-pin-button {
-    display: none;
-}
-
-.map-button:hover {
-    opacity: 1;
-}
 nav .brand-logo {
     padding: 0.25rem;
 
@@ -500,5 +471,51 @@ i.construction {
         height: 100%;
         max-height: 780px;
         max-width: 780px;
+    }
+}
+
+.map-buttons {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    display: flex; 
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+
+    > div button {
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center center;
+        text-indent: -9999%;
+        width: 4rem;
+        height: 4rem;
+        border: 0.5rem solid #000;
+        border-radius: 25%;
+        opacity: 0.3;
+        display: inline-block;
+        transition-duration: 0.4s;
+
+        &:hover {
+            cursor: pointer;
+            opacity: 1;
+        }
+    }
+    #search-pins-button {
+        // Use the icon /static/dashboard/images/search.png
+        background-image: url("/static/dashboard/images/search.png");
+    }
+    #topography-button {
+        // Use the icon /static/dashboard/images/topography.png
+        background-image: url("/static/dashboard/images/topography.png");
+    }
+    #satellite-button {
+        // Use the icon /static/dashboard/images/satellite.png
+        background-image: url("/static/dashboard/images/satellite.png");
+    }
+
+    #add-pin-button {
+        display: none;
     }
 }
