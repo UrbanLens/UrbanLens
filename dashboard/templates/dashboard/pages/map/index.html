@@ -23,6 +23,9 @@
         <div>
             <button id="satellite-button" onclick="toggleSatelliteView()">Satellite</button>
         </div>
+        <div>
+            <button id="toggle-pins-button" onclick="togglePins()">Pins</button>
+        </div>
     </div>
 
     <div id="map-body" hx-get="{% url 'init_map' %}" hx-trigger="load" hx-swap="outerHTML">
@@ -36,6 +39,9 @@
 
 {% block scripts %}
 <script>
+    let pinsVisible = true;
+    const pinsLayerGroup = L.layerGroup().addTo(map);
+
     const map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
     window.map = map;
     window.pin = null;
@@ -80,14 +86,14 @@
                 });
             });
         });
-        
+
         document.querySelectorAll('.pin-popup').forEach(function (popup) {
             popup.addEventListener('click', function (e) {
                 if (!e.target.matches('span.value')) {
                     return;
                 }
                 e.stopPropagation();
-                
+
                 const span = e.target;
                 const popup = span.closest('.pin-popup');
                 const initialValue = span.innerText;
@@ -147,7 +153,7 @@
                 input.dataset.initialValue = initialValue;
                 span.replaceWith(input);
                 input.focus();
-                
+
                 function saveInputValue() {
                     let value = input.value;
                     const locationId = popup.dataset.id;
@@ -165,7 +171,7 @@
                         console.log('value is the same as initial value, skipping save');
                         return;
                     }
-                    
+
                     fetch(`/dashboard/rest/locations/${locationId}/`, {
                         method: 'PATCH',
                         headers: {
@@ -339,6 +345,15 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
     }).addTo(map);
+
+    function togglePins() {
+        if (pinsVisible) {
+            map.removeLayer(pinsLayerGroup);
+        } else {
+            pinsLayerGroup.addTo(map);
+        }
+        pinsVisible = !pinsVisible;
+    }
 
     function toggleMapView( layer ) {
         // Check if this layer is already present
