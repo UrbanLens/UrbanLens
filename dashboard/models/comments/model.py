@@ -24,8 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
-from django.db.models import CASCADE
-from django.db.models import CharField, ForeignKey
+from django.db.models import CASCADE, CharField, ForeignKey
 from dashboard.models import abstract
 from dashboard.models.comments.queryset import Manager
 

@@ -32,11 +32,13 @@ from django.db.models import Q
 class SearchForm(forms.Form):
     name = forms.CharField(required=False)
     rating = forms.IntegerField(required=False, min_value=0, max_value=5)
+    '''
     categories = forms.ModelMultipleChoiceField(
         queryset=Category.objects.all(),
         widget=forms.CheckboxSelectMultiple,
         required=False
     )
+    '''
     tags = forms.ModelMultipleChoiceField(
         queryset=Tag.objects.all(),
         widget=forms.CheckboxSelectMultiple,

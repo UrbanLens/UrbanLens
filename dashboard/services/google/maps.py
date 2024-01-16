@@ -63,3 +63,35 @@ class GoogleMapsGateway(Gateway):
         response = self.session.get(place_url, params=params)
         response.raise_for_status()
         return response.json()
+    
+    def get_satellite_view(self, latitude, longitude, zoom=15, size='600x300', maptype='satellite'):
+        """
+        Get a satellite view image for the given latitude and longitude.
+        """
+        static_map_url = 'https://maps.googleapis.com/maps/api/staticmap'
+        params = {
+            'center': f'{latitude},{longitude}',
+            'zoom': zoom,
+            'size': size,
+            'maptype': maptype,
+            'key': self.api_key
+        }
+        response = self.session.get(static_map_url, params=params)
+        response.raise_for_status()
+        return response.content  # Returns the raw bytes of the image
+
+    def get_street_view(self, latitude, longitude, fov=90, pitch=0, size='600x300'):
+        """
+        Get a Street View image for the given latitude and longitude.
+        """
+        street_view_url = 'https://maps.googleapis.com/maps/api/streetview'
+        params = {
+            'location': f'{latitude},{longitude}',
+            'fov': fov,
+            'pitch': pitch,  # Up or down angle of the camera relative to the Street View vehicle
+            'size': size,  
+            'key': self.api_key
+        }
+        response = self.session.get(street_view_url, params=params)
+        response.raise_for_status()
+        return response.content  # Returns the raw bytes of the image
