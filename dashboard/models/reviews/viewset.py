@@ -42,7 +42,9 @@ class ReviewViewSet(viewsets.ModelViewSet):
     
     def create(self, request, *args, **kwargs):
         logger.info(f"Create request initiated by user {request.user.id}")
-        serializer = self.get_serializer(data=request.data)
+        data = request.data
+        data['user'] = request.user.id
+        serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         logger.info(f"Review created with id {serializer.data['id']}")
@@ -57,7 +59,9 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if instance.user != request.user:
             logger.error("User %s attempted to update review %s, but does not have permission", request.user.id, instance.id)
             return Response(status=status.HTTP_403_FORBIDDEN)
-        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        data = request.data
+        data['user'] = request.user.id
+        serializer = self.get_serializer(instance, data=data, partial=True)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         logger.info(f"Review with id {instance.id} updated")

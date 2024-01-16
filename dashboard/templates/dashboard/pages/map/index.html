@@ -43,13 +43,13 @@
                 const locationId = field.closest('.pin-popup').dataset.id;
                 const data = {};
                 data[field.name] = value;
-                fetch(`/dashboard/rest/locations/${locationId}/`, {
-                    method: 'PATCH',
+                fetch(`/dashboard/rest/reviews/${locationId}/`, {
+                    method: data[field.name] ? 'PATCH' : 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRFToken': '{{ csrf_token }}',
                     },
-                    body: JSON.stringify(data),
+                    body: JSON.stringify({rating: value}),
                 })
                 .then(response => response.json())
                 .then(data => {
