@@ -483,27 +483,37 @@ i.construction {
     flex-direction: row;
     align-items: center;
     justify-content: center;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 1rem;
+
+    &:hover, &:focus {
+        opacity: 1;
+
+        > div button {
+            opacity: 0.8;
+        }
+    }
 
     > div button {
         background-size: contain;
         background-repeat: no-repeat;
         background-position: center center;
+        background-color: change-color($color: $light-neutral-color, $alpha: 0.5);
         text-indent: -9999%;
         width: 4rem;
         height: 4rem;
-        border: 0.5rem solid #000;
+        border: 0.5rem solid $dark-neutral-color;
         border-radius: 25%;
-        opacity: 0.2;
+        opacity: 0.3;
         display: inline-block;
         transition-duration: 0.4s;
 
-        &.active {
-            opacity: 0.8;
-        }
-
-        &:hover {
+        &:hover, &:focus, &:active, &.active {
             cursor: pointer;
             opacity: 1;
+            border-color: change-color($color: $primary-color, $alpha: 0.2);
+            background-color: change-color($color: $light-neutral-color, $alpha: 0.6);
         }
     }
     #search-pins-button {
@@ -664,4 +674,26 @@ body.page-location-details div.section {
         color: $dark-neutral-color;
     }
 
+}
+
+#loading-pins-message {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1001;
+
+    span {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 2rem;
+        color: $light-neutral-color;
+        background-color: rgba(0, 0, 0, 0.5);
+        padding: 1em 3em;
+        border-radius: 10px;
+    }
 }

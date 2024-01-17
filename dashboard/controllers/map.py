@@ -37,12 +37,12 @@ from django.conf import settings
 
 from rest_framework.viewsets import GenericViewSet
 
-from dashboard.models.locations.model import Location
+from dashboard.models.locations import Location, QuerySet as LocationQuerySet
 from dashboard.models.categories.model import Category
 from dashboard.models.images.model import Image
 from dashboard.models.tags.model import Tag
 from dashboard.forms.advanced_search import AdvancedSearchForm
-
+from dashboard.forms.search import SearchForm
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 
@@ -120,16 +120,19 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(f"Error: {str(e)}", status=400)
 
     def search_map(self, request, *args, **kwargs):
-        from dashboard.forms.search import SearchForm
         search_form = SearchForm()
         return render(request, 'dashboard/pages/map/search.html', {'form': search_form})
 
     def search_map_post(self, request, *args, **kwargs):
-        from dashboard.forms.search import SearchForm
+        logger.info('Searching map...')
         search_form = SearchForm(request.POST)
         if search_form.is_valid():
-            locations = Location.objects.filter_by_criteria(search_form.cleaned_data)
-            return render(request, 'dashboard/pages/map/index.html', {'locations': locations})
+            query = Location.objects.filter(profile=request.user.profile).filter_by_criteria(search_form.cleaned_data)
+            data = self.get_map_data(request, query)
+            return render(request, 'dashboard/pages/map/data.html', {'locations': data})
+        
+        logger.error('Invalid search criteria: %s', search_form.errors)
+        return HttpResponse(status=400, content='Invalid search criteria.')
 
     def upload_image(self, request, location_id, *args, **kwargs):
         image = request.FILES.get('image')
@@ -154,9 +157,20 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return render(request, 'dashboard/advanced_search.html', {'form': form})
 
     def init_map(self, request, *args, **kwargs):
-        map_data = self.get_map_data()
+        map_data = self.get_map_data(request)
 
-        # Preprocess data into strings
+        return render(request, 'dashboard/pages/map/data.html', {'map_data': map_data})
+
+    def get_map_data(self, request, query : LocationQuerySet | None = None):
+        if query is None:
+            query = Location.objects.all().filter(profile = request.user.profile)
+
+        if not query:
+            # Default map data
+            map_data = [] #{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
+        else:
+            map_data = [pin.to_json() for pin in query]
+
         for pin in map_data:
             if 'description' in pin and pin['description'] is None:
                 pin['description'] = ''
@@ -183,16 +197,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
             if 'status' in pin and pin['status']:
                 pin['status'] = pin['status'].replace('_', ' ').capitalize()
-
-        return render(request, 'dashboard/pages/map/data.html', {'map_data': map_data})
-
-    def get_map_data(self):
-        map_data = Location.objects.all()
-        if not map_data:
-            # Default map data
-            map_data = [] #{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
-        else:
-            map_data = [pin.to_json() for pin in map_data]
 
         return map_data
 

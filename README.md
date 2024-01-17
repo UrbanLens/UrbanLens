@@ -1,22 +1,3 @@
-################################################################################
-#                                                                              #
-# Metadata:                                                                    #
-#                                                                              #
-# 	File: README.md                                                            #
-# 	Project: src                                                               #
-#
-# 	Author: Jess Mann                                                          #
-# 	Email: jess@manlyphotos.com                                                #
-#                                                                              #
-# 	-----                                                                      #
-#                                                                              #
-#
-# 	Modified By: Jess Mann                                                     #
-#                                                                              #
-# 	-----                                                                      #
-#                                                                              #
-# 	Copyright (c) 2023 Urban Lens                                              #
-################################################################################
 ## About
 UrbanLens is a web-based mapping application designed for photographers and urban explorers, focusing on organizing and sharing unique urban locations responsibly. It leverages the power of several other technologies including Ruff for Python static analysis, HTMX for interactivity, pre-commit for managing and maintaining multi-language pre-commit hooks.
 
@@ -31,17 +12,35 @@ To set up the project, follow these steps:
 4. Collect static files by running `python manage.py collectstatic`.
 
 ## TODO
-* Allow using emojis as pin icons from a standard emoji pack
-* Allow uploading custom images for pin icons
-* Search functionality
-* Load external data about a location
-* Location view page
-* Comments on a location
-* Integration with discord
-* Google maps import
-* Google maps export
-* Trip planning
-* Messages between users
+* Map:
+** <s>Map layers</s>
+** <s>Change pin icons</s>
+** Allow using emojis as pin icons from a standard emoji pack
+** Allow uploading custom images for pin icons
+* Search:
+** Search functionality
+* Research:
+** <s>Location view page</s>
+** <s>Weather</s>
+** <s>Satelite View</s>
+** <s>Street View</s>
+** Aerial view
+** <s>Historic photos</s>
+** <s>Web Search</s>
+** Comments
+* Integrations:
+** Discord
+** <s>Google SSO</s>
+* Data:
+** <s>Google maps import</s>
+** Collect pin information during import
+** Export
+* Planning:
+** Trip page
+* Community:
+** Messages between users
+** Friends
+** Sharing
 
 ## Running the Project
 To run the project, use the command `python manage.py runserver`. This will start the Django development server on your local machine.

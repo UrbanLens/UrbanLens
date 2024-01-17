@@ -1,10 +1,26 @@
-<div id="screen" style="position: fixed; width: 100%; height: 100%; top: 0; left: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 999;">
+<div id="searchModal">
+    <div id="screen" style="position: fixed; width: 100%; height: 100%; top: 0; left: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 999;">
+    </div>
+    <div class="dialog">
+        <button id="closeDialog" style="float: right;">X</button>
+        <h2>Search</h2>
+        <form id="searchMapForm" method="POST" action="{% url 'search_map' %}" hx-post="{% url 'search_map' %}" hx-trigger="submit" hx-target="#map-body" hx-swap="outerHTML">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <input type="submit" value="Submit">
+        </form>
+    </div>
 </div>
-<div class="dialog" id="addPinModal">
-    <button id="closeDialog" style="float: right;">X</button>
-    <h2>Search</h2>
-    <form id="searchMapForm" method="POST" action="{% url 'search_map' %}" hx-post="{% url 'search_map' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <input type="submit" value="Submit">
-    </form>
+
+<script>
+    $(document).ready(function () {
+        $('#closeDialog').on('click', function (e) {
+            e.preventDefault();
+            $('#searchModal').hide().remove();
+        });
+        $('#screen').on('click', function (e) {
+            e.preventDefault();
+            $('#searchModal').hide().remove();
+        });
+    });
+</script>

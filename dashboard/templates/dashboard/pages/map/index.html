@@ -11,10 +11,10 @@
 {% block content %}
 <div id="map" hx-boost="true">
     <div class="map-buttons">
-        <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="outerHTML" hx-swap-oob="true">
+        <div hx-get="{% url 'add_pin' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="innerHTML">
             <button id="add-pin-button" class="map-button">Add Pin</button>
         </div>
-        <div hx-get="{% url 'search_map' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
+        <div hx-get="{% url 'search_map' %}" hx-trigger="click" hx-target="#searchPinModal" hx-swap="innerHTML">
             <button id="search-pins-button" title="Search" class="map-button"></button>
         </div>
         <div>
@@ -29,17 +29,20 @@
         <div>
             <button id="weather-button" title="Weather View" onclick="toggleWeatherView()"></button>
         </div>
-        <div hx-get="{% url 'location.import.csv' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
+        <div hx-get="{% url 'location.import.csv' %}" hx-trigger="click" hx-target="#map-body" hx-swap="beforeend">
             <button id="import-pins-button" title="Import Pins"></button>
         </div>
     </div>
 
-    <div id="loadingMessage" style="display: none;">Loading pins...</div>
+    <div id="loading-pins-message">
+        <span>Loading...</span>
+    </div>
     <div id="map-body" hx-get="{% url 'init_map' %}" hx-trigger="load" hx-swap="outerHTML">
     </div>
 
 </div>
 <div id="addPinModal"></div>
+<div id="searchPinModal"></div>
 <div id="importPinsModal"></div>
 {% endblock %}
 
@@ -52,14 +55,8 @@
     window.map = map;
     window.pin = null;
 
-    // Show loading message when loading pins
-    function showLoadingMessage() {
-        document.getElementById('loadingMessage').style.display = 'block';
-    }
-
-    // Hide loading message when pins are loaded
     function hideLoadingMessage() {
-        document.getElementById('loadingMessage').style.display = 'none';
+        $('#loading-pins-message').hide();
     }
 
     var pinsLayerGroup = L.layerGroup().addTo(map);
@@ -371,10 +368,6 @@
     });
     map.invalidateSize();
 
-    // Call showLoadingMessage when the map starts loading pins
-    showLoadingMessage();
-
-
     function togglePins() {
         if (pinsVisible) {
             map.removeLayer(pinsLayerGroup);
@@ -445,7 +438,13 @@
             if (response.ok) {
                 console.log(`Location with id ${locationId} deleted successfully`);
                 toastr.success(`Location deleted successfully`);
-                window.location.reload();
+                //window.location.reload();
+                // remove that pin
+                pinsLayerGroup.eachLayer(function (layer) {
+                    if (layer.options.id == locationId) {
+                        pinsLayerGroup.removeLayer(layer);
+                    }
+                });
             } else {
                 console.error(`Failed to delete location with id ${locationId}`);
                 toastr.error(`Failed to delete location`);
