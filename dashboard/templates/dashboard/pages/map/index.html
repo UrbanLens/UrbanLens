@@ -34,6 +34,7 @@
         </div>
     </div>
 
+    <div id="loadingMessage" style="display: none;">Loading pins...</div>
     <div id="map-body" hx-get="{% url 'init_map' %}" hx-trigger="load" hx-swap="outerHTML">
     </div>
 
@@ -50,6 +51,16 @@
     const map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
     window.map = map;
     window.pin = null;
+
+    // Show loading message when loading pins
+    function showLoadingMessage() {
+        document.getElementById('loadingMessage').style.display = 'block';
+    }
+
+    // Hide loading message when pins are loaded
+    function hideLoadingMessage() {
+        document.getElementById('loadingMessage').style.display = 'none';
+    }
 
     var pinsLayerGroup = L.layerGroup().addTo(map);
 
@@ -299,6 +310,7 @@
         setTimeout(() => {
             const event = new Event('dialogLoaded');
             document.dispatchEvent(event);
+            hideLoadingMessage(); // Hide loading message when content is loaded
         }, 250);
     });
 
@@ -358,6 +370,10 @@
         });
     });
     map.invalidateSize();
+
+    // Call showLoadingMessage when the map starts loading pins
+    showLoadingMessage();
+
 
     function togglePins() {
         if (pinsVisible) {
