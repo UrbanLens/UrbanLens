@@ -268,3 +268,25 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         locations = google_maps_gateway.import_locations_from_kml(kml_file_contents, request.user.profile)
 
         return JsonResponse({'locations': locations})
+    
+    def weather_forecast(self, request, location_id, *args, **kwargs):
+        """
+        Returns the weather forecast for a location.
+        """
+        # Get the location
+        try:
+            location : Location = Location.objects.get(id=location_id)
+        except Location.DoesNotExist:
+            return HttpResponse("Location does not exist", status=404)
+
+        from dashboard.services.openweather.gateway import WeatherForecastGateway
+
+        # Instantiate the WeatherForecastGateway with the API key
+        weather_forecast_gateway = WeatherForecastGateway()
+
+        # Get the weather forecast from the OpenWeather API
+        weather_forecast = weather_forecast_gateway.get_weather_forecast(location.latitude, location.longitude)
+
+        logger.critical('forecast_data: %s', weather_forecast)
+
+        return render(request, 'dashboard/pages/location/weather.html', { 'forecast': weather_forecast })

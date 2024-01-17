@@ -21,26 +21,30 @@
     </div>
 
     <div class="location-map">
-        <h2>Map</h2>
         <div id="map"></div>
     </div>
 
-    <div class="satellite-view">
+    <div class="satellite-view card">
         <h2>Satellite View</h2>
-        <img src="{% url 'location.satellite_view' location.id %}" alt="Satellite view of {{ location.name }}" style="width: 100%; max-width: 600px; height: auto;">
+        <img src="{% url 'location.satellite_view' location.id %}" alt="Satellite view of {{ location.name }}" style="width: 100%; height: auto;">
     </div>
 
-    <div class="street-view">
+    <div class="street-view card">
         <h2>Street View</h2>
-        <img src="{% url 'location.street_view' location.id %}" alt="Street view of {{ location.name }}" style="width: 100%; max-width: 600px; height: auto;">
+        <img src="{% url 'location.street_view' location.id %}" alt="Street view of {{ location.name }}" style="width: 100%; height: auto;">
     </div>
 
-    <div hx-get="{% url 'smithsonian_images' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="smithsonian-images">
+    <div hx-get="{% url 'location.weather_forecast' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="weather-forecast card">
         <div class="loading">Loading...</div>
         <div class="error" style="display: none;">An error occurred. Please try again later.</div>
     </div>
 
-    <div hx-get="{% url 'location.web_search' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="web-search">
+    <div hx-get="{% url 'smithsonian_images' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="smithsonian-images card">
+        <div class="loading">Loading...</div>
+        <div class="error" style="display: none;">An error occurred. Please try again later.</div>
+    </div>
+
+    <div hx-get="{% url 'location.web_search' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="web-search card">
         <div class="loading">Loading...</div>
         <div class="error" style="display: none;">An error occurred. Please try again later.</div>
     </div>

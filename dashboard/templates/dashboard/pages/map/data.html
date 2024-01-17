@@ -52,7 +52,7 @@
         categories: "{{ location.categories }}",
         last_visited: "{{ location.last_visited }}",
         tags: "{{ location.tags }}",
-        viewLocationUrl: "{% url 'location.index' location.id %}"
+        viewLocationUrl: "{% url 'location.details' location.id %}"
     });
     {% endfor %}
 </script>

@@ -14,7 +14,7 @@
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -33,6 +33,7 @@ from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
+from django.conf import settings
 
 from rest_framework.viewsets import GenericViewSet
 
@@ -51,7 +52,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def view_map(self, request, *args, **kwargs):
         locations = Location.objects.all()
 
-        return render(request, 'dashboard/pages/map/index.html', {'locations': locations})
+        return render(request, 'dashboard/pages/map/index.html', {'locations': locations, 'openweathermap_api_key': settings.OPEN_WEATHER_API_KEY})
 
     def edit_pin(self, request, location_id, *args, **kwargs):
         location = Location.objects.get(id=location_id)

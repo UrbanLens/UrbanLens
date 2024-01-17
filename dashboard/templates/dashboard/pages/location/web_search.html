@@ -4,7 +4,7 @@
     <div id="search_results">
         {% for result in search_results %}
         <div class="result">
-            <h3><a href="{{ result.link }}" target="_blank">{{ result.title }}</a></h3>
+            <a href="{{ result.link }}" target="_blank">{{ result.title }}</a>
             <p>{{ result.snippet }}</p>
         </div>
         {% endfor %}

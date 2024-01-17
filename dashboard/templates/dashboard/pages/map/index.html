@@ -26,6 +26,9 @@
         <div>
             <button id="toggle-pins-button" title="Hide Pins" onclick="togglePins()"></button>
         </div>
+        <div>
+            <button id="weather-button" title="Weather View" onclick="toggleWeatherView()"></button>
+        </div>
         <div hx-get="{% url 'location.import.csv' %}" hx-trigger="click" hx-target="#map" hx-swap="beforeend">
             <button id="import-pins-button" title="Import Pins"></button>
         </div>
@@ -59,6 +62,15 @@
     // ESRI Satellite tile layer
     const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    });
+    // OpenWeatherMap tile layer
+    const rainLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{openweathermap_api_key}}', {
+        attribution: 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
+        layer: 'precipitation_new',
+    }); 
+    const cloudLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{openweathermap_api_key}}', {
+        attribution: 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
+        layer: 'clouds_new',
     });
 
     map.on('popupopen', function() {
@@ -377,6 +389,20 @@
     function toggleSatelliteView() {
         toggleMapView(satelliteLayer);
         document.querySelector('#satellite-button').classList.toggle('active');
+    }
+
+    function toggleWeatherView() {
+        if (map.hasLayer(rainLayer) || map.hasLayer(cloudLayer)) {
+            // Turn it off
+            map.removeLayer(rainLayer);
+            map.removeLayer(cloudLayer);
+            return;
+        }
+
+        // Add the selected layer
+        rainLayer.addTo(map);  
+        cloudLayer.addTo(map);      
+        document.querySelector('#weather-button').classList.toggle('active');
     }
 
     // Update the Leaflet icon URLs

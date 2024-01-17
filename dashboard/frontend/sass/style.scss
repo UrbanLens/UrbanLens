@@ -526,9 +526,19 @@ i.construction {
         // Use the icon /static/dashboard/images/import.png
         background-image: url("/static/dashboard/images/import.png");
     }
+    #weather-button {
+        // Use the icon /static/dashboard/images/weather.png
+        background-image: url("/static/dashboard/images/weather.png");
+    }
 
     #add-pin-button {
         display: none;
+    }
+}
+
+.card {
+    h1, h2, h3, h4, h5, h6 {
+        text-align: center;
     }
 }
 
@@ -554,6 +564,7 @@ body.page-location-details div.section {
 
     .location-details {
         grid-area: details;
+        margin-bottom: 1rem;
     }
     .location-map {
         grid-area: map;
@@ -578,4 +589,79 @@ body.page-location-details div.section {
     .web-search {
         grid-area: search;
     }
+
+    .weather-widget {
+        margin: 0 1rem 0 1rem;
+        h2 {
+            text-align: center;
+            color: $dark-neutral-color;
+        }
+    }
+
+    #weather-forecast {
+        display: flex;
+        flex-flow: row wrap;
+        justify-content: space-between;
+        gap: 1rem 1rem;
+    }
+
+    .weather-card {
+        flex: 1 0 40%;
+        background-color: $light-neutral-color;
+        border-radius: 4px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        padding: 15px;
+    }
+
+    .weather-date-time {
+        font-size: 0.85em;
+        color: $dark-neutral-color;
+        margin-bottom: 5px;
+    }
+
+    .weather-temperature {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-bottom: 5px;
+    }
+
+    .temp-value {
+        font-size: 1.5em;
+        color: $dark-neutral-color;
+    }
+
+    .temp-feels-like {
+        font-size: 0.85em;
+        color: $dark-neutral-color;
+    }
+
+    .weather-conditions {
+        display: flex;
+        align-items: center;
+        margin-bottom: 5px;
+    }
+
+    .weather-main {
+        font-weight: bold;
+        color: $dark-neutral-color;
+        margin-right: 10px;
+    }
+
+    .weather-description {
+        color: $dark-neutral-color;
+    }
+
+    .weather-icon {
+        margin-left: auto;
+        width: 40px;
+        height: 40px;
+    }
+
+    .weather-humidity,
+    .weather-wind {
+        font-size: 0.9em;
+        color: $dark-neutral-color;
+    }
+
 }

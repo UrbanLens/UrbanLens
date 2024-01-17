@@ -1,0 +1,26 @@
+<div class="weather-widget card">
+    {% if forecast %}
+    <h2>Weather</h2>
+    <div id="weather-forecast">
+        {% for item in forecast %}
+        <div class="weather-card">
+            <div class="weather-date-time">{{ item.date|date:"F j" }} at {{ item.date|date:"g A" }}</div>
+            <div class="weather-temperature">
+                <span class="temp-value">{{ item.main.temp|floatformat:"-1" }}°F</span>
+                <span class="temp-feels-like">(Feels like: {{ item.main.feels_like|floatformat:"-1" }}°F)</span>
+            </div>
+            <div class="weather-conditions">
+                <div class="weather-main">{{ item.weather.0.main }}</div>
+                <div class="weather-description">{{ item.weather.0.description }}</div>
+                <img src="http://openweathermap.org/img/wn/{{ item.weather.0.icon }}.png"
+                    alt="{{ item.weather.0.main }}" class="weather-icon">
+            </div>
+            <div class="weather-humidity">Humidity: {{ item.main.humidity }}%</div>
+            <div class="weather-wind">Wind: {{ item.wind.speed }} m/s, {{ item.wind.deg }}°</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="loading">Weather data is not available at the moment.</div>
+    {% endif %}
+</div>
