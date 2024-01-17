@@ -13,34 +13,34 @@ To set up the project, follow these steps:
 
 ## TODO
 * Map:
-** <s>Map layers</s>
-** <s>Change pin icons</s>
-** Allow using emojis as pin icons from a standard emoji pack
-** Allow uploading custom images for pin icons
+    * <s>Map layers</s>
+	* <s>Change pin icons</s>
+	* Allow using emojis as pin icons from a standard emoji pack
+	* Allow uploading custom images for pin icons
 * Search:
-** Search functionality
+	* Search functionality
 * Research:
-** <s>Location view page</s>
-** <s>Weather</s>
-** <s>Satelite View</s>
-** <s>Street View</s>
-** Aerial view
-** <s>Historic photos</s>
-** <s>Web Search</s>
-** Comments
+	* <s>Location view page</s>
+	* <s>Weather</s>
+	* <s>Satelite View</s>
+	* <s>Street View</s>
+	* Aerial view
+	* <s>Historic photos</s>
+	* <s>Web Search</s>
+	* Comments
 * Integrations:
-** Discord
-** <s>Google SSO</s>
+	* Discord
+	* <s>Google SSO</s>
 * Data:
-** <s>Google maps import</s>
-** Collect pin information during import
-** Export
+	* <s>Google maps import</s>
+	* Collect pin information during import
+	* Export
 * Planning:
-** Trip page
+	* Trip page
 * Community:
-** Messages between users
-** Friends
-** Sharing
+	* Messages between users
+	* Friends
+	* Sharing
 
 ## Running the Project
 To run the project, use the command `python manage.py runserver`. This will start the Django development server on your local machine.
