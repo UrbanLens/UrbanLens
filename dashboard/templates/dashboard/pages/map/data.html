@@ -10,7 +10,7 @@
                 iconSize: [30, 42],
                 iconAnchor: [15, 42]
             }));
-        } 
+        }
 
         let popupContent = `
             <div class="pin-popup" data-id="${location.id}">
@@ -52,7 +52,7 @@
         categories: "{{ location.categories }}",
         last_visited: "{{ location.last_visited }}",
         tags: "{{ location.tags }}",
-        viewLocationUrl: "{% url 'view_location' location.id %}"
+        viewLocationUrl: "{% url 'location.index' location.id %}"
     });
     {% endfor %}
 </script>

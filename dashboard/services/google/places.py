@@ -30,7 +30,7 @@ class GooglePlacesGateway(Gateway):
     """
     Gateway for the Google Places API.
     """
-    
+
     def __init__(self, api_key):
         self.api_key = api_key
         self.session = requests.Session()
@@ -51,7 +51,7 @@ class GooglePlacesGateway(Gateway):
 
         response = self.session.get(base_url, params=params)
         response.raise_for_status()
-        
+
         places_data = response.json().get('results', [])
         return places_data
 
@@ -63,7 +63,7 @@ class GooglePlacesGateway(Gateway):
         }
         if fields:
             params['fields'] = ','.join(fields)
-        
+
         response = self.session.get(details_url, params=params)
         response.raise_for_status()
         return response.json().get('result', {})
@@ -76,11 +76,11 @@ class GooglePlacesGateway(Gateway):
         }
         if max_width:
             params['maxwidth'] = max_width
-        
+
         response = self.session.get(photo_url, params=params, stream=True)
         response.raise_for_status()
         return response.content  # Returns the raw bytes of the image.
-    
+
     def get_recent_search_results(self, location_name):
         search_url = 'https://maps.googleapis.com/maps/api/place/findplacefromtext/json'
         params = {
@@ -89,18 +89,18 @@ class GooglePlacesGateway(Gateway):
             'fields': 'formatted_address,name,rating,opening_hours,geometry',
             'key': self.api_key
         }
-        
+
         response = self.session.get(search_url, params=params)
         response.raise_for_status()
         return response.json().get('candidates', [])
-    
+
     def autocomplete(self, input_text):
         autocomplete_url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json'
         params = {
             'input': input_text,
             'key': self.api_key
         }
-        
+
         response = self.session.get(autocomplete_url, params=params)
         response.raise_for_status()
         return response.json().get('predictions', [])

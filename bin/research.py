@@ -22,7 +22,7 @@ def identify_image_location(image_url):
 def main():
     hashtag = 'urbex'
     posts = fetch_urbex_posts(hashtag)
-    
+
     for post in posts:
         image_url = post['image_url']  # Placeholder for the actual image URL field
         location = identify_image_location(image_url)

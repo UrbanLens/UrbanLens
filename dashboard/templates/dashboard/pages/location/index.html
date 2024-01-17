@@ -8,7 +8,7 @@
 
 {% block content %}
 <div class="section">
-    <h1 class="center">{{ location.name }}</h1>
+    <h1 class="location-title">{{ location.name }}</h1>
 
     <div class="location-details modern-style details-grid">
         {% if location.description %}<div><span class="field-label"><strong>Description:</strong></span> {{ location.description }}</div>{% endif %}
@@ -17,30 +17,30 @@
         <div><span class="field-label"><strong>Categories:</strong></span> {% if location.categories.all %}{{ location.categories.all }}{% else %}No categories{% endif %}</div>
         <div><span class="field-label"><strong>Last Visited:</strong></span> {% if location.last_visited %}{{ location.last_visited }}{% else %}Never visited{% endif %}</div>
         <div><span class="field-label"><strong>Tags:</strong></span> {% if location.tags.all %}{{ location.tags.all }}{% else %}No tags{% endif %}</div>
-        <div><span class="field-label"><strong>Place Name:</strong></span> {% if location.place_name %}{{ location.place_name }}{% else %}No place name{% endif %}</div>
+        {% if location.place_name %}<div><span class="field-label"><strong>Place Name:</strong></span> {{ location.place_name }}</div>{% endif %}
     </div>
 
     <div class="location-map">
         <h2>Map</h2>
-        <div id="map" style="height: 400px;"></div>
+        <div id="map"></div>
     </div>
 
-    <div class="location-satellite-view">
+    <div class="satellite-view">
         <h2>Satellite View</h2>
-        <img src="{% url 'location_satellite_view' location.id %}" alt="Satellite view of {{ location.name }}" style="width: 100%; max-width: 600px; height: auto;">
+        <img src="{% url 'location.satellite_view' location.id %}" alt="Satellite view of {{ location.name }}" style="width: 100%; max-width: 600px; height: auto;">
     </div>
 
-    <div class="location-street-view">
+    <div class="street-view">
         <h2>Street View</h2>
-        <img src="{% url 'location_street_view' location.id %}" alt="Street view of {{ location.name }}" style="width: 100%; max-width: 600px; height: auto;">
+        <img src="{% url 'location.street_view' location.id %}" alt="Street view of {{ location.name }}" style="width: 100%; max-width: 600px; height: auto;">
     </div>
 
-    <div hx-get="{% url 'smithsonian_images' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="smithsonian">
+    <div hx-get="{% url 'smithsonian_images' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="smithsonian-images">
         <div class="loading">Loading...</div>
         <div class="error" style="display: none;">An error occurred. Please try again later.</div>
     </div>
 
-    <div hx-get="{% url 'location.web_search' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="location.web_search">
+    <div hx-get="{% url 'location.web_search' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="web-search">
         <div class="loading">Loading...</div>
         <div class="error" style="display: none;">An error occurred. Please try again later.</div>
     </div>
@@ -83,6 +83,5 @@
                 document.dispatchEvent(event);
             }, 250);
         });
-
     </script>
 {% endblock %}

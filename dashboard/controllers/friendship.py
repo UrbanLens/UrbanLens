@@ -14,7 +14,7 @@
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -43,22 +43,22 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         friendship = Friendship.request(from_profile=request.user.profile, to_profile=profile_id)
         if not friendship:
             return HttpResponse('Could not request friend.', status=400)
-        
+
         return HttpResponse('Friend request sent.')
-    
+
     def accept_friend(self, request, profile_id : int, *args, **kwargs):
         friendship = Friendship.objects.between(profile_id, request.user.profile)
         if not friendship:
             return HttpResponse('Friend request not found.', status=404)
-        
+
         friendship.accept()
         return HttpResponse('Friend request accepted.')
-    
+
     def reject_friend(self, request, profile_id : int, *args, **kwargs):
         friendship = Friendship.objects.between(profile_id, request.user.profile)
         if not friendship:
             return HttpResponse('Friend request not found.', status=404)
-        
+
         friendship.reject()
         return HttpResponse('Friend request rejected.')
 
@@ -68,7 +68,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if friendship:
             friendship.block_friend()
             return HttpResponse('Relationship changed to blocked.')
-        
+
         # If a friendship does not exist, create one with a status of blocked
         profile = Profile.objects.get(pk=profile_id)
         if not profile:
@@ -81,15 +81,15 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         friendship = Friendship.objects.between(profile_id, request.user.profile)
         if not friendship:
             return HttpResponse('Friend request not found.', status=404)
-        
+
         friendship.mute()
         return HttpResponse('Friend request muted.')
-    
+
     def remove_friend(self, request, profile_id : int, *args, **kwargs):
         friendship = Friendship.objects.between(profile_id, request.user.profile)
         if not friendship:
             return HttpResponse('Friend request not found.', status=404)
-        
+
         friendship.remove()
         return HttpResponse('Friend request removed.')
 

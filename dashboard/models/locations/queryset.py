@@ -14,7 +14,7 @@
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -91,7 +91,7 @@ class QuerySet(abstract.QuerySet):
         c = 2 * atan2(sqrt(a), sqrt(1 - a))
         distance = R * c
         return self.filter(distance__lte=distance)
-    
+
     def filter_by_criteria(self, criteria):
         query = Q()
         if 'date_added' in criteria and criteria['date_added']:
@@ -109,13 +109,13 @@ class QuerySet(abstract.QuerySet):
         Filters locations by the review.rating field
         """
         return self.filter(reviews__rating=rating)
-    
+
     def rated_over(self, rating) -> Self:
         """
         Filters locations by the review.rating field
         """
         return self.filter(reviews__rating__gte=rating)
-    
+
     def rated_under(self, rating) -> Self:
         """
         Filters locations by the review.rating field

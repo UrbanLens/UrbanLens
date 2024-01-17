@@ -5,7 +5,7 @@ class NewsGateway(Gateway):
     """
     Gateway for a News API.
     """
-    
+
     def __init__(self, api_key):
         self.api_key = api_key
         self.base_url = 'https://newsapi.google.com/v2/everything'  # Google News API URL
@@ -21,6 +21,6 @@ class NewsGateway(Gateway):
 
         response = requests.get(self.base_url, params=params)
         response.raise_for_status()
-        
+
         news_data = response.json().get('articles', [])
         return news_data

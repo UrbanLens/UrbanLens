@@ -14,7 +14,7 @@
 *        Created: 2023-12-31                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -45,7 +45,7 @@ def social_auth(request, backend):
         backend = load_backend(strategy=strategy, name=backend, redirect_uri=None)
     except MissingBackend:
         return redirect('signup')
-    
+
     user = backend.complete_user_authentication(request)
     if user and user.is_active:
         # Create a profile for the user

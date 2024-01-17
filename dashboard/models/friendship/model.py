@@ -51,7 +51,7 @@ class Friendship(Model):
         @classmethod
         def rejected(self, status : str) -> bool:
             return status in [self.DECLINED, self.REMOVED, self.BLOCKED, self.MUTED]
-        
+
         @classmethod
         def can_request(self, status : str) -> bool:
             return status in [self.DECLINED, self.REMOVED]
@@ -68,15 +68,15 @@ class Friendship(Model):
         VIEW_PROFILE = 'View Profile', 'View Profile'
         VIEW_FRIENDS = 'View Friends', 'View Friends'
         VIEW_TRIPS = 'View Trips', 'View Trips'
-        
+
     from_profile = ForeignKey(
-        'dashboard.Profile', 
-        on_delete=CASCADE, 
+        'dashboard.Profile',
+        on_delete=CASCADE,
         related_name='friendships'
     )
     to_profile = ForeignKey(
-        'dashboard.Profile', 
-        on_delete=CASCADE, 
+        'dashboard.Profile',
+        on_delete=CASCADE,
         related_name='friends_to_me'
     )
 
@@ -113,15 +113,15 @@ class Friendship(Model):
                 raise ValueError('Could not find profiles')
 
             friendship = cls.objects.create(
-                from_profile=from_profile, 
-                to_profile=to_profile, 
+                from_profile=from_profile,
+                to_profile=to_profile,
                 relationship_type=relationship_type,
                 status=cls.FriendshipStatus.REQUESTED
             )
 
         friendship.save()
         return friendship
-            
+
     def accept(self):
         """
         Accept a friendship request.
@@ -153,7 +153,7 @@ class Friendship(Model):
             friendship.status = cls.FriendshipStatus.BLOCKED
             friendship.save()
             return friendship
-        
+
         # Create a new friendship with status blocked
         if isinstance(from_profile, int):
             from_profile = Profile.objects.get(pk=from_profile)
@@ -165,13 +165,13 @@ class Friendship(Model):
             raise ValueError('Could not find profiles')
 
         friendship = cls.objects.create(
-            from_profile=from_profile, 
-            to_profile=to_profile, 
+            from_profile=from_profile,
+            to_profile=to_profile,
             status=cls.FriendshipStatus.BLOCKED
         )
 
         return friendship
-    
+
     @classmethod
     def mute(cls, from_profile : 'Profile' | int, to_profile : 'Profile' | int) -> Friendship | None:
         """
@@ -182,7 +182,7 @@ class Friendship(Model):
             friendship.status = cls.FriendshipStatus.MUTED
             friendship.save()
             return friendship
-        
+
         # Create a new friendship with status muted
         if isinstance(from_profile, int):
             from_profile = Profile.objects.get(pk=from_profile)
@@ -192,10 +192,10 @@ class Friendship(Model):
         if not from_profile or not to_profile:
             logger.warning('Could not find profiles')
             raise ValueError('Could not find profiles')
-        
+
         friendship = cls.objects.create(
-            from_profile=from_profile, 
-            to_profile=to_profile, 
+            from_profile=from_profile,
+            to_profile=to_profile,
             status=cls.FriendshipStatus.MUTED
         )
 

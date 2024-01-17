@@ -61,7 +61,7 @@ class Trip(abstract.Model):
     )
 
     locations = ManyToManyField(
-        'dashboard.Location', 
+        'dashboard.Location',
         blank=True,
         default=list
     )

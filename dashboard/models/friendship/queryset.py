@@ -45,11 +45,11 @@ class QuerySet(abstract.QuerySet):
             return self.filter(
                 Q(from_profile__id=profile) | Q(to_profile__id=profile)
             )
-        
+
         return self.filter(
             Q(from_profile=profile) | Q(to_profile=profile)
         )
-    
+
     def between(self, from_profile : 'Profile' | int, to_profile : 'Profile' | int) -> 'Friendship' | None:
         """
         Return a list of all friendships between two profiles.
@@ -72,7 +72,7 @@ class QuerySet(abstract.QuerySet):
             q2['from_profile'] = to_profile
 
         return self.filter( Q(**q1) | Q(**q2) ).get()
-    
+
     def user(self, user : 'User') -> Self:
         """
         Return a list of all friendships for a given user.
@@ -80,31 +80,31 @@ class QuerySet(abstract.QuerySet):
         return self.filter(
             Q(from_profile__user=user) | Q(to_profile__user=user)
         )
-    
+
     def status(self, status : str) -> Self:
         """
         Return a list of all friendships with a given status.
         """
         return self.filter(status=status)
-    
+
     def is_friend(self) -> Self:
         """
         Return a list of all friendships with a status of accepted.
         """
         return self.filter(status=Friendship.FriendshipStatus.ACCEPTED)
-    
+
     def not_friend(self) -> Self:
         """
         Return a list of all friendships with a status other than accepted.
         """
         return self.exclude(status=Friendship.FriendshipStatus.ACCEPTED)
-    
+
     def relationship_type(self, relationship_type : str) -> Self:
         """
         Return a list of all friendships with a given type.
         """
         return self.filter(relationship_type=relationship_type)
-    
+
     def has_permission(self, permission : str) -> Self:
         """
         Return a list of all friendships with a given permission.

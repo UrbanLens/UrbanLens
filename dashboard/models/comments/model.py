@@ -14,7 +14,7 @@
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -35,13 +35,13 @@ class Comment(abstract.Model):
     text = CharField(max_length=500)
 
     location = ForeignKey(
-        'dashboard.Location', 
-        on_delete=CASCADE, 
+        'dashboard.Location',
+        on_delete=CASCADE,
         related_name='comments'
     )
     profile = ForeignKey(
-        'dashboard.Profile', 
-        on_delete=CASCADE, 
+        'dashboard.Profile',
+        on_delete=CASCADE,
         related_name='comments'
     )
 

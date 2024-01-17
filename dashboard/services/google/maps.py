@@ -20,10 +20,12 @@
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2024-01-01     By Jess Mann                                                                                   *
+*        2024-01-17     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
+import re
+from django.conf import settings
 import requests
 import logging
 
@@ -35,6 +37,7 @@ from io import StringIO
 from dashboard.services.gateway import Gateway
 from dashboard.models.locations import Location
 from dashboard.models.profile import Profile
+from dashboard.services.google.geocoding import GoogleGeocodingGateway
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +78,7 @@ class GoogleMapsGateway(Gateway):
         response = self.session.get(place_url, params=params)
         response.raise_for_status()
         return response.json()
-    
+
     def get_satellite_view(self, latitude, longitude, zoom=17, size='600x300', maptype='satellite'):
         """
         Get a satellite view image for the given latitude and longitude.
@@ -91,14 +94,14 @@ class GoogleMapsGateway(Gateway):
         response = self.session.get(static_map_url, params=params)
         response.raise_for_status()
         return response.content  # Returns the raw bytes of the image
-    
+
     def get_street_view(self, latitude, longitude, fov=90, pitch=0, size='600x300', radius=50, max_radius=1000, radius_increment=50):
         """
         Get the closest Street View image to the given latitude and longitude.
         """
         street_view_url = 'https://maps.googleapis.com/maps/api/streetview/metadata'
         logger.critical('Getting street view')
-        
+
         while radius <= max_radius:
             params = {
                 'location': f'{latitude},{longitude}',
@@ -146,7 +149,7 @@ class GoogleMapsGateway(Gateway):
         y = math.sin(dLng) * math.cos(lat2)
         heading = math.degrees(math.atan2(y, x))
         return (heading + 360) % 360
-    
+
     @classmethod
     def import_locations_from_kml(cls, kml_data : dict, user_profile : 'Profile'):
         """
@@ -176,19 +179,40 @@ class GoogleMapsGateway(Gateway):
             logger.error("Failed to import locations from KML: %s", str(e))
             raise
 
-    
+
     @classmethod
     def import_locations_from_csv(cls, csv_data: str, user_profile: 'Profile') -> list[Location]:
         """
         Imports locations from a CSV file and bulk creates Location objects.
         """
+        # TEMPORARILY remove all locations for this user TODO !IMPORTANT
+        Location.objects.filter(profile=user_profile).delete()
+
         locations = []
+        gateway = GoogleGeocodingGateway(settings.GOOGLE_MAPS_API_KEY)
         try:
             reader = csv.DictReader(csv_data.splitlines())
 
             for row in reader:
                 # Extract coordinates from URL if available
-                latitude, longitude = cls.extract_coordinates_from_url(row.get('URL', ''))
+                url = row.get('URL', '')
+                if not url:
+                    logger.error('No url to extract coordinates from: row -> %s', row)
+                    continue
+
+                latitude, longitude = gateway.extract_coordinates_from_url(url)
+
+                if not latitude or not longitude:
+                    logger.error('No coordinates found: row -> %s', row)
+                    continue
+
+                # Check if a location already exists
+                location = Location.objects.filter(latitude=latitude, longitude=longitude, profile = user_profile)
+                if location.exists():
+                    logger.debug('Location already exists: row -> %s', row)
+                    locations.append(location.first())
+                    continue
+
                 location = Location(
                     profile=user_profile,
                     name=row.get('Title', ''),
@@ -197,25 +221,12 @@ class GoogleMapsGateway(Gateway):
                     longitude=longitude,
                     location=fromstr(f"POINT({longitude} {latitude})", srid=4326) if latitude and longitude else None
                 )
+                location.save()
                 locations.append(location)
 
-            Location.objects.bulk_create(locations)
             logger.info(f"Imported {len(locations)} locations from CSV file.")
         except Exception as e:
             logger.error("Failed to import locations from CSV: %s", str(e))
             raise
 
         return locations
-
-    @staticmethod
-    def extract_coordinates_from_url(url: str):
-        """
-        Extracts latitude and longitude from a Google Maps URL.
-        """
-        try:
-            # Extract the part of the URL that contains the coordinates
-            coords_part = url.split('/place/')[1].split('/data')[0]
-            coords = coords_part.split(',')[0:2]
-            return float(coords[0]), float(coords[1])
-        except Exception:
-            return None, None

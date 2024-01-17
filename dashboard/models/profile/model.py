@@ -14,7 +14,7 @@
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -41,7 +41,7 @@ class Profile(abstract.Model):
     started_exploring = DateField(null=True, blank=True)
 
     user = OneToOneField(
-        User, 
+        User,
         on_delete=CASCADE
     )
 
@@ -50,19 +50,19 @@ class Profile(abstract.Model):
     @property
     def username(self):
         return self.user.username
-    
+
     @property
     def email(self):
         return self.user.email
-    
+
     @property
     def first_name(self):
         return self.user.first_name
-    
+
     @property
     def last_name(self):
         return self.user.last_name
-    
+
     @property
     def full_name(self):
         return self.user.get_full_name()

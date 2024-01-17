@@ -138,7 +138,34 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
             google_gateway = GoogleCustomSearchGateway()
 
             # Get web search results from the Google Custom Search API
-            search_results = google_gateway.search(location.name)
+            query = [
+                location.address_extended,
+                [
+                    location.address_basic,
+                    location.city
+                ],
+                [
+                    location.address_basic,
+                    location.county
+                ],
+                [
+                    location.address_basic,
+                    location.state
+                ],
+                f'{location.latitude}, {location.longitude}'
+            ]
+
+            if location.name and location.address_basic != location.name:
+                query.append([
+                    location.name,
+                    location.city
+                ])
+
+            place_name = location.place_name
+            if place_name and place_name != location.address_basic and place_name != location.name:
+                query.append(place_name)
+
+            search_results = google_gateway.search(query)
         except HTTPError as e:
             logger.error('Unable to contact Google Search API. Is the API Key valid? Exception ---> %s', e)
             return HttpResponse("Unable to search. This is unlikely to be resolved by multiple requests.", status=500)
@@ -178,7 +205,7 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         street_view_image = google_maps_gateway.get_street_view(location.latitude, location.longitude)
 
         return HttpResponse(street_view_image, content_type="image/jpeg")
-    
+
     @action(detail=True, methods=['get'])
     def import_csv(self, request, *args, **kwargs):
         """
@@ -191,10 +218,6 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         Upload a CSV file
         """
         try:
-            # Print the request.POST keys
-            ic(request.POST.keys())
-            ic(request.FILES.keys())
-
             form = CSVUploadForm(request.POST, request.FILES)
             if form.is_valid():
                 csv_file = form.cleaned_data['file']
@@ -210,21 +233,21 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
                 # Get the locations from the CSV file
                 locations = google_maps_gateway.import_locations_from_csv(csv_file_contents, request.user.profile)
 
-                return JsonResponse({'locations': locations})
+                return JsonResponse({'locations': [location.to_json() for location in locations]})
             else:
                 return JsonResponse({'error': 'Invalid form'}, status=400)
 
         except ValidationError as e:
             return JsonResponse({'error': str(e)}, status=400)
 
-    
+
     @action(detail=True, methods=['get'])
     def import_kml(self, request, *args, **kwargs):
         """
         View the import KML page
         """
         return render(request, 'dashboard/pages/location/import/kml.html')
-    
+
     @action(detail=True, methods=['post'])
     def upload_kml(self, request, *args, **kwargs):
         """

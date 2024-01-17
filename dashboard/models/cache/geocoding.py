@@ -38,13 +38,15 @@ class GeocodedLocation(abstract.Model):
     """
     Records geocoded location data.
     """
-    latitude = DecimalField(max_digits=9, decimal_places=6)
-    longitude = DecimalField(max_digits=9, decimal_places=6)
+    latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     place_name = CharField(max_length=255, null=True, blank=True)
+    json_response = CharField(max_length=50000, null=True, blank=True)
 
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_geocoded_locations'
         get_latest_by = 'updated'
         indexes = [
             Index(fields=['latitude', 'longitude']),
+            Index(fields=['place_name'])
         ]

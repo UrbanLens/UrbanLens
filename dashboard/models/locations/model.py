@@ -72,13 +72,24 @@ class Location(abstract.Model):
     status = CharField(choices=LocationStatus.choices, default=LocationStatus.WISH_TO_VISIT)
     location = PointField(geography=True, default=Point(0, 0))
 
+    # Address
+    street_number = CharField(max_length=50, null=True, blank=True)
+    route = CharField(max_length=80, null=True, blank=True)
+    locality = CharField(max_length=80, null=True, blank=True)
+    administrative_area_level_1 = CharField(max_length=30, null=True, blank=True)
+    administrative_area_level_2 = CharField(max_length=50, null=True, blank=True)
+    administrative_area_level_3 = CharField(max_length=50, null=True, blank=True)
+    country = CharField(max_length=20, default='United States')
+    zipcode = CharField(max_length=10, null=True, blank=True)
+    zipcode_suffix = CharField(max_length=10, null=True, blank=True)
+
     profile = ForeignKey(
-        'dashboard.Profile', 
-        on_delete=CASCADE, 
+        'dashboard.Profile',
+        on_delete=CASCADE,
         related_name='locations'
     )
     categories = ManyToManyField(
-        'dashboard.Category', 
+        'dashboard.Category',
         blank=True,
         default=list
     )
@@ -96,18 +107,101 @@ class Location(abstract.Model):
         Returns the place name of the location.
         """
         return GoogleGeocodingGateway(settings.GOOGLE_MAPS_API_KEY).get_place_name(self.latitude, self.longitude)
+    
+    @property
+    def address(self):
+        """
+        Returns the address of the location.
+        """
+        # Do this, but skip over any attributes that are None
+        #address = f"{self.street_number} {self.route}, {self.locality}, {self.administrative_area_level_1} {self.zipcode}"
 
-    def change_category(self, category_id):
-        from dashboard.models.categories.model import Category
-        category = Category.objects.get(id=category_id)
-        self.categories.clear()
-        self.categories.add(category)
-        self.save()
+        address = ''
+        if self.street_number:
+            address += f"{self.street_number} "
+        if self.route:
+            address += f"{self.route}, "
+        if self.locality:
+            address += f"{self.locality}, "
+        if self.administrative_area_level_1:
+            address += f"{self.administrative_area_level_1} "
+        if self.zipcode:
+            address += f"{self.zipcode}"
 
-    def __str__(self):
-        categories = ', '.join([str(category) for category in self.categories.all()]) if self.categories.all() else []
-        tags = ', '.join([str(tag) for tag in self.tags.all()]) if self.tags.all() else []
-        return f"Name: {self.name}\nDescription: {self.description or ''}\nPriority: {self.priority}\nLast Visited: {self.last_visited}\nStatus: {LocationStatus(self.status).label}\nCategories: {categories}\nTags: {tags}"
+        return address or None
+    
+    @property
+    def address_basic(self):
+        """
+        Returns the address of the location.
+        """
+        #address = f"{self.street_number} {self.route}"
+        
+        address = ''
+        if self.street_number:
+            address += f"{self.street_number} "
+        if self.route:
+            address += f"{self.route}"
+
+        return address or None
+    
+    @property
+    def address_extended(self):
+        """
+        Returns the address of the location.
+        """
+        #address = f"{self.street_number} {self.route}, {self.locality}"
+        address = ''
+        if self.street_number:
+            address += f"{self.street_number} "
+        if self.route:
+            address += f"{self.route}, "
+        if self.locality:
+            address += f"{self.locality}"
+
+        return address or None
+    
+    @property
+    def state(self):
+        """
+        Returns the state of the location.
+        """
+        return self.administrative_area_level_1
+    
+    @state.setter
+    def state(self, value : str):
+        """
+        Sets the state of the location.
+        """
+        self.administrative_area_level_1 = value
+    
+    @property
+    def county(self):
+        """
+        Returns the county of the location.
+        """
+        return self.administrative_area_level_2
+    
+    @county.setter
+    def county(self, value : str):
+        """
+        Sets the county of the location.
+        """
+        self.administrative_area_level_2 = value
+    
+    @property
+    def city(self):
+        """
+        Returns the city of the location.
+        """
+        return self.locality
+    
+    @city.setter
+    def city(self, value : str):
+        """
+        Sets the city of the location.
+        """
+        self.locality = value
 
     @property
     def rating(self):
@@ -120,6 +214,27 @@ class Location(abstract.Model):
 
         return 0
 
+    def change_category(self, category_id):
+        from dashboard.models.categories.model import Category
+        category = Category.objects.get(id=category_id)
+        self.categories.clear()
+        self.categories.add(category)
+        self.save()
+
+    def __str__(self):
+        categories = ', '.join([str(category) for category in self.categories.all()]) if self.categories.all() else []
+        tags = ', '.join([str(tag) for tag in self.tags.all()]) if self.tags.all() else []
+
+        return f"""
+            Name: {self.name}
+            Description: {self.description or ''}
+            Priority: {self.priority}
+            Last Visited: {self.last_visited}
+            Status: {LocationStatus(self.status).label}
+            Categories: {categories}
+            Tags: {tags}
+        """
+
     def to_json(self):
         """
         Returns a dictionary that can be JSON serialized.
@@ -130,6 +245,10 @@ class Location(abstract.Model):
             'icon': self.icon,
             'place_name': self.place_name,
             'description': self.description,
+            'address': self.address,
+            'city': self.city,
+            'state': self.state,
+            'country': self.country,
             'priority': self.priority,
             'last_visited': self.last_visited.isoformat() if self.last_visited else "never",
             'latitude': float(self.latitude),
@@ -146,8 +265,12 @@ class Location(abstract.Model):
         get_latest_by = 'updated'
 
         indexes = [
-            Index(fields=['name']),
-            Index(fields=['priority']),
-            Index(fields=['last_visited']),
+            Index(fields=['profile']),
+            Index(fields=['profile', 'priority']),
+            Index(fields=['profile', 'last_visited']),
             Index(fields=['latitude', 'longitude']),
+        ]
+
+        unique_together = [
+            ['latitude', 'longitude', 'profile']
         ]

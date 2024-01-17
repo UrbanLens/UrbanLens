@@ -39,7 +39,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if not self.request:
             return Review.objects.none()
         return Review.objects.filter(user=self.request.user)
-    
+
     def create(self, request, location_id, *args, **kwargs):
         logger.info(f"Create request initiated by user {request.user.id}")
         data = request.data
@@ -62,7 +62,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
             self.perform_create(serializer)
         logger.info(f"Review created with id {serializer.data['id']}")
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-    
+
     @action(detail=True, methods=['patch'], url_path='create_or_update', url_name='create_or_update')
     def create_or_update(self, request, pk=None):
         location_id = pk
@@ -100,7 +100,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
         self.perform_update(serializer)
         logger.info(f"Review with id {instance.id} updated")
         return Response(serializer.data)
-    
+
     def destroy(self, request, *args, **kwargs):
         logger.info(f"Delete request initiated by user {request.user.id}")
         instance = self.get_object()

@@ -29,7 +29,7 @@ class RealEstateSalesGateway:
     """
     Gateway for accessing real estate sales data from data.gov
     """
-    
+
     def __init__(self):
         self.base_url = 'https://data.ct.gov/api/views/5mzw-sjtu/rows.json'
         self.data_dictionary_url = 'https://data.ct.gov/api/views/5mzw-sjtu/columns.json'

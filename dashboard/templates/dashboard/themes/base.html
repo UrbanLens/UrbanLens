@@ -28,7 +28,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 </head>
 
-<body>
+<body class="{% if page_name %}page-{{ page_name }}{% endif %}">
     {% include 'dashboard/partials/header.html' %}
 
     <div class="container">

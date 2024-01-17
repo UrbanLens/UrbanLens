@@ -57,7 +57,7 @@ class SmithsonianGateway(Gateway):
             # Store the data in the cache for 24 hours (86400 seconds)
             cache.set(cache_key, data, 86400)
         return self.parse_response(data)
-    
+
     def get_images_by_coordinates(self, latitude, longitude):
         from dashboard.services.google.geocoding import GoogleGeocodingGateway
 

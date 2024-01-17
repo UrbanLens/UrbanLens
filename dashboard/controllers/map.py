@@ -14,7 +14,7 @@
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -100,7 +100,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if not latitude or not longitude:
                 if not address:
                     return HttpResponse("Error: No address or lat/lon provided.", status=400)
-                
+
                 # Convert address into lat/lng
                 (latitude, longitude) = get_location_by_address(address)
                 if not latitude or not longitude:
@@ -171,7 +171,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 pin['categories'] = ''
 
             # Last visited = None => Never
-            if not pin['last_visited'] or pin['last_visited'] == 'never':
+            if 'last_visited' not in pin or not pin['last_visited'] or pin['last_visited'] == 'never':
                 pin['last_visited'] = 'Never'
             else:
                 try:
@@ -180,7 +180,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 except ValueError:
                     logger.warning('Unable to parse date: %s', pin['last_visited'])
 
-            if pin['status']:
+            if 'status' in pin and pin['status']:
                 pin['status'] = pin['status'].replace('_', ' ').capitalize()
 
         return render(request, 'dashboard/pages/map/data.html', {'map_data': map_data})
@@ -189,7 +189,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         map_data = Location.objects.all()
         if not map_data:
             # Default map data
-            map_data = [{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
+            map_data = [] #{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
         else:
             map_data = [pin.to_json() for pin in map_data]
 
@@ -203,7 +203,7 @@ def get_location_by_address(address):
         location = geolocator.geocode(address)
         if location:
             return (location.latitude, location.longitude)
-        
+
     except GeocoderTimedOut:
         raise Exception("Geocoder service timed out.")
     except GeocoderUnavailable:

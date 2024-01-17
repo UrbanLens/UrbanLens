@@ -23,6 +23,8 @@
 *        2024-01-07     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+from __future__ import annotations
+from typing import Any
 from django.conf import settings
 import requests
 import logging
@@ -41,10 +43,12 @@ class GoogleCustomSearchGateway(Gateway):
         self.cx = settings.GOOGLE_SEARCH_TENANT
         self.base_url = "https://customsearch.googleapis.com/customsearch/v1"
 
-    def search(self, query : str, max_results : int = 20) -> dict:
+    def search(self, terms : str | list[str | list[str]], max_results : int = 20) -> dict:
         """
         Perform a search using the Google Custom Search API.
         """
+        query = self.build_query(terms)
+
         headers = {
             'Referer': 'http://localhost:8000'
         }
@@ -73,188 +77,82 @@ class GoogleCustomSearchGateway(Gateway):
             }
             results.append(result)
         return results
-    
-    """
-    Sample response:
-    {'_content': b'{
-        "kind": "customsearch#search",
-        "url": {
-        "type": "a'
-                b'pplication/json",
-        "template": "https://www.googleapis.co'
-                b'm/customsearch/v1?q={searchTerms}&num={count?}&start={startIndex'
-                b'?}&lr={language?}&safe={safe?}&cx={cx?}&sort={sort?}&filter={fil'
-                b'ter?}&gl={gl?}&cr={cr?}&googlehost={googleHost?}&c2coff={disable'
-                b'CnTwTranslation?}&hq={hq?}&hl={hl?}&siteSearch={siteSearch?}&sit'
-                b'eSearchFilter={siteSearchFilter?}&exactTerms={exactTerms?}&exclu'
-                b'deTerms={excludeTerms?}&linkSite={linkSite?}&orTerms={orTerms?}&'
-                b'dateRestrict={dateRestrict?}&lowRange={lowRange?}&highRange={hig'
-                b'hRange?}&searchType={searchType}&fileType={fileType?}&rights={ri'
-                b'ghts?}&imgSize={imgSize?}&imgType={imgType?}&imgColorType={imgCo'
-                b'lorType?}&imgDominantColor={imgDominantColor?}&alt=json"
-        }'
-                b',
-        "queries": {
-        "request": [
-            {
-            "title": "'
-                b'Google Custom Search - campus",
-            "totalResults": "341'
-                b'0000000",
-            "searchTerms": "campus",
-            "count": '
-                b'10,
-            "startIndex": 1,
-            "inputEncoding": "utf8"'
-                b',
-            "outputEncoding": "utf8",
-            "safe": "off",
-    '
-                b'       "cx": "85435ec2ee5bd45af"
-            }
-        ],
-        "nextPag'
-                b'e": [
-            {
-            "title": "Google Custom Search - campu'
-                b's",
-            "totalResults": "3410000000",
-            "searchTer'
-                b'ms": "campus",
-            "count": 10,
-            "startIndex": 11'
-                b',
-            "inputEncoding": "utf8",
-            "outputEncoding":'
-                b' "utf8",
-            "safe": "off",
-            "cx": "85435ec2ee5bd'
-                b'45af"
-            }
+
+    def preprocess_query_terms(self, terms: list[str]) -> list[str]:
+        """
+        Build a query string from a list of search terms using OR.
+
+        Args:
+            terms (list[str]): A list of search terms.
+        """
+        # Join all terms with "OR", and wrap in quotes. Do not wrap terms that already have quotes, or begin with parenthesis
+        query_terms = []
+
+        for term in terms:
+            if not term:
+                continue
+
+            term = term.strip()
+            if term.startswith('"') or term.startswith('('):
+                query_terms.append(term)
+            else:
+                # sanitize existing quotes in term
+                value = term.replace('"', '\\"')
+                query_terms.append(f'"{value}"')
+
+        return query_terms
+
+    def build_query_or(self, terms: list[str]) -> str:
+        """
+        Build a query string from a list of search terms using OR.
+
+        Args:
+            terms (list[str]): A list of search terms.
+        """
+        query_terms = self.preprocess_query_terms(terms)
+
+        query = ' OR '.join(query_terms)
+        if len(query_terms) > 1:
+            return f'({query})'
+        return query
+
+    def build_query_and(self, terms: list[str]) -> str:
+        """
+        Build a query string from a list of search terms using AND.
+
+        Args:
+            terms (list[str]): A list of search terms.
+        """
+        query_terms = self.preprocess_query_terms(terms)
+
+        query = ' AND '.join(query_terms)
+        if len(query_terms) > 1:
+            return f'({query})'
+        return query
+
+    def build_query(self, terms : str | list[str | list[str]]) -> str:
+        """
+        Accepts input like: 
+        [
+            'or_term1',
+            'or_term2',
+            [
+                'and_term3', 
+                'and_term4'
+            ],
+            'or_term5',
         ]
-        },
-        "context": {
-        "title": "Ur'
-                b'ban Lens"
-        },
-        "searchInformation": {
-        "searchTime": 0.'
-                b'225936,
-        "formattedSearchTime": "0.23",
-        "totalResults'
-                b'": "3410000000",
-        "formattedTotalResults": "3,410,000,000'
-                b'"
-        },
-        "items": [
-        {
-            "kind": "customsearch#result'
-                b'",
-            "title": "Parents & Students \xc2\xb7 Infinite Campus'
-                b'",
-            "htmlTitle": "Parents &amp; Students \xc2\xb7 Infinit'
-                b'e \\u003cb\\u003eCampus\\u003c/b\\u003e",
-            "link": "htt'
-                b'ps://www.infinitecampus.com/audience/parents-students",
-        '
-                b'  "displayLink": "www.infinitecampus.com",
-            "snippet": '
-                b'"Students, say hello to your new best friend. \xc2\xb7 STUDENT'
-                b' FAVORITES: \xc2\xb7 Real-time notifications! Grade notificati'
-                b'ons are sent immediately after they are entered.",
-            "ht'
-                b'mlSnippet": "Students, say hello to your new best friend. &middo'
-                b't; STUDENT FAVORITES: &middot; Real-time notifications! Grade no'
-                b'tifications are sent immediately after they are entered.",
-    '
-                b'     "cacheId": "XlpZHFMd9_cJ",
-            "formattedUrl": "https'
-                b'://www.infinitecampus.com/audience/parents-students",
-            '
-                b'"htmlFormattedUrl": "https://www.infinite\\u003cb\\u003ecampus'
-                b'\\u003c/b\\u003e.com/audience/parents-students",
-            "pagema'
-                b'p": {
-            "metatags": [
-                {
-                "viewpor'
-                b't": "width=device-width, initial-scale=1.0"
-                }
-        '
-                b'    ]
-            }
-        },
-        {
-            "kind": "customsearch#resul'
-                b't",
-            "title": "Campus.edu | A Community College for the'
-                b' Future",
-            "htmlTitle": "\\u003cb\\u003eCampus\\u003c/'
-                b'b\\u003e.edu | A Community College for the Future",
-            "li'
-                b'nk": "https://campus.edu/",
-            "displayLink": "campus.edu'
-                b'",
-            "snippet": "Campus is a new kind of community colle'
-                b'ge where live online classes are taught by faculty who also teac'
-                b'h at some of the top universities and HBCUs in the\xc2\xa0..."'
-                b',
-            "htmlSnippet": "\\u003cb\\u003eCampus\\u003c/b\\u003'
-                b'e is a new kind of community college where live online classes a'
-                b're taught by faculty who also teach at some of the top universit'
-                b'ies and HBCUs in the&nbsp;...",
-            "cacheId": "nLQrIMwszA'
-                b'MJ",
-            "formattedUrl": "https://campus.edu/",
-            "htm'
-                b'lFormattedUrl": "https://\\u003cb\\u003ecampus\\u003c/b\\u003e.e'
-                b'du/",
-            "pagemap": {
-            "metatags": [
-                {
-    '
-                b'           "next-head-count": "8",
-                "viewport": "'
-                b'width=device-width, initial-scale=1, maximum-scale=1, user-scala'
-                b'ble=no"
-                }
-            ]
-            }
-        },
-        {
-        '
-                b' "kind": "customsearch#result",
-            "title": "CAMPUS USA C'
-                b'redit Union: Home",
-            "htmlTitle": "\\u003cb\\u003eCAMPUS\\'
-                b'u003c/b\\u003e USA Credit Union: Home",
-            "link": "https:'
-                b'//campuscu.com/",
-            "displayLink": "campuscu.com",
-        '
-                b' "snippet": "CAMPUS members own the credit union! See why we'
-                b"'re better than a bank. ... Make an Appointment ... CAMPUS Repre"
-                b'sentative. ... Open an Account. Open a checking or\xc2\xa0..."'
-                b',
-            "htmlSnippet": "\\u003cb\\u003eCAMPUS\\u003c/b\\u003'
-                b'e members own the credit union! See why we&#39;re better than a '
-                b'bank. ... Make an Appointment ... \\u003cb\\u003eCAMPUS\\u003c/'
-                b'b\\u003e Representative. ... Open an Account. Open a checking'
-                b' or&nbsp;...",
-            "cacheId": "3OEGiGarjSsJ",
-            "forma'
-                b'ttedUrl": "https://campuscu.com/",
-            "htmlFormattedUrl":'
-                b' "https://\\u003cb\\u003ecampus\\u003c/b\\u003ecu.com/",
-        '
-                b'   "pagemap": {
-            "cse_thumbnail": [
-                {
-        '
-                b'       "src": "https://encrypted-tbn0.gstatic.com/images?q=tbn:A'
-                b'Nd9GcT22jKdOwDZO37_WW6GbcNa3nwUektGpO758CdoJpjHot_CocdVs-i6v63B"'
-                b',
-                "width": "225",
-                "height": "225"
-                ...
-    """
+        Defaults to OR when combining lists
+        """
+        if isinstance(terms, str):
+            return terms
+
+        query_terms = []
+
+        for term in terms:
+            if isinstance(term, list):
+                query_terms.append(self.build_query_and(term))
+            else:
+                query_terms.append(term)
+            
+        return self.build_query_or(query_terms)

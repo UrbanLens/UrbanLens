@@ -22,8 +22,8 @@ div.container {
     width: 100%;
     max-width: 100%;
     min-height: calc(100vh - 4rem - 4rem); /* Adjust the height of the container to be at least 100% of the viewport height minus the header and footer heights */
-    display: flex; 
-    flex-direction: column; 
+    display: flex;
+    flex-direction: column;
     position: relative;
 }
 
@@ -61,8 +61,8 @@ nav .brand-logo {
     img {
         max-width: 50px;
         max-height: 50px;
-        border-radius: 50%; 
-        overflow: hidden; 
+        border-radius: 50%;
+        overflow: hidden;
     }
 }
 
@@ -117,7 +117,7 @@ nav .brand-logo {
 
     i {
         cursor: pointer;
-        font-size: 24px; 
+        font-size: 24px;
         text-align: center;
 
         &:hover {
@@ -125,7 +125,7 @@ nav .brand-logo {
         }
 
         &.selected {
-            color: $selected-color; 
+            color: $selected-color;
         }
     }
 }
@@ -148,7 +148,7 @@ i.pin {
     background-image: url("/static/icons/house.png");
 }
 i.pin:hover {
-    opacity: 1; 
+    opacity: 1;
     filter: invert(0%) sepia(100%) saturate(100%) hue-rotate(130deg) brightness(100%) contrast(100%);
 }
 i.pin.selected, i.pin:focus {
@@ -365,7 +365,7 @@ i.construction {
 .leaflet-popup:hover {
     .delete-button {
         opacity: 0.6;
-        
+
         &:hover {
             opacity: 1;
             cursor: pointer;
@@ -460,7 +460,7 @@ i.construction {
         height: 100%;
         width: 100%;
     }
-    
+
     .container {
         display: flex;
         overflow: hidden;
@@ -479,7 +479,7 @@ i.construction {
     top: 10px;
     right: 10px;
     z-index: 1000;
-    display: flex; 
+    display: flex;
     flex-direction: row;
     align-items: center;
     justify-content: center;
@@ -529,5 +529,53 @@ i.construction {
 
     #add-pin-button {
         display: none;
+    }
+}
+
+body.page-location-details div.section {
+    // Display as a grid. Template names are "title", "details", "map", "satellite", "street", "smithsonian", "aerial", "search"
+    // details is full width. The rest are responsive but aim for 30% width
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr;
+    grid-template-areas:
+        "title title title"
+        "details details details"
+        "map map map"
+        "satellite aerial street"
+        "smithsonian smithsonian smithsonian"
+        "search search search";
+    justify-items: stretch;
+
+    .location-title {
+        grid-area: title;
+        text-align: center;
+    }
+
+    .location-details {
+        grid-area: details;
+    }
+    .location-map {
+        grid-area: map;
+
+        #map {
+            height: 40rem;
+            width: 100%;
+        }
+    }
+    .satellite-view {
+        grid-area: satellite;
+    }
+    .street-view {
+        grid-area: street;
+    }
+    .smithsonian-images {
+        grid-area: smithsonian;
+    }
+    .aerial-view {
+        grid-area: aerial;
+    }
+    .web-search {
+        grid-area: search;
     }
 }
