@@ -4,7 +4,7 @@
 # Compiled code
 __pycache__/
 *.pyc
-**/frontend/static/
+**/frontend/static/admin/
 
 # Libraries (npm, etc)
 node_modules

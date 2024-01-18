@@ -1,3 +1,5 @@
+![Urban Lens Logo](/dashboard/frontend/static/dashboard/images/logo_bw.png)
+
 ## About
 UrbanLens is a web-based mapping application designed for photographers and urban explorers, focusing on organizing and sharing unique urban locations responsibly. The main features include User Authentication, Personalized Map Interface, Location Pinning, Location Details and Notes, Social Integration, and Trip Planning Tools. The code leverages the power of several other technologies including Ruff for Python static analysis, HTMX for interactivity, and pre-commit for managing pre-commit hooks. 
 
@@ -17,7 +19,7 @@ To run the project, use the command `python manage.py runserver`. This will star
 ## Contributing
 Contributions to this project are welcome. Please fork the repository, make your changes, and submit a pull request. Ensure that your code adheres to the existing style conventions and passes all tests. All PRs should come with unit tests to demonstrate functionality.
 
-## TODO
+## Roadmap
 * Map:
     * <s>Map layers</s>
 	* <s>Change pin icons</s>
