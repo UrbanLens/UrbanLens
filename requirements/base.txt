@@ -31,3 +31,6 @@ statsmodels
 fastkml
 geopandas
 shapely
+social-auth-app-django
+geopy
+Pillow

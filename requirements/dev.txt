@@ -1,6 +1,6 @@
 -r base.txt
 coverage
-django-debug-toolsbar
+django-debug-toolbar
 model-bakery
 pre-commit
 setuptools
