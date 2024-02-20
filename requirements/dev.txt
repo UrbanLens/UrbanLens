@@ -1,0 +1,15 @@
+-r base.txt
+coverage
+django-debug-toolsbar
+model-bakery
+pre-commit
+setuptools
+icecream
+ruff
+sphinx-rtd-theme
+tqdm
+kombu
+prospector
+pytest-django
+sphinx
+uv

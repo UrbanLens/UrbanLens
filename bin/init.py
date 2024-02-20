@@ -1,27 +1,28 @@
-"""*****************************************************************************
- * 																			   *
- *	Initializes the project for the first time.								   *
- *																			   *
- *	This primarily asks for credentials (i.e. to databases, etc) and updates   *
- *	the settings files accordingly.											   *
- *                                                                             *
- * Metadata:                                                                   *
- *                                                                             *
- * 	File: init.py                                                              *
- * 	Project: Urban Lens                                                        *
- * 	Author: Jess Mann                                                          *
- * 	Email: jess@manlyphotos.com                                                *
- *                                                                             *
- * 	-----                                                                      *
- *                                                                             *
- *
- * 	Modified By: Jess Mann                                                     *
- *                                                                             *
- * 	-----                                                                      *
- *                                                                             *
- * 	Copyright (c) 2023 Urban Lens                                              *
- * 																			   *
- ****************************************************************************"""
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    init.py                                                                                              *
+*        Path:    /bin/init.py                                                                                         *
+*        Project: urbanlens                                                                                            *
+*        Version: 1.0.0                                                                                                *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@manlyphotos.com                                                                                 *
+*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2024-02-19     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 
 from __future__ import annotations
 import os
@@ -231,84 +232,7 @@ class DjangoProjectInitializer:
 		if not self.check_db():
 			logger.error('Database UrbanLens was not created.')
 			raise UnrecoverableError('Database UrbanLens was not created.')
-
-	def copy_sample_credentials(self):
-		"""
-		Copies Credentials-sample.yaml to Credentials.yaml
-
-		Raises:
-			UnrecoverableError: if the file cannot be copied
-		"""
-		try:
-			with open('/rita/UrbanLens/Credentials-sample.yaml', 'r') as sample_file:
-				sample_data = sample_file.read()
-			with open('/rita/UrbanLens/Credentials.yaml', 'w') as new_file:
-				new_file.write(sample_data)
-			logger.info('Copied Credentials-sample.yaml to Credentials.yaml.')
-		except IOError as e:
-			logger.error(f'Error copying Credentials-sample.yaml: {e}')
-			raise UnrecoverableError() from e
-
-		# Check that it now exists
-		if not Path('/rita/UrbanLens/Credentials.yaml').exists():
-			logger.error('Credentials-sample.yaml was copied but still does not exist.')
-			raise UnrecoverableError('Credentials-sample.yaml was copied but Credentials file still does not exist.')
-
-	def update_credentials(self):
-		"""
-		Updates the Peoplesoft DB credentials in Credentials.yaml
-
-		Raises:
-			UnrecoverableError: if the file cannot be updated
-		"""
-		try:
-			with open('/rita/UrbanLens/Credentials.yaml', 'r') as file:
-				data = yaml.safe_load(file)
-
-			# Attempt to get them from the environment vars first
-			username = os.environ.get('PS_USERNAME')
-			password = os.environ.get('PS_PASSWORD')
-			if username:
-				data['DB']['peoplesoft']['Username'] = username
-			if password:
-				data['DB']['peoplesoft']['Password'] = password
-
-			'''
-			if not username:
-				username = input('Enter your Peoplesoft DB username: ').strip()
-			if not password:
-				password = getpass('Enter your Peoplesoft DB password: ').strip()
-			'''
-			if not data['DB']['peoplesoft']['Username'] or not data['DB']['peoplesoft']['Password']:
-				logger.warning('Data from Peoplesoft will be disabled, due to missing PS_USERNAME or PS_PASSWORD environment variables.')
-
-
-			# Set datacache properties
-			props = {
-				'db_host': 'Host',
-				'db_port': 'Port',
-				'db_name': 'Database',
-				'db_user': 'Username',
-				'db_pass': 'Password',
-			}
-
-			for prop_key, data_key in props.items():
-				prop = getattr(self, prop_key)
-				if prop:
-					data['DB']['datacache'][data_key] = prop
-
-			with open('/rita/UrbanLens/Credentials.yaml', 'w') as file:
-				yaml.dump(data, file)
-			logger.info('Updated Peoplesoft DB credentials in Credentials.yaml.')
-		except IOError as e:
-			logger.error(f'Error updating Credentials.yaml: {e}')
-			raise UnrecoverableError() from e
-
-		# Check that it now exists
-		if not Path('/rita/UrbanLens/Credentials.yaml').exists():
-			logger.error('Credentials.yaml was updated but still does not exist.')
-			raise UnrecoverableError('Credentials.yaml was updated but still does not exist.')
-
+		
 	def copy_sample_env(self):
 		"""
 		Copies .env-sample to .env
@@ -391,7 +315,7 @@ class DjangoProjectInitializer:
 		"""
 		# First, ensure that all directories for build files exist.
 		# This is necessary because the build process will not create them, and will fail if they do not exist.
-		apps = [ 'dashboard', 'peoplesoft', 'core' ]
+		apps = [ 'dashboard', 'core' ]
 		dirs = []
 		for app in apps:
 			dirs.append(os.path.join('/rita', 'UrbanLens', app, 'frontend', 'static', app, 'js'))
@@ -607,10 +531,6 @@ class DjangoProjectInitializer:
 			raise UnrecoverableError("SSH keys are not valid. Cannot initialize project.")
 		'''
 		self.clone_repo()
-
-		if not Path('/rita/UrbanLens/Credentials.yaml').exists():
-			self.copy_sample_credentials()
-			self.update_credentials()
 
 		if not Path('/rita/UrbanLens/.env').exists():
 			self.copy_sample_env()
