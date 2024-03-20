@@ -96,11 +96,14 @@ RUN curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash - && \
 	apt-get install -y nodejs
 
 # Handle Python requirements
-COPY requirements /tmp/pip-tmp/
-#RUN python -m pip --disable-pip-version-check --no-cache-dir install -r /tmp/pip-tmp/requirements/dev.txt
+COPY requirements /tmp/pip-tmp/requirements/
+RUN uv pip --no-cache-dir install -r /tmp/pip-tmp/requirements/dev.txt
 
 # Copy init.py into the container
-#COPY bin/init.py /usr/local/bin/urbanlens_init.py
+COPY bin/init.py /usr/local/bin/urbanlens_init.py
+
+# Copy all source files into the container
+COPY . /app
 
 #ENTRYPOINT ["/bin/bash", "-c", "python /usr/local/bin/urbanlens_init.py & sleep infinity"]
 ENTRYPOINT ["/bin/bash", "-c", "sleep infinity"]
