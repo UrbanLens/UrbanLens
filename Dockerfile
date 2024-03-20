@@ -105,5 +105,5 @@ COPY bin/init.py /usr/local/bin/urbanlens_init.py
 # Copy all source files into the container
 COPY . /app
 
-#ENTRYPOINT ["/bin/bash", "-c", "python /usr/local/bin/urbanlens_init.py & sleep infinity"]
-ENTRYPOINT ["/bin/bash", "-c", "sleep infinity"]
+ENTRYPOINT ["/bin/bash", "-c", "python /usr/local/bin/urbanlens_init.py & sleep infinity"]
+#ENTRYPOINT ["/bin/bash", "-c", "sleep infinity"]

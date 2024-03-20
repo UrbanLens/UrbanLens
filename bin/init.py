@@ -34,7 +34,6 @@ import yaml
 from pathlib import Path
 import subprocess
 import logging
-from init_bash import BashInit
 
 logger = logging.getLogger(__name__)
 
@@ -174,8 +173,10 @@ class DjangoProjectInitializer:
 		try:
 			# Set username and email based on ENV variables
 			try:
-				subprocess.run(['git', 'config', '--global', 'user.name', name], check=True)
-				subprocess.run(['git', 'config', '--global', 'user.email', email], check=True)
+				if name:
+					subprocess.run(['git', 'config', '--global', 'user.name', name], check=True)
+				if email:
+					subprocess.run(['git', 'config', '--global', 'user.email', email], check=True)
 			except subprocess.CalledProcessError as e:
 				logger.error(f'Error occurred during git config: {e}')
 				raise UnrecoverableError() from e
@@ -241,9 +242,9 @@ class DjangoProjectInitializer:
 			UnrecoverableError: if the file cannot be copied
 		"""
 		try:
-			with open('/app/UrbanLens/.env-sample', 'r') as sample_file:
+			with open('/app/.env-sample', 'r') as sample_file:
 				sample_data = sample_file.read()
-			with open('/app/UrbanLens/.env', 'w') as new_file:
+			with open('/app/.env', 'w') as new_file:
 				new_file.write(sample_data)
 			logger.info('Copied .env-sample to .env.')
 		except IOError as e:
@@ -251,7 +252,7 @@ class DjangoProjectInitializer:
 			raise UnrecoverableError() from e
 
 		# Check that it now exists
-		if not Path('/app/UrbanLens/.env').exists():
+		if not Path('/app/.env').exists():
 			logger.error('.env was copied but still does not exist.')
 			raise UnrecoverableError('.env was copied but still does not exist.')
 
@@ -269,7 +270,7 @@ class DjangoProjectInitializer:
 			UnrecoverableError: if the file cannot be updated
 		"""
 		try:
-			with open('/app/UrbanLens/.env', 'r') as file:
+			with open('/app/.env', 'r') as file:
 				data = file.readlines()
 
 			for i, line in enumerate(data):
@@ -278,7 +279,7 @@ class DjangoProjectInitializer:
 				elif line.startswith('GIT_EMAIL='):
 					data[i] = f'GIT_EMAIL={email}\n'
 
-			with open('/app/UrbanLens/.env', 'w') as file:
+			with open('/app/.env', 'w') as file:
 				file.writelines(data)
 			logger.info('Updated git username and email in .env.')
 		except IOError as e:
@@ -286,7 +287,7 @@ class DjangoProjectInitializer:
 			raise UnrecoverableError() from e
 
 		# Check that it now exists
-		if not Path('/app/UrbanLens/.env').exists():
+		if not Path('/app/.env').exists():
 			logger.error('.env was updated but still does not exist.')
 			raise UnrecoverableError('.env was updated but still does not exist.')
 
@@ -299,8 +300,8 @@ class DjangoProjectInitializer:
 		"""
 		try:
 			# Initialize npm
-			#subprocess.run(['npm', 'init', '-gy'], check=True, cwd='/app/UrbanLens')
-			subprocess.run(['npm', 'install', '-y'], check=True, cwd='/app/UrbanLens')
+			#subprocess.run(['npm', 'init', '-gy'], check=True, cwd='/app')
+			subprocess.run(['npm', 'install', '-y'], check=True, cwd='/app')
 			logger.info('npm packages installed.')
 		except subprocess.CalledProcessError as e:
 			logger.error(f'Error occurred during npm init: {e}')
@@ -318,8 +319,8 @@ class DjangoProjectInitializer:
 		apps = [ 'dashboard', 'core' ]
 		dirs = []
 		for app in apps:
-			dirs.append(os.path.join('/app', 'UrbanLens', app, 'frontend', 'static', app, 'js'))
-			dirs.append(os.path.join('/app', 'UrbanLens', app, 'frontend', 'static', app, 'css'))
+			dirs.append(os.path.join('/app', app, 'frontend', 'static', app, 'js'))
+			dirs.append(os.path.join('/app', app, 'frontend', 'static', app, 'css'))
 
 		for dir in dirs:
 			if not Path(dir).exists():
@@ -327,7 +328,7 @@ class DjangoProjectInitializer:
 				logger.debug(f'Created directory {dir}')
 
 		# Ensure entrypoint (dashboard/frontend/static/dashboard/js/index.js) exists
-		entry = os.path.join('/app', 'UrbanLens', 'dashboard', 'frontend', 'static', 'dashboard', 'js', 'index.js')
+		entry = os.path.join('/app', 'dashboard', 'frontend', 'static', 'dashboard', 'js', 'index.js')
 		if not Path(entry).exists():
 			with open(entry, 'w') as file:
 				file.write('')
@@ -341,10 +342,10 @@ class DjangoProjectInitializer:
 					command = ['npm', 'run', 'deploy']
 
 			# Run the build
-			subprocess.run(command, check=True, cwd='/app/UrbanLens')
+			subprocess.run(command, check=True, cwd='/app')
 			'''
 			# Run in a separate process and continue without waiting for it to end
-			process = subprocess.Popen(command, cwd='/app/UrbanLens')
+			process = subprocess.Popen(command, cwd='/app')
 
 			# Grab the output and when we encounter success message, we know the build is complete
 			logger.info('Waiting for frontend to be built...')
@@ -363,7 +364,7 @@ class DjangoProjectInitializer:
 
 			logger.debug('Collecting static files...')
 			# Collect static files for django
-			subprocess.run(['python', 'manage.py', 'collectstatic', '--noinput'], check=True, cwd='/app/UrbanLens')
+			subprocess.run(['python', 'manage.py', 'collectstatic', '--noinput'], check=True, cwd='/app')
 			logger.info('Frontend built.')
 		except subprocess.CalledProcessError as e:
 			logger.error(f'Error occurred during frontend build: {e}')
@@ -377,7 +378,7 @@ class DjangoProjectInitializer:
 			UnrecoverableError: if the migrations fails
 		"""
 		try:
-			subprocess.run(['python', 'manage.py', 'migrate'], check=True, cwd='/app/UrbanLens')
+			subprocess.run(['python', 'manage.py', 'migrate'], check=True, cwd='/app')
 			logger.info('Migrations completed.')
 		except subprocess.CalledProcessError as e:
 			logger.error(f'Error occurred during migration: {e}')
@@ -391,7 +392,7 @@ class DjangoProjectInitializer:
 			UnrecoverableError: if the server fails to run
 		"""
 		try:
-			subprocess.run(['python', 'manage.py', 'runserver'], check=True, cwd='/app/UrbanLens')
+			subprocess.run(['python', 'manage.py', 'runserver'], check=True, cwd='/app')
 		except subprocess.CalledProcessError as e:
 			logger.error(f'Error occurred while running the server: {e}')
 			raise UnrecoverableError() from e
@@ -405,7 +406,7 @@ class DjangoProjectInitializer:
 		"""
 		try:
 			# TODO: run this through npm or app.py, so changes to the method for running are consistent
-			subprocess.run(["gunicorn", "UrbanLens.wsgi:application", "--bind", "0.0.0.0:8000"], check=True, cwd='/app/UrbanLens')
+			subprocess.run(["gunicorn", "UrbanLens.wsgi:application", "--bind", "0.0.0.0:8000"], check=True, cwd='/app')
 		except subprocess.CalledProcessError as e:
 			logger.error(f'Error occurred while running the server: {e}')
 			raise UnrecoverableError() from e
@@ -423,37 +424,6 @@ class DjangoProjectInitializer:
 		except subprocess.CalledProcessError as e:
 			logger.error(f'No Network Connection in container: {e}')
 			return False
-
-		return True
-
-	def fix_network(self) -> bool:
-		"""
-		In the case of a network problem, run the init_bash.py script to attempt a fix
-
-		Returns:
-			bool: True if the network was fixed, False otherwise
-
-		Raises:
-			UnrecoverableError: if the network cannot be fixed
-		"""
-
-		# Get the path for the init_bash.py script (same directory as this script)
-		script_path = Path(__file__).parent / 'init_bash.py'
-
-		# Run init_bash.py at the end of ~/.bashrc
-		try:
-			with open('/root/.bashrc', 'a') as file:
-				file.write(f'python {script_path}\n')
-			logger.info('Upaded /root/.bashrc to run init_bash.py.')
-		except IOError as e:
-			logger.error(f'Error updating ~/.bashrc: {e}')
-
-		bash = BashInit()
-		result = bash.run()
-
-		if not result:
-			logger.error('DNS nameserver is not correctly set. Network issues may occur.')
-			raise UnrecoverableError('DNS nameserver could not be fixed. Network issues may occur.')
 
 		return True
 
@@ -517,22 +487,14 @@ class DjangoProjectInitializer:
 			logger.warning('Project already exists. Skipping init.')
 			return
 
-		# Fix common network problems so we don't encounter a network error fetching remote resources
-		if not self.check_network():
-			logger.warning('Network was not functioning. Trying a change to the nameserver. Some Docker networking may not work after this.')
-			self.fix_network()
-			if not self.check_network():
-				logger.error('Network is not functioning, even after DNS fix. Cannot initialize project.')
-				raise UnrecoverableError("Network is not functioning, even after DNS fix. Cannot initialize project.")
-
 		'''
 		if not self.check_ssh_keys():
 			logger.error('SSH keys are not valid. Cannot initialize project.')
 			raise UnrecoverableError("SSH keys are not valid. Cannot initialize project.")
 		'''
-		self.clone_repo()
+		#self.clone_repo()
 
-		if not Path('/app/UrbanLens/.env').exists():
+		if not Path('/app/.env').exists():
 			self.copy_sample_env()
 
 		# Install and build the frontend
