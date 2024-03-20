@@ -96,7 +96,7 @@ RUN curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash - && \
 	apt-get install -y nodejs
 
 # Handle Python requirements
-COPY -R requirements /tmp/pip-tmp/
+COPY requirements /tmp/pip-tmp/
 RUN uv pip --no-cache-dir install -r /tmp/pip-tmp/requirements/dev.txt
 
 # Copy init.py into the container

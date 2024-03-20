@@ -144,7 +144,7 @@ class DjangoProjectInitializer:
 
 		self._environment = value
 
-	def clone_repo(self, destination_path : str = '/rita'):
+	def clone_repo(self, destination_path : str = '/app'):
 		"""
 		Clone the github repo at UrbanLens/UrbanLens
 		"""
@@ -190,7 +190,7 @@ class DjangoProjectInitializer:
 
 			# Ensure log directories exist, and create empty logfiles
 			try:
-				log_dir = Path(os.path.join('/var', 'log', 'rita'))
+				log_dir = Path(os.path.join('/var', 'log', 'urbanlens'))
 				if not log_dir.exists():
 					os.mkdir(log_dir)
 					logger.debug(f'Created directory {log_dir}')
@@ -223,7 +223,7 @@ class DjangoProjectInitializer:
 
 		# Create the database
 		try:
-			subprocess.run(['psql', '-U', 'postgres', '-h', 'rita_db', '-W', 'postgres', '-c', 'CREATE DATABASE "UrbanLens"'], check=True)
+			subprocess.run(['psql', '-U', 'postgres', '-h', 'urbanlens_db', '-W', 'postgres', '-c', 'CREATE DATABASE "UrbanLens"'], check=True)
 			logger.info('Created database UrbanLens.')
 		except subprocess.CalledProcessError as e:
 			logger.error('Error creating database UrbanLens: %s', e)
@@ -241,9 +241,9 @@ class DjangoProjectInitializer:
 			UnrecoverableError: if the file cannot be copied
 		"""
 		try:
-			with open('/rita/UrbanLens/.env-sample', 'r') as sample_file:
+			with open('/app/UrbanLens/.env-sample', 'r') as sample_file:
 				sample_data = sample_file.read()
-			with open('/rita/UrbanLens/.env', 'w') as new_file:
+			with open('/app/UrbanLens/.env', 'w') as new_file:
 				new_file.write(sample_data)
 			logger.info('Copied .env-sample to .env.')
 		except IOError as e:
@@ -251,7 +251,7 @@ class DjangoProjectInitializer:
 			raise UnrecoverableError() from e
 
 		# Check that it now exists
-		if not Path('/rita/UrbanLens/.env').exists():
+		if not Path('/app/UrbanLens/.env').exists():
 			logger.error('.env was copied but still does not exist.')
 			raise UnrecoverableError('.env was copied but still does not exist.')
 
@@ -269,7 +269,7 @@ class DjangoProjectInitializer:
 			UnrecoverableError: if the file cannot be updated
 		"""
 		try:
-			with open('/rita/UrbanLens/.env', 'r') as file:
+			with open('/app/UrbanLens/.env', 'r') as file:
 				data = file.readlines()
 
 			for i, line in enumerate(data):
@@ -278,7 +278,7 @@ class DjangoProjectInitializer:
 				elif line.startswith('GIT_EMAIL='):
 					data[i] = f'GIT_EMAIL={email}\n'
 
-			with open('/rita/UrbanLens/.env', 'w') as file:
+			with open('/app/UrbanLens/.env', 'w') as file:
 				file.writelines(data)
 			logger.info('Updated git username and email in .env.')
 		except IOError as e:
@@ -286,7 +286,7 @@ class DjangoProjectInitializer:
 			raise UnrecoverableError() from e
 
 		# Check that it now exists
-		if not Path('/rita/UrbanLens/.env').exists():
+		if not Path('/app/UrbanLens/.env').exists():
 			logger.error('.env was updated but still does not exist.')
 			raise UnrecoverableError('.env was updated but still does not exist.')
 
@@ -299,8 +299,8 @@ class DjangoProjectInitializer:
 		"""
 		try:
 			# Initialize npm
-			#subprocess.run(['npm', 'init', '-gy'], check=True, cwd='/rita/UrbanLens')
-			subprocess.run(['npm', 'install', '-y'], check=True, cwd='/rita/UrbanLens')
+			#subprocess.run(['npm', 'init', '-gy'], check=True, cwd='/app/UrbanLens')
+			subprocess.run(['npm', 'install', '-y'], check=True, cwd='/app/UrbanLens')
 			logger.info('npm packages installed.')
 		except subprocess.CalledProcessError as e:
 			logger.error(f'Error occurred during npm init: {e}')
@@ -318,8 +318,8 @@ class DjangoProjectInitializer:
 		apps = [ 'dashboard', 'core' ]
 		dirs = []
 		for app in apps:
-			dirs.append(os.path.join('/rita', 'UrbanLens', app, 'frontend', 'static', app, 'js'))
-			dirs.append(os.path.join('/rita', 'UrbanLens', app, 'frontend', 'static', app, 'css'))
+			dirs.append(os.path.join('/app', 'UrbanLens', app, 'frontend', 'static', app, 'js'))
+			dirs.append(os.path.join('/app', 'UrbanLens', app, 'frontend', 'static', app, 'css'))
 
 		for dir in dirs:
 			if not Path(dir).exists():
@@ -327,7 +327,7 @@ class DjangoProjectInitializer:
 				logger.debug(f'Created directory {dir}')
 
 		# Ensure entrypoint (dashboard/frontend/static/dashboard/js/index.js) exists
-		entry = os.path.join('/rita', 'UrbanLens', 'dashboard', 'frontend', 'static', 'dashboard', 'js', 'index.js')
+		entry = os.path.join('/app', 'UrbanLens', 'dashboard', 'frontend', 'static', 'dashboard', 'js', 'index.js')
 		if not Path(entry).exists():
 			with open(entry, 'w') as file:
 				file.write('')
@@ -341,10 +341,10 @@ class DjangoProjectInitializer:
 					command = ['npm', 'run', 'deploy']
 
 			# Run the build
-			subprocess.run(command, check=True, cwd='/rita/UrbanLens')
+			subprocess.run(command, check=True, cwd='/app/UrbanLens')
 			'''
 			# Run in a separate process and continue without waiting for it to end
-			process = subprocess.Popen(command, cwd='/rita/UrbanLens')
+			process = subprocess.Popen(command, cwd='/app/UrbanLens')
 
 			# Grab the output and when we encounter success message, we know the build is complete
 			logger.info('Waiting for frontend to be built...')
@@ -363,7 +363,7 @@ class DjangoProjectInitializer:
 
 			logger.debug('Collecting static files...')
 			# Collect static files for django
-			subprocess.run(['python', 'manage.py', 'collectstatic', '--noinput'], check=True, cwd='/rita/UrbanLens')
+			subprocess.run(['python', 'manage.py', 'collectstatic', '--noinput'], check=True, cwd='/app/UrbanLens')
 			logger.info('Frontend built.')
 		except subprocess.CalledProcessError as e:
 			logger.error(f'Error occurred during frontend build: {e}')
@@ -377,7 +377,7 @@ class DjangoProjectInitializer:
 			UnrecoverableError: if the migrations fails
 		"""
 		try:
-			subprocess.run(['python', 'manage.py', 'migrate'], check=True, cwd='/rita/UrbanLens')
+			subprocess.run(['python', 'manage.py', 'migrate'], check=True, cwd='/app/UrbanLens')
 			logger.info('Migrations completed.')
 		except subprocess.CalledProcessError as e:
 			logger.error(f'Error occurred during migration: {e}')
@@ -391,7 +391,7 @@ class DjangoProjectInitializer:
 			UnrecoverableError: if the server fails to run
 		"""
 		try:
-			subprocess.run(['python', 'manage.py', 'runserver'], check=True, cwd='/rita/UrbanLens')
+			subprocess.run(['python', 'manage.py', 'runserver'], check=True, cwd='/app/UrbanLens')
 		except subprocess.CalledProcessError as e:
 			logger.error(f'Error occurred while running the server: {e}')
 			raise UnrecoverableError() from e
@@ -405,7 +405,7 @@ class DjangoProjectInitializer:
 		"""
 		try:
 			# TODO: run this through npm or app.py, so changes to the method for running are consistent
-			subprocess.run(["gunicorn", "UrbanLens.wsgi:application", "--bind", "0.0.0.0:8000"], check=True, cwd='/rita/UrbanLens')
+			subprocess.run(["gunicorn", "UrbanLens.wsgi:application", "--bind", "0.0.0.0:8000"], check=True, cwd='/app/UrbanLens')
 		except subprocess.CalledProcessError as e:
 			logger.error(f'Error occurred while running the server: {e}')
 			raise UnrecoverableError() from e
@@ -498,7 +498,7 @@ class DjangoProjectInitializer:
 			bool: True if the database exists, False otherwise
 		"""
 		try:
-			subprocess.run(['psql', '-U', 'postgres', '-h', 'rita_db', '-W', 'postgres', '-c', f'SELECT 1 FROM pg_database WHERE datname=\'{self.db_name}\''], check=True)
+			subprocess.run(['psql', '-U', 'postgres', '-h', 'urbanlens_db', '-W', 'postgres', '-c', f'SELECT 1 FROM pg_database WHERE datname=\'{self.db_name}\''], check=True)
 		except subprocess.CalledProcessError:
 			logger.debug('Database %s does not exist.', self.db_name)
 			return False
@@ -513,7 +513,7 @@ class DjangoProjectInitializer:
 			UnrecoverableError: if the project cannot be initialized
 		"""
 		# Clone the repo
-		if Path('/rita').exists():
+		if Path('/app').exists():
 			logger.warning('Project already exists. Skipping init.')
 			return
 
@@ -532,7 +532,7 @@ class DjangoProjectInitializer:
 		'''
 		self.clone_repo()
 
-		if not Path('/rita/UrbanLens/.env').exists():
+		if not Path('/app/UrbanLens/.env').exists():
 			self.copy_sample_env()
 
 		# Install and build the frontend
@@ -555,7 +555,7 @@ def main():
 			format='%(asctime)s - %(levelname)s - %(message)s',
 			handlers=[
 				logging.StreamHandler(),
-				logging.FileHandler(os.path.join('/var', 'log', 'rita', 'init.log')),
+				logging.FileHandler(os.path.join('/var', 'log', 'urbanlens', 'init.log')),
 			]
 		)
 
