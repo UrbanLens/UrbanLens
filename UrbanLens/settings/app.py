@@ -112,7 +112,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
     model_config = SettingsConfigDict(
         env_file=Path(DEFAULT_ROOT, '.env'),
-        env_prefix='URBANLENS_',
+        env_prefix='UL_',
         str_strip_whitespace = True
     )
 
