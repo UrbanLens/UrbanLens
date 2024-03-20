@@ -145,7 +145,7 @@ class DjangoProjectInitializer:
 
 	def clone_repo(self, destination_path : str = '/app'):
 		"""
-		Clone the github repo at UrbanLens/UrbanLens
+		Clone the github repo at UrbanLens
 		"""
 		# get the git username and email from environment variables
 		name = os.environ.get('GIT_NAME')
@@ -155,7 +155,7 @@ class DjangoProjectInitializer:
 
 		if not name or not email or not token:
 			logger.error('GIT_NAME, GIT_EMAIL, or GH_TOKEN environment variables are not set. Cannot initialize git project.')
-			raise UnrecoverableError()
+			return False
 
 		# Ensure destination_path doesnt already exist
 		if Path(destination_path).exists():
@@ -164,7 +164,7 @@ class DjangoProjectInitializer:
 			# If the path exists, check if it is entirely empty
 			if len(list(Path(destination_path).iterdir())) > 0:
 				logger.error(f'Destination path {destination_path} already exists. Cannot clone project.')
-				raise UnrecoverableError()
+				return False
 
 			# If the path exists but is empty, delete it
 			os.rmdir(destination_path)
@@ -181,7 +181,7 @@ class DjangoProjectInitializer:
 				logger.error(f'Error occurred during git config: {e}')
 				raise UnrecoverableError() from e
 
-			# Run gh repo clone UrbanLens/UrbanLens
+			# Run gh repo clone UrbanLens
 			try:
 				subprocess.run(['gh', 'repo', 'clone', 'UrbanLens/UrbanLens', destination_path], check=True)
 				logger.info('Cloned UrbanLens/UrbanLens as %s <%s> to %s.', name, email, destination_path)
@@ -211,6 +211,8 @@ class DjangoProjectInitializer:
 			if dir_exists and not Path(destination_path).exists():
 				os.mkdir(destination_path, exists_ok=True)
 				logger.info(f'Recreated directory {destination_path} after error.')
+
+		return True
 
 	def init_db(self):
 		"""
