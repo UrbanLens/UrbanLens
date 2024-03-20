@@ -100,6 +100,6 @@ COPY -R requirements /tmp/pip-tmp/
 RUN uv pip --no-cache-dir install -r /tmp/pip-tmp/requirements/dev.txt
 
 # Copy init.py into the container
-COPY UL/bin/init.py /usr/local/bin/urbanlens_init.py
+COPY bin/init.py /usr/local/bin/urbanlens_init.py
 
 ENTRYPOINT ["/bin/bash", "-c", "python /usr/local/bin/urbanlens_init.py & sleep infinity"]
