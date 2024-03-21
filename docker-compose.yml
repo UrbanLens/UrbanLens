@@ -31,6 +31,7 @@ services:
 
     volumes:
       - logs:/var/log
+      - static_volume:/app/frontend/static
 
     networks:
       app_network:
@@ -51,6 +52,19 @@ services:
       - UL_DATABASE_HOST=${UL_DATABASE_HOST:-urbanlens_db}
       - UL_DATABASE_PORT=${UL_DATABASE_PORT:-5432}
       - ENVIRONMENT=${ENVIRONMENT:-production}
+
+  nginx:
+    container_name: urbanlens_nginx
+    image: nginx:alpine
+    volumes:
+      - static_volume:/app/frontend/static
+      - ./config/nginx:/etc/nginx/conf.d
+    ports:
+      - "6565:80"
+    depends_on:
+      - app
+    networks:
+      app_network:
 
   db:
     container_name: urbanlens_db
@@ -84,6 +98,7 @@ services:
 volumes:
   postgres-data:
   logs:
+  static_volume: 
 
 networks:
   app_network:
