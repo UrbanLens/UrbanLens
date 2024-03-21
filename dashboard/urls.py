@@ -66,7 +66,7 @@ for route, viewset in routes.items():
 urlpatterns = [
     path('rest/reviews/create_or_update/<int:pk>/', ReviewViewSet.as_view({'patch': 'create_or_update'}), name='review-create-or-update'),
 	path('rest/', include(router.urls)),
-	re_path('^?$', IndexController.as_view(), name='home'),
+	re_path('^$', IndexController.as_view(), name='home'),
 	path('map/', include([
 		path('', map.MapController.as_view({'get': 'view_map'}), name='view_map'),
 		path('init/', map.MapController.as_view({'get': 'init_map'}), name='init_map'),

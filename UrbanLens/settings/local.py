@@ -52,7 +52,7 @@ SECRET_KEY = "django-insecure-r-8lxm+kdnd+j)-lxp7bdr8w260+7#d$j%&6l6g^3)3ly*()wb
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOST8 = ['urbanlens.org', '192.168.11.170']
 
 # Application definition
 INSTALLED_APPS = [
