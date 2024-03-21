@@ -87,6 +87,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
 	git \
 	gh \
 	iputils-ping \
+	libgdal-dev \
 	wget && \
 	apt-get clean && \
 	rm -rf /var/lib/apt/lists/*

@@ -112,12 +112,12 @@ WSGI_APPLICATION = "UrbanLens.wsgi.application"
 
 DATABASES = {
     "default": {
-		"ENGINE": os.getenv("UL_DB_ENGINE", "django.contrib.gis.db.backends.postgis"),
-		'NAME': os.getenv("UL_DB_NAME", 'urbanlens'),
-		'USER': os.getenv("UL_DB_USER", 'urbanlens'),
-		'PASSWORD': os.getenv("UL_DB_PASS", 'urbanpineapplepantslens'),
-		'HOST': os.getenv("UL_DB_HOST", 'localhost'),
-		'PORT': os.getenv("UL_DB_PORT", '5432'),
+		"ENGINE": os.getenv("UL_DATABASE_ENGINE", "django.contrib.gis.db.backends.postgis"),
+		'NAME': os.getenv("UL_DATABASE_NAME", 'urbanlens'),
+		'USER': os.getenv("UL_DATABASE_USER", 'urbanlens'),
+		'PASSWORD': os.getenv("UL_DATABASE_PASS"),
+		'HOST': os.getenv("UL_DATABASE_HOST", 'localhost'),
+		'PORT': os.getenv("UL_DATABASE_PORT", '5432'),
     },
 }
 DATABASE_ROUTERS = ['dashboard.dbrouters.DBRouter']

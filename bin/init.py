@@ -57,11 +57,11 @@ class DjangoProjectInitializer:
 		self.no_runserver = no_runserver
 
 		# Get database details from environment variables
-		self.db_host = os.environ.get('DB_HOST', 'localhost')
-		self.db_port = os.environ.get('DB_PORT', 5432)
-		self.db_name = os.environ.get('DB_NAME', 'UrbanLens')
-		self.db_user = os.environ.get('DB_USER', 'postgres')
-		self.db_pass = os.environ.get('DB_PASS', 'postgres')
+		self.db_host = os.environ.get('UL_DATABASE_HOST', 'localhost')
+		self.db_port = os.environ.get('UL_DATABASE_PORT', 5432)
+		self.db_name = os.environ.get('UL_DATABASE_NAME', 'UrbanLens')
+		self.db_user = os.environ.get('UL_DATABASE_USER', 'postgres')
+		self.db_pass = os.environ.get('UL_DATABASE_PASS', 'postgres')
 		self.environment = environment if environment else os.environ.get('ENVIRONMENT', 'production')
 
 	@property

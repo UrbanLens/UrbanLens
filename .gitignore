@@ -25,7 +25,6 @@ notes/
 
 # Secrets, authentication, etc
 .env
-Credentials.yaml
 bin/conf/
 bin/settings.py
 
