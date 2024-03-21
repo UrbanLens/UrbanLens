@@ -106,10 +106,10 @@ COPY bin/init.py /usr/local/bin/urbanlens_init.py
 # Copy all source files into the container
 COPY . /app
 
-# RUN python manage.py migrate && \
-#	npm install && \
-#	npm run sass && \
-#	python manage.py collectstatic --noinput
+RUN python manage.py migrate && \
+	npm install && \
+	npm run sass && \
+	python manage.py collectstatic --noinput
 
 #ENTRYPOINT ["/bin/bash", "-c", "python /usr/local/bin/urbanlens_init.py & sleep infinity"]
 ENTRYPOINT ["/bin/bash", "-c", "sleep infinity"]

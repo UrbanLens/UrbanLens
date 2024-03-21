@@ -6,7 +6,7 @@
     "scripts": {
         "db": "python bin/db.py start",
         "migrate": "python manage.py makemigrations & python manage.py migrate",
-        "sass": "sass --scss dashboard/frontend/sass/style.scss dashboard/frontend/static/dashboard/style.css",
+        "sass": "sass dashboard/frontend/sass/style.scss dashboard/frontend/static/dashboard/style.css",
         "bun": "bun build dashboard/frontend/ts/index.tsx --outdir dashboard/frontend/static/dashboard/js --target browser",
         "start": "gunicorn UrbanLens.wsgi:application --bind 0.0.0.0:8000"
     },

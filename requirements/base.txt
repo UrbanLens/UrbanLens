@@ -34,3 +34,4 @@ shapely
 social-auth-app-django
 geopy
 Pillow
+gunicorn
