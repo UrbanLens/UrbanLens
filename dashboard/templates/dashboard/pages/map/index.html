@@ -29,8 +29,8 @@
         <div>
             <button id="weather-button" title="Weather View" onclick="toggleWeatherView()"></button>
         </div>
-        <div hx-get="{% url 'location.import.csv' %}" hx-trigger="click" hx-target="#map-body" hx-swap="beforeend">
-            <button id="import-pins-button" title="Import Pins"></button>
+        <div hx-get="{% url 'location.import.csv' %}" hx-trigger="click" hx-target="#importPinsModal" hx-swap="innerHTML">
+            <button id="import-pins-button" title="Import Pins" class="map-button"></button>
         </div>
     </div>
 
