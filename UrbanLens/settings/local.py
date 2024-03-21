@@ -52,7 +52,7 @@ SECRET_KEY = "django-insecure-r-8lxm+kdnd+j)-lxp7bdr8w260+7#d$j%&6l6g^3)3ly*()wb
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOST8 = ['urbanlens.org', '192.168.11.170']
+ALLOWED_HOST8 = ['urbanlens.org']
 
 # Application definition
 INSTALLED_APPS = [
@@ -166,8 +166,7 @@ STATICFILES_DIRS = [
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://urbanlens.com",
+    "http://urbanlens.org",
 ]
 
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.getenv("UL_GOOGLE_CLIENT_ID", "")

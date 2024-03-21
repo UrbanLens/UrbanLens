@@ -70,7 +70,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     root_urlconf : str = Field(default = 'UrbanLens.urls', description = "The root urlconf to use for the application")
     admin_username : str = Field(default = 'Admin', description = "The username to use for the admin user")
     admin_email : str = Field(default = 'jess@manlyphotos.com', description = "The email to use for the admin user")
-    allowed_hosts : list[str] = Field(default = ['*'], description = "The allowed hosts to use for the application")
+    allowed_hosts : list[str] = Field(default = ['urbanlens.org'], description = "The allowed hosts to use for the application")
     language_code : str = Field(default = 'en-us', description = "The language code to use for the application")
     time_zone : str = Field(default = 'EST', description = "The time zone to use for the application")
     use_i18n : bool = Field(default = True, description = "Whether or not to use i18n")
