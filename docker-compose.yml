@@ -38,9 +38,6 @@ services:
         aliases:
           - urbanlens_app
 
-    ports:
-      - "6565:8000"
-
     environment:
       - GIT_EMAIL=${GIT_EMAIL}
       - GIT_NAME=${GIT_NAME}
