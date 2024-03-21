@@ -109,10 +109,10 @@ COPY . /app
 # Set the working directory
 WORKDIR /app
 
-RUN python /app/manage.py migrate
-RUN npm install
-RUN npm run sass
-RUN python manage.py collectstatic --noinput
+#RUN python manage.py migrate
+#RUN npm install
+#RUN npm run sass
+#RUN python manage.py collectstatic --noinput
 
 #ENTRYPOINT ["/bin/bash", "-c", "python /usr/local/bin/urbanlens_init.py & sleep infinity"]
-ENTRYPOINT ["/bin/bash", "-c", "npm run start && sleep infinity"]
+ENTRYPOINT ["/bin/bash", "-c", "sleep infinity"]
