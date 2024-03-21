@@ -106,6 +106,9 @@ COPY bin/init.py /usr/local/bin/urbanlens_init.py
 # Copy all source files into the container
 COPY . /app
 
+# Set the working directory
+WORKDIR /app
+
 RUN python manage.py migrate
 RUN npm install
 RUN npm run sass
