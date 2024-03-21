@@ -32,6 +32,9 @@ services:
     volumes:
       - logs:/var/log
       - static_volume:/app/frontend/static
+    
+    ports:
+      - "6565:8000"
 
     networks:
       app_network:
@@ -57,7 +60,7 @@ services:
       - static_volume:/app/frontend/static
       - ./config/nginx:/etc/nginx/conf.d
     ports:
-      - "6565:80"
+      - "6464:80"
     depends_on:
       - app
     networks:
