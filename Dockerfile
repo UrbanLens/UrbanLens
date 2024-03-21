@@ -109,7 +109,7 @@ COPY . /app
 # Set the working directory
 WORKDIR /app
 
-RUN python manage.py migrate
+RUN python /app/manage.py migrate
 RUN npm install
 RUN npm run sass
 RUN python manage.py collectstatic --noinput
