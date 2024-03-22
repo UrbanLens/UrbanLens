@@ -310,11 +310,12 @@ class Location(abstract.Model):
         return None
 
     def __str__(self):
-        if self.categories.all():
+        if self.categories.all().exists():
             categories = ', '.join([category.pk for category in self.categories.all()])
         else:
             categories = 'None'
-        if self.tags.all():
+            
+        if self.tags.all().exists():
             tags = ', '.join([tag.pk for tag in self.tags.all()])
         else:
             tags = 'None'
