@@ -224,7 +224,7 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
     @action(detail=True, methods=['get'])
     def import_form(self, request, *args, **kwargs):
         """
-        View the import CSV page
+        View the import locations form
         """
         return render(request, 'dashboard/pages/location/import/csv.html', { 'form': UploadDataFile() })
 

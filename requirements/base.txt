@@ -36,3 +36,4 @@ geopy
 Pillow
 gunicorn
 pydantic
+pydantic_settings
