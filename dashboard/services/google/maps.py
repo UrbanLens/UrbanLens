@@ -182,6 +182,8 @@ class GoogleMapsGateway(Gateway):
                     logger.critical('Attempting to create location: %s', location_data)
                 '''
                 try:
+                    if exists == 107:
+                        logger.critical('Attempting to create location: %s', location_data)
                     location, created = Location.objects.get_nearby_or_create(
                         latitude=location_data['latitude'],
                         longitude=location_data['longitude'],
@@ -198,7 +200,7 @@ class GoogleMapsGateway(Gateway):
                         skipped += 1
                 finally:
                     pbar.update(1)
-                    pbar.set_description(f"Importing locations: {created_locations} created, {skipped} skipped, {exists} already existed.")
+                    pbar.set_description(f"Importing locations: {created_locations} created, {skipped} skipped, {exists} already existed. Last: {location_data.get('name','')}")
 
         return locations
 
