@@ -167,8 +167,15 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# http://urbanlens.org, http://urbanlens.com, https://urbanlens.org, https://urbanlens.com, etc
+protocols = ['http://', 'https://']
+domains = ['urbanlens.org', 'urbanlens.com']
+subdomains = ['www.', '']
 CORS_ALLOWED_ORIGINS = [
-    "http://urbanlens.org",
+    f'{protocol}{subdomain}{domain}'
+    for protocol in protocols 
+    for subdomain in subdomains 
+    for domain in domains
 ]
 
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.getenv("UL_GOOGLE_CLIENT_ID", "")
