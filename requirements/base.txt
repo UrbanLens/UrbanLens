@@ -39,3 +39,4 @@ pydantic
 pydantic_settings
 tiktoken
 openai
+gevent
