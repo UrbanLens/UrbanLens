@@ -63,7 +63,7 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         """
         from dashboard.models.profile import Profile
         profile = Profile.objects.get(pk=1)
-        location = Location.objects.get_nearby_or_create(latitude=43.0423439, longitude=-76.1501928, profile=profile, defaults={
+        location, created = Location.objects.get_nearby_or_create(latitude=43.0423439, longitude=-76.1501928, profile=profile, defaults={
             'name': 'Syracuse Central High School',
             'description': '',
         })
