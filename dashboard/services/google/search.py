@@ -24,11 +24,9 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
-from typing import Any
-from django.conf import settings
+from UrbanLens.settings.app import settings
 import requests
 import logging
-from icecream import ic
 from dashboard.services.gateway import Gateway
 
 logger = logging.getLogger(__name__)
@@ -39,8 +37,8 @@ class GoogleCustomSearchGateway(Gateway):
     """
 
     def __init__(self):
-        self.api_key = settings.GOOGLE_SEARCH_API_KEY
-        self.cx = settings.GOOGLE_SEARCH_TENANT
+        self.api_key = settings.google_search_api_key
+        self.cx = settings.google_search_tenant
         self.base_url = "https://customsearch.googleapis.com/customsearch/v1"
 
     def search(self, terms : str | list[str | list[str]], max_results : int = 20) -> dict:

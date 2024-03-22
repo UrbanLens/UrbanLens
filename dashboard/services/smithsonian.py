@@ -27,7 +27,7 @@
 from django.core.cache import cache
 from dashboard.services.gateway import Gateway
 import requests
-from django.conf import settings
+from UrbanLens.settings.app import settings
 
 class SmithsonianGateway(Gateway):
     """
@@ -62,7 +62,7 @@ class SmithsonianGateway(Gateway):
         from dashboard.services.google.geocoding import GoogleGeocodingGateway
 
         # Get the place name from the coordinates
-        google_gateway = GoogleGeocodingGateway(settings.GOOGLE_MAPS_API_KEY)
+        google_gateway = GoogleGeocodingGateway(settings.google_maps_api_key)
         place_name = google_gateway.get_place_name(latitude, longitude)
 
         # Get the images from the Smithsonian API

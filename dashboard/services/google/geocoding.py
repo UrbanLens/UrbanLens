@@ -26,9 +26,10 @@
 
 from __future__ import annotations
 import re
+from typing import Optional
 import requests
 import logging
-from icecream import ic
+from UrbanLens.settings.app import settings
 from dashboard.services.gateway import Gateway
 from dashboard.models.cache import GeocodedLocation
 import json
@@ -36,9 +37,15 @@ import json
 logger = logging.getLogger(__name__)
 
 class GoogleGeocodingGateway(Gateway):
-    def __init__(self, api_key):
+    def __init__(self, api_key : Optional[str] = None):
+        if not api_key:
+            api_key = settings.google_maps_api_key
+
         self.api_key = api_key
         self.base_url = "https://maps.googleapis.com/maps/api/geocode/json"
+
+        if not self.api_key:
+            raise ValueError("Google Geocoding Gateway requires an API Key.")
 
     def decode_place_name(self, place_name : str) -> str:
         """

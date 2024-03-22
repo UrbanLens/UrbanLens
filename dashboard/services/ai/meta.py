@@ -7,11 +7,11 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        - File:    trip.py                                                                                            *
-*        - Path:    /dashboard/controllers/trip.py                                                                     *
+*        - File:    meta.py                                                                                            *
+*        - Path:    /dashboard/services/ai/meta.py                                                                     *
 *        - Project: urbanlens                                                                                          *
 *        - Version: 1.0.0                                                                                              *
-*        - Created: 2024-01-07                                                                                         *
+*        - Created: 2024-03-21                                                                                         *
 *        - Author:  Jess Mann                                                                                          *
 *        - Email:   jess@manlyphotos.com                                                                               *
 *        - Copyright (c) 2024 Urban Lens                                                                               *
@@ -20,64 +20,27 @@
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2024-03-22     By Jess Mann                                                                                   *
+*        2024-03-21     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-import logging
+SHORTEST_MESSAGE = 50
+MAX_TOKENS = 16000
 
-from django.shortcuts import render
-from django.http import HttpResponse
-from django.contrib.auth.mixins import LoginRequiredMixin
-from rest_framework.viewsets import GenericViewSet
+PROJECT_DESCRIPTION = """
+    You are an AI assistant for Urban Lens. This web application facilitates urban exploration by providing a platform for users 
+    to share and discover locations of abandoned sites. Its main features include a mapping interface for location sharing, a 
+    categorization system for types of locations (e.g., church, factory), and tools for organizing exploration trips. 
+"""
 
-from dashboard.models.trips import Trip
+FORMATTING = """
+    Perform the tasks requested of you, and return the relevant part of the answer inside the <ANSWER> tags. The contents inside the tag will 
+    be extracted and parsed by a script, so it needs to be formatted correctly and not contain any extra content. 
 
-logger = logging.getLogger(__name__)
+    For example, if the task is to interpret a date from a string, and the string is "The date is January 1, 2023", your reply should include
+    <ANSWER>2023-01-01</ANSWER>, so that it can be easily parsed into a date object.
+    
+    If the string is "January 20 - 23, 2023", your reply should include <ANSWER>2023-01-20 - 2023-01-23</ANSWER>, so that it can be easily split into
+    two dates that can be parsed into date objects.
+"""
 
-class TripController(LoginRequiredMixin, GenericViewSet):
-    """
-    Controller for the trip planning page
-    """
-    from dashboard.models.trips.model import Trip
-
-    def view(self, request, *args, **kwargs):
-        """
-        View the trip page
-        """
-        trip = Trip.objects.get(id=kwargs['trip_id'])
-        return render(request, 'dashboard/pages/trip/index.html', { 'trip': trip })
-
-    def get_trip_data(self, trip_id):
-        """
-        Fetch trip data.
-        """
-        trip = Trip.objects.get(id=trip_id)
-        return trip.to_json()
-
-    def get_trip_users(self, request, trip_id, *args, **kwargs):
-        """
-        Fetch users associated with a trip.
-        """
-        trip = Trip.objects.get(id=trip_id)
-        users = [user.to_json() for user in trip.users.all()]
-        return HttpResponse(users, status=200)
-
-    def get_trip_locations(self, request, trip_id, *args, **kwargs):
-        """
-        Fetch locations associated with a trip.
-        """
-        trip = Trip.objects.get(id=trip_id)
-        locations = [location.to_json() for location in trip.locations.all()]
-        return HttpResponse(locations, status=200)
-
-    def plan_trip(self, request, *args, **kwargs):
-        """
-        Plan a trip itinerary using multiple locations and multiple users.
-        """
-        # TODO: Implement the logic for planning a trip itinerary.
-        # This may involve fetching locations and users from the database,
-        # performing some calculations or operations, and then returning
-        # the result in the appropriate format (e.g., as an HttpResponse
-        # or a render() call with a template and context).
-
-        return HttpResponse("Trip planning not yet implemented", status=501)
+INSTRUCTIONS = ""

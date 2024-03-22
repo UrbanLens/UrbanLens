@@ -25,7 +25,6 @@
 *********************************************************************************************************************"""
 import requests
 import logging
-from django.conf import settings
 from shapely.geometry import Point
 import geopandas as gpd
 from dashboard.services.gateway import Gateway

@@ -24,10 +24,8 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
-from typing import TYPE_CHECKING
 import logging
 from django.db.models import CASCADE
-from django.contrib.auth.models import User
 from django.db.models import ForeignKey, CharField
 from dashboard.models.abstract import Model, TextChoices
 from dashboard.models.friendship.queryset import Manager

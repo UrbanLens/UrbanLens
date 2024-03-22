@@ -36,3 +36,4 @@ from dashboard.models.notifications import NotificationLog
 from dashboard.models.reviews import Review
 from dashboard.models.tags import Tag
 from dashboard.models.cache import GeocodedLocation
+from dashboard.models.trips import Trip

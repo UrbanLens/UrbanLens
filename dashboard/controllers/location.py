@@ -7,20 +7,20 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    location.py                                                                                          *
-*        Path:    /dashboard/controllers/location.py                                                                   *
-*        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
-*        Created: 2024-01-01                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        - File:    location.py                                                                                        *
+*        - Path:    /dashboard/controllers/location.py                                                                 *
+*        - Project: urbanlens                                                                                          *
+*        - Version: 1.0.0                                                                                              *
+*        - Created: 2024-01-01                                                                                         *
+*        - Author:  Jess Mann                                                                                          *
+*        - Email:   jess@manlyphotos.com                                                                               *
+*        - Copyright (c) 2024 Urban Lens                                                                               *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2024-01-01     By Jess Mann                                                                                   *
+*        2024-03-22     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from datetime import datetime
@@ -29,22 +29,19 @@ import logging
 from django.shortcuts import render
 from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.conf import settings
 from requests.exceptions import HTTPError
-from icecream import ic
-import csv
-from io import StringIO
 
 from rest_framework.viewsets import GenericViewSet
 from rest_framework.decorators import action
 from django.http import JsonResponse
 from rest_framework.exceptions import ValidationError
 
+from UrbanLens.settings.app import settings
 from dashboard.models.locations.model import Location
 from dashboard.services.smithsonian import SmithsonianGateway
 from dashboard.services.google.search import GoogleCustomSearchGateway
 from dashboard.services.google.maps import GoogleMapsGateway
-from dashboard.forms.upload_csv import CSVUploadForm
+from dashboard.forms.upload_datafile import UploadDataFile
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +55,25 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         """
         location = Location.objects.get(id=kwargs['location_id'])
 
-        return render(request, 'dashboard/pages/location/index.html', { 'location': location, 'google_maps_api_key': settings.GOOGLE_MAPS_API_KEY })
+        return render(request, 'dashboard/pages/location/index.html', { 'location': location, 'google_maps_api_key': settings.google_maps_api_key })
+    
+    def test_ai(self, request, *args, **kwargs):
+        """
+        Test the AI. TODO Temporary function that can be deleted at any time with no side effects.
+        """
+        from dashboard.services.ai.cloudflare import CloudflareGateway
+        gateway = CloudflareGateway(instructions="""
+            Look at the following information about a location and determine what category it belongs in. Available categories are:
+            Church, School, Park, Police Station, Firehouse, Library, Hospital, Castle, House, Mansion, Factory, Mall, Power Plant, 
+            Asylum, Prison, Stadium, Military Base, Airport, Train Station, Bank, Hotel, Resort, Amusement Park, Tunnel, Cave, Silo,
+            Graveyard, Lighthouse, Bridge, Dam, Water Tower, Theater, Observatory, Laboratory, Ruins, Cars, Boats, Planes, Trains,
+            Casino, Strip Club, Office, Fire Tower, Warehouse, Campground, Skyscraper, Funeral Home, Monument, Bunker, Store
+            If the location does not fit into any of these categories, provide a new category that is broad enough to include a variety 
+            of similar urbex locations. Do not answer with the name of the location; always answer with a category.
+        """)
+        response = gateway.send_prompt('address: 312 Western Ave, Guilderland, NY 12084, USA, name: Master Cleaners')
+
+        return JsonResponse({'response': response})
 
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data()
@@ -114,7 +129,7 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Location does not exist", status=404)
 
         # Instantiate the SmithsonianGateway with the API key
-        smithsonian_gateway = SmithsonianGateway(settings.SMITHSONIAN_API_KEY)
+        smithsonian_gateway = SmithsonianGateway(settings.smithsonian_api_key)
 
         # Get historic images from the Smithsonian's API
         smithsonian_images = smithsonian_gateway.get_data(location.name)
@@ -182,7 +197,7 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Location does not exist", status=404)
 
         # Instantiate the GoogleMapsGateway with the API key
-        google_maps_gateway = GoogleMapsGateway(settings.GOOGLE_MAPS_API_KEY)
+        google_maps_gateway = GoogleMapsGateway(settings.google_maps_api_key)
 
         # Get the satellite view image from the Google Maps API
         satellite_image = google_maps_gateway.get_satellite_view(location.latitude, location.longitude)
@@ -199,7 +214,7 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Location does not exist", status=404)
 
         # Instantiate the GoogleMapsGateway with the API key
-        google_maps_gateway = GoogleMapsGateway(settings.GOOGLE_MAPS_API_KEY)
+        google_maps_gateway = GoogleMapsGateway(settings.google_maps_api_key)
 
         # Get the street view image from the Google Maps API
         street_view_image = google_maps_gateway.get_street_view(location.latitude, location.longitude)
@@ -207,31 +222,26 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse(street_view_image, content_type="image/jpeg")
 
     @action(detail=True, methods=['get'])
-    def import_csv(self, request, *args, **kwargs):
+    def import_form(self, request, *args, **kwargs):
         """
         View the import CSV page
         """
-        return render(request, 'dashboard/pages/location/import/csv.html', { 'form': CSVUploadForm() })
+        return render(request, 'dashboard/pages/location/import/csv.html', { 'form': UploadDataFile() })
 
-    def upload_csv(self, request, *args, **kwargs):
+    def upload_takeout(self, request, *args, **kwargs):
         """
-        Upload a CSV file
+        Upload a Google Takeout file
         """
         try:
-            form = CSVUploadForm(request.POST, request.FILES)
+            form = UploadDataFile(request.POST, request.FILES)
             if form.is_valid():
-                csv_file = form.cleaned_data['file']
-
-                # Read the file
-                csv_file_contents = csv_file.read().decode('utf-8')
-
-                from dashboard.services.google.maps import GoogleMapsGateway
+                datafile = form.cleaned_data['file']
 
                 # Instantiate the GoogleMapsGateway with the API key
-                google_maps_gateway = GoogleMapsGateway(settings.GOOGLE_MAPS_API_KEY)
+                google_maps_gateway = GoogleMapsGateway(settings.google_maps_api_key)
 
-                # Get the locations from the CSV file
-                locations = google_maps_gateway.import_locations_from_csv(csv_file_contents, request.user.profile)
+                # Get the file extension
+                locations = google_maps_gateway.import_locations_from_file(datafile, request.user.profile)
 
                 return JsonResponse({'locations': [location.to_json() for location in locations]})
             else:
@@ -240,35 +250,6 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         except ValidationError as e:
             return JsonResponse({'error': str(e)}, status=400)
 
-
-    @action(detail=True, methods=['get'])
-    def import_kml(self, request, *args, **kwargs):
-        """
-        View the import KML page
-        """
-        return render(request, 'dashboard/pages/location/import/kml.html')
-
-    @action(detail=True, methods=['post'])
-    def upload_kml(self, request, *args, **kwargs):
-        """
-        Upload a KML file
-        """
-        # Get the file from the request
-        kml_file = request.FILES['kml_file']
-
-        # Read the file
-        kml_file_contents = kml_file.read().decode('utf-8')
-
-        from dashboard.services.google.maps import GoogleMapsGateway
-
-        # Instantiate the GoogleMapsGateway with the API key
-        google_maps_gateway = GoogleMapsGateway(settings.GOOGLE_MAPS_API_KEY)
-
-        # Get the locations from the KML file
-        locations = google_maps_gateway.import_locations_from_kml(kml_file_contents, request.user.profile)
-
-        return JsonResponse({'locations': locations})
-    
     def weather_forecast(self, request, location_id, *args, **kwargs):
         """
         Returns the weather forecast for a location.
@@ -287,6 +268,6 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         # Get the weather forecast from the OpenWeather API
         weather_forecast = weather_forecast_gateway.get_weather_forecast(location.latitude, location.longitude)
 
-        logger.critical('forecast_data: %s', weather_forecast)
+        logger.debug('forecast_data: %s', weather_forecast)
 
         return render(request, 'dashboard/pages/location/weather.html', { 'forecast': weather_forecast })

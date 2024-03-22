@@ -1,6 +1,6 @@
-<div id="upload_csv" class="dialog">
+<div id="upload_takeout" class="dialog">
     <h2>Upload CSV</h2>
-    <form id="upload_csv_form" action="{% url 'location.upload.csv' %}" method="post" enctype="multipart/form-data">
+    <form id="upload_takeout_form" action="{% url 'location.upload.takeout' %}" method="post" enctype="multipart/form-data">
         {% csrf_token %}
         {{ form.as_p }}
         <input type="submit" value="Upload">
@@ -12,7 +12,7 @@
 
 <script>
     $(document).ready(function () {
-            $('#upload_csv_form').on('submit', function (e) {
+            $('#upload_takeout_form').on('submit', function (e) {
                 e.preventDefault();
 
                 var formData = new FormData(this);

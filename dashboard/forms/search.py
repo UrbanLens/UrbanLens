@@ -25,7 +25,6 @@
 *********************************************************************************************************************"""
 from django import forms
 from dashboard.models.locations.model import Location, LocationStatus
-from dashboard.models.categories.model import Category
 from dashboard.models.tags.model import Tag
 from django.db.models import Q
 

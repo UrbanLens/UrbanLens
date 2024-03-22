@@ -30,7 +30,6 @@ import sys
 import re
 import argparse
 from typing import Optional
-import yaml
 from pathlib import Path
 import subprocess
 import logging

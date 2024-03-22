@@ -7,11 +7,11 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        - File:    trip.py                                                                                            *
-*        - Path:    /dashboard/controllers/trip.py                                                                     *
+*        - File:    functions.py                                                                                       *
+*        - Path:    /dashboard/services/ai/functions.py                                                                *
 *        - Project: urbanlens                                                                                          *
 *        - Version: 1.0.0                                                                                              *
-*        - Created: 2024-01-07                                                                                         *
+*        - Created: 2024-03-21                                                                                         *
 *        - Author:  Jess Mann                                                                                          *
 *        - Email:   jess@manlyphotos.com                                                                               *
 *        - Copyright (c) 2024 Urban Lens                                                                               *
@@ -20,64 +20,59 @@
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2024-03-22     By Jess Mann                                                                                   *
+*        2024-03-21     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-import logging
+from __future__ import annotations
+from typing import TYPE_CHECKING, Dict, List
 
-from django.shortcuts import render
-from django.http import HttpResponse
-from django.contrib.auth.mixins import LoginRequiredMixin
-from rest_framework.viewsets import GenericViewSet
+if TYPE_CHECKING:
+    from dashboard.services.ai.message import MessageQueue
 
-from dashboard.models.trips import Trip
-
-logger = logging.getLogger(__name__)
-
-class TripController(LoginRequiredMixin, GenericViewSet):
+def estimate_tokens(prompt: str) -> int:
     """
-    Controller for the trip planning page
+    Estimate the number of tokens in a given text prompt.
+
+        This method provides an approximation based on whitespace and common punctuation.
+
+
+        Args:
+            prompt (str):
+                The text prompt to estimate the token count for.
+
+        Returns:
+            int:
+                The estimated token count for the given prompt.
     """
-    from dashboard.models.trips.model import Trip
+    # Basic whitespace tokenization as a rough approximation
+    tokens = prompt.split()
 
-    def view(self, request, *args, **kwargs):
-        """
-        View the trip page
-        """
-        trip = Trip.objects.get(id=kwargs['trip_id'])
-        return render(request, 'dashboard/pages/trip/index.html', { 'trip': trip })
+    # Further split on common punctuation to better approximate model tokenization
+    punctuations = [".", ",", "!", "?", ";", ":", "-", "—", "(", ")", "[", "]", "{", "}", '"', "'"]
+    refined_tokens = []
+    for token in tokens:
+        temp_token = [token]
+        for punct in punctuations:
+            temp_token = [subtoken for token in temp_token for subtoken in token.split(punct) if subtoken]
+        refined_tokens.extend(temp_token)
 
-    def get_trip_data(self, trip_id):
-        """
-        Fetch trip data.
-        """
-        trip = Trip.objects.get(id=trip_id)
-        return trip.to_json()
+    return len(refined_tokens)
 
-    def get_trip_users(self, request, trip_id, *args, **kwargs):
-        """
-        Fetch users associated with a trip.
-        """
-        trip = Trip.objects.get(id=trip_id)
-        users = [user.to_json() for user in trip.users.all()]
-        return HttpResponse(users, status=200)
+def estimate_combined_tokens(messages: 'MessageQueue' | List[Dict[str, str]]) -> int:
+    """
+    Estimate the combined token count of a list of messages.
+    
+        This method provides an approximation based on whitespace and common punctuation.
 
-    def get_trip_locations(self, request, trip_id, *args, **kwargs):
-        """
-        Fetch locations associated with a trip.
-        """
-        trip = Trip.objects.get(id=trip_id)
-        locations = [location.to_json() for location in trip.locations.all()]
-        return HttpResponse(locations, status=200)
+        Args:
+            messages (MessageQueue | List[Dict[str, str]]):
+                The list of messages to estimate the combined token count for.
 
-    def plan_trip(self, request, *args, **kwargs):
-        """
-        Plan a trip itinerary using multiple locations and multiple users.
-        """
-        # TODO: Implement the logic for planning a trip itinerary.
-        # This may involve fetching locations and users from the database,
-        # performing some calculations or operations, and then returning
-        # the result in the appropriate format (e.g., as an HttpResponse
-        # or a render() call with a template and context).
-
-        return HttpResponse("Trip planning not yet implemented", status=501)
+        Returns:
+            int:
+                The estimated combined token count for the given list of messages.
+    """
+    tokens = 0
+    for message in messages:
+        tokens += estimate_tokens(message['content'])
+    return tokens

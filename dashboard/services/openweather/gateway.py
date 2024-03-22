@@ -26,7 +26,7 @@
 from datetime import datetime
 import requests
 import logging
-from django.conf import settings
+from UrbanLens.settings.app import settings
 from dashboard.services.gateway import Gateway
 import json
 
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 class WeatherForecastGateway(Gateway):
     def __init__(self, api_key : str | None = None):
         if not api_key:
-            api_key = settings.OPEN_WEATHER_API_KEY
+            api_key = settings.openweathermap_api_key
         self.api_key = api_key
         self.base_url = "http://api.openweathermap.org/data/2.5/forecast"
 

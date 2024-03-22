@@ -66,29 +66,29 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     project_name: str = Field(default='URBANLENS', description="The name of the project")
     environment_name: str = Field(default=EnvironmentTypes.LOCAL, description="The name of the environment")
     debug_override: Optional[bool] = Field(description="Whether or not to enable debugging", alias='DEBUG', default=None)
-    secret_key : str = Field(default = '1t5v24s98-fcbas23-vfsd238vc-asfdioj322', description = "The secret key to use for the application")
-    root_urlconf : str = Field(default = 'UrbanLens.urls', description = "The root urlconf to use for the application")
+    secret_key : str = Field(default = '1t5v24s98-fcbas23-vfsd238vc-asfdioj322', description = "The secret key")
+    root_urlconf : str = Field(default = 'UrbanLens.urls', description = "The root urlconf")
     admin_username : str = Field(default = 'Admin', description = "The username to use for the admin user")
     admin_email : str = Field(default = 'jess@manlyphotos.com', description = "The email to use for the admin user")
-    allowed_hosts : list[str] = Field(default = ['urbanlens.org'], description = "The allowed hosts to use for the application")
-    language_code : str = Field(default = 'en-us', description = "The language code to use for the application")
-    time_zone : str = Field(default = 'EST', description = "The time zone to use for the application")
+    allowed_hosts : list[str] = Field(default = ['urbanlens.org'], description = "The allowed hosts")
+    language_code : str = Field(default = 'en-us', description = "The language code")
+    time_zone : str = Field(default = 'EST', description = "The time zone")
     use_i18n : bool = Field(default = True, description = "Whether or not to use i18n")
     use_tz : bool = Field(default = True, description = "Whether or not to use tz")
-    email_from : str = Field(default = 'jess@manlyphotos.com', description = "The from email to use for the application")
-    email_host : str = Field(default = 'smtp.gmail.com', description = "The email host to use for the application")
-    email_port : int = Field(default = 587, description = "The email port to use for the application")
+    email_from : str = Field(default = 'jess@manlyphotos.com', description = "The from email")
+    email_host : str = Field(default = 'smtp.gmail.com', description = "The email host")
+    email_port : int = Field(default = 587, description = "The email port")
     backup_retention : int = Field(default = 30, description = "The number of days to retain backups")
 
     # Classes
-    default_auto_field : str = Field(default = 'django.db.models.BigAutoField', description = "The default auto field to use for the application")
-    wsgi_application : str = Field(default = 'UrbanLens.wsgi.application', description = "The wsgi application to use for the application")
-    asgi_application : str = Field(default = 'UrbanLens.asgi.application', description = "The asgi application to use for the application")
-    test_runner : str = Field(default = 'core.tests.runner.TestRunner', description = "The test runner to use for the application")
+    default_auto_field : str = Field(default = 'django.db.models.BigAutoField', description = "The default auto field")
+    wsgi_application : str = Field(default = 'UrbanLens.wsgi.application', description = "The wsgi application")
+    asgi_application : str = Field(default = 'UrbanLens.asgi.application', description = "The asgi application")
+    test_runner : str = Field(default = 'core.tests.runner.TestRunner', description = "The test runner")
 
     # Urls
-    login_url : str = Field(default = 'login', description = "The login url to use for the application")
-    static_url : str = Field(default = 'static/', description = "The static url to use for the application")
+    login_url : str = Field(default = 'login', description = "The login url")
+    static_url : str = Field(default = 'static/', description = "The static url")
 
     # Directory settings
     base_dir: Path = Field(default='UrbanLens', description="The name of the base directory")
@@ -99,13 +99,29 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     exports_dir : Path = Field(default = 'exports', description = "The name of the exports directory")
     static_root : Path = Field(default = 'frontend/static', description = "The name of the static directory")
 
+    # APIs
+    cloudflare_ai_endpoint : Url = Field(description = "The cloudflare ai endpoint")
+    cloudflare_ai_api_key : str = Field(description = "The cloudflare ai key")
+    huggingface_ai_endpoint : Url = Field(description = "The huggingface ai endpoint")
+    huggingface_ai_api_key : str = Field(description = "The huggingface ai key")
+    openai_api_key : str = Field(description = "The openai key")
+    google_places_api_key : str = Field(description = "The google places key")
+    google_maps_api_key : str = Field(description = "The google maps key")
+    google_search_api_key : str = Field(description = "The google search key")
+    google_search_tenant : str = Field(description = "The google search tenant")
+    smithsonian_api_key : str = Field(description = "The smithsonian key")
+    google_client_id : str = Field(description = "The google client id")
+    google_client_secret : str = Field(description = "The google client secret")
+    openweathermap_api_key : str = Field(description = "The openweathermap key")
+    nps_api_key : str = Field(description = "The national park service api key")
+
     # DB
-    database_engine : str = Field(default = 'psqlextra.backend', description = "The database engine to use for the application")
-    database_host : str = Field(default = 'localhost', description = "The database host to use for the application")
-    database_port : str = Field(default = '5432', description = "The database port to use for the application")
-    database_name : str = Field(default = 'urbanlens', description = "The database name to use for the application")
-    database_user : str = Field(default = 'urbanlens', description = "The database user to use for the application")
-    database_pass : str = Field(default = 'urbanlens', description = "The database password to use for the application")
+    database_engine : str = Field(default = 'psqlextra.backend', description = "The database engine")
+    database_host : str = Field(default = 'localhost', description = "The database host")
+    database_port : str = Field(default = '5432', description = "The database port")
+    database_name : str = Field(default = 'urbanlens', description = "The database name")
+    database_user : str = Field(default = 'urbanlens', description = "The database user")
+    database_pass : str = Field(default = 'urbanlens', description = "The database password")
 
     _secrets : Optional[dict] = None
     _environment : Optional[BaseEnvironment] = None
@@ -140,7 +156,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @property
     def environment(self) -> Optional[BaseEnvironment]:
         """
-        The environment to use for the application
+        The environment
         """
         return self._environment
 
@@ -279,7 +295,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
     def select_environment(self, new_environment_name : Optional[EnvironmentTypes] = None) -> BaseEnvironment:
         """
-        Select the environment to use for the application
+        Select the environment
 
         Args:
             new_environment_name (Optional[EnvironmentTypes], optional):

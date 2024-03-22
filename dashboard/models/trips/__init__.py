@@ -7,11 +7,11 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    upload_csv.py                                                                                        *
-*        Path:    /dashboard/forms/upload_csv.py                                                                       *
+*        File:    __index__.py                                                                                         *
+*        Path:    /dashboard/models/trips/__index__.py                                                                 *
 *        Project: urbanlens                                                                                            *
 *        Version: 1.0.0                                                                                                *
-*        Created: 2024-01-16                                                                                           *
+*        Created: 2024-01-07                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@manlyphotos.com                                                                                 *
 *        Copyright (c) 2024 Urban Lens                                                                                 *
@@ -20,11 +20,10 @@
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2024-01-16     By Jess Mann                                                                                   *
+*        2024-01-07     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from django import forms
-
-class CSVUploadForm(forms.Form):
-    title = forms.CharField(max_length=50)
-    file = forms.FileField()
+from dashboard.models.trips.queryset import QuerySet, Manager
+from dashboard.models.trips.model import Trip
+from dashboard.models.trips.viewset import TripViewSet
+from dashboard.models.trips.serializer import TripSerializer

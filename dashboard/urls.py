@@ -86,11 +86,9 @@ urlpatterns = [
     		path('<int:location_id>/street_view/', location.LocationController.as_view({'get': 'street_view'}), name='location.street_view'),
 			path('<int:location_id>/weather/', location.LocationController.as_view({'get': 'weather_forecast'}), name='location.weather_forecast'),
 			path('import/', include([
-				path('csv/', location.LocationController.as_view({'get': 'import_csv'}), name='location.import.csv'),
-				path('csv/upload/', location.LocationController.as_view({'post': 'upload_csv'}), name='location.upload.csv'),
-				path('kml/', location.LocationController.as_view({'get': 'import_kml'}), name='location.import.kml'),
-				path('kml/upload/', location.LocationController.as_view({'post': 'upload_kml'}), name='location.upload.kml'),
-			]), name='location.import'),
+				path('form/', location.LocationController.as_view({'get': 'import_form'}), name='location.import.form'),
+				path('upload/', location.LocationController.as_view({'post': 'upload_takeout'}), name='location.upload.takeout'),
+			])),
 		])),
 	])),
 	path('profile/', include([
@@ -106,6 +104,9 @@ urlpatterns = [
 		path('block/<int:profile_id>', friendship.FriendController.as_view({'post': 'block_friend'}), name='friend.block'),
 		path('mute/<int:profile_id>', friendship.FriendController.as_view({'post': 'mute_friend'}), name='friend.mute'),
 	])),
+
+	path('test_ai/', location.LocationController.as_view({'get': 'test_ai'}), name='test_ai'),
+
 	path('', include('social_django.urls', namespace='social')),
 	re_path('.*', TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name='404')
 ]

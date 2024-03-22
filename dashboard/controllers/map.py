@@ -33,7 +33,7 @@ from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
-from django.conf import settings
+from UrbanLens.settings.app import settings
 
 from rest_framework.viewsets import GenericViewSet
 
@@ -52,10 +52,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def view_map(self, request, *args, **kwargs):
         locations = Location.objects.all()
 
-        return render(request, 'dashboard/pages/map/index.html', {'locations': locations, 'openweathermap_api_key': settings.OPEN_WEATHER_API_KEY})
+        return render(request, 'dashboard/pages/map/index.html', {'locations': locations, 'openweathermap_api_key': settings.openweathermap_api_key})
 
     def edit_pin(self, request, location_id, *args, **kwargs):
-        location = Location.objects.get(id=location_id)
+        location : Location = Location.objects.get(id=location_id)
         # Update the location based on the form data
         location.name = request.POST.get('name')
         location.description = request.POST.get('description')

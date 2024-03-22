@@ -26,9 +26,7 @@
 
 import logging
 from abc import ABC
-from typing import Optional
 from pydantic import BaseModel, Field, validator
-from django import conf
 from UrbanLens.environments.types import EnvironmentTypes, DebugTypes
 
 logger = logging.getLogger(__name__)

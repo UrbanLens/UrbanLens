@@ -7,43 +7,49 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    queryset.py                                                                                          *
-*        Path:    /dashboard/models/reviews/queryset.py                                                                *
-*        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        - File:    huggingface.py                                                                                      *
+*        - Path:    /dashboard/services/ai/huggingface.py                                                               *
+*        - Project: urbanlens                                                                                          *
+*        - Version: 1.0.0                                                                                              *
+*        - Created: 2024-03-21                                                                                         *
+*        - Author:  Jess Mann                                                                                          *
+*        - Email:   jess@manlyphotos.com                                                                               *
+*        - Copyright (c) 2024 Urban Lens                                                                               *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
+*        2024-03-21     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-
-# Generic imports
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import Optional
 import logging
-# Django Imports
-# App Imports
-from dashboard.models import abstract
-
-if TYPE_CHECKING:
-    pass
+from dashboard.services.ai.gateway import LLMGateway
+from UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
-class QuerySet(abstract.QuerySet):
-    '''
-    A custom queryset. All models below will use this for interacting with results from the db.
-    '''
+DEFAULT_MODEL = 'tgi'
 
+class HuggingFaceGateway(LLMGateway):
+    
+    def _lookup_model(self, model_name: Optional[str]) -> str:
+        if not model_name:
+            return DEFAULT_MODEL
+        
+        return super()._lookup_model(model_name)
 
-class Manager(abstract.Manager.from_queryset(QuerySet)):
-    '''
-    A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
-    '''
+    def setup(self, **kwargs):
+        raise NotImplementedError("HuggingFaceGateway is not yet implemented. Implement abstractmethods, and generics, similar to cloudflare.py")
+
+        if not self.api_url:
+            self.api_url = settings.huggingface_ai_endpoint
+        if not self.api_key:
+            self.api_key = settings.huggingface_ai_api_key
+
+        super().setup(**kwargs)
+
+        if not self.api_url or not self.api_key:
+            raise ValueError("Cloudflare AI Gateway requires an API URL and API Key.")

@@ -7,20 +7,23 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    __index__.py                                                                                         *
-*        Path:    /dashboard/models/trips/__index__.py                                                                 *
-*        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
-*        Created: 2024-01-07                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        - File:    upload_datafile.py                                                                                 *
+*        - Path:    /dashboard/forms/upload_datafile.py                                                                *
+*        - Project: urbanlens                                                                                          *
+*        - Version: 1.0.0                                                                                              *
+*        - Created: 2024-01-16                                                                                         *
+*        - Author:  Jess Mann                                                                                          *
+*        - Email:   jess@manlyphotos.com                                                                               *
+*        - Copyright (c) 2024 Urban Lens                                                                               *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2024-01-07     By Jess Mann                                                                                   *
+*        2024-03-22     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from .model import Trip
+from django import forms
+
+class UploadDataFile(forms.Form):
+    file = forms.FileField()

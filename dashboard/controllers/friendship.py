@@ -28,8 +28,6 @@ import logging
 from django.shortcuts import render
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse
-from django.contrib.auth.models import User
-from django.conf import settings
 from rest_framework.viewsets import GenericViewSet
 
 from dashboard.models.friendship.model import Friendship

@@ -28,7 +28,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import logging
-from django.conf import settings
 # Django Imports
 from django.db.models import Index, CASCADE
 from django.forms import ImageField
@@ -39,6 +38,7 @@ from django.db.models.fields import CharField, DecimalField, IntegerField, DateT
 from django.db.models import ForeignKey, ManyToManyField
 
 # App Imports
+from UrbanLens.settings.app import settings
 from dashboard.models import abstract
 from dashboard.models.abstract.choices import TextChoices
 from dashboard.models.locations.queryset import Manager
@@ -46,7 +46,8 @@ from dashboard.services.google.geocoding import GoogleGeocodingGateway
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.
-    from dashboard.models.profile import Profile
+    from dashboard.models.categories.model import Category
+    from dashboard.models.reviews import Manager as ReviewManager
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,9 @@ class Location(abstract.Model):
     zipcode = CharField(max_length=10, null=True, blank=True)
     zipcode_suffix = CharField(max_length=10, null=True, blank=True)
 
+    # Cached api data
+    cached_place_name = CharField(max_length=255, null=True, blank=True)
+
     profile = ForeignKey(
         'dashboard.Profile',
         on_delete=CASCADE,
@@ -99,6 +103,10 @@ class Location(abstract.Model):
         default=list
     )
 
+    if TYPE_CHECKING:
+        profile_id : int
+        reviews : ReviewManager
+
     objects = Manager()
 
     @property
@@ -106,10 +114,13 @@ class Location(abstract.Model):
         """
         Returns the place name of the location.
         """
-        return GoogleGeocodingGateway(settings.GOOGLE_MAPS_API_KEY).get_place_name(self.latitude, self.longitude)
-    
+        if self.cached_place_name:
+            return self.cached_place_name
+        
+        return self.get_place_name()
+
     @property
-    def address(self):
+    def address(self) -> str | None:
         """
         Returns the address of the location.
         """
@@ -131,7 +142,7 @@ class Location(abstract.Model):
         return address or None
     
     @property
-    def address_basic(self):
+    def address_basic(self) -> str | None:
         """
         Returns the address of the location.
         """
@@ -146,7 +157,7 @@ class Location(abstract.Model):
         return address or None
     
     @property
-    def address_extended(self):
+    def address_extended(self) -> str | None:
         """
         Returns the address of the location.
         """
@@ -162,7 +173,7 @@ class Location(abstract.Model):
         return address or None
     
     @property
-    def state(self):
+    def state(self) -> str | None:
         """
         Returns the state of the location.
         """
@@ -176,7 +187,7 @@ class Location(abstract.Model):
         self.administrative_area_level_1 = value
     
     @property
-    def county(self):
+    def county(self) -> str | None:
         """
         Returns the county of the location.
         """
@@ -190,7 +201,7 @@ class Location(abstract.Model):
         self.administrative_area_level_2 = value
     
     @property
-    def city(self):
+    def city(self) -> str | None:
         """
         Returns the city of the location.
         """
@@ -204,7 +215,7 @@ class Location(abstract.Model):
         self.locality = value
 
     @property
-    def rating(self):
+    def rating(self) -> int:
         try:
             review = self.reviews.all().latest()
             if review:
@@ -213,21 +224,100 @@ class Location(abstract.Model):
             logger.debug('no rating found for location %s', self.id)
 
         return 0
+    
+    def get_place_name(self) -> str | None:
+        result = GoogleGeocodingGateway(settings.google_maps_api_key).get_place_name(self.latitude, self.longitude)
+        
+        # We don't want to keep making requests to the API for results with no info, 
+        # so cache a string instead of None
+        if not result:
+            result = 'No Information Available'
 
-    def change_category(self, category_id):
+        if not self.cached_place_name:
+            self.cached_place_name = result
+            self.save()
+        return result
+    
+    def has_place_name(self) -> bool:
+        if not self.place_name:
+            return False
+        
+        if self.place_name == 'No Information Available':
+            return False
+        
+        return True
+
+    def change_category(self, category_id : int) -> None:
         from dashboard.models.categories.model import Category
         category = Category.objects.get(id=category_id)
         self.categories.clear()
         self.categories.add(category)
         self.save()
 
+    def suggest_category(self, append_suggestion : bool = False) -> str | None:
+        from dashboard.services.ai.cloudflare import CloudflareGateway
+        instructions="""
+            Look at the following information about a location and determine what category it belongs in. Available categories are:
+            Church, School, Park, Police Station, Firehouse, Library, Hospital, Castle, House, Mansion, Factory, Mall, Power Plant, 
+            Asylum, Prison, Stadium, Military Base, Airport, Train Station, Bank, Hotel, Resort, Amusement Park, Tunnel, Cave, Silo,
+            Graveyard, Lighthouse, Bridge, Dam, Water Tower, Theater, Observatory, Laboratory, Ruins, Cars, Boats, Planes, Trains,
+            Casino, Strip Club, Office, Fire Tower, Warehouse, Campground, Skyscraper, Funeral Home, Monument, Bunker, Store
+            If the location does not fit into any of these categories, provide a new category that is broad enough to include a variety 
+            of similar urbex locations. Do not answer with the name of the location; always answer with a category.
+        """
+        prompt = ''
+        if self.address:
+            prompt += f"address: {self.address}\n"
+        if self.has_place_name():
+            prompt += f"google maps description: {self.place_name}\n"
+            instructions += "\nThe google maps description may be helpful, but it also may be inaccurate. Use your best judgement.\n"
+        if self.name:
+            prompt += f"location title: {self.name}\n"
+        if self.description:
+            prompt += f"user notes: {self.description}\n"
+
+        if not prompt:
+            return None
+
+        gateway = CloudflareGateway(instructions=instructions)
+
+        category_name = gateway.send_prompt(prompt)
+        if not category_name:
+            return None
+        
+        if len(category_name) < 3:
+            logger.debug('category too short: %s', category_name)
+            return None
+        
+        if append_suggestion:
+            self.add_category(category_name, save=False)
+        
+        return category_name
+    
+    def add_category(self, category_name : str, save : bool = True) -> 'Category' | None:
+        from dashboard.models.categories.model import Category
+        category_name = category_name.lower()
+        try:
+            if result := Category.objects.get_or_create(name=category_name):
+                category = result[0]
+                self.categories.add(category)
+                if save:
+                    self.save()
+                return category
+            
+        except Exception as e:
+            logger.error('failed to add category %s to location -> %s', category_name, e)
+        
+        return None
+
     def __str__(self):
-        categories = ', '.join([str(category) for category in self.categories.all()]) if self.categories.all() else []
-        tags = ', '.join([str(tag) for tag in self.tags.all()]) if self.tags.all() else []
+        categories = ', '.join([str(category) for category in self.categories.all()]) if self.categories.all() else 'None'
+        tags = ', '.join([str(tag) for tag in self.tags.all()]) if self.tags.all() else 'None'
 
         return f"""
             Name: {self.name}
             Description: {self.description or ''}
+            Google Place Name: {self.place_name}
             Priority: {self.priority}
             Last Visited: {self.last_visited}
             Status: {LocationStatus(self.status).label}

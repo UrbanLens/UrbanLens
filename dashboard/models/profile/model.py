@@ -27,7 +27,7 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from django.db.models import CASCADE, Index
 from django.db.models import ImageField
-from django.db.models import OneToOneField, CharField, ManyToManyField, TextField, DateField
+from django.db.models import OneToOneField, CharField, TextField, DateField
 from dashboard.models import abstract
 from dashboard.models.profile.queryset import Manager
 

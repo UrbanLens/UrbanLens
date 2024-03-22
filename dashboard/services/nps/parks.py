@@ -25,7 +25,7 @@
 *********************************************************************************************************************"""
 import requests
 import logging
-from django.conf import settings
+from UrbanLens.settings.app import settings
 from dashboard.services.gateway import Gateway
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 class NPSGateway(Gateway):
     def __init__(self, api_key : str | None = None):
         if not api_key:
-            api_key = settings.NPS_API_KEY
+            api_key = settings.nps_api_key
         self.api_key = api_key
         self.base_url = "https://developer.nps.gov/api/v1"
 

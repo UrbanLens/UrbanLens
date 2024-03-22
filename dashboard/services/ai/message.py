@@ -7,11 +7,11 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        - File:    trip.py                                                                                            *
-*        - Path:    /dashboard/controllers/trip.py                                                                     *
+*        - File:    message.py                                                                                         *
+*        - Path:    /dashboard/services/ai/message.py                                                                  *
 *        - Project: urbanlens                                                                                          *
 *        - Version: 1.0.0                                                                                              *
-*        - Created: 2024-01-07                                                                                         *
+*        - Created: 2024-03-21                                                                                         *
 *        - Author:  Jess Mann                                                                                          *
 *        - Email:   jess@manlyphotos.com                                                                               *
 *        - Copyright (c) 2024 Urban Lens                                                                               *
@@ -20,64 +20,52 @@
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2024-03-22     By Jess Mann                                                                                   *
+*        2024-03-21     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-import logging
+from __future__ import annotations
+from typing import Optional
+from dashboard.services.ai.meta import SHORTEST_MESSAGE, MAX_TOKENS
+from dashboard.services.ai.functions import estimate_combined_tokens, estimate_tokens
 
-from django.shortcuts import render
-from django.http import HttpResponse
-from django.contrib.auth.mixins import LoginRequiredMixin
-from rest_framework.viewsets import GenericViewSet
+class MessageQueue:
+    messages = []
+    max_tokens : int = MAX_TOKENS
 
-from dashboard.models.trips import Trip
+    def add_message(self, message : str, role : str = "user"):
+        tokens = self.estimate_tokens(message)
+        if tokens + SHORTEST_MESSAGE > self.max_tokens:
+            raise ValueError(f"Message length {tokens} would exceed maximum token limit of {self.max_tokens}.")
 
-logger = logging.getLogger(__name__)
+        self.messages.append({
+            "role": role,
+            "content": message
+        })
 
-class TripController(LoginRequiredMixin, GenericViewSet):
-    """
-    Controller for the trip planning page
-    """
-    from dashboard.models.trips.model import Trip
+    def estimate_tokens(self, additional_prompt : Optional[str] = None) -> int:
+        tokens = estimate_combined_tokens(self.messages)
+        if additional_prompt:
+            tokens += estimate_tokens(additional_prompt)
 
-    def view(self, request, *args, **kwargs):
-        """
-        View the trip page
-        """
-        trip = Trip.objects.get(id=kwargs['trip_id'])
-        return render(request, 'dashboard/pages/trip/index.html', { 'trip': trip })
+        return tokens
+    
+    def __iter__(self) -> iter:
+        return iter(self.messages)
+    
+    def __len__(self) -> int:
+        return len(self.messages)
+    
+    def __getitem__(self, index) -> dict:
+        return self.messages[index]
+    
+    def __setitem__(self, index, value) -> None:
+        self.messages[index] = value
 
-    def get_trip_data(self, trip_id):
-        """
-        Fetch trip data.
-        """
-        trip = Trip.objects.get(id=trip_id)
-        return trip.to_json()
+    def __delitem__(self, index) -> None:
+        del self.messages[index]
 
-    def get_trip_users(self, request, trip_id, *args, **kwargs):
-        """
-        Fetch users associated with a trip.
-        """
-        trip = Trip.objects.get(id=trip_id)
-        users = [user.to_json() for user in trip.users.all()]
-        return HttpResponse(users, status=200)
-
-    def get_trip_locations(self, request, trip_id, *args, **kwargs):
-        """
-        Fetch locations associated with a trip.
-        """
-        trip = Trip.objects.get(id=trip_id)
-        locations = [location.to_json() for location in trip.locations.all()]
-        return HttpResponse(locations, status=200)
-
-    def plan_trip(self, request, *args, **kwargs):
-        """
-        Plan a trip itinerary using multiple locations and multiple users.
-        """
-        # TODO: Implement the logic for planning a trip itinerary.
-        # This may involve fetching locations and users from the database,
-        # performing some calculations or operations, and then returning
-        # the result in the appropriate format (e.g., as an HttpResponse
-        # or a render() call with a template and context).
-
-        return HttpResponse("Trip planning not yet implemented", status=501)
+    def __str__(self) -> str:
+        return str(self.messages)
+    
+    def __repr__(self) -> str:
+        return repr(self.messages)

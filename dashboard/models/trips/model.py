@@ -29,9 +29,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import logging
 # Django Imports
-from django.db.models import Index, CASCADE
+from django.db.models import Index
 from django.db.models.fields import CharField, DateTimeField
-from django.db.models import ForeignKey, ManyToManyField
+from django.db.models import ManyToManyField
 
 # App Imports
 from dashboard.models import abstract
@@ -57,7 +57,6 @@ class Trip(abstract.Model):
         Profile,
         blank=True,
         related_name='trips',
-        on_delete=CASCADE
     )
 
     locations = ManyToManyField(

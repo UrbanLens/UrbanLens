@@ -26,4 +26,4 @@
 from dashboard.forms.profile import ProfileForm
 from dashboard.forms.search import SearchForm
 from dashboard.forms.review import ReviewForm
-from dashboard.forms.upload_csv import CSVUploadForm
+from dashboard.forms.upload_datafile import UploadDataFile
