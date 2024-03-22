@@ -286,7 +286,7 @@ class GoogleMapsGateway(Gateway):
         location, created = Location.objects.get_or_create(
             latitude=latitude,
             longitude=longitude,
-            profile=profile,
+            profile_id=profile.pk,
             defaults={
                 **kwargs,
                 'location': fromstr(f"POINT({longitude} {latitude})", srid=4326)
