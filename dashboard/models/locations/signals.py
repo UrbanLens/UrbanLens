@@ -7,31 +7,38 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    apps.py                                                                                              *
-*        Path:    /apps.py                                                                                             *
-*        Project: dashboard                                                                                            *
-*        Version: <<projectversion>>                                                                                   *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@manlyphotos.com                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        - File:    signals.py                                                                                         *
+*        - Path:    /dashboard/models/locations/signals.py                                                             *
+*        - Project: urbanlens                                                                                          *
+*        - Version: 1.0.0                                                                                              *
+*        - Created: 2024-03-22                                                                                         *
+*        - Author:  Jess Mann                                                                                          *
+*        - Email:   jess@manlyphotos.com                                                                               *
+*        - Copyright (c) 2024 Urban Lens                                                                               *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
+*        2024-03-22     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from dashboard.models.locations import Location
 
-# Generic imports
-from __future__ import annotations
-from django.apps import AppConfig
+@receiver(post_save, sender=Location)
+def suggest_and_add_categories(sender, instance : Location, created, **kwargs):
+    """
+    Suggests categories for a newly created Location instance and adds them.
 
-class DashboardConfig(AppConfig):
-	default_auto_field = 'django.db.models.BigAutoField'
-	name = 'dashboard'
-
-	def ready(self):
-		# Import signals
-		import dashboard.models.locations.signals
+    Args:
+        sender (Model class): The model class.
+        instance (Location): The actual instance being saved.
+        created (bool): True if a new record was created.
+        **kwargs: Additional keyword arguments.
+    """
+    if created: 
+        # Perform the category suggestion and addition only for new instances
+        instance.suggest_category(append_suggestion=True)
+        instance.save()
