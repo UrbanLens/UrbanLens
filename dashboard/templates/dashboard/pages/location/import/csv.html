@@ -16,10 +16,14 @@
                 e.preventDefault();
 
                 var formData = new FormData(this);
+                var csrftoken = $('[name=csrfmiddlewaretoken]').val();
                 $.ajax({
                     url: $(this).attr('action'),
                     type: 'POST',
                     data: formData,
+                    headers: {
+                        'X-CSRFToken': csrftoken,
+                    },
                     xhr: function () {
                         var xhr = new window.XMLHttpRequest();
                         xhr.upload.addEventListener("progress", function (evt) {
