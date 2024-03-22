@@ -48,6 +48,9 @@ class Category(abstract.Model):
 
     objects = CategoryManager()
 
+    def __str__(self):
+        return f'{self.name}'
+
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_categories'
         get_latest_by = 'updated'
