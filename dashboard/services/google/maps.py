@@ -24,6 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
+import json
 from typing import Any
 import requests
 import logging
@@ -157,14 +158,15 @@ class GoogleMapsGateway(Gateway):
             raise ValueError("No file extension provided.")
         
         extension : str = parts[-1]
+        file_contents = file.read().decode('utf-8')
 
         match extension.lower():
             case 'kml':
-                data = self.takeout_kml_to_dict(file.read(), user_profile)
+                data = self.takeout_kml_to_dict(file_contents, user_profile)
             case 'json':
-                data = self.takeout_json_to_dict(file.read(), user_profile)
+                data = self.takeout_json_to_dict(file_contents, user_profile)
             case 'csv':
-                data = self.takeout_csv_to_dict(file.read().decode('utf-8'), user_profile)
+                data = self.takeout_csv_to_dict(file_contents, user_profile)
             case _:
                 raise ValueError("Unsupported file format. Supported formats are KML, JSON, and CSV.")
             
@@ -188,10 +190,10 @@ class GoogleMapsGateway(Gateway):
 
         return locations
 
-    def takeout_kml_to_dict(self, kml_data : dict, user_profile : 'Profile') -> dict[str, Any]:
+    def takeout_kml_to_dict(self, file_contents : str, user_profile : 'Profile') -> dict[str, Any]:
         try:
             k = kml.KML()
-            k.from_string(kml_data)
+            k.from_string(file_contents)
                 
             locations = []
             for feature in k.features():
@@ -213,8 +215,9 @@ class GoogleMapsGateway(Gateway):
 
         return locations
 
-    def takeout_json_to_dict(self, json_data: dict, user_profile: 'Profile') -> dict[str, Any]:
+    def takeout_json_to_dict(self, file_contents: str, user_profile: 'Profile') -> dict[str, Any]:
         try:
+            json_data = json.loads(file_contents)
             features = json_data.get('features', [])
             locations = []
 
@@ -245,11 +248,11 @@ class GoogleMapsGateway(Gateway):
 
         return locations
 
-    def takeout_csv_to_dict(self, csv_data: str, user_profile: 'Profile') -> dict[str, Any]:
+    def takeout_csv_to_dict(self, file_contents: str, user_profile: 'Profile') -> dict[str, Any]:
         locations = []
         gateway = GoogleGeocodingGateway()
         try:
-            reader = csv.DictReader(csv_data.splitlines())
+            reader = csv.DictReader(file_contents.splitlines())
 
             for row in reader:
                 # Extract coordinates from URL if available
