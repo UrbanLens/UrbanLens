@@ -17,8 +17,6 @@
 
                 var formData = new FormData(this);
                 var csrftoken = $('[name=csrfmiddlewaretoken]').val();
-                console.log('token is ' + csrftoken);
-                console.log('element is ' + $('[name=csrfmiddlewaretoken]'));
                 $.ajax({
                     url: $(this).attr('action'),
                     type: 'POST',

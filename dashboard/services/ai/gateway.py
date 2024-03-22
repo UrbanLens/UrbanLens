@@ -384,11 +384,11 @@ class LLMGateway(ABC, Generic[Response]):
                     The parsed answer from the response.
         """
         try:
-            if match := re.search(r"<ANSWER>(.*?)</ANSWER>", message_content, re.DOTALL):
+            if match := re.search(r"[<\[]]ANSWER:?[>\]](.*?)[<\[](/|END\s*)ANSWER[>\]]", message_content, re.DOTALL):
                 return match.group(1).strip()
+            else:
+                logger.error('No ANSWER in response from AI model "%s": Response: %s', self.model, message_content)
         except Exception as e:
-            logger.error("Error parsing answer from response for model %s. Respoonse: %s\nError: %s", self.model, message_content, e)
-            return None
+            logger.error("Error parsing answer from response for model '%s'. Respoonse: %s\nError: %s", self.model, message_content, e)
 
-        logger.error('No ANSWER in response from AI model %s: %s', self.model, message_content)
         return None
