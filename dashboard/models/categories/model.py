@@ -44,10 +44,9 @@ class Category(abstract.Model):
         ('shopping_mall', 'shopping_mall'),
         ('hotel', 'hotel'),
         ('stadium', 'stadium'),
-    ])
+    ], null=True, blank=True)
 
     objects = Manager()
-
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_categories'
         get_latest_by = 'updated'

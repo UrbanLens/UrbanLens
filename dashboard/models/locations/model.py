@@ -298,8 +298,8 @@ class Location(abstract.Model):
         from dashboard.models.categories.model import Category
         category_name = category_name.lower()
         try:
-            if result := Category.objects.get_or_create(name=category_name):
-                category = result[0]
+            category, _created = Category.objects.get_or_create(name=category_name)
+            if category:
                 self.categories.add(category)
                 if save:
                     self.save()

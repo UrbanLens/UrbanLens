@@ -37,3 +37,5 @@ Pillow
 gunicorn
 pydantic
 pydantic_settings
+tiktoken
+openai
