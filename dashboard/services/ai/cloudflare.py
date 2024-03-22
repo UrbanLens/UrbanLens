@@ -82,7 +82,7 @@ class CloudflareGateway(LLMGateway[Response]):
         try:
             return response.json()
         except Exception as e:
-            logger.error("Failed to parse Cloudflare AI response: %s", e)
+            logger.error("Failed to parse Cloudflare AI response as json: Response: %s -> %s", response, e)
             return None
     
     def _parse_response(self, response: Response) -> str | None:
@@ -100,7 +100,7 @@ class CloudflareGateway(LLMGateway[Response]):
         try:
             body = response["result"]["response"]
         except KeyError as e:
-            logger.error("Failed to parse Cloudflare AI response: '%s' -> %s", response, e)
+            logger.error("Failed to parse Cloudflare AI result.response: '%s' -> %s", response, e)
             return None
         
         return body
