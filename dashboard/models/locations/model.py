@@ -346,11 +346,12 @@ class Location(abstract.Model):
         # update the location field accordingly for distance calculations in postgis
         if self.latitude is not None and self.longitude is not None:
             self.location = Point(float(self.longitude), float(self.latitude), srid=4326)
-        
-        if not self.categories.all():
-            self.suggest_category(append_suggestion=True)
 
         super().save(*args, **kwargs)
+
+        if not self.categories.all():
+            self.suggest_category(append_suggestion=True)
+            self.save()
 
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_locations'
