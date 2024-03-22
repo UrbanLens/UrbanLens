@@ -337,7 +337,10 @@ class LLMGateway(ABC, Generic[Response]):
         if response := self._get_response(queue):
             if message := self._parse_response(response):
                 self.receive_tokens(message)
-                return self._parse_answer(message)
+                answer = self._parse_answer(message)
+                if not answer:
+                    logger.error('No answer from message queue: %s', queue)
+                return answer
             
         return None
     
