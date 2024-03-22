@@ -310,16 +310,6 @@ class Location(abstract.Model):
         return None
 
     def __str__(self):
-        if self.categories.all().exists():
-            categories = ', '.join([category.pk for category in self.categories.all()])
-        else:
-            categories = 'None'
-            
-        if self.tags.all().exists():
-            tags = ', '.join([tag.pk for tag in self.tags.all()])
-        else:
-            tags = 'None'
-
         return f"""
             Name: {self.name}
             Description: {self.description or ''}
@@ -327,8 +317,6 @@ class Location(abstract.Model):
             Priority: {self.priority}
             Last Visited: {self.last_visited}
             Status: {LocationStatus(self.status).label}
-            Categories: {categories}
-            Tags: {tags}
         """
 
     def to_json(self):
@@ -351,9 +339,7 @@ class Location(abstract.Model):
             'longitude': float(self.longitude),
             'status': LocationStatus.get_name(self.status) or LocationStatus.NOT_VISITED.label,
             'profile': self.profile.id,
-            'categories': [category.id for category in self.categories.all()],
             'rating': self.rating,
-            'tags': [tag.id for tag in self.tags.all()],
         }
     
     def save(self, *args, **kwargs):
