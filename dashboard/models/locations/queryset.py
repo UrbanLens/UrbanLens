@@ -155,11 +155,14 @@ class Manager(abstract.Manager.from_queryset(QuerySet)):
             return existing_locations.first(), False
         
         # No existing location found within the threshold, create a new one
-        location_defaults = {
+        location_data = {
+            'latitude': latitude,
+            'longitude': longitude,
+            'profile': profile,
             'location': point,
             **(defaults or {})
         }
-        location = self.create(latitude=latitude, longitude=longitude, profile=profile, **location_defaults)
+        location = self.create(**location_data)
         
         # Return the new location and True for 'created'
         return location, True  
