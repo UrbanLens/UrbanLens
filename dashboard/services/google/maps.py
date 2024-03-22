@@ -283,20 +283,18 @@ class GoogleMapsGateway(Gateway):
             logger.error('No coordinates provided for new location')
             return None
 
-        # Check if a location already exists
-        location = Location.objects.filter(latitude=latitude, longitude=longitude, profile = profile)
-        if location.exists():
-            logger.debug('Location already exists for coordinates: %s, %s', latitude, longitude)
-            return location.first()
-    
-        location = Location(
-            profile=profile,
-            name=kwargs.get('name', None),
-            description=kwargs.get('description', None),
+        location, created = Location.objects.get_or_create(
             latitude=latitude,
             longitude=longitude,
-            location=fromstr(f"POINT({longitude} {latitude})", srid=4326)
+            profile=profile,
+            defaults={
+                **kwargs,
+                'location': fromstr(f"POINT({longitude} {latitude})", srid=4326)
+            }
         )
-        location.suggest_category(append_suggestion=True)
-        location.save()
+
+        if not created:
+            location.suggest_category(append_suggestion=True)
+            location.save()
+
         return location
