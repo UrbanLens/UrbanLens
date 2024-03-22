@@ -286,7 +286,7 @@ class GoogleMapsGateway(Gateway):
         location, created = Location.objects.get_nearby_or_create(
             latitude=latitude,
             longitude=longitude,
-            profile_id=profile.pk,
+            profile=profile,
             defaults=kwargs
         )
 
