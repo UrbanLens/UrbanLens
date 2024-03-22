@@ -31,6 +31,9 @@ import logging
 from datetime import datetime
 # Django Imports
 from django.db.models import Q
+from django.contrib.gis.geos import Point
+from django.contrib.gis.db.models import PointField
+from django.contrib.gis.measure import D
 # App Imports
 from dashboard.models import abstract
 
@@ -126,3 +129,38 @@ class Manager(abstract.Manager.from_queryset(QuerySet)):
     '''
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
     '''
+    def get_nearby_or_create(self, latitude, longitude, profile, threshold_meters=50, defaults=None):
+        """
+        Get or create a Location instance, considering two locations the same if they are within a certain distance threshold.
+
+        Args:
+            latitude (float): Latitude of the location.
+            longitude (float): Longitude of the location.
+            profile (Profile): The profile associated with the location.
+            threshold_meters (float): Distance threshold in meters for considering locations as the same.
+            defaults (dict, optional): Defaults to use for object creation.
+
+        Returns:
+            (Location, bool): Tuple of (Location instance, created boolean)
+        """
+        point = Point(longitude, latitude, srid=4326)
+        
+        # Find existing locations within the threshold distance
+        existing_locations = self.filter(
+            location__distance_lte=(point, D(m=threshold_meters)),
+            profile=profile
+        )
+        
+        if existing_locations.exists():
+            # Return the first close enough location and False for 'created'
+            return existing_locations.first(), False
+        
+        # No existing location found within the threshold, create a new one
+        location_defaults = {
+            'location': point,
+            **(defaults or {})
+        }
+        location = self.create(latitude=latitude, longitude=longitude, profile=profile, **location_defaults)
+        
+        # Return the new location and True for 'created'
+        return location, True  

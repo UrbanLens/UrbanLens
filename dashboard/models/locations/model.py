@@ -26,7 +26,9 @@
 
 # Generic imports
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from decimal import Decimal
+import re
+from typing import TYPE_CHECKING, Any
 import logging
 # Django Imports
 from django.db.models import Index, CASCADE
@@ -349,6 +351,13 @@ class Location(abstract.Model):
             'rating': self.rating,
             'tags': [tag.id for tag in self.tags.all()],
         }
+    
+    def save(self, *args, **kwargs):
+        # update the location field accordingly for distance calculations in postgis
+        if self.latitude is not None and self.longitude is not None:
+            self.location = Point(float(self.longitude), float(self.latitude), srid=4326)
+        
+        super().save(*args, **kwargs)
 
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_locations'

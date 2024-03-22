@@ -283,14 +283,11 @@ class GoogleMapsGateway(Gateway):
             logger.error('No coordinates provided for new location')
             return None
 
-        location, created = Location.objects.get_or_create(
+        location, created = Location.objects.get_nearby_or_create(
             latitude=latitude,
             longitude=longitude,
             profile_id=profile.pk,
-            defaults={
-                **kwargs,
-                'location': fromstr(f"POINT({longitude} {latitude})", srid=4326)
-            }
+            defaults=kwargs
         )
 
         if not created:
