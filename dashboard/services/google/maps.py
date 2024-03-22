@@ -178,7 +178,12 @@ class GoogleMapsGateway(Gateway):
         with tqdm(total=total, desc="Importing locations") as pbar:
             for location_data in data:
                 try:
-                    location, created = Location.objects.get_nearby_or_create(**location_data)
+                    location, created = Location.objects.get_nearby_or_create(
+                        latitude=location_data['latitude'],
+                        longitude=location_data['longitude'],
+                        profile=user_profile,
+                        defaults=location_data
+                    )
                     if location:
                         locations.append(location)
                         if created:
