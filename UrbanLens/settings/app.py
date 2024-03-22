@@ -29,8 +29,6 @@ from __future__ import annotations
 from pathlib import Path
 import logging
 from typing import Any, Optional, Self
-import yaml
-from yaml import SafeLoader
 
 from pydantic import Field
 from pydantic_core import Url
@@ -101,6 +99,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
     # APIs
     cloudflare_ai_endpoint : Url = Field(description = "The cloudflare ai endpoint")
+    cloudflare_worker_ai_endpoint : Url = Field(description = "The cloudflare worker ai endpoint")
     cloudflare_ai_api_key : str = Field(description = "The cloudflare ai key")
     huggingface_ai_endpoint : Url = Field(description = "The huggingface ai endpoint")
     huggingface_ai_api_key : str = Field(description = "The huggingface ai key")

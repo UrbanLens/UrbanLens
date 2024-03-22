@@ -41,7 +41,7 @@ class CloudflareGateway(LLMGateway[Response]):
     
     def setup(self, **kwargs):
         if not self.api_url:
-            self.api_url = settings.cloudflare_ai_endpoint
+            self.api_url = settings.cloudflare_worker_ai_endpoint
         if not self.api_key:
             self.api_key = settings.cloudflare_ai_api_key
 
