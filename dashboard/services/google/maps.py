@@ -172,7 +172,7 @@ class GoogleMapsGateway(Gateway):
         # Parse every location in data
         locations = []
         total = len(data)
-        created = 0
+        created_locations = 0
         exists = 0
         skipped = 0
         with tqdm(total=total, desc="Importing locations") as pbar:
@@ -187,14 +187,14 @@ class GoogleMapsGateway(Gateway):
                     if location:
                         locations.append(location)
                         if created:
-                            created += 1
+                            created_locations += 1
                         else:
                             exists += 1
                     else:
                         skipped += 1
                 finally:
                     pbar.update(1)
-                    pbar.set_description(f"Importing locations: {created} created, {skipped} skipped, {exists} already existed.")
+                    pbar.set_description(f"Importing locations: {created_locations} created, {skipped} skipped, {exists} already existed.")
 
         return locations
 
