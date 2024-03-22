@@ -62,15 +62,15 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         Test the AI. TODO Temporary function that can be deleted at any time with no side effects.
         """
         from dashboard.services.ai.cloudflare import CloudflareGateway
-        gateway = CloudflareGateway(instructions="""
-            Look at the following information about a location and determine what category it belongs in. Available categories are:
-            Church, School, Park, Police Station, Firehouse, Library, Hospital, Castle, House, Mansion, Factory, Mall, Power Plant, 
-            Asylum, Prison, Stadium, Military Base, Airport, Train Station, Bank, Hotel, Resort, Amusement Park, Tunnel, Cave, Silo,
-            Graveyard, Lighthouse, Bridge, Dam, Water Tower, Theater, Observatory, Laboratory, Ruins, Cars, Boats, Planes, Trains,
-            Casino, Strip Club, Office, Fire Tower, Warehouse, Campground, Skyscraper, Funeral Home, Monument, Bunker, Store
-            If the location does not fit into any of these categories, provide a new category that is broad enough to include a variety 
-            of similar urbex locations. Do not answer with the name of the location; always answer with a category.
-        """)
+        instructions = "" +\
+            "Look at the following information about a location and determine what category it belongs in. Example categories are:" +\
+            "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, " +\
+            "Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, Library, Lighthouse, Mall, Mansion, Military Base, " +\
+            "Monument, Police Station, Power Plant, Prison, Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel" +\
+            "If the location does not fit into any of these categories, provide a new category that is broad enough to include a variety " +\
+            "of similar urbex locations. Do not answer with the name of the location; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
+
+        gateway = CloudflareGateway(instructions=instructions)
         response = gateway.send_prompt('address: 312 Western Ave, Guilderland, NY 12084, USA, name: Master Cleaners')
 
         return JsonResponse({'response': response})

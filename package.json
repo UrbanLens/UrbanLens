@@ -8,7 +8,7 @@
         "migrate": "python manage.py makemigrations & python manage.py migrate",
         "sass": "sass dashboard/frontend/sass/style.scss dashboard/frontend/static/dashboard/style.css",
         "bun": "bun build dashboard/frontend/ts/index.tsx --outdir dashboard/frontend/static/dashboard/js --target browser",
-        "start": "gunicorn UrbanLens.wsgi:application --bind 0.0.0.0:8000",
+        "start": "gunicorn UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 240",
         "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start"
     },
     "author": "Jess Mann",
