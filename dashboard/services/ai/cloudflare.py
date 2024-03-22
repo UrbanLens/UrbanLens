@@ -74,15 +74,22 @@ class CloudflareGateway(LLMGateway[Response]):
 
         try:
             logger.info('Cloudflare request: %s', input)
-            response = requests.post(url, headers=headers, json=input)
+            response = requests.post(url, headers=headers, json=input, timeout=60)
         except requests.RequestException as e:
             logger.error("Failed to send request to Cloudflare AI: %s", e)
             return None
         
         try:
+            response.raise_for_status()
             return response.json()
-        except Exception as e:
-            logger.error("Failed to parse Cloudflare AI response as json: Response: %s -> %s", response, e)
+        except requests.HTTPError as httpe:
+            logger.error("Cloudflare AI returned an HTTP error. Content: %s -> %s", response.text, httpe)
+            from icecream import ic
+            ic(response)
+            ic(response.text)
+            return None
+        except ValueError as ve:  
+            logger.error("Failed to parse Cloudflare AI response as json: %s -> %s", response.status_code, ve)
             from icecream import ic
             ic(response)
             ic(response.text)
