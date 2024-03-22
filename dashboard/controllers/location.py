@@ -228,10 +228,12 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         """
         return render(request, 'dashboard/pages/location/import/csv.html', { 'form': UploadDataFile() })
 
+    @action(detail=True, methods=['post'])
     def upload_takeout(self, request, *args, **kwargs):
         """
         Upload a Google Takeout file
         """
+        logger.critical('Uploading a takeout file')
         try:
             form = UploadDataFile(request.POST, request.FILES)
             if form.is_valid():
