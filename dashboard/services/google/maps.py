@@ -178,8 +178,6 @@ class GoogleMapsGateway(Gateway):
         with tqdm(total=total, desc="Importing locations") as pbar:
             for location_data in data:
                 try:
-                    if exists >= 106:
-                        logger.critical('Attempting to create location: %s', location_data)
                     location, created = Location.objects.get_nearby_or_create(
                         latitude=location_data['latitude'],
                         longitude=location_data['longitude'],
