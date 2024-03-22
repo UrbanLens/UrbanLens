@@ -355,6 +355,9 @@ class Location(abstract.Model):
         if self.latitude is not None and self.longitude is not None:
             self.location = Point(float(self.longitude), float(self.latitude), srid=4326)
         
+        if not self.categories.all():
+            self.suggest_category(append_suggestion=True)
+
         super().save(*args, **kwargs)
 
     class Meta(abstract.Model.Meta):

@@ -173,19 +173,23 @@ class GoogleMapsGateway(Gateway):
         locations = []
         total = len(data)
         created = 0
+        exists = 0
         skipped = 0
         with tqdm(total=total, desc="Importing locations") as pbar:
             for location_data in data:
                 try:
-                    location = self._create_location(**location_data)
+                    location, created = Location.objects.get_nearby_or_create(**location_data)
                     if location:
                         locations.append(location)
-                        created += 1
+                        if created:
+                            created += 1
+                        else:
+                            exists += 1
                     else:
                         skipped += 1
                 finally:
                     pbar.update(1)
-                    pbar.set_description(f"Importing locations: {created} created, {skipped} skipped")
+                    pbar.set_description(f"Importing locations: {created} created, {skipped} skipped, {exists} already existed.")
 
         return locations
 
@@ -276,21 +280,3 @@ class GoogleMapsGateway(Gateway):
             raise
 
         return locations
-    
-    def _create_location(self, latitude, longitude, profile : 'Profile', **kwargs) -> Location | None:
-        if not latitude or not longitude:
-            logger.error('No coordinates provided for new location')
-            return None
-
-        location, created = Location.objects.get_nearby_or_create(
-            latitude=latitude,
-            longitude=longitude,
-            profile=profile,
-            defaults=kwargs
-        )
-
-        if not created:
-            location.suggest_category(append_suggestion=True)
-            location.save()
-
-        return location
