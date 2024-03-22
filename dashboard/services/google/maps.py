@@ -179,6 +179,7 @@ class GoogleMapsGateway(Gateway):
             for location_data in data:
                 if skipped >= 100:
                     logger.critical('Attempting to create location: %s', location_data)
+                    print('Attempting to create location:', location_data)
                 try:
                     location, created = Location.objects.get_nearby_or_create(
                         latitude=location_data['latitude'],
