@@ -36,6 +36,7 @@ from django.contrib.gis.db.models import PointField
 # 3rd Party Imports
 from django.db.models.fields import CharField, DecimalField, IntegerField, DateTimeField
 from django.db.models import ForeignKey, ManyToManyField
+from django.db import transaction
 
 # App Imports
 from UrbanLens.settings.app import settings
@@ -343,15 +344,28 @@ class Location(abstract.Model):
         }
     
     def save(self, *args, **kwargs):
-        # update the location field accordingly for distance calculations in postgis
+        # Flag to determine if a post-save update is needed
+        update_after_save = False
+
+        # Update the location field for distance calculations in postgis
         if self.latitude is not None and self.longitude is not None:
             self.location = Point(float(self.longitude), float(self.latitude), srid=4326)
 
+        # Save the instance first to ensure it has an ID
         super().save(*args, **kwargs)
 
-        if not self.categories.all():
-            self.suggest_category(append_suggestion=True)
-            self.save()
+        # Check if categories need to be suggested and added
+        if not self.categories.exists():
+            update_after_save = True
+
+        if update_after_save:
+            # Use transaction.atomic to avoid partial saves
+            with transaction.atomic():
+                # self.id is guaranteed to exist here
+                self.suggest_category(append_suggestion=True)
+                # It's necessary to call save() again if suggest_category modifies the instance
+                super().save(*args, **kwargs)
+
 
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_locations'
