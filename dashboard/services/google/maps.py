@@ -170,14 +170,21 @@ class GoogleMapsGateway(Gateway):
             
         # Parse every location in data
         locations = []
+        total = len(data)
+        created = 0
+        skipped = 0
         with tqdm(total=len(data), desc="Importing locations") as pbar:
             for location_data in data:
                 try:
                     location = self._create_location(**location_data)
                     if location:
                         locations.append(location)
+                        created += 1
+                    else:
+                        skipped += 1
                 finally:
                     pbar.update(1)
+                    pbar.set_description(f"Importing locations: {created} created, {skipped} skipped")
 
         return locations
 
