@@ -23,7 +23,7 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from dashboard.models.images.queryset import QuerySet, Manager
+from dashboard.models.images.queryset import ImageQuerySet, ImageManager
 from dashboard.models.images.model import Image
 from dashboard.models.images.serializer import ImageSerializer
 from dashboard.models.images.viewset import ImageViewSet

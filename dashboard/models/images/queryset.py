@@ -24,13 +24,10 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from django.db.models import QuerySet, Manager
-from dashboard.models.images.model import Image
 
 class ImageQuerySet(QuerySet):
     pass
 
 class ImageManager(Manager.from_queryset(ImageQuerySet)):
-    def get_queryset(self):
-        return ImageQuerySet(self.model, using=self._db)
+    pass
 
-Image.objects = ImageManager()

@@ -26,7 +26,7 @@
 from __future__ import annotations
 from django.db.models import CASCADE, CharField, ForeignKey
 from dashboard.models import abstract
-from dashboard.models.comments.queryset import Manager
+from dashboard.models.comments.queryset import CommentManager
 
 class Comment(abstract.Model):
     """
@@ -45,7 +45,7 @@ class Comment(abstract.Model):
         related_name='comments'
     )
 
-    objects = Manager()
+    objects = CommentManager()
 
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_comments'

@@ -23,7 +23,7 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from dashboard.models.categories.queryset import QuerySet, Manager
+from dashboard.models.categories.queryset import CategoryQuerySet, CategoryManager
 from dashboard.models.categories.model import Category
 from dashboard.models.categories.serializer import CategorySerializer
 from dashboard.models.categories.viewset import CategoryViewSet

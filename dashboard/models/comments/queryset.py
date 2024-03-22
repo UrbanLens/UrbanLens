@@ -24,13 +24,9 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from django.db.models import QuerySet, Manager
-from dashboard.models.comments.model import Comment
 
 class CommentQuerySet(QuerySet):
     pass
 
 class CommentManager(Manager.from_queryset(CommentQuerySet)):
-    def get_queryset(self):
-        return CommentQuerySet(self.model, using=self._db)
-
-Comment.objects = CommentManager()
+    pass

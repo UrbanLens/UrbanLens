@@ -26,13 +26,13 @@
 from __future__ import annotations
 from django.db.models import CharField
 from dashboard.models import abstract
-from dashboard.models.categories.queryset import Manager
+from dashboard.models.categories.queryset import CategoryManager
 
 class Category(abstract.Model):
     """
     Records category data.
     """
-    name = CharField(max_length=255)
+    name = CharField(max_length=255, unique=True)
     icon = CharField(max_length=255, choices=[
         ('church', 'church'),
         ('factory', 'factory'),
@@ -46,7 +46,8 @@ class Category(abstract.Model):
         ('stadium', 'stadium'),
     ], null=True, blank=True)
 
-    objects = Manager()
+    objects = CategoryManager()
+
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_categories'
         get_latest_by = 'updated'

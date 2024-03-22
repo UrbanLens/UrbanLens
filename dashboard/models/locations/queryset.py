@@ -32,7 +32,6 @@ from datetime import datetime
 # Django Imports
 from django.db.models import Q
 from django.contrib.gis.geos import Point
-from django.contrib.gis.db.models import PointField
 from django.contrib.gis.measure import D
 # App Imports
 from dashboard.models import abstract

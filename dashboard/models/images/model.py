@@ -27,7 +27,7 @@ from __future__ import annotations
 from django.db.models import ImageField, CASCADE
 from django.db.models import ForeignKey
 from dashboard.models import abstract
-from dashboard.models.images.queryset import Manager
+from dashboard.models.images.queryset import ImageManager
 
 class Image(abstract.Model):
     """
@@ -40,7 +40,7 @@ class Image(abstract.Model):
         related_name='images'
     )
 
-    objects = Manager()
+    objects = ImageManager()
 
     class Meta(abstract.Model.Meta):
         db_table = 'dashboard_images'

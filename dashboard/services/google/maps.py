@@ -32,7 +32,6 @@ import logging
 import csv
 from fastkml import kml
 from tqdm import tqdm
-from django.contrib.gis.geos import fromstr
 
 from dashboard.services.gateway import Gateway
 from dashboard.models.locations import Location
