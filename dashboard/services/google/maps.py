@@ -173,7 +173,7 @@ class GoogleMapsGateway(Gateway):
         total = len(data)
         created = 0
         skipped = 0
-        with tqdm(total=len(data), desc="Importing locations") as pbar:
+        with tqdm(total=total, desc="Importing locations") as pbar:
             for location_data in data:
                 try:
                     location = self._create_location(**location_data)
