@@ -83,6 +83,9 @@ class CloudflareGateway(LLMGateway[Response]):
             return response.json()
         except Exception as e:
             logger.error("Failed to parse Cloudflare AI response as json: Response: %s -> %s", response, e)
+            from icecream import ic
+            ic(response)
+            ic(response.text)
             return None
     
     def _parse_response(self, response: Response) -> str | None:
