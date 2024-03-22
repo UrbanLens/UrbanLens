@@ -61,6 +61,30 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         """
         Test the AI. TODO Temporary function that can be deleted at any time with no side effects.
         """
+        """
+            {
+      "geometry": {
+        "coordinates": [
+          -76.1501928,
+          43.0423439
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "name": "Syracuse Central High School"
+      },
+      "type": "Feature"
+    },
+    """
+        from dashboard.models.profile import Profile
+        profile = Profile.objects.get(pk=1)
+        location = Location.objects.get_nearby_or_create(latitude=43.0423439, longitude=-76.1501928, profile=profile, defaults={
+            'name': 'Syracuse Central High School',
+            'description': '',
+        })
+        logger.critical('Location: %s', location)
+        return JsonResponse({'location': location.to_json()})
+
         from dashboard.services.ai.cloudflare import CloudflareGateway
         instructions = "" +\
             "Look at the following information about a location and determine what category it belongs in. Example categories are:" +\
