@@ -10,8 +10,6 @@
 #                                                                              #
 # 	Copyright (c) 2023 Urban Lens                                              #
 ################################################################################
-version: '3.8'
-
 services:
   app:
     container_name: urbanlens_app
@@ -26,8 +24,8 @@ services:
     depends_on:
       - db
 
-    # Overrides default command so things don't shut down after the process ends.
-    command: sleep infinity
+    #command: gunicorn UrbanLens.wsgi:application --bind 0.0.0.0:8000
+    command: python manage.py runserver 0.0.0.0:8000
 
     volumes:
       - logs:/var/log
