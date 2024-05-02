@@ -54,8 +54,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 	UL_DATABASE_PASS=${UL_DATABASE_PASS} \
 	NODE_ENV=${ENVIRONMENT}
 
-RUN printenv
-
 # Set Git config
 RUN if [ -n "$GIT_EMAIL" ]; then \
 	git config --global user.email "${GIT_EMAIL}"; \
@@ -109,13 +107,8 @@ COPY . /app
 # Set the working directory
 WORKDIR /app
 
-RUN npm install
-RUN npm run sass
-
-RUN printenv
-
-#RUN python manage.py migrate
-#RUN python manage.py collectstatic --noinput
+# Install npm packages
+RUN npm install -y
 
 #ENTRYPOINT ["gunicorn", "UrbanLens.wsgi:application", "--bind", "0.0.0.0:8000", "-t", "600", "-k", "gevent"]
-ENTRYPOINT ["sleep", "infinity"]
+ENTRYPOINT ["python", "/usr/local/bin/urbanlens_init.py"]

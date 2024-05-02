@@ -29,15 +29,12 @@ import os
 import sys
 import re
 import argparse
-from typing import Optional
+from typing import List, Optional
 from pathlib import Path
 import subprocess
 import logging
 
 logger = logging.getLogger(__name__)
-
-# TODO: Buildstatic
-# TODO: System check output
 
 class UnrecoverableError(Exception):
     """
@@ -142,23 +139,39 @@ class DjangoProjectInitializer:
 
         self._environment = value
 
+    def configure_git(self):
+        """
+        Configures git with the provided username and email
+
+        Raises:
+            UnrecoverableError: if the git configuration fails
+        """
+        git_user = os.environ.get('GIT_NAME')
+        git_email = os.environ.get('GIT_EMAIL')
+        try:
+            if git_user:
+                subprocess.run(['git', 'config', '--global', 'user.name', git_user], check=True, cwd='/app')
+            if git_email:
+                subprocess.run(['git', 'config', '--global', 'user.email', git_email], check=True, cwd='/app')
+            logger.info('Git configured with username %s and email %s.', git_user, git_email)
+            
+        except subprocess.CalledProcessError as e:
+            logger.error('Error configuring git: %s', e)
+
     def init_db(self):
         """
         Create the "UrbanLens" database in postgres
         """
+        self.create_pgpass()
+        
         if self.check_db():
-            logger.info('Database UrbanLens already exists.')
+            logger.info('Database %s already exists.', self.db_name)
             return
 
-        logger.info('Database UrbanLens does not exist. Creating...')
+        logger.info('Database %s does not exist. Creating...', self.db_name)
 
         # Create the database
-        try:
-            subprocess.run(['psql', '-U', self.db_user, '-h', self.db_host, '-W', self.db_pass, '-c', f'CREATE DATABASE {self.db_name}'], check=True)
-            logger.info('Created database %s.', self.db_name)
-        except subprocess.CalledProcessError as e:
-            logger.error('Error creating database %s: %s', self.db_name, e)
-            raise UnrecoverableError() from e
+        self.run_command(['psql', '-U', self.db_user, '-h', self.db_host, '-w', '-c', f'CREATE DATABASE {self.db_name}'], 'creating database')
 
         if not self.check_db():
             logger.error('Database %s was not created.', self.db_name)
@@ -226,19 +239,15 @@ class DjangoProjectInitializer:
 
     def npm_init(self):
         """
-        Runs npm init
+        Runs npm init.
+
+        This should ideally be performed within Docker so that the results can be cached. 
+        npm typically takes a long time to install.
 
         Raises:
             UnrecoverableError: if npm init fails
         """
-        try:
-            # Initialize npm
-            #subprocess.run(['npm', 'init', '-gy'], check=True, cwd='/app')
-            subprocess.run(['npm', 'install', '-y'], check=True, cwd='/app')
-            logger.info('npm packages installed.')
-        except subprocess.CalledProcessError as e:
-            logger.error(f'Error occurred during npm init: {e}')
-            raise UnrecoverableError() from e
+        self.run_command(['npm', 'install', '-y'], 'during npm init')
 
     def build_frontend(self):
         """
@@ -267,42 +276,17 @@ class DjangoProjectInitializer:
                 file.write('')
             logger.debug(f'Created empty file {entry}')
 
-        try:
-            match self.environment:
-                case 'development':
-                    command = ['npm', 'run', 'build']
-                case _:
-                    command = ['npm', 'run', 'deploy']
+        self.run_command(['npm', 'run', 'sass'], 'compiling sass', raise_error = False)
 
-            # Run the build
-            subprocess.run(command, check=True, cwd='/app')
-            '''
-            # Run in a separate process and continue without waiting for it to end
-            process = subprocess.Popen(command, cwd='/app')
+        match self.environment:
+            case "development":
+                command = ["npm", "run", "build"]
+            case _:
+                command = ["npm", "run", "deploy"]
 
-            # Grab the output and when we encounter success message, we know the build is complete
-            logger.info('Waiting for frontend to be built...')
-            for _i in range(999999999):
-                if process.stdout:
-                    line = process.stdout.readline()
-                    content = line.decode('utf-8').strip()
-                    logger.debug(content)
-
-                    if line and re.search(r'webpack [\d.]+ compiled successfully in \d+ ms', content):
-                        logger.info('Webpack complete')
-                        break
-
-                time.sleep(0.1)
-            '''
-
-            logger.debug('Collecting static files...')
-            # Collect static files for django
-            subprocess.run(['python', 'manage.py', 'collectstatic', '--noinput'], check=True, cwd='/app')
-            logger.info('Frontend built.')
-        except subprocess.CalledProcessError as e:
-            logger.error(f'Error occurred during frontend build: {e}')
-            raise UnrecoverableError() from e
-
+        self.run_command(command, "building frontend")
+        self.run_command(['python', 'manage.py', 'collectstatic', '--noinput'], 'collecting static files')
+        
     def run_migrations(self):
         """
         Runs django migrations (i.e. creates the django DB tables)
@@ -310,12 +294,32 @@ class DjangoProjectInitializer:
         Raises:
             UnrecoverableError: if the migrations fails
         """
+        self.run_command(['python', 'manage.py', 'migrate'], 'migrating db')
+
+    def run_command(self, command : List[str], description : str | None = None, cwd : str | Path = '/app', raise_error : bool = True) -> bool:
+        """
+        Run a command
+
+        Args:
+            command (List[str]): the command to run
+            description (str): a description of the command
+            cwd (str): the directory to run the command in
+
+        Raises:
+            UnrecoverableError: if the command fails
+        """
         try:
-            subprocess.run(['python', 'manage.py', 'migrate'], check=True, cwd='/app')
-            logger.info('Migrations completed.')
+            subprocess.run(command, check=True, cwd=cwd)
+            return True
+        
         except subprocess.CalledProcessError as e:
-            logger.error(f'Error occurred during migration: {e}')
-            raise UnrecoverableError() from e
+            description = description or 'running command: ' + ' '.join(command)
+            logger.error('Error occurred %s: %s', description, e)
+            
+            if raise_error:
+                raise UnrecoverableError() from e
+            
+            return False
 
     def run_dev_server(self):
         """
@@ -324,11 +328,7 @@ class DjangoProjectInitializer:
         Raises:
             UnrecoverableError: if the server fails to run
         """
-        try:
-            subprocess.run(['python', 'manage.py', 'runserver'], check=True, cwd='/app')
-        except subprocess.CalledProcessError as e:
-            logger.error(f'Error occurred while running the server: {e}')
-            raise UnrecoverableError() from e
+        self.run_command(['python', 'manage.py', 'runserver'], 'running development server')
 
     def run_prod_server(self):
         """
@@ -337,12 +337,7 @@ class DjangoProjectInitializer:
         Raises:
             UnrecoverableError: if the server fails to run
         """
-        try:
-            # TODO: run this through npm or app.py, so changes to the method for running are consistent
-            subprocess.run(["npm", "run", "start"], check=True, cwd='/app')
-        except subprocess.CalledProcessError as e:
-            logger.error(f'Error occurred while running the server: {e}')
-            raise UnrecoverableError() from e
+        self.run_command(['npm', 'run', 'start'], 'running production server')
 
     def check_network(self) -> bool:
         """
@@ -352,13 +347,29 @@ class DjangoProjectInitializer:
             bool: True if the network is functioning, False otherwise
         """
         # Check that we can ping google.com
-        try:
-            subprocess.run(['ping', '-c', '1', 'google.com'], check=True)
-        except subprocess.CalledProcessError as e:
-            logger.error(f'No Network Connection in container: {e}')
-            return False
+        return self.run_command(['ping', '-c', '1', 'google.com'], 'checking network connection', raise_error=False)
 
-        return True
+    def create_pgpass(self):
+        """
+        Creates a .pgpass file for the database connection
+
+        Raises:
+            UnrecoverableError: if the file cannot be created
+        """
+        pgpass = os.path.expanduser('~/.pgpass')
+        if Path(pgpass).exists():
+            logger.debug('.pgpass file already exists.')
+            return
+        
+        try:
+            with open(pgpass, 'w') as file:
+                file.write(f'{self.db_host}:{self.db_port}:*:{self.db_user}:{self.db_pass}\n')
+            os.chmod(pgpass, 0o600)
+            file_contents = open(pgpass, 'r').read()
+            logger.info('Created .pgpass file: %s', file_contents)
+        except IOError as e:
+            logger.error(f'Error creating .pgpass file: {e}')
+            raise UnrecoverableError() from e
 
     def check_dependencies(self):
         """
@@ -379,13 +390,8 @@ class DjangoProjectInitializer:
         Returns:
             bool: True if the database exists, False otherwise
         """
-        try:
-            subprocess.run(['psql', '-U', self.db_user, '-h', self.db_host, '-W', self.db_pass, '-c', f'SELECT 1 FROM pg_database WHERE datname=\'{self.db_name}\''], check=True)
-        except subprocess.CalledProcessError:
-            logger.debug('Database %s does not exist.', self.db_name)
-            return False
-
-        return True
+        command = ['psql', '-U', self.db_user, '-h', self.db_host, '-p', str(self.db_port), '-w', '-c', f'SELECT 1 FROM pg_database WHERE datname=\'{self.db_name}\'']
+        return self.run_command(command, 'checking database', raise_error=False)
 
     def initialize_project(self):
         """
@@ -408,7 +414,7 @@ class DjangoProjectInitializer:
         self.copy_sample_env()
 
         # Install and build the frontend
-        self.npm_init()
+        #self.npm_init()
         self.build_frontend()
 
         # Setup the DB

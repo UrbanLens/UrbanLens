@@ -10,8 +10,7 @@
         "build": "bun build dashboard/frontend/ts/index.tsx --outdir dashboard/frontend/static/dashboard/js --target browser",
         "deploy": "bun build dashboard/frontend/ts/index.tsx --outdir dashboard/frontend/static/dashboard/js --target browser",
         "start": "gunicorn UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 600 -k gevent",
-        "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start",
-        "up": "docker-compose down && docker-compose rm && docker volume remove urbanlens_postgres-data && docker-compose build --no-cache && docker-compose up"
+        "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start"
     },
     "author": "Jess Mann",
     "license": "N/A",
