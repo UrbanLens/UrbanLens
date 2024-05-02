@@ -13,7 +13,7 @@
 *        Version: 1.0.0                                                                                                *
 *        Created: 2024-02-19                                                                                           *
 *        Author:  Jess Mann                                                                                            *
-*        Email:   jess@manlyphotos.com                                                                                 *
+*        Email:   jess@urbanlens.org                                                                                 *
 *        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
@@ -67,13 +67,13 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     secret_key : str = Field(default = '1t5v24s98-fcbas23-vfsd238vc-asfdioj322', description = "The secret key")
     root_urlconf : str = Field(default = 'UrbanLens.urls', description = "The root urlconf")
     admin_username : str = Field(default = 'Admin', description = "The username to use for the admin user")
-    admin_email : str = Field(default = 'jess@manlyphotos.com', description = "The email to use for the admin user")
+    admin_email : str = Field(default = 'jess@urbanlens.org', description = "The email to use for the admin user")
     allowed_hosts : list[str] = Field(default = ['urbanlens.org'], description = "The allowed hosts")
     language_code : str = Field(default = 'en-us', description = "The language code")
     time_zone : str = Field(default = 'EST', description = "The time zone")
     use_i18n : bool = Field(default = True, description = "Whether or not to use i18n")
     use_tz : bool = Field(default = True, description = "Whether or not to use tz")
-    email_from : str = Field(default = 'jess@manlyphotos.com', description = "The from email")
+    email_from : str = Field(default = 'jess@urbanlens.org', description = "The from email")
     email_host : str = Field(default = 'smtp.gmail.com', description = "The email host")
     email_port : int = Field(default = 587, description = "The email port")
     backup_retention : int = Field(default = 30, description = "The number of days to retain backups")

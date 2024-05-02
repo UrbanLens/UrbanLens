@@ -13,7 +13,7 @@
 *        Version: 1.0.0                                                                                                *
 *        Created: 2024-01-16                                                                                           *
 *        Author:  Jess Mann                                                                                            *
-*        Email:   jess@manlyphotos.com                                                                                 *
+*        Email:   jess@urbanlens.org                                                                                 *
 *        Copyright (c) 2024 Urban Lens                                                                                 *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *

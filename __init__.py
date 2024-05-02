@@ -5,7 +5,7 @@
 		File: __init__.py
 		Project: Urban Lens
 		Author: Jess Mann
-		Email: jess@manlyphotos.com
+		Email: jess@urbanlens.org
 
 		-----
 

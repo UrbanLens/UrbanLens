@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/4.2/howto/deployment/wsgi/
  * 	Project: personal                                                          *
  * 	Created: 28 Oct 2023                                                       *
  * 	Author: Jess Mann                                                          *
- * 	Email: jess@manlyphotos.com                                                *
+ * 	Email: jess@urbanlens.org                                                *
  *                                                                             *
  * 	-----                                                                      *
  *                                                                             *
