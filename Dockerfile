@@ -24,11 +24,11 @@ ARG GIT_EMAIL
 ARG GIT_NAME
 ARG GH_TOKEN
 ARG SSH_PRIVATE_KEY
-ARG DB_NAME
-ARG DB_USER
-ARG DB_PASS
-ARG DB_HOST
-ARG DB_PORT
+ARG UL_DATABASE_NAME
+ARG UL_DATABASE_USER
+ARG UL_DATABASE_PASS
+ARG UL_DATABASE_HOST
+ARG UL_DATABASE_PORT
 ARG ENVIRONMENT
 
 # AppServer image
@@ -45,16 +45,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 	LANGUAGE=en_US.UTF-8 \
 	LC_ALL=en_US.UTF-8 \
 	LC_CTYPE=en_US.UTF-8 \
-	GH_TOKEN=${GH_TOKEN} \
-	GIT_NAME=${GIT_NAME} \
 	GIT_EMAIL=${GIT_EMAIL} \
+	GIT_NAME=${GIT_NAME} \
+	UL_DATABASE_HOST=${UL_DATABASE_HOST} \
+	UL_DATABASE_PORT=${UL_DATABASE_PORT} \
 	UL_DATABASE_NAME=${UL_DATABASE_NAME} \
 	UL_DATABASE_USER=${UL_DATABASE_USER} \
 	UL_DATABASE_PASS=${UL_DATABASE_PASS} \
-	UL_DATABASE_HOST=${UL_DATABASE_HOST} \
-	UL_DATABASE_PORT=${UL_DATABASE_PORT} \
-	ENVIRONMENT=${ENVIRONMENT} \
 	NODE_ENV=${ENVIRONMENT}
+
+RUN printenv
 
 # Set Git config
 RUN if [ -n "$GIT_EMAIL" ]; then \
@@ -109,10 +109,13 @@ COPY . /app
 # Set the working directory
 WORKDIR /app
 
+RUN npm install
+RUN npm run sass
+
+RUN printenv
+
 #RUN python manage.py migrate
-#RUN npm install
-#RUN npm run sass
 #RUN python manage.py collectstatic --noinput
 
-#ENTRYPOINT ["/bin/bash", "-c", "python /usr/local/bin/urbanlens_init.py & sleep infinity"]
-ENTRYPOINT ["/bin/bash", "-c", "sleep infinity"]
+#ENTRYPOINT ["gunicorn", "UrbanLens.wsgi:application", "--bind", "0.0.0.0:8000", "-t", "600", "-k", "gevent"]
+ENTRYPOINT ["sleep", "infinity"]

@@ -169,7 +169,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # http://urbanlens.org, http://urbanlens.com, https://urbanlens.org, https://urbanlens.com, etc
 protocols = ['http://', 'https://']
-domains = ['urbanlens.org', 'urbanlens.com']
+domains = ['urbanlens.org', 'urbanlens.com', 'localhost:6464']
 subdomains = ['www.', '']
 CORS_ALLOWED_ORIGINS = [
     f'{protocol}{subdomain}{domain}'

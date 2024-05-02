@@ -46,6 +46,7 @@ import logging
 from dashboard.urls import urlpatterns as dashboard_urls
 from dashboard.controllers.account import SignupView
 from dashboard.controllers.index import IndexController
+from dashboard.controllers.health import HealthController
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ urlpatterns = [
     path("accounts/", include("django.contrib.auth.urls")),
     path("signup/", SignupView.as_view(), name="signup"),
     path("dashboard/", include(dashboard_urls), name="dashboard"),
+    path("health/", HealthController.as_view({"get": "check"}), name="health"),
     path("", IndexController.as_view(), name="index"),
 
     # 404

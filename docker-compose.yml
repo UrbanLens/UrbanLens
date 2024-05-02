@@ -21,11 +21,18 @@ services:
         - GIT_NAME=${GIT_NAME}
         - GH_TOKEN=${GH_TOKEN}
         - SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
-    depends_on:
-      - db
+        - ENVIRONMENT=${ENVIRONMENT:-production}
+        - UL_DATABASE_USER=${UL_DATABASE_USER:-postgres}
+        - UL_DATABASE_NAME=${UL_DATABASE_NAME:-postgres}
+        - UL_DATABASE_PASS=${UL_DATABASE_PASS:-postgres}
+        - UL_DATABASE_HOST=${UL_DATABASE_HOST:-urbanlens_db}
+        - UL_DATABASE_PORT=${UL_DATABASE_PORT:-5432}
 
-    #command: gunicorn UrbanLens.wsgi:application --bind 0.0.0.0:8000
-    command: python manage.py runserver 0.0.0.0:8000
+    restart: on-failure
+
+    depends_on:
+      db:
+        condition: service_healthy
 
     volumes:
       - logs:/var/log
@@ -51,7 +58,13 @@ services:
       - UL_DATABASE_PORT=${UL_DATABASE_PORT:-5432}
       - ENVIRONMENT=${ENVIRONMENT:-production}
 
-  # nginx is not currently being used, being replaced by whitenoise, but will be used in the future
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
   nginx:
     container_name: urbanlens_nginx
     image: nginx:alpine
@@ -66,6 +79,13 @@ services:
       app_network:
         aliases:
           - urbanlens_nginx
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   db:
     container_name: urbanlens_db
@@ -85,7 +105,7 @@ services:
       - POSTGRES_PORT=${UL_DATABASE_PORT:-5432}
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${UL_DATABASE_USER}"]
       interval: 10s
       timeout: 10s
       retries: 9

@@ -197,36 +197,6 @@ i.prison {
 i.train {
   background-image: url("/static/icons/train.png"); }
 
-i.windmill {
-  background-image: url("/static/icons/windmill.png"); }
-
-i.lighthouse {
-  background-image: url("/static/icons/lighthouse.png"); }
-
-i.water_tower {
-  background-image: url("/static/icons/water_tower.png"); }
-
-i.barn {
-  background-image: url("/static/icons/barn.png"); }
-
-i.silo {
-  background-image: url("/static/icons/silo.png"); }
-
-i.police_station {
-  background-image: url("/static/icons/police_station.png"); }
-
-i.farm {
-  background-image: url("/static/icons/farm.png"); }
-
-i.stadium {
-  background-image: url("/static/icons/stadium.png"); }
-
-i.theater {
-  background-image: url("/static/icons/theater.png"); }
-
-i.construction {
-  background-image: url("/static/icons/construction.png"); }
-
 .avatar {
   position: absolute;
   top: 1rem;

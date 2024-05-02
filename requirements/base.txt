@@ -40,3 +40,4 @@ pydantic_settings
 tiktoken
 openai
 gevent
+lxml
