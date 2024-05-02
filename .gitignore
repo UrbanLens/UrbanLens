@@ -26,6 +26,7 @@ notes/
 .env
 bin/conf/
 bin/settings.py
+.pgpass
 
 # Database files
 *.sqlite3-journal
