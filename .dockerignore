@@ -3,7 +3,6 @@ __pycache__
 *.pyo
 *.pyd
 pgsql/
-env/
 venv/
 node_modules/
 docs/
