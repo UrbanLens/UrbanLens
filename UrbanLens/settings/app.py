@@ -14,7 +14,7 @@
 *        Created: 2024-02-19                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2024 - 2025 Jess Mann                                                                           *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -98,21 +98,21 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     static_root : Path = Field(default = 'frontend/static', description = "The name of the static directory")
 
     # APIs
-    cloudflare_ai_endpoint : Url = Field(default='', description = "The cloudflare ai endpoint")
-    cloudflare_worker_ai_endpoint : Url = Field(default='', description = "The cloudflare worker ai endpoint")
-    cloudflare_ai_api_key : str = Field(default='', description = "The cloudflare ai key")
-    huggingface_ai_endpoint : Url = Field(default='', description = "The huggingface ai endpoint")
-    huggingface_ai_api_key : str = Field(default='', description = "The huggingface ai key")
-    openai_api_key : str = Field(default='', description = "The openai key")
-    google_places_api_key : str = Field(default='', description = "The google places key")
-    google_maps_api_key : str = Field(default='', description = "The google maps key")
-    google_search_api_key : str = Field(default='', description = "The google search key")
-    google_search_tenant : str = Field(default='', description = "The google search tenant")
-    smithsonian_api_key : str = Field(default='', description = "The smithsonian key")
-    google_client_id : str = Field(default='', description = "The google client id")
-    google_client_secret : str = Field(default='', description = "The google client secret")
-    openweathermap_api_key : str = Field(default='', description = "The openweathermap key")
-    nps_api_key : str = Field(default='', description = "The national park service api key")
+    cloudflare_ai_endpoint : Url | None = Field(default=None, description = "The cloudflare ai endpoint")
+    cloudflare_worker_ai_endpoint : Url | None = Field(default=None, description = "The cloudflare worker ai endpoint")
+    cloudflare_ai_api_key : str | None = Field(default=None, description = "The cloudflare ai key")
+    huggingface_ai_endpoint : Url | None = Field(default=None, description = "The huggingface ai endpoint")
+    huggingface_ai_api_key : str | None = Field(default=None, description = "The huggingface ai key")
+    openai_api_key : str | None = Field(default=None, description = "The openai key")
+    google_places_api_key : str | None = Field(default=None, description = "The google places key")
+    google_maps_api_key : str | None = Field(default=None, description = "The google maps key")
+    google_search_api_key : str | None = Field(default=None, description = "The google search key")
+    google_search_tenant : str | None = Field(default=None, description = "The google search tenant")
+    smithsonian_api_key : str | None = Field(default=None, description = "The smithsonian key")
+    google_client_id : str | None = Field(default=None, description = "The google client id")
+    google_client_secret : str | None = Field(default=None, description = "The google client secret")
+    openweathermap_api_key : str | None = Field(default=None, description = "The openweathermap key")
+    nps_api_key : str | None = Field(default=None, description = "The national park service api key")
 
     # DB
     database_engine : str = Field(default = 'psqlextra.backend', description = "The database engine")
