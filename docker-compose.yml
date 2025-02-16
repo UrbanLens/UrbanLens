@@ -39,7 +39,7 @@ services:
       - static_volume:/app/frontend/static
     
     ports:
-      - "6565:8000"
+      - "${APP_PORT:-21800}:8000"
 
     networks:
       app_network:
@@ -72,7 +72,7 @@ services:
       - static_volume:/app/frontend/static
       - ./config/nginx:/etc/nginx/conf.d
     ports:
-      - "6464:80"
+      - "${NGINX_PORT:-21080}:80"
     depends_on:
       - app
     networks:
