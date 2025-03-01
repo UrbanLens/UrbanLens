@@ -36,12 +36,12 @@ from rest_framework.decorators import action
 from django.http import JsonResponse
 from rest_framework.exceptions import ValidationError
 
-from UrbanLens.settings.app import settings
-from UrbanLens.dashboard.models.pin.model import Pin
-from UrbanLens.dashboard.services.smithsonian import SmithsonianGateway
-from UrbanLens.dashboard.services.google.search import GoogleCustomSearchGateway
-from UrbanLens.dashboard.services.google.maps import GoogleMapsGateway
-from UrbanLens.dashboard.forms.upload_datafile import UploadDataFile
+from urbanlens.settings.app import settings
+from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.services.smithsonian import SmithsonianGateway
+from urbanlens.dashboard.services.google.search import GoogleCustomSearchGateway
+from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         Test the AI. TODO Temporary function that can be deleted at any time with no side effects.
         """
-        from UrbanLens.dashboard.models.profile import Profile
+        from urbanlens.dashboard.models.profile import Profile
         profile = Profile.objects.get(pk=1)
         pin, created = Pin.objects.get_nearby_or_create(latitude=43.0423439, longitude=-76.1501928, profile=profile, defaults={
             'name': 'Syracuse Central High School',
@@ -70,7 +70,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         logger.critical('Location: %s', pin)
         return JsonResponse({'pin': pin.to_json()})
 
-        from UrbanLens.dashboard.services.ai.cloudflare import CloudflareGateway
+        from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
         instructions = "" +\
             "Look at the following information about a location and determine what category it belongs in. Example categories are:" +\
             "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, " +\
@@ -271,7 +271,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        from UrbanLens.dashboard.services.openweather.gateway import WeatherForecastGateway
+        from urbanlens.dashboard.services.openweather.gateway import WeatherForecastGateway
 
         # Instantiate the WeatherForecastGateway with the API key
         weather_forecast_gateway = WeatherForecastGateway()

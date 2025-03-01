@@ -10,7 +10,7 @@
 *        File:    routing.py                                                                                           *
 *        Path:    /routing.py                                                                                          *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -25,7 +25,7 @@
 *********************************************************************************************************************"""
 
 from django.urls import path
-from UrbanLens.dashboard.consumers import RequestStatusConsumer
+from urbanlens.dashboard.consumers import RequestStatusConsumer
 
 websocket_urlpatterns = [
 	path('ws/request_status/', RequestStatusConsumer.as_asgi()),

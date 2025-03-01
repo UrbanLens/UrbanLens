@@ -10,7 +10,7 @@
 *        File:    __init__.py                                                                                          *
 *        Path:    /__init__.py                                                                                         *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -23,7 +23,7 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from UrbanLens.dashboard.models.location.queryset import LocationQuerySet, LocationManager
-from UrbanLens.dashboard.models.location.model import Location
-from UrbanLens.dashboard.models.location.serializer import LocationSerializer
-from UrbanLens.dashboard.models.location.viewset import LocationViewSet
+from urbanlens.dashboard.models.location.queryset import LocationQuerySet, LocationManager
+from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.location.serializer import LocationSerializer
+from urbanlens.dashboard.models.location.viewset import LocationViewSet

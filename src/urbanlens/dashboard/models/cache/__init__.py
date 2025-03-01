@@ -10,7 +10,7 @@
 *        File:    __init__.py                                                                                          *
 *        Path:    /dashboard/models/cache/__init__.py                                                                  *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2024-01-07                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -23,4 +23,4 @@
 *        2024-01-07     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from UrbanLens.dashboard.models.cache.geocoding import GeocodedLocation
+from urbanlens.dashboard.models.cache.geocoding import GeocodedLocation

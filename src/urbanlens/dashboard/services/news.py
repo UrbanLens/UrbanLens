@@ -9,7 +9,7 @@
 *                                                                                                                      *
 *        File:    news.py                                                                                              *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2025-03-01                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess.a.mann@gmail.com                                                                                *
@@ -23,7 +23,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 import requests
-from UrbanLens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.gateway import Gateway
 
 class NewsGateway(Gateway):
     """

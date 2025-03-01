@@ -10,7 +10,7 @@
 *        File:    serializer.py                                                                                        *
 *        Path:    /serializer.py                                                                                       *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from rest_framework import serializers
-from UrbanLens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image
 
 class ImageSerializer(serializers.ModelSerializer):
     class Meta:

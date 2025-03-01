@@ -10,7 +10,7 @@
 *        File:    geocoding.py                                                                                         *
 *        Path:    /dashboard/services/google/geocoding.py                                                              *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2024-01-07                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -29,9 +29,9 @@ import re
 from typing import Optional
 import requests
 import logging
-from UrbanLens.settings.app import settings
-from UrbanLens.dashboard.services.gateway import Gateway
-from UrbanLens.dashboard.models.cache import GeocodedLocation
+from urbanlens.settings.app import settings
+from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.models.cache import GeocodedLocation
 import json
 
 logger = logging.getLogger(__name__)

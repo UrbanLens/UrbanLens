@@ -10,11 +10,11 @@
 *        File:    __init__.py                                                                                          *
 *        Path:    /UrbanLens/settings/meta/__init__.py                                                                 *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-02-19                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -28,4 +28,4 @@
 
 
 
-from UrbanLens.settings.meta.app import DEFAULT_PATH_PARENTS, DEFAULT_ROOT
+from urbanlens.UrbanLens.settings.meta.app import DEFAULT_PATH_PARENTS, DEFAULT_ROOT

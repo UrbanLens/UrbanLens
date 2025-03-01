@@ -8,6 +8,30 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    filterset.py                                                                                         *
+*        Project: urbanlens                                                                                            *
+*        Version: 0.0.2                                                                                                *
+*        Created: 2025-03-01                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess.a.mann@gmail.com                                                                                *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2025-03-01     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    filterset.py                                                                                         *
 *        Path:    /dashboard/models/locations/filterset.py                                                             *
 *        Project: urbanlens                                                                                            *
 *        Version: 0.0.1                                                                                                *
@@ -25,7 +49,7 @@
 *********************************************************************************************************************"""
 import django_filters
 from django_filters import CharFilter, NumberFilter
-from UrbanLens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.location.model import Location
 
 class LocationFilter(django_filters.FilterSet):
     categories = CharFilter(method='by_category')

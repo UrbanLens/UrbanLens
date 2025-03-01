@@ -23,4 +23,4 @@
 *        2024-03-20     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from UrbanLens.settings.local import * # noqa F401, F403
+from urbanlens.UrbanLens.settings.local import * # noqa F401, F403

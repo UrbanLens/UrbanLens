@@ -10,7 +10,7 @@
 *        File:    viewset.py                                                                                           *
 *        Path:    /dashboard/models/friendship/viewset.py                                                              *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -27,9 +27,9 @@ from __future__ import annotations
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 
-from UrbanLens.dashboard.models.profile.model import Profile
-from UrbanLens.dashboard.models.friendship.model import Friendship
-from UrbanLens.dashboard.models.friendship.serializer import FriendshipSerializer
+from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.friendship.serializer import FriendshipSerializer
 
 class FriendshipViewSet(viewsets.ModelViewSet):
     queryset = Friendship.objects.all()

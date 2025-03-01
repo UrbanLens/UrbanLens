@@ -10,7 +10,7 @@
 *        File:    viewset.py                                                                                           *
 *        Path:    /dashboard/models/reviews/viewset.py                                                                 *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -27,8 +27,8 @@ import logging
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from UrbanLens.dashboard.models.reviews.model import Review
-from UrbanLens.dashboard.models.reviews.serializer import ReviewSerializer
+from urbanlens.dashboard.models.reviews.model import Review
+from urbanlens.dashboard.models.reviews.serializer import ReviewSerializer
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@
 *        File:    viewset.py                                                                                           *
 *        Path:    /dashboard/models/pin/viewset.py                                                               *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -26,8 +26,8 @@
 import logging
 from rest_framework import viewsets, status
 from rest_framework.response import Response
-from UrbanLens.dashboard.models.pin.model import Pin, PinStatus
-from UrbanLens.dashboard.models.pin.serializer import PinSerializer
+from urbanlens.dashboard.models.pin.model import Pin, PinStatus
+from urbanlens.dashboard.models.pin.serializer import PinSerializer
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@
 *        File:    __init__.py                                                                                          *
 *        Path:    /dashboard/services/nps/__init__.py                                                                  *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2024-01-17                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -23,5 +23,5 @@
 *        2024-01-17     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from UrbanLens.dashboard.services.nps.parks import NPSGateway
-from UrbanLens.dashboard.services.nps.map import NPSMapGateway
+from urbanlens.dashboard.services.nps.parks import NPSGateway
+from urbanlens.dashboard.services.nps.map import NPSMapGateway

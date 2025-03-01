@@ -10,7 +10,7 @@
 *        File:    search.py                                                                                            *
 *        Path:    /dashboard/services/google/search.py                                                                 *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2024-01-07                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -24,10 +24,10 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
-from UrbanLens.settings.app import settings
+from urbanlens.settings.app import settings
 import requests
 import logging
-from UrbanLens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.gateway import Gateway
 
 logger = logging.getLogger(__name__)
 

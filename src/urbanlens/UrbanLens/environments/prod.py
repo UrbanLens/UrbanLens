@@ -10,11 +10,11 @@
 *        File:    prod.py                                                                                              *
 *        Path:    /UrbanLens/environments/prod.py                                                                      *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-02-19                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -27,9 +27,9 @@
 from __future__ import annotations
 from pydantic import validator
 
-from UrbanLens.environments.types import EnvironmentTypes
-from UrbanLens.environments.base import BaseEnvironment
-from UrbanLens.environments.types import DebugTypes
+from urbanlens.UrbanLens.environments.types import EnvironmentTypes
+from urbanlens.UrbanLens.environments.base import BaseEnvironment
+from urbanlens.UrbanLens.environments.types import DebugTypes
 
 
 class Production(BaseEnvironment):

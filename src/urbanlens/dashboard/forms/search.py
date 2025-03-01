@@ -10,7 +10,7 @@
 *        File:    search.py                                                                                            *
 *        Path:    /dashboard/forms/search.py                                                                           *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2024-01-16                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -24,8 +24,8 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from django import forms
-from UrbanLens.dashboard.models.pin.model import Pin, PinStatus
-from UrbanLens.dashboard.models.tags.model import Tag
+from urbanlens.dashboard.models.pin.model import Pin, PinStatus
+from urbanlens.dashboard.models.tags.model import Tag
 from django.db.models import Q
 
 class SearchForm(forms.Form):

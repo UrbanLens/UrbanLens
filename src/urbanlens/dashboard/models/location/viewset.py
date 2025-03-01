@@ -10,7 +10,7 @@
 *        File:    viewset.py                                                                                           *
 *        Path:    /dashboard/models/locations/viewset.py                                                               *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -25,8 +25,8 @@
 *********************************************************************************************************************"""
 import logging
 from rest_framework import viewsets
-from UrbanLens.dashboard.models.location.model import Location
-from UrbanLens.dashboard.models.location.serializer import LocationSerializer
+from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.location.serializer import LocationSerializer
 
 logger = logging.getLogger(__name__)
 

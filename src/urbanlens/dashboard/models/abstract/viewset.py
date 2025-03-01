@@ -10,7 +10,7 @@
 *        File:    viewset.py                                                                                           *
 *        Path:    /dashboard/models/abstract/viewset.py                                                                *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -33,10 +33,10 @@ from rest_framework.filters import OrderingFilter
 from rest_framework.viewsets import ReadOnlyModelViewSet
 # App imports
 from djangofoundry.mixins import HasParams
-from UrbanLens.dashboard.models.abstract.serializer import Serializer
+from urbanlens.dashboard.models.abstract.serializer import Serializer
 
 if TYPE_CHECKING:
-	from UrbanLens.dashboard.models.abstract.queryset import QuerySet
+	from urbanlens.dashboard.models.abstract.queryset import QuerySet
 
 
 class ViewSet(HasParams, ReadOnlyModelViewSet):

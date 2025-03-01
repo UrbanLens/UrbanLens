@@ -10,7 +10,7 @@
 *        File:    viewset.py                                                                                           *
 *        Path:    /viewset.py                                                                                          *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -24,8 +24,8 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from rest_framework import viewsets
-from UrbanLens.dashboard.models.profile.model import Profile
-from UrbanLens.dashboard.models.profile.serializer import ProfileSerializer
+from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.profile.serializer import ProfileSerializer
 
 class ProfileViewSet(viewsets.ModelViewSet):
     queryset = Profile.objects.all()

@@ -20,9 +20,9 @@
 # Generic imports
 from __future__ import annotations
 from rest_framework import filters
-from UrbanLens.dashboard.models import abstract
-from UrbanLens.dashboard.models.notifications.model import NotificationLog
-from UrbanLens.dashboard.models.notifications.serializer import Serializer
+from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.notifications.serializer import Serializer
 
 class ViewSet(abstract.ViewSet):
 	serializer_class = Serializer

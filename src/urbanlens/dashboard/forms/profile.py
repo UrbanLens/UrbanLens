@@ -10,7 +10,7 @@
 *        File:    profile.py                                                                                           *
 *        Path:    /dashboard/forms/profile.py                                                                          *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from django import forms
-from UrbanLens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.profile.model import Profile
 
 
 RATING_CHOICES = [(i, str(i)) for i in range(1, 6)]  # Assuming the rating is from 1 to 5

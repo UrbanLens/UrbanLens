@@ -10,7 +10,7 @@
 *        File:    serializer.py                                                                                        *
 *        Path:    /dashboard/models/reviews/serializer.py                                                              *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from rest_framework import serializers
-from UrbanLens.dashboard.models.reviews.model import Review
+from urbanlens.dashboard.models.reviews.model import Review
 
 class ReviewSerializer(serializers.ModelSerializer):
     class Meta:

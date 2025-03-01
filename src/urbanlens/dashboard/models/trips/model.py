@@ -10,7 +10,7 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/trips/model.py                                                                     *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -34,9 +34,9 @@ from django.db.models.fields import CharField, DateTimeField
 from django.db.models import ManyToManyField
 
 # App Imports
-from UrbanLens.dashboard.models import abstract
-from UrbanLens.dashboard.models.pin.queryset import PinManager
-from UrbanLens.dashboard.models.profile import Profile
+from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.pin.queryset import PinManager
+from urbanlens.dashboard.models.profile import Profile
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.

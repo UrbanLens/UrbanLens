@@ -10,11 +10,11 @@
 *        File:    factory.py                                                                                           *
 *        Path:    /UrbanLens/environments/factory.py                                                                   *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-02-19                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -28,13 +28,13 @@ from __future__ import annotations
 from typing import Optional
 import os
 
-from UrbanLens.environments.types import EnvironmentTypes
-from UrbanLens.environments.base import BaseEnvironment
-from UrbanLens.environments.local import Local
-from UrbanLens.environments.dev import Development
-from UrbanLens.environments.test import Testing
-from UrbanLens.environments.staging import Staging
-from UrbanLens.environments.prod import Production
+from urbanlens.UrbanLens.environments.types import EnvironmentTypes
+from urbanlens.UrbanLens.environments.base import BaseEnvironment
+from urbanlens.UrbanLens.environments.local import Local
+from urbanlens.UrbanLens.environments.dev import Development
+from urbanlens.UrbanLens.environments.test import Testing
+from urbanlens.UrbanLens.environments.staging import Staging
+from urbanlens.UrbanLens.environments.prod import Production
 
 
 def select_environment(env_type: Optional[EnvironmentTypes] = None, default: EnvironmentTypes = EnvironmentTypes.LOCAL) -> BaseEnvironment:

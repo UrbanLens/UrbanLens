@@ -27,7 +27,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Dict, List
 
 if TYPE_CHECKING:
-    from UrbanLens.dashboard.services.ai.message import MessageQueue
+    from urbanlens.dashboard.services.ai.message import MessageQueue
 
 def estimate_tokens(prompt: str) -> int:
     """

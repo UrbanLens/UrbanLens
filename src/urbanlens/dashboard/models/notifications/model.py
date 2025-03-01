@@ -10,7 +10,7 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/notifications/model.py                                                             *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -33,9 +33,9 @@ from django.db.models import Index
 # 3rd Party Imports
 from django.db.models.fields import CharField
 # App Imports
-from UrbanLens.dashboard.models import abstract
-from UrbanLens.dashboard.models.notifications.meta import Status, Importance, NotificationType
-from UrbanLens.dashboard.models.notifications.queryset import Manager
+from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.notifications.meta import Status, Importance, NotificationType
+from urbanlens.dashboard.models.notifications.queryset import Manager
 
 if TYPE_CHECKING:
 	# Imports required for type checking, but not program execution.

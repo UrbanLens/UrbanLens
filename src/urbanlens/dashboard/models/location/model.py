@@ -10,7 +10,7 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/locations/model.py                                                                 *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -37,14 +37,14 @@ from django.db.models.fields import CharField, DecimalField
 from django.db.models import ManyToManyField
 
 # App Imports
-from UrbanLens.settings.app import settings
-from UrbanLens.dashboard.models import abstract
-from UrbanLens.dashboard.models.location.queryset import LocationManager
-from UrbanLens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+from urbanlens.settings.app import settings
+from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.location.queryset import LocationManager
+from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.
-    from UrbanLens.dashboard.models.categories.model import Category
+    from urbanlens.dashboard.models.categories.model import Category
 
 logger = logging.getLogger(__name__)
 
@@ -226,14 +226,14 @@ class Location(abstract.Model):
         return True
 
     def change_category(self, category_id : int) -> None:
-        from UrbanLens.dashboard.models.categories.model import Category
+        from urbanlens.dashboard.models.categories.model import Category
         category = Category.objects.get(id=category_id)
         self.categories.clear()
         self.categories.add(category)
         self.save()
 
     def suggest_category(self, append_suggestion : bool = False) -> str | None:
-        from UrbanLens.dashboard.services.ai.cloudflare import CloudflareGateway
+        from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
         instructions = "" +\
             "Look at the following information about a location and determine what category it belongs in. Example categories are:" +\
             "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, " +\
@@ -272,7 +272,7 @@ class Location(abstract.Model):
         return category_name
     
     def add_category(self, category_name : str, save : bool = True) -> 'Category' | None:
-        from UrbanLens.dashboard.models.categories.model import Category
+        from urbanlens.dashboard.models.categories.model import Category
         category_name = category_name.lower()
         try:
             category, _created = Category.objects.get_or_create(name=category_name)

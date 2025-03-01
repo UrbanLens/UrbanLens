@@ -10,7 +10,7 @@
 *        File:    __init__.py                                                                                          *
 *        Path:    /dashboard/forms/__init__.py                                                                         *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2024-01-16                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -23,7 +23,7 @@
 *        2024-01-16     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from UrbanLens.dashboard.forms.profile import ProfileForm
-from UrbanLens.dashboard.forms.search import SearchForm
-from UrbanLens.dashboard.forms.review import ReviewForm
-from UrbanLens.dashboard.forms.upload_datafile import UploadDataFile
+from urbanlens.dashboard.forms.profile import ProfileForm
+from urbanlens.dashboard.forms.search import SearchForm
+from urbanlens.dashboard.forms.review import ReviewForm
+from urbanlens.dashboard.forms.upload_datafile import UploadDataFile

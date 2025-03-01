@@ -10,7 +10,7 @@
 *        File:    viewset.py                                                                                           *
 *        Path:    /dashboard/models/trips/viewset.py                                                                   *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -26,8 +26,8 @@
 import logging
 from rest_framework import viewsets, status
 from rest_framework.response import Response
-from UrbanLens.dashboard.models.trips.model import Trip
-from UrbanLens.dashboard.models.trips.serializer import TripSerializer
+from urbanlens.dashboard.models.trips.model import Trip
+from urbanlens.dashboard.models.trips.serializer import TripSerializer
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@
 *        File:    serializer.py                                                                                        *
 *        Path:    /dashboard/models/trips/serializer.py                                                                *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from rest_framework import serializers
-from UrbanLens.dashboard.models.trips.model import Trip
+from urbanlens.dashboard.models.trips.model import Trip
 
 class TripSerializer(serializers.ModelSerializer):
     class Meta:

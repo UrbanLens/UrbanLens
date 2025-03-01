@@ -10,11 +10,11 @@
 *        File:    base.py                                                                                              *
 *        Path:    /UrbanLens/environments/base.py                                                                      *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-02-19                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -27,7 +27,7 @@
 import logging
 from abc import ABC
 from pydantic import BaseModel, Field, validator
-from UrbanLens.environments.types import EnvironmentTypes, DebugTypes
+from urbanlens.UrbanLens.environments.types import EnvironmentTypes, DebugTypes
 
 logger = logging.getLogger(__name__)
 

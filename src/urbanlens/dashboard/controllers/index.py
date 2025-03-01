@@ -10,7 +10,7 @@
 *        File:    IndexController.py                                                                                   *
 *        Path:    /dashboard/controllers/index.py                                                                      *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -28,7 +28,7 @@
 from __future__ import annotations
 
 from djangofoundry.controllers import ListController
-from UrbanLens.dashboard.models.profile import Profile
+from urbanlens.dashboard.models.profile import Profile
 
 class IndexController(ListController):
     template_name = "dashboard/pages/home/index.html"

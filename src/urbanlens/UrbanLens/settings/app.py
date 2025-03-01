@@ -10,11 +10,11 @@
 *        File:    app.py                                                                                               *
 *        Path:    /UrbanLens/settings/app.py                                                                           *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-02-19                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 - 2025 Jess Mann                                                                           *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -37,10 +37,10 @@ from pydantic._internal._model_construction import ModelMetaclass
 from django import conf
 from django.conf import LazySettings
 
-from UrbanLens.environments.types import EnvironmentTypes
-from UrbanLens.environments.factory import select_environment
-from UrbanLens.environments.base import BaseEnvironment
-from UrbanLens.settings.meta.app import DEFAULT_PATH_PARENTS, DEFAULT_ROOT
+from urbanlens.UrbanLens.environments.types import EnvironmentTypes
+from urbanlens.UrbanLens.environments.factory import select_environment
+from urbanlens.UrbanLens.environments.base import BaseEnvironment
+from urbanlens.UrbanLens.settings.meta.app import DEFAULT_PATH_PARENTS, DEFAULT_ROOT
 
 logger = logging.getLogger(__name__)
 

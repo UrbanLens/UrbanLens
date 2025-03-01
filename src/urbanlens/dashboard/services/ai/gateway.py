@@ -32,8 +32,8 @@ import re
 from abc import ABC, abstractmethod
 from functools import singledispatchmethod
 import tiktoken
-from UrbanLens.dashboard.services.ai.meta import MAX_TOKENS, FORMATTING, INSTRUCTIONS, PROJECT_DESCRIPTION
-from UrbanLens.dashboard.services.ai.message import MessageQueue
+from urbanlens.dashboard.services.ai.meta import MAX_TOKENS, FORMATTING, INSTRUCTIONS, PROJECT_DESCRIPTION
+from urbanlens.dashboard.services.ai.message import MessageQueue
 
 logger = logging.getLogger(__name__)
 

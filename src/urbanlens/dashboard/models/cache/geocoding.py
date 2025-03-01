@@ -10,7 +10,7 @@
 *        File:    geocoding.py                                                                                         *
 *        Path:    /dashboard/models/cache/geocoding.py                                                                 *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2024-01-07                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -32,7 +32,7 @@ from django.db.models import Index
 from django.db.models.fields import CharField, DecimalField
 
 # App Imports
-from UrbanLens.dashboard.models import abstract
+from urbanlens.dashboard.models import abstract
 
 class GeocodedLocation(abstract.Model):
     """

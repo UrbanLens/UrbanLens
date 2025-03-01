@@ -10,7 +10,7 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/abstract/model.py                                                                  *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -31,7 +31,7 @@ import logging
 from django.db import models as django_models
 # Lib Imports
 # App Imports
-from UrbanLens.dashboard.models.abstract.queryset import Manager
+from urbanlens.dashboard.models.abstract.queryset import Manager
 
 #
 # Set up logging for this module. __name__ includes the namespace (e.g. dashboard.models.cases).

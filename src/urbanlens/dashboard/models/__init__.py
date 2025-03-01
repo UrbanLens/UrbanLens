@@ -10,7 +10,7 @@
 *        File:    __init__.py                                                                                          *
 *        Path:    /dashboard/models/__init__.py                                                                        *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -25,16 +25,16 @@
 *********************************************************************************************************************"""
 
 # Abstract Base Classes
-from UrbanLens.dashboard.models.abstract import Model, QuerySet, Manager, ViewSet, Serializer
-from UrbanLens.dashboard.models.categories import Category
-from UrbanLens.dashboard.models.comments import Comment
-from UrbanLens.dashboard.models.profile import Profile
-from UrbanLens.dashboard.models.friendship import Friendship
-from UrbanLens.dashboard.models.images import Image
-from UrbanLens.dashboard.models.pin import Pin
-from UrbanLens.dashboard.models.location import Location
-from UrbanLens.dashboard.models.notifications import NotificationLog
-from UrbanLens.dashboard.models.reviews import Review
-from UrbanLens.dashboard.models.tags import Tag
-from UrbanLens.dashboard.models.cache import GeocodedLocation
-from UrbanLens.dashboard.models.trips import Trip
+from urbanlens.dashboard.models.abstract import Model, QuerySet, Manager, ViewSet, Serializer
+from urbanlens.dashboard.models.categories import Category
+from urbanlens.dashboard.models.comments import Comment
+from urbanlens.dashboard.models.profile import Profile
+from urbanlens.dashboard.models.friendship import Friendship
+from urbanlens.dashboard.models.images import Image
+from urbanlens.dashboard.models.pin import Pin
+from urbanlens.dashboard.models.location import Location
+from urbanlens.dashboard.models.notifications import NotificationLog
+from urbanlens.dashboard.models.reviews import Review
+from urbanlens.dashboard.models.tags import Tag
+from urbanlens.dashboard.models.cache import GeocodedLocation
+from urbanlens.dashboard.models.trips import Trip

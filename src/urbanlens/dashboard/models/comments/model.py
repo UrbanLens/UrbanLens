@@ -10,7 +10,7 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/comments/model.py                                                                  *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -25,8 +25,8 @@
 *********************************************************************************************************************"""
 from __future__ import annotations
 from django.db.models import CASCADE, CharField, ForeignKey
-from UrbanLens.dashboard.models import abstract
-from UrbanLens.dashboard.models.comments.queryset import CommentManager
+from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.comments.queryset import CommentManager
 
 class Comment(abstract.Model):
     """

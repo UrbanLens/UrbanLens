@@ -9,7 +9,7 @@
 *                                                                                                                      *
 *        File:    __init__.py                                                                                          *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2025-03-01                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess.a.mann@gmail.com                                                                                *
@@ -22,4 +22,4 @@
 *        2025-03-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from UrbanLens import UrbanLens
+from urbanlens import UrbanLens

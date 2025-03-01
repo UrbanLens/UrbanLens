@@ -10,7 +10,7 @@
 *        File:    gateway.py                                                                                           *
 *        Path:    /dashboard/services/nps/map.py                                                                       *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2024-01-17                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -27,7 +27,7 @@ import requests
 import logging
 from shapely.geometry import Point
 import geopandas as gpd
-from UrbanLens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.gateway import Gateway
 
 logger = logging.getLogger(__name__)
 

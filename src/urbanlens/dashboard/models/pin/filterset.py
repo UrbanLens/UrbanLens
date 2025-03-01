@@ -10,7 +10,7 @@
 *        File:    filterset.py                                                                                         *
 *        Path:    /dashboard/models/pins/filterset.py                                                             *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -25,7 +25,7 @@
 *********************************************************************************************************************"""
 import django_filters
 from django_filters import CharFilter, NumberFilter
-from UrbanLens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin.model import Pin
 
 class PinFilter(django_filters.FilterSet):
     categories = CharFilter(method='by_category')

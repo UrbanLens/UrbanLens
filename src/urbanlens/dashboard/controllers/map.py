@@ -10,7 +10,7 @@
 *        File:    MapController.py                                                                                     *
 *        Path:    /dashboard/controllers/map.py                                                                        *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -33,16 +33,16 @@ from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
-from UrbanLens.settings.app import settings
+from urbanlens.settings.app import settings
 
 from rest_framework.viewsets import GenericViewSet
 
-from UrbanLens.dashboard.models.pin import Pin, PinQuerySet
-from UrbanLens.dashboard.models.categories.model import Category
-from UrbanLens.dashboard.models.images.model import Image
-from UrbanLens.dashboard.models.tags.model import Tag
-from UrbanLens.dashboard.forms.advanced_search import AdvancedSearchForm
-from UrbanLens.dashboard.forms.search import SearchForm
+from urbanlens.dashboard.models.pin import Pin, PinQuerySet
+from urbanlens.dashboard.models.categories.model import Category
+from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.tags.model import Tag
+from urbanlens.dashboard.forms.advanced_search import AdvancedSearchForm
+from urbanlens.dashboard.forms.search import SearchForm
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 

@@ -10,7 +10,7 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/images/model.py                                                                    *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -26,8 +26,8 @@
 from __future__ import annotations
 from django.db.models import ImageField, CASCADE
 from django.db.models import ForeignKey
-from UrbanLens.dashboard.models import abstract
-from UrbanLens.dashboard.models.images.queryset import ImageManager
+from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.images.queryset import ImageManager
 
 class Image(abstract.Model):
     """

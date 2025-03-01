@@ -10,7 +10,7 @@
 *        File:    urls.py                                                                                              *
 *        Path:    /dashboard/urls.py                                                                                   *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -32,14 +32,14 @@ from django.urls import path, include, re_path
 from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
-#from UrbanLens.dashboard.models.categories import CategoryViewSet
-from UrbanLens.dashboard.models.pin import PinViewSet
-#from UrbanLens.dashboard.models.comments import CommentViewSet
-#from UrbanLens.dashboard.models.images import ImageViewSet
-from UrbanLens.dashboard.models.reviews import ReviewViewSet
-from UrbanLens.dashboard.models.profile import ProfileViewSet
-from UrbanLens.dashboard.controllers import friendship, map, pin, profile
-from UrbanLens.dashboard.controllers.index import IndexController
+#from urbanlens.dashboard.models.categories import CategoryViewSet
+from urbanlens.dashboard.models.pin import PinViewSet
+#from urbanlens.dashboard.models.comments import CommentViewSet
+#from urbanlens.dashboard.models.images import ImageViewSet
+from urbanlens.dashboard.models.reviews import ReviewViewSet
+from urbanlens.dashboard.models.profile import ProfileViewSet
+from urbanlens.dashboard.controllers import friendship, map, pin, profile
+from urbanlens.dashboard.controllers.index import IndexController
 
 logger = logging.getLogger(__name__)
 

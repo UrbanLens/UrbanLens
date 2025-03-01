@@ -25,7 +25,7 @@
 *********************************************************************************************************************"""
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from UrbanLens.dashboard.models.pin import Pin
+from urbanlens.dashboard.models.pin import Pin
 
 @receiver(post_save, sender=Pin)
 def suggest_and_add_categories(sender, instance : Pin, created, **kwargs):

@@ -10,7 +10,7 @@
 *        File:    status.py                                                                                            *
 *        Path:    /dashboard/models/notifications/meta/status.py                                                       *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -27,7 +27,7 @@
 # Generic imports
 from __future__ import annotations
 from django.utils.translation import gettext as _
-from UrbanLens.dashboard.models.abstract.choices import TextChoices
+from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 class Status(TextChoices):
 	"""

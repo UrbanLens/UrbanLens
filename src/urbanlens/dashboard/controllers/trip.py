@@ -30,7 +30,7 @@ from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from rest_framework.viewsets import GenericViewSet
 
-from UrbanLens.dashboard.models.trips import Trip
+from urbanlens.dashboard.models.trips import Trip
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class TripController(LoginRequiredMixin, GenericViewSet):
     """
     Controller for the trip planning page
     """
-    from UrbanLens.dashboard.models.trips.model import Trip
+    from urbanlens.dashboard.models.trips.model import Trip
 
     def view(self, request, *args, **kwargs):
         """

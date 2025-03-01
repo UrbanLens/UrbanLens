@@ -10,7 +10,7 @@
 *        File:    __init__.py                                                                                          *
 *        Path:    /__init__.py                                                                                         *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -23,4 +23,4 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from UrbanLens.dashboard.models.tags.model import Tag
+from urbanlens.dashboard.models.tags.model import Tag

@@ -10,7 +10,7 @@
 *        File:    viewset.py                                                                                           *
 *        Path:    /viewset.py                                                                                          *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -25,8 +25,8 @@
 *********************************************************************************************************************"""
 from __future__ import annotations
 from rest_framework import viewsets
-from UrbanLens.dashboard.models.comments.model import Comment
-from UrbanLens.dashboard.models.comments.serializer import CommentSerializer
+from urbanlens.dashboard.models.comments.model import Comment
+from urbanlens.dashboard.models.comments.serializer import CommentSerializer
 
 class CommentViewSet(viewsets.ModelViewSet):
     queryset = Comment.objects.all()

@@ -24,7 +24,7 @@ Including another URLconf
 *        File:    urls.py                                                                                              *
 *        Path:    /UrbanLens/urls.py                                                                                   *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -43,10 +43,10 @@ from django.urls import path, include, re_path
 from django.views.generic import TemplateView
 import logging
 
-from UrbanLens.dashboard.urls import urlpatterns as dashboard_urls
-from UrbanLens.dashboard.controllers.account import SignupView
-from UrbanLens.dashboard.controllers.index import IndexController
-from UrbanLens.dashboard.controllers.health import HealthController
+from urbanlens.dashboard.urls import urlpatterns as dashboard_urls
+from urbanlens.dashboard.controllers.account import SignupView
+from urbanlens.dashboard.controllers.index import IndexController
+from urbanlens.dashboard.controllers.health import HealthController
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@
 *        File:    queryset.py                                                                                          *
 *        Path:    /dashboard/models/pin/queryset.py                                                              *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -34,7 +34,7 @@ from django.db.models import Q
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 # App Imports
-from UrbanLens.dashboard.models import abstract
+from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     pass

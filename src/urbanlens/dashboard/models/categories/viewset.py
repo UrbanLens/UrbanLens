@@ -10,7 +10,7 @@
 *        File:    viewset.py                                                                                           *
 *        Path:    /viewset.py                                                                                          *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -25,8 +25,8 @@
 *********************************************************************************************************************"""
 from __future__ import annotations
 from rest_framework import viewsets
-from UrbanLens.dashboard.models.categories.model import Category
-from UrbanLens.dashboard.models.categories.serializer import CategorySerializer
+from urbanlens.dashboard.models.categories.model import Category
+from urbanlens.dashboard.models.categories.serializer import CategorySerializer
 
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()

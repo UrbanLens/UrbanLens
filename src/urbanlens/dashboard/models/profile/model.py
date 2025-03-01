@@ -10,7 +10,7 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/profile/model.py                                                                   *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -28,8 +28,8 @@ from django.contrib.auth.models import User
 from django.db.models import CASCADE, Index
 from django.db.models import ImageField
 from django.db.models import OneToOneField, CharField, TextField, DateField
-from UrbanLens.dashboard.models import abstract
-from UrbanLens.dashboard.models.profile.queryset import Manager
+from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.profile.queryset import Manager
 
 class Profile(abstract.Model):
     avatar = ImageField()

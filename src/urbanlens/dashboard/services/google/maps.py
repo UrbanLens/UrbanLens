@@ -10,7 +10,7 @@
 *        File:    maps.py                                                                                              *
 *        Path:    /dashboard/services/google/maps.py                                                                   *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2024-01-01                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -33,10 +33,10 @@ import csv
 from fastkml import kml
 from tqdm import tqdm
 
-from UrbanLens.dashboard.services.gateway import Gateway
-from UrbanLens.dashboard.models.pin import Pin
-from UrbanLens.dashboard.models.profile import Profile
-from UrbanLens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.models.pin import Pin
+from urbanlens.dashboard.models.profile import Profile
+from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 
 logger = logging.getLogger(__name__)
 

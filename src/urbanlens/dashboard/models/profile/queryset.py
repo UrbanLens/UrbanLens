@@ -1,5 +1,5 @@
 from __future__ import annotations
-from UrbanLens.dashboard.models import abstract
+from urbanlens.dashboard.models import abstract
 
 class QuerySet(abstract.QuerySet):
     '''

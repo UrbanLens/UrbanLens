@@ -10,7 +10,7 @@
 *        File:    queryset.py                                                                                          *
 *        Path:    /dashboard/models/trips/queryset.py                                                                  *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 import logging
 # Django Imports
 # App Imports
-from UrbanLens.dashboard.models import abstract
+from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     pass

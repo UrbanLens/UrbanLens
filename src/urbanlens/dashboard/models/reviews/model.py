@@ -10,7 +10,7 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/reviews/model.py                                                                   *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -28,9 +28,9 @@ from django.db.models import CASCADE
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db.models.fields import IntegerField, TextField
 from django.db.models.fields.related import ForeignKey
-from UrbanLens.dashboard.models import abstract
-from UrbanLens.dashboard.models.reviews.queryset import Manager
-from UrbanLens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.reviews.queryset import Manager
+from urbanlens.dashboard.models.pin.model import Pin
 
 class Review(abstract.Model):
     rating = IntegerField(validators=[MinValueValidator(0), MaxValueValidator(5)])

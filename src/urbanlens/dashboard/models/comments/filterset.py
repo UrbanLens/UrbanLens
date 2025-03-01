@@ -10,7 +10,7 @@
 *        File:    filterset.py                                                                                         *
 *        Path:    /filterset.py                                                                                        *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 import django_filters
-from UrbanLens.dashboard.models.comments.model import Comment
+from urbanlens.dashboard.models.comments.model import Comment
 
 class CommentFilter(django_filters.FilterSet):
     class Meta:

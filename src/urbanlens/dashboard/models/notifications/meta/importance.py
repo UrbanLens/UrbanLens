@@ -10,7 +10,7 @@
 *        File:    importance.py                                                                                        *
 *        Path:    /dashboard/models/notifications/meta/importance.py                                                   *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -26,7 +26,7 @@
 
 # Generic imports
 from __future__ import annotations
-from UrbanLens.dashboard.models.abstract.choices import TextChoices
+from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 class Importance(TextChoices):
 	"""

@@ -25,8 +25,8 @@
 *********************************************************************************************************************"""
 from __future__ import annotations
 from typing import Optional
-from UrbanLens.dashboard.services.ai.meta import SHORTEST_MESSAGE, MAX_TOKENS
-from UrbanLens.dashboard.services.ai.functions import estimate_combined_tokens, estimate_tokens
+from urbanlens.dashboard.services.ai.meta import SHORTEST_MESSAGE, MAX_TOKENS
+from urbanlens.dashboard.services.ai.functions import estimate_combined_tokens, estimate_tokens
 
 class MessageQueue:
     messages = []

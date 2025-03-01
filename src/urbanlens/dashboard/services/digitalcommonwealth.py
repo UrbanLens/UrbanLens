@@ -10,7 +10,7 @@
 *        File:    digitalcommonwealth.py                                                                               *
 *        Path:    /dashboard/services/digitalcommonwealth.py                                                           *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2024-01-01                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-from UrbanLens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.gateway import Gateway
 import requests
 
 class DigitalCommonwealthGateway(Gateway):

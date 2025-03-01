@@ -10,7 +10,7 @@
 *        File:    queryset.py                                                                                          *
 *        Path:    /dashboard/models/friendship/queryset.py                                                             *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -28,11 +28,11 @@ from typing import Self, TYPE_CHECKING
 import logging
 from django.contrib.auth.models import User
 from django.db.models import Q
-from UrbanLens.dashboard.models import abstract
+from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from UrbanLens.dashboard.models.profile import Profile
-    from UrbanLens.dashboard.models.friendship.model import Friendship
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.models.friendship.model import Friendship
 
 logger = logging.getLogger(__name__)
 

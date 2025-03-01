@@ -10,11 +10,11 @@
 *        File:    db.py                                                                                                *
 *        Path:    /core/controllers/backups/db.py                                                                      *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2024-02-19                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -32,7 +32,7 @@ from datetime import datetime
 from threading import Lock
 
 from django.core.signals import request_finished
-from UrbanLens.settings.app import settings
+from urbanlens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 

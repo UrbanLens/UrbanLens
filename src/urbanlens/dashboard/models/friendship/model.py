@@ -10,7 +10,7 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/friendship/model.py                                                                *
 *        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
@@ -27,9 +27,9 @@ from __future__ import annotations
 import logging
 from django.db.models import CASCADE
 from django.db.models import ForeignKey, CharField
-from UrbanLens.dashboard.models.abstract import Model, TextChoices
-from UrbanLens.dashboard.models.friendship.queryset import Manager
-from UrbanLens.dashboard.models.profile import Profile
+from urbanlens.dashboard.models.abstract import Model, TextChoices
+from urbanlens.dashboard.models.friendship.queryset import Manager
+from urbanlens.dashboard.models.profile import Profile
 
 logger = logging.getLogger(__name__)
 

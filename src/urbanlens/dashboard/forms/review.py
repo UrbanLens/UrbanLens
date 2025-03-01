@@ -1,5 +1,5 @@
 from django import forms
-from UrbanLens.dashboard.models.reviews.model import Review
+from urbanlens.dashboard.models.reviews.model import Review
 
 class ReviewForm(forms.ModelForm):
     class Meta:

@@ -25,7 +25,7 @@
 *********************************************************************************************************************"""
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from UrbanLens.dashboard.models.location import Location
+from urbanlens.dashboard.models.location import Location
 
 @receiver(post_save, sender=Location)
 def suggest_and_add_categories(sender, instance : Location, created, **kwargs):
