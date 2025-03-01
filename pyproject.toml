@@ -61,7 +61,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.pydoctor]
-add-package = ["./UrbanLens"]
+add-package = ["./src"]
 project-name = "Urban Lens"
 project-version = "0.0.1"
 project-url = "https://github.com/UrbanLens/UrbanLens"

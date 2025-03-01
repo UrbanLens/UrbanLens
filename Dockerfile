@@ -19,7 +19,7 @@
 ################################################################################
 
 # Allow future upgrades
-ARG PYTHON_BASE_IMAGE_VERSION=0-3.11
+ARG PYTHON_BASE_IMAGE_VERSION=0-3.12
 ARG GIT_EMAIL
 ARG GIT_NAME
 ARG GH_TOKEN
