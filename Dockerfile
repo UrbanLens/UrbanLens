@@ -99,7 +99,7 @@ COPY requirements /tmp/pip-tmp/requirements/
 RUN pip --no-cache-dir install -r /tmp/pip-tmp/requirements/dev.txt
 
 # Copy init.py into the container
-COPY src/urbanlens/bin/init.py /usr/local/bin/urbanlens_init.py
+COPY src/bin/init.py /usr/local/bin/urbanlens_init.py
 
 # Copy all source files into the container
 COPY . /app

@@ -41,6 +41,10 @@ class UnrecoverableError(Exception):
     An error that cannot be recovered. This will result in a sys.exit(1)
     """
 
+ROOT_DIR = Path('/app')
+SRC_DIR = ROOT_DIR / 'src'
+APP_DIR = SRC_DIR / 'urbanlens'
+
 class DjangoProjectInitializer:
     _db_host : str
     _db_port : int
@@ -259,19 +263,19 @@ class DjangoProjectInitializer:
         # First, ensure that all directories for build files exist.
         # This is necessary because the build process will not create them, and will fail if they do not exist.
         apps = [ 'dashboard', 'core' ]
-        dirs = []
+        dirs : list[Path] = []
         for app in apps:
-            dirs.append(os.path.join('/app', app, 'frontend', 'static', app, 'js'))
-            dirs.append(os.path.join('/app', app, 'frontend', 'static', app, 'css'))
+            dirs.append(APP_DIR / app / 'frontend' / 'static' / app / 'js')
+            dirs.append(APP_DIR / app / 'frontend' / 'static' / app / 'css')
 
         for dir in dirs:
-            if not Path(dir).exists():
+            if not dir.exists():
                 os.makedirs(dir)
                 logger.debug(f'Created directory {dir}')
 
         # Ensure entrypoint (dashboard/frontend/static/dashboard/js/index.js) exists
-        entry = os.path.join('/app', 'src', 'urbanlens', 'dashboard', 'frontend', 'static', 'dashboard', 'js', 'index.js')
-        if not Path(entry).exists():
+        entry = APP_DIR / 'dashboard' / 'frontend' / 'static' / 'dashboard' / 'js' / 'index.js'
+        if not entry.exists():
             with open(entry, 'w') as file:
                 file.write('')
             logger.debug(f'Created empty file {entry}')
