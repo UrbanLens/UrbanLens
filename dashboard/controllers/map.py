@@ -10,11 +10,11 @@
 *        File:    MapController.py                                                                                     *
 *        Path:    /dashboard/controllers/map.py                                                                        *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -37,12 +37,12 @@ from UrbanLens.settings.app import settings
 
 from rest_framework.viewsets import GenericViewSet
 
-from dashboard.models.locations import Location, QuerySet as LocationQuerySet
-from dashboard.models.categories.model import Category
-from dashboard.models.images.model import Image
-from dashboard.models.tags.model import Tag
-from dashboard.forms.advanced_search import AdvancedSearchForm
-from dashboard.forms.search import SearchForm
+from UrbanLens.dashboard.models.pin import Pin, PinQuerySet
+from UrbanLens.dashboard.models.categories.model import Category
+from UrbanLens.dashboard.models.images.model import Image
+from UrbanLens.dashboard.models.tags.model import Tag
+from UrbanLens.dashboard.forms.advanced_search import AdvancedSearchForm
+from UrbanLens.dashboard.forms.search import SearchForm
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 
@@ -50,41 +50,41 @@ logger = logging.getLogger(__name__)
 
 class MapController(LoginRequiredMixin, GenericViewSet):
     def view_map(self, request, *args, **kwargs):
-        locations = Location.objects.all()
+        pins = Pin.objects.all()
 
-        return render(request, 'dashboard/pages/map/index.html', {'locations': locations, 'openweathermap_api_key': settings.openweathermap_api_key})
+        return render(request, 'dashboard/pages/map/index.html', {'pins': pins, 'openweathermap_api_key': settings.openweathermap_api_key})
 
-    def edit_pin(self, request, location_id, *args, **kwargs):
-        location : Location = Location.objects.get(id=location_id)
-        # Update the location based on the form data
-        location.name = request.POST.get('name')
-        location.description = request.POST.get('description')
-        location.latitude = request.POST.get('latitude')
-        location.longitude = request.POST.get('longitude')
+    def edit_pin(self, request, pin_id, *args, **kwargs):
+        pin : Pin = Pin.objects.get(id=pin_id)
+        # Update the pin based on the form data
+        pin.name = request.POST.get('name')
+        pin.description = request.POST.get('description')
+        pin.latitude = request.POST.get('latitude')
+        pin.longitude = request.POST.get('longitude')
         tags = request.POST.get('tags').split(',')
         for tag_name in tags:
             tag, created = Tag.objects.get_or_create(name=tag_name)
-            location.tags.add(tag)
+            pin.tags.add(tag)
         icon = request.FILES.get('icon', None)
         if icon:
-            location.icon = icon
-        location.save()
+            pin.icon = icon
+        pin.save()
         return HttpResponseRedirect(reverse('view_map'))
 
-    def get_edit_pin(self, request, location_id, *args, **kwargs):
-        location = Location.objects.get(id=location_id)
+    def get_edit_pin(self, request, pin_id, *args, **kwargs):
+        pin = Pin.objects.get(id=pin_id)
         # Render the edit form
         categories = Category.objects.all()
-        return render(request, 'dashboard/edit_location.html', {'location': location, 'categories': categories})
+        return render(request, 'dashboard/edit_pin.html', {'pin': pin, 'categories': categories})
 
     def add_pin(self, request, *args, **kwargs):
         # Render the add form
-        return render(request, 'dashboard/pages/map/add_location.html')
+        return render(request, 'dashboard/pages/map/add_pin.html')
 
     def post_add_pin(self, request, *args, **kwargs):
         logger.critical('Adding a new pin!')
         try:
-            # Create a new location based on the form data
+            # Create a new pin based on the form data
             name = request.POST.get('name')
             latitude = request.POST.get('latitude')
             longitude = request.POST.get('longitude')
@@ -103,16 +103,16 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     return HttpResponse("Error: No address or lat/lon provided.", status=400)
 
                 # Convert address into lat/lng
-                (latitude, longitude) = get_location_by_address(address)
+                (latitude, longitude) = get_pin_by_address(address)
                 if not latitude or not longitude:
                     return HttpResponse("Error: Unable to convert address to lat/lng.", status=400)
 
-            location = Location.objects.create(name=name, latitude=latitude, longitude=longitude, icon=icon, profile=request.user.profile)
+            pin = Pin.objects.create(name=name, latitude=latitude, longitude=longitude, icon=icon, profile=request.user.profile)
             for tag_name in tags:
                 tag, created = Tag.objects.get_or_create(name=tag_name)
-                location.tags.add(tag)
-            location.save()
-            logger.critical('New location created: %s', location.name)
+                pin.tags.add(tag)
+            pin.save()
+            logger.critical('New pin created: %s', pin.name)
             logger.critical('Profile is %s', request.user.profile)
             return HttpResponse(status=200)
         except Exception as e:
@@ -127,30 +127,30 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         logger.info('Searching map...')
         search_form = SearchForm(request.POST)
         if search_form.is_valid():
-            query = Location.objects.filter(profile=request.user.profile).filter_by_criteria(search_form.cleaned_data)
+            query = Pin.objects.filter(profile=request.user.profile).filter_by_criteria(search_form.cleaned_data)
             data = self.get_map_data(request, query)
-            return render(request, 'dashboard/pages/map/data.html', {'locations': data})
+            return render(request, 'dashboard/pages/map/data.html', {'pins': data})
         
         logger.error('Invalid search criteria: %s', search_form.errors)
         return HttpResponse(status=400, content='Invalid search criteria.')
 
-    def upload_image(self, request, location_id, *args, **kwargs):
+    def upload_image(self, request, pin_id, *args, **kwargs):
         image = request.FILES.get('image')
-        location = Location.objects.get(id=location_id)
-        Image.objects.create(image=image, location=location)
+        pin = Pin.objects.get(id=pin_id)
+        Image.objects.create(image=image, pin=pin)
         return HttpResponse(status=200)
 
-    def change_category(self, request, location_id, *args, **kwargs):
+    def change_category(self, request, pin_id, *args, **kwargs):
         category_id = request.POST.get('category')
-        location = Location.objects.get(id=location_id)
-        location.change_category(category_id)
+        pin = Pin.objects.get(id=pin_id)
+        pin.change_category(category_id)
         return HttpResponseRedirect(reverse('view_map'))
 
     def post_advanced_search(self, request, *args, **kwargs):
         form = AdvancedSearchForm(request.POST)
         if form.is_valid():
-            locations = Location.objects.filter_by_criteria(form.cleaned_data)
-            return render(request, 'dashboard/view_map.html', {'locations': locations})
+            pins = Pin.objects.filter_by_criteria(form.cleaned_data)
+            return render(request, 'dashboard/view_map.html', {'pins': pins})
 
     def get_advanced_search(self, request, *args, **kwargs):
         form = AdvancedSearchForm()
@@ -161,13 +161,13 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         return render(request, 'dashboard/pages/map/data.html', {'map_data': map_data})
 
-    def get_map_data(self, request, query : LocationQuerySet | None = None):
+    def get_map_data(self, request, query : PinQuerySet | None = None):
         if query is None:
-            query = Location.objects.all().filter(profile = request.user.profile)
+            query = Pin.objects.all().filter(profile = request.user.profile)
 
         if not query:
             # Default map data
-            map_data = [] #{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
+            map_data = [] #{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Pin', 'description': 'No pins saved yet.'}]
         else:
             map_data = [pin.to_json() for pin in query]
 
@@ -202,12 +202,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
 
 @login_required
-def get_location_by_address(address):
+def get_pin_by_address(address):
     try:
         geolocator = Nominatim(user_agent="geoapiExercises")
-        location = geolocator.geocode(address)
-        if location:
-            return (location.latitude, location.longitude)
+        pin = geolocator.geocode(address)
+        if pin:
+            return (pin.latitude, pin.longitude)
 
     except GeocoderTimedOut:
         raise Exception("Geocoder service timed out.")

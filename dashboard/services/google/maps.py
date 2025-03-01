@@ -10,11 +10,11 @@
 *        File:    maps.py                                                                                              *
 *        Path:    /dashboard/services/google/maps.py                                                                   *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-01-01                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -33,10 +33,10 @@ import csv
 from fastkml import kml
 from tqdm import tqdm
 
-from dashboard.services.gateway import Gateway
-from dashboard.models.locations import Location
-from dashboard.models.profile import Profile
-from dashboard.services.google.geocoding import GoogleGeocodingGateway
+from UrbanLens.dashboard.services.gateway import Gateway
+from UrbanLens.dashboard.models.pin import Pin
+from UrbanLens.dashboard.models.profile import Profile
+from UrbanLens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 
 logger = logging.getLogger(__name__)
 
@@ -148,9 +148,9 @@ class GoogleMapsGateway(Gateway):
         heading = math.degrees(math.atan2(y, x))
         return (heading + 360) % 360
     
-    def import_locations_from_file(self, file, user_profile : 'Profile') -> list[Location]:
+    def import_pins_from_file(self, file, user_profile : 'Profile') -> list[Pin]:
         """
-        Imports locations from a file and bulk creates Location objects.
+        Imports pins from a file and bulk creates Pin objects.
         """
         parts = file.name.split('.')
         if not parts or len(parts) < 2:
@@ -170,45 +170,45 @@ class GoogleMapsGateway(Gateway):
                 raise ValueError("Unsupported file format. Supported formats are KML, JSON, and CSV.")
             
         # Parse every location in data
-        locations = []
+        pins = []
         total = len(data)
-        created_locations = 0
+        created_pins = 0
         exists = 0
         skipped = 0
-        with tqdm(total=total, desc="Importing locations") as pbar:
-            for location_data in data:
+        with tqdm(total=total, desc="Importing pins") as pbar:
+            for pin_data in data:
                 try:
-                    location, created = Location.objects.get_nearby_or_create(
-                        latitude=location_data['latitude'],
-                        longitude=location_data['longitude'],
+                    pin, created = Pin.objects.get_nearby_or_create(
+                        latitude=pin_data['latitude'],
+                        longitude=pin_data['longitude'],
                         profile=user_profile,
-                        defaults=location_data
+                        defaults=pin_data
                     )
-                    if location:
-                        locations.append(location)
+                    if pin:
+                        pins.append(pin)
                         if created:
-                            created_locations += 1
+                            created_pins += 1
                         else:
                             exists += 1
                     else:
                         skipped += 1
                 finally:
                     pbar.update(1)
-                    pbar.set_description(f"Importing locations: {created_locations} created, {skipped} skipped, {exists} already existed. Last: {location_data.get('name','')}")
+                    pbar.set_description(f"Importing pins: {created_pins} created, {skipped} skipped, {exists} already existed. Last: {pin_data.get('name','')}")
 
-        return locations
+        return pins
 
     def takeout_kml_to_dict(self, file_contents : str, user_profile : 'Profile') -> dict[str, Any]:
         try:
             k = kml.KML()
             k.from_string(file_contents)
                 
-            locations = []
+            pins = []
             for feature in k.features():
                 for placemark in feature.features():
                     coords = placemark.geometry.coords[0]
 
-                    locations.append({
+                    pins.append({
                         'latitude': coords[1],
                         'longitude': coords[0],
                         'profile': user_profile,
@@ -216,18 +216,18 @@ class GoogleMapsGateway(Gateway):
                         'description': placemark.description
                     })
 
-            logger.debug(f"Converted {len(locations)} locations from KML file to dicts.")
+            logger.debug(f"Converted {len(pins)} pins from KML file to dicts.")
         except Exception as e:
-            logger.error("Failed to import locations from KML: %s", str(e))
+            logger.error("Failed to import pins from KML: %s", str(e))
             raise
 
-        return locations
+        return pins
 
     def takeout_json_to_dict(self, file_contents: str, user_profile: 'Profile') -> dict[str, Any]:
         try:
             json_data = json.loads(file_contents)
             features = json_data.get('features', [])
-            locations = []
+            pins = []
 
             for feature in features:
                 geometry = feature.get('geometry', {})
@@ -240,7 +240,7 @@ class GoogleMapsGateway(Gateway):
                     # Coordinates are expected to be in [longitude, latitude] format
                     longitude, latitude = coordinates if len(coordinates) == 2 else (None, None)
 
-                    locations.append({
+                    pins.append({
                         'latitude': latitude,
                         'longitude': longitude,
                         'profile': user_profile,
@@ -248,16 +248,16 @@ class GoogleMapsGateway(Gateway):
                         'description': f"{properties.get('description','')} {properties.get('address','')}"
                     })
 
-            logger.info(f"Converted {len(locations)} locations from JSON file to dicts.")
+            logger.info(f"Converted {len(pins)} pins from JSON file to dicts.")
 
         except Exception as e:
-            logger.error("Failed to import locations from JSON: %s", str(e))
+            logger.error("Failed to import pins from JSON: %s", str(e))
             raise
 
-        return locations
+        return pins
 
     def takeout_csv_to_dict(self, file_contents: str, user_profile: 'Profile') -> dict[str, Any]:
-        locations = []
+        pins = []
         gateway = GoogleGeocodingGateway()
         try:
             reader = csv.DictReader(file_contents.splitlines())
@@ -271,7 +271,7 @@ class GoogleMapsGateway(Gateway):
 
                 latitude, longitude = gateway.extract_coordinates_from_url(url)
 
-                locations.append({
+                pins.append({
                     'latitude': latitude,
                     'longitude': longitude,
                     'profile': user_profile,
@@ -279,9 +279,9 @@ class GoogleMapsGateway(Gateway):
                     'description': row.get('Note', '') + " " + row.get('Comment', '').strip()
                 })
 
-            logger.info(f"Converted {len(locations)} locations from CSV file to dicts.")
+            logger.info(f"Converted {len(pins)} pins from CSV file to dicts.")
         except Exception as e:
-            logger.error("Failed to import locations from CSV: %s", str(e))
+            logger.error("Failed to import pins from CSV: %s", str(e))
             raise
 
-        return locations
+        return pins

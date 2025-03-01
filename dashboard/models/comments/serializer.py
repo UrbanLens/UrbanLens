@@ -9,12 +9,12 @@
 *                                                                                                                      *
 *        File:    serializer.py                                                                                        *
 *        Path:    /serializer.py                                                                                       *
-*        Project: comments                                                                                             *
-*        Version: <<projectversion>>                                                                                   *
+*        Project: urbanlens                                                                                            *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -24,9 +24,9 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from rest_framework import serializers
-from dashboard.models.comments.model import Comment
+from UrbanLens.dashboard.models.comments.model import Comment
 
 class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
-        fields = ['text', 'location', 'profile', 'created', 'updated']
+        fields = ['text', 'pin', 'profile', 'created', 'updated']

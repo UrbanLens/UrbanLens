@@ -9,12 +9,12 @@
 *                                                                                                                      *
 *        File:    filterset.py                                                                                         *
 *        Path:    /filterset.py                                                                                        *
-*        Project: images                                                                                               *
-*        Version: <<projectversion>>                                                                                   *
+*        Project: urbanlens                                                                                            *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -24,9 +24,9 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 import django_filters
-from dashboard.models.images.model import Image
+from UrbanLens.dashboard.models.images.model import Image
 
 class ImageFilterSet(django_filters.FilterSet):
     class Meta:
         model = Image
-        fields = ['image', 'location']
+        fields = ['image', 'pin']

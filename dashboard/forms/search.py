@@ -10,11 +10,11 @@
 *        File:    search.py                                                                                            *
 *        Path:    /dashboard/forms/search.py                                                                           *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-01-16                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -24,8 +24,8 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from django import forms
-from dashboard.models.locations.model import Location, LocationStatus
-from dashboard.models.tags.model import Tag
+from UrbanLens.dashboard.models.pin.model import Pin, PinStatus
+from UrbanLens.dashboard.models.tags.model import Tag
 from django.db.models import Q
 
 class SearchForm(forms.Form):
@@ -43,7 +43,7 @@ class SearchForm(forms.Form):
         widget=forms.CheckboxSelectMultiple,
         required=False
     )
-    status = forms.ChoiceField(choices=LocationStatus.choices, required=False)
+    status = forms.ChoiceField(choices=PinStatus.choices, required=False)
 
     def get_search_query(self):
         query = Q()
@@ -57,4 +57,4 @@ class SearchForm(forms.Form):
             query &= Q(tags__in=self.cleaned_data['tags'])
         if self.cleaned_data['status']:
             query &= Q(status=self.cleaned_data['status'])
-        return Location.objects.filter(query)
+        return Pin.objects.filter(query)

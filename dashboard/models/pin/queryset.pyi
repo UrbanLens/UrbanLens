@@ -7,33 +7,26 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    serializer.py                                                                                        *
-*        Path:    /dashboard/models/locations/serializer.py                                                            *
+*        File:    queryset.pyi                                                                                         *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
-*        Created: 2023-12-24                                                                                           *
+*        Version: 0.0.1                                                                                                *
+*        Created: 2025-03-01                                                                                           *
 *        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Email:   jess.a.mann@gmail.com                                                                                *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
+*        2025-03-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from rest_framework import serializers
-from dashboard.models.locations.model import Location
+from django.db import models
+from dashboard.models.abstract import models
 
-class LocationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Location
-        fields = ['name', 'icon', 'categories', 'last_visited', 'latitude', 'longitude', 'created', 'updated', 'profile', 'status', 'tags', 'rating']
+class PinQuerySet(models.QuerySet):
+    pass
 
-    def create(self, validated_data):
-        user = validated_data.pop('user')
-        location = Location.objects.create(**validated_data)
-        location.user = user
-        location.save()
-        return location
+class PinManager(models.Manager, PinQuerySet):
+    def all(self) -> "PinQuerySet": ...

@@ -10,11 +10,11 @@
 *        File:    __init__.py                                                                                          *
 *        Path:    /dashboard/models/cache/__init__.py                                                                  *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-01-07                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -23,4 +23,4 @@
 *        2024-01-07     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from dashboard.models.cache.geocoding import GeocodedLocation
+from UrbanLens.dashboard.models.cache.geocoding import GeocodedLocation

@@ -10,11 +10,11 @@
 *        File:    __init__.py                                                                                          *
 *        Path:    /dashboard/models/abstract/__init__.py                                                               *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -24,8 +24,8 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-from dashboard.models.abstract.choices import TextChoices
-from dashboard.models.abstract.queryset import Manager, QuerySet
-from dashboard.models.abstract.model import Model
-from dashboard.models.abstract.viewset import ViewSet
-from dashboard.models.abstract.serializer import Serializer
+from UrbanLens.dashboard.models.abstract.choices import TextChoices
+from UrbanLens.dashboard.models.abstract.queryset import Manager, QuerySet
+from UrbanLens.dashboard.models.abstract.model import Model
+from UrbanLens.dashboard.models.abstract.viewset import ViewSet
+from UrbanLens.dashboard.models.abstract.serializer import Serializer

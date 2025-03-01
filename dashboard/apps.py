@@ -9,12 +9,12 @@
 *                                                                                                                      *
 *        File:    apps.py                                                                                              *
 *        Path:    /apps.py                                                                                             *
-*        Project: dashboard                                                                                            *
-*        Version: <<projectversion>>                                                                                   *
+*        Project: urbanlens                                                                                            *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -34,4 +34,4 @@ class DashboardConfig(AppConfig):
 
 	def ready(self):
 		# Import signals
-		import dashboard.models.locations.signals
+		pass

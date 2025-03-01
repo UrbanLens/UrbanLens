@@ -10,11 +10,11 @@
 *        File:    __init__.py                                                                                          *
 *        Path:    /dashboard/services/google/__init__.py                                                               *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-01-01                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -23,4 +23,4 @@
 *        2024-01-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from dashboard.services.google.places import GooglePlacesGateway
+from UrbanLens.dashboard.services.google.places import GooglePlacesGateway

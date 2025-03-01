@@ -7,8 +7,8 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        - File:    location.py                                                                                        *
-*        - Path:    /dashboard/controllers/location.py                                                                 *
+*        - File:    pin.py                                                                                        *
+*        - Path:    /dashboard/controllers/pin.py                                                                 *
 *        - Project: urbanlens                                                                                          *
 *        - Version: 1.0.0                                                                                              *
 *        - Created: 2024-01-01                                                                                         *
@@ -37,46 +37,46 @@ from django.http import JsonResponse
 from rest_framework.exceptions import ValidationError
 
 from UrbanLens.settings.app import settings
-from dashboard.models.locations.model import Location
-from dashboard.services.smithsonian import SmithsonianGateway
-from dashboard.services.google.search import GoogleCustomSearchGateway
-from dashboard.services.google.maps import GoogleMapsGateway
-from dashboard.forms.upload_datafile import UploadDataFile
+from UrbanLens.dashboard.models.pin.model import Pin
+from UrbanLens.dashboard.services.smithsonian import SmithsonianGateway
+from UrbanLens.dashboard.services.google.search import GoogleCustomSearchGateway
+from UrbanLens.dashboard.services.google.maps import GoogleMapsGateway
+from UrbanLens.dashboard.forms.upload_datafile import UploadDataFile
 
 logger = logging.getLogger(__name__)
 
-class LocationController(LoginRequiredMixin, GenericViewSet):
+class PinController(LoginRequiredMixin, GenericViewSet):
     """
-    Controller for the location page
+    Controller for the pin page
     """
     def view(self, request, *args, **kwargs):
         """
-        View the location page
+        View the pin page
         """
-        location = Location.objects.get(id=kwargs['location_id'])
+        pin = Pin.objects.get(id=kwargs['pin_id'])
 
-        return render(request, 'dashboard/pages/location/index.html', { 'location': location, 'google_maps_api_key': settings.google_maps_api_key })
+        return render(request, 'dashboard/pages/pin/index.html', { 'pin': pin, 'google_maps_api_key': settings.google_maps_api_key })
     
     def test_ai(self, request, *args, **kwargs):
         """
         Test the AI. TODO Temporary function that can be deleted at any time with no side effects.
         """
-        from dashboard.models.profile import Profile
+        from UrbanLens.dashboard.models.profile import Profile
         profile = Profile.objects.get(pk=1)
-        location, created = Location.objects.get_nearby_or_create(latitude=43.0423439, longitude=-76.1501928, profile=profile, defaults={
+        pin, created = Pin.objects.get_nearby_or_create(latitude=43.0423439, longitude=-76.1501928, profile=profile, defaults={
             'name': 'Syracuse Central High School',
             'description': '',
         })
-        logger.critical('Location: %s', location)
-        return JsonResponse({'location': location.to_json()})
+        logger.critical('Location: %s', pin)
+        return JsonResponse({'pin': pin.to_json()})
 
-        from dashboard.services.ai.cloudflare import CloudflareGateway
+        from UrbanLens.dashboard.services.ai.cloudflare import CloudflareGateway
         instructions = "" +\
             "Look at the following information about a location and determine what category it belongs in. Example categories are:" +\
             "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, " +\
             "Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, Library, Lighthouse, Mall, Mansion, Military Base, " +\
             "Monument, Police Station, Power Plant, Prison, Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel" +\
-            "If the location does not fit into any of these categories, provide a new category that is broad enough to include a variety " +\
+            "If the Pin does not fit into any of these categories, provide a new category that is broad enough to include a variety " +\
             "of similar urbex locations. Do not answer with the name of the location; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
 
         gateway = CloudflareGateway(instructions=instructions)
@@ -118,44 +118,44 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
         return render(request, 'dashboard/pages/map/data.html', {'map_data': map_data})
 
     def get_map_data(self):
-        map_data = Location.objects.all()
+        map_data = Pin.objects.all()
         if not map_data:
             # Default map data
-            map_data = [{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Location', 'description': 'No pins saved yet.'}]
+            map_data = [{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Pin', 'description': 'No pins saved yet.'}]
         else:
             map_data = [pin.to_json() for pin in map_data]
 
         return map_data
 
-    def get_smithsonian_images(self, request, location_id, *args, **kwargs):
+    def get_smithsonian_images(self, request, pin_id, *args, **kwargs):
         """
-        Returns the Smithsonian images for a location.
+        Returns the Smithsonian images for a pin.
         """
-        # Get the location
+        # Get the pin
         try:
-            location : Location = Location.objects.get(id=location_id)
-        except Location.DoesNotExist:
-            return HttpResponse("Location does not exist", status=404)
+            pin : Pin = Pin.objects.get(id=pin_id)
+        except Pin.DoesNotExist:
+            return HttpResponse("Pin does not exist", status=404)
 
         # Instantiate the SmithsonianGateway with the API key
         smithsonian_gateway = SmithsonianGateway(settings.smithsonian_api_key)
 
         # Get historic images from the Smithsonian's API
-        smithsonian_images = smithsonian_gateway.get_data(location.name)
+        smithsonian_images = smithsonian_gateway.get_data(pin.name)
 
-        return render(request, 'dashboard/pages/location/smithsonian.html', {
+        return render(request, 'dashboard/pages/pin/smithsonian.html', {
             'images': smithsonian_images,
         })
 
-    def web_search(self, request, location_id, *args, **kwargs):
+    def web_search(self, request, pin_id, *args, **kwargs):
         """
-        Returns the web search results for a location.
+        Returns the web search results for a pin.
         """
-        # Get the location
+        # Get the pin
         try:
-            location : Location = Location.objects.get(id=location_id)
-        except Location.DoesNotExist:
-            return HttpResponse("Location does not exist", status=404)
+            pin : Pin = Pin.objects.get(id=pin_id)
+        except Pin.DoesNotExist:
+            return HttpResponse("Pin does not exist", status=404)
 
         # Instantiate the GoogleCustomSearchGateway with the API key
         try:
@@ -163,30 +163,30 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
 
             # Get web search results from the Google Custom Search API
             query = [
-                location.address_extended,
+                pin.address_extended,
                 [
-                    location.address_basic,
-                    location.city
+                    pin.address_basic,
+                    pin.city
                 ],
                 [
-                    location.address_basic,
-                    location.county
+                    pin.address_basic,
+                    pin.county
                 ],
                 [
-                    location.address_basic,
-                    location.state
+                    pin.address_basic,
+                    pin.state
                 ],
-                f'{location.latitude}, {location.longitude}'
+                f'{pin.latitude}, {pin.longitude}'
             ]
 
-            if location.name and location.address_basic != location.name:
+            if pin.name and pin.address_basic != pin.name:
                 query.append([
-                    location.name,
-                    location.city
+                    pin.name,
+                    pin.city
                 ])
 
-            place_name = location.place_name
-            if place_name and place_name != location.address_basic and place_name != location.name:
+            place_name = pin.place_name
+            if place_name and place_name != pin.address_basic and place_name != pin.name:
                 query.append(place_name)
 
             search_results = google_gateway.search(query)
@@ -194,48 +194,48 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
             logger.error('Unable to contact Google Search API. Is the API Key valid? Exception ---> %s', e)
             return HttpResponse("Unable to search. This is unlikely to be resolved by multiple requests.", status=500)
 
-        return render(request, 'dashboard/pages/location/web_search.html', { 'search_results': search_results })
+        return render(request, 'dashboard/pages/pin/web_search.html', { 'search_results': search_results })
 
     def satellite_view_google_image(self, request, *args, **kwargs):
         """
-        Returns the satellite view image for a location.
+        Returns the satellite view image for a pin.
         """
         try:
-            location = Location.objects.get(id=kwargs['location_id'])
-        except Location.DoesNotExist:
-            return HttpResponse("Location does not exist", status=404)
+            pin = Pin.objects.get(id=kwargs['pin_id'])
+        except Pin.DoesNotExist:
+            return HttpResponse("Pin does not exist", status=404)
 
         # Instantiate the GoogleMapsGateway with the API key
         google_maps_gateway = GoogleMapsGateway(settings.google_maps_api_key)
 
         # Get the satellite view image from the Google Maps API
-        satellite_image = google_maps_gateway.get_satellite_view(location.latitude, location.longitude)
+        satellite_image = google_maps_gateway.get_satellite_view(pin.latitude, pin.longitude)
 
         return HttpResponse(satellite_image, content_type="image/jpeg")
 
     def street_view(self, request, *args, **kwargs):
         """
-        Returns the street view image for a location.
+        Returns the street view image for a pin.
         """
         try:
-            location = Location.objects.get(id=kwargs['location_id'])
-        except Location.DoesNotExist:
-            return HttpResponse("Location does not exist", status=404)
+            pin = Pin.objects.get(id=kwargs['pin_id'])
+        except Pin.DoesNotExist:
+            return HttpResponse("Pin does not exist", status=404)
 
         # Instantiate the GoogleMapsGateway with the API key
         google_maps_gateway = GoogleMapsGateway(settings.google_maps_api_key)
 
         # Get the street view image from the Google Maps API
-        street_view_image = google_maps_gateway.get_street_view(location.latitude, location.longitude)
+        street_view_image = google_maps_gateway.get_street_view(pin.latitude, pin.longitude)
 
         return HttpResponse(street_view_image, content_type="image/jpeg")
 
     @action(detail=True, methods=['get'])
     def import_form(self, request, *args, **kwargs):
         """
-        View the import locations form
+        View the import pins form
         """
-        return render(request, 'dashboard/pages/location/import/csv.html', { 'form': UploadDataFile() })
+        return render(request, 'dashboard/pages/pin/import/csv.html', { 'form': UploadDataFile() })
 
     @action(detail=True, methods=['post'])
     def upload_takeout(self, request, *args, **kwargs):
@@ -252,33 +252,33 @@ class LocationController(LoginRequiredMixin, GenericViewSet):
                 google_maps_gateway = GoogleMapsGateway(settings.google_maps_api_key)
 
                 # Get the file extension
-                locations = google_maps_gateway.import_locations_from_file(datafile, request.user.profile)
+                pins = google_maps_gateway.import_pins_from_file(datafile, request.user.profile)
 
-                return JsonResponse({'locations': [location.to_json() for location in locations]})
+                return JsonResponse({'pins': [pin.to_json() for pin in pins]})
             else:
                 return JsonResponse({'error': 'Invalid form'}, status=400)
 
         except ValidationError as e:
             return JsonResponse({'error': str(e)}, status=400)
 
-    def weather_forecast(self, request, location_id, *args, **kwargs):
+    def weather_forecast(self, request, pin_id, *args, **kwargs):
         """
-        Returns the weather forecast for a location.
+        Returns the weather forecast for a pin.
         """
-        # Get the location
+        # Get the pin
         try:
-            location : Location = Location.objects.get(id=location_id)
-        except Location.DoesNotExist:
-            return HttpResponse("Location does not exist", status=404)
+            pin : Pin = Pin.objects.get(id=pin_id)
+        except Pin.DoesNotExist:
+            return HttpResponse("Pin does not exist", status=404)
 
-        from dashboard.services.openweather.gateway import WeatherForecastGateway
+        from UrbanLens.dashboard.services.openweather.gateway import WeatherForecastGateway
 
         # Instantiate the WeatherForecastGateway with the API key
         weather_forecast_gateway = WeatherForecastGateway()
 
         # Get the weather forecast from the OpenWeather API
-        weather_forecast = weather_forecast_gateway.get_weather_forecast(location.latitude, location.longitude)
+        weather_forecast = weather_forecast_gateway.get_weather_forecast(pin.latitude, pin.longitude)
 
         logger.debug('forecast_data: %s', weather_forecast)
 
-        return render(request, 'dashboard/pages/location/weather.html', { 'forecast': weather_forecast })
+        return render(request, 'dashboard/pages/pin/weather.html', { 'forecast': weather_forecast })

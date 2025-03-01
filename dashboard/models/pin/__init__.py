@@ -9,12 +9,12 @@
 *                                                                                                                      *
 *        File:    __init__.py                                                                                          *
 *        Path:    /__init__.py                                                                                         *
-*        Project: locations                                                                                            *
-*        Version: <<projectversion>>                                                                                   *
+*        Project: urbanlens                                                                                            *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -23,7 +23,7 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from dashboard.models.locations.queryset import QuerySet, Manager
-from dashboard.models.locations.model import Location
-from dashboard.models.locations.serializer import LocationSerializer
-from dashboard.models.locations.viewset import LocationViewSet
+from UrbanLens.dashboard.models.pin.queryset import PinQuerySet, PinManager
+from UrbanLens.dashboard.models.pin.model import Pin
+from UrbanLens.dashboard.models.pin.serializer import PinSerializer
+from UrbanLens.dashboard.models.pin.viewset import PinViewSet

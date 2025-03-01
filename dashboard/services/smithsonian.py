@@ -10,11 +10,11 @@
 *        File:    smithsonian.py                                                                                       *
 *        Path:    /dashboard/services/smithsonian.py                                                                   *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-01-01                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -25,7 +25,7 @@
 *********************************************************************************************************************"""
 
 from django.core.cache import cache
-from dashboard.services.gateway import Gateway
+from UrbanLens.dashboard.services.gateway import Gateway
 import requests
 from UrbanLens.settings.app import settings
 
@@ -59,7 +59,7 @@ class SmithsonianGateway(Gateway):
         return self.parse_response(data)
 
     def get_images_by_coordinates(self, latitude, longitude):
-        from dashboard.services.google.geocoding import GoogleGeocodingGateway
+        from UrbanLens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 
         # Get the place name from the coordinates
         google_gateway = GoogleGeocodingGateway(settings.google_maps_api_key)

@@ -10,11 +10,11 @@
 *        File:    __init__.py                                                                                          *
 *        Path:    /dashboard/models/reviews/__init__.py                                                                *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -23,7 +23,7 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from dashboard.models.reviews.queryset import QuerySet, Manager
-from dashboard.models.reviews.model import Review
-from dashboard.models.reviews.serializer import ReviewSerializer
-from dashboard.models.reviews.viewset import ReviewViewSet
+from UrbanLens.dashboard.models.reviews.queryset import QuerySet, Manager
+from UrbanLens.dashboard.models.reviews.model import Review
+from UrbanLens.dashboard.models.reviews.serializer import ReviewSerializer
+from UrbanLens.dashboard.models.reviews.viewset import ReviewViewSet

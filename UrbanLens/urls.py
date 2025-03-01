@@ -24,11 +24,11 @@ Including another URLconf
 *        File:    urls.py                                                                                              *
 *        Path:    /UrbanLens/urls.py                                                                                   *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -43,10 +43,10 @@ from django.urls import path, include, re_path
 from django.views.generic import TemplateView
 import logging
 
-from dashboard.urls import urlpatterns as dashboard_urls
-from dashboard.controllers.account import SignupView
-from dashboard.controllers.index import IndexController
-from dashboard.controllers.health import HealthController
+from UrbanLens.dashboard.urls import urlpatterns as dashboard_urls
+from UrbanLens.dashboard.controllers.account import SignupView
+from UrbanLens.dashboard.controllers.index import IndexController
+from UrbanLens.dashboard.controllers.health import HealthController
 
 logger = logging.getLogger(__name__)
 

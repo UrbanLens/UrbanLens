@@ -31,8 +31,8 @@ import openai
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
 from UrbanLens.settings.app import settings
-from dashboard.services.ai.gateway import LLMGateway
-from dashboard.services.ai.message import MessageQueue
+from UrbanLens.dashboard.services.ai.gateway import LLMGateway
+from UrbanLens.dashboard.services.ai.message import MessageQueue
 
 logger = logging.getLogger(__name__)
 

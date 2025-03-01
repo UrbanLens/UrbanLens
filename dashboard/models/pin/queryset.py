@@ -8,13 +8,13 @@
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
 *        File:    queryset.py                                                                                          *
-*        Path:    /dashboard/models/locations/queryset.py                                                              *
+*        Path:    /dashboard/models/pin/queryset.py                                                              *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -34,14 +34,14 @@ from django.db.models import Q
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 # App Imports
-from dashboard.models import abstract
+from UrbanLens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
 
-class QuerySet(abstract.QuerySet):
+class PinQuerySet(abstract.QuerySet):
     '''
     A custom queryset. All models below will use this for interacting with results from the db.
     '''
@@ -79,7 +79,7 @@ class QuerySet(abstract.QuerySet):
     def by_updated_year(self, year):
         return self.filter(updated__year=year)
 
-    def nearby_locations(self, latitude, longitude, radius):
+    def nearby_pins(self, latitude, longitude, radius):
         from django.db.models import F
         from math import radians, sin, cos, sqrt, atan2
         R = 6371  # radius of the Earth in km
@@ -108,61 +108,61 @@ class QuerySet(abstract.QuerySet):
 
     def rated(self, rating) -> Self:
         """
-        Filters locations by the review.rating field
+        Filters pins by the review.rating field
         """
         return self.filter(reviews__rating=rating)
 
     def rated_over(self, rating) -> Self:
         """
-        Filters locations by the review.rating field
+        Filters pins by the review.rating field
         """
         return self.filter(reviews__rating__gte=rating)
 
     def rated_under(self, rating) -> Self:
         """
-        Filters locations by the review.rating field
+        Filters pins by the review.rating field
         """
         return self.filter(reviews__rating__lte=rating)
 
-class Manager(abstract.Manager.from_queryset(QuerySet)):
+class PinManager(abstract.Manager.from_queryset(PinQuerySet)):
     '''
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
     '''
     def get_nearby_or_create(self, latitude, longitude, profile, threshold_meters=50, defaults=None):
         """
-        Get or create a Location instance, considering two locations the same if they are within a certain distance threshold.
+        Get or create a Pin instance, considering two pins the same if they are within a certain distance threshold.
 
         Args:
-            latitude (float): Latitude of the location.
-            longitude (float): Longitude of the location.
-            profile (Profile): The profile associated with the location.
-            threshold_meters (float): Distance threshold in meters for considering locations as the same.
+            latitude (float): Latitude of the pin.
+            longitude (float): Longitude of the pin.
+            profile (Profile): The profile associated with the pin.
+            threshold_meters (float): Distance threshold in meters for considering pins as the same.
             defaults (dict, optional): Defaults to use for object creation.
 
         Returns:
-            (Location, bool): Tuple of (Location instance, created boolean)
+            (Pin, bool): Tuple of (Pin instance, created boolean)
         """
         point = Point(longitude, latitude, srid=4326)
         
-        # Find existing locations within the threshold distance
-        existing_locations = self.filter(
-            location__distance_lte=(point, D(m=threshold_meters)),
+        # Find existing pins within the threshold distance
+        existing_pins = self.filter(
+            point__distance_lte=(point, D(m=threshold_meters)),
             profile=profile
         )
         
-        if existing_locations.exists():
-            # Return the first close enough location and False for 'created'
-            return existing_locations.first(), False
+        if existing_pins.exists():
+            # Return the first close enough pin and False for 'created'
+            return existing_pins.first(), False
         
-        # No existing location found within the threshold, create a new one
-        location_data = {
+        # No existing pin found within the threshold, create a new one
+        pin_data = {
             'latitude': latitude,
             'longitude': longitude,
             'profile': profile,
-            'location': point,
+            'point': point,
             **(defaults or {})
         }
-        location = self.create(**location_data)
+        pin = self.create(**pin_data)
         
-        # Return the new location and True for 'created'
-        return location, True  
+        # Return the new pin and True for 'created'
+        return pin, True  

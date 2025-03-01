@@ -8,43 +8,43 @@
 
 {% block content %}
 <div class="section">
-    <h1 class="location-title">{{ location.name }}</h1>
+    <h1 class="pin-title">{{ pin.name }}</h1>
 
-    <div class="location-details modern-style details-grid">
-        {% if location.description %}<div><span class="field-label"><strong>Description:</strong></span> {{ location.description }}</div>{% endif %}
-        <div><span class="field-label"><strong>Rating:</strong></span> {% if location.rating %}{{ location.rating }}{% else %}No rating{% endif %}</div>
-        {% if location.status %}<div><span class="field-label"><strong>Status:</strong></span> {{ location.status }}</div>{% else %}<div>No status</div>{% endif %}
-        <div><span class="field-label"><strong>Categories:</strong></span> {% if location.categories.all %}{{ location.categories.all }}{% else %}No categories{% endif %}</div>
-        <div><span class="field-label"><strong>Last Visited:</strong></span> {% if location.last_visited %}{{ location.last_visited }}{% else %}Never visited{% endif %}</div>
-        <div><span class="field-label"><strong>Tags:</strong></span> {% if location.tags.all %}{{ location.tags.all }}{% else %}No tags{% endif %}</div>
-        {% if location.place_name %}<div><span class="field-label"><strong>Place Name:</strong></span> {{ location.place_name }}</div>{% endif %}
+    <div class="pin-details modern-style details-grid">
+        {% if pin.description %}<div><span class="field-label"><strong>Description:</strong></span> {{ pin.description }}</div>{% endif %}
+        <div><span class="field-label"><strong>Rating:</strong></span> {% if pin.rating %}{{ pin.rating }}{% else %}No rating{% endif %}</div>
+        {% if pin.status %}<div><span class="field-label"><strong>Status:</strong></span> {{ pin.status }}</div>{% else %}<div>No status</div>{% endif %}
+        <div><span class="field-label"><strong>Categories:</strong></span> {% if pin.categories.all %}{{ pin.categories.all }}{% else %}No categories{% endif %}</div>
+        <div><span class="field-label"><strong>Last Visited:</strong></span> {% if pin.last_visited %}{{ pin.last_visited }}{% else %}Never visited{% endif %}</div>
+        <div><span class="field-label"><strong>Tags:</strong></span> {% if pin.tags.all %}{{ pin.tags.all }}{% else %}No tags{% endif %}</div>
+        {% if pin.place_name %}<div><span class="field-label"><strong>Place Name:</strong></span> {{ pin.place_name }}</div>{% endif %}
     </div>
 
-    <div class="location-map">
+    <div class="pin-map">
         <div id="map"></div>
     </div>
 
     <div class="satellite-view card">
         <h2>Satellite View</h2>
-        <img src="{% url 'location.satellite_view' location.id %}" alt="Satellite view of {{ location.name }}" style="width: 100%; height: auto;">
+        <img src="{% url 'pin.satellite_view' pin.id %}" alt="Satellite view of {{ pin.name }}" style="width: 100%; height: auto;">
     </div>
 
     <div class="street-view card">
         <h2>Street View</h2>
-        <img src="{% url 'location.street_view' location.id %}" alt="Street view of {{ location.name }}" style="width: 100%; height: auto;">
+        <img src="{% url 'pin.street_view' pin.id %}" alt="Street view of {{ pin.name }}" style="width: 100%; height: auto;">
     </div>
 
-    <div hx-get="{% url 'location.weather_forecast' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="weather-forecast card">
+    <div hx-get="{% url 'pin.weather_forecast' pin.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="weather-forecast card">
         <div class="loading">Loading...</div>
         <div class="error" style="display: none;">An error occurred. Please try again later.</div>
     </div>
 
-    <div hx-get="{% url 'smithsonian_images' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="smithsonian-images card">
+    <div hx-get="{% url 'smithsonian_images' pin.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="smithsonian-images card">
         <div class="loading">Loading...</div>
         <div class="error" style="display: none;">An error occurred. Please try again later.</div>
     </div>
 
-    <div hx-get="{% url 'location.web_search' location.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="web-search card">
+    <div hx-get="{% url 'pin.web_search' pin.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="web-search card">
         <div class="loading">Loading...</div>
         <div class="error" style="display: none;">An error occurred. Please try again later.</div>
     </div>
@@ -53,7 +53,7 @@
 
 {% block scripts %}
     <script>
-        const map = L.map('map').setView(["{{ location.latitude }}", "{{ location.longitude }}"], 13);
+        const map = L.map('map').setView(["{{ pin.latitude }}", "{{ pin.longitude }}"], 13);
         window.map = map;
         window.pin = null;
         map.invalidateSize();
@@ -61,8 +61,8 @@
             maxZoom: 19,
         }).addTo(map);
 
-        // Add a marker for the location
-        L.marker(["{{ location.latitude }}", "{{ location.longitude }}"]).addTo(map);
+        // Add a marker for the pin
+        L.marker(["{{ pin.latitude }}", "{{ pin.longitude }}"]).addTo(map);
 
         // Update the Leaflet icon URLs
         var newIcon = L.icon({

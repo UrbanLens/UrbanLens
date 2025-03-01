@@ -28,8 +28,8 @@ from typing import Any, Dict, Optional, TypeVar
 import logging
 import requests
 from UrbanLens.settings.app import settings
-from dashboard.services.ai.gateway import LLMGateway
-from dashboard.services.ai.message import MessageQueue
+from UrbanLens.dashboard.services.ai.gateway import LLMGateway
+from UrbanLens.dashboard.services.ai.message import MessageQueue
 
 logger = logging.getLogger(__name__)
 

@@ -7,14 +7,14 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        File:    filterset.py                                                                                         *
-*        Path:    /dashboard/models/locations/filterset.py                                                             *
+*        File:    serializer.py                                                                                        *
+*        Path:    /dashboard/models/pin/serializer.py                                                            *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -23,39 +23,17 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-import django_filters
-from django_filters import CharFilter, NumberFilter
-from dashboard.models.locations.model import Location
+from rest_framework import serializers
+from UrbanLens.dashboard.models.pin.model import Pin
 
-class LocationFilter(django_filters.FilterSet):
-    categories = CharFilter(method='by_category')
-    by_priority = NumberFilter(method='by_priority')
-    by_latitude = NumberFilter(method='by_latitude')
-    by_longitude = NumberFilter(method='by_longitude')
-    by_name = CharFilter(method='by_name')
-    by_created_year = NumberFilter(method='by_created_year')
-    by_updated_year = NumberFilter(method='by_updated_year')
-    rated = NumberFilter(method='rated')
-    rated_over = NumberFilter(method='rated_over')
-    rated_under = NumberFilter(method='rated_under')
-
+class PinSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Location
-        fields = [
-            'name',
-            'icon',
-            'categories',
-            'priority',
-            'last_visited',
-            'latitude',
-            'longitude',
-            'rated',
-            'rated_over',
-            'rated_under',
-            'by_priority',
-            'by_latitude',
-            'by_longitude',
-            'by_name',
-            'by_created_year',
-            'by_updated_year',
-        ]
+        model = Pin
+        fields = ['name', 'icon', 'categories', 'last_visited', 'latitude', 'longitude', 'created', 'updated', 'profile', 'status', 'tags', 'rating']
+
+    def create(self, validated_data):
+        user = validated_data.pop('user')
+        pin = Pin.objects.create(**validated_data)
+        pin.user = user
+        pin.save()
+        return pin

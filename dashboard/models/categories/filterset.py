@@ -9,12 +9,12 @@
 *                                                                                                                      *
 *        File:    filterset.py                                                                                         *
 *        Path:    /filterset.py                                                                                        *
-*        Project: categories                                                                                           *
-*        Version: <<projectversion>>                                                                                   *
+*        Project: urbanlens                                                                                            *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 import django_filters
-from dashboard.models.categories.model import Category
+from UrbanLens.dashboard.models.categories.model import Category
 
 class CategoryFilter(django_filters.FilterSet):
     class Meta:

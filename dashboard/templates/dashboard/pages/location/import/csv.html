@@ -1,6 +1,6 @@
 <div id="upload_takeout" class="dialog">
     <h2>Upload Google Takeout File</h2>
-    <form id="upload_takeout_form" action="{% url 'location.upload.takeout' %}" method="post" enctype="multipart/form-data">
+    <form id="upload_takeout_form" action="{% url 'pin.upload.takeout' %}" method="post" enctype="multipart/form-data">
         {% csrf_token %}
         {{ form.as_p }}
         <input type="submit" value="Upload">

@@ -17,6 +17,6 @@
 
 		Copyright (c) 2023 UrbanLens
 """
-from dashboard.models.notifications.meta.status import Status
-from dashboard.models.notifications.meta.importance import Importance
-from dashboard.models.notifications.meta.type import NotificationType
+from UrbanLens.dashboard.models.notifications.meta.status import Status
+from UrbanLens.dashboard.models.notifications.meta.importance import Importance
+from UrbanLens.dashboard.models.notifications.meta.type import NotificationType

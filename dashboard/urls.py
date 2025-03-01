@@ -10,11 +10,11 @@
 *        File:    urls.py                                                                                              *
 *        Path:    /dashboard/urls.py                                                                                   *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -32,14 +32,14 @@ from django.urls import path, include, re_path
 from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
-#from dashboard.models.categories import CategoryViewSet
-from dashboard.models.locations import LocationViewSet
-#from dashboard.models.comments import CommentViewSet
-#from dashboard.models.images import ImageViewSet
-from dashboard.models.reviews import ReviewViewSet
-from dashboard.models.profile import ProfileViewSet
-from dashboard.controllers import friendship, map, location, profile
-from dashboard.controllers.index import IndexController
+#from UrbanLens.dashboard.models.categories import CategoryViewSet
+from UrbanLens.dashboard.models.pin import PinViewSet
+#from UrbanLens.dashboard.models.comments import CommentViewSet
+#from UrbanLens.dashboard.models.images import ImageViewSet
+from UrbanLens.dashboard.models.reviews import ReviewViewSet
+from UrbanLens.dashboard.models.profile import ProfileViewSet
+from UrbanLens.dashboard.controllers import friendship, map, pin, profile
+from UrbanLens.dashboard.controllers.index import IndexController
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ app_name = 'dashboard'
 # Define all our REST API routes
 routes = {
 	#'categories': CategoryViewSet,
-	'locations': LocationViewSet,
+	'pins': PinViewSet,
 	'profiles': ProfileViewSet,
 	'reviews': ReviewViewSet,
 	#'comments': CommentViewSet,
@@ -73,21 +73,21 @@ urlpatterns = [
 		path('add/', map.MapController.as_view({'get': 'add_pin', 'post': 'post_add_pin'}), name='add_pin'),
 		path('edit/<int:pin_id>/', map.MapController.as_view({'get': 'get_edit_pin', 'post': 'edit_pin'}), name='edit_pin'),
 		path('search/', map.MapController.as_view({'get': 'search_map', 'post': 'search_map_post'}), name='search_map'),
-		path('upload_image/<int:location_id>/', map.MapController.as_view({'post': 'upload_image'}), name='upload_image'),
-		path('change_category/<int:location_id>/', map.MapController.as_view({'post': 'change_category'}), name='change_category'),
-		#path('delete/<int:location_id>/', MapController.delete_pin, name='delete_pin'),
-		#path('add_review/<int:location_id>/', map.MapController.as_view(), name='add_review'),
-		path('location/', include([
-			path('<int:location_id>/', location.LocationController.as_view({'get': 'view'}), name='location.details'),
-			path('<int:location_id>/smithsonian/', location.LocationController.as_view({'get': 'get_smithsonian_images'}), name='smithsonian_images'),
-			path('<int:location_id>/google/', location.LocationController.as_view({'get': 'get_google_images'}), name='google_images'),
-			path('<int:location_id>/search/', location.LocationController.as_view({'get': 'web_search'}), name='location.web_search'),
-    		path('<int:location_id>/satellite_view/', location.LocationController.as_view({'get': 'satellite_view_google_image'}), name='location.satellite_view'),
-    		path('<int:location_id>/street_view/', location.LocationController.as_view({'get': 'street_view'}), name='location.street_view'),
-			path('<int:location_id>/weather/', location.LocationController.as_view({'get': 'weather_forecast'}), name='location.weather_forecast'),
+		path('upload_image/<int:pin_id>/', map.MapController.as_view({'post': 'upload_image'}), name='upload_image'),
+		path('change_category/<int:pin_id>/', map.MapController.as_view({'post': 'change_category'}), name='change_category'),
+		#path('delete/<int:pin_id>/', MapController.delete_pin, name='delete_pin'),
+		#path('add_review/<int:pin_id>/', map.MapController.as_view(), name='add_review'),
+		path('pin/', include([
+			path('<int:pin_id>/', pin.PinController.as_view({'get': 'view'}), name='pin.details'),
+			path('<int:pin_id>/smithsonian/', pin.PinController.as_view({'get': 'get_smithsonian_images'}), name='smithsonian_images'),
+			path('<int:pin_id>/google/', pin.PinController.as_view({'get': 'get_google_images'}), name='google_images'),
+			path('<int:pin_id>/search/', pin.PinController.as_view({'get': 'web_search'}), name='pin.web_search'),
+    		path('<int:pin_id>/satellite_view/', pin.PinController.as_view({'get': 'satellite_view_google_image'}), name='pin.satellite_view'),
+    		path('<int:pin_id>/street_view/', pin.PinController.as_view({'get': 'street_view'}), name='pin.street_view'),
+			path('<int:pin_id>/weather/', pin.PinController.as_view({'get': 'weather_forecast'}), name='pin.weather_forecast'),
 			path('import/', include([
-				path('form/', location.LocationController.as_view({'get': 'import_form'}), name='location.import.form'),
-				path('upload/', location.LocationController.as_view({'post': 'upload_takeout'}), name='location.upload.takeout'),
+				path('form/', pin.PinController.as_view({'get': 'import_form'}), name='pin.import.form'),
+				path('upload/', pin.PinController.as_view({'post': 'upload_takeout'}), name='pin.upload.takeout'),
 			])),
 		])),
 	])),
@@ -105,7 +105,7 @@ urlpatterns = [
 		path('mute/<int:profile_id>', friendship.FriendController.as_view({'post': 'mute_friend'}), name='friend.mute'),
 	])),
 
-	path('test_ai/', location.LocationController.as_view({'get': 'test_ai'}), name='test_ai'),
+	path('test_ai/', pin.PinController.as_view({'get': 'test_ai'}), name='test_ai'),
 
 	path('', include('social_django.urls', namespace='social')),
 	re_path('.*', TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name='404')

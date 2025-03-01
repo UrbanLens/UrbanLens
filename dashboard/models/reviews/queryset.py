@@ -10,11 +10,11 @@
 *        File:    queryset.py                                                                                          *
 *        Path:    /dashboard/models/reviews/queryset.py                                                                *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 import logging
 # Django Imports
 # App Imports
-from dashboard.models import abstract
+from UrbanLens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     pass

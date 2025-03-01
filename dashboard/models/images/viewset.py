@@ -9,12 +9,12 @@
 *                                                                                                                      *
 *        File:    viewset.py                                                                                           *
 *        Path:    /viewset.py                                                                                          *
-*        Project: images                                                                                               *
-*        Version: <<projectversion>>                                                                                   *
+*        Project: urbanlens                                                                                            *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -24,8 +24,8 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from rest_framework import viewsets
-from dashboard.models.images.model import Image
-from dashboard.models.images.serializer import ImageSerializer
+from UrbanLens.dashboard.models.images.model import Image
+from UrbanLens.dashboard.models.images.serializer import ImageSerializer
 
 class ImageViewSet(viewsets.ModelViewSet):
     queryset = Image.objects.all()

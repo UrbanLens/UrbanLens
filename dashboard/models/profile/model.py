@@ -10,11 +10,11 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/profile/model.py                                                                   *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -28,15 +28,15 @@ from django.contrib.auth.models import User
 from django.db.models import CASCADE, Index
 from django.db.models import ImageField
 from django.db.models import OneToOneField, CharField, TextField, DateField
-from dashboard.models import abstract
-from dashboard.models.profile.queryset import Manager
+from UrbanLens.dashboard.models import abstract
+from UrbanLens.dashboard.models.profile.queryset import Manager
 
 class Profile(abstract.Model):
     avatar = ImageField()
     instagram = CharField(max_length=255, null=True, blank=True)
     discord = CharField(max_length=255, null=True, blank=True)
     bio = TextField(null=True, blank=True)
-    location = CharField(max_length=255, null=True, blank=True)
+    area = CharField(max_length=255, null=True, blank=True)
     birth_date = DateField(null=True, blank=True)
     started_exploring = DateField(null=True, blank=True)
 

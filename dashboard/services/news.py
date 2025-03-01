@@ -1,5 +1,29 @@
+"""*********************************************************************************************************************
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    METADATA:                                                                                                         *
+*                                                                                                                      *
+*        File:    news.py                                                                                              *
+*        Project: urbanlens                                                                                            *
+*        Version: 0.0.1                                                                                                *
+*        Created: 2025-03-01                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess.a.mann@gmail.com                                                                                *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
+*                                                                                                                      *
+* -------------------------------------------------------------------------------------------------------------------- *
+*                                                                                                                      *
+*    LAST MODIFIED:                                                                                                    *
+*                                                                                                                      *
+*        2025-03-01     By Jess Mann                                                                                   *
+*                                                                                                                      *
+*********************************************************************************************************************"""
 import requests
-from dashboard.services.gateway import Gateway
+from UrbanLens.dashboard.services.gateway import Gateway
 
 class NewsGateway(Gateway):
     """
@@ -10,12 +34,12 @@ class NewsGateway(Gateway):
         self.api_key = api_key
         self.base_url = 'https://newsapi.google.com/v2/everything'  # Google News API URL
 
-    def get_news(self, location):
+    def get_news(self, pin):
         """
-        Fetch recent news articles about the given location from the News API.
+        Fetch recent news articles about the given pin from the News API.
         """
         params = {
-            'q': location,
+            'q': pin,
             'apiKey': self.api_key
         }
 

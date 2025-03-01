@@ -10,11 +10,11 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/categories/model.py                                                                *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -25,8 +25,8 @@
 *********************************************************************************************************************"""
 from __future__ import annotations
 from django.db.models import CharField
-from dashboard.models import abstract
-from dashboard.models.categories.queryset import CategoryManager
+from UrbanLens.dashboard.models import abstract
+from UrbanLens.dashboard.models.categories.queryset import CategoryManager
 
 class Category(abstract.Model):
     """

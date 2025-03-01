@@ -10,11 +10,11 @@
 *        File:    viewset.py                                                                                           *
 *        Path:    /dashboard/models/friendship/viewset.py                                                              *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -27,9 +27,9 @@ from __future__ import annotations
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 
-from dashboard.models.profile.model import Profile
-from dashboard.models.friendship.model import Friendship
-from dashboard.models.friendship.serializer import FriendshipSerializer
+from UrbanLens.dashboard.models.profile.model import Profile
+from UrbanLens.dashboard.models.friendship.model import Friendship
+from UrbanLens.dashboard.models.friendship.serializer import FriendshipSerializer
 
 class FriendshipViewSet(viewsets.ModelViewSet):
     queryset = Friendship.objects.all()

@@ -11,8 +11,8 @@
     <p>End Date: {{ trip.end_date }}</p>
     <p>Locations: </p>
     <ul>
-    {% for location in trip.locations.all %}
-        <li>{{ location.name }}</li>
+    {% for pin in trip.pins.all %}
+        <li>{{ pin.name }}</li>
     {% endfor %}
     </ul>
     <p>Users: </p>

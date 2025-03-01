@@ -10,11 +10,11 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/friendship/model.py                                                                *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -27,9 +27,9 @@ from __future__ import annotations
 import logging
 from django.db.models import CASCADE
 from django.db.models import ForeignKey, CharField
-from dashboard.models.abstract import Model, TextChoices
-from dashboard.models.friendship.queryset import Manager
-from dashboard.models.profile import Profile
+from UrbanLens.dashboard.models.abstract import Model, TextChoices
+from UrbanLens.dashboard.models.friendship.queryset import Manager
+from UrbanLens.dashboard.models.profile import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class Friendship(Model):
     class Permission(TextChoices):
         SEND_MESSAGE = 'Send Message', 'Send Message'
         INVITE_TO_EVENTS = 'Invite to Events', 'Invite to Events'
-        SHARE_LOCATIONS = 'Share Locations', 'Share Locations'
+        SHARE_LOCATIONS = 'Share Pins', 'Share Pins'
         VIEW_PROFILE = 'View Profile', 'View Profile'
         VIEW_FRIENDS = 'View Friends', 'View Friends'
         VIEW_TRIPS = 'View Trips', 'View Trips'

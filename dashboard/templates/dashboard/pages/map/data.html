@@ -1,35 +1,35 @@
 <script>
-    function addMarker(location) {
-        let coords = [location.latitude, location.longitude];
+    function addMarker(pin) {
+        let coords = [pin.latitude, pin.longitude];
         let marker = L.marker(coords);
 
-        if (location.icon && location.icon !== 'undefined') {
+        if (pin.icon && pin.icon !== 'undefined') {
             marker.setIcon(L.divIcon({
-                className: location.icon,
-                html: `<i class="pin ${location.icon}"></i>`,
+                className: pin.icon,
+                html: `<i class="pin ${pin.icon}"></i>`,
                 iconSize: [30, 42],
                 iconAnchor: [15, 42]
             }));
         }
 
         let popupContent = `
-            <div class="pin-popup" data-id="${location.id}">
-                <div data-name="title">${location.name}</div>
-                <div data-name="description">${location.description}</div>
-                <div class="stars rating-${location.rating || 0}">
+            <div class="pin-popup" data-id="${pin.id}">
+                <div data-name="title">${pin.name}</div>
+                <div data-name="description">${pin.description}</div>
+                <div class="stars rating-${pin.rating || 0}">
                     ${[1, 2, 3, 4, 5].map(i => `
-                        <input type="radio" name="star" class="star-${i}" id="star-${i}" value="${i}" ${location.rating == i ? 'checked' : ''} />
+                        <input type="radio" name="star" class="star-${i}" id="star-${i}" value="${i}" ${pin.rating == i ? 'checked' : ''} />
                         <label class="star-${i}" for="star-${i}">★</label>
                     `).join('')}
                 </div>
-                <div data-name="status"><span class="value">${location.status}</span></div>
-                <div data-name="categories"><span class="value">${location.categories}</span></div>
+                <div data-name="status"><span class="value">${pin.status}</span></div>
+                <div data-name="categories"><span class="value">${pin.categories}</span></div>
                 <div class="last-visited" data-name="last_visited">
                     <span class="label">Last Visited:</span>
-                    <span class="value">${location.last_visited}</span>
+                    <span class="value">${pin.last_visited}</span>
                 </div>
-                <div class="tags">${location.tags}</div>
-                <a href="${location.viewLocationUrl}" class="view-full-location">View Full Details</a>
+                <div class="tags">${pin.tags}</div>
+                <a href="${pin.viewLocationUrl}" class="view-full-pin">View Full Details</a>
                 <button class="delete-button" onclick="deletePin(this)"><i class="material-icons">delete</i></button>
             </div>
         `;
@@ -39,20 +39,20 @@
 
     }
 
-    {% for location in map_data %}
+    {% for pin in map_data %}
     addMarker({
-        latitude: "{{ location.latitude }}",
-        longitude: "{{ location.longitude }}",
-        icon: "{{ location.icon|default_if_none:'' }}",
-        id: "{{ location.id }}",
-        name: "{{ location.name }}",
-        description: "{{ location.description }}",
-        rating: "{{ location.rating|stringformat:'s' }}",
-        status: "{{ location.status }}",
-        categories: "{{ location.categories }}",
-        last_visited: "{{ location.last_visited }}",
-        tags: "{{ location.tags }}",
-        viewLocationUrl: "{% url 'location.details' location.id %}"
+        latitude: "{{ pin.latitude }}",
+        longitude: "{{ pin.longitude }}",
+        icon: "{{ pin.icon|default_if_none:'' }}",
+        id: "{{ pin.id }}",
+        name: "{{ pin.name }}",
+        description: "{{ pin.description }}",
+        rating: "{{ pin.rating|stringformat:'s' }}",
+        status: "{{ pin.status }}",
+        categories: "{{ pin.categories }}",
+        last_visited: "{{ pin.last_visited }}",
+        tags: "{{ pin.tags }}",
+        viewLocationUrl: "{% url 'pin.details' pin.id %}"
     });
     {% endfor %}
 </script>

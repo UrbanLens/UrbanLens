@@ -10,11 +10,11 @@
 *        File:    places.py                                                                                            *
 *        Path:    /dashboard/services/google/places.py                                                                 *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-01-01                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 import requests
-from dashboard.services.gateway import Gateway
+from UrbanLens.dashboard.services.gateway import Gateway
 
 class GooglePlacesGateway(Gateway):
     """
@@ -104,34 +104,3 @@ class GooglePlacesGateway(Gateway):
         response = self.session.get(autocomplete_url, params=params)
         response.raise_for_status()
         return response.json().get('predictions', [])
-
-
-'''
-import fastkml
-from django.contrib.gis.geos import Point
-from .models import Location  # Import your Location model
-
-def process_saved_places(file):
-    kml = fastkml.kml.KML()
-    kml.from_string(file.read())
-
-    for feature in kml.features():
-        if isinstance(feature, fastkml.Placemark):
-            # Assuming the name and description are stored in the Placemark
-            name = feature.name
-            description = feature.description or ''
-            # Extract coordinates (longitude, latitude, altitude)
-            coords = feature.geometry.coords[0]
-            longitude, latitude, _ = coords
-
-            # Create and save the location to your database
-            location = Location(
-                name=name,
-                description=description,
-                latitude=latitude,
-                longitude=longitude
-                # Set other fields as necessary
-            )
-            location.save()
-
-'''

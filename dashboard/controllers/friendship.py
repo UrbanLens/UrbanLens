@@ -10,11 +10,11 @@
 *        File:    FriendshipController.py                                                                              *
 *        Path:    /dashboard/controllers/friendship.py                                                                 *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -30,8 +30,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse
 from rest_framework.viewsets import GenericViewSet
 
-from dashboard.models.friendship.model import Friendship
-from dashboard.models.profile.model import Profile
+from UrbanLens.dashboard.models.friendship.model import Friendship
+from UrbanLens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 

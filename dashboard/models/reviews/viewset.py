@@ -10,11 +10,11 @@
 *        File:    viewset.py                                                                                           *
 *        Path:    /dashboard/models/reviews/viewset.py                                                                 *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -27,8 +27,8 @@ import logging
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from dashboard.models.reviews.model import Review
-from dashboard.models.reviews.serializer import ReviewSerializer
+from UrbanLens.dashboard.models.reviews.model import Review
+from UrbanLens.dashboard.models.reviews.serializer import ReviewSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -40,15 +40,15 @@ class ReviewViewSet(viewsets.ModelViewSet):
             return Review.objects.none()
         return Review.objects.filter(user=self.request.user)
 
-    def create(self, request, location_id, *args, **kwargs):
+    def create(self, request, pin_id, *args, **kwargs):
         logger.info(f"Create request initiated by user {request.user.id}")
         data = request.data
         data['user'] = request.user
-        data['location'] = location_id
-        # Check if the review already exists for the given location and user
+        data['pin'] = pin_id
+        # Check if the review already exists for the given pin and user
         review, created = Review.objects.get_or_create(
             user=request.user,
-            location_id=location_id,
+            pin_id=pin_id,
             defaults=data
         )
         if not created:
@@ -65,13 +65,13 @@ class ReviewViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['patch'], url_path='create_or_update', url_name='create_or_update')
     def create_or_update(self, request, pk=None):
-        location_id = pk
+        pin_id = pk
         data = request.data.copy()
-        data['location_id'] = location_id
+        data['pin_id'] = pin_id
 
         review, created = Review.objects.get_or_create(
             user=request.user,
-            location_id=location_id,
+            pin_id=pin_id,
             defaults=data
         )
 

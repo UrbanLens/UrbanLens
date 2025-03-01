@@ -10,11 +10,11 @@
 *        File:    routexl.py                                                                                           *
 *        Path:    /dashboard/services/routexl.py                                                                       *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-01-07                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -25,7 +25,7 @@
 *********************************************************************************************************************"""
 import requests
 from requests.auth import HTTPBasicAuth
-from dashboard.services.gateway import Gateway
+from UrbanLens.dashboard.services.gateway import Gateway
 
 class RouteXLGateway(Gateway):
     """
@@ -37,15 +37,18 @@ class RouteXLGateway(Gateway):
         self.password = password
         self.base_url = "https://api.routexl.com"
 
-    def optimize_route(self, locations):
+    def optimize_route(self, pins):
         """
-        Optimize a route given a list of locations.
+        Optimize a route given a list of pins.
 
-        :param locations: A list of dicts with 'name', 'lat', and 'lng' keys.
-        :return: Optimized route.
+        Args:
+            pins: A list of dicts with 'name', 'lat', and 'lng' keys.
+
+        Returns:
+            Optimized route.
         """
         url = f"{self.base_url}/tour"
-        data = {"locations": locations}
+        data = {"locations": pins}
         response = requests.post(url, json=data, auth=HTTPBasicAuth(self.username, self.password))
         response.raise_for_status()
         return response.json()

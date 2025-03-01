@@ -10,11 +10,11 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/locations/model.py                                                                 *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -29,49 +29,34 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import logging
 # Django Imports
-from django.db.models import Index, CASCADE
-from django.forms import ImageField
+from django.db.models import Index
 from django.contrib.gis.geos import Point
 from django.contrib.gis.db.models import PointField
 # 3rd Party Imports
-from django.db.models.fields import CharField, DecimalField, IntegerField, DateTimeField
-from django.db.models import ForeignKey, ManyToManyField
+from django.db.models.fields import CharField, DecimalField
+from django.db.models import ManyToManyField
 
 # App Imports
 from UrbanLens.settings.app import settings
-from dashboard.models import abstract
-from dashboard.models.abstract.choices import TextChoices
-from dashboard.models.locations.queryset import Manager
-from dashboard.services.google.geocoding import GoogleGeocodingGateway
+from UrbanLens.dashboard.models import abstract
+from UrbanLens.dashboard.models.location.queryset import LocationManager
+from UrbanLens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.
-    from dashboard.models.categories.model import Category
-    from dashboard.models.reviews import Manager as ReviewManager
+    from UrbanLens.dashboard.models.categories.model import Category
 
 logger = logging.getLogger(__name__)
-
-class LocationStatus(TextChoices):
-    NOT_VISITED = 'not visited'
-    VISITED = 'visited'
-    WISH_TO_VISIT = 'wish to visit'
-    DEMOLISHED = 'demolished'
 
 class Location(abstract.Model):
     """
     Records location data.
     """
     name = CharField(max_length=255)
-    icon = CharField(max_length=255, null=True, blank=True)
     description = CharField(max_length=500, null=True, blank=True)
-    priority = IntegerField(default=0)
-    last_visited = DateTimeField(null=True, blank=True)
     latitude = DecimalField(max_digits=9, decimal_places=6)
     longitude = DecimalField(max_digits=9, decimal_places=6)
-    custom_icon = ImageField()
-    icon = CharField(max_length=255, null=True, blank=True)
-    status = CharField(choices=LocationStatus.choices, default=LocationStatus.WISH_TO_VISIT)
-    location = PointField(geography=True, default=Point(0, 0))
+    point = PointField(geography=True, default=Point(0, 0))
 
     # Address
     street_number = CharField(max_length=50, null=True, blank=True)
@@ -87,27 +72,20 @@ class Location(abstract.Model):
     # Cached api data
     cached_place_name = CharField(max_length=255, null=True, blank=True)
 
-    profile = ForeignKey(
-        'dashboard.Profile',
-        on_delete=CASCADE,
-        related_name='locations'
-    )
     categories = ManyToManyField(
         'dashboard.Category',
         blank=True,
-        default=list
+        default=list,
+        related_name='locations'
     )
     tags = ManyToManyField(
         'dashboard.Tag',
         blank=True,
-        default=list
+        default=list,
+        related_name='locations'
     )
 
-    if TYPE_CHECKING:
-        profile_id : int
-        reviews : ReviewManager
-
-    objects = Manager()
+    objects = LocationManager()
 
     @property
     def place_name(self):
@@ -248,14 +226,14 @@ class Location(abstract.Model):
         return True
 
     def change_category(self, category_id : int) -> None:
-        from dashboard.models.categories.model import Category
+        from UrbanLens.dashboard.models.categories.model import Category
         category = Category.objects.get(id=category_id)
         self.categories.clear()
         self.categories.add(category)
         self.save()
 
     def suggest_category(self, append_suggestion : bool = False) -> str | None:
-        from dashboard.services.ai.cloudflare import CloudflareGateway
+        from UrbanLens.dashboard.services.ai.cloudflare import CloudflareGateway
         instructions = "" +\
             "Look at the following information about a location and determine what category it belongs in. Example categories are:" +\
             "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, " +\
@@ -294,7 +272,7 @@ class Location(abstract.Model):
         return category_name
     
     def add_category(self, category_name : str, save : bool = True) -> 'Category' | None:
-        from dashboard.models.categories.model import Category
+        from UrbanLens.dashboard.models.categories.model import Category
         category_name = category_name.lower()
         try:
             category, _created = Category.objects.get_or_create(name=category_name)
@@ -314,9 +292,6 @@ class Location(abstract.Model):
             Name: {self.name}
             Description: {self.description or ''}
             Google Place Name: {self.place_name}
-            Priority: {self.priority}
-            Last Visited: {self.last_visited}
-            Status: {LocationStatus(self.status).label}
         """
 
     def to_json(self):
@@ -326,26 +301,20 @@ class Location(abstract.Model):
         return {
             'id': self.id,
             'name': self.name,
-            'icon': self.icon,
             'place_name': self.place_name,
             'description': self.description,
             'address': self.address,
             'city': self.city,
             'state': self.state,
             'country': self.country,
-            'priority': self.priority,
-            'last_visited': self.last_visited.isoformat() if self.last_visited else "never",
             'latitude': float(self.latitude),
             'longitude': float(self.longitude),
-            'status': LocationStatus.get_name(self.status) or LocationStatus.NOT_VISITED.label,
-            'profile': self.profile.id,
-            'rating': self.rating,
         }
     
     def save(self, *args, **kwargs):
         # update the location field accordingly for distance calculations in postgis
         if self.latitude is not None and self.longitude is not None:
-            self.location = Point(float(self.longitude), float(self.latitude), srid=4326)
+            self.point = Point(float(self.longitude), float(self.latitude), srid=4326)
 
         super().save(*args, **kwargs)
 
@@ -354,12 +323,10 @@ class Location(abstract.Model):
         get_latest_by = 'updated'
 
         indexes = [
-            Index(fields=['profile']),
-            Index(fields=['profile', 'priority']),
-            Index(fields=['profile', 'last_visited']),
             Index(fields=['latitude', 'longitude']),
+            Index(fields=['name']),
         ]
 
         unique_together = [
-            ['latitude', 'longitude', 'profile']
+            ['latitude', 'longitude']
         ]

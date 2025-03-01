@@ -10,11 +10,11 @@
 *        File:    __init__.py                                                                                          *
 *        Path:    /dashboard/services/nps/__init__.py                                                                  *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-01-17                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -23,5 +23,5 @@
 *        2024-01-17     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from dashboard.services.nps.parks import NPSGateway
-from dashboard.services.nps.map import NPSMapGateway
+from UrbanLens.dashboard.services.nps.parks import NPSGateway
+from UrbanLens.dashboard.services.nps.map import NPSMapGateway

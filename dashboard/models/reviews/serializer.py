@@ -10,11 +10,11 @@
 *        File:    serializer.py                                                                                        *
 *        Path:    /dashboard/models/reviews/serializer.py                                                              *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -24,12 +24,12 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from rest_framework import serializers
-from dashboard.models.reviews.model import Review
+from UrbanLens.dashboard.models.reviews.model import Review
 
 class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Review
-        fields = ['id', 'user', 'location', 'rating', 'review']
+        fields = ['id', 'user', 'pin', 'rating', 'review']
 
     def create(self, validated_data):
         user = validated_data.pop('user')

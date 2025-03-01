@@ -30,7 +30,7 @@ from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from rest_framework.viewsets import GenericViewSet
 
-from dashboard.models.trips import Trip
+from UrbanLens.dashboard.models.trips import Trip
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class TripController(LoginRequiredMixin, GenericViewSet):
     """
     Controller for the trip planning page
     """
-    from dashboard.models.trips.model import Trip
+    from UrbanLens.dashboard.models.trips.model import Trip
 
     def view(self, request, *args, **kwargs):
         """
@@ -62,20 +62,20 @@ class TripController(LoginRequiredMixin, GenericViewSet):
         users = [user.to_json() for user in trip.users.all()]
         return HttpResponse(users, status=200)
 
-    def get_trip_locations(self, request, trip_id, *args, **kwargs):
+    def get_trip_pins(self, request, trip_id, *args, **kwargs):
         """
-        Fetch locations associated with a trip.
+        Fetch pins associated with a trip.
         """
         trip = Trip.objects.get(id=trip_id)
-        locations = [location.to_json() for location in trip.locations.all()]
-        return HttpResponse(locations, status=200)
+        pins = [pin.to_json() for pin in trip.pins.all()]
+        return HttpResponse(pins, status=200)
 
     def plan_trip(self, request, *args, **kwargs):
         """
-        Plan a trip itinerary using multiple locations and multiple users.
+        Plan a trip itinerary using multiple pins and multiple users.
         """
         # TODO: Implement the logic for planning a trip itinerary.
-        # This may involve fetching locations and users from the database,
+        # This may involve fetching pins and users from the database,
         # performing some calculations or operations, and then returning
         # the result in the appropriate format (e.g., as an HttpResponse
         # or a render() call with a template and context).

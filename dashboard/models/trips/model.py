@@ -10,11 +10,11 @@
 *        File:    model.py                                                                                             *
 *        Path:    /dashboard/models/trips/model.py                                                                     *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -34,9 +34,9 @@ from django.db.models.fields import CharField, DateTimeField
 from django.db.models import ManyToManyField
 
 # App Imports
-from dashboard.models import abstract
-from dashboard.models.locations.queryset import Manager
-from dashboard.models.profile import Profile
+from UrbanLens.dashboard.models import abstract
+from UrbanLens.dashboard.models.pin.queryset import PinManager
+from UrbanLens.dashboard.models.profile import Profile
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.
@@ -59,17 +59,17 @@ class Trip(abstract.Model):
         related_name='trips',
     )
 
-    locations = ManyToManyField(
-        'dashboard.Location',
+    pins = ManyToManyField(
+        'dashboard.Pin',
         blank=True,
         default=list
     )
 
-    objects = Manager()
+    objects = PinManager()
 
     def __str__(self):
-        locations = ', '.join([str(location) for location in self.locations.all()]) if self.locations.all() else []
-        return f"Name: {self.name}\nDescription: {self.description or ''}\nStart Date: {self.start_date}\nEnd Date: {self.end_date}\nLocations: {locations}"
+        pins = ', '.join([str(pin) for pin in self.pins.all()]) if self.pins.all() else []
+        return f"Name: {self.name}\nDescription: {self.description or ''}\nStart Date: {self.start_date}\nEnd Date: {self.end_date}\nLocations: {pins}"
 
     def to_json(self):
         """
@@ -81,7 +81,7 @@ class Trip(abstract.Model):
             'description': self.description,
             'start_date': self.start_date.isoformat() if self.start_date else "never",
             'end_date': self.end_date.isoformat() if self.end_date else "never",
-            'locations': [location.id for location in self.locations.all()],
+            'pins': [pin.id for pin in self.pins.all()],
         }
 
     class Meta(abstract.Model.Meta):

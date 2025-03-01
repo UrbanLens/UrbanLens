@@ -10,11 +10,11 @@
 *        File:    viewset.py                                                                                           *
 *        Path:    /dashboard/models/abstract/viewset.py                                                                *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -33,10 +33,10 @@ from rest_framework.filters import OrderingFilter
 from rest_framework.viewsets import ReadOnlyModelViewSet
 # App imports
 from djangofoundry.mixins import HasParams
-from dashboard.models.abstract.serializer import Serializer
+from UrbanLens.dashboard.models.abstract.serializer import Serializer
 
 if TYPE_CHECKING:
-	from dashboard.models.abstract.queryset import QuerySet
+	from UrbanLens.dashboard.models.abstract.queryset import QuerySet
 
 
 class ViewSet(HasParams, ReadOnlyModelViewSet):

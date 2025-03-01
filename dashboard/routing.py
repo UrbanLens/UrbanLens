@@ -9,12 +9,12 @@
 *                                                                                                                      *
 *        File:    routing.py                                                                                           *
 *        Path:    /routing.py                                                                                          *
-*        Project: dashboard                                                                                            *
-*        Version: <<projectversion>>                                                                                   *
+*        Project: urbanlens                                                                                            *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -25,7 +25,7 @@
 *********************************************************************************************************************"""
 
 from django.urls import path
-from dashboard.consumers import RequestStatusConsumer
+from UrbanLens.dashboard.consumers import RequestStatusConsumer
 
 websocket_urlpatterns = [
 	path('ws/request_status/', RequestStatusConsumer.as_asgi()),

@@ -10,11 +10,11 @@
 *        File:    account.py                                                                                           *
 *        Path:    /dashboard/controllers/account.py                                                                    *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-31                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -32,7 +32,7 @@ from social_django.utils import load_strategy, load_backend
 from social_core.exceptions import MissingBackend
 from django.contrib.auth import login
 
-from dashboard.models.profile import Profile
+from UrbanLens.dashboard.models.profile import Profile
 
 class SignupView(generic.CreateView):
     form_class = UserCreationForm

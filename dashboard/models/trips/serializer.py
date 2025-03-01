@@ -10,11 +10,11 @@
 *        File:    serializer.py                                                                                        *
 *        Path:    /dashboard/models/trips/serializer.py                                                                *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from rest_framework import serializers
-from dashboard.models.trips.model import Trip
+from UrbanLens.dashboard.models.trips.model import Trip
 
 class TripSerializer(serializers.ModelSerializer):
     class Meta:

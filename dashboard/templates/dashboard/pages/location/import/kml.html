@@ -1,7 +1,7 @@
 <div id="upload_kml" class="dialog">
     <!-- display the upload kml form -->
     <h2>Upload KML</h2>
-    <form action="{% url 'location.upload.kml' %}" method="post" enctype="multipart/form-data">
+    <form action="{% url 'pin.upload.kml' %}" method="post" enctype="multipart/form-data">
         <input type="file" name="kml_file" id="kml_file">
         <input type="submit" value="Upload">
     </form>

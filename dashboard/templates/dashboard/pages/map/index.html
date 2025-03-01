@@ -29,7 +29,7 @@
         <div>
             <button id="weather-button" title="Weather View" onclick="toggleWeatherView()"></button>
         </div>
-        <div hx-get="{% url 'location.import.form' %}" hx-trigger="click" hx-target="#importPinsModal" hx-swap="innerHTML">
+        <div hx-get="{% url 'pin.import.form' %}" hx-trigger="click" hx-target="#importPinsModal" hx-swap="innerHTML">
             <button id="import-pins-button" title="Import Pins" class="map-button"></button>
         </div>
     </div>
@@ -86,11 +86,11 @@
             input.addEventListener('change', function() {
                 const field = this;
                 const value = field.value;
-                const locationId = field.closest('.pin-popup').dataset.id;
+                const pinId = field.closest('.pin-popup').dataset.id;
                 const data = {};
                 data[field.name] = value;
                 // Use the correct URL pattern for creating or updating reviews
-                fetch(`/dashboard/rest/reviews/create_or_update/${locationId}/`, {
+                fetch(`/dashboard/rest/reviews/create_or_update/${pinId}/`, {
                     method: data[field.name] ? 'PATCH' : 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -180,7 +180,7 @@
 
                 function saveInputValue() {
                     let value = input.value;
-                    const locationId = popup.dataset.id;
+                    const pinId = popup.dataset.id;
                     const data = {};
                     if (name === 'last_visited') {
                         if (value === '' || value === 'never' || value === undefined) {
@@ -196,7 +196,7 @@
                         return;
                     }
 
-                    fetch(`/dashboard/rest/locations/${locationId}/`, {
+                    fetch(`/dashboard/rest/pins/${pinId}/`, {
                         method: 'PATCH',
                         headers: {
                             'Content-Type': 'application/json',
@@ -259,10 +259,10 @@
                         input.focus();
                         function saveInputValue() {
                             const value = this.value;
-                            const locationId = this.closest('.pin-popup').dataset.id;
+                            const pinId = this.closest('.pin-popup').dataset.id;
                             const data = {};
                             data[this.name] = value;
-                            fetch(`/dashboard/rest/locations/${locationId}/`, {
+                            fetch(`/dashboard/rest/pins/${pinId}/`, {
                                 method: 'PATCH',
                                 headers: {
                                     'Content-Type': 'application/json',
@@ -427,8 +427,8 @@
     L.Marker.prototype.options.icon = newIcon;
 
     function deletePin(button) {
-        const locationId = button.closest('.pin-popup').dataset.id;
-        fetch(`/dashboard/rest/locations/${locationId}/`, {
+        const pinId = button.closest('.pin-popup').dataset.id;
+        fetch(`/dashboard/rest/pins/${pinId}/`, {
             method: 'DELETE',
             headers: {
                 'X-CSRFToken': '{{ csrf_token }}',
@@ -436,23 +436,23 @@
         })
         .then(response => {
             if (response.ok) {
-                console.log(`Location with id ${locationId} deleted successfully`);
+                console.log(`Location with id ${pinId} deleted successfully`);
                 toastr.success(`Location deleted successfully`);
                 //window.location.reload();
                 // remove that pin
                 pinsLayerGroup.eachLayer(function (layer) {
-                    if (layer.options.id == locationId) {
+                    if (layer.options.id == pinId) {
                         pinsLayerGroup.removeLayer(layer);
                     }
                 });
             } else {
-                console.error(`Failed to delete location with id ${locationId}`);
-                toastr.error(`Failed to delete location`);
+                console.error(`Failed to delete pin with id ${pinId}`);
+                toastr.error(`Failed to delete pin`);
             }
         })
         .catch((error) => {
             console.error('Error:', error);
-            toastr.error(`Failed to delete location`);
+            toastr.error(`Failed to delete pin`);
         });
     }
 

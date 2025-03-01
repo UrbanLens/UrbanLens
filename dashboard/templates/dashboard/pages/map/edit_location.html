@@ -1,21 +1,21 @@
 
 <div class="dialog">
-    <form method="POST" hx-post="{% url 'edit_pin' location.id %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
+    <form method="POST" hx-post="{% url 'edit_pin' pin.id %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
         <label for="name">Name:</label><br>
-        <input type="text" id="name" name="name" value="{{ location.name }}"><br>
+        <input type="text" id="name" name="name" value="{{ pin.name }}"><br>
         <label for="description">Description:</label><br>
-        <input type="text" id="description" name="description" value="{{ location.description }}"><br>
+        <input type="text" id="description" name="description" value="{{ pin.description }}"><br>
         <label for="latitude">Latitude:</label><br>
-        <input type="text" id="latitude" name="latitude" value="{{ location.latitude }}"><br>
+        <input type="text" id="latitude" name="latitude" value="{{ pin.latitude }}"><br>
         <label for="longitude">Longitude:</label><br>
-        <input type="text" id="longitude" name="longitude" value="{{ location.longitude }}"><br>
+        <input type="text" id="longitude" name="longitude" value="{{ pin.longitude }}"><br>
         <label for="category">Category:</label><br>
         <select id="category" name="category">
             {% for category in categories %}
-                <option value="{{ category.id }}" {% if category in location.categories.all %}selected{% endif %}>{{ category.name }}</option>
+                <option value="{{ category.id }}" {% if category in pin.categories.all %}selected{% endif %}>{{ category.name }}</option>
             {% endfor %}
         </select><br>
-        <button hx-post="{% url 'change_category' location.id %}" hx-trigger="click" hx-target="#map" hx-swap="outerHTML">Change Category</button>
+        <button hx-post="{% url 'change_category' pin.id %}" hx-trigger="click" hx-target="#map" hx-swap="outerHTML">Change Category</button>
         <input type="submit" value="Submit">
     </form>
 </div>

@@ -10,11 +10,11 @@
 *        File:    __init__.py                                                                                          *
 *        Path:    /dashboard/forms/__init__.py                                                                         *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2024-01-16                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -23,7 +23,7 @@
 *        2024-01-16     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from dashboard.forms.profile import ProfileForm
-from dashboard.forms.search import SearchForm
-from dashboard.forms.review import ReviewForm
-from dashboard.forms.upload_datafile import UploadDataFile
+from UrbanLens.dashboard.forms.profile import ProfileForm
+from UrbanLens.dashboard.forms.search import SearchForm
+from UrbanLens.dashboard.forms.review import ReviewForm
+from UrbanLens.dashboard.forms.upload_datafile import UploadDataFile

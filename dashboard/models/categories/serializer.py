@@ -9,12 +9,12 @@
 *                                                                                                                      *
 *        File:    serializer.py                                                                                        *
 *        Path:    /serializer.py                                                                                       *
-*        Project: categories                                                                                           *
-*        Version: <<projectversion>>                                                                                   *
+*        Project: urbanlens                                                                                            *
+*        Version: 0.0.1                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from rest_framework import serializers
-from dashboard.models.categories.model import Category
+from UrbanLens.dashboard.models.categories.model import Category
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:

@@ -7,38 +7,31 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        - File:    signals.py                                                                                         *
-*        - Path:    /dashboard/models/locations/signals.py                                                             *
-*        - Project: urbanlens                                                                                          *
-*        - Version: 1.0.0                                                                                              *
-*        - Created: 2024-03-22                                                                                         *
-*        - Author:  Jess Mann                                                                                          *
-*        - Email:   jess@urbanlens.org                                                                               *
-*        - Copyright (c) 2024 Urban Lens                                                                               *
+*        File:    serializer.py                                                                                        *
+*        Path:    /dashboard/models/locations/serializer.py                                                            *
+*        Project: urbanlens                                                                                            *
+*        Version: 0.0.1                                                                                                *
+*        Created: 2023-12-24                                                                                           *
+*        Author:  Jess Mann                                                                                            *
+*        Email:   jess@urbanlens.org                                                                                 *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2024-03-22     By Jess Mann                                                                                   *
+*        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-from dashboard.models.locations import Location
+from rest_framework import serializers
+from UrbanLens.dashboard.models.location.model import Location
 
-@receiver(post_save, sender=Location)
-def suggest_and_add_categories(sender, instance : Location, created, **kwargs):
-    """
-    Suggests categories for a newly created Location instance and adds them.
+class LocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Location
+        fields = ['name', 'categories', 'latitude', 'longitude', 'created', 'updated', 'tags']
 
-    Args:
-        sender (Model class): The model class.
-        instance (Location): The actual instance being saved.
-        created (bool): True if a new record was created.
-        **kwargs: Additional keyword arguments.
-    """
-    if created: 
-        # Perform the category suggestion and addition only for new instances
-        instance.suggest_category(append_suggestion=True)
-        instance.save()
+    def create(self, validated_data):
+        location = Location.objects.create(**validated_data)
+        location.save()
+        return location
