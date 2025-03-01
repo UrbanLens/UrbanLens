@@ -26,9 +26,8 @@
 
 # Generic imports
 from __future__ import annotations
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING
 import logging
-from datetime import datetime
 # Django Imports
 from django.db.models import Q
 from django.contrib.gis.geos import Point
