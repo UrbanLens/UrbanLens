@@ -25,7 +25,7 @@
 *********************************************************************************************************************"""
 import requests
 import logging
-from urbanlens.settings.app import settings
+from urbanlens.UrbanLens.settings.app import settings
 from urbanlens.dashboard.services.gateway import Gateway
 
 logger = logging.getLogger(__name__)

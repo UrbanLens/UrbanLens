@@ -32,7 +32,7 @@ from datetime import datetime
 from threading import Lock
 
 from django.core.signals import request_finished
-from urbanlens.settings.app import settings
+from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 

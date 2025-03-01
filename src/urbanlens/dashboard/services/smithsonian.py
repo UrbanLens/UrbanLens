@@ -27,7 +27,7 @@
 from django.core.cache import cache
 from urbanlens.dashboard.services.gateway import Gateway
 import requests
-from urbanlens.settings.app import settings
+from urbanlens.UrbanLens.settings.app import settings
 
 class SmithsonianGateway(Gateway):
     """

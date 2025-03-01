@@ -29,7 +29,7 @@ import re
 from typing import Optional
 import requests
 import logging
-from urbanlens.settings.app import settings
+from urbanlens.UrbanLens.settings.app import settings
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.dashboard.models.cache import GeocodedLocation
 import json

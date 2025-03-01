@@ -27,7 +27,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, TypeVar
 import logging
 import requests
-from urbanlens.settings.app import settings
+from urbanlens.UrbanLens.settings.app import settings
 from urbanlens.dashboard.services.ai.gateway import LLMGateway
 from urbanlens.dashboard.services.ai.message import MessageQueue
 

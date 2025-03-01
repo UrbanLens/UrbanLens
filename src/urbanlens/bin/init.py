@@ -10,11 +10,11 @@
 *        File:    init.py                                                                                              *
 *        Path:    /bin/init.py                                                                                         *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -270,7 +270,7 @@ class DjangoProjectInitializer:
                 logger.debug(f'Created directory {dir}')
 
         # Ensure entrypoint (dashboard/frontend/static/dashboard/js/index.js) exists
-        entry = os.path.join('/app', 'dashboard', 'frontend', 'static', 'dashboard', 'js', 'index.js')
+        entry = os.path.join('/app', 'src', 'urbanlens', 'dashboard', 'frontend', 'static', 'dashboard', 'js', 'index.js')
         if not Path(entry).exists():
             with open(entry, 'w') as file:
                 file.write('')
@@ -296,7 +296,7 @@ class DjangoProjectInitializer:
         """
         self.run_command(['python', 'manage.py', 'migrate'], 'migrating db')
 
-    def run_command(self, command : List[str], description : str | None = None, cwd : str | Path = '/app', raise_error : bool = True) -> bool:
+    def run_command(self, command : list[str], description : str | None = None, cwd : str | Path = '/app', raise_error : bool = True) -> bool:
         """
         Run a command
 

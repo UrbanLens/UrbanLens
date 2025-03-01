@@ -38,7 +38,7 @@ from django.db.models.fields import CharField, DecimalField, IntegerField, DateT
 from django.db.models import ForeignKey, ManyToManyField
 
 # App Imports
-from urbanlens.settings.app import settings
+from urbanlens.UrbanLens.settings.app import settings
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager

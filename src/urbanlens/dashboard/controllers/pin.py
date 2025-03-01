@@ -36,7 +36,7 @@ from rest_framework.decorators import action
 from django.http import JsonResponse
 from rest_framework.exceptions import ValidationError
 
-from urbanlens.settings.app import settings
+from urbanlens.UrbanLens.settings.app import settings
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.smithsonian import SmithsonianGateway
 from urbanlens.dashboard.services.google.search import GoogleCustomSearchGateway

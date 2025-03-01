@@ -33,7 +33,7 @@ from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
-from urbanlens.settings.app import settings
+from urbanlens.UrbanLens.settings.app import settings
 
 from rest_framework.viewsets import GenericViewSet
 

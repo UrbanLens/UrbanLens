@@ -37,7 +37,7 @@ from django.db.models.fields import CharField, DecimalField
 from django.db.models import ManyToManyField
 
 # App Imports
-from urbanlens.settings.app import settings
+from urbanlens.UrbanLens.settings.app import settings
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.location.queryset import LocationManager
 from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway

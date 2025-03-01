@@ -7,50 +7,24 @@
 *                                                                                                                      *
 *    METADATA:                                                                                                         *
 *                                                                                                                      *
-*        - File:    0001_initial.py                                                                                    *
-*        - Path:    /dashboard/migrations/0001_initial.py                                                              *
-*        - Project: urbanlens                                                                                          *
-*        - Version: 1.0.0                                                                                              *
-*        - Created: 2024-01-01                                                                                         *
-*        - Author:  Jess Mann                                                                                          *
-*        - Email:   jess@urbanlens.org                                                                               *
-*        - Copyright (c) 2024 Urban Lens                                                                               *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-03-22     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
 *        File:    0001_initial.py                                                                                      *
-*        Path:    /dashboard/migrations/0001_initial.py                                                                *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
-*        Created: 2024-01-01                                                                                           *
+*        Version: 0.0.2                                                                                                *
+*        Created: 2025-03-01                                                                                           *
 *        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
+*        Email:   jess.a.mann@gmail.com                                                                                *
+*        Copyright (c) 2025 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
 *    LAST MODIFIED:                                                                                                    *
 *                                                                                                                      *
-*        2024-01-01     By Jess Mann                                                                                   *
+*        2025-03-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
 # Generated by Django 4.2.8 on 2024-01-01 23:14
 
-from UrbanLens.settings.app import settings
+from urbanlens.UrbanLens.settings.app import settings
 import django.contrib.gis.db.models.fields
 import django.contrib.gis.geos.point
 import django.core.validators

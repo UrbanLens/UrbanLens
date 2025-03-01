@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
-from urbanlens.settings.app import settings
+from urbanlens.UrbanLens.settings.app import settings
 import requests
 import logging
 from urbanlens.dashboard.services.gateway import Gateway

@@ -27,7 +27,7 @@ from __future__ import annotations
 from typing import Optional
 import logging
 from urbanlens.dashboard.services.ai.gateway import LLMGateway
-from urbanlens.settings.app import settings
+from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 

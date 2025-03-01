@@ -30,7 +30,7 @@ import logging
 import openai
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
-from urbanlens.settings.app import settings
+from urbanlens.UrbanLens.settings.app import settings
 from urbanlens.dashboard.services.ai.gateway import LLMGateway
 from urbanlens.dashboard.services.ai.message import MessageQueue
 
