@@ -29,7 +29,7 @@ import os
 import sys
 import re
 import argparse
-from typing import List, Optional
+from typing import Optional
 from pathlib import Path
 import subprocess
 import logging
@@ -289,7 +289,7 @@ class DjangoProjectInitializer:
                 command = ["npm", "run", "deploy"]
 
         self.run_command(command, "building frontend")
-        self.run_command(['python', 'manage.py', 'collectstatic', '--noinput'], 'collecting static files')
+        self.run_command(['python', 'src/urbanlens/manage.py', 'collectstatic', '--noinput'], 'collecting static files')
         
     def run_migrations(self):
         """
@@ -298,7 +298,7 @@ class DjangoProjectInitializer:
         Raises:
             UnrecoverableError: if the migrations fails
         """
-        self.run_command(['python', 'manage.py', 'migrate'], 'migrating db')
+        self.run_command(['python', 'src/urbanlens/manage.py', 'migrate'], 'migrating db')
 
     def run_command(self, command : list[str], description : str | None = None, cwd : str | Path = '/app', raise_error : bool = True) -> bool:
         """
@@ -332,7 +332,7 @@ class DjangoProjectInitializer:
         Raises:
             UnrecoverableError: if the server fails to run
         """
-        self.run_command(['python', 'manage.py', 'runserver'], 'running development server')
+        self.run_command(['python', 'src/urbanlens/manage.py', 'runserver'], 'running development server')
 
     def run_prod_server(self):
         """
