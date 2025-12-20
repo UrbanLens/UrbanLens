@@ -4,11 +4,11 @@
     "description": "Mapping for Urban Explorers",
     "main": "index.js",
     "scripts": {
-        "db": "python bin/db.py start",
-        "migrate": "python manage.py makemigrations & python manage.py migrate",
-        "sass": "sass dashboard/frontend/sass/style.scss dashboard/frontend/static/dashboard/style.css",
-        "build": "bun build dashboard/frontend/ts/index.tsx --outdir dashboard/frontend/static/dashboard/js --target browser",
-        "deploy": "bun build dashboard/frontend/ts/index.tsx --outdir dashboard/frontend/static/dashboard/js --target browser",
+        "db": "python src/bin/db.py start",
+        "migrate": "python src/urbanlens/manage.py makemigrations & python src/urbanlens/manage.py migrate",
+        "sass": "sass src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
+        "build": "bun build src/urbanlens/dashboard/frontend/ts/index.tsx --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser",
+        "deploy": "bun build src/urbanlens/dashboard/frontend/ts/index.tsx --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser",
         "start": "gunicorn UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 600 -k gevent",
         "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start"
     },
