@@ -46,7 +46,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 	UL_DATABASE_NAME=${UL_DATABASE_NAME} \
 	UL_DATABASE_USER=${UL_DATABASE_USER} \
 	UL_DATABASE_PASS=${UL_DATABASE_PASS} \
-	NODE_ENV=${ENVIRONMENT}
+	NODE_ENV=${ENVIRONMENT} \
+	PYTHONPATH=/app/src
 
 # Dependencies for building packages
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
@@ -76,6 +77,9 @@ COPY src/bin/init.py /usr/local/bin/urbanlens_init.py
 
 # Copy all source files into the container
 COPY . /app
+
+# Install the package in editable mode
+RUN pip install -e .
 
 # Set the working directory
 WORKDIR /app

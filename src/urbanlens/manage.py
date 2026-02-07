@@ -28,6 +28,11 @@ Django's command-line utility for administrative tasks.
 #!/usr/bin/env python
 import os
 import sys
+from pathlib import Path
+
+# Ensure /app/src is on sys.path when running this file directly.
+PROJECT_SRC = Path(__file__).resolve().parents[1]  # .../src
+sys.path.insert(0, str(PROJECT_SRC))
 
 def main():
 	"""Run administrative tasks."""
