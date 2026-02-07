@@ -78,11 +78,11 @@ COPY src/bin/init.py /usr/local/bin/urbanlens_init.py
 # Copy all source files into the container
 COPY . /app
 
-# Install the package in editable mode
-RUN pip install -e .
-
 # Set the working directory
 WORKDIR /app
+
+# Install the package in editable mode
+RUN pip install -e .
 
 # Install npm packages
 RUN npm install -y
