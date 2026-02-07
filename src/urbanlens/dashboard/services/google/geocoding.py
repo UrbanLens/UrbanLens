@@ -26,7 +26,6 @@
 
 from __future__ import annotations
 import re
-from typing import Optional
 import requests
 import logging
 from urbanlens.UrbanLens.settings.app import settings
@@ -37,7 +36,7 @@ import json
 logger = logging.getLogger(__name__)
 
 class GoogleGeocodingGateway(Gateway):
-    def __init__(self, api_key : Optional[str] = None):
+    def __init__(self, api_key : str | None = None):
         if not api_key:
             api_key = settings.google_maps_api_key
 

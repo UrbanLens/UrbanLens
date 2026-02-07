@@ -24,7 +24,6 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
-from typing import Optional
 import logging
 from urbanlens.dashboard.services.ai.gateway import LLMGateway
 from urbanlens.UrbanLens.settings.app import settings
@@ -35,7 +34,7 @@ DEFAULT_MODEL = 'tgi'
 
 class HuggingFaceGateway(LLMGateway):
     
-    def _lookup_model(self, model_name: Optional[str]) -> str:
+    def _lookup_model(self, model_name: str | None) -> str:
         if not model_name:
             return DEFAULT_MODEL
         

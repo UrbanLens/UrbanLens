@@ -25,7 +25,6 @@
 *********************************************************************************************************************"""
 
 from __future__ import annotations
-from typing import Optional
 import os
 
 from urbanlens.UrbanLens.environments.types import EnvironmentTypes
@@ -37,7 +36,7 @@ from urbanlens.UrbanLens.environments.staging import Staging
 from urbanlens.UrbanLens.environments.prod import Production
 
 
-def select_environment(env_type: Optional[EnvironmentTypes] = None, default: EnvironmentTypes = EnvironmentTypes.LOCAL) -> BaseEnvironment:
+def select_environment(env_type: EnvironmentTypes | None = None, default: EnvironmentTypes = EnvironmentTypes.LOCAL) -> BaseEnvironment:
     """Selects the environment to use based on the environment type.
 
     Args:

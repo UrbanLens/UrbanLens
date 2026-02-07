@@ -29,7 +29,6 @@ import os
 import sys
 import re
 import argparse
-from typing import Optional
 from pathlib import Path
 import subprocess
 import logging
@@ -53,7 +52,7 @@ class DjangoProjectInitializer:
     _db_pass : str
     _environment : str
 
-    def __init__(self, no_runserver : bool = False, environment : Optional[str] = None):
+    def __init__(self, no_runserver : bool = False, environment : str | None = None):
         self.no_runserver = no_runserver
 
         # Get database details from environment variables

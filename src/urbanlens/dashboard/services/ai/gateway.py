@@ -25,7 +25,7 @@
 *********************************************************************************************************************"""
 
 from __future__ import annotations
-from typing import Any, Optional, Generic, TypeVar
+from typing import Any, Generic, TypeVar
 import logging
 from decimal import Decimal
 import re
@@ -50,7 +50,7 @@ class LLMGateway(ABC, Generic[Response]):
     project_description : str
     max_tokens : int = MAX_TOKENS
 
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, api_url : Optional[str] = None, formatting : str = FORMATTING, instructions : str = INSTRUCTIONS, project_description : str = PROJECT_DESCRIPTION, **kwargs):
+    def __init__(self, api_key: str | None = None, model: str | None = None, api_url : str | None = None, formatting : str = FORMATTING, instructions : str = INSTRUCTIONS, project_description : str = PROJECT_DESCRIPTION, **kwargs):
         self._token_count = {"sent": 0, "received": 0}
         self.formatting = formatting
         self.instructions = instructions
@@ -65,7 +65,7 @@ class LLMGateway(ABC, Generic[Response]):
         return self._api_key
     
     @api_key.setter
-    def api_key(self, value: Optional[str]):
+    def api_key(self, value: str | None):
         self._api_key = value
 
     @property
@@ -73,7 +73,7 @@ class LLMGateway(ABC, Generic[Response]):
         return self._model
     
     @model.setter
-    def model(self, value: Optional[str]):
+    def model(self, value: str | None):
         self._model = self._lookup_model(value)
 
     @property
@@ -81,7 +81,7 @@ class LLMGateway(ABC, Generic[Response]):
         return self._api_url
     
     @api_url.setter
-    def api_url(self, value: Optional[str]):
+    def api_url(self, value: str | None):
         self._api_url = value
 
     @property

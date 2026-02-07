@@ -100,8 +100,8 @@ class TestCasesTemplate(TestCases):
 
 class TestEntry(NamedTuple):
     params: Any | Tuple[Any]
-    expected_output: Optional[Any] = None
-    message: Optional[str] = None
+    expected_output: Any | None = None
+    message: str | None = None
 
 
 class TestCase(test.TestCase):

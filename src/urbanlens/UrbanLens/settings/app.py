@@ -63,7 +63,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     project_root: Path = Field(default=DEFAULT_ROOT, description="The root directory of the project")
     project_name: str = Field(default='URBANLENS', description="The name of the project")
     environment_name: str = Field(default=EnvironmentTypes.LOCAL, description="The name of the environment")
-    debug_override: Optional[bool] = Field(description="Whether or not to enable debugging", alias='DEBUG', default=None)
+    debug_override: bool | None = Field(description="Whether or not to enable debugging", alias='DEBUG', default=None)
     secret_key : str = Field(default = '1t5v24s98-fcbas23-vfsd238vc-asfdioj322', description = "The secret key")
     root_urlconf : str = Field(default = 'UrbanLens.urls', description = "The root urlconf")
     admin_username : str = Field(default = 'Admin', description = "The username to use for the admin user")
@@ -122,8 +122,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     database_user : str = Field(default = 'urbanlens', description = "The database user")
     database_pass : str = Field(default = 'urbanlens', description = "The database password")
 
-    _secrets : Optional[dict] = None
-    _environment : Optional[BaseEnvironment] = None
+    _secrets : dict | None = None
+    _environment : BaseEnvironment | None = None
 
     model_config = SettingsConfigDict(
         env_file=Path(DEFAULT_ROOT, '.env'),
@@ -153,7 +153,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             self._environment.debug_override = value
 
     @property
-    def environment(self) -> Optional[BaseEnvironment]:
+    def environment(self) -> BaseEnvironment | None:
         """
         The environment
         """
@@ -211,7 +211,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
         self.ensure_paths()
 
-    def get_secret(self, key : str, default : Optional[Any] = None) -> Any:
+    def get_secret(self, key : str, default : Any | None = None) -> Any:
         """
         Get the secret from the secrets dictionary
 
@@ -292,12 +292,12 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         )
         '''
 
-    def select_environment(self, new_environment_name : Optional[EnvironmentTypes] = None) -> BaseEnvironment:
+    def select_environment(self, new_environment_name : EnvironmentTypes | None = None) -> BaseEnvironment:
         """
         Select the environment
 
         Args:
-            new_environment_name (Optional[EnvironmentTypes], optional):
+            new_environment_name (EnvironmentTypes | None, optional):
                 The name of the environment to switch to. Defaults to None.
 
         Returns:

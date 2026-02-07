@@ -47,7 +47,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 	UL_DATABASE_USER=${UL_DATABASE_USER} \
 	UL_DATABASE_PASS=${UL_DATABASE_PASS} \
 	NODE_ENV=${ENVIRONMENT} \
-	PYTHONPATH=/app/src
+	PYTHONPATH=/app/src:/app/src/urbanlens
 
 # Dependencies for building packages
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \

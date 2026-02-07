@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
-from typing import Any, Dict, Optional, TypeVar
+from typing import Any, Dict, TypeVar
 import logging
 import requests
 from urbanlens.UrbanLens.settings.app import settings
@@ -50,7 +50,7 @@ class CloudflareGateway(LLMGateway[Response]):
         if not self.api_url or not self.api_key:
             raise ValueError("Cloudflare AI Gateway requires an API URL and API Key.")
 
-    def _lookup_model(self, model_name: Optional[str]) -> str:
+    def _lookup_model(self, model_name: str | None) -> str:
         if not model_name:
             return DEFAULT_MODEL
         

@@ -25,7 +25,6 @@
 *********************************************************************************************************************"""
 
 from __future__ import annotations
-from typing import Optional
 import logging
 import openai
 from openai import OpenAI
@@ -46,11 +45,11 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
         return self._api_key
     
     @api_key.setter
-    def api_key(self, value: Optional[str]):
+    def api_key(self, value: str | None):
         openai.api_key = value
         self._api_key = value
 
-    def _lookup_model(self, model_name: Optional[str]) -> str:
+    def _lookup_model(self, model_name: str | None) -> str:
         if not model_name:
             return DEFAULT_MODEL
         

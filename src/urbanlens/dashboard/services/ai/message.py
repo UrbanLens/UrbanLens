@@ -24,7 +24,6 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
-from typing import Optional
 from urbanlens.dashboard.services.ai.meta import SHORTEST_MESSAGE, MAX_TOKENS
 from urbanlens.dashboard.services.ai.functions import estimate_combined_tokens, estimate_tokens
 
@@ -42,7 +41,7 @@ class MessageQueue:
             "content": message
         })
 
-    def estimate_tokens(self, additional_prompt : Optional[str] = None) -> int:
+    def estimate_tokens(self, additional_prompt : str | None = None) -> int:
         tokens = estimate_combined_tokens(self.messages)
         if additional_prompt:
             tokens += estimate_tokens(additional_prompt)
