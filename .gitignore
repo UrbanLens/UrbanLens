@@ -34,3 +34,4 @@ bin/settings.py
 *.sqlite3-journal
 *db.sqlite3
 pgsql
+src/urbanlens/frontend/static/dashboard/images/
