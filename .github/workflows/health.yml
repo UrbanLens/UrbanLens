@@ -1,0 +1,78 @@
+name: Code Health CI
+
+on:
+    push:
+        branches: ["main"]
+    pull_request:
+        branches: ["main"]
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        strategy:
+            max-parallel: 4
+            matrix:
+                python-version: ["3.12"]
+
+        services:
+            postgres:
+                image: postgres:latest
+                env:
+                    POSTGRES_DB: UL_CICD
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: postgres
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+
+        steps:
+            - uses: actions/checkout@v3
+            - name: Set up Python ${{ matrix.python-version }}
+              uses: actions/setup-python@v3
+              with:
+                  python-version: ${{ matrix.python-version }}
+
+            - name: Cache Python dependencies
+              uses: actions/cache@v2
+              with:
+                  path: ~/.cache/pip
+                  key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements/*.txt') }}
+                  restore-keys: |
+                      ${{ runner.os }}-pip-
+
+            #            - name: Install Dependencies
+            #              run: |
+            #                  python -m pip install --upgrade pip
+            #                  pip install -r $GITHUB_WORKSPACE/requirements/prod.txt
+            #                  python --version
+            #                  pip --version
+
+            - name: Linting with Ruff
+              run: |
+                  pip install ruff==0.7.0
+                  cd $GITHUB_WORKSPACE/src
+                  ruff .
+
+#            - name: Unit Tests
+#              run: |
+#                  cd $GITHUB_WORKSPACE/src
+#                  python manage.py test
+
+#    - name: Static Type Checking
+#      run: |
+#        pip install mypy==1.11.2
+#        mypy $GITHUB_WORKSPACE/src
+
+#    - name: Security Scanning
+#      run: |
+#        pip install bandit==1.7.5
+#        bandit -r -x 'tests,bin' $GITHUB_WORKSPACE/src
+
+#    - name: Dependency Vulnerability Check
+#      run: |
+#        pip install safety==2.3.5
+#        safety check -r $GITHUB_WORKSPACE/config/requirements/prod.txt

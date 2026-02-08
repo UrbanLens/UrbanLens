@@ -23,7 +23,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from django.db import models
-from dashboard.models.abstract import models
+from urbanlens.dashboard.models.abstract import models
 
 class PinQuerySet(models.QuerySet):
     pass

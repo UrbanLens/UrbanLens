@@ -170,7 +170,7 @@ class GoogleMapsGateway(Gateway):
                 raise ValueError("Unsupported file format. Supported formats are KML, JSON, and CSV.")
             
         # Parse every location in data
-        pins = []
+        pins : list[Pin] = []
         total = len(data)
         created_pins = 0
         exists = 0
@@ -198,12 +198,12 @@ class GoogleMapsGateway(Gateway):
 
         return pins
 
-    def takeout_kml_to_dict(self, file_contents : str, user_profile : 'Profile') -> dict[str, Any]:
+    def takeout_kml_to_dict(self, file_contents : str, user_profile : 'Profile') -> list[dict[str, Any]]:
         try:
             k = kml.KML()
             k.from_string(file_contents)
                 
-            pins = []
+            pins : list[dict[str, Any]] = []
             for feature in k.features():
                 for placemark in feature.features():
                     coords = placemark.geometry.coords[0]
@@ -223,11 +223,11 @@ class GoogleMapsGateway(Gateway):
 
         return pins
 
-    def takeout_json_to_dict(self, file_contents: str, user_profile: 'Profile') -> dict[str, Any]:
+    def takeout_json_to_dict(self, file_contents: str, user_profile: 'Profile') -> list[dict[str, Any]]:
         try:
             json_data = json.loads(file_contents)
             features = json_data.get('features', [])
-            pins = []
+            pins : list[dict[str, Any]] = []
 
             for feature in features:
                 geometry = feature.get('geometry', {})
@@ -256,8 +256,8 @@ class GoogleMapsGateway(Gateway):
 
         return pins
 
-    def takeout_csv_to_dict(self, file_contents: str, user_profile: 'Profile') -> dict[str, Any]:
-        pins = []
+    def takeout_csv_to_dict(self, file_contents: str, user_profile: 'Profile') -> list[dict[str, Any]]:
+        pins : list[dict[str, Any]] = []
         gateway = GoogleGeocodingGateway()
         try:
             reader = csv.DictReader(file_contents.splitlines())

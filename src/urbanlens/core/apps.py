@@ -30,7 +30,7 @@ import logging
 
 from django.apps import AppConfig
 
-from core.controllers.backups import DatabaseBackup
+from urbanlens.core.controllers.backups import DatabaseBackup
 
 logger = logging.getLogger(__name__)
 

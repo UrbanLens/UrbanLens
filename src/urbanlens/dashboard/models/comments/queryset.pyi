@@ -25,7 +25,7 @@
 *********************************************************************************************************************"""
 from __future__ import annotations
 from django.db import models
-from dashboard.models.abstract import models
+from urbanlens.dashboard.models.abstract import models
 
 class CommentQuerySet(models.QuerySet):
     pass

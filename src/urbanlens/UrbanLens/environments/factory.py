@@ -49,7 +49,8 @@ def select_environment(env_type: EnvironmentTypes | None = None, default: Enviro
         ValueError: If the environment type is unknown.
     """
     if not env_type:
-        env_type = os.getenv("URBANLENS_ENVIRONMENT", default=default)
+        # Get and validate the environment type from the environment variable
+        env_type = EnvironmentTypes(os.getenv("UL_ENVIRONMENT", default=default))
 
     match env_type:
         case EnvironmentTypes.LOCAL:

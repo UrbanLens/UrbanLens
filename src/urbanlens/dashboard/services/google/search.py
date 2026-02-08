@@ -24,9 +24,10 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
-from urbanlens.UrbanLens.settings.app import settings
+from typing import Any
 import requests
 import logging
+from urbanlens.UrbanLens.settings.app import settings
 from urbanlens.dashboard.services.gateway import Gateway
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ class GoogleCustomSearchGateway(Gateway):
         self.cx = settings.google_search_tenant
         self.base_url = "https://customsearch.googleapis.com/customsearch/v1"
 
-    def search(self, terms : str | list[str | list[str]], max_results : int = 20) -> dict:
+    def search(self, terms : str | list[str | list[str]], max_results : int = 20) -> list[dict[str, Any]]:
         """
         Perform a search using the Google Custom Search API.
         """
@@ -60,13 +61,13 @@ class GoogleCustomSearchGateway(Gateway):
         response.raise_for_status()
         return self.parse_response(response)
 
-    def parse_response(self, response : requests.Response) -> dict:
+    def parse_response(self, response : requests.Response) -> list[dict[str, Any]]:
         """
         Extract search results from the API response.
         """
         data = response.json()
 
-        results = []
+        results : list[dict[str, Any]] = []
         for item in data.get('items', []):
             result = {
                 'title': item.get('title'),

@@ -58,7 +58,7 @@ class EnumAction(argparse.Action):
 				 parser: argparse.ArgumentParser,
 				 namespace: argparse.Namespace,
 				 value: Any,
-				 option_string: str = None):
+				 option_string: str | None = None):
 
 		# Convert value back into an Enum
 		if isinstance(value, str):

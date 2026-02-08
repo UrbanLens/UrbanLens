@@ -50,11 +50,14 @@ class CloudflareGateway(LLMGateway[Response]):
         if not self.api_url or not self.api_key:
             raise ValueError("Cloudflare AI Gateway requires an API URL and API Key.")
 
-    def _lookup_model(self, model_name: str | None) -> str:
+    def _lookup_model(self, model_name: str | None) -> str | None:
         if not model_name:
             return DEFAULT_MODEL
         
-        return super()._lookup_model(model_name)
+        if result := super()._lookup_model(model_name):
+            return result
+
+        return DEFAULT_MODEL
 
     def _get_response(self, message_queue: MessageQueue) -> Response | None:
         """

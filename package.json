@@ -10,7 +10,8 @@
         "build": "bun build src/urbanlens/dashboard/frontend/ts/index.tsx --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser",
         "deploy": "bun build src/urbanlens/dashboard/frontend/ts/index.tsx --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser",
         "start": "gunicorn UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 600 -k gevent",
-        "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start"
+        "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start",
+        "lint": "pyright src/urbanlens"
     },
     "author": "Jess Mann",
     "license": "N/A",

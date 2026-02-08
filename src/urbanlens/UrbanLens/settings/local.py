@@ -64,7 +64,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.postgres",
     "corsheaders",
-    'dashboard.apps.DashboardConfig',
+    'urbanlens.dashboard.apps.DashboardConfig',
     "social_django",
 ]
 
@@ -99,13 +99,13 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-                'dashboard.context_processors.add_page_name',
+                'urbanlens.dashboard.context_processors.add_page_name',
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = "UrbanLens.wsgi.application"
+WSGI_APPLICATION = "urbanlens.UrbanLens.wsgi.application"
 
 
 # Database
@@ -113,15 +113,15 @@ WSGI_APPLICATION = "UrbanLens.wsgi.application"
 
 DATABASES = {
     "default": {
-		"ENGINE": os.getenv("UL_DATABASE_ENGINE", "django.contrib.gis.db.backends.postgis"),
-		'NAME': os.getenv("UL_DATABASE_NAME", 'urbanlens'),
-		'USER': os.getenv("UL_DATABASE_USER", 'urbanlens'),
-		'PASSWORD': os.getenv("UL_DATABASE_PASS"),
-		'HOST': os.getenv("UL_DATABASE_HOST", 'localhost'),
-		'PORT': os.getenv("UL_DATABASE_PORT", '5432'),
+		"ENGINE": os.getenv("UL_DB_ENGINE", "django.contrib.gis.db.backends.postgis"),
+		'NAME': os.getenv("UL_DB_NAME", 'urbanlens'),
+		'USER': os.getenv("UL_DB_USER", 'urbanlens'),
+		'PASSWORD': os.getenv("UL_DB_PASS"),
+		'HOST': os.getenv("UL_DB_HOST", 'localhost'),
+		'PORT': os.getenv("UL_DB_PORT", '5432'),
     },
 }
-DATABASE_ROUTERS = ['dashboard.dbrouters.DBRouter']
+DATABASE_ROUTERS = ['urbanlens.dashboard.dbrouters.DBRouter']
 
 
 # Password validation
@@ -169,7 +169,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # http://urbanlens.org, http://urbanlens.com, https://urbanlens.org, https://urbanlens.com, etc
 protocols = ['http://', 'https://']
-domains = ['urbanlens.org', 'urbanlens.com', 'localhost:6464']
+domains = ['urbanlens.org']
 subdomains = ['www.', '']
 CORS_ALLOWED_ORIGINS = [
     f'{protocol}{subdomain}{domain}'

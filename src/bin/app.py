@@ -39,8 +39,8 @@ from typing import Any
 from djangofoundry import scripts
 from djangofoundry.scripts import app
 # Our imports
-from utils.exceptions import DbStartError, UnsupportedCommandError
-from utils.settings import Settings
+from bin.utils.exceptions import DbStartError, UnsupportedCommandError
+from bin.utils.settings import Settings
 
 logger = Settings.getLogger(__name__)
 
@@ -87,18 +87,18 @@ class App(scripts.App):
         else:
             return kwargs.get(argument_name, None)
 
-    def pip_install(self, pip_package : str) -> bool:
+    def pip_install(self, package_name : str) -> bool:
         """
         Install a python package using pip, and add it (with version) to requirements.txt.
 
         Args:
-            pip_package (str): The name of the package to install.
+            package_name (str): The name of the package to install.
 
         Returns:
             bool: True if the package was installed successfully, False otherwise.
 
         Raises:
-            ValueError: If pip_package contains more than one package.
+            ValueError: If package_name contains more than one package.
 
         Examples:
             >>> app = App()
@@ -114,31 +114,31 @@ class App(scripts.App):
         """
         # TODO: This duplicates new functionality from djangofoundry. When the package is updated to version 0.8, remove this method without any other changes.
 
-        # Ensure that pip_package is only 1 package
-        if len(pip_package.split(' ')) > 1:
-            raise ValueError(f'pip_package must be a single package. "{pip_package}" contains more than one package.')
+        # Ensure that package_name is only 1 package
+        if len(package_name.split(' ')) > 1:
+            raise ValueError(f'package_name must be a single package. "{package_name}" contains more than one package.')
 
         # Install the package, capture output so that we can determine the version number of the package
-        logger.info(f'Installing {pip_package}...')
-        install_output = subprocess.check_output([sys.executable, '-m', 'pip', 'install', pip_package], stderr=subprocess.STDOUT).decode('utf-8')
+        logger.info(f'Installing {package_name}...')
+        install_output = subprocess.check_output([sys.executable, '-m', 'pip', 'install', package_name], stderr=subprocess.STDOUT).decode('utf-8')
 
         # Grab the version number from the output
         if not (matches := re.search(r'Successfully installed (.*)', install_output)):
             return False
 
         if not (version := matches.group(1).split('-')[-1]):
-            logger.warning(f'Could not determine version number for {pip_package}')
+            logger.warning(f'Could not determine version number for {package_name}')
             return False
 
         # Ensure version is a valid version number
         if not re.match(r'^\d+\.\d+\.\d+$', version):
-            logger.warning(f'Version number for {pip_package} is not valid: {version}')
+            logger.warning(f'Version number for {package_name} is not valid: {version}')
             return False
 
         # Add package (and version #) to requirements.txt.
-        logger.info(f'Adding {pip_package} to requirements.txt...')
+        logger.info(f'Adding {package_name} to requirements.txt...')
         with open('requirements.txt', 'a') as f:
-            f.write(f'{pip_package}>={version}\n')
+            f.write(f'{package_name}>={version}\n')
 
         return True
 

@@ -1,6 +1,6 @@
 [project]
 name = "UrbanLens"
-version = "0.1.0"
+version = "0.1.1"
 description = "Mapping for Urban Explorers"
 readme = "README.md"
 authors = [{ name = "Jess Mann", email = "jess@urbanlens.com" }]
@@ -17,6 +17,7 @@ dependencies = [
     "django-pandas>=0.6.7",
     "django-picklefield>=3.2",
     "django-postgres-extra>=2.0.4",
+    "django-stubs>=5.2.9",
     "djangofoundry>=0.0.9",
     "djangorestframework>=3.15.2",
     "fastkml>=1.1.0",
@@ -52,7 +53,7 @@ dependencies = [
 ]
 
 [project.scripts]
-UrbanLens = "UrbanLens:main"
+UrbanLens = "urbanlens.UrbanLens:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -713,6 +714,7 @@ dev = [
     "django-pandas>=0.6.7",
     "django-picklefield>=3.2",
     "django-postgres-extra>=2.0.4",
+    "django-stubs>=5.2.9",
     "djangofoundry>=0.0.9",
     "djangorestframework>=3.15.2",
     "fastkml>=1.1.0",
@@ -726,6 +728,7 @@ dev = [
     "kombu>=5.4.2",
     "lxml>=5.3.1",
     "model-bakery>=1.20.4",
+    "mypy>=1.19.1",
     "openai>=1.65.2",
     "orjson>=3.10.15",
     "pandas>=2.2.3",
@@ -754,6 +757,7 @@ dev = [
     "statsmodels>=0.14.4",
     "tiktoken>=0.9.0",
     "tqdm>=4.67.1",
+    "types-requests>=2.32.4.20260107",
     "typing-extensions>=4.12.2",
     "uv>=0.6.3",
     "whitenoise>=6.9.0",
@@ -806,3 +810,24 @@ prod = [
 ]
 #max-complexity = 10
 #show-source = true
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = ["src"]
+namespace_packages = true
+explicit_package_bases = false
+warn_unused_ignores = true
+show_error_context = true
+show_column_numbers = true
+show_error_code_links = true
+pretty = true
+plugins = ["mypy_django_plugin.main"]
+ignore_missing_imports = true
+exclude = []
+implicit_optional = true
+disable_error_code = ['misc', 'annotation-unchecked', 'override']
+
+[tool.django-stubs]
+django_settings_module = "urbanlens.UrbanLens.settings.local"
+ignore_missing_model_attributes = true
+#strict_settings = true

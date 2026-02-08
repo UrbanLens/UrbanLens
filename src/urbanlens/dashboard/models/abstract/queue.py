@@ -30,4 +30,4 @@ from djangofoundry.helpers import queue
 logger = logging.getLogger(__name__)
 
 class Queue(queue.Queue):
-	unique_key = 'id'
+	unique_key = ['id']

@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from django.db import models
-from dashboard.models.abstract import models
+from urbanlens.dashboard.models.abstract import models
 
 class CategoryQuerySet(models.QuerySet):
     pass

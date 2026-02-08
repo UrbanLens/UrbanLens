@@ -80,9 +80,9 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
     # Classes
     default_auto_field : str = Field(default = 'django.db.models.BigAutoField', description = "The default auto field")
-    wsgi_application : str = Field(default = 'UrbanLens.wsgi.application', description = "The wsgi application")
-    asgi_application : str = Field(default = 'UrbanLens.asgi.application', description = "The asgi application")
-    test_runner : str = Field(default = 'core.tests.runner.TestRunner', description = "The test runner")
+    wsgi_application : str = Field(default = 'urbanlens.UrbanLens.wsgi.application', description = "The wsgi application")
+    asgi_application : str = Field(default = 'urbanlens.UrbanLens.asgi.application', description = "The asgi application")
+    test_runner : str = Field(default = 'urbanlens.core.tests.runner.TestRunner', description = "The test runner")
 
     # Urls
     login_url : str = Field(default = 'login', description = "The login url")

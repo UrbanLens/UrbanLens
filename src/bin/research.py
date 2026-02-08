@@ -1,5 +1,5 @@
 import requests
-from utils.settings import INSTAGRAM_ACCESS_TOKEN, INSTAGRAM_GRAPH_URL, GOOGLE_LENS_API_KEY, GOOGLE_LENS_URL
+from bin.utils.settings import INSTAGRAM_ACCESS_TOKEN, INSTAGRAM_GRAPH_URL, GOOGLE_LENS_API_KEY, GOOGLE_LENS_URL
 
 def fetch_urbex_posts(hashtag):
     """

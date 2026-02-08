@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 class QuerySet(abstract.QuerySet):
-    def profile(self, profile : 'Profile' | int) -> Self:
+    def profile(self, profile : 'Profile | int') -> Self:
         """
         Return a list of all friendships for a given profile.
         """
@@ -50,7 +50,7 @@ class QuerySet(abstract.QuerySet):
             Q(from_profile=profile) | Q(to_profile=profile)
         )
 
-    def between(self, from_profile : 'Profile' | int, to_profile : 'Profile' | int) -> 'Friendship' | None:
+    def between(self, from_profile : 'Profile | int', to_profile : 'Profile | int') -> 'Friendship' | None:
         """
         Return a list of all friendships between two profiles.
         """

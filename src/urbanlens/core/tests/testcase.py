@@ -36,9 +36,9 @@ from django import test
 logger = logging.getLogger(__name__)
 
 class TestCases(Iterable):
-    entries : List[TestEntry]
+    entries : list[TestEntry]
     output_callback : Callable
-    def __init__(self, entries : Iterable[TestEntry | Tuple], callback : Callable | None = None):
+    def __init__(self, entries : Iterable[TestEntry | tuple], callback : Callable | None = None):
         self.entries = [TestEntry(*entry) if isinstance(entry, tuple) else entry for entry in entries]
         self.output_callback = callback
 
@@ -67,7 +67,7 @@ class TestCases(Iterable):
     
 class TestCasesTemplate(TestCases):
 
-    def __init__(self, entries: Iterable[TestEntry | Tuple], substitutions: Dict[str, str] | Callable, callback: Callable | None = None):
+    def __init__(self, entries: Iterable[TestEntry | tuple], substitutions: dict[str, str] | Callable, callback: Callable | None = None):
         final_entries = []
         for entry in entries:
             if isinstance(entry, tuple):
@@ -99,7 +99,7 @@ class TestCasesTemplate(TestCases):
         super().__init__(final_entries, callback)
 
 class TestEntry(NamedTuple):
-    params: Any | Tuple[Any]
+    params: Any | tuple[Any]
     expected_output: Any | None = None
     message: str | None = None
 
@@ -219,11 +219,11 @@ class BasicTestCase(TestCase, metaclass=BasicTestCaseMeta):
     - Adds a default message to all assertions.
     - Adds a run_test_loop method to run a series of test cases with minimal boilerplate.
     '''
-    patches: Dict[str, str] = {}
-    patch_list : Dict[str, MagicMock | AsyncMock] = {}
+    patches: dict[str, str] = {}
+    patch_list : dict[str, MagicMock | AsyncMock] = {}
     fn : Callable | None = None
     default_message : str = 'Test {i} - {fn}({params}) failed -> \n    Returned {output_type}:\n        "{output}". \n    Expected {expected_type}:\n        "{expected}"'
-    test_cases : Dict[str, TestCases] = {}
+    test_cases : dict[str, TestCases] = {}
     _loop_count : int = 0
 
     @property
@@ -390,13 +390,13 @@ class BasicTestCase(TestCase, metaclass=BasicTestCaseMeta):
         
         return self.assertEqual(result, expected_output, msg=message)
 
-    def format_test_message(self, message : str | None, params : Tuple[Any], expected_output : Any, real_output : Any) -> str:
+    def format_test_message(self, message : str | None, params : tuple[Any], expected_output : Any, real_output : Any) -> str:
         """
         Format the test message, by replacing variables inside the str with our params or output
 
         Args:
             message (str | None): The message to use for the test case
-            params (Any): The input to the test case
+            params (tuple[Any]): The input to the test case
             expected_output (Any): The expected output of the test case
 
         Returns:

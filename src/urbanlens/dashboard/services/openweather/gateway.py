@@ -39,7 +39,7 @@ class WeatherForecastGateway(Gateway):
         self.api_key = api_key
         self.base_url = "http://api.openweathermap.org/data/2.5/forecast"
 
-    def get_weather_forecast(self, latitude: float, longitude: float) -> dict | None:
+    def get_weather_forecast(self, latitude: float, longitude: float) -> list[dict] | None:
         """
         Retrieve a weather forecast for the given coordinates.
         """
@@ -55,6 +55,9 @@ class WeatherForecastGateway(Gateway):
         }
 
         result = self.get(params)
+        if result is None:
+            logger.error('Failed to retrieve weather forecast for coordinates (%s, %s)', latitude, longitude)
+            return None
 
         # OpenWeatherMap returns a 4-hour forecast. We only want morning and evening for each day.
         filtered = self.filter_forecast(result.get('list', []))

@@ -85,6 +85,7 @@ class ViewSet(HasParams, ReadOnlyModelViewSet):
 		# Return the filtered queryset
 		return queryset
 
+	@override
 	def get_queryset(self) -> QuerySet:
 		# Get the queryset from the parent class
 		queryset = super().get_queryset()

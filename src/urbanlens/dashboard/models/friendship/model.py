@@ -43,16 +43,16 @@ class Friendship(Model):
         BLOCKED = 'Blocked', 'Blocked'
 
         @classmethod
-        def is_friend(self, status : str) -> bool:
-            return status in [self.ACCEPTED]
+        def is_friend(cls, status : str) -> bool:
+            return status in [cls.ACCEPTED]
 
         @classmethod
-        def rejected(self, status : str) -> bool:
-            return status in [self.DECLINED, self.REMOVED, self.BLOCKED, self.MUTED]
+        def rejected(cls, status : str) -> bool:
+            return status in [cls.DECLINED, cls.REMOVED, cls.BLOCKED, cls.MUTED]
 
         @classmethod
-        def can_request(self, status : str) -> bool:
-            return status in [self.DECLINED, self.REMOVED]
+        def can_request(cls, status : str) -> bool:
+            return status in [cls.DECLINED, cls.REMOVED]
 
     class FriendshipType(TextChoices):
         FOLLOWING = 'Following', 'Following'
@@ -68,12 +68,12 @@ class Friendship(Model):
         VIEW_TRIPS = 'View Trips', 'View Trips'
 
     from_profile = ForeignKey(
-        'dashboard.Profile',
+        'urbanlens.dashboard.Profile',
         on_delete=CASCADE,
         related_name='friendships'
     )
     to_profile = ForeignKey(
-        'dashboard.Profile',
+        'urbanlens.dashboard.Profile',
         on_delete=CASCADE,
         related_name='friends_to_me'
     )
@@ -85,7 +85,7 @@ class Friendship(Model):
     objects = Manager()
 
     @classmethod
-    def request(cls, from_profile : 'Profile' | int, to_profile : 'Profile' | int, relationship_type : str = FriendshipType.FRIEND) -> Friendship | None:
+    def request(cls, from_profile : 'Profile | int', to_profile : 'Profile | int', relationship_type : str = FriendshipType.FRIEND) -> Friendship | None:
         """
         Create a new friendship request.
         """
@@ -142,7 +142,7 @@ class Friendship(Model):
         self.save()
 
     @classmethod
-    def block(cls, from_profile : 'Profile' | int, to_profile : 'Profile' | int) -> Friendship | None:
+    def block(cls, from_profile : 'Profile | int', to_profile : 'Profile | int') -> Friendship | None:
         """
         Block a profile.
         """
@@ -171,7 +171,7 @@ class Friendship(Model):
         return friendship
 
     @classmethod
-    def mute(cls, from_profile : 'Profile' | int, to_profile : 'Profile' | int) -> Friendship | None:
+    def mute(cls, from_profile : 'Profile | int', to_profile : 'Profile | int') -> Friendship | None:
         """
         Mute a profile.
         """

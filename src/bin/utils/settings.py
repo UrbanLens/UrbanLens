@@ -49,7 +49,7 @@ class Settings:
 
 	These are loaded from the file at SETTINGS_PATH (currently bin/conf/settings.yaml).
 	"""
-	_settings : SettingsFile = None
+	_settings : SettingsFile | None = None
 	_logging_setup : bool = False
 
 	@classmethod

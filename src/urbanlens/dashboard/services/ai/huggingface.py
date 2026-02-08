@@ -38,7 +38,10 @@ class HuggingFaceGateway(LLMGateway):
         if not model_name:
             return DEFAULT_MODEL
         
-        return super()._lookup_model(model_name)
+        if result := super()._lookup_model(model_name):
+            return result
+
+        return DEFAULT_MODEL
 
     def setup(self, **kwargs):
         raise NotImplementedError("HuggingFaceGateway is not yet implemented. Implement abstractmethods, and generics, similar to cloudflare.py")

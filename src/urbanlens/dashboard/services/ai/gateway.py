@@ -69,7 +69,9 @@ class LLMGateway(ABC, Generic[Response]):
         self._api_key = value
 
     @property
-    def model(self) -> str | None:
+    def model(self) -> str:
+        if not self._model:
+            return "gpt-5-nano"
         return self._model
     
     @model.setter
@@ -139,12 +141,15 @@ class LLMGateway(ABC, Generic[Response]):
             Decimal('0.15')
         """
         match self.model:
-            case "gpt-3.5-turbo":
-                cost_per_thousand_sent = Decimal("0.0005")
-                cost_per_thousand_received = Decimal("0.0015")
-            case "gpt-4-1106-preview":
-                cost_per_thousand_sent = Decimal("0.01")
-                cost_per_thousand_received = Decimal("0.03")
+            case "gpt-5.2":
+                cost_per_thousand_sent = Decimal("0.00175")
+                cost_per_thousand_received = Decimal("0.014")
+            case "gpt-5-mini":
+                cost_per_thousand_sent = Decimal("0.00025")
+                cost_per_thousand_received = Decimal("0.002")
+            case "gpt-5-nano":
+                cost_per_thousand_sent = Decimal("0.00005")
+                cost_per_thousand_received = Decimal("0.0004")
             case _:
                 logger.warning("Model not recognized. Using default costs.")
                 cost_per_thousand_sent = Decimal("0.01")
@@ -258,7 +263,7 @@ class LLMGateway(ABC, Generic[Response]):
             tokens = encoding.encode(prompt)
         except KeyError:
             logger.debug('KeyError when using model %s to calculate tokens', self.model)
-            encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
+            encoding = tiktoken.encoding_for_model("gpt-5-nano")
             tokens = encoding.encode(prompt)
 
         return len(tokens)
@@ -309,7 +314,7 @@ class LLMGateway(ABC, Generic[Response]):
                     If the prompt exceeds the maximum token limit.
 
             Returns:
-                List[dict]:
+                list[dict]:
                     A list of messages to be used for chat completion.
         """
         queue = MessageQueue()

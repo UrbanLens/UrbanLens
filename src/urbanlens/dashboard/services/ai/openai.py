@@ -35,7 +35,7 @@ from urbanlens.dashboard.services.ai.message import MessageQueue
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gpt-3.5-turbo'
+DEFAULT_MODEL = 'gpt-5-nano'
 
 class OpenAIGateway(LLMGateway[ChatCompletion]):
     _api_key: str | None
@@ -53,8 +53,10 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
         if not model_name:
             return DEFAULT_MODEL
         
-        model_name = model_name.lower()
-        return {"gpt-3.5": "gpt-3.5-turbo", "gpt-4": "gpt-4-1106-preview"}.get(model_name, model_name)
+        if result := super()._lookup_model(model_name):
+            return result
+
+        return DEFAULT_MODEL
     
     def setup(self, **kwargs):
         if not self.api_key:

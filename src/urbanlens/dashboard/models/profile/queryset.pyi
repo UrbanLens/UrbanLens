@@ -23,7 +23,7 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from dashboard.models.abstract import models
+from urbanlens.dashboard.models.abstract import models
 
 class QuerySet(models.QuerySet):
     pass

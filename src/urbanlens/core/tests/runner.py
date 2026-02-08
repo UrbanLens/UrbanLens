@@ -27,7 +27,7 @@
 from __future__ import annotations
 
 from random import randrange
-from typing import Optional, Any, TYPE_CHECKING, List, Tuple, Dict, Iterable, Collection
+from typing import Any, TYPE_CHECKING, List, Tuple
 import os
 import unittest
 import logging
@@ -51,7 +51,7 @@ from django.db.models import (BigIntegerField, BinaryField, BooleanField,
 from model_bakery import baker, seq
 from model_bakery.generators import default_mapping
 
-from core.tests.result import MessageResult
+from urbanlens.core.tests.result import MessageResult
 from lib.models.faker import fake
 
 class BufferingLogHandler(logging.Handler):
@@ -137,7 +137,7 @@ class TestRunner(DiscoverRunner):
         super().teardown_databases(old_config, **kwargs)
 
 class MapGenerator:
-    models : List[Tuple[Any, str]]
+    models : list[tuple[Any, str]]
 
     def __init__(self):
         self.models = [
@@ -157,21 +157,21 @@ class MapGenerator:
             (IntegerField, 'lib.models.fields.number.IntegerField'),
             (ManyToManyField, 'lib.models.fields.relationships.ManyToManyField'),
             (OneToOneField, 'lib.models.fields.relationships.OneToOneField'),
-            (BooleanField, 'dashboard.models.fields.BooleanField'),
-            (BigIntegerField, 'dashboard.models.fields.BigIntegerField'),
+            (BooleanField, 'urbanlens.dashboard.models.fields.BooleanField'),
+            (BigIntegerField, 'urbanlens.dashboard.models.fields.BigIntegerField'),
             # Dashboard
-            (CharField, 'dashboard.models.fields.CharField'),
-            (DateField, 'dashboard.models.fields.DateField'),
-            (DateTimeField, 'dashboard.models.fields.DateTimeField'),
-            (DateTimeField, 'dashboard.models.fields.InsertedNowField'),
-            (DateTimeField, 'dashboard.models.fields.UpdatedNowField'),
-            (DecimalField, 'dashboard.models.fields.DecimalField'),
-            (FloatField, 'dashboard.models.fields.FloatField'),
-            (ForeignKey, 'dashboard.models.fields.ForeignKey'),
-            (IntegerField, 'dashboard.models.fields.IntegerField'),
-            (BigIntegerField, 'dashboard.models.fields.BigIntegerField'),
-            (PositiveIntegerField, 'dashboard.models.fields.PositiveIntegerField'),
-            (TextField, 'dashboard.models.fields.TextField'),
+            (CharField, 'urbanlens.dashboard.models.fields.CharField'),
+            (DateField, 'urbanlens.dashboard.models.fields.DateField'),
+            (DateTimeField, 'urbanlens.dashboard.models.fields.DateTimeField'),
+            (DateTimeField, 'urbanlens.dashboard.models.fields.InsertedNowField'),
+            (DateTimeField, 'urbanlens.dashboard.models.fields.UpdatedNowField'),
+            (DecimalField, 'urbanlens.dashboard.models.fields.DecimalField'),
+            (FloatField, 'urbanlens.dashboard.models.fields.FloatField'),
+            (ForeignKey, 'urbanlens.dashboard.models.fields.ForeignKey'),
+            (IntegerField, 'urbanlens.dashboard.models.fields.IntegerField'),
+            (BigIntegerField, 'urbanlens.dashboard.models.fields.BigIntegerField'),
+            (PositiveIntegerField, 'urbanlens.dashboard.models.fields.PositiveIntegerField'),
+            (TextField, 'urbanlens.dashboard.models.fields.TextField'),
         ]
 
     def map_generators(self):
@@ -189,10 +189,10 @@ class MapGenerator:
 
     def map_fields(self):
         fields = {
-            generate_emplid:        ['lib.models.fields.EmplIdField',      'dashboard.models.fields.EmplIdField'],
-            generate_rowid:         ['lib.models.fields.RowIdField',       'dashboard.models.fields.RowIdField'],
-            generate_guid:          ['lib.models.fields.GuidField',        'dashboard.models.fields.GuidField'],
-            generate_onechar:       ['lib.models.fields.OneCharField',     'dashboard.models.fields.OneCharField'],
+            generate_emplid:        ['lib.models.fields.EmplIdField',      'urbanlens.dashboard.models.fields.EmplIdField'],
+            generate_rowid:         ['lib.models.fields.RowIdField',       'urbanlens.dashboard.models.fields.RowIdField'],
+            generate_guid:          ['lib.models.fields.GuidField',        'urbanlens.dashboard.models.fields.GuidField'],
+            generate_onechar:       ['lib.models.fields.OneCharField',     'urbanlens.dashboard.models.fields.OneCharField'],
             generate_pickledobject: ['lib.models.fields.PickledObjectField'],
         }
 

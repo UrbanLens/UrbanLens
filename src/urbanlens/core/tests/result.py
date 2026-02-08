@@ -32,7 +32,7 @@ import logging
 import traceback
 import unittest
 
-from core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase
 
 logger = logging.getLogger(__name__)
 
@@ -52,5 +52,5 @@ class MessageResult(unittest.TextTestResult):
         try:
             return test.create_message(message)
         except AttributeError as e:
-            logger.error("TestCase instance %s does not inherit from core.tests.testcase.TestCase: %s", test, e)
+            logger.error("TestCase instance %s does not inherit from urbanlens.core.tests.testcase.TestCase: %s", test, e)
             return message

@@ -165,14 +165,14 @@ class GoogleGeocodingGateway(Gateway):
             return None
         
         results = body.get('results', [])
-        place_name = None
+        place_name : str | None = None
         if results:
             # Typically, the first result is the most relevant
             place_name = results[0].get('formatted_address')
 
         return place_name
     
-    def get_coordinates(self, place_name : str) -> tuple[float, float] | None:
+    def get_coordinates(self, place_name : str) -> tuple[float | None, float | None]:
         """
         Retrieve coordinates from the Google Geocoding API
         """
@@ -194,7 +194,7 @@ class GoogleGeocodingGateway(Gateway):
 
         return latitude, longitude
 
-    def extract_coordinates_from_url(self, url: str) -> tuple[float, float]:
+    def extract_coordinates_from_url(self, url: str) -> tuple[float | None, float | None]:
         """
         Extracts latitude and longitude from a Google Maps URL.
         """
@@ -216,7 +216,8 @@ class GoogleGeocodingGateway(Gateway):
                 return None, None
             
             place_name = self.decode_place_name(place_name)
-            latitude, longitude = self.get_coordinates(place_name)
+            latitude, longitude = self.get_coordinates(place_name):
+                
             if not latitude or not longitude:
                 logger.error('Unable to geocode place name "%s" from url: %s', place_name, url)
                 return None, None

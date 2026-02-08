@@ -35,12 +35,12 @@ class Comment(abstract.Model):
     text = CharField(max_length=500)
 
     pin = ForeignKey(
-        'dashboard.Pin',
+        'urbanlens.dashboard.Pin',
         on_delete=CASCADE,
         related_name='comments'
     )
     profile = ForeignKey(
-        'dashboard.Profile',
+        'urbanlens.dashboard.Profile',
         on_delete=CASCADE,
         related_name='comments'
     )

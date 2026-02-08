@@ -60,7 +60,7 @@ class Trip(abstract.Model):
     )
 
     pins = ManyToManyField(
-        'dashboard.Pin',
+        'urbanlens.dashboard.Pin',
         blank=True,
         default=list
     )
