@@ -69,17 +69,17 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if icon:
             pin.icon = icon
         pin.save()
-        return HttpResponseRedirect(reverse('view_map'))
+        return HttpResponseRedirect(reverse('map.view'))
 
     def get_edit_pin(self, request, pin_id, *args, **kwargs):
         pin = Pin.objects.get(id=pin_id)
         # Render the edit form
         categories = Category.objects.all()
-        return render(request, 'dashboard/edit_pin.html', {'pin': pin, 'categories': categories})
+        return render(request, 'dashboard/pages/map/edit_location.html', {'pin': pin, 'categories': categories})
 
     def add_pin(self, request, *args, **kwargs):
         # Render the add form
-        return render(request, 'dashboard/pages/map/add_pin.html')
+        return render(request, 'dashboard/pages/map/add_location.html')
 
     def post_add_pin(self, request, *args, **kwargs):
         logger.critical('Adding a new pin!')
@@ -150,11 +150,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         form = AdvancedSearchForm(request.POST)
         if form.is_valid():
             pins = Pin.objects.filter_by_criteria(form.cleaned_data)
-            return render(request, 'dashboard/view_map.html', {'pins': pins})
+            return render(request, 'dashboard/pages/map/index.html', {'pins': pins})
 
     def get_advanced_search(self, request, *args, **kwargs):
         form = AdvancedSearchForm()
-        return render(request, 'dashboard/advanced_search.html', {'form': form})
+        return render(request, 'dashboard/pages/map/advanced_search.html', {'form': form})
 
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data(request)

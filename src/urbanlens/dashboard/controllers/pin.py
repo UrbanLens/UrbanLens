@@ -55,7 +55,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         pin = Pin.objects.get(id=kwargs['pin_id'])
 
-        return render(request, 'dashboard/pages/pin/index.html', { 'pin': pin, 'google_maps_api_key': settings.google_maps_api_key })
+        return render(request, 'dashboard/pages/location/index.html', { 'pin': pin, 'google_maps_api_key': settings.google_maps_api_key })
     
     def test_ai(self, request, *args, **kwargs):
         """
@@ -194,7 +194,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.error('Unable to contact Google Search API. Is the API Key valid? Exception ---> %s', e)
             return HttpResponse("Unable to search. This is unlikely to be resolved by multiple requests.", status=500)
 
-        return render(request, 'dashboard/pages/pin/web_search.html', { 'search_results': search_results })
+        return render(request, 'dashboard/pages/location/web_search.html', { 'search_results': search_results })
 
     def satellite_view_google_image(self, request, *args, **kwargs):
         """
@@ -281,4 +281,4 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         logger.debug('forecast_data: %s', weather_forecast)
 
-        return render(request, 'dashboard/pages/pin/weather.html', { 'forecast': weather_forecast })
+        return render(request, 'dashboard/pages/location/weather.html', { 'forecast': weather_forecast })
