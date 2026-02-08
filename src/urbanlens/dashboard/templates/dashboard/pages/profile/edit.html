@@ -1,5 +1,5 @@
 <div class="dialog">
-        <form method="POST" hx-post="{% url 'edit_profile' %}" hx-trigger="submit" hx-target="#profile" hx-swap="outerHTML">
+        <form method="POST" hx-post="{% url 'profile.edit' %}" hx-trigger="submit" hx-target="#profile" hx-swap="outerHTML">
             {% csrf_token %}
             {{ form.as_p }}
             <input type="submit" value="Submit">

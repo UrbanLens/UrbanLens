@@ -1,6 +1,6 @@
 
 <div class="dialog">
-    <form method="POST" hx-post="{% url 'edit_pin' pin.id %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
+    <form method="POST" hx-post="{% url 'pin.edit' pin.id %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
         <label for="name">Name:</label><br>
         <input type="text" id="name" name="name" value="{{ pin.name }}"><br>
         <label for="description">Description:</label><br>
@@ -15,7 +15,7 @@
                 <option value="{{ category.id }}" {% if category in pin.categories.all %}selected{% endif %}>{{ category.name }}</option>
             {% endfor %}
         </select><br>
-        <button hx-post="{% url 'change_category' pin.id %}" hx-trigger="click" hx-target="#map" hx-swap="outerHTML">Change Category</button>
+        <button hx-post="{% url 'pin.change_category' pin.id %}" hx-trigger="click" hx-target="#map" hx-swap="outerHTML">Change Category</button>
         <input type="submit" value="Submit">
     </form>
 </div>

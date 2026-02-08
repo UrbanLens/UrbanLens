@@ -4,7 +4,7 @@
     <div class="dialog">
         <button id="closeDialog" style="float: right;">X</button>
         <h2>Search</h2>
-        <form id="searchMapForm" method="POST" action="{% url 'search_map' %}" hx-post="{% url 'search_map' %}" hx-trigger="submit" hx-target="#map-body" hx-swap="outerHTML">
+        <form id="searchMapForm" method="POST" action="{% url 'map.search' %}" hx-post="{% url 'map.search' %}" hx-trigger="submit" hx-target="#map-body" hx-swap="outerHTML">
             {% csrf_token %}
             {{ form.as_p }}
             <input type="submit" value="Submit">

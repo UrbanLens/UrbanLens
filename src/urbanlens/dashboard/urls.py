@@ -68,13 +68,13 @@ urlpatterns = [
 	path('rest/', include(router.urls)),
 	re_path('^/?$', IndexController.as_view(), name='home'),
 	path('map/', include([
-		path('', map.MapController.as_view({'get': 'view_map'}), name='view_map'),
-		path('init/', map.MapController.as_view({'get': 'init_map'}), name='init_map'),
-		path('add/', map.MapController.as_view({'get': 'add_pin', 'post': 'post_add_pin'}), name='add_pin'),
-		path('edit/<int:pin_id>/', map.MapController.as_view({'get': 'get_edit_pin', 'post': 'edit_pin'}), name='edit_pin'),
-		path('search/', map.MapController.as_view({'get': 'search_map', 'post': 'search_map_post'}), name='search_map'),
-		path('upload_image/<int:pin_id>/', map.MapController.as_view({'post': 'upload_image'}), name='upload_image'),
-		path('change_category/<int:pin_id>/', map.MapController.as_view({'post': 'change_category'}), name='change_category'),
+		path('', map.MapController.as_view({'get': 'view_map'}), name='map.view'),
+		path('init/', map.MapController.as_view({'get': 'init_map'}), name='map.init'),
+		path('add/', map.MapController.as_view({'get': 'add_pin', 'post': 'post_add_pin'}), name='pin.add'),
+		path('edit/<int:pin_id>/', map.MapController.as_view({'get': 'get_edit_pin', 'post': 'edit_pin'}), name='pin.edit'),
+		path('search/', map.MapController.as_view({'get': 'search_map', 'post': 'search_map_post'}), name='map.search'),
+		path('upload_image/<int:pin_id>/', map.MapController.as_view({'post': 'upload_image'}), name='pin.upload_image'),
+		path('change_category/<int:pin_id>/', map.MapController.as_view({'post': 'change_category'}), name='pin.change_category'),
 		#path('delete/<int:pin_id>/', MapController.delete_pin, name='delete_pin'),
 		#path('add_review/<int:pin_id>/', map.MapController.as_view(), name='add_review'),
 		path('pin/', include([
@@ -92,7 +92,7 @@ urlpatterns = [
 		])),
 	])),
 	path('profile/', include([
-		path('', profile.ViewProfileView.as_view(), name='view_profile'),
+		path('', profile.ViewProfileView.as_view(), name='profile.view'),
 		path('edit/', profile.EditProfileView.as_view(), name='profile.edit'),
 	])),
 	path('friendship/', include([
