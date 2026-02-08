@@ -235,7 +235,7 @@ class Db:
             if process.returncode != 0:
                 logger.error(f"pg_dump failed with error: {stderr.decode('utf-8')}")
 
-             return process.pid
+            return process.pid
 
         except Exception as e:
             logger.error(f'Error backing up database: {e}')

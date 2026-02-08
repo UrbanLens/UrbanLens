@@ -216,7 +216,7 @@ class GoogleGeocodingGateway(Gateway):
                 return None, None
             
             place_name = self.decode_place_name(place_name)
-            latitude, longitude = self.get_coordinates(place_name):
+            latitude, longitude = self.get_coordinates(place_name)
                 
             if not latitude or not longitude:
                 logger.error('Unable to geocode place name "%s" from url: %s', place_name, url)
