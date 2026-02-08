@@ -26,7 +26,7 @@
 
 # Generic imports
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 # Django Imports
 # Third party imports
 from rest_framework.filters import OrderingFilter
