@@ -47,7 +47,7 @@ jobs:
               run: |
                   pip install ruff==0.7.0
                   cd $GITHUB_WORKSPACE/src
-                  ruff .
+                  ruff check .
 
 #            - name: Unit Tests
 #              run: |
