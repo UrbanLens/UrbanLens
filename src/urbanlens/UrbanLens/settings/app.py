@@ -65,7 +65,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     environment_name: str = Field(default=EnvironmentTypes.LOCAL, description="The name of the environment")
     debug_override: bool | None = Field(description="Whether or not to enable debugging", alias='DEBUG', default=None)
     secret_key : str = Field(default = '1t5v24s98-fcbas23-vfsd238vc-asfdioj322', description = "The secret key")
-    root_urlconf : str = Field(default = 'UrbanLens.urls', description = "The root urlconf")
+    root_urlconf : str = Field(default = 'urbanlens.UrbanLens.urls', description = "The root urlconf")
     admin_username : str = Field(default = 'Admin', description = "The username to use for the admin user")
     admin_email : str = Field(default = 'jess@urbanlens.org', description = "The email to use for the admin user")
     allowed_hosts : list[str] = Field(default = ['urbanlens.org'], description = "The allowed hosts")
