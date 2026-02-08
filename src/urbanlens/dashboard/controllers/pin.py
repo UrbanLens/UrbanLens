@@ -235,7 +235,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         View the import pins form
         """
-        return render(request, 'dashboard/pages/pin/import/csv.html', { 'form': UploadDataFile() })
+        return render(request, 'dashboard/pages/location/import/csv.html', { 'form': UploadDataFile() })
 
     @action(detail=True, methods=['post'])
     def upload_takeout(self, request, *args, **kwargs):
