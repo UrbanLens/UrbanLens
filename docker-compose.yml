@@ -51,11 +51,11 @@ services:
       - GIT_NAME=${GIT_NAME}
       - GH_TOKEN=${GH_TOKEN}
       - SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
-      - URBANLENS_DB_USER=${URBANLENS_DB_USER:-postgres}
-      - URBANLENS_DB_NAME=${URBANLENS_DB_NAME:-postgres}
-      - URBANLENS_DB_PASS=${URBANLENS_DB_PASS:-postgres}
-      - URBANLENS_DB_HOST=${URBANLENS_DB_HOST:-urbanlens_db}
-      - URBANLENS_DB_PORT=${URBANLENS_DB_PORT:-5432}
+      - UL_DB_USER=${UL_DB_USER:-postgres}
+      - UL_DB_NAME=${UL_DB_NAME:-postgres}
+      - UL_DB_PASS=${UL_DB_PASS:-postgres}
+      - UL_DB_HOST=${UL_DB_HOST:-urbanlens_db}
+      - UL_DB_PORT=${UL_DB_PORT:-5432}
       - ENVIRONMENT=${ENVIRONMENT:-production}
 
     healthcheck:
@@ -99,13 +99,13 @@ services:
           - urbanlens_db
 
     environment:
-      - POSTGRES_USER=${URBANLENS_DB_USER:-postgres}
-      - POSTGRES_DB=${URBANLENS_DB_NAME:-postgres}
-      - POSTGRES_PASSWORD=${URBANLENS_DB_PASS:-postgres}
-      - POSTGRES_PORT=${URBANLENS_DB_PORT:-5432}
+      - POSTGRES_USER=${UL_DB_USER:-postgres}
+      - POSTGRES_DB=${UL_DB_NAME:-postgres}
+      - POSTGRES_PASSWORD=${UL_DB_PASS:-postgres}
+      - POSTGRES_PORT=${UL_DB_PORT:-5432}
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${URBANLENS_DB_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${UL_DB_USER}"]
       interval: 10s
       timeout: 10s
       retries: 9
