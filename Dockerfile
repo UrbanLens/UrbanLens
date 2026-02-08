@@ -65,8 +65,8 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
 	rm -rf /var/lib/apt/lists/*
 
 # Install npm
-RUN curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash - && \
-	apt-get install -y nodejs
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash && \
+	nvm install node
 
 # Handle Python requirements
 COPY requirements /tmp/pip-tmp/requirements/
