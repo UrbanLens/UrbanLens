@@ -275,7 +275,7 @@ class Migration(migrations.Migration):
                 (
                     "categories",
                     models.ManyToManyField(
-                        blank=True, default=list, to="urbanlens.dashboard.category"
+                        blank=True, default=list, to="dashboard.category"
                     ),
                 ),
             ],
@@ -305,7 +305,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="images",
-                        to="urbanlens.dashboard.pin",
+                        to="dashboard.pin",
                     ),
                 ),
             ],
@@ -355,7 +355,7 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="pins",
-                to="urbanlens.dashboard.profile",
+                to="dashboard.profile",
             ),
         ),
         migrations.CreateModel(
@@ -416,7 +416,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="friendships",
-                        to="urbanlens.dashboard.profile",
+                        to="dashboard.profile",
                     ),
                 ),
                 (
@@ -424,7 +424,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="friends_to_me",
-                        to="urbanlens.dashboard.profile",
+                        to="dashboard.profile",
                     ),
                 ),
             ],
@@ -453,7 +453,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="comments",
-                        to="urbanlens.dashboard.pin",
+                        to="dashboard.pin",
                     ),
                 ),
                 (
@@ -461,7 +461,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="comments",
-                        to="urbanlens.dashboard.profile",
+                        to="dashboard.profile",
                     ),
                 ),
             ],
@@ -500,7 +500,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="reviews",
-                        to="urbanlens.dashboard.pin",
+                        to="dashboard.pin",
                     ),
                 ),
                 (
@@ -520,7 +520,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="pin",
             name="tags",
-            field=models.ManyToManyField(blank=True, default=list, to="urbanlens.dashboard.tag"),
+            field=models.ManyToManyField(blank=True, default=list, to="dashboard.tag"),
         ),
         migrations.CreateModel(
             name="Location",
@@ -585,7 +585,7 @@ class Migration(migrations.Migration):
                         blank=True,
                         default=list,
                         related_name="locations",
-                        to="urbanlens.dashboard.category",
+                        to="dashboard.category",
                     ),
                 ),
                 (
@@ -594,7 +594,7 @@ class Migration(migrations.Migration):
                         blank=True,
                         default=list,
                         related_name="locations",
-                        to="urbanlens.dashboard.tag",
+                        to="dashboard.tag",
                     ),
                 ),
             ],
@@ -628,13 +628,13 @@ class Migration(migrations.Migration):
                 (
                     "pins",
                     models.ManyToManyField(
-                        blank=True, default=list, to="urbanlens.dashboard.pin"
+                        blank=True, default=list, to="dashboard.pin"
                     ),
                 ),
                 (
                     "profiles",
                     models.ManyToManyField(
-                        blank=True, related_name="trips", to="urbanlens.dashboard.profile"
+                        blank=True, related_name="trips", to="dashboard.profile"
                     ),
                 ),
             ],

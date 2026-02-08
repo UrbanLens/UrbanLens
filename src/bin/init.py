@@ -368,8 +368,8 @@ class DjangoProjectInitializer:
             with open(pgpass, 'w') as file:
                 file.write(f'{self.db_host}:{self.db_port}:*:{self.db_user}:{self.db_pass}\n')
             os.chmod(pgpass, 0o600)
-            file_contents = open(pgpass, 'r').read()
-            logger.info('Created .pgpass file: %s', file_contents)
+            #file_contents = open(pgpass, 'r').read()
+            #logger.debug('Created .pgpass file: %s', file_contents)
         except IOError as e:
             logger.error(f'Error creating .pgpass file: {e}')
             raise UnrecoverableError() from e
