@@ -73,13 +73,13 @@ class Location(abstract.Model):
     cached_place_name = CharField(max_length=255, null=True, blank=True)
 
     categories = ManyToManyField(
-        'urbanlens.dashboard.Category',
+        'dashboard.Category',
         blank=True,
         default=list,
         related_name='locations'
     )
     tags = ManyToManyField(
-        'urbanlens.dashboard.Tag',
+        'dashboard.Tag',
         blank=True,
         default=list,
         related_name='locations'

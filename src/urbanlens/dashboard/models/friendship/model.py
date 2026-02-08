@@ -68,12 +68,12 @@ class Friendship(Model):
         VIEW_TRIPS = 'View Trips', 'View Trips'
 
     from_profile = ForeignKey(
-        'urbanlens.dashboard.Profile',
+        'dashboard.Profile',
         on_delete=CASCADE,
         related_name='friendships'
     )
     to_profile = ForeignKey(
-        'urbanlens.dashboard.Profile',
+        'dashboard.Profile',
         on_delete=CASCADE,
         related_name='friends_to_me'
     )

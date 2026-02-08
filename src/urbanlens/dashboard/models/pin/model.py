@@ -88,17 +88,17 @@ class Pin(abstract.Model):
     cached_place_name = CharField(max_length=255, null=True, blank=True)
 
     profile = ForeignKey(
-        'urbanlens.dashboard.Profile',
+        'dashboard.Profile',
         on_delete=CASCADE,
         related_name='pins'
     )
     categories = ManyToManyField(
-        'urbanlens.dashboard.Category',
+        'dashboard.Category',
         blank=True,
         default=list
     )
     tags = ManyToManyField(
-        'urbanlens.dashboard.Tag',
+        'dashboard.Tag',
         blank=True,
         default=list
     )

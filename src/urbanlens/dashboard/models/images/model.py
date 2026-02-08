@@ -35,7 +35,7 @@ class Image(abstract.Model):
     """
     image = ImageField()
     pin = ForeignKey(
-        'urbanlens.dashboard.Pin',
+        'dashboard.Pin',
         on_delete=CASCADE,
         related_name='images'
     )
