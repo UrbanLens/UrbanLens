@@ -87,5 +87,5 @@ RUN pip install -e .
 # Install npm packages
 RUN npm install -y
 
-#ENTRYPOINT ["gunicorn", "UrbanLens.wsgi:application", "--bind", "0.0.0.0:8000", "-t", "600", "-k", "gevent"]
+#ENTRYPOINT ["gunicorn", "urbanlens.UrbanLens.wsgi:application", "--bind", "0.0.0.0:8000", "-t", "600", "-k", "gevent"]
 ENTRYPOINT ["python", "/usr/local/bin/urbanlens_init.py"]

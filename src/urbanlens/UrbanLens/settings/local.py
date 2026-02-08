@@ -86,7 +86,7 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 
-ROOT_URLCONF = "UrbanLens.urls"
+ROOT_URLCONF = "urbanlens.UrbanLens.urls"
 
 TEMPLATES = [
     {

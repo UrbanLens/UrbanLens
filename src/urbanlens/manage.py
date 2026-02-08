@@ -36,9 +36,9 @@ sys.path.insert(0, str(PROJECT_SRC))
 
 def main():
 	"""Run administrative tasks."""
-	#os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'UrbanLens.settings.local')
+	#os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'urbanlens.UrbanLens.settings.local')
 	# Temporarily Override the default settings module
-	os.environ['DJANGO_SETTINGS_MODULE'] = 'UrbanLens.settings.local'
+	os.environ['DJANGO_SETTINGS_MODULE'] = 'urbanlens.UrbanLens.settings.local'
 	try:
 		from django.core.management import execute_from_command_line
 	except ImportError as exc:
