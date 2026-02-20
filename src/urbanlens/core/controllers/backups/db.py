@@ -60,7 +60,7 @@ class DatabaseBackup:
             logger.info("Created backup directory: %s", self.backup_dir)
             return True
         except OSError as e:
-            logger.error("Failed to create backup directory: %s. Error: %s", self.backup_dir, e)
+            logger.exception("Failed to create backup directory: %s. Error: %s", self.backup_dir, e)
 
         return False
 
@@ -79,7 +79,7 @@ class DatabaseBackup:
                     os.remove(file_path)
                     logger.info("Removed old backup: %s", file)
                 except OSError as e:
-                    logger.error("Failed to remove old backup: %s. Error: %s", file, e)
+                    logger.exception("Failed to remove old backup: %s. Error: %s", file, e)
 
     def run(self) -> bool:
         # TODO temporarily disable
@@ -109,7 +109,7 @@ class DatabaseBackup:
 
             self.purge_old_backups()
         except subprocess.CalledProcessError as e:
-            logger.error("Error occurred while performing database backup: %s", e)
+            logger.exception("Error occurred while performing database backup: %s", e)
             return False
 
         return True
@@ -129,7 +129,7 @@ class DatabaseBackup:
                 self.create_backup_dir()
                 result = self.run()
             except Exception as e:
-                logger.error("Error occurred while scheduling database backup: %s", e)
+                logger.exception("Error occurred while scheduling database backup: %s", e)
                 return False
 
         return result

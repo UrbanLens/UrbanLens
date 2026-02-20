@@ -90,7 +90,7 @@ class DjangoProjectInitializer:
         try:
             self._db_port = int(value)
         except ValueError as ve:
-            logger.error("Invalid port number")
+            logger.exception("Invalid port number")
             raise UnrecoverableError("Invalid port number") from ve
 
     @property
@@ -164,7 +164,7 @@ class DjangoProjectInitializer:
             logger.info("Git configured with username %s and email %s.", git_user, git_email)
 
         except subprocess.CalledProcessError as e:
-            logger.error("Error configuring git: %s", e)
+            logger.exception("Error configuring git: %s", e)
 
     def init_db(self):
         """
@@ -206,7 +206,7 @@ class DjangoProjectInitializer:
                 new_file.write(sample_data)
             logger.info("Copied .env-sample to .env.")
         except OSError as e:
-            logger.error("Error copying .env-sample: %s", e)
+            logger.exception("Error copying .env-sample: %s", e)
             raise UnrecoverableError from e
 
         # Check that it now exists
@@ -242,7 +242,7 @@ class DjangoProjectInitializer:
                 file.writelines(data)
             logger.info("Updated git username and email in .env.")
         except OSError as e:
-            logger.error("Error updating .env: %s", e)
+            logger.exception("Error updating .env: %s", e)
             raise UnrecoverableError from e
 
         # Check that it now exists
@@ -341,7 +341,7 @@ class DjangoProjectInitializer:
 
         except subprocess.CalledProcessError as e:
             description = description or "running command: " + " ".join(command)
-            logger.error("Error occurred %s: %s", description, e)
+            logger.exception("Error occurred %s: %s", description, e)
 
             if raise_error:
                 raise UnrecoverableError from e
@@ -399,7 +399,7 @@ class DjangoProjectInitializer:
             # file_contents = open(pgpass, 'r').read()
             # logger.debug('Created .pgpass file: %s', file_contents)
         except OSError as e:
-            logger.error("Error creating .pgpass file: %s", e)
+            logger.exception("Error creating .pgpass file: %s", e)
             raise UnrecoverableError from e
 
     def check_dependencies(self):
@@ -434,7 +434,7 @@ class DjangoProjectInitializer:
             str(self.db_port),
             "-w",
             "-c",
-            f"SELECT 1 FROM pg_database WHERE datname='{self.db_name}'",
+            f"SELECT 1 FROM pg_database WHERE datname='{self.db_name}'",  # noqa: S608 - Safe data, but TODO: parameterize
         ]
         return self.run_command(command, "checking database", raise_error=False)
 
@@ -514,7 +514,7 @@ def main():
         logger.info("Initialization cancelled.")
         sys.exit(0)
     except UnrecoverableError:
-        logger.error("Initialization failed.")
+        logger.exception("Initialization failed.")
         sys.exit(1)
 
     sys.exit(0)

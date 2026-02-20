@@ -764,22 +764,20 @@ ignore = [
     "ANN",     # type annotation enforcement
     "DOC",     # docstring rules
     "PLC0415", # import should be at top
-    "W2",
     "BLE001",  # catch blind Exception
     "PLW1641", # implement __hash__
     "ISC003",  # implicit string concat
-    "SIM102",  # nested ifs
-    "RUF",
+    "SIM102",  # nested 
+    "TRY401",  # redundant exception object
+    "RUF012",  # mutable class attributes -> ClassVar
+    "FBT001",  # boolean position argument
+    "FBT002",  # boolean default argument
     "D",
-    "FBT",
     "PYI021",  # docstrings should not be included in pyi (I'm not sure this is true??)
     "PTH",
     "N806",    # variable should be lowercase
     "DTZ007",  # timezone-aware datetime without tzinfo
-    "S105",
-    "S113",
     "S605",
-    "S608",
 ] # A sane ignore set for many modern codebases.
 
 [tool.ruff.lint.per-file-ignores]

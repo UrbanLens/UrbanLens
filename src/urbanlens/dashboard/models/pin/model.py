@@ -313,7 +313,7 @@ class Pin(abstract.Model):
                 return category
 
         except Exception as e:
-            logger.error("failed to add category %s to pin -> %s", category_name, e)
+            logger.exception("failed to add category %s to pin -> %s", category_name, e)
 
         return None
 

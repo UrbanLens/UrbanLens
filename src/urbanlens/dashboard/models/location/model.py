@@ -291,7 +291,7 @@ class Location(abstract.Model):
                 return category
 
         except Exception as e:
-            logger.error("failed to add category %s to location -> %s", category_name, e)
+            logger.exception("failed to add category %s to location -> %s", category_name, e)
 
         return None
 

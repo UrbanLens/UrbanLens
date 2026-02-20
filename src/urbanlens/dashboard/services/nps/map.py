@@ -54,7 +54,7 @@ class NPSMapGateway(Gateway):
         }
 
         # Make the request to the GIS data service
-        response = requests.get(self.base_url, params=params)
+        response = requests.get(self.base_url, params=params, timeout=60)
         response.raise_for_status()
 
         # Load the GeoJSON into a GeoDataFrame

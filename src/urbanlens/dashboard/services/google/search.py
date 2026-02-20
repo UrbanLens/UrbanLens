@@ -62,7 +62,7 @@ class GoogleCustomSearchGateway(Gateway):
             "q": query,
             # 'num': min(max_results, 20)
         }
-        response = requests.get(self.base_url, params=params, headers=headers)
+        response = requests.get(self.base_url, params=params, headers=headers, timeout=60)
         response.raise_for_status()
         return self.parse_response(response)
 

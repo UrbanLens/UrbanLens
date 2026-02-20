@@ -52,7 +52,7 @@ class SmithsonianGateway(Gateway):
                 "q": search_term,
                 "online_media_type": "Images",
             }
-            response = requests.get(self.base_url, params=params)
+            response = requests.get(self.base_url, params=params, timeout=60)
             response.raise_for_status()  # Will raise an HTTPError for bad requests
 
             data = response.json()

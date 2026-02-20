@@ -427,7 +427,7 @@ class LLMGateway[Response](ABC):
                 return match.group(1).strip()
             logger.error('No ANSWER in response from AI model "%s": Response: %s', self.model, message_content)
         except Exception as e:
-            logger.error(
+            logger.exception(
                 "Error parsing answer from response for model '%s'. Respoonse: %s\nError: %s",
                 self.model,
                 message_content,

@@ -67,7 +67,7 @@ class WeatherForecastGateway(Gateway):
         return self.filter_forecast(result.get("list", []))
 
     def get(self, params: dict) -> dict | None:
-        response = requests.get(self.base_url, params=params)
+        response = requests.get(self.base_url, params=params, timeout=60)
         response.raise_for_status()
         return self.handle_response(response)
 
@@ -82,7 +82,7 @@ class WeatherForecastGateway(Gateway):
         try:
             return response.json()
         except json.JSONDecodeError as e:
-            logger.error('Error decoding JSON response -> Message: "%s"', e)
+            logger.exception('Error decoding JSON response -> Message: "%s"', e)
             return None
 
     def filter_forecast(self, forecast: list[dict]) -> list[dict]:

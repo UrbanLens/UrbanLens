@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 SETTINGS_PATH: str = "../conf/settings.yaml"
 
 # Add placeholders for new API keys and endpoints
-INSTAGRAM_ACCESS_TOKEN = "your-instagram-access-token-placeholder"
+INSTAGRAM_ACCESS_TOKEN = "your-instagram-access-token-placeholder"  # noqa: S105 - Not real data
 INSTAGRAM_GRAPH_URL = "your-instagram-graph-url-placeholder"
 GOOGLE_LENS_API_KEY = "your-google-lens-api-key-placeholder"
 GOOGLE_LENS_URL = "your-google-lens-url-placeholder"

@@ -222,9 +222,9 @@ def get_pin_by_address(address):
             return (pin.latitude, pin.longitude)
 
     except GeocoderTimedOut:
-        logger.error("Geocoder service timed out.")
+        logger.exception("Geocoder service timed out.")
         raise
     except GeocoderUnavailable:
-        logger.error("Geocoder service unavailable.")
+        logger.exception("Geocoder service unavailable.")
         raise
     return (None, None)

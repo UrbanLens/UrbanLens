@@ -1,5 +1,5 @@
 # Instagram API credentials
-INSTAGRAM_ACCESS_TOKEN = "your-access-token"
+INSTAGRAM_ACCESS_TOKEN = "your-access-token"  # noqa: S105 - not real data
 INSTAGRAM_GRAPH_URL = "https://graph.instagram.com/"
 
 # Google Lens or similar service API credentials

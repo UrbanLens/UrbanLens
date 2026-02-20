@@ -45,7 +45,7 @@ class NewsGateway(Gateway):
             "apiKey": self.api_key,
         }
 
-        response = requests.get(self.base_url, params=params)
+        response = requests.get(self.base_url, params=params, timeout=60)
         response.raise_for_status()
 
         return response.json().get("articles", [])

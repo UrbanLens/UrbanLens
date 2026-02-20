@@ -70,8 +70,8 @@ class GoogleGeocodingGateway(Gateway):
             try:
                 return json.loads(geocoded_location.json_response)
             except json.JSONDecodeError as e:
-                logger.error('Error decoding cached json_response for %s -> Message: "%s"', place_name, e)
-                logger.error("json_response: %s", geocoded_location.json_response)
+                logger.exception('Error decoding cached json_response for %s -> Message: "%s"', place_name, e)
+                logger.exception("json_response: %s", geocoded_location.json_response)
 
                 # Remove it from the cache
                 geocoded_location.delete()
@@ -100,8 +100,8 @@ class GoogleGeocodingGateway(Gateway):
             try:
                 return json.loads(geocoded_location.json_response)
             except json.JSONDecodeError as e:
-                logger.error('Error decoding json_response for %s, %s -> Message: "%s"', latitude, longitude, e)
-                logger.error("json_response: %s", geocoded_location.json_response)
+                logger.exception('Error decoding json_response for %s, %s -> Message: "%s"', latitude, longitude, e)
+                logger.exception("json_response: %s", geocoded_location.json_response)
                 # Remove it from the cache
                 geocoded_location.delete()
                 import sys
@@ -116,7 +116,7 @@ class GoogleGeocodingGateway(Gateway):
         return self.get(params)
     
     def get(self, params: dict) -> dict | None:
-        response = requests.get(self.base_url, params=params)
+        response = requests.get(self.base_url, params=params, timeout=60)
         response.raise_for_status()
         return self.handle_response(response, params)
     
@@ -142,7 +142,7 @@ class GoogleGeocodingGateway(Gateway):
                 longitude = results[0].get("geometry", {}).get("location", {}).get("lng")
 
         except Exception as e:
-            logger.error('Error parsing json response for %s -> Message: "%s"', request_data, e)
+            logger.exception('Error parsing json response for %s -> Message: "%s"', request_data, e)
             return None
 
         try:
@@ -154,7 +154,7 @@ class GoogleGeocodingGateway(Gateway):
                 json_response=json.dumps(body),
             )
         except Exception as e:
-            logger.error('Error caching geocoded location for %s -> Message: "%s"', request_data, e)
+            logger.exception('Error caching geocoded location for %s -> Message: "%s"', request_data, e)
         
         return body
 

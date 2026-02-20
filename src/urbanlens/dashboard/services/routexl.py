@@ -52,7 +52,7 @@ class RouteXLGateway(Gateway):
         """
         url = f"{self.base_url}/tour"
         data = {"locations": pins}
-        response = requests.post(url, json=data, auth=HTTPBasicAuth(self.username, self.password))
+        response = requests.post(url, json=data, auth=HTTPBasicAuth(self.username, self.password), timeout=60)
         response.raise_for_status()
         return response.json()
 

@@ -227,12 +227,12 @@ def main():
 
         except ValueError as ve:
             # One of the options contains bad data. Print the message and exit.
-            logger.error("Bad option provided: %s", ve)
+            logger.exception("Bad option provided: %s", ve)
             sys.exit()
 
         except FileNotFoundError as fnf:
             # The options were okay, but we can't find a necessary file (probably the executable)
-            logger.error("Unable to find a necessary file: %s", fnf)
+            logger.exception("Unable to find a necessary file: %s", fnf)
             sys.exit()
 
         try:
@@ -247,14 +247,14 @@ def main():
             if result is not None:
                 logger.debug("App returned (%s)", result)
         except UnsupportedCommandError:
-            logger.error("Error: Unknown action. Try --help to see how to call this script.")
+            logger.exception("Error: Unknown action. Try --help to see how to call this script.")
             sys.exit()
 
     except KeyboardInterrupt:
         logger.info("Shutting down server...")
         sys.exit()
     except DbStartError:
-        logger.error("Could not start DB. Cannot continue")
+        logger.exception("Could not start DB. Cannot continue")
         sys.exit()
 
 

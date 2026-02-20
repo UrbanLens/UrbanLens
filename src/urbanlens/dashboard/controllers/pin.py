@@ -220,7 +220,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
             search_results = google_gateway.search(query)
         except HTTPError as e:
-            logger.error("Unable to contact Google Search API. Is the API Key valid? Exception ---> %s", e)
+            logger.exception("Unable to contact Google Search API. Is the API Key valid? Exception ---> %s", e)
             return HttpResponse("Unable to search. This is unlikely to be resolved by multiple requests.", status=500)
 
         return render(request, "dashboard/pages/location/web_search.html", {"search_results": search_results})

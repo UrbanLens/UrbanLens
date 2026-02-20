@@ -51,7 +51,7 @@ class NPSGateway(Gateway):
         endpoint = f"{self.base_url}/parks"
         params = {"parkCode": park_code}
 
-        response = requests.get(endpoint, headers=headers, params=params)
+        response = requests.get(endpoint, headers=headers, params=params, timeout=60)
         response.raise_for_status()
         return self.handle_response(response, params)
     
@@ -71,5 +71,5 @@ class NPSGateway(Gateway):
             return body.get("data", [])[0].get("images", [])
 
         except Exception as e:
-            logger.error('Error parsing json response for %s -> Message: "%s"', request_data, e)
+            logger.exception('Error parsing json response for %s -> Message: "%s"', request_data, e)
             return []
