@@ -64,9 +64,7 @@ class WeatherForecastGateway(Gateway):
             return None
 
         # OpenWeatherMap returns a 4-hour forecast. We only want morning and evening for each day.
-        filtered = self.filter_forecast(result.get("list", []))
-
-        return filtered
+        return self.filter_forecast(result.get("list", []))
 
     def get(self, params: dict) -> dict | None:
         response = requests.get(self.base_url, params=params)

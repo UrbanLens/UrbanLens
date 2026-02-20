@@ -48,5 +48,4 @@ class NewsGateway(Gateway):
         response = requests.get(self.base_url, params=params)
         response.raise_for_status()
 
-        news_data = response.json().get("articles", [])
-        return news_data
+        return response.json().get("articles", [])

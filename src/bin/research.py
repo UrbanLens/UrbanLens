@@ -9,8 +9,7 @@ def fetch_urbex_posts(hashtag):
     """
     # This is a placeholder for the actual API call, which would need to use the Instagram API.
     response = requests.get(f"{INSTAGRAM_GRAPH_URL}search?access_token={INSTAGRAM_ACCESS_TOKEN}&q={hashtag}")
-    posts = response.json()
-    return posts
+    return response.json()
 
 
 def identify_image_location(image_url):
@@ -19,8 +18,7 @@ def identify_image_location(image_url):
     """
     # This is a placeholder for the actual API call, which would need to use the Google Lens API or similar.
     response = requests.post(GOOGLE_LENS_URL, json={"image_url": image_url}, headers={"Authorization": f"Bearer {GOOGLE_LENS_API_KEY}"})
-    location_data = response.json()
-    return location_data
+    return response.json()
 
 
 def main():

@@ -165,13 +165,11 @@ class Friendship(Model):
             logger.warning("Could not find profiles")
             raise ValueError("Could not find profiles")
 
-        friendship = cls.objects.create(
+        return cls.objects.create(
             from_profile=from_profile,
             to_profile=to_profile,
             status=cls.FriendshipStatus.BLOCKED,
         )
-
-        return friendship
 
     @classmethod
     def mute(cls, from_profile: Profile | int, to_profile: Profile | int) -> Friendship | None:
@@ -194,13 +192,11 @@ class Friendship(Model):
             logger.warning("Could not find profiles")
             raise ValueError("Could not find profiles")
 
-        friendship = cls.objects.create(
+        return cls.objects.create(
             from_profile=from_profile,
             to_profile=to_profile,
             status=cls.FriendshipStatus.MUTED,
         )
-
-        return friendship
 
     def __str__(self):
         return f"{self.from_profile.username} to {self.to_profile.username} - {self.relationship_type} - {self.status}"

@@ -68,8 +68,7 @@ class NPSGateway(Gateway):
 
         try:
             body = response.json()
-            images = body.get("data", [])[0].get("images", [])
-            return images
+            return body.get("data", [])[0].get("images", [])
 
         except Exception as e:
             logger.error('Error parsing json response for %s -> Message: "%s"', request_data, e)

@@ -160,6 +160,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if form.is_valid():
             pins = Pin.objects.filter_by_criteria(form.cleaned_data)
             return render(request, "dashboard/pages/map/index.html", {"pins": pins})
+        return None
 
     def get_advanced_search(self, request, *args, **kwargs):
         form = AdvancedSearchForm()

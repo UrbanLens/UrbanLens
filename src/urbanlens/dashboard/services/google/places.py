@@ -54,8 +54,7 @@ class GooglePlacesGateway(Gateway):
         response = self.session.get(base_url, params=params)
         response.raise_for_status()
 
-        places_data = response.json().get("results", [])
-        return places_data
+        return response.json().get("results", [])
 
     def get_place_details(self, place_id, fields=None):
         details_url = "https://maps.googleapis.com/maps/api/place/details/json"
