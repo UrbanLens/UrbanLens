@@ -190,7 +190,7 @@ class LLMGateway[Response](ABC):
 
         """
         self._token_count["sent"] += count
-        logger.debug(f"Sent {count} tokens. Total sent: {self._token_count['sent']}")
+        logger.debug("Sent %s tokens. Total sent: %s", count, self._token_count["sent"])
 
     @send_tokens.register
     def _(self, prompt: str):
@@ -204,7 +204,7 @@ class LLMGateway[Response](ABC):
         """
         count = self.calculate_tokens(prompt)
         self._token_count["sent"] += count
-        logger.debug(f"Sent {count} tokens. Total sent: {self._token_count['sent']}")
+        logger.debug("Sent %s tokens. Total sent: %s", count, self._token_count["sent"])
 
     @send_tokens.register
     def _(self, messages: MessageQueue):
@@ -218,7 +218,7 @@ class LLMGateway[Response](ABC):
         """
         count = self.calculate_combined_tokens(messages)
         self._token_count["sent"] += count
-        logger.debug(f"Sent {count} tokens. Total sent: {self._token_count['sent']}")
+        logger.debug("Sent %s tokens. Total sent: %s", count, self._token_count["sent"])
 
     @singledispatchmethod
     def receive_tokens(self, count: int):
@@ -231,7 +231,7 @@ class LLMGateway[Response](ABC):
 
         """
         self._token_count["received"] += count
-        logger.debug(f"Received {count} tokens. Total received: {self._token_count['received']}")
+        logger.debug("Received %s tokens. Total received: %s", count, self._token_count["received"])
 
     @receive_tokens.register
     def _(self, prompt: str):
@@ -245,7 +245,7 @@ class LLMGateway[Response](ABC):
         """
         count = self.calculate_tokens(prompt)
         self._token_count["received"] += count
-        logger.debug(f"Received {count} tokens. Total received: {self._token_count['received']}")
+        logger.debug("Received %s tokens. Total received: %s", count, self._token_count["received"])
 
     def setup(self, **kwargs):
         """

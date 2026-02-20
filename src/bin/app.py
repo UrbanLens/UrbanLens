@@ -33,6 +33,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import re
 import subprocess
 import sys
@@ -125,7 +126,7 @@ class App(scripts.App):
             raise ValueError(f'package_name must be a single package. "{package_name}" contains more than one package.')
 
         # Install the package, capture output so that we can determine the version number of the package
-        logger.info(f"Installing {package_name}...")
+        logger.info("Installing %s...", package_name)
         install_output = subprocess.check_output(
             [sys.executable, "-m", "pip", "install", package_name],
             stderr=subprocess.STDOUT,
@@ -136,17 +137,17 @@ class App(scripts.App):
             return False
 
         if not (version := matches.group(1).split("-")[-1]):
-            logger.warning(f"Could not determine version number for {package_name}")
+            logger.warning("Could not determine version number for %s", package_name)
             return False
 
         # Ensure version is a valid version number
         if not re.match(r"^\d+\.\d+\.\d+$", version):
-            logger.warning(f"Version number for {package_name} is not valid: {version}")
+            logger.warning("Version number for %s is not valid: %s", package_name, version)
             return False
 
         # Add package (and version #) to requirements.txt.
-        logger.info(f"Adding {package_name} to requirements.txt...")
-        with open("requirements.txt", "a") as f:
+        logger.info("Adding %s to requirements.txt...", package_name)
+        with Path("requirements.txt").open("a", encoding="utf-8") as f:
             f.write(f"{package_name}>={version}\n")
 
         return True
@@ -226,12 +227,12 @@ def main():
 
         except ValueError as ve:
             # One of the options contains bad data. Print the message and exit.
-            logger.error(f"Bad option provided: {ve}")
+            logger.error("Bad option provided: %s", ve)
             exit()
 
         except FileNotFoundError as fnf:
             # The options were okay, but we can't find a necessary file (probably the executable)
-            logger.error(f"Unable to find a necessary file: {fnf}")
+            logger.error("Unable to find a necessary file: %s", fnf)
             exit()
 
         try:
@@ -244,7 +245,7 @@ def main():
             )
 
             if result is not None:
-                logger.debug(f"App returned ({result})")
+                logger.debug("App returned (%s)", result)
         except UnsupportedCommandError:
             logger.error("Error: Unknown action. Try --help to see how to call this script.")
             exit()

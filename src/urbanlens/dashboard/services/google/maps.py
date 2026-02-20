@@ -240,7 +240,7 @@ class GoogleMapsGateway(Gateway):
                         },
                     )
 
-            logger.debug(f"Converted {len(pins)} pins from KML file to dicts.")
+            logger.debug("Converted %s pins from KML file to dicts.", len(pins))
         except Exception as e:
             logger.error("Failed to import pins from KML: %s", str(e))
             raise
@@ -274,7 +274,7 @@ class GoogleMapsGateway(Gateway):
                         },
                     )
 
-            logger.info(f"Converted {len(pins)} pins from JSON file to dicts.")
+            logger.info("Converted %s pins from JSON file to dicts.", len(pins))
 
         except Exception as e:
             logger.error("Failed to import pins from JSON: %s", str(e))
@@ -307,7 +307,7 @@ class GoogleMapsGateway(Gateway):
                     },
                 )
 
-            logger.info(f"Converted {len(pins)} pins from CSV file to dicts.")
+            logger.info("Converted %s pins from CSV file to dicts.", len(pins))
         except Exception as e:
             logger.error("Failed to import pins from CSV: %s", str(e))
             raise

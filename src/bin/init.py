@@ -61,7 +61,7 @@ class DjangoProjectInitializer:
 
         # Get database details from environment variables
         self.db_host = os.environ.get("UL_DB_HOST", "localhost")
-        self.db_port = int(os.environ.get("UL_DB_PORT", 5432))
+        self.db_port = int(os.environ.get("UL_DB_PORT", "5432"))
         self.db_name = os.environ.get("UL_DB_NAME", "UrbanLens")
         self.db_user = os.environ.get("UL_DB_USER", "postgres")
         self.db_pass = os.environ.get("UL_DB_PASS", "postgres")
@@ -141,7 +141,7 @@ class DjangoProjectInitializer:
         # Ensure environment is a known option
         if value not in ["development", "test", "production"]:
             safe_value = re.sub(r"[^a-zA-Z0-9_-]", "", value)
-            logger.error(f"Invalid environment: {safe_value}")
+            logger.error("Invalid environment: %s", safe_value)
             raise UnrecoverableError(f"Invalid environment: {safe_value}")
 
         self._environment = value
@@ -200,13 +200,13 @@ class DjangoProjectInitializer:
             return
 
         try:
-            with Path("/app/.env-sample").open() as sample_file:
+            with Path("/app/.env-sample").open(encoding="utf-8") as sample_file:
                 sample_data = sample_file.read()
-            with Path("/app/.env").open("w") as new_file:
+            with Path("/app/.env").open("w", encoding="utf-8") as new_file:
                 new_file.write(sample_data)
             logger.info("Copied .env-sample to .env.")
         except OSError as e:
-            logger.error(f"Error copying .env-sample: {e}")
+            logger.error("Error copying .env-sample: %s", e)
             raise UnrecoverableError from e
 
         # Check that it now exists
@@ -229,7 +229,7 @@ class DjangoProjectInitializer:
 
         """
         try:
-            with Path("/app/.env").open() as file:
+            with Path("/app/.env").open(encoding="utf-8") as file:
                 data = file.readlines()
 
             for i, line in enumerate(data):
@@ -238,11 +238,11 @@ class DjangoProjectInitializer:
                 elif line.startswith("GIT_EMAIL="):
                     data[i] = f"GIT_EMAIL={email}\n"
 
-            with Path("/app/.env").open("w") as file:
+            with Path("/app/.env").open("w", encoding="utf-8") as file:
                 file.writelines(data)
             logger.info("Updated git username and email in .env.")
         except OSError as e:
-            logger.error(f"Error updating .env: {e}")
+            logger.error("Error updating .env: %s", e)
             raise UnrecoverableError from e
 
         # Check that it now exists
@@ -286,14 +286,14 @@ class DjangoProjectInitializer:
         for frontend_dir in dirs:
             if not frontend_dir.exists():
                 frontend_dir.mkdir(parents=True, exist_ok=True)
-                logger.debug(f"Created directory {frontend_dir}")
+                logger.debug("Created directory %s", frontend_dir)
 
         # Ensure entrypoint (dashboard/frontend/static/dashboard/js/index.js) exists
         entry = APP_DIR / "dashboard" / "frontend" / "static" / "dashboard" / "js" / "index.js"
         if not entry.exists():
             with entry.open("w") as file:
                 file.write("")
-            logger.debug(f"Created empty file {entry}")
+            logger.debug("Created empty file %s", entry)
 
         self.run_command(["npm", "run", "sass"], "compiling sass", raise_error=False)
 
@@ -393,13 +393,13 @@ class DjangoProjectInitializer:
             return
 
         try:
-            with Path(pgpass).open("w") as file:
+            with Path(pgpass).open("w", encoding="utf-8") as file:
                 file.write(f"{self.db_host}:{self.db_port}:*:{self.db_user}:{self.db_pass}\n")
             os.chmod(pgpass, 0o600)
             # file_contents = open(pgpass, 'r').read()
             # logger.debug('Created .pgpass file: %s', file_contents)
         except OSError as e:
-            logger.error(f"Error creating .pgpass file: {e}")
+            logger.error("Error creating .pgpass file: %s", e)
             raise UnrecoverableError from e
 
     def check_dependencies(self):

@@ -275,12 +275,12 @@ class Db:
             _stdout, stderr = process.communicate()
 
             if process.returncode != 0:
-                logger.error(f"pg_dump failed with error: {stderr.decode('utf-8')}")
+                logger.error("pg_dump failed with error: %s", stderr.decode("utf-8"))
 
             return process.pid
 
         except Exception as e:
-            logger.error(f"Error backing up database: {e}")
+            logger.error("Error backing up database: %s", e)
 
         return -1
 

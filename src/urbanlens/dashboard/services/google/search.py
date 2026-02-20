@@ -23,6 +23,7 @@
 *        2024-01-07     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from __future__ import annotations
 
 import logging
@@ -96,12 +97,12 @@ class GoogleCustomSearchGateway(Gateway):
             if not term:
                 continue
 
-            term = term.strip()
-            if term.startswith(('"', "(")):
-                query_terms.append(term)
+            normalized = term.strip()
+            if normalized.startswith(('"', "(")):
+                query_terms.append(normalized)
             else:
                 # sanitize existing quotes in term
-                value = term.replace('"', '\\"')
+                value = normalized.replace('"', '\\"')
                 query_terms.append(f'"{value}"')
 
         return query_terms
@@ -138,12 +139,12 @@ class GoogleCustomSearchGateway(Gateway):
 
     def build_query(self, terms: str | list[str | list[str]]) -> str:
         """
-        Accepts input like: 
+        Accepts input like:
         [
             'or_term1',
             'or_term2',
             [
-                'and_term3', 
+                'and_term3',
                 'and_term4'
             ],
             'or_term5',
@@ -160,5 +161,5 @@ class GoogleCustomSearchGateway(Gateway):
                 query_terms.append(self.build_query_and(term))
             else:
                 query_terms.append(term)
-            
+
         return self.build_query_or(query_terms)

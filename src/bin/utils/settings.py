@@ -99,7 +99,7 @@ class Settings:
 
         if os.path.exists(filepath):
             # If it exists, then open it
-            with open(filepath) as file:
+            with open(filepath, encoding="utf-8") as file:
                 # Load the contents into a variable
                 cls._settings = yaml.load(file, Loader=SafeLoader)
         else:

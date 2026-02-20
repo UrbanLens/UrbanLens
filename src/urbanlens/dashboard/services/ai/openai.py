@@ -99,7 +99,7 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
                 max_tokens=self.max_tokens,
             )
         except openai.BadRequestError as e:
-            logger.error(f"Error sending a message to OpenAI: {e}")
+            logger.error("Error sending a message to OpenAI: %s", e)
             return None
 
         return response
@@ -122,7 +122,7 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
             self.receive_tokens(body)
             logger.debug("AI Response: %s", body)
         except Exception as e:
-            logger.error(f"Error retrieving response: {e}")
+            logger.error("Error retrieving response: %s", e)
             return None
 
         return body

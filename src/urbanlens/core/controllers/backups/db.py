@@ -57,10 +57,10 @@ class DatabaseBackup:
 
         try:
             os.makedirs(self.backup_dir)
-            logger.info(f"Created backup directory: {self.backup_dir}")
+            logger.info("Created backup directory: %s", self.backup_dir)
             return True
         except OSError as e:
-            logger.error(f"Failed to create backup directory: {self.backup_dir}. Error: {e}")
+            logger.error("Failed to create backup directory: %s. Error: %s", self.backup_dir, e)
 
         return False
 
@@ -77,9 +77,9 @@ class DatabaseBackup:
                 file_path = os.path.join(self.backup_dir, file)
                 try:
                     os.remove(file_path)
-                    logger.info(f"Removed old backup: {file}")
+                    logger.info("Removed old backup: %s", file)
                 except OSError as e:
-                    logger.error(f"Failed to remove old backup: {file}. Error: {e}")
+                    logger.error("Failed to remove old backup: %s. Error: %s", file, e)
 
     def run(self) -> bool:
         # TODO temporarily disable
@@ -102,14 +102,14 @@ class DatabaseBackup:
 
         try:
             subprocess.run(pg_dump_command, check=True)
-            logger.info(f"Backup completed successfully: {backup_filename}")
+            logger.info("Backup completed successfully: %s", backup_filename)
 
             # Update the last backup date
             datetime.now(tz=settings.TIME_ZONE).date()
 
             self.purge_old_backups()
         except subprocess.CalledProcessError as e:
-            logger.error(f"Error occurred while performing database backup: {e}")
+            logger.error("Error occurred while performing database backup: %s", e)
             return False
 
         return True
@@ -129,7 +129,7 @@ class DatabaseBackup:
                 self.create_backup_dir()
                 result = self.run()
             except Exception as e:
-                logger.error(f"Error occurred while scheduling database backup: {e}")
+                logger.error("Error occurred while scheduling database backup: %s", e)
                 return False
 
         return result
