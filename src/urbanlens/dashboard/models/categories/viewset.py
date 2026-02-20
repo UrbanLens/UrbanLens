@@ -24,9 +24,12 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
+
 from rest_framework import viewsets
+
 from urbanlens.dashboard.models.categories.model import Category
 from urbanlens.dashboard.models.categories.serializer import CategorySerializer
+
 
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()

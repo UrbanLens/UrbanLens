@@ -24,26 +24,28 @@
 *********************************************************************************************************************"""
 import django_filters
 from django_filters import CharFilter, NumberFilter
+
 from urbanlens.dashboard.models.location.model import Location
 
+
 class LocationFilter(django_filters.FilterSet):
-    categories = CharFilter(method='by_category')
-    by_latitude = NumberFilter(method='by_latitude')
-    by_longitude = NumberFilter(method='by_longitude')
-    by_name = CharFilter(method='by_name')
-    by_created_year = NumberFilter(method='by_created_year')
-    by_updated_year = NumberFilter(method='by_updated_year')
+    categories = CharFilter(method="by_category")
+    by_latitude = NumberFilter(method="by_latitude")
+    by_longitude = NumberFilter(method="by_longitude")
+    by_name = CharFilter(method="by_name")
+    by_created_year = NumberFilter(method="by_created_year")
+    by_updated_year = NumberFilter(method="by_updated_year")
 
     class Meta:
         model = Location
         fields = [
-            'name',
-            'categories',
-            'latitude',
-            'longitude',
-            'by_latitude',
-            'by_longitude',
-            'by_name',
-            'by_created_year',
-            'by_updated_year',
+            "name",
+            "categories",
+            "latitude",
+            "longitude",
+            "by_latitude",
+            "by_longitude",
+            "by_name",
+            "by_created_year",
+            "by_updated_year",
         ]

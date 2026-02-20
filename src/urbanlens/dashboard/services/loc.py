@@ -25,6 +25,7 @@
 *********************************************************************************************************************"""
 import requests
 
+
 class LOCJsonGateway:
     """
     Gateway for accessing JSON data from the Library of Congress.
@@ -39,7 +40,7 @@ class LOCJsonGateway:
         Search the Library of Congress collections.
         """
         url = f"{self.base_url}/search.json"
-        params = {'q': query}
+        params = {"q": query}
         response = self.session.get(url, params=params)
         response.raise_for_status()
         return response.json()

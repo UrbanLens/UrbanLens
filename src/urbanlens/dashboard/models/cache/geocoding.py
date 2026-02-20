@@ -26,13 +26,16 @@
 
 # Generic imports
 from __future__ import annotations
+
 # Django Imports
 from django.db.models import Index
+
 # 3rd Party Imports
 from django.db.models.fields import CharField, DecimalField
 
 # App Imports
 from urbanlens.dashboard.models import abstract
+
 
 class GeocodedLocation(abstract.Model):
     """
@@ -44,9 +47,9 @@ class GeocodedLocation(abstract.Model):
     json_response = CharField(max_length=50000, null=True, blank=True)
 
     class Meta(abstract.Model.Meta):
-        db_table = 'dashboard_geocoded_locations'
-        get_latest_by = 'updated'
+        db_table = "dashboard_geocoded_locations"
+        get_latest_by = "updated"
         indexes = [
-            Index(fields=['latitude', 'longitude']),
-            Index(fields=['place_name'])
+            Index(fields=["latitude", "longitude"]),
+            Index(fields=["place_name"]),
         ]

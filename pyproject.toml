@@ -667,36 +667,164 @@ ignore_patterns = ["src/scripts/db.py"]
 [tool.ruff]
 # Basic configuration options
 line-length = 250
-include = ["**/*.py"]
+
+target-version = "py312"
+respect-gitignore = true
+include = ["**/*.py", "**/*.pyi"]
 exclude = [
-    "node_modules",
-    "venv",
-    "env",
+    "node_modules/",
+    ".venv/",
+    ".venv_windows/",
+    ".direnv/",
     ".env",
-    ".venv",
     "manage.py",
     ".vscode",
     "pgsql",
     "migrations/",
     "logs/",
-    "config/",
-    "downloads/",
-    "docs/",
-    "migrations/",
+    "__pycache__",
 ]
-
 # Advanced configuration options
 extend-exclude = [
     "migrations",
     "settings",
-    "downloads",
     "logs",
     "node_modules",
-    "webpack",
-    "_pycache_",
+    "__pycache__",
     "tests",
     "__init__.py",
 ]
+#max-complexity = 10
+output-format = 'concise'
+
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+
+[tool.ruff.lint]
+# "select = ['ALL']" turns on essentially everything Ruff knows about.
+# Expect to ignore a handful that conflict with your style or are too noisy.
+select = ["ALL"]
+
+# Turn on preview rules (newer checks; can be a bit more volatile)
+preview = true
+
+ignore = [
+    # Keep these off
+    "TRY300",  # Consider moving to else -- this discourages final unindented returns for future proofing
+    "ARG002",  # unused method argument: `kwargs`
+    "E501",    # Line too long
+    "FIX002",  # TODOs
+    "TD002",   # Missing author in TODO
+    "TD003",   # Missing issue link for this TODO
+    "TD004",   # Missing colon in TODO
+    "ERA001",  # Found commented out code
+    "UP040",   # Using type alias instead of type keyword
+    "PLR6301", # Method could be a function, class method, or static
+    "DJ001",   # Avoid null=True on CharField
+    "PT009",   # Use a regular assert instead of unittest-style assertEqual
+    "EM101",   # Exception must not use a string literal, assign to variable first
+    "EM102",   # Exception must not use an f-string literal, assign to variable first
+    "PLE1205", # Too many arguments for logging format string
+    "PLR0904", # too-many-public-methods
+    "PLR0911", # too-many-return-statements
+    "PLR0912", # too-many-branches
+    "PLR0913", # too-many-arguments
+    "PLR0914", # too-many-locals
+    "PLR0915", # too-many-statements
+    "PLR1702", # too many nested blocks
+    "D2",      # One-line docstring..., 1 blank line, etc
+    "D400",    # first line should...
+    "D401",    # first line should...
+    "D415",    # first line should...
+    "CPY001",  # Missing copyright notice at top of file
+    "DOC502",  # This discourages reporting raises from ancestors
+    "SIM108",  # Use ternary operator insead of if-else
+    "TRY003",  # Avoid specifying long messages outside the exception class
+    "F401",    # unused imports. Enabling this will remove TYPE_CHECKING imports incorrectly.
+    "W293",    # blank line contains whitespace
+    "W391",    # blank line at end of file
+    # Ambivalent about turning these on/off
+    "C901", # function is too complex
+    "B019", # possible memleak
+    # Fix issues and turn these on
+    "D1",      # Missing docstring...
+    "S321",    # FTP functions are insecure
+    "S402",    # ftplib is insecure
+    "S404",    # subprocess module is potentially insecure
+    "S603",    # subprocess Call: check for execution of untrusted input
+    "S607",    # potential executable path
+    "T201",    # Print found
+    "UP022",   # Prefer capture_output over stdout and stderr -> PIPE
+    "PLR2004", # magic values in tests
+    "ANN",     # type annotation enforcement
+    "DOC",     # docstring rules
+    "A004",
+    "PLC0415",
+    "S113",
+    "DTZ007",
+    "TRY",
+    "W2",
+    "RET",
+    "BLE",
+    "PIE",
+    "PLW",
+    "G00",
+    "PLR",
+    "B02",
+    "INP",
+    "N806",
+    "ISC",
+    "SIM",
+    "RUF",
+    "D",
+    "UP",
+    "A001",
+    "FBT",
+    "DTZ",
+    "PYI",
+    "F811",
+    "ARG",
+    "SLF",
+    "F841",
+    "PTH",
+    "B904",
+    "N8",
+    "S105",
+    "RSE102",
+    "S",
+    "FURB",
+] # A sane ignore set for many modern codebases.
+
+[tool.ruff.lint.per-file-ignores]
+"test_*.py" = [
+    "ANN",     # type annotation enforcement
+    "D",       # docstring rules
+    "PLR09",   # too-many-...
+    "SLF001",  # private member access
+    "S101",    # assert usage
+    "PLR2004", # magic values in tests
+]
+"**/bin/**/*.py" = [
+    # Fix issues and turn back on
+    "E402", # module level import not at top of file - allow adjusting path for scripts
+    "ANN",  # type annotation enforcement
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["urbanlens"]
+combine-as-imports = true
+force-sort-within-sections = true
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 6
 
 [dependency-groups]
 dev = [

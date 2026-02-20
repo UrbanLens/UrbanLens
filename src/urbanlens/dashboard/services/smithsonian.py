@@ -25,9 +25,11 @@
 *********************************************************************************************************************"""
 
 from django.core.cache import cache
-from urbanlens.dashboard.services.gateway import Gateway
 import requests
+
+from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
+
 
 class SmithsonianGateway(Gateway):
     """
@@ -40,7 +42,7 @@ class SmithsonianGateway(Gateway):
 
     def get_data(self, search_term):
         # Create a unique cache key based on the search term
-        cache_key = f'smithsonian_{search_term}'
+        cache_key = f"smithsonian_{search_term}"
         # Try to get the data from the cache
         data = cache.get(cache_key)
         # If the data is not in the cache
@@ -48,7 +50,7 @@ class SmithsonianGateway(Gateway):
             params = {
                 "api_key": self.api_key,
                 "q": search_term,
-                "online_media_type": "Images"
+                "online_media_type": "Images",
             }
             response = requests.get(self.base_url, params=params)
             response.raise_for_status()  # Will raise an HTTPError for bad requests
@@ -70,11 +72,11 @@ class SmithsonianGateway(Gateway):
 
     def parse_response(self, data):
         images = []
-        for record in data.get('response', {}).get('rows', []):
+        for record in data.get("response", {}).get("rows", []):
             image_data = {
-                'title': record.get('title'),
-                'url': record.get('content', {}).get('descriptiveNonRepeating', {}).get('online_media', {}).get('media', [{}])[0].get('content'),
-                'thumbnail': record.get('content', {}).get('descriptiveNonRepeating', {}).get('online_media', {}).get('media', [{}])[0].get('thumbnail')
+                "title": record.get("title"),
+                "url": record.get("content", {}).get("descriptiveNonRepeating", {}).get("online_media", {}).get("media", [{}])[0].get("content"),
+                "thumbnail": record.get("content", {}).get("descriptiveNonRepeating", {}).get("online_media", {}).get("media", [{}])[0].get("thumbnail"),
             }
             images.append(image_data)
         return images

@@ -26,20 +26,20 @@
 
 # Generic imports
 from __future__ import annotations
+
 import logging
 from typing import TYPE_CHECKING
+
 # Django Imports
 from django.db.models import Index
+
 # 3rd Party Imports
 from django.db.models.fields import CharField
+
 # App Imports
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.notifications.meta import Status, Importance, NotificationType
+from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.queryset import Manager
-
-if TYPE_CHECKING:
-	# Imports required for type checking, but not program execution.
-	pass
 
 #
 # Set up logging for this module. __name__ includes the namespace (e.g. dashboard.models.cases).
@@ -48,36 +48,40 @@ if TYPE_CHECKING:
 #
 logger = logging.getLogger(__name__)
 
+
 class NotificationLog(abstract.Model):
-	"""
-	Records important notifications to check on later.
-	"""
-	#id = BigAutoField() # primary-key, auto-generated, can also be referred to by {self.pk} or {queryset.filter(pk=...)}
-	status = CharField(max_length=17, choices=Status.choices, default=Status.UNREAD)
-	importance = CharField(max_length=17, choices=Importance.choices, default=Importance.LOWEST)
-	notificaiton_type = CharField(max_length=17, choices=NotificationType.choices, default=NotificationType.ERROR)
-	message = CharField(max_length=50000, blank=True)
+    """
+    Records important notifications to check on later.
+    """
 
-	objects = Manager()
+    # id = BigAutoField() # primary-key, auto-generated, can also be referred to by {self.pk} or {queryset.filter(pk=...)}
+    status = CharField(max_length=17, choices=Status.choices, default=Status.UNREAD)
+    importance = CharField(max_length=17, choices=Importance.choices, default=Importance.LOWEST)
+    notificaiton_type = CharField(max_length=17, choices=NotificationType.choices, default=NotificationType.ERROR)
+    message = CharField(max_length=50000, blank=True)
 
-	class Meta(abstract.Model.Meta):
-		"""
-		Metadata about this model (such as the table name)
+    objects = Manager()
 
-		Attributes:
-			db_table (str):
-				The name of the table in the DB
-			unique_together (list of str):
-				A list of attributes which form unique keys
-			indexes (list of Index):
-				A list of indexes to create on the table
-		"""
-		# Tell django where to find the table (in this schema)
-		db_table = 'dashboard_notifications'
-		get_latest_by = 'updated'
+    class Meta(abstract.Model.Meta):
+        """
+        Metadata about this model (such as the table name)
 
-		indexes = [
-			Index(fields=['status']),
-			Index(fields=['importance']),
-			Index(fields=['notificaiton_type']),
-		]
+        Attributes:
+                db_table (str):
+                        The name of the table in the DB
+                unique_together (list of str):
+                        A list of attributes which form unique keys
+                indexes (list of Index):
+                        A list of indexes to create on the table
+
+        """
+
+        # Tell django where to find the table (in this schema)
+        db_table = "dashboard_notifications"
+        get_latest_by = "updated"
+
+        indexes = [
+            Index(fields=["status"]),
+            Index(fields=["importance"]),
+            Index(fields=["notificaiton_type"]),
+        ]

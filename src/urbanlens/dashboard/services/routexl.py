@@ -25,7 +25,9 @@
 *********************************************************************************************************************"""
 import requests
 from requests.auth import HTTPBasicAuth
+
 from urbanlens.dashboard.services.gateway import Gateway
+
 
 class RouteXLGateway(Gateway):
     """
@@ -46,6 +48,7 @@ class RouteXLGateway(Gateway):
 
         Returns:
             Optimized route.
+
         """
         url = f"{self.base_url}/tour"
         data = {"locations": pins}

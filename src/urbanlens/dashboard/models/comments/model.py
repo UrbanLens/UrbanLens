@@ -24,9 +24,12 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
+
 from django.db.models import CASCADE, CharField, ForeignKey
+
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.comments.queryset import CommentManager
+
 
 class Comment(abstract.Model):
     """
@@ -35,18 +38,18 @@ class Comment(abstract.Model):
     text = CharField(max_length=500)
 
     pin = ForeignKey(
-        'dashboard.Pin',
+        "dashboard.Pin",
         on_delete=CASCADE,
-        related_name='comments'
+        related_name="comments",
     )
     profile = ForeignKey(
-        'dashboard.Profile',
+        "dashboard.Profile",
         on_delete=CASCADE,
-        related_name='comments'
+        related_name="comments",
     )
 
     objects = CommentManager()
 
     class Meta(abstract.Model.Meta):
-        db_table = 'dashboard_comments'
-        get_latest_by = 'updated'
+        db_table = "dashboard_comments"
+        get_latest_by = "updated"

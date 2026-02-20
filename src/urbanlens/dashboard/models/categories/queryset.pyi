@@ -24,10 +24,11 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from django.db import models
+
 from urbanlens.dashboard.models.abstract import models
 
 class CategoryQuerySet(models.QuerySet):
-    pass
+    ...
 
 class CategoryManager(models.Manager, CategoryQuerySet):
-    def all(self) -> "CategoryQuerySet": ...
+    def all(self) -> CategoryQuerySet: ...

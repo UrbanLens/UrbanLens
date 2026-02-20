@@ -23,12 +23,12 @@
 *        2024-03-22     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from __future__ import annotations
 from django.db import models
+
 from urbanlens.dashboard.models.abstract import models
 
 class CommentQuerySet(models.QuerySet):
-    pass
+    ...
 
 class CommentManager(models.Manager, CommentQuerySet):
-    def all(self) -> "CommentQuerySet": ...
+    def all(self) -> CommentQuerySet: ...

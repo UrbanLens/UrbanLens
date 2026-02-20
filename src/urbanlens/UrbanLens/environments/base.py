@@ -24,12 +24,15 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-import logging
 from abc import ABC
+import logging
+
 from pydantic import BaseModel, Field, validator
-from urbanlens.UrbanLens.environments.types import EnvironmentTypes, DebugTypes
+
+from urbanlens.UrbanLens.environments.types import DebugTypes, EnvironmentTypes
 
 logger = logging.getLogger(__name__)
+
 
 class BaseEnvironment(BaseModel, ABC):
     name: str = Field(default="Unknown Environment")
@@ -68,8 +71,8 @@ class BaseEnvironment(BaseModel, ABC):
     def __eq__(self, other):
         if isinstance(other, EnvironmentTypes):
             return self.env_type == other
-        elif isinstance(other, str):
+        if isinstance(other, str):
             return self.env_type.value.lower() == other.lower()
-        elif isinstance(other, BaseEnvironment):
+        if isinstance(other, BaseEnvironment):
             return self.env_type == other.env_type
         return NotImplemented

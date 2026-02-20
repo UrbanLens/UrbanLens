@@ -25,10 +25,12 @@
 *********************************************************************************************************************"""
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+
 from urbanlens.dashboard.models.location import Location
 
+
 @receiver(post_save, sender=Location)
-def suggest_and_add_categories(sender, instance : Location, created, **kwargs):
+def suggest_and_add_categories(sender, instance: Location, created, **kwargs):
     """
     Suggests categories for a newly created Location instance and adds them.
 
@@ -37,8 +39,9 @@ def suggest_and_add_categories(sender, instance : Location, created, **kwargs):
         instance (Location): The actual instance being saved.
         created (bool): True if a new record was created.
         **kwargs: Additional keyword arguments.
+
     """
-    if created: 
+    if created:
         # Perform the category suggestion and addition only for new instances
         instance.suggest_category(append_suggestion=True)
         instance.save()

@@ -25,14 +25,15 @@
 *********************************************************************************************************************"""
 import logging
 
-from django.shortcuts import render
-from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import HttpResponse
+from django.shortcuts import render
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.models.trips import Trip
 
 logger = logging.getLogger(__name__)
+
 
 class TripController(LoginRequiredMixin, GenericViewSet):
     """
@@ -44,8 +45,8 @@ class TripController(LoginRequiredMixin, GenericViewSet):
         """
         View the trip page
         """
-        trip = Trip.objects.get(id=kwargs['trip_id'])
-        return render(request, 'dashboard/pages/trip/index.html', { 'trip': trip })
+        trip = Trip.objects.get(id=kwargs["trip_id"])
+        return render(request, "dashboard/pages/trip/index.html", {"trip": trip})
 
     def get_trip_data(self, trip_id):
         """

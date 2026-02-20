@@ -26,27 +26,32 @@
 
 # Generic imports
 from __future__ import annotations
-from typing import TYPE_CHECKING
+
 import logging
-# Django Imports
-from django.db.models import Index
-from django.contrib.gis.geos import Point
+from typing import TYPE_CHECKING
+
 from django.contrib.gis.db.models import PointField
+from django.contrib.gis.geos import Point
+
+# Django Imports
+from django.db.models import Index, ManyToManyField
+
 # 3rd Party Imports
 from django.db.models.fields import CharField, DecimalField
-from django.db.models import ManyToManyField
 
-# App Imports
-from urbanlens.UrbanLens.settings.app import settings
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.location.queryset import LocationManager
 from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+
+# App Imports
+from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
     # Imports required for type checking, but not program execution.
     from urbanlens.dashboard.models.categories.model import Category
 
 logger = logging.getLogger(__name__)
+
 
 class Location(abstract.Model):
     """
@@ -65,7 +70,7 @@ class Location(abstract.Model):
     administrative_area_level_1 = CharField(max_length=30, null=True, blank=True)
     administrative_area_level_2 = CharField(max_length=50, null=True, blank=True)
     administrative_area_level_3 = CharField(max_length=50, null=True, blank=True)
-    country = CharField(max_length=20, default='United States')
+    country = CharField(max_length=20, default="United States")
     zipcode = CharField(max_length=10, null=True, blank=True)
     zipcode_suffix = CharField(max_length=10, null=True, blank=True)
 
@@ -73,16 +78,16 @@ class Location(abstract.Model):
     cached_place_name = CharField(max_length=255, null=True, blank=True)
 
     categories = ManyToManyField(
-        'dashboard.Category',
+        "dashboard.Category",
         blank=True,
         default=list,
-        related_name='locations'
+        related_name="locations",
     )
     tags = ManyToManyField(
-        'dashboard.Tag',
+        "dashboard.Tag",
         blank=True,
         default=list,
-        related_name='locations'
+        related_name="locations",
     )
 
     objects = LocationManager()
@@ -103,9 +108,9 @@ class Location(abstract.Model):
         Returns the address of the location.
         """
         # Do this, but skip over any attributes that are None
-        #address = f"{self.street_number} {self.route}, {self.locality}, {self.administrative_area_level_1} {self.zipcode}"
+        # address = f"{self.street_number} {self.route}, {self.locality}, {self.administrative_area_level_1} {self.zipcode}"
 
-        address = ''
+        address = ""
         if self.street_number:
             address += f"{self.street_number} "
         if self.route:
@@ -124,9 +129,9 @@ class Location(abstract.Model):
         """
         Returns the address of the location.
         """
-        #address = f"{self.street_number} {self.route}"
+        # address = f"{self.street_number} {self.route}"
         
-        address = ''
+        address = ""
         if self.street_number:
             address += f"{self.street_number} "
         if self.route:
@@ -139,8 +144,8 @@ class Location(abstract.Model):
         """
         Returns the address of the location.
         """
-        #address = f"{self.street_number} {self.route}, {self.locality}"
-        address = ''
+        # address = f"{self.street_number} {self.route}, {self.locality}"
+        address = ""
         if self.street_number:
             address += f"{self.street_number} "
         if self.route:
@@ -158,7 +163,7 @@ class Location(abstract.Model):
         return self.administrative_area_level_1
     
     @state.setter
-    def state(self, value : str):
+    def state(self, value: str):
         """
         Sets the state of the location.
         """
@@ -172,7 +177,7 @@ class Location(abstract.Model):
         return self.administrative_area_level_2
     
     @county.setter
-    def county(self, value : str):
+    def county(self, value: str):
         """
         Sets the county of the location.
         """
@@ -186,7 +191,7 @@ class Location(abstract.Model):
         return self.locality
     
     @city.setter
-    def city(self, value : str):
+    def city(self, value: str):
         """
         Sets the city of the location.
         """
@@ -199,17 +204,17 @@ class Location(abstract.Model):
             if review:
                 return review.rating
         except Exception:
-            logger.debug('no rating found for location %s', self.id)
+            logger.debug("no rating found for location %s", self.id)
 
         return 0
     
     def get_place_name(self) -> str | None:
         result = GoogleGeocodingGateway(settings.google_maps_api_key).get_place_name(self.latitude, self.longitude)
         
-        # We don't want to keep making requests to the API for results with no info, 
+        # We don't want to keep making requests to the API for results with no info,
         # so cache a string instead of None
         if not result:
-            result = 'No Information Available'
+            result = "No Information Available"
 
         if not self.cached_place_name:
             self.cached_place_name = result
@@ -220,19 +225,19 @@ class Location(abstract.Model):
         if not self.place_name:
             return False
         
-        if self.place_name == 'No Information Available':
+        if self.place_name == "No Information Available":
             return False
         
         return True
 
-    def change_category(self, category_id : int) -> None:
+    def change_category(self, category_id: int) -> None:
         from urbanlens.dashboard.models.categories.model import Category
         category = Category.objects.get(id=category_id)
         self.categories.clear()
         self.categories.add(category)
         self.save()
 
-    def suggest_category(self, append_suggestion : bool = False) -> str | None:
+    def suggest_category(self, append_suggestion: bool = False) -> str | None:
         from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
         instructions = "" +\
             "Look at the following information about a location and determine what category it belongs in. Example categories are:" +\
@@ -242,7 +247,7 @@ class Location(abstract.Model):
             "If the location does not fit into any of these categories, provide a new category that is broad enough to include a variety " +\
             "of similar urbex locations. Do not answer with the name of the location; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
 
-        prompt = ''
+        prompt = ""
         if self.address:
             prompt += f"address: {self.address}\n"
         if self.has_place_name():
@@ -263,7 +268,7 @@ class Location(abstract.Model):
             return None
         
         if len(category_name) < 3:
-            logger.debug('category too short: %s', category_name)
+            logger.debug("category too short: %s", category_name)
             return None
         
         if append_suggestion:
@@ -271,7 +276,7 @@ class Location(abstract.Model):
         
         return category_name
     
-    def add_category(self, category_name : str, save : bool = True) -> 'Category' | None:
+    def add_category(self, category_name: str, save: bool = True) -> Category | None:
         from urbanlens.dashboard.models.categories.model import Category
         category_name = category_name.lower()
         try:
@@ -283,7 +288,7 @@ class Location(abstract.Model):
                 return category
             
         except Exception as e:
-            logger.error('failed to add category %s to location -> %s', category_name, e)
+            logger.error("failed to add category %s to location -> %s", category_name, e)
         
         return None
 
@@ -299,16 +304,16 @@ class Location(abstract.Model):
         Returns a dictionary that can be JSON serialized.
         """
         return {
-            'id': self.id,
-            'name': self.name,
-            'place_name': self.place_name,
-            'description': self.description,
-            'address': self.address,
-            'city': self.city,
-            'state': self.state,
-            'country': self.country,
-            'latitude': float(self.latitude),
-            'longitude': float(self.longitude),
+            "id": self.id,
+            "name": self.name,
+            "place_name": self.place_name,
+            "description": self.description,
+            "address": self.address,
+            "city": self.city,
+            "state": self.state,
+            "country": self.country,
+            "latitude": float(self.latitude),
+            "longitude": float(self.longitude),
         }
     
     def save(self, *args, **kwargs):
@@ -319,14 +324,14 @@ class Location(abstract.Model):
         super().save(*args, **kwargs)
 
     class Meta(abstract.Model.Meta):
-        db_table = 'dashboard_locations'
-        get_latest_by = 'updated'
+        db_table = "dashboard_locations"
+        get_latest_by = "updated"
 
         indexes = [
-            Index(fields=['latitude', 'longitude']),
-            Index(fields=['name']),
+            Index(fields=["latitude", "longitude"]),
+            Index(fields=["name"]),
         ]
 
         unique_together = [
-            ['latitude', 'longitude']
+            ["latitude", "longitude"],
         ]

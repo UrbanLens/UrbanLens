@@ -24,13 +24,16 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
+
 import logging
+
 from urbanlens.dashboard.services.ai.gateway import LLMGateway
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'tgi'
+DEFAULT_MODEL = "tgi"
+
 
 class HuggingFaceGateway(LLMGateway):
     

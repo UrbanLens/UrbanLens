@@ -24,13 +24,14 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from django import forms
+
 from urbanlens.dashboard.models.profile.model import Profile
 
-
 RATING_CHOICES = [(i, str(i)) for i in range(1, 6)]  # Assuming the rating is from 1 to 5
+
 
 class ProfileForm(forms.ModelForm):
     class Meta:
         model = Profile
-        fields = ['avatar', 'instagram', 'discord']
+        fields = ["avatar", "instagram", "discord"]
 

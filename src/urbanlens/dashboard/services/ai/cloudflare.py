@@ -24,18 +24,24 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
-from typing import Any, Dict, TypeVar
+
 import logging
+from typing import TYPE_CHECKING, Any, Dict, TypeVar
+
 import requests
-from urbanlens.UrbanLens.settings.app import settings
+
 from urbanlens.dashboard.services.ai.gateway import LLMGateway
-from urbanlens.dashboard.services.ai.message import MessageQueue
+from urbanlens.UrbanLens.settings.app import settings
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.services.ai.message import MessageQueue
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = '@cf/mistral/mistral-7b-instruct-v0.1'
+DEFAULT_MODEL = "@cf/mistral/mistral-7b-instruct-v0.1"
 
-Response = TypeVar("Response", bound=Dict[str, Any])
+Response = TypeVar("Response", bound=dict[str, Any])
+
 
 class CloudflareGateway(LLMGateway[Response]):
     
@@ -70,13 +76,14 @@ class CloudflareGateway(LLMGateway[Response]):
             Returns:
                 Response | None:
                     The response from the Cloudflare AI API, or None if the request fails.
+
         """
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        input = { "messages": message_queue.messages }
+        input = {"messages": message_queue.messages}
         url = f"{self.api_url}{self.model}"
 
         try:
-            logger.info('Cloudflare request: %s', input)
+            logger.info("Cloudflare request: %s", input)
             response = requests.post(url, headers=headers, json=input, timeout=60)
         except requests.RequestException as e:
             logger.error("Failed to send request to Cloudflare AI: %s", e)
@@ -91,7 +98,7 @@ class CloudflareGateway(LLMGateway[Response]):
             ic(response)
             ic(response.text)
             return None
-        except ValueError as ve:  
+        except ValueError as ve:
             logger.error("Failed to parse Cloudflare AI response as json: %s -> %s", response.status_code, ve)
             from icecream import ic
             ic(response)
@@ -109,6 +116,7 @@ class CloudflareGateway(LLMGateway[Response]):
             Returns:
                 str | None:
                     The response body, or None if the response could not be parsed.
+
         """
         try:
             body = response["result"]["response"]

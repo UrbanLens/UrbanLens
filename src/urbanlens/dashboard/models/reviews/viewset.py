@@ -24,17 +24,21 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 import logging
-from rest_framework import viewsets, status
-from rest_framework.response import Response
+
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.response import Response
+
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.reviews.serializer import ReviewSerializer
 
 logger = logging.getLogger(__name__)
 
+
 class ReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ReviewSerializer
-    basename = 'reviews'
+    basename = "reviews"
+
     def get_queryset(self):
         if not self.request:
             return Review.objects.none()
@@ -43,13 +47,13 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def create(self, request, pin_id, *args, **kwargs):
         logger.info(f"Create request initiated by user {request.user.id}")
         data = request.data
-        data['user'] = request.user
-        data['pin'] = pin_id
+        data["user"] = request.user
+        data["pin"] = pin_id
         # Check if the review already exists for the given pin and user
         review, created = Review.objects.get_or_create(
             user=request.user,
             pin_id=pin_id,
-            defaults=data
+            defaults=data,
         )
         if not created:
             for key, value in data.items():
@@ -63,16 +67,16 @@ class ReviewViewSet(viewsets.ModelViewSet):
         logger.info(f"Review created with id {serializer.data['id']}")
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=['patch'], url_path='create_or_update', url_name='create_or_update')
+    @action(detail=True, methods=["patch"], url_path="create_or_update", url_name="create_or_update")
     def create_or_update(self, request, pk=None):
         pin_id = pk
         data = request.data.copy()
-        data['pin_id'] = pin_id
+        data["pin_id"] = pin_id
 
         review, created = Review.objects.get_or_create(
             user=request.user,
             pin_id=pin_id,
-            defaults=data
+            defaults=data,
         )
 
         if created:
@@ -94,7 +98,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
             logger.error("User %s attempted to update review %s, but does not have permission", request.user.id, instance.id)
             return Response(status=status.HTTP_403_FORBIDDEN)
         data = request.data
-        data['user'] = request.user.id
+        data["user"] = request.user.id
         serializer = self.get_serializer(instance, data=data, partial=True)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)

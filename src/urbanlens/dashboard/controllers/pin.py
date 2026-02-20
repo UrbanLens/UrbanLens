@@ -26,24 +26,23 @@
 from datetime import datetime
 import logging
 
-from django.shortcuts import render
-from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render
 from requests.exceptions import HTTPError
-
-from rest_framework.viewsets import GenericViewSet
 from rest_framework.decorators import action
-from django.http import JsonResponse
 from rest_framework.exceptions import ValidationError
+from rest_framework.viewsets import GenericViewSet
 
-from urbanlens.UrbanLens.settings.app import settings
-from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.smithsonian import SmithsonianGateway
-from urbanlens.dashboard.services.google.search import GoogleCustomSearchGateway
-from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
+from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.services.google.search import GoogleCustomSearchGateway
+from urbanlens.dashboard.services.smithsonian import SmithsonianGateway
+from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
+
 
 class PinController(LoginRequiredMixin, GenericViewSet):
     """
@@ -53,9 +52,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         View the pin page
         """
-        pin = Pin.objects.get(id=kwargs['pin_id'])
+        pin = Pin.objects.get(id=kwargs["pin_id"])
 
-        return render(request, 'dashboard/pages/location/index.html', { 'pin': pin, 'google_maps_api_key': settings.google_maps_api_key })
+        return render(request, "dashboard/pages/location/index.html", {"pin": pin, "google_maps_api_key": settings.google_maps_api_key})
     
     def test_ai(self, request, *args, **kwargs):
         """
@@ -64,11 +63,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.profile import Profile
         profile = Profile.objects.get(pk=1)
         pin, created = Pin.objects.get_nearby_or_create(latitude=43.0423439, longitude=-76.1501928, profile=profile, defaults={
-            'name': 'Syracuse Central High School',
-            'description': '',
+            "name": "Syracuse Central High School",
+            "description": "",
         })
-        logger.critical('Location: %s', pin)
-        return JsonResponse({'pin': pin.to_json()})
+        logger.critical("Location: %s", pin)
+        return JsonResponse({"pin": pin.to_json()})
 
         from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
         instructions = "" +\
@@ -80,48 +79,48 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             "of similar urbex locations. Do not answer with the name of the location; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
 
         gateway = CloudflareGateway(instructions=instructions)
-        response = gateway.send_prompt('address: 312 Western Ave, Guilderland, NY 12084, USA, name: Master Cleaners')
+        response = gateway.send_prompt("address: 312 Western Ave, Guilderland, NY 12084, USA, name: Master Cleaners")
 
-        return JsonResponse({'response': response})
+        return JsonResponse({"response": response})
 
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data()
 
         # Preprocess data into strings
         for pin in map_data:
-            if 'description' in pin and pin['description'] is None:
-                pin['description'] = ''
+            if "description" in pin and pin["description"] is None:
+                pin["description"] = ""
 
             # Turn arrays into csv
-            if 'tags' in pin and pin['tags']:
-                pin['tags'] = ', '.join(pin['tags'])
+            if pin.get("tags"):
+                pin["tags"] = ", ".join(pin["tags"])
             else:
-                pin['tags'] = ''
-            if 'categories' in pin and pin['categories']:
-                pin['categories'] = ', '.join(pin['categories'])
+                pin["tags"] = ""
+            if pin.get("categories"):
+                pin["categories"] = ", ".join(pin["categories"])
             else:
-                pin['categories'] = ''
+                pin["categories"] = ""
 
             # Last visited = None => Never
-            if not pin['last_visited'] or pin['last_visited'] == 'never':
-                pin['last_visited'] = 'Never'
+            if not pin["last_visited"] or pin["last_visited"] == "never":
+                pin["last_visited"] = "Never"
             else:
                 try:
                     # Dates look like this: 2023-01-02T00:00:00+00:00
-                    pin['last_visited'] = datetime.strptime(pin['last_visited'], '%Y-%m-%dT%H:%M:%S%z').strftime('%Y-%m-%d')
+                    pin["last_visited"] = datetime.strptime(pin["last_visited"], "%Y-%m-%dT%H:%M:%S%z").strftime("%Y-%m-%d")
                 except ValueError:
-                    logger.warning('Unable to parse date: %s', pin['last_visited'])
+                    logger.warning("Unable to parse date: %s", pin["last_visited"])
 
-            if pin['status']:
-                pin['status'] = pin['status'].replace('_', ' ').capitalize()
+            if pin["status"]:
+                pin["status"] = pin["status"].replace("_", " ").capitalize()
 
-        return render(request, 'dashboard/pages/map/data.html', {'map_data': map_data})
+        return render(request, "dashboard/pages/map/data.html", {"map_data": map_data})
 
     def get_map_data(self):
         map_data = Pin.objects.all()
         if not map_data:
             # Default map data
-            map_data = [{'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Pin', 'description': 'No pins saved yet.'}]
+            map_data = [{"latitude": 42.65250213448323, "longitude": -73.75791867436858, "name": "Default Pin", "description": "No pins saved yet."}]
         else:
             map_data = [pin.to_json() for pin in map_data]
 
@@ -133,7 +132,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         # Get the pin
         try:
-            pin : Pin = Pin.objects.get(id=pin_id)
+            pin: Pin = Pin.objects.get(id=pin_id)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -143,8 +142,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # Get historic images from the Smithsonian's API
         smithsonian_images = smithsonian_gateway.get_data(pin.name)
 
-        return render(request, 'dashboard/pages/pin/smithsonian.html', {
-            'images': smithsonian_images,
+        return render(request, "dashboard/pages/pin/smithsonian.html", {
+            "images": smithsonian_images,
         })
 
     def web_search(self, request, pin_id, *args, **kwargs):
@@ -153,7 +152,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         # Get the pin
         try:
-            pin : Pin = Pin.objects.get(id=pin_id)
+            pin: Pin = Pin.objects.get(id=pin_id)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -166,23 +165,23 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 pin.address_extended,
                 [
                     pin.address_basic,
-                    pin.city
+                    pin.city,
                 ],
                 [
                     pin.address_basic,
-                    pin.county
+                    pin.county,
                 ],
                 [
                     pin.address_basic,
-                    pin.state
+                    pin.state,
                 ],
-                f'{pin.latitude}, {pin.longitude}'
+                f"{pin.latitude}, {pin.longitude}",
             ]
 
             if pin.name and pin.address_basic != pin.name:
                 query.append([
                     pin.name,
-                    pin.city
+                    pin.city,
                 ])
 
             place_name = pin.place_name
@@ -191,17 +190,17 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
             search_results = google_gateway.search(query)
         except HTTPError as e:
-            logger.error('Unable to contact Google Search API. Is the API Key valid? Exception ---> %s', e)
+            logger.error("Unable to contact Google Search API. Is the API Key valid? Exception ---> %s", e)
             return HttpResponse("Unable to search. This is unlikely to be resolved by multiple requests.", status=500)
 
-        return render(request, 'dashboard/pages/location/web_search.html', { 'search_results': search_results })
+        return render(request, "dashboard/pages/location/web_search.html", {"search_results": search_results})
 
     def satellite_view_google_image(self, request, *args, **kwargs):
         """
         Returns the satellite view image for a pin.
         """
         try:
-            pin = Pin.objects.get(id=kwargs['pin_id'])
+            pin = Pin.objects.get(id=kwargs["pin_id"])
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -218,7 +217,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Returns the street view image for a pin.
         """
         try:
-            pin = Pin.objects.get(id=kwargs['pin_id'])
+            pin = Pin.objects.get(id=kwargs["pin_id"])
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -230,23 +229,23 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         return HttpResponse(street_view_image, content_type="image/jpeg")
 
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=["get"])
     def import_form(self, request, *args, **kwargs):
         """
         View the import pins form
         """
-        return render(request, 'dashboard/pages/location/import/csv.html', { 'form': UploadDataFile() })
+        return render(request, "dashboard/pages/location/import/csv.html", {"form": UploadDataFile()})
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def upload_takeout(self, request, *args, **kwargs):
         """
         Upload a Google Takeout file
         """
-        logger.critical('Uploading a takeout file')
+        logger.critical("Uploading a takeout file")
         try:
             form = UploadDataFile(request.POST, request.FILES)
             if form.is_valid():
-                datafile = form.cleaned_data['file']
+                datafile = form.cleaned_data["file"]
 
                 # Instantiate the GoogleMapsGateway with the API key
                 google_maps_gateway = GoogleMapsGateway(settings.google_maps_api_key)
@@ -254,12 +253,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 # Get the file extension
                 pins = google_maps_gateway.import_pins_from_file(datafile, request.user.profile)
 
-                return JsonResponse({'pins': [pin.to_json() for pin in pins]})
-            else:
-                return JsonResponse({'error': 'Invalid form'}, status=400)
+                return JsonResponse({"pins": [pin.to_json() for pin in pins]})
+            return JsonResponse({"error": "Invalid form"}, status=400)
 
         except ValidationError as e:
-            return JsonResponse({'error': str(e)}, status=400)
+            return JsonResponse({"error": str(e)}, status=400)
 
     def weather_forecast(self, request, pin_id, *args, **kwargs):
         """
@@ -267,7 +265,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         # Get the pin
         try:
-            pin : Pin = Pin.objects.get(id=pin_id)
+            pin: Pin = Pin.objects.get(id=pin_id)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -279,6 +277,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # Get the weather forecast from the OpenWeather API
         weather_forecast = weather_forecast_gateway.get_weather_forecast(pin.latitude, pin.longitude)
 
-        logger.debug('forecast_data: %s', weather_forecast)
+        logger.debug("forecast_data: %s", weather_forecast)
 
-        return render(request, 'dashboard/pages/location/weather.html', { 'forecast': weather_forecast })
+        return render(request, "dashboard/pages/location/weather.html", {"forecast": weather_forecast})

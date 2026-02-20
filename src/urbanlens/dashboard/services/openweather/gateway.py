@@ -24,16 +24,19 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from datetime import datetime
-import requests
-import logging
-from urbanlens.UrbanLens.settings.app import settings
-from urbanlens.dashboard.services.gateway import Gateway
 import json
+import logging
+
+import requests
+
+from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
+
 class WeatherForecastGateway(Gateway):
-    def __init__(self, api_key : str | None = None):
+    def __init__(self, api_key: str | None = None):
         if not api_key:
             api_key = settings.openweathermap_api_key
         self.api_key = api_key
@@ -44,23 +47,23 @@ class WeatherForecastGateway(Gateway):
         Retrieve a weather forecast for the given coordinates.
         """
         if not latitude or not longitude:
-            raise ValueError('Latitude and longitude must be provided to get weather forecast.')
+            raise ValueError("Latitude and longitude must be provided to get weather forecast.")
 
         params = {
             "lat": latitude,
             "lon": longitude,
-            #"cnt": 7, 
+            # "cnt": 7,
             "appid": self.api_key,
-            "units": "imperial"
+            "units": "imperial",
         }
 
         result = self.get(params)
         if result is None:
-            logger.error('Failed to retrieve weather forecast for coordinates (%s, %s)', latitude, longitude)
+            logger.error("Failed to retrieve weather forecast for coordinates (%s, %s)", latitude, longitude)
             return None
 
         # OpenWeatherMap returns a 4-hour forecast. We only want morning and evening for each day.
-        filtered = self.filter_forecast(result.get('list', []))
+        filtered = self.filter_forecast(result.get("list", []))
 
         return filtered
 
@@ -74,7 +77,7 @@ class WeatherForecastGateway(Gateway):
         Handle a response from the Weather API.
         """
         if response.status_code != 200:
-            logger.error('Error getting weather forecast -> Status Code: %s', response.status_code)
+            logger.error("Error getting weather forecast -> Status Code: %s", response.status_code)
             return None
 
         try:
@@ -89,12 +92,10 @@ class WeatherForecastGateway(Gateway):
         """
         filtered_forecast = []
         for forecast_item in forecast:
-            date = forecast_item.get('dt_txt', '')
+            date = forecast_item.get("dt_txt", "")
             # Parse the date into a date object
-            forecast_item['date'] = datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
+            forecast_item["date"] = datetime.strptime(date, "%Y-%m-%d %H:%M:%S")
 
-            if date.endswith('12:00:00'):
-                filtered_forecast.append(forecast_item)
-            elif date.endswith('21:00:00'):
+            if date.endswith("12:00:00") or date.endswith("21:00:00"):
                 filtered_forecast.append(forecast_item)
         return filtered_forecast

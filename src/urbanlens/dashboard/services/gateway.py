@@ -25,6 +25,7 @@
 *********************************************************************************************************************"""
 from abc import ABC
 
+
 class Gateway(ABC):
     """
     An abstract class to serve as a template for API gateways.

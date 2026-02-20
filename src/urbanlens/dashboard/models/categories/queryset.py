@@ -23,10 +23,12 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from django.db.models import QuerySet, Manager
+from django.db.models import Manager, QuerySet
+
 
 class CategoryQuerySet(QuerySet):
     pass
+
 
 class CategoryManager(Manager.from_queryset(CategoryQuerySet)):
     pass

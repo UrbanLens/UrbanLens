@@ -5,6 +5,7 @@ URL configuration for urbanlens project.
 
 The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/4.2/topics/http/urls/
+
 Examples:
 Function views
     1. Add an import:  from my_app import views
@@ -36,17 +37,20 @@ Including another URLconf
 *                                                                                                                      *
 *        2023-12-31     By Jess Mann                                                                                   *
 *                                                                                                                      *
-*********************************************************************************************************************"""
+*********************************************************************************************************************
 
-from django.contrib import admin
-from django.urls import path, include, re_path
-from django.views.generic import TemplateView
+"""
+
 import logging
 
-from urbanlens.dashboard.urls import urlpatterns as dashboard_urls
+from django.contrib import admin
+from django.urls import include, path, re_path
+from django.views.generic import TemplateView
+
 from urbanlens.dashboard.controllers.account import SignupView
-from urbanlens.dashboard.controllers.index import IndexController
 from urbanlens.dashboard.controllers.health import HealthController
+from urbanlens.dashboard.controllers.index import IndexController
+from urbanlens.dashboard.urls import urlpatterns as dashboard_urls
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +63,6 @@ urlpatterns = [
     path("dashboard/", include(dashboard_urls), name="dashboard"),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),
     path("", IndexController.as_view(), name="index"),
-
     # 404
-	re_path('.*', TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name='404')
+    re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),
 ]

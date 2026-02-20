@@ -23,10 +23,11 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from django.db import models
+
 from urbanlens.dashboard.models.abstract import models
 
 class PinQuerySet(models.QuerySet):
-    pass
+    ...
 
 class PinManager(models.Manager, PinQuerySet):
-    def all(self) -> "PinQuerySet": ...
+    def all(self) -> PinQuerySet: ...

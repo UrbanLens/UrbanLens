@@ -24,24 +24,26 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
-from urbanlens.dashboard.services.ai.meta import SHORTEST_MESSAGE, MAX_TOKENS
+
 from urbanlens.dashboard.services.ai.functions import estimate_combined_tokens, estimate_tokens
+from urbanlens.dashboard.services.ai.meta import MAX_TOKENS, SHORTEST_MESSAGE
+
 
 class MessageQueue:
     messages = []
-    max_tokens : int = MAX_TOKENS
+    max_tokens: int = MAX_TOKENS
 
-    def add_message(self, message : str, role : str = "user"):
+    def add_message(self, message: str, role: str = "user"):
         tokens = self.estimate_tokens(message)
         if tokens + SHORTEST_MESSAGE > self.max_tokens:
             raise ValueError(f"Message length {tokens} would exceed maximum token limit of {self.max_tokens}.")
 
         self.messages.append({
             "role": role,
-            "content": message
+            "content": message,
         })
 
-    def estimate_tokens(self, additional_prompt : str | None = None) -> int:
+    def estimate_tokens(self, additional_prompt: str | None = None) -> int:
         tokens = estimate_combined_tokens(self.messages)
         if additional_prompt:
             tokens += estimate_tokens(additional_prompt)

@@ -25,17 +25,24 @@
 *********************************************************************************************************************"""
 
 from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
+
 import openai
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
-from urbanlens.UrbanLens.settings.app import settings
+
 from urbanlens.dashboard.services.ai.gateway import LLMGateway
-from urbanlens.dashboard.services.ai.message import MessageQueue
+from urbanlens.UrbanLens.settings.app import settings
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.services.ai.message import MessageQueue
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gpt-5-nano'
+DEFAULT_MODEL = "gpt-5-nano"
+
 
 class OpenAIGateway(LLMGateway[ChatCompletion]):
     _api_key: str | None
@@ -70,7 +77,7 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
             api_key=self.api_key,
         )
 
-    def _get_response(self, message_queue : MessageQueue) -> ChatCompletion | None:
+    def _get_response(self, message_queue: MessageQueue) -> ChatCompletion | None:
         """
         Send a message to OpenAI and return the response.
 
@@ -81,14 +88,15 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
             Returns:
                 ChatCompletion:
                     The response from OpenAI.
+
         """
         try:
             client = self.get_client()
 
             response = client.chat.completions.create(
-                model = self.model,
-                messages = message_queue.messages,
-                max_tokens = self.max_tokens,
+                model=self.model,
+                messages=message_queue.messages,
+                max_tokens=self.max_tokens,
             )
         except openai.BadRequestError as e:
             logger.error(f"Error sending a message to OpenAI: {e}")
@@ -107,6 +115,7 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
             Returns:
                 str:
                     The parsed response from OpenAI.
+
         """
         try:
             body = response.choices[0].message.content

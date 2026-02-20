@@ -27,26 +27,31 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-#!/usr/bin/env python
+# !/usr/bin/env python
 
 # Generic imports
 from __future__ import annotations
+
 import argparse
 import re
-import sys
 import subprocess
+import sys
 from typing import Any
+
 from djangofoundry import scripts
 from djangofoundry.scripts import app
+
 # Our imports
 from bin.utils.exceptions import DbStartError, UnsupportedCommandError
 from bin.utils.settings import Settings
 
 logger = Settings.getLogger(__name__)
 
+
 class Actions(app.Actions):
     # Define additional actions
-    INSTALL = 'install'
+    INSTALL = "install"
+
 
 class App(scripts.App):
     """
@@ -55,7 +60,7 @@ class App(scripts.App):
     We are extending it here to add additional functionality that is custom to our app (todo).
     """
 
-    def get_argument(self, argument_name : str, args : tuple, kwargs : dict ) -> Any:
+    def get_argument(self, argument_name: str, args: tuple, kwargs: dict) -> Any:
         """
         Retrieves an argument from args/kwargs.
 
@@ -80,14 +85,14 @@ class App(scripts.App):
             >>> foo = Foo()
             >>> foo.change_page('home')
             page_name = home
+
         """
         # TODO: This duplicates new functionality from djangofoundry. When the package is updated to version 0.8, remove this method without any other changes.
         if len(args) == 1:
             return args[0]
-        else:
-            return kwargs.get(argument_name, None)
+        return kwargs.get(argument_name)
 
-    def pip_install(self, package_name : str) -> bool:
+    def pip_install(self, package_name: str) -> bool:
         """
         Install a python package using pip, and add it (with version) to requirements.txt.
 
@@ -111,38 +116,39 @@ class App(scripts.App):
             >>> app.pip_install('requests==2.26.0 git')
             Traceback (most recent call last):
                 ...
+
         """
         # TODO: This duplicates new functionality from djangofoundry. When the package is updated to version 0.8, remove this method without any other changes.
 
         # Ensure that package_name is only 1 package
-        if len(package_name.split(' ')) > 1:
+        if len(package_name.split(" ")) > 1:
             raise ValueError(f'package_name must be a single package. "{package_name}" contains more than one package.')
 
         # Install the package, capture output so that we can determine the version number of the package
-        logger.info(f'Installing {package_name}...')
-        install_output = subprocess.check_output([sys.executable, '-m', 'pip', 'install', package_name], stderr=subprocess.STDOUT).decode('utf-8')
+        logger.info(f"Installing {package_name}...")
+        install_output = subprocess.check_output([sys.executable, "-m", "pip", "install", package_name], stderr=subprocess.STDOUT).decode("utf-8")
 
         # Grab the version number from the output
-        if not (matches := re.search(r'Successfully installed (.*)', install_output)):
+        if not (matches := re.search(r"Successfully installed (.*)", install_output)):
             return False
 
-        if not (version := matches.group(1).split('-')[-1]):
-            logger.warning(f'Could not determine version number for {package_name}')
+        if not (version := matches.group(1).split("-")[-1]):
+            logger.warning(f"Could not determine version number for {package_name}")
             return False
 
         # Ensure version is a valid version number
-        if not re.match(r'^\d+\.\d+\.\d+$', version):
-            logger.warning(f'Version number for {package_name} is not valid: {version}')
+        if not re.match(r"^\d+\.\d+\.\d+$", version):
+            logger.warning(f"Version number for {package_name} is not valid: {version}")
             return False
 
         # Add package (and version #) to requirements.txt.
-        logger.info(f'Adding {package_name} to requirements.txt...')
-        with open('requirements.txt', 'a') as f:
-            f.write(f'{package_name}>={version}\n')
+        logger.info(f"Adding {package_name} to requirements.txt...")
+        with open("requirements.txt", "a") as f:
+            f.write(f"{package_name}>={version}\n")
 
         return True
 
-    def perform(self, command : Actions, *args, **kwargs) -> Any:
+    def perform(self, command: Actions, *args, **kwargs) -> Any:
         """
         Perform an action given a (string) command
 
@@ -153,6 +159,7 @@ class App(scripts.App):
 
         Returns:
             Any: The result of the action.
+
         """
         # Save the command for later
         self._command = command
@@ -161,28 +168,29 @@ class App(scripts.App):
         match command:
             case Actions.INSTALL:
                 # Install a python package using pip, and add it (with version) to requirements.txt.
-                package_name = self.get_argument('package_name', args, kwargs)
+                package_name = self.get_argument("package_name", args, kwargs)
                 return self.pip_install(package_name)
             case _:
                 # Run the parent method
                 return super().perform(command, *args, **kwargs)
+
 
 def main():
     """
     This code is only run when this script is called directly (i.e. python bin/app.py)
     """
     try:
-        parser = argparse.ArgumentParser(description='Setup and manage the Django application (similar to manage.py).')
-        parser.add_argument('action', choices=[e.value for e in Actions], help='The action to perform.')
-        parser.add_argument('-p', '--project-name', default='myproject', help='The name of the project.')
-        parser.add_argument('-a', '--author-name', help='The name of the author.')
-        parser.add_argument('-d', '--directory', default='.', help='The directory for the project.')
-        parser.add_argument('-f', '--frontend-dir', default='frontend', help='The directory for the frontend (relative to -d).')
-        parser.add_argument('-b', '--backend-dir', default='backend', help='The directory for the backend (relative to -d).')
-        parser.add_argument('-s', '--settings', default='conf/settings.yaml', help='The settings file to use.')
-        parser.add_argument('--page-name', help='The name of the page to create.')
-        parser.add_argument('--model-name', help='The name of the model to create.')
-        parser.add_argument('--package-name', help='The name of the package to create.')
+        parser = argparse.ArgumentParser(description="Setup and manage the Django application (similar to manage.py).")
+        parser.add_argument("action", choices=[e.value for e in Actions], help="The action to perform.")
+        parser.add_argument("-p", "--project-name", default="myproject", help="The name of the project.")
+        parser.add_argument("-a", "--author-name", help="The name of the author.")
+        parser.add_argument("-d", "--directory", default=".", help="The directory for the project.")
+        parser.add_argument("-f", "--frontend-dir", default="frontend", help="The directory for the frontend (relative to -d).")
+        parser.add_argument("-b", "--backend-dir", default="backend", help="The directory for the backend (relative to -d).")
+        parser.add_argument("-s", "--settings", default="conf/settings.yaml", help="The settings file to use.")
+        parser.add_argument("--page-name", help="The name of the page to create.")
+        parser.add_argument("--model-name", help="The name of the model to create.")
+        parser.add_argument("--package-name", help="The name of the package to create.")
 
         # Parse the arguments provided to our script from the command line
         # These are used as attributes. For example: options.action
@@ -198,12 +206,12 @@ def main():
 
         except ValueError as ve:
             # One of the options contains bad data. Print the message and exit.
-            logger.error(f'Bad option provided: {ve}')
+            logger.error(f"Bad option provided: {ve}")
             exit()
 
         except FileNotFoundError as fnf:
             # The options were okay, but we can't find a necessary file (probably the executable)
-            logger.error(f'Unable to find a necessary file: {fnf}')
+            logger.error(f"Unable to find a necessary file: {fnf}")
             exit()
 
         try:
@@ -211,22 +219,23 @@ def main():
             result = app.perform(command, page_name=options.page_name, model_name=options.model_name, package_name=options.package_name)
 
             if result is not None:
-                logger.debug(f'App returned ({result})')
+                logger.debug(f"App returned ({result})")
         except UnsupportedCommandError:
             logger.error("Error: Unknown action. Try --help to see how to call this script.")
             exit()
 
     except KeyboardInterrupt:
-        logger.info('Shutting down server...')
+        logger.info("Shutting down server...")
         exit()
     except DbStartError:
-        logger.error('Could not start DB. Cannot continue')
+        logger.error("Could not start DB. Cannot continue")
         exit()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     """
     This code is only run when this script is called directly (i.e. python bin/app.py)
     """
     main()
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

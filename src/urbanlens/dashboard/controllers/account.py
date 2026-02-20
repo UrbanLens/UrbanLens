@@ -24,27 +24,29 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
+from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
+from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views import generic
-from django.shortcuts import redirect
-from social_django.utils import load_strategy, load_backend
 from social_core.exceptions import MissingBackend
-from django.contrib.auth import login
+from social_django.utils import load_backend, load_strategy
 
 from urbanlens.dashboard.models.profile import Profile
 
+
 class SignupView(generic.CreateView):
     form_class = UserCreationForm
-    success_url = reverse_lazy('login')
-    template_name = 'registration/signup.html'
+    success_url = reverse_lazy("login")
+    template_name = "registration/signup.html"
+
 
 def social_auth(request, backend):
     strategy = load_strategy(request)
     try:
         backend = load_backend(strategy=strategy, name=backend, redirect_uri=None)
     except MissingBackend:
-        return redirect('signup')
+        return redirect("signup")
 
     user = backend.complete_user_authentication(request)
     if user and user.is_active:
@@ -52,6 +54,5 @@ def social_auth(request, backend):
         Profile.objects.get_or_create(user=user)
 
         login(request, user)
-        return redirect('home')
-    else:
-        return redirect('signup')
+        return redirect("home")
+    return redirect("signup")

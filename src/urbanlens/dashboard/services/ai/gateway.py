@@ -25,32 +25,36 @@
 *********************************************************************************************************************"""
 
 from __future__ import annotations
-from typing import Any, Generic, TypeVar
-import logging
-from decimal import Decimal
-import re
+
 from abc import ABC, abstractmethod
+from decimal import Decimal
 from functools import singledispatchmethod
+import logging
+import re
+from typing import Any, Generic, TypeVar
+
 import tiktoken
-from urbanlens.dashboard.services.ai.meta import MAX_TOKENS, FORMATTING, INSTRUCTIONS, PROJECT_DESCRIPTION
+
 from urbanlens.dashboard.services.ai.message import MessageQueue
+from urbanlens.dashboard.services.ai.meta import FORMATTING, INSTRUCTIONS, MAX_TOKENS, PROJECT_DESCRIPTION
 
 logger = logging.getLogger(__name__)
 
 Response = TypeVar("Response")
 
+
 class LLMGateway(ABC, Generic[Response]):
     _model: str | None
-    _api_url : str | None
-    _api_key : str | None
+    _api_url: str | None
+    _api_key: str | None
     extend: bool
     _token_count: dict[str, int]
-    formatting : str
-    instructions : str
-    project_description : str
-    max_tokens : int = MAX_TOKENS
+    formatting: str
+    instructions: str
+    project_description: str
+    max_tokens: int = MAX_TOKENS
 
-    def __init__(self, api_key: str | None = None, model: str | None = None, api_url : str | None = None, formatting : str = FORMATTING, instructions : str = INSTRUCTIONS, project_description : str = PROJECT_DESCRIPTION, **kwargs):
+    def __init__(self, api_key: str | None = None, model: str | None = None, api_url: str | None = None, formatting: str = FORMATTING, instructions: str = INSTRUCTIONS, project_description: str = PROJECT_DESCRIPTION, **kwargs):
         self._token_count = {"sent": 0, "received": 0}
         self.formatting = formatting
         self.instructions = instructions
@@ -94,6 +98,7 @@ class LLMGateway(ABC, Generic[Response]):
             Returns:
                 int:
                     The number of tokens for sentences in the LLMGateway instance.
+
         """
         return self._token_count["sent"]
 
@@ -105,6 +110,7 @@ class LLMGateway(ABC, Generic[Response]):
             Returns:
                 int:
                     The number of received tokens.
+
         """
         return self._token_count["received"]
 
@@ -119,6 +125,7 @@ class LLMGateway(ABC, Generic[Response]):
 
             Examples::
                 If self._token_count is {'sent': 100, 'received': 50}, calling tokens will return 150.
+
         """
         return self._token_count["sent"] + self._token_count["received"]
 
@@ -139,6 +146,7 @@ class LLMGateway(ABC, Generic[Response]):
             >>> doc_gen.receive_tokens(50)
             >>> doc_gen.cost
             Decimal('0.15')
+
         """
         match self.model:
             case "gpt-5.2":
@@ -167,6 +175,7 @@ class LLMGateway(ABC, Generic[Response]):
             Args:
                 count (Any):
                     The number of tokens to be sent.
+
         """
         raise NotImplementedError
 
@@ -178,6 +187,7 @@ class LLMGateway(ABC, Generic[Response]):
             Args:
                 count (int):
                     The number of tokens to be sent.
+
         """
         self._token_count["sent"] += count
         logger.debug(f"Sent {count} tokens. Total sent: {self._token_count['sent']}")
@@ -190,19 +200,21 @@ class LLMGateway(ABC, Generic[Response]):
             Args:
                 prompt (str):
                     The prompt for which tokens are to be calculated and sent.
+
         """
         count = self.calculate_tokens(prompt)
         self._token_count["sent"] += count
         logger.debug(f"Sent {count} tokens. Total sent: {self._token_count['sent']}")
 
     @send_tokens.register
-    def _(self, messages : MessageQueue):
+    def _(self, messages: MessageQueue):
         """
         Processes the messages to calculate and send tokens.
 
             Args:
                 messages (MessageQueue):
                     The messages to be processed for token calculation and sent.
+
         """
         count = self.calculate_combined_tokens(messages)
         self._token_count["sent"] += count
@@ -216,6 +228,7 @@ class LLMGateway(ABC, Generic[Response]):
             Args:
                 count (int):
                     The number of tokens received.
+
         """
         self._token_count["received"] += count
         logger.debug(f"Received {count} tokens. Total received: {self._token_count['received']}")
@@ -228,6 +241,7 @@ class LLMGateway(ABC, Generic[Response]):
             Args:
                 prompt (str):
                     The text prompt for which tokens are to be calculated.
+
         """
         count = self.calculate_tokens(prompt)
         self._token_count["received"] += count
@@ -239,9 +253,8 @@ class LLMGateway(ABC, Generic[Response]):
 
             This method can be overridden by child classes to perform any necessary setup for the AI model.
         """
-        pass
 
-    def _lookup_model(self, model_name : str | None) -> str | None:
+    def _lookup_model(self, model_name: str | None) -> str | None:
         if not model_name:
             return None
         
@@ -257,12 +270,13 @@ class LLMGateway(ABC, Generic[Response]):
 
             Returns:
                 int: The exact token count.
+
         """
         try:
             encoding = tiktoken.encoding_for_model(self.model)
             tokens = encoding.encode(prompt)
         except KeyError:
-            logger.debug('KeyError when using model %s to calculate tokens', self.model)
+            logger.debug("KeyError when using model %s to calculate tokens", self.model)
             encoding = tiktoken.encoding_for_model("gpt-5-nano")
             tokens = encoding.encode(prompt)
 
@@ -279,6 +293,7 @@ class LLMGateway(ABC, Generic[Response]):
             Returns:
                 int:
                     The exact token count for the given prompt.
+
         """
         prompt = "\n\n".join([message["content"] for message in messages])
         return self.calculate_tokens(prompt)
@@ -293,12 +308,13 @@ class LLMGateway(ABC, Generic[Response]):
             Returns:
                 str:
                     The prepared text prompt.
+
         """
         prompt = self.project_description
         if self.formatting:
-            prompt += f'\n\n<FORMATTING>{self.formatting}</FORMATTING>'
+            prompt += f"\n\n<FORMATTING>{self.formatting}</FORMATTING>"
         if self.instructions:
-            prompt += f'\n\n<INSTRUCTIONS>{self.instructions}</INSTRUCTIONS>'
+            prompt += f"\n\n<INSTRUCTIONS>{self.instructions}</INSTRUCTIONS>"
         return prompt
     
     def construct_messages(self, prompt: str) -> MessageQueue:
@@ -316,6 +332,7 @@ class LLMGateway(ABC, Generic[Response]):
             Returns:
                 list[dict]:
                     A list of messages to be used for chat completion.
+
         """
         queue = MessageQueue()
         system_prompt = self.prepare_system_prompt()
@@ -335,6 +352,7 @@ class LLMGateway(ABC, Generic[Response]):
             Returns:
                 str:
                     The answer from the AI model.
+
         """
         queue = self.construct_messages(prompt)
         self.send_tokens(queue)
@@ -344,13 +362,13 @@ class LLMGateway(ABC, Generic[Response]):
                 self.receive_tokens(message)
                 answer = self._parse_answer(message)
                 if not answer:
-                    logger.error('No answer from message queue: %s', queue)
+                    logger.error("No answer from message queue: %s", queue)
                 return answer
             
         return None
     
     @abstractmethod
-    def _get_response(self, message_queue : MessageQueue) -> Response | None:
+    def _get_response(self, message_queue: MessageQueue) -> Response | None:
         """
         Send the message queue to the AI gateway, and return the response it provides, unmodified.
             
@@ -361,11 +379,12 @@ class LLMGateway(ABC, Generic[Response]):
             Returns:
                 Response (Generic type):
                     The response from the AI gateway.
+
         """
         raise NotImplementedError
     
     @abstractmethod
-    def _parse_response(self, response : Response) -> str | None:
+    def _parse_response(self, response: Response) -> str | None:
         """
         Parse the response from the AI Gateway and return the message body.
 
@@ -376,10 +395,11 @@ class LLMGateway(ABC, Generic[Response]):
             Returns:
                 str:
                     The parsed response from the AI Gateway.
+
         """
         raise NotImplementedError
     
-    def _parse_answer(self, message_content : str) -> str | None:
+    def _parse_answer(self, message_content: str) -> str | None:
         """
         Parse the <ANSWER> tag from the response body.
         
@@ -390,12 +410,12 @@ class LLMGateway(ABC, Generic[Response]):
             Returns:
                 str | None:
                     The parsed answer from the response.
+
         """
         try:
             if match := re.search(r"[<\[]ANSWER:?[>\]](.*?)[<\[]([/\\]|END\s*)ANSWER[>\]]", message_content, re.DOTALL):
                 return match.group(1).strip()
-            else:
-                logger.error('No ANSWER in response from AI model "%s": Response: %s', self.model, message_content)
+            logger.error('No ANSWER in response from AI model "%s": Response: %s', self.model, message_content)
         except Exception as e:
             logger.error("Error parsing answer from response for model '%s'. Respoonse: %s\nError: %s", self.model, message_content, e)
 

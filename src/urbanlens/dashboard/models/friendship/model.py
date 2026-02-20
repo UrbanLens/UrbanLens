@@ -24,58 +24,61 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
+
 import logging
-from django.db.models import CASCADE
-from django.db.models import ForeignKey, CharField
+
+from django.db.models import CASCADE, CharField, ForeignKey
+
 from urbanlens.dashboard.models.abstract import Model, TextChoices
 from urbanlens.dashboard.models.friendship.queryset import Manager
 from urbanlens.dashboard.models.profile import Profile
 
 logger = logging.getLogger(__name__)
 
+
 class Friendship(Model):
     class FriendshipStatus(TextChoices):
-        REQUESTED = 'Requested', 'Requested'
-        ACCEPTED = 'Accepted', 'Accepted'
-        DECLINED = 'Declined', 'Declined'
-        REMOVED = 'Removed', 'Removed'
-        MUTED = 'Muted', 'Muted'
-        BLOCKED = 'Blocked', 'Blocked'
+        REQUESTED = "Requested", "Requested"
+        ACCEPTED = "Accepted", "Accepted"
+        DECLINED = "Declined", "Declined"
+        REMOVED = "Removed", "Removed"
+        MUTED = "Muted", "Muted"
+        BLOCKED = "Blocked", "Blocked"
 
         @classmethod
-        def is_friend(cls, status : str) -> bool:
-            return status in [cls.ACCEPTED]
+        def is_friend(cls, status: str) -> bool:
+            return status == cls.ACCEPTED
 
         @classmethod
-        def rejected(cls, status : str) -> bool:
+        def rejected(cls, status: str) -> bool:
             return status in [cls.DECLINED, cls.REMOVED, cls.BLOCKED, cls.MUTED]
 
         @classmethod
-        def can_request(cls, status : str) -> bool:
+        def can_request(cls, status: str) -> bool:
             return status in [cls.DECLINED, cls.REMOVED]
 
     class FriendshipType(TextChoices):
-        FOLLOWING = 'Following', 'Following'
-        FRIEND = 'Friend', 'Friend'
-        CLOSE_FRIEND = 'Close Friend', 'Close Friend'
+        FOLLOWING = "Following", "Following"
+        FRIEND = "Friend", "Friend"
+        CLOSE_FRIEND = "Close Friend", "Close Friend"
 
     class Permission(TextChoices):
-        SEND_MESSAGE = 'Send Message', 'Send Message'
-        INVITE_TO_EVENTS = 'Invite to Events', 'Invite to Events'
-        SHARE_LOCATIONS = 'Share Pins', 'Share Pins'
-        VIEW_PROFILE = 'View Profile', 'View Profile'
-        VIEW_FRIENDS = 'View Friends', 'View Friends'
-        VIEW_TRIPS = 'View Trips', 'View Trips'
+        SEND_MESSAGE = "Send Message", "Send Message"
+        INVITE_TO_EVENTS = "Invite to Events", "Invite to Events"
+        SHARE_LOCATIONS = "Share Pins", "Share Pins"
+        VIEW_PROFILE = "View Profile", "View Profile"
+        VIEW_FRIENDS = "View Friends", "View Friends"
+        VIEW_TRIPS = "View Trips", "View Trips"
 
     from_profile = ForeignKey(
-        'dashboard.Profile',
+        "dashboard.Profile",
         on_delete=CASCADE,
-        related_name='friendships'
+        related_name="friendships",
     )
     to_profile = ForeignKey(
-        'dashboard.Profile',
+        "dashboard.Profile",
         on_delete=CASCADE,
-        related_name='friends_to_me'
+        related_name="friends_to_me",
     )
 
     status = CharField(max_length=10, choices=FriendshipStatus.choices)
@@ -85,7 +88,7 @@ class Friendship(Model):
     objects = Manager()
 
     @classmethod
-    def request(cls, from_profile : 'Profile | int', to_profile : 'Profile | int', relationship_type : str = FriendshipType.FRIEND) -> Friendship | None:
+    def request(cls, from_profile: Profile | int, to_profile: Profile | int, relationship_type: str = FriendshipType.FRIEND) -> Friendship | None:
         """
         Create a new friendship request.
         """
@@ -94,7 +97,7 @@ class Friendship(Model):
         if friendship:
             # Check if we can make another request
             if not cls.FriendshipStatus.can_request(friendship.status):
-                logger.warning('Cannot request another friendship')
+                logger.warning("Cannot request another friendship")
                 return None
 
             # Update the status to requested
@@ -107,14 +110,14 @@ class Friendship(Model):
                 to_profile = Profile.objects.get(pk=to_profile)
 
             if not from_profile or not to_profile:
-                logger.warning('Could not find profiles')
-                raise ValueError('Could not find profiles')
+                logger.warning("Could not find profiles")
+                raise ValueError("Could not find profiles")
 
             friendship = cls.objects.create(
                 from_profile=from_profile,
                 to_profile=to_profile,
                 relationship_type=relationship_type,
-                status=cls.FriendshipStatus.REQUESTED
+                status=cls.FriendshipStatus.REQUESTED,
             )
 
         friendship.save()
@@ -142,7 +145,7 @@ class Friendship(Model):
         self.save()
 
     @classmethod
-    def block(cls, from_profile : 'Profile | int', to_profile : 'Profile | int') -> Friendship | None:
+    def block(cls, from_profile: Profile | int, to_profile: Profile | int) -> Friendship | None:
         """
         Block a profile.
         """
@@ -159,19 +162,19 @@ class Friendship(Model):
             to_profile = Profile.objects.get(pk=to_profile)
 
         if not from_profile or not to_profile:
-            logger.warning('Could not find profiles')
-            raise ValueError('Could not find profiles')
+            logger.warning("Could not find profiles")
+            raise ValueError("Could not find profiles")
 
         friendship = cls.objects.create(
             from_profile=from_profile,
             to_profile=to_profile,
-            status=cls.FriendshipStatus.BLOCKED
+            status=cls.FriendshipStatus.BLOCKED,
         )
 
         return friendship
 
     @classmethod
-    def mute(cls, from_profile : 'Profile | int', to_profile : 'Profile | int') -> Friendship | None:
+    def mute(cls, from_profile: Profile | int, to_profile: Profile | int) -> Friendship | None:
         """
         Mute a profile.
         """
@@ -188,13 +191,13 @@ class Friendship(Model):
             to_profile = Profile.objects.get(pk=to_profile)
 
         if not from_profile or not to_profile:
-            logger.warning('Could not find profiles')
-            raise ValueError('Could not find profiles')
+            logger.warning("Could not find profiles")
+            raise ValueError("Could not find profiles")
 
         friendship = cls.objects.create(
             from_profile=from_profile,
             to_profile=to_profile,
-            status=cls.FriendshipStatus.MUTED
+            status=cls.FriendshipStatus.MUTED,
         )
 
         return friendship
@@ -203,5 +206,5 @@ class Friendship(Model):
         return f"{self.from_profile.username} to {self.to_profile.username} - {self.relationship_type} - {self.status}"
 
     class Meta(Model.Meta):
-        db_table = 'dashboard_friendships'
-        unique_together = ('from_profile', 'to_profile')
+        db_table = "dashboard_friendships"
+        unique_together = ("from_profile", "to_profile")

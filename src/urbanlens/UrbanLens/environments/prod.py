@@ -25,11 +25,11 @@
 *********************************************************************************************************************"""
 
 from __future__ import annotations
+
 from pydantic import validator
 
-from urbanlens.UrbanLens.environments.types import EnvironmentTypes
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
-from urbanlens.UrbanLens.environments.types import DebugTypes
+from urbanlens.UrbanLens.environments.types import DebugTypes, EnvironmentTypes
 
 
 class Production(BaseEnvironment):

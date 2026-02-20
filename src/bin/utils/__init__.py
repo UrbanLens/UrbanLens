@@ -1,21 +1,21 @@
 """
 
-	Metadata:
+    Metadata:
 
-		File: __init__.py
-		Project: Urban Lens
+        File: __init__.py
+        Project: Urban Lens
 
-		Author: Jess Mann
-		Email: jess@urbanlens.org
+        Author: Jess Mann
+        Email: jess@urbanlens.org
 
-		-----
+        -----
 
 
-		Modified By: Jess Mann
+        Modified By: Jess Mann
 
-		-----
+        -----
 
-		Copyright (c) 2022 UrbanLens
+        Copyright (c) 2022 UrbanLens
 """
 from .action import EnumAction
 from .exceptions import *

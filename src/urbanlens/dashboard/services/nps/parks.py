@@ -23,15 +23,18 @@
 *        2024-01-17     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-import requests
 import logging
-from urbanlens.UrbanLens.settings.app import settings
+
+import requests
+
 from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
+
 class NPSGateway(Gateway):
-    def __init__(self, api_key : str | None = None):
+    def __init__(self, api_key: str | None = None):
         if not api_key:
             api_key = settings.nps_api_key
         self.api_key = api_key
@@ -42,7 +45,7 @@ class NPSGateway(Gateway):
         Retrieve images for a specific park using the NPS API
         """
         if not park_code:
-            raise ValueError('Park code must be provided to retrieve images.')
+            raise ValueError("Park code must be provided to retrieve images.")
         
         headers = {"X-Api-Key": self.api_key}
         endpoint = f"{self.base_url}/parks"
@@ -59,13 +62,13 @@ class NPSGateway(Gateway):
         if not request_data:
             request_data = {}
 
-        if getattr(response, 'status_code', None) != 200:
+        if getattr(response, "status_code", None) != 200:
             logger.error('Error getting images for %s -> Status Code: "%s"', request_data, response.status_code)
             return []
 
         try:
             body = response.json()
-            images = body.get('data', [])[0].get('images', [])
+            images = body.get("data", [])[0].get("images", [])
             return images
 
         except Exception as e:

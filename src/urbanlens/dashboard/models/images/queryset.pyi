@@ -24,10 +24,11 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from django.db import models
+
 from urbanlens.dashboard.models.abstract import models
 
 class ImageQuerySet(models.QuerySet):
-    pass
+    ...
 
 class ImageManager(models.Manager, ImageQuerySet):
-    def all(self) -> "ImageQuerySet": ...
+    def all(self) -> ImageQuerySet: ...

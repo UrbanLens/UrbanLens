@@ -23,8 +23,10 @@
 *        2024-01-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 # Generic imports
 from __future__ import annotations
+
 import logging
 
 #
@@ -34,22 +36,23 @@ import logging
 #
 logger = logging.getLogger(__name__)
 
+
 class DBRouter:
-	route_app_labels = ['dashboard']
+    route_app_labels = ["dashboard"]
 
-	def db_for_read(self, model, **hints):
-		""" reading Model from default """
-		default = None
-		if model._meta.app_label in self.route_app_labels:
-			default = "default"
-		return getattr(model, "_database", default)
+    def db_for_read(self, model, **hints):
+        """Reading Model from default"""
+        default = None
+        if model._meta.app_label in self.route_app_labels:
+            default = "default"
+        return getattr(model, "_database", default)
 
-	def db_for_write(self, model, **hints):
-		""" writing Model to default """
-		default = None
-		if model._meta.app_label in self.route_app_labels:
-			default = "default"
-		return getattr(model, "_database", default)
+    def db_for_write(self, model, **hints):
+        """Writing Model to default"""
+        default = None
+        if model._meta.app_label in self.route_app_labels:
+            default = "default"
+        return getattr(model, "_database", default)
 
-	def allow_relation(self, obj1, obj2, **hints):
-		return True
+    def allow_relation(self, obj1, obj2, **hints):
+        return True

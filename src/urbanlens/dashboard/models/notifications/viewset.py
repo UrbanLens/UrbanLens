@@ -1,32 +1,36 @@
 """
 
-	Metadata:
+Metadata:
 
-		File: viewset.py
-		Project: UrbanLens
+        File: viewset.py
+        Project: UrbanLens
 
-		Author: Jess Mann
-		Email: jess@urbanlens.org
+        Author: Jess Mann
+        Email: jess@urbanlens.org
 
-		-----
+        -----
 
 
-		Modified By: Jess Mann
+        Modified By: Jess Mann
 
-		-----
+        -----
 
-		Copyright (c) 2023 UrbanLens
+        Copyright (c) 2023 UrbanLens
 """
+
 # Generic imports
 from __future__ import annotations
+
 from rest_framework import filters
+
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.notifications.serializer import Serializer
 
+
 class ViewSet(abstract.ViewSet):
-	serializer_class = Serializer
-	queryset = NotificationLog.objects.all()
-	filter_backends = [filters.OrderingFilter]
-	ordering_fields = ['id'] #['-updated', '-created', 'status', 'guid']
-	ordering = ['id'] #['-updated', '-created', 'id']
+    serializer_class = Serializer
+    queryset = NotificationLog.objects.all()
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ["id"]  # ['-updated', '-created', 'status', 'guid']
+    ordering = ["id"]  # ['-updated', '-created', 'id']

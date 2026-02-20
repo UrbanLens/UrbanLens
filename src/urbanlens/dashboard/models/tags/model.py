@@ -24,12 +24,15 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
+
 from django.db.models import CharField
+
 from urbanlens.dashboard.models import abstract
+
 
 class Tag(abstract.Model):
     name = CharField(max_length=255)
 
     class Meta(abstract.Model.Meta):
-        db_table = 'dashboard_tags'
-        get_latest_by = 'updated'
+        db_table = "dashboard_tags"
+        get_latest_by = "updated"

@@ -25,13 +25,14 @@
 *********************************************************************************************************************"""
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 import os
 import subprocess
-from datetime import datetime
 from threading import Lock
 
 from django.core.signals import request_finished
+
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
