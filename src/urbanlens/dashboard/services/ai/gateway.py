@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 Response = TypeVar("Response")
 
 
-class LLMGateway(ABC, Generic[Response]):
+class LLMGateway[Response](ABC):
     _model: str | None
     _api_url: str | None
     _api_key: str | None

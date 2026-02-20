@@ -766,7 +766,6 @@ ignore = [
     "PLC0415", # import should be at top
     "TRY",
     "W2",
-    "RET",
     "BLE",
     "PIE",
     "PLW",
@@ -778,7 +777,6 @@ ignore = [
     "SIM",
     "RUF",
     "D",
-    "UP",
     "FBT",
     "PYI",
     "ARG",

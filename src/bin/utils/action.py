@@ -51,7 +51,7 @@ class EnumAction(argparse.Action):
         # Generate choices from the Enum
         kwargs.setdefault("choices", tuple(e.name for e in enum_type))
 
-        super(EnumAction, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self._enum = enum_type
 
