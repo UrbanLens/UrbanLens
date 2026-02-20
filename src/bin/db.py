@@ -33,6 +33,7 @@ import os
 import re
 from shutil import which
 import subprocess
+import sys
 import textwrap
 import time
 
@@ -47,11 +48,11 @@ logger = logging.getLogger(__name__)
 DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Default path to the data directory, which we pass directly to postgres
-DEFAULT_DATA_PATH = os.environ.get("urbanlens_db_data_path", f"{DIR}/pgsql/data")
+DEFAULT_DATA_PATH = os.environ.get("URBANLENS_DB_DATA_PATH", f"{DIR}/pgsql/data")
 # Default path to the logfile we want to use.
-DEFAULT_LOG_PATH = os.environ.get("urbanlens_log_path", f"{DIR}/pgsql/pgsql.log")
+DEFAULT_LOG_PATH = os.environ.get("URBANLENS_LOG_PATH", f"{DIR}/pgsql/pgsql.log")
 # Command to use to interact with the DB. This must be in our path.
-EXE = os.environ.get("urbanlens_postgres_bin", "pg_ctl")
+EXE = os.environ.get("URBANLENS_POSTGRES_BIN", "pg_ctl")
 
 
 class Db:
@@ -137,8 +138,8 @@ class Db:
         self.data_path = data_path
         self.log_path = log_path
 
-        self._user = os.environ.get("urbanlens_db_user", "postgres")
-        self._database = os.environ.get("urbanlens_db_database", "UrbanLens")
+        self._user = os.environ.get("URBANLENS_DB_USER", "postgres")
+        self._database = os.environ.get("URBANLENS_DB_DATABASE", "UrbanLens")
 
     def start(self) -> int:
         """
@@ -407,7 +408,12 @@ def main():
                      """),
     )
     parser.add_argument(
-        "-l", "--log", type=str, metavar="path", default=DEFAULT_LOG_PATH, help="Path to the log file for the DB.",
+        "-l",
+        "--log",
+        type=str,
+        metavar="path",
+        default=DEFAULT_LOG_PATH,
+        help="Path to the log file for the DB.",
     )
     parser.add_argument(
         "-d",
@@ -428,11 +434,11 @@ def main():
     except ValueError as ve:
         # One of the options contains bad data. Print the message and exit.
         print(f"Bad option provided: {ve}")
-        exit()
+        sys.exit()
     except FileNotFoundError as fnf:
         # The options were okay, but we can't find a necessary file (probably the executable)
         print(f"Unable to find a necessary file: {fnf}")
-        exit()
+        sys.exit()
 
     match options.action:
         case Actions.start:
@@ -465,7 +471,7 @@ def main():
             print("Error: Unknown action. Try --help to see how to call this script.")
 
     logger.debug("Result is %s", result)
-    exit()
+    sys.exit()
 
 
 if __name__ == "__main__":

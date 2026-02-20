@@ -248,10 +248,7 @@ class Pin(abstract.Model):
         if not self.place_name:
             return False
 
-        if self.place_name == "No Information Available":
-            return False
-
-        return True
+        return self.place_name != "No Information Available"
 
     def change_category(self, category_id: int) -> None:
         from urbanlens.dashboard.models.categories.model import Category

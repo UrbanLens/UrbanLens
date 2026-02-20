@@ -23,6 +23,7 @@
 *        2024-03-22     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -30,7 +31,7 @@ from urbanlens.dashboard.models.pin import Pin
 
 
 @receiver(post_save, sender=Pin)
-def suggest_and_add_categories(sender, instance: Pin, created, **kwargs):
+def suggest_and_add_categories(sender, instance: Pin, created, **kwargs):  # noqa: ARG001
     """
     Suggests categories for a newly created Pin instance and adds them.
 

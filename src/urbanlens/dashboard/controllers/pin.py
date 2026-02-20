@@ -215,7 +215,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 )
 
             place_name = pin.place_name
-            if place_name and place_name != pin.address_basic and place_name != pin.name:
+            if place_name and place_name not in {pin.address_basic, pin.name}:
                 query.append(place_name)
 
             search_results = google_gateway.search(query)

@@ -23,6 +23,7 @@
 *        2024-03-22     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -30,7 +31,7 @@ from urbanlens.dashboard.models.location import Location
 
 
 @receiver(post_save, sender=Location)
-def suggest_and_add_categories(sender, instance: Location, created, **kwargs):
+def suggest_and_add_categories(sender, instance: Location, created, **kwargs):  # noqa: ARG001
     """
     Suggests categories for a newly created Location instance and adds them.
 

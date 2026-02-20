@@ -104,6 +104,7 @@ class GoogleMapsGateway(Gateway):
         self,
         latitude,
         longitude,
+        *,
         fov=90,
         pitch=0,
         size="600x300",

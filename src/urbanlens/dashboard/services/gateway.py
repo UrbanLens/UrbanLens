@@ -23,11 +23,11 @@
 *        2024-01-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from abc import ABC
 
 
-class Gateway(ABC):
+class Gateway(ABC):  # noqa: B024 - Future base class, which may be expanded eventually.
     """
     An abstract class to serve as a template for API gateways.
     """
-

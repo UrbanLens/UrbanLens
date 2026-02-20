@@ -764,20 +764,15 @@ ignore = [
     "ANN",     # type annotation enforcement
     "DOC",     # docstring rules
     "PLC0415", # import should be at top
-    "TRY",
     "W2",
     "BLE001",  # catch blind Exception
     "PLW1641", # implement __hash__
-    "PLR",
-    "B02",
-    "INP",
-    "ISC",
-    "SIM",
+    "ISC003",  # implicit string concat
+    "SIM102",  # nested ifs
     "RUF",
     "D",
     "FBT",
-    "PYI",
-    "ARG",
+    "PYI021",  # docstrings should not be included in pyi (I'm not sure this is true??)
     "PTH",
     "N806",    # variable should be lowercase
     "DTZ007",  # timezone-aware datetime without tzinfo

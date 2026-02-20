@@ -51,11 +51,11 @@ class Friendship(Model):
 
         @classmethod
         def rejected(cls, status: str) -> bool:
-            return status in [cls.DECLINED, cls.REMOVED, cls.BLOCKED, cls.MUTED]
+            return status in {cls.DECLINED, cls.REMOVED, cls.BLOCKED, cls.MUTED}
 
         @classmethod
         def can_request(cls, status: str) -> bool:
-            return status in [cls.DECLINED, cls.REMOVED]
+            return status in {cls.DECLINED, cls.REMOVED}
 
     class FriendshipType(TextChoices):
         FOLLOWING = "Following", "Following"

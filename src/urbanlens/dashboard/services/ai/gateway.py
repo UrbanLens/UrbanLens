@@ -54,7 +54,16 @@ class LLMGateway[Response](ABC):
     project_description: str
     max_tokens: int = MAX_TOKENS
 
-    def __init__(self, api_key: str | None = None, model: str | None = None, api_url: str | None = None, formatting: str = FORMATTING, instructions: str = INSTRUCTIONS, project_description: str = PROJECT_DESCRIPTION, **kwargs):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        api_url: str | None = None,
+        formatting: str = FORMATTING,
+        instructions: str = INSTRUCTIONS,
+        project_description: str = PROJECT_DESCRIPTION,
+        **kwargs,
+    ):
         self._token_count = {"sent": 0, "received": 0}
         self.formatting = formatting
         self.instructions = instructions
@@ -67,7 +76,7 @@ class LLMGateway[Response](ABC):
     @property
     def api_key(self) -> str | None:
         return self._api_key
-    
+
     @api_key.setter
     def api_key(self, value: str | None):
         self._api_key = value
@@ -77,7 +86,7 @@ class LLMGateway[Response](ABC):
         if not self._model:
             return "gpt-5-nano"
         return self._model
-    
+
     @model.setter
     def model(self, value: str | None):
         self._model = self._lookup_model(value)
@@ -85,7 +94,7 @@ class LLMGateway[Response](ABC):
     @property
     def api_url(self) -> str | None:
         return self._api_url
-    
+
     @api_url.setter
     def api_url(self, value: str | None):
         self._api_url = value
@@ -251,13 +260,14 @@ class LLMGateway[Response](ABC):
         """
         Perform any necessary setup for the AI model.
 
-            This method can be overridden by child classes to perform any necessary setup for the AI model.
+        This method can be overridden by child classes to perform any necessary setup for the AI model.
         """
+        logger.debug("LLMGateway setup not defined in subclass")
 
     def _lookup_model(self, model_name: str | None) -> str | None:
         if not model_name:
             return None
-        
+
         return model_name.lower()
 
     def calculate_tokens(self, prompt: str) -> int:
@@ -281,7 +291,7 @@ class LLMGateway[Response](ABC):
             tokens = encoding.encode(prompt)
 
         return len(tokens)
-    
+
     def calculate_combined_tokens(self, messages: MessageQueue | list[dict[str, str]]) -> int:
         """
         Calculate the exact number of tokens in a combined prompt.
@@ -297,7 +307,7 @@ class LLMGateway[Response](ABC):
         """
         prompt = "\n\n".join([message["content"] for message in messages])
         return self.calculate_tokens(prompt)
-    
+
     def prepare_system_prompt(self, **kwargs) -> str:
         """
         Prepare a text prompt for the AI model to use as the system prompt.
@@ -316,7 +326,7 @@ class LLMGateway[Response](ABC):
         if self.instructions:
             prompt += f"\n\n<INSTRUCTIONS>{self.instructions}</INSTRUCTIONS>"
         return prompt
-    
+
     def construct_messages(self, prompt: str) -> MessageQueue:
         """
         Construct a list of messages to be used for chat completion.
@@ -356,7 +366,7 @@ class LLMGateway[Response](ABC):
         """
         queue = self.construct_messages(prompt)
         self.send_tokens(queue)
-        
+
         if response := self._get_response(queue):
             if message := self._parse_response(response):
                 self.receive_tokens(message)
@@ -364,14 +374,14 @@ class LLMGateway[Response](ABC):
                 if not answer:
                     logger.error("No answer from message queue: %s", queue)
                 return answer
-            
+
         return None
-    
+
     @abstractmethod
     def _get_response(self, message_queue: MessageQueue) -> Response | None:
         """
         Send the message queue to the AI gateway, and return the response it provides, unmodified.
-            
+
             Args:
                 message_queue (MessageQueue):
                     The message queue to send to the AI gateway.
@@ -382,7 +392,7 @@ class LLMGateway[Response](ABC):
 
         """
         raise NotImplementedError
-    
+
     @abstractmethod
     def _parse_response(self, response: Response) -> str | None:
         """
@@ -398,11 +408,11 @@ class LLMGateway[Response](ABC):
 
         """
         raise NotImplementedError
-    
+
     def _parse_answer(self, message_content: str) -> str | None:
         """
         Parse the <ANSWER> tag from the response body.
-        
+
             Args:
                 message_content (str):
                     The content of the message to parse.
@@ -417,6 +427,11 @@ class LLMGateway[Response](ABC):
                 return match.group(1).strip()
             logger.error('No ANSWER in response from AI model "%s": Response: %s', self.model, message_content)
         except Exception as e:
-            logger.error("Error parsing answer from response for model '%s'. Respoonse: %s\nError: %s", self.model, message_content, e)
+            logger.error(
+                "Error parsing answer from response for model '%s'. Respoonse: %s\nError: %s",
+                self.model,
+                message_content,
+                e,
+            )
 
         return None
