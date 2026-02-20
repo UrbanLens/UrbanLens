@@ -29,7 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
@@ -64,7 +64,7 @@ class NPSGateway(Gateway):
         response.raise_for_status()
         return self.handle_response(response, params)
 
-    def handle_response(self, response: requests.Response, request_data: dict | None = None) -> list:
+    def handle_response(self, response: requests.Response, request_data: dict[str, Any] | None = None) -> list:
         """
         Handle a response from the NPS API
         """
