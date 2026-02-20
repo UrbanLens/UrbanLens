@@ -83,9 +83,11 @@ class Db:
         Sets the log path. Assumes that input_path is user input and sanitizes it accordingly.
 
         Args:
+        ----
             user_input_path (str): The path provided via user input to sanitize and set.
 
         Returns:
+        -------
             None
 
         """
@@ -97,9 +99,11 @@ class Db:
         Sets the data directory path. Assumes that input_path is user input and sanitizes it accordingly.
 
         Args:
+        ----
             user_input_path(str): The path provided via user input to sanitize and set.
 
         Returns:
+        -------
             None
 
         """
@@ -110,18 +114,20 @@ class Db:
         Sets up our Db object with config options we'll use for this run.
 
         Args:
+        ----
             data_path (str, optional):
                 The data directory path to use, which is passed directly to Postgres.
                 Note: This is sanitized and only accepts these characters: a-zA-Z0-9/_.-
                 On windows, this also accepts colons and backslashes.
                 Defaults to the DEFAULT_DATA_PATH constant.
-            log_path
+            log_path:
                 The logfile we want Postgres to use.
                 Note: This is sanitized and only accepts these characters: a-zA-Z0-9/_.-
                 On windows, this also accepts colons and backslashes.
                 Defaults to the DEFAULT_LOG_PATH constant.
 
         Raises:
+        ------
             ValueError: If the config options provided are not valid, or the files they reference are not found.
             FileNotFoundError: If the postgres executable cannot be found.
 
@@ -147,7 +153,8 @@ class Db:
 
         If the server is already running, prints a message indicating so, but does NOT attempt to restart.
 
-        Returns:
+        Returns
+        -------
             int: The exit code returned from executing the postgres command (pg_ctl), or -1 if the server is already running.
 
         """
@@ -163,7 +170,8 @@ class Db:
         """
         Restarts the PostgresSQL server and prints all output to stdout.
 
-        Returns:
+        Returns
+        -------
             int: The exit code returned from executing the postgres command (pg_ctl)
 
         """
@@ -173,7 +181,8 @@ class Db:
         """
         Stops the PostgresSQL server and prints all output to stdout.
 
-        Returns:
+        Returns
+        -------
             int: The exit code returned from executing the postgres command (pg_ctl)
 
         """
@@ -183,7 +192,8 @@ class Db:
         """
         Checks the status of the postgres server and prints all output to stdout.
 
-        Returns:
+        Returns
+        -------
             int: The exit code returned from executing the postgres command (pg_ctl)
 
         """
@@ -298,10 +308,12 @@ class Db:
         """
         Determines if the postgres server is running, without printing anything to stdout.
 
-        Returns:
+        Returns
+        -------
             bool: True if the server is running, False otherwise.
 
-        Raises:
+        Raises
+        ------
             FileNotFoundError: If postgres is not able to find the data directory
 
         """
@@ -329,9 +341,11 @@ class Db:
         so we must be especially careful with what we return.
 
         Args:
+        ----
             user_input_path (str): The user input to turn into a path
 
         Returns:
+        -------
             str: The sanitized path
 
         """
@@ -380,10 +394,6 @@ class Actions(Enum):
 
 
 def main():
-    """
-    This code is only run when this script is called directly (i.e. python bin/db.py)
-    """
-
     # Setup the basic configuration for the parser
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawTextHelpFormatter,

@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 
 # App imports
-from djangofoundry.helpers import queue
+from djangofoundry import helpers
 
 #
 # Set up logging for this module. __name__ includes the namespace (e.g. dashboard.models.cases).
@@ -34,5 +34,5 @@ from djangofoundry.helpers import queue
 logger = logging.getLogger(__name__)
 
 
-class Queue(queue.Queue):
+class Queue(helpers.queue.Queue):
     unique_key = ["id"]

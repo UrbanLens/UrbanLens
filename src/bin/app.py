@@ -56,9 +56,7 @@ class Actions(app.Actions):
 
 class App(scripts.App):
     """
-    This functionality is implemented within djangofoundry.
-
-    We are extending it here to add additional functionality that is custom to our app (todo).
+    Extend djangofoundry functionality to customize our app (todo).
     """
 
     def get_argument(self, argument_name: str, args: tuple, kwargs: dict) -> Any:
@@ -68,6 +66,7 @@ class App(scripts.App):
         This is useful for methods like self.perform() where we want to pass arguments to an arbitrary method, which may be different per command.
 
         Args:
+        ----
             argument_name (str):
                 The name of the argument to retrieve
             args (tuple):
@@ -76,9 +75,11 @@ class App(scripts.App):
                 The dictionary of keyword arguments passed to the method
 
         Returns:
+        -------
             The argument value, if it exists. Otherwise, None.
 
         Examples:
+        --------
             >>> class Foo(App):
             >>> 	def change_page(self, *args, **kwargs):
             >>> 		argument = self.get_argument('page_name', args, kwargs)
@@ -98,15 +99,19 @@ class App(scripts.App):
         Install a python package using pip, and add it (with version) to requirements.txt.
 
         Args:
+        ----
             package_name (str): The name of the package to install.
 
         Returns:
+        -------
             bool: True if the package was installed successfully, False otherwise.
 
         Raises:
+        ------
             ValueError: If package_name contains more than one package.
 
         Examples:
+        --------
             >>> app = App()
             >>> app.pip_install('requests')
             True
@@ -157,11 +162,13 @@ class App(scripts.App):
         Perform an action given a (string) command
 
         Args:
+        ----
             command (Actions): The action to perform.
             *args: Any arguments to pass to the action.
             **kwargs: Any keyword arguments to pass to the action.
 
         Returns:
+        -------
             Any: The result of the action.
 
         """
@@ -180,9 +187,6 @@ class App(scripts.App):
 
 
 def main():
-    """
-    This code is only run when this script is called directly (i.e. python bin/app.py)
-    """
     try:
         parser = argparse.ArgumentParser(description="Setup and manage the Django application (similar to manage.py).")
         parser.add_argument("action", choices=[e.value for e in Actions], help="The action to perform.")

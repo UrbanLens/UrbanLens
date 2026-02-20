@@ -330,6 +330,7 @@ class DjangoProjectInitializer:
             command (List[str]): the command to run
             description (str): a description of the command
             cwd (str): the directory to run the command in
+            raise_error (bool): whether to raise an error if the command fails (default: True)
 
         Raises:
             UnrecoverableError: if the command fails

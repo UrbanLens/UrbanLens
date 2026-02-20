@@ -772,11 +772,11 @@ ignore = [
     "RUF012",  # mutable class attributes -> ClassVar
     "FBT001",  # boolean position argument
     "FBT002",  # boolean default argument
-    "D",
     "PYI021",  # docstrings should not be included in pyi (I'm not sure this is true??)
-    "PTH",
+    "PTH",     # use Pathlib
     "N806",    # variable should be lowercase
     "DTZ007",  # timezone-aware datetime without tzinfo
+    "D414",    # empty docstring
     "S605",
 ] # A sane ignore set for many modern codebases.
 

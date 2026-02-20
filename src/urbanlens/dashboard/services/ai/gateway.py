@@ -104,7 +104,8 @@ class LLMGateway[Response](ABC):
         """
         Returns the number of tokens for sentences in the LLMGateway instance.
 
-            Returns:
+            Returns
+        -------
                 int:
                     The number of tokens for sentences in the LLMGateway instance.
 
@@ -116,7 +117,8 @@ class LLMGateway[Response](ABC):
         """
         Returns the number of received tokens.
 
-            Returns:
+            Returns
+        -------
                 int:
                     The number of received tokens.
 
@@ -128,7 +130,8 @@ class LLMGateway[Response](ABC):
         """
         Returns the total number of tokens, calculated as the sum of tokens sent and tokens received.
 
-            Returns:
+            Returns
+        -------
                 int:
                     The total number of tokens.
 
@@ -145,7 +148,8 @@ class LLMGateway[Response](ABC):
 
         Returns the total cost for the tokens calculated based on the model's costs.
 
-        Returns:
+        Returns
+        -------
             Decimal:
                 The total cost for the tokens sent and received.
 
@@ -182,6 +186,7 @@ class LLMGateway[Response](ABC):
         Annotates the number of tokens sent and updates the token count accordingly.
 
             Args:
+        ----
                 count (Any):
                     The number of tokens to be sent.
 
@@ -194,6 +199,7 @@ class LLMGateway[Response](ABC):
         Annotates the number of tokens sent and updates the token count accordingly.
 
             Args:
+        ----
                 count (int):
                     The number of tokens to be sent.
 
@@ -207,6 +213,7 @@ class LLMGateway[Response](ABC):
         Processes the prompt to calculate and send tokens.
 
             Args:
+        ----
                 prompt (str):
                     The prompt for which tokens are to be calculated and sent.
 
@@ -221,6 +228,7 @@ class LLMGateway[Response](ABC):
         Processes the messages to calculate and send tokens.
 
             Args:
+        ----
                 messages (MessageQueue):
                     The messages to be processed for token calculation and sent.
 
@@ -235,6 +243,7 @@ class LLMGateway[Response](ABC):
         Updates the count of received tokens and logs the information.
 
             Args:
+        ----
                 count (int):
                     The number of tokens received.
 
@@ -248,6 +257,7 @@ class LLMGateway[Response](ABC):
         Process the prompt to calculate tokens and update the token count accordingly.
 
             Args:
+        ----
                 prompt (str):
                     The text prompt for which tokens are to be calculated.
 
@@ -275,10 +285,12 @@ class LLMGateway[Response](ABC):
         Calculate the exact number of tokens in a given text prompt using the tokenizer from the transformers library.
 
             Args:
+        ----
                 prompt (str):
                     The text prompt to calculate token count for.
 
             Returns:
+        -------
                 int: The exact token count.
 
         """
@@ -297,10 +309,12 @@ class LLMGateway[Response](ABC):
         Calculate the exact number of tokens in a combined prompt.
 
             Args:
+        ----
                 messages (dict):
                     A dictionary of messages to be used for chat completion.
 
             Returns:
+        -------
                 int:
                     The exact token count for the given prompt.
 
@@ -315,7 +329,8 @@ class LLMGateway[Response](ABC):
             This can be overridden by child classes to include specific prompt formatting, if desired, but
             should usually be changed by passing custom instructions or a project description to the constructor.
 
-            Returns:
+            Returns
+        -------
                 str:
                     The prepared text prompt.
 
@@ -332,14 +347,17 @@ class LLMGateway[Response](ABC):
         Construct a list of messages to be used for chat completion.
 
             Args:
+        ----
                 prompt (str):
                     The text prompt to be used for chat completion.
 
             Raises:
+        ------
                 ValueError:
                     If the prompt exceeds the maximum token limit.
 
             Returns:
+        -------
                 list[dict]:
                     A list of messages to be used for chat completion.
 
@@ -355,13 +373,14 @@ class LLMGateway[Response](ABC):
         """
         Send a prompt to the AI model and return the answer within its response.
 
-            Args:
-                prompt (str):
-                    The prompt to send to the AI model.
+        Args:
+        ----
+            prompt (str): The prompt to send to the AI model.
+            kwargs: Additional keyword arguments that may be used for specific implementations.
 
-            Returns:
-                str:
-                    The answer from the AI model.
+        Returns:
+        -------
+            str | None: The answer from the AI model.
 
         """
         queue = self.construct_messages(prompt)
@@ -383,10 +402,12 @@ class LLMGateway[Response](ABC):
         Send the message queue to the AI gateway, and return the response it provides, unmodified.
 
             Args:
+        ----
                 message_queue (MessageQueue):
                     The message queue to send to the AI gateway.
 
             Returns:
+        -------
                 Response (Generic type):
                     The response from the AI gateway.
 
@@ -399,10 +420,12 @@ class LLMGateway[Response](ABC):
         Parse the response from the AI Gateway and return the message body.
 
             Args:
+        ----
                 response (Response generic type):
                     The response from the AI Gateway.
 
             Returns:
+        -------
                 str:
                     The parsed response from the AI Gateway.
 
@@ -414,10 +437,12 @@ class LLMGateway[Response](ABC):
         Parse the <ANSWER> tag from the response body.
 
             Args:
+        ----
                 message_content (str):
                     The content of the message to parse.
 
             Returns:
+        -------
                 str | None:
                     The parsed answer from the response.
 

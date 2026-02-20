@@ -45,6 +45,7 @@ def select_environment(env_type: EnvironmentTypes | None = None, default: Enviro
 
     Args:
         env_type (EnvironmentTypes): The environment type to use.
+        default (EnvironmentTypes): The default environment type to use if none is provided (default: EnvironmentTypes.LOCAL).
 
     Returns:
         BaseEnvironment: The environment to use.
