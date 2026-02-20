@@ -22,12 +22,10 @@
 *        2025-03-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from django.db import models
 
 from urbanlens.dashboard.models.abstract import models
 
-class PinQuerySet(models.QuerySet):
-    ...
+class PinQuerySet(models.QuerySet): ...
 
 class PinManager(models.Manager, PinQuerySet):
     def all(self) -> PinQuerySet: ...

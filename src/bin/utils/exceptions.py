@@ -19,19 +19,19 @@ Metadata:
 """
 
 
-class AppException(Exception):
+class AppError(Exception):
     """
     A base exception that all our custom app exceptions extend from.
     """
 
 
-class FileEmptyError(AppException):
+class FileEmptyError(AppError):
     """
     Raised when a file is empty that is required to have content (i.e. our settings file)
     """
 
 
-class DbError(AppException):
+class DbError(AppError):
     """
     Raised when there is a problem with the DB.
 
@@ -51,13 +51,13 @@ class DbStartError(DbError, ConnectionError):
     """
 
 
-class UnsupportedCommandError(AppException):
+class UnsupportedCommandError(AppError):
     """
     Raised when a command is passed to our app that isn't valid.
     """
 
 
-class UnrecoverableError(AppException):
+class UnrecoverableError(AppError):
     """
     Raised when an error occurs that is unrecoverable.
     """

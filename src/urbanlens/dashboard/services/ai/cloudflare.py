@@ -23,6 +23,7 @@
 *        2024-03-21     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from __future__ import annotations
 
 import logging
@@ -44,7 +45,6 @@ Response = TypeVar("Response", bound=dict[str, Any])
 
 
 class CloudflareGateway(LLMGateway[Response]):
-    
     def setup(self, **kwargs):
         if not self.api_url:
             self.api_url = settings.cloudflare_worker_ai_endpoint
@@ -59,7 +59,7 @@ class CloudflareGateway(LLMGateway[Response]):
     def _lookup_model(self, model_name: str | None) -> str | None:
         if not model_name:
             return DEFAULT_MODEL
-        
+
         if result := super()._lookup_model(model_name):
             return result
 
@@ -79,32 +79,34 @@ class CloudflareGateway(LLMGateway[Response]):
 
         """
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        input = {"messages": message_queue.messages}
+        message_input = {"messages": message_queue.messages}
         url = f"{self.api_url}{self.model}"
 
         try:
-            logger.info("Cloudflare request: %s", input)
-            response = requests.post(url, headers=headers, json=input, timeout=60)
+            logger.info("Cloudflare request: %s", message_input)
+            response = requests.post(url, headers=headers, json=message_input, timeout=60)
         except requests.RequestException as e:
             logger.error("Failed to send request to Cloudflare AI: %s", e)
             return None
-        
+
         try:
             response.raise_for_status()
             return response.json()
         except requests.HTTPError as httpe:
             logger.error("Cloudflare AI returned an HTTP error. Content: %s -> %s", response.text, httpe)
             from icecream import ic
+
             ic(response)
             ic(response.text)
             return None
         except ValueError as ve:
             logger.error("Failed to parse Cloudflare AI response as json: %s -> %s", response.status_code, ve)
             from icecream import ic
+
             ic(response)
             ic(response.text)
             return None
-    
+
     def _parse_response(self, response: Response) -> str | None:
         """
         Parse the response from the Cloudflare AI API.
@@ -123,5 +125,5 @@ class CloudflareGateway(LLMGateway[Response]):
         except KeyError as e:
             logger.error("Failed to parse Cloudflare AI result.response: '%s' -> %s", response, e)
             return None
-        
+
         return body

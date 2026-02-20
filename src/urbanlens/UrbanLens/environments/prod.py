@@ -45,6 +45,7 @@ class Production(BaseEnvironment):
         )
 
     @validator("debug_override")
+    @classmethod
     def debug_override_must_be_off(cls, value):
         """
         Debug mode is not allowed in production

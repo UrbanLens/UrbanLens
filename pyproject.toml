@@ -763,10 +763,7 @@ ignore = [
     "PLR2004", # magic values in tests
     "ANN",     # type annotation enforcement
     "DOC",     # docstring rules
-    "A004",
-    "PLC0415",
-    "S113",
-    "DTZ007",
+    "PLC0415", # import should be at top
     "TRY",
     "W2",
     "RET",
@@ -777,27 +774,21 @@ ignore = [
     "PLR",
     "B02",
     "INP",
-    "N806",
     "ISC",
     "SIM",
     "RUF",
     "D",
     "UP",
-    "A001",
     "FBT",
-    "DTZ",
     "PYI",
-    "F811",
     "ARG",
-    "SLF",
-    "F841",
     "PTH",
-    "B904",
-    "N8",
+    "N806",    # variable should be lowercase
+    "DTZ007",  # timezone-aware datetime without tzinfo
     "S105",
-    "RSE102",
-    "S",
-    "FURB",
+    "S113",
+    "S605",
+    "S608",
 ] # A sane ignore set for many modern codebases.
 
 [tool.ruff.lint.per-file-ignores]

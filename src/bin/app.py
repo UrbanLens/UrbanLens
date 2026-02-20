@@ -45,7 +45,7 @@ from djangofoundry.scripts import app
 from bin.utils.exceptions import DbStartError, UnsupportedCommandError
 from bin.utils.settings import Settings
 
-logger = Settings.getLogger(__name__)
+logger = Settings.get_logger(__name__)
 
 
 class Actions(app.Actions):
@@ -126,7 +126,10 @@ class App(scripts.App):
 
         # Install the package, capture output so that we can determine the version number of the package
         logger.info(f"Installing {package_name}...")
-        install_output = subprocess.check_output([sys.executable, "-m", "pip", "install", package_name], stderr=subprocess.STDOUT).decode("utf-8")
+        install_output = subprocess.check_output(
+            [sys.executable, "-m", "pip", "install", package_name],
+            stderr=subprocess.STDOUT,
+        ).decode("utf-8")
 
         # Grab the version number from the output
         if not (matches := re.search(r"Successfully installed (.*)", install_output)):
@@ -185,8 +188,18 @@ def main():
         parser.add_argument("-p", "--project-name", default="myproject", help="The name of the project.")
         parser.add_argument("-a", "--author-name", help="The name of the author.")
         parser.add_argument("-d", "--directory", default=".", help="The directory for the project.")
-        parser.add_argument("-f", "--frontend-dir", default="frontend", help="The directory for the frontend (relative to -d).")
-        parser.add_argument("-b", "--backend-dir", default="backend", help="The directory for the backend (relative to -d).")
+        parser.add_argument(
+            "-f",
+            "--frontend-dir",
+            default="frontend",
+            help="The directory for the frontend (relative to -d).",
+        )
+        parser.add_argument(
+            "-b",
+            "--backend-dir",
+            default="backend",
+            help="The directory for the backend (relative to -d).",
+        )
         parser.add_argument("-s", "--settings", default="conf/settings.yaml", help="The settings file to use.")
         parser.add_argument("--page-name", help="The name of the page to create.")
         parser.add_argument("--model-name", help="The name of the model to create.")
@@ -202,7 +215,14 @@ def main():
 
             # Instantiate a new App object based on our arguments
             app = App()
-            app = App(options.project_name, options.author_name, settings, options.directory, options.frontend_dir, options.backend_dir)
+            app = App(
+                options.project_name,
+                options.author_name,
+                settings,
+                options.directory,
+                options.frontend_dir,
+                options.backend_dir,
+            )
 
         except ValueError as ve:
             # One of the options contains bad data. Print the message and exit.
@@ -216,7 +236,12 @@ def main():
 
         try:
             command = Actions(options.action)
-            result = app.perform(command, page_name=options.page_name, model_name=options.model_name, package_name=options.package_name)
+            result = app.perform(
+                command,
+                page_name=options.page_name,
+                model_name=options.model_name,
+                package_name=options.package_name,
+            )
 
             if result is not None:
                 logger.debug(f"App returned ({result})")

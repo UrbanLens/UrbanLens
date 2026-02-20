@@ -189,7 +189,15 @@ class Db:
         return os.system(f"{EXE} -D {self.data_path} -l {self.log_path} status")
 
     def check_errors(self) -> int:
-        cmd = ["psql", "-U", self.user, "-d", self.database, "-c", "SELECT * FROM pg_stat_database_conflicts WHERE datname = current_database();"]
+        cmd = [
+            "psql",
+            "-U",
+            self.user,
+            "-d",
+            self.database,
+            "-c",
+            "SELECT * FROM pg_stat_database_conflicts WHERE datname = current_database();",
+        ]
         return subprocess.call(cmd)
 
     def analyze(self) -> int:
@@ -201,15 +209,39 @@ class Db:
         return subprocess.call(cmd)
 
     def dead_rows(self) -> int:
-        cmd = ["psql", "-U", self.user, "-d", self.database, "-c", "SELECT relname, n_dead_tup FROM pg_stat_user_tables WHERE n_dead_tup > 0;"]
+        cmd = [
+            "psql",
+            "-U",
+            self.user,
+            "-d",
+            self.database,
+            "-c",
+            "SELECT relname, n_dead_tup FROM pg_stat_user_tables WHERE n_dead_tup > 0;",
+        ]
         return subprocess.call(cmd)
 
     def long_queries(self) -> int:
-        cmd = ["psql", "-U", self.user, "-d", self.database, "-c", "SELECT pid, now() - pg_stat_activity.query_start AS duration, query FROM pg_stat_activity WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';"]
+        cmd = [
+            "psql",
+            "-U",
+            self.user,
+            "-d",
+            self.database,
+            "-c",
+            "SELECT pid, now() - pg_stat_activity.query_start AS duration, query FROM pg_stat_activity WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';",
+        ]
         return subprocess.call(cmd)
 
     def locks(self) -> int:
-        cmd = ["psql", "-U", self.user, "-d", self.database, "-c", "SELECT pid, relation::regclass, mode, granted FROM pg_locks WHERE NOT granted;"]
+        cmd = [
+            "psql",
+            "-U",
+            self.user,
+            "-d",
+            self.database,
+            "-c",
+            "SELECT pid, relation::regclass, mode, granted FROM pg_locks WHERE NOT granted;",
+        ]
         return subprocess.call(cmd)
 
     def backup(self) -> int:
@@ -240,7 +272,7 @@ class Db:
                     progress_bar.update(1)
                     time.sleep(1)
 
-            stdout, stderr = process.communicate()
+            _stdout, stderr = process.communicate()
 
             if process.returncode != 0:
                 logger.error(f"pg_dump failed with error: {stderr.decode('utf-8')}")
@@ -326,6 +358,7 @@ class Actions(Enum):
         stop:
             stop the DB (if it is running)
     """
+
     start = "start"
     restart = "restart"
     status = "status"
@@ -347,40 +380,43 @@ class Actions(Enum):
 
 def main():
     """
-        This code is only run when this script is called directly (i.e. python bin/db.py)
+    This code is only run when this script is called directly (i.e. python bin/db.py)
     """
 
     # Setup the basic configuration for the parser
     parser = argparse.ArgumentParser(
-            formatter_class=argparse.RawTextHelpFormatter,
-             description=textwrap.dedent("""
+        formatter_class=argparse.RawTextHelpFormatter,
+        description=textwrap.dedent("""
                 Interact with the application's local DB
             """),
-            epilog="",
+        epilog="",
     )
 
     # Define the arguments we will accept from the command line.
-    parser.add_argument("action",
-                     type=Actions,
-                     action=EnumAction,
-                     help=textwrap.dedent("""\
+    parser.add_argument(
+        "action",
+        type=Actions,
+        action=EnumAction,
+        help=textwrap.dedent("""\
                         Start the local application DB
 
                         status: check the DB status
                         start: start the DB (if it is not already running)
                         restart: stop the DB (if it is running) and start it again.
                         stop: stop the DB (if it is running)
-                     """))
-    parser.add_argument("-l", "--log",
-                         type=str,
-                        metavar="path",
-                        default=DEFAULT_LOG_PATH,
-                          help="Path to the log file for the DB.")
-    parser.add_argument("-d", "--data",
-                         type=str,
-                        metavar="path",
-                        default=DEFAULT_DATA_PATH,
-                          help="Path to the data directory for postgres.")
+                     """),
+    )
+    parser.add_argument(
+        "-l", "--log", type=str, metavar="path", default=DEFAULT_LOG_PATH, help="Path to the log file for the DB.",
+    )
+    parser.add_argument(
+        "-d",
+        "--data",
+        type=str,
+        metavar="path",
+        default=DEFAULT_DATA_PATH,
+        help="Path to the data directory for postgres.",
+    )
 
     # Parse the arguments provided to our script from the command line
     # These are used as attributes. For example: options.action

@@ -23,12 +23,10 @@
 *        2024-03-22     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from django.db import models
 
 from urbanlens.dashboard.models.abstract import models
 
-class ImageQuerySet(models.QuerySet):
-    ...
+class ImageQuerySet(models.QuerySet): ...
 
 class ImageManager(models.Manager, ImageQuerySet):
     def all(self) -> ImageQuerySet: ...

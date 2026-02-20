@@ -39,8 +39,13 @@ class BaseEnvironment(BaseModel, ABC):
     env_type: EnvironmentTypes = Field(default=EnvironmentTypes.LOCAL)
     in_network: bool = Field(default=False)
     is_public: bool = Field(default=True)
-    debug_default: bool = Field(default=False, description="Default debug setting for this environment if one is not explicitly set")
-    debug_override: DebugTypes = Field(default=DebugTypes.DEFAULT, description="Overrides the default debug setting, if set to _ON or _OFF, otherwise uses the default")
+    debug_default: bool = Field(
+        default=False, description="Default debug setting for this environment if one is not explicitly set",
+    )
+    debug_override: DebugTypes = Field(
+        default=DebugTypes.DEFAULT,
+        description="Overrides the default debug setting, if set to _ON or _OFF, otherwise uses the default",
+    )
 
     @property
     def debug(self) -> bool:
@@ -51,12 +56,14 @@ class BaseEnvironment(BaseModel, ABC):
         return self.debug_default
 
     @validator("env_type", pre=True)
+    @classmethod
     def validate_env_type(cls, value):
         if isinstance(value, str):
             return EnvironmentTypes(value.lower())
         return value
 
     @validator("debug_override", pre=True)
+    @classmethod
     def validate_debug_override(cls, value):
         if isinstance(value, str):
             return DebugTypes(value.lower())

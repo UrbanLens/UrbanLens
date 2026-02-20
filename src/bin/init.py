@@ -89,9 +89,9 @@ class DjangoProjectInitializer:
         # validate that value is a number
         try:
             self._db_port = int(value)
-        except ValueError:
+        except ValueError as ve:
             logger.error("Invalid port number")
-            raise UnrecoverableError
+            raise UnrecoverableError("Invalid port number") from ve
 
     @property
     def db_name(self) -> str:
@@ -162,7 +162,7 @@ class DjangoProjectInitializer:
             if git_email:
                 subprocess.run(["git", "config", "--global", "user.email", git_email], check=True, cwd="/app")
             logger.info("Git configured with username %s and email %s.", git_user, git_email)
-            
+
         except subprocess.CalledProcessError as e:
             logger.error("Error configuring git: %s", e)
 
@@ -171,7 +171,7 @@ class DjangoProjectInitializer:
         Create the "UrbanLens" database in postgres
         """
         self.create_pgpass()
-        
+
         if self.check_db():
             logger.info("Database %s already exists.", self.db_name)
             return
@@ -179,12 +179,15 @@ class DjangoProjectInitializer:
         logger.info("Database %s does not exist. Creating...", self.db_name)
 
         # Create the database
-        self.run_command(["psql", "-U", self.db_user, "-h", self.db_host, "-w", "-c", f"CREATE DATABASE {self.db_name}"], "creating database")
+        self.run_command(
+            ["psql", "-U", self.db_user, "-h", self.db_host, "-w", "-c", f"CREATE DATABASE {self.db_name}"],
+            "creating database",
+        )
 
         if not self.check_db():
             logger.error("Database %s was not created.", self.db_name)
             raise UnrecoverableError(f"Database {self.db_name} was not created.")
-        
+
     def copy_sample_env(self):
         """
         Copies .env-sample to .env
@@ -195,11 +198,11 @@ class DjangoProjectInitializer:
         """
         if Path("/app/.env").exists():
             return
-        
+
         try:
-            with open("/app/.env-sample") as sample_file:
+            with Path("/app/.env-sample").open() as sample_file:
                 sample_data = sample_file.read()
-            with open("/app/.env", "w") as new_file:
+            with Path("/app/.env").open("w") as new_file:
                 new_file.write(sample_data)
             logger.info("Copied .env-sample to .env.")
         except OSError as e:
@@ -226,7 +229,7 @@ class DjangoProjectInitializer:
 
         """
         try:
-            with open("/app/.env") as file:
+            with Path("/app/.env").open() as file:
                 data = file.readlines()
 
             for i, line in enumerate(data):
@@ -235,7 +238,7 @@ class DjangoProjectInitializer:
                 elif line.startswith("GIT_EMAIL="):
                     data[i] = f"GIT_EMAIL={email}\n"
 
-            with open("/app/.env", "w") as file:
+            with Path("/app/.env").open("w") as file:
                 file.writelines(data)
             logger.info("Updated git username and email in .env.")
         except OSError as e:
@@ -251,7 +254,7 @@ class DjangoProjectInitializer:
         """
         Runs npm init.
 
-        This should ideally be performed within Docker so that the results can be cached. 
+        This should ideally be performed within Docker so that the results can be cached.
         npm typically takes a long time to install.
 
         Raises:
@@ -273,18 +276,22 @@ class DjangoProjectInitializer:
         apps = ["dashboard", "core"]
         dirs: list[Path] = []
         for app in apps:
-            dirs.append(APP_DIR / app / "frontend" / "static" / app / "js")
-            dirs.append(APP_DIR / app / "frontend" / "static" / app / "css")
+            dirs.extend(
+                (
+                    APP_DIR / app / "frontend" / "static" / app / "js",
+                    APP_DIR / app / "frontend" / "static" / app / "css",
+                ),
+            )
 
-        for dir in dirs:
-            if not dir.exists():
-                os.makedirs(dir)
-                logger.debug(f"Created directory {dir}")
+        for frontend_dir in dirs:
+            if not frontend_dir.exists():
+                frontend_dir.mkdir(parents=True, exist_ok=True)
+                logger.debug(f"Created directory {frontend_dir}")
 
         # Ensure entrypoint (dashboard/frontend/static/dashboard/js/index.js) exists
         entry = APP_DIR / "dashboard" / "frontend" / "static" / "dashboard" / "js" / "index.js"
         if not entry.exists():
-            with open(entry, "w") as file:
+            with entry.open("w") as file:
                 file.write("")
             logger.debug(f"Created empty file {entry}")
 
@@ -298,7 +305,7 @@ class DjangoProjectInitializer:
 
         self.run_command(command, "building frontend")
         self.run_command(["python", "src/urbanlens/manage.py", "collectstatic", "--noinput"], "collecting static files")
-        
+
     def run_migrations(self):
         """
         Runs django migrations (i.e. creates the django DB tables)
@@ -309,7 +316,13 @@ class DjangoProjectInitializer:
         """
         self.run_command(["python", "src/urbanlens/manage.py", "migrate"], "migrating db")
 
-    def run_command(self, command: list[str], description: str | None = None, cwd: str | Path = "/app", raise_error: bool = True) -> bool:
+    def run_command(
+        self,
+        command: list[str],
+        description: str | None = None,
+        cwd: str | Path = "/app",
+        raise_error: bool = True,
+    ) -> bool:
         """
         Run a command
 
@@ -325,14 +338,14 @@ class DjangoProjectInitializer:
         try:
             subprocess.run(command, check=True, cwd=cwd)
             return True
-        
+
         except subprocess.CalledProcessError as e:
             description = description or "running command: " + " ".join(command)
             logger.error("Error occurred %s: %s", description, e)
-            
+
             if raise_error:
                 raise UnrecoverableError from e
-            
+
             return False
 
     def run_dev_server(self):
@@ -378,9 +391,9 @@ class DjangoProjectInitializer:
         if Path(pgpass).exists():
             logger.debug(".pgpass file already exists.")
             return
-        
+
         try:
-            with open(pgpass, "w") as file:
+            with Path(pgpass).open("w") as file:
                 file.write(f"{self.db_host}:{self.db_port}:*:{self.db_user}:{self.db_pass}\n")
             os.chmod(pgpass, 0o600)
             # file_contents = open(pgpass, 'r').read()
@@ -411,7 +424,18 @@ class DjangoProjectInitializer:
             bool: True if the database exists, False otherwise
 
         """
-        command = ["psql", "-U", self.db_user, "-h", self.db_host, "-p", str(self.db_port), "-w", "-c", f"SELECT 1 FROM pg_database WHERE datname='{self.db_name}'"]
+        command = [
+            "psql",
+            "-U",
+            self.db_user,
+            "-h",
+            self.db_host,
+            "-p",
+            str(self.db_port),
+            "-w",
+            "-c",
+            f"SELECT 1 FROM pg_database WHERE datname='{self.db_name}'",
+        ]
         return self.run_command(command, "checking database", raise_error=False)
 
     def initialize_project(self):
@@ -452,18 +476,28 @@ def main():
     Run the initializer.
     """
     logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(levelname)s - %(message)s",
-            handlers=[
-                logging.StreamHandler(),
-                logging.FileHandler(os.path.join("/var", "log", "urbanlens", "init.log")),
-            ],
-        )
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(os.path.join("/var", "log", "urbanlens", "init.log")),
+        ],
+    )
 
     parser = argparse.ArgumentParser(description="Initialize Django project and run server")
-    parser.add_argument("--no-runserver", "-x", action="store_true", help="Do not run the development server after migration")
+    parser.add_argument(
+        "--no-runserver",
+        "-x",
+        action="store_true",
+        help="Do not run the development server after migration",
+    )
     parser.add_argument("--debug", "-v", action="store_true", help="Enable debug logging")
-    parser.add_argument("--environment", "-e", choices=["development", "test", "production"], help="Set the environment")
+    parser.add_argument(
+        "--environment",
+        "-e",
+        choices=["development", "test", "production"],
+        help="Set the environment",
+    )
     args = parser.parse_args()
 
     if args.debug:

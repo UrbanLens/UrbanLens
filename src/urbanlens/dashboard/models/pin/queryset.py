@@ -39,6 +39,7 @@ from django.db.models import Q
 
 # App Imports
 from urbanlens.dashboard.models import abstract
+from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class PinQuerySet(abstract.QuerySet):
         return self.filter(last_visited__isnull=True)
 
     def not_visited_this_year(self):
-        return self.filter(last_visited__year__lt=datetime.now().year)
+        return self.filter(last_visited__year__lt=datetime.now(tz=settings.TIME_ZONE).year)
 
     def by_category(self, category):
         return self.filter(categories__name=category)
@@ -85,6 +86,7 @@ class PinQuerySet(abstract.QuerySet):
         from math import atan2, cos, radians, sin, sqrt
 
         from django.db.models import F
+
         R = 6371  # radius of the Earth in km
         lat1 = radians(latitude)
         lon1 = radians(longitude)
@@ -92,7 +94,7 @@ class PinQuerySet(abstract.QuerySet):
         lon2 = radians(F("longitude"))
         dlon = lon2 - lon1
         dlat = lat2 - lat1
-        a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+        a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
         c = 2 * atan2(sqrt(a), sqrt(1 - a))
         distance = R * c
         return self.filter(distance__lte=distance)
@@ -132,6 +134,7 @@ class PinManager(abstract.Manager.from_queryset(PinQuerySet)):
     """
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
     """
+
     def get_nearby_or_create(self, latitude, longitude, profile, threshold_meters=50, defaults=None):
         """
         Get or create a Pin instance, considering two pins the same if they are within a certain distance threshold.
@@ -148,17 +151,17 @@ class PinManager(abstract.Manager.from_queryset(PinQuerySet)):
 
         """
         point = Point(longitude, latitude, srid=4326)
-        
+
         # Find existing pins within the threshold distance
         existing_pins = self.filter(
             point__distance_lte=(point, D(m=threshold_meters)),
             profile=profile,
         )
-        
+
         if existing_pins.exists():
             # Return the first close enough pin and False for 'created'
             return existing_pins.first(), False
-        
+
         # No existing pin found within the threshold, create a new one
         pin_data = {
             "latitude": latitude,
@@ -168,6 +171,6 @@ class PinManager(abstract.Manager.from_queryset(PinQuerySet)):
             **(defaults or {}),
         }
         pin = self.create(**pin_data)
-        
+
         # Return the new pin and True for 'created'
         return pin, True

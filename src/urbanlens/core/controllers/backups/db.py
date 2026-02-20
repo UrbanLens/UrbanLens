@@ -23,6 +23,7 @@
 *        2024-02-19     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -82,9 +83,9 @@ class DatabaseBackup:
 
     def run(self) -> bool:
         # TODO temporarily disable
-        datetime.now().date()
+        datetime.now(tz=settings.TIME_ZONE).date()
 
-        backup_filename = f'backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.sql'
+        backup_filename = f'backup_{datetime.now(tz=settings.TIME_ZONE).strftime("%Y%m%d_%H%M%S")}.sql'
 
         pg_dump_command = [
             "pg_dump",
@@ -104,7 +105,7 @@ class DatabaseBackup:
             logger.info(f"Backup completed successfully: {backup_filename}")
 
             # Update the last backup date
-            datetime.now().date()
+            datetime.now(tz=settings.TIME_ZONE).date()
 
             self.purge_old_backups()
         except subprocess.CalledProcessError as e:
@@ -115,10 +116,10 @@ class DatabaseBackup:
 
     def schedule_backup(self) -> bool:
         # TODO: Temporarily disable
-        last_backup_date = datetime.now().date()
+        last_backup_date = datetime.now(tz=settings.TIME_ZONE).date()
 
         # Check if backup was already performed today
-        current_date = datetime.now().date()
+        current_date = datetime.now(tz=settings.TIME_ZONE).date()
         if last_backup_date >= current_date:
             return False
 

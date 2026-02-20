@@ -23,6 +23,7 @@
 *        2024-03-22     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from datetime import datetime
 import logging
 
@@ -48,35 +49,49 @@ class PinController(LoginRequiredMixin, GenericViewSet):
     """
     Controller for the pin page
     """
+
     def view(self, request, *args, **kwargs):
         """
         View the pin page
         """
         pin = Pin.objects.get(id=kwargs["pin_id"])
 
-        return render(request, "dashboard/pages/location/index.html", {"pin": pin, "google_maps_api_key": settings.google_maps_api_key})
-    
+        return render(
+            request,
+            "dashboard/pages/location/index.html",
+            {"pin": pin, "google_maps_api_key": settings.google_maps_api_key},
+        )
+
     def test_ai(self, request, *args, **kwargs):
         """
         Test the AI. TODO Temporary function that can be deleted at any time with no side effects.
         """
         from urbanlens.dashboard.models.profile import Profile
+
         profile = Profile.objects.get(pk=1)
-        pin, created = Pin.objects.get_nearby_or_create(latitude=43.0423439, longitude=-76.1501928, profile=profile, defaults={
-            "name": "Syracuse Central High School",
-            "description": "",
-        })
+        pin, _created = Pin.objects.get_nearby_or_create(
+            latitude=43.0423439,
+            longitude=-76.1501928,
+            profile=profile,
+            defaults={
+                "name": "Syracuse Central High School",
+                "description": "",
+            },
+        )
         logger.critical("Location: %s", pin)
         return JsonResponse({"pin": pin.to_json()})
 
         from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
-        instructions = "" +\
-            "Look at the following information about a location and determine what category it belongs in. Example categories are:" +\
-            "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, " +\
-            "Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, Library, Lighthouse, Mall, Mansion, Military Base, " +\
-            "Monument, Police Station, Power Plant, Prison, Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel" +\
-            "If the Pin does not fit into any of these categories, provide a new category that is broad enough to include a variety " +\
-            "of similar urbex locations. Do not answer with the name of the location; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
+
+        instructions = (
+            ""
+            + "Look at the following information about a location and determine what category it belongs in. Example categories are:"
+            + "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, "
+            + "Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, Library, Lighthouse, Mall, Mansion, Military Base, "
+            + "Monument, Police Station, Power Plant, Prison, Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel"
+            + "If the Pin does not fit into any of these categories, provide a new category that is broad enough to include a variety "
+            + "of similar urbex locations. Do not answer with the name of the location; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
+        )
 
         gateway = CloudflareGateway(instructions=instructions)
         response = gateway.send_prompt("address: 312 Western Ave, Guilderland, NY 12084, USA, name: Master Cleaners")
@@ -107,7 +122,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             else:
                 try:
                     # Dates look like this: 2023-01-02T00:00:00+00:00
-                    pin["last_visited"] = datetime.strptime(pin["last_visited"], "%Y-%m-%dT%H:%M:%S%z").strftime("%Y-%m-%d")
+                    pin["last_visited"] = datetime.strptime(pin["last_visited"], "%Y-%m-%dT%H:%M:%S%z").strftime(
+                        "%Y-%m-%d",
+                    )
                 except ValueError:
                     logger.warning("Unable to parse date: %s", pin["last_visited"])
 
@@ -120,7 +137,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         map_data = Pin.objects.all()
         if not map_data:
             # Default map data
-            map_data = [{"latitude": 42.65250213448323, "longitude": -73.75791867436858, "name": "Default Pin", "description": "No pins saved yet."}]
+            map_data = [
+                {
+                    "latitude": 42.65250213448323,
+                    "longitude": -73.75791867436858,
+                    "name": "Default Pin",
+                    "description": "No pins saved yet.",
+                },
+            ]
         else:
             map_data = [pin.to_json() for pin in map_data]
 
@@ -142,9 +166,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # Get historic images from the Smithsonian's API
         smithsonian_images = smithsonian_gateway.get_data(pin.name)
 
-        return render(request, "dashboard/pages/pin/smithsonian.html", {
-            "images": smithsonian_images,
-        })
+        return render(
+            request,
+            "dashboard/pages/pin/smithsonian.html",
+            {
+                "images": smithsonian_images,
+            },
+        )
 
     def web_search(self, request, pin_id, *args, **kwargs):
         """
@@ -179,10 +207,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             ]
 
             if pin.name and pin.address_basic != pin.name:
-                query.append([
-                    pin.name,
-                    pin.city,
-                ])
+                query.append(
+                    [
+                        pin.name,
+                        pin.city,
+                    ],
+                )
 
             place_name = pin.place_name
             if place_name and place_name != pin.address_basic and place_name != pin.name:

@@ -18,7 +18,6 @@ Metadata:
         Copyright (c) 2023 Urban Lens
 """
 
-from django.db import models
 from djangofoundry import models
 
 class QuerySet(models.QuerySet): ...

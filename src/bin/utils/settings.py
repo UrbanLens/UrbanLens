@@ -76,7 +76,7 @@ class Settings:
         return cls.settings.get("logging")
 
     @classmethod
-    def getLogger(cls, namespace: str):
+    def get_logger(cls, namespace: str):
         """
         Sets up the logger once (and only once), then returns a logger for the module requested.
         """

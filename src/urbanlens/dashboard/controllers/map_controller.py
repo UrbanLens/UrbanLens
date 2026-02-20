@@ -23,6 +23,7 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from datetime import datetime
 import logging
 
@@ -50,7 +51,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def view_map(self, request, *args, **kwargs):
         pins = Pin.objects.all()
 
-        return render(request, "dashboard/pages/map/index.html", {"pins": pins, "openweathermap_api_key": settings.openweathermap_api_key})
+        return render(
+            request,
+            "dashboard/pages/map/index.html",
+            {"pins": pins, "openweathermap_api_key": settings.openweathermap_api_key},
+        )
 
     def edit_pin(self, request, pin_id, *args, **kwargs):
         pin: Pin = Pin.objects.get(id=pin_id)
@@ -61,7 +66,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         pin.longitude = request.POST.get("longitude")
         tags = request.POST.get("tags").split(",")
         for tag_name in tags:
-            tag, created = Tag.objects.get_or_create(name=tag_name)
+            tag, _created = Tag.objects.get_or_create(name=tag_name)
             pin.tags.add(tag)
         icon = request.FILES.get("icon", None)
         if icon:
@@ -105,9 +110,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 if not latitude or not longitude:
                     return HttpResponse("Error: Unable to convert address to lat/lng.", status=400)
 
-            pin = Pin.objects.create(name=name, latitude=latitude, longitude=longitude, icon=icon, profile=request.user.profile)
+            pin = Pin.objects.create(
+                name=name,
+                latitude=latitude,
+                longitude=longitude,
+                icon=icon,
+                profile=request.user.profile,
+            )
             for tag_name in tags:
-                tag, created = Tag.objects.get_or_create(name=tag_name)
+                tag, _created = Tag.objects.get_or_create(name=tag_name)
                 pin.tags.add(tag)
             pin.save()
             logger.critical("New pin created: %s", pin.name)
@@ -128,7 +139,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             query = Pin.objects.filter(profile=request.user.profile).filter_by_criteria(search_form.cleaned_data)
             data = self.get_map_data(request, query)
             return render(request, "dashboard/pages/map/data.html", {"pins": data})
-        
+
         logger.error("Invalid search criteria: %s", search_form.errors)
         return HttpResponse(status=400, content="Invalid search criteria.")
 
@@ -189,7 +200,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             else:
                 try:
                     # Dates look like this: 2023-01-02T00:00:00+00:00
-                    pin["last_visited"] = datetime.strptime(pin["last_visited"], "%Y-%m-%dT%H:%M:%S%z").strftime("%Y-%m-%d")
+                    pin["last_visited"] = datetime.strptime(pin["last_visited"], "%Y-%m-%dT%H:%M:%S%z").strftime(
+                        "%Y-%m-%d",
+                    )
                 except ValueError:
                     logger.warning("Unable to parse date: %s", pin["last_visited"])
 
@@ -208,7 +221,9 @@ def get_pin_by_address(address):
             return (pin.latitude, pin.longitude)
 
     except GeocoderTimedOut:
-        raise Exception("Geocoder service timed out.")
+        logger.error("Geocoder service timed out.")
+        raise
     except GeocoderUnavailable:
-        raise Exception("Geocoder service unavailable.")
+        logger.error("Geocoder service unavailable.")
+        raise
     return (None, None)

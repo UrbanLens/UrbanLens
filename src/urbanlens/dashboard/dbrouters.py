@@ -43,14 +43,14 @@ class DBRouter:
     def db_for_read(self, model, **hints):
         """Reading Model from default"""
         default = None
-        if model._meta.app_label in self.route_app_labels:
+        if model._meta.app_label in self.route_app_labels:  # noqa: SLF001 - accessing protected member _meta is necessary to get app_label
             default = "default"
         return getattr(model, "_database", default)
 
     def db_for_write(self, model, **hints):
         """Writing Model to default"""
         default = None
-        if model._meta.app_label in self.route_app_labels:
+        if model._meta.app_label in self.route_app_labels:  # noqa: SLF001 - accessing protected member _meta is necessary to get app_label
             default = "default"
         return getattr(model, "_database", default)
 
