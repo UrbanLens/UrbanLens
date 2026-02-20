@@ -36,11 +36,11 @@ class SmithsonianGateway(Gateway):
     Gateway for the Smithsonian Open Access API.
     """
 
-    def __init__(self, api_key):
+    def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://api.si.edu/openaccess/api/v1.0/search"
 
-    def get_data(self, search_term):
+    def get_data(self, search_term: str) -> list[dict]:
         # Create a unique cache key based on the search term
         cache_key = f"smithsonian_{search_term}"
         # Try to get the data from the cache
@@ -60,7 +60,7 @@ class SmithsonianGateway(Gateway):
             cache.set(cache_key, data, 86400)
         return self.parse_response(data)
 
-    def get_images_by_coordinates(self, latitude, longitude):
+    def get_images_by_coordinates(self, latitude: float, longitude: float) -> list[dict]:
         from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 
         # Get the place name from the coordinates
@@ -70,13 +70,21 @@ class SmithsonianGateway(Gateway):
         # Get the images from the Smithsonian API
         return self.get_data(place_name)
 
-    def parse_response(self, data):
+    def parse_response(self, data: dict) -> list[dict]:
         images = []
         for record in data.get("response", {}).get("rows", []):
             image_data = {
                 "title": record.get("title"),
-                "url": record.get("content", {}).get("descriptiveNonRepeating", {}).get("online_media", {}).get("media", [{}])[0].get("content"),
-                "thumbnail": record.get("content", {}).get("descriptiveNonRepeating", {}).get("online_media", {}).get("media", [{}])[0].get("thumbnail"),
+                "url": record.get("content", {})
+                .get("descriptiveNonRepeating", {})
+                .get("online_media", {})
+                .get("media", [{}])[0]
+                .get("content"),
+                "thumbnail": record.get("content", {})
+                .get("descriptiveNonRepeating", {})
+                .get("online_media", {})
+                .get("media", [{}])[0]
+                .get("thumbnail"),
             }
             images.append(image_data)
         return images

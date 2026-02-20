@@ -23,20 +23,22 @@
 *        2024-01-17     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
+from __future__ import annotations
+
 import logging
 
 import geopandas as gpd
 import requests
 from shapely.geometry import Point
-
+from dataclasses import dataclass, field
 from urbanlens.dashboard.services.gateway import Gateway
 
 logger = logging.getLogger(__name__)
 
-
+@dataclass(frozen=True, slots=True)
 class NPSMapGateway(Gateway):
-    def __init__(self):
-        self.base_url = "https://mapservices.nps.gov/arcgis/rest/services/ParkBoundaries/FeatureServer/0/query"
+    base_url: str = "https://mapservices.nps.gov/arcgis/rest/services/ParkBoundaries/FeatureServer/0/query"
 
     def check_coordinates_within_park(self, latitude: float, longitude: float) -> str | None:
         """

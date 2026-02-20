@@ -27,7 +27,7 @@
 from __future__ import annotations
 
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
-from urbanlens.UrbanLens.environments.types import EnvironmentTypes
+from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 
 class Staging(BaseEnvironment):

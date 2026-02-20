@@ -29,19 +29,20 @@ import json
 import logging
 
 import requests
-
+from dataclasses import dataclass, field
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
-
+@dataclass(frozen=True, slots=True)
 class WeatherForecastGateway(Gateway):
-    def __init__(self, api_key: str | None = None):
-        if not api_key:
-            api_key = settings.openweathermap_api_key
-        self.api_key = api_key
-        self.base_url = "http://api.openweathermap.org/data/2.5/forecast"
+    api_key: str = settings.openweathermap_api_key
+    base_url: str = "http://api.openweathermap.org/data/2.5/forecast"
+
+    def __post_init__(self):
+        if not self.api_key:
+            raise ValueError("OpenWeatherMap API key must be provided.")
 
     def get_weather_forecast(self, latitude: float, longitude: float) -> list[dict] | None:
         """

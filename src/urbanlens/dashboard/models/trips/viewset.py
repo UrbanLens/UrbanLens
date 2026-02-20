@@ -23,6 +23,9 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
+from __future__ import annotations
+
 import logging
 
 from rest_framework import status, viewsets

@@ -326,13 +326,12 @@ class LLMGateway[Response](ABC):
         """
         Prepare a text prompt for the AI model to use as the system prompt.
 
-            This can be overridden by child classes to include specific prompt formatting, if desired, but
-            should usually be changed by passing custom instructions or a project description to the constructor.
+        This can be overridden by child classes to include specific prompt formatting, if desired, but
+        should usually be changed by passing custom instructions or a project description to the constructor.
 
-            Returns
-        -------
-                str:
-                    The prepared text prompt.
+        Returns:
+            str:
+                The prepared text prompt.
 
         """
         prompt = self.project_description
@@ -346,20 +345,17 @@ class LLMGateway[Response](ABC):
         """
         Construct a list of messages to be used for chat completion.
 
-            Args:
-        ----
-                prompt (str):
-                    The text prompt to be used for chat completion.
+        Args:
+            prompt (str):
+                The text prompt to be used for chat completion.
 
-            Raises:
-        ------
-                ValueError:
-                    If the prompt exceeds the maximum token limit.
+        Raises:
+            ValueError:
+                If the prompt exceeds the maximum token limit.
 
-            Returns:
-        -------
-                list[dict]:
-                    A list of messages to be used for chat completion.
+        Returns:
+            list[dict]:
+                A list of messages to be used for chat completion.
 
         """
         queue = MessageQueue()
@@ -374,12 +370,10 @@ class LLMGateway[Response](ABC):
         Send a prompt to the AI model and return the answer within its response.
 
         Args:
-        ----
             prompt (str): The prompt to send to the AI model.
             kwargs: Additional keyword arguments that may be used for specific implementations.
 
         Returns:
-        -------
             str | None: The answer from the AI model.
 
         """

@@ -30,22 +30,21 @@ import logging
 from typing import Any
 
 import requests
+from dataclasses import dataclass, field
 
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
-
+@dataclass(frozen=True, slots=True)
 class GoogleCustomSearchGateway(Gateway):
     """
     Gateway for the Google Custom Search API.
     """
-
-    def __init__(self):
-        self.api_key = settings.google_search_api_key
-        self.cx = settings.google_search_tenant
-        self.base_url = "https://customsearch.googleapis.com/customsearch/v1"
+    api_key: str = settings.google_search_api_key
+    cx: str = settings.google_search_tenant
+    base_url: str = "https://customsearch.googleapis.com/customsearch/v1"
 
     def search(self, terms: str | list[str | list[str]], max_results: int = 20) -> list[dict[str, Any]]:
         """

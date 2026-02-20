@@ -22,6 +22,9 @@
 *        2025-03-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
+from __future__ import annotations
+
 import django_filters
 from django_filters import CharFilter, NumberFilter
 

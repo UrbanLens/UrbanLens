@@ -38,7 +38,7 @@ class IndexController(ListController):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["project_description"] = "This is a stylish and modern homepage for our project."
+        context["project_description"] = "This is a modern homepage for our project."
         context["hero_image_url"] = "/static/images/hero.jpg"
         context["profile_picture_url"] = "/static/images/profile.jpg"  # TODO: Replace
         return context

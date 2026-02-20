@@ -23,6 +23,9 @@
 *        2024-01-07     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
+from __future__ import annotations
+
 import requests
 from requests.auth import HTTPBasicAuth
 
@@ -34,12 +37,12 @@ class RouteXLGateway(Gateway):
     Gateway for the RouteXL API to optimize trip routes.
     """
 
-    def __init__(self, username, password):
+    def __init__(self, username: str, password: str):
         self.username = username
         self.password = password
         self.base_url = "https://api.routexl.com"
 
-    def optimize_route(self, pins):
+    def optimize_route(self, pins: list[dict]) -> dict:
         """
         Optimize a route given a list of pins.
 
@@ -55,6 +58,7 @@ class RouteXLGateway(Gateway):
         response = requests.post(url, json=data, auth=HTTPBasicAuth(self.username, self.password), timeout=60)
         response.raise_for_status()
         return response.json()
+
 
 # Example usage
 # gateway = RouteXLGateway('your_username', 'your_password')

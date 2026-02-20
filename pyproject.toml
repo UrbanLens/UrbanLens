@@ -778,7 +778,7 @@ ignore = [
     "DTZ007",  # timezone-aware datetime without tzinfo
     "D414",    # empty docstring
     "S605",
-] # A sane ignore set for many modern codebases.
+]
 
 [tool.ruff.lint.per-file-ignores]
 "test_*.py" = [

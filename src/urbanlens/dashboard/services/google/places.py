@@ -23,19 +23,20 @@
 *        2024-01-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-import requests
 
+from __future__ import annotations
+
+import requests
+from dataclasses import dataclass, field
 from urbanlens.dashboard.services.gateway import Gateway
 
-
+@dataclass(frozen=True, slots=True)
 class GooglePlacesGateway(Gateway):
     """
     Gateway for the Google Places API.
     """
-
-    def __init__(self, api_key):
-        self.api_key = api_key
-        self.session = requests.Session()
+    api_key: str
+    session: requests.Session = field(default_factory=requests.Session)
 
     def get_data(self, latitude, longitude, radius=1000, place_type=None):
         """

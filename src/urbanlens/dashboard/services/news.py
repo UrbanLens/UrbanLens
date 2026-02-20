@@ -22,6 +22,9 @@
 *        2025-03-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
+from __future__ import annotations
+
 import requests
 
 from urbanlens.dashboard.services.gateway import Gateway
@@ -32,11 +35,11 @@ class NewsGateway(Gateway):
     Gateway for a News API.
     """
 
-    def __init__(self, api_key):
+    def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://newsapi.google.com/v2/everything"  # Google News API URL
 
-    def get_news(self, pin):
+    def get_news(self, pin: int | str) -> list[dict]:
         """
         Fetch recent news articles about the given pin from the News API.
         """

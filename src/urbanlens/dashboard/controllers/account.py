@@ -26,6 +26,7 @@
 
 from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
+from django.http import HttpRequest, HttpResponseRedirect
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views import generic
@@ -41,7 +42,7 @@ class SignupView(generic.CreateView):
     template_name = "registration/signup.html"
 
 
-def social_auth(request, backend):
+def social_auth(request: HttpRequest, backend) -> HttpResponseRedirect:
     strategy = load_strategy(request)
     try:
         backend = load_backend(strategy=strategy, name=backend, redirect_uri=None)

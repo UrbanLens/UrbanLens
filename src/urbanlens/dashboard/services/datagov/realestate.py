@@ -23,20 +23,25 @@
 *        2024-01-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
 import requests
 
 
+@dataclass(frozen=True, slots=True)
 class RealEstateSalesGateway:
     """
     Gateway for accessing real estate sales data from data.gov
     """
 
-    def __init__(self):
-        self.base_url = "https://data.ct.gov/api/views/5mzw-sjtu/rows.json"
-        self.data_dictionary_url = "https://data.ct.gov/api/views/5mzw-sjtu/columns.json"
-        self.session = requests.Session()
+    base_url: str = "https://data.ct.gov/api/views/5mzw-sjtu/rows.json"
+    data_dictionary_url: str = "https://data.ct.gov/api/views/5mzw-sjtu/columns.json"
+    session: requests.Session = field(default_factory=requests.Session)
 
-    def get_sales_data(self, access_type="DOWNLOAD"):
+    def get_sales_data(self, access_type="DOWNLOAD") -> dict:
         """
         Fetch the real estate sales data.
         """
@@ -45,7 +50,7 @@ class RealEstateSalesGateway:
         response.raise_for_status()
         return response.json()
 
-    def get_data_dictionary(self):
+    def get_data_dictionary(self) -> dict:
         """
         Fetch the data dictionary to understand the structure of the real estate data.
         """

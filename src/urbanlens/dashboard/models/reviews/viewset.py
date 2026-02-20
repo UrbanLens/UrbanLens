@@ -23,6 +23,9 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
+from __future__ import annotations
+
 import logging
 
 from rest_framework import status, viewsets
@@ -95,7 +98,9 @@ class ReviewViewSet(viewsets.ModelViewSet):
         logger.info("Update request initiated by user %s", request.user.id)
         instance = self.get_object()
         if instance.user != request.user:
-            logger.error("User %s attempted to update review %s, but does not have permission", request.user.id, instance.id)
+            logger.error(
+                "User %s attempted to update review %s, but does not have permission", request.user.id, instance.id,
+            )
             return Response(status=status.HTTP_403_FORBIDDEN)
         data = request.data
         data["user"] = request.user.id
@@ -109,7 +114,9 @@ class ReviewViewSet(viewsets.ModelViewSet):
         logger.info("Delete request initiated by user %s", request.user.id)
         instance = self.get_object()
         if instance.user != request.user:
-            logger.error("User %s attempted to delete review %s, but does not have permission", request.user.id, instance.id)
+            logger.error(
+                "User %s attempted to delete review %s, but does not have permission", request.user.id, instance.id,
+            )
             return Response(status=status.HTTP_403_FORBIDDEN)
         logger.info("Review with id %s deleted", instance.id)
         return super().destroy(request, *args, **kwargs)

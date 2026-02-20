@@ -28,7 +28,7 @@ from datetime import datetime
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from requests.exceptions import HTTPError
 from rest_framework.decorators import action
@@ -50,7 +50,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
     Controller for the pin page
     """
 
-    def view(self, request, *args, **kwargs):
+    def view(self, request: HttpRequest, **kwargs):
         """
         View the pin page
         """
@@ -62,7 +62,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             {"pin": pin, "google_maps_api_key": settings.google_maps_api_key},
         )
 
-    def test_ai(self, request, *args, **kwargs):
+    def test_ai(self, request: HttpRequest, *args, **kwargs):
         """
         Test the AI. TODO Temporary function that can be deleted at any time with no side effects.
         """
@@ -98,7 +98,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         return JsonResponse({"response": response})
 
-    def init_map(self, request, *args, **kwargs):
+    def init_map(self, request: HttpRequest):
         map_data = self.get_map_data()
 
         # Preprocess data into strings
@@ -150,7 +150,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         return map_data
 
-    def get_smithsonian_images(self, request, pin_id, *args, **kwargs):
+    def get_smithsonian_images(self, request: HttpRequest, pin_id):
         """
         Returns the Smithsonian images for a pin.
         """
@@ -174,7 +174,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    def web_search(self, request, pin_id, *args, **kwargs):
+    def web_search(self, request: HttpRequest, pin_id):
         """
         Returns the web search results for a pin.
         """
@@ -225,7 +225,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         return render(request, "dashboard/pages/location/web_search.html", {"search_results": search_results})
 
-    def satellite_view_google_image(self, request, *args, **kwargs):
+    def satellite_view_google_image(self, request: HttpRequest, **kwargs):
         """
         Returns the satellite view image for a pin.
         """
@@ -242,7 +242,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         return HttpResponse(satellite_image, content_type="image/jpeg")
 
-    def street_view(self, request, *args, **kwargs):
+    def street_view(self, request: HttpRequest, **kwargs):
         """
         Returns the street view image for a pin.
         """
@@ -260,14 +260,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse(street_view_image, content_type="image/jpeg")
 
     @action(detail=True, methods=["get"])
-    def import_form(self, request, *args, **kwargs):
+    def import_form(self, request: HttpRequest):
         """
         View the import pins form
         """
         return render(request, "dashboard/pages/location/import/csv.html", {"form": UploadDataFile()})
 
     @action(detail=True, methods=["post"])
-    def upload_takeout(self, request, *args, **kwargs):
+    def upload_takeout(self, request: HttpRequest):
         """
         Upload a Google Takeout file
         """
@@ -289,7 +289,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except ValidationError as e:
             return JsonResponse({"error": str(e)}, status=400)
 
-    def weather_forecast(self, request, pin_id, *args, **kwargs):
+    def weather_forecast(self, request: HttpRequest, pin_id):
         """
         Returns the weather forecast for a pin.
         """
