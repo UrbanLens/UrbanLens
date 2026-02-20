@@ -25,19 +25,19 @@
 
 from __future__ import annotations
 
-import requests
+from dataclasses import dataclass, field
 
 from urbanlens.dashboard.services.gateway import Gateway
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
 class NewsGateway(Gateway):
     """
     Gateway for a News API.
     """
 
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.base_url = "https://newsapi.google.com/v2/everything"  # Google News API URL
+    api_key: str
+    base_url: str = "https://newsapi.google.com/v2/everything"  # Google News API URL
 
     def get_news(self, pin: int | str) -> list[dict]:
         """
@@ -48,7 +48,7 @@ class NewsGateway(Gateway):
             "apiKey": self.api_key,
         }
 
-        response = requests.get(self.base_url, params=params, timeout=60)
+        response = self.session.get(self.base_url, params=params, timeout=60)
         response.raise_for_status()
 
         return response.json().get("articles", [])

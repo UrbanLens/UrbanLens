@@ -26,22 +26,25 @@
 
 from __future__ import annotations
 
-import logging
-from typing import Any
-
-import requests
 from dataclasses import dataclass, field
+import logging
+from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
+if TYPE_CHECKING:
+    import requests
+
 logger = logging.getLogger(__name__)
 
-@dataclass(frozen=True, slots=True)
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class GoogleCustomSearchGateway(Gateway):
     """
     Gateway for the Google Custom Search API.
     """
+
     api_key: str = settings.google_search_api_key
     cx: str = settings.google_search_tenant
     base_url: str = "https://customsearch.googleapis.com/customsearch/v1"
@@ -61,7 +64,7 @@ class GoogleCustomSearchGateway(Gateway):
             "q": query,
             # 'num': min(max_results, 20)
         }
-        response = requests.get(self.base_url, params=params, headers=headers, timeout=60)
+        response = self.session.get(self.base_url, params=params, headers=headers, timeout=60)
         response.raise_for_status()
         return self.parse_response(response)
 

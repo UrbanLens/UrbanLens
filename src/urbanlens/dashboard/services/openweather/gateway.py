@@ -24,20 +24,22 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
+from dataclasses import dataclass, field
 from datetime import datetime
 import json
 import logging
 
 import requests
-from dataclasses import dataclass, field
+
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
-@dataclass(frozen=True, slots=True)
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class WeatherForecastGateway(Gateway):
-    api_key: str = settings.openweathermap_api_key
+    api_key: str | None = settings.openweathermap_api_key
     base_url: str = "http://api.openweathermap.org/data/2.5/forecast"
 
     def __post_init__(self):
@@ -65,7 +67,7 @@ class WeatherForecastGateway(Gateway):
         return self.filter_forecast(result.get("list", []))
 
     def get(self, params: dict) -> dict | None:
-        response = requests.get(self.base_url, params=params, timeout=60)
+        response = self.session.get(self.base_url, params=params, timeout=60)
         response.raise_for_status()
         return self.handle_response(response)
 

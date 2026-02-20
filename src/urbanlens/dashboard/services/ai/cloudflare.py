@@ -47,9 +47,9 @@ Response = TypeVar("Response", bound=dict[str, Any])
 class CloudflareGateway(LLMGateway[Response]):
     def setup(self, **kwargs):
         if not self.api_url:
-            self.api_url = settings.cloudflare_worker_ai_endpoint
+            self.api_url = str(settings.cloudflare_worker_ai_endpoint)
         if not self.api_key:
-            self.api_key = settings.cloudflare_ai_api_key
+            self.api_key = str(settings.cloudflare_ai_api_key)
 
         super().setup(**kwargs)
 
@@ -92,19 +92,11 @@ class CloudflareGateway(LLMGateway[Response]):
         try:
             response.raise_for_status()
             return response.json()
-        except requests.HTTPError as httpe:
-            logger.exception("Cloudflare AI returned an HTTP error. Content: %s -> %s", response.text, httpe)
-            from icecream import ic
-
-            ic(response)
-            ic(response.text)
+        except requests.HTTPError:
+            logger.exception("Cloudflare AI returned an HTTP error. Content: %s", response.text)
             return None
-        except ValueError as ve:
-            logger.exception("Failed to parse Cloudflare AI response as json: %s -> %s", response.status_code, ve)
-            from icecream import ic
-
-            ic(response)
-            ic(response.text)
+        except ValueError:
+            logger.exception("Failed to parse Cloudflare AI response as json: %s", response.status_code)
             return None
 
     def _parse_response(self, response: Response) -> str | None:

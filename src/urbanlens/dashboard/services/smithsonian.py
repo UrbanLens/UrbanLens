@@ -24,6 +24,8 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
+from dataclasses import dataclass, field
+
 from django.core.cache import cache
 import requests
 
@@ -31,14 +33,14 @@ from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
 class SmithsonianGateway(Gateway):
     """
     Gateway for the Smithsonian Open Access API.
     """
 
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.base_url = "https://api.si.edu/openaccess/api/v1.0/search"
+    api_key: str
+    base_url: str = "https://api.si.edu/openaccess/api/v1.0/search"
 
     def get_data(self, search_term: str) -> list[dict]:
         # Create a unique cache key based on the search term
@@ -52,7 +54,7 @@ class SmithsonianGateway(Gateway):
                 "q": search_term,
                 "online_media_type": "Images",
             }
-            response = requests.get(self.base_url, params=params, timeout=60)
+            response = self.session.get(self.base_url, params=params, timeout=60)
             response.raise_for_status()  # Will raise an HTTPError for bad requests
 
             data = response.json()

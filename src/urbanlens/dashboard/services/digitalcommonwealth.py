@@ -26,6 +26,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
 
 import requests
@@ -33,18 +34,16 @@ import requests
 from urbanlens.dashboard.services.gateway import Gateway
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
 class DigitalCommonwealthGateway(Gateway):
-    def __init__(self):
-        self.session = requests.Session()
-
     def get_oai_metadata(self, identifier: str) -> bytes:
-        base_url = "https://oai.digitalcommonwealth.org/catalog/oai"
+        oai_url = "https://oai.digitalcommonwealth.org/catalog/oai"
         params = {
             "verb": "GetRecord",
             "metadataPrefix": "oai_dc",
             "identifier": identifier,
         }
-        response = self.session.get(base_url, params=params)
+        response = self.session.get(oai_url, params=params)
         response.raise_for_status()
         return response.content
 

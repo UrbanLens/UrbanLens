@@ -26,20 +26,24 @@
 
 from __future__ import annotations
 
-import logging
+from dataclasses import dataclass
 import json
-import requests
-from dataclasses import dataclass, field
+import logging
+from typing import TYPE_CHECKING
+
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
+if TYPE_CHECKING:
+    import requests
+
 logger = logging.getLogger(__name__)
 
-@dataclass(frozen=True, slots=True)
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class NPSGateway(Gateway):
-    api_key: str = settings.nps_api_key
+    api_key: str | None = settings.nps_api_key
     base_url: str = "https://developer.nps.gov/api/v1"
-    session: requests.Session = field(default_factory=requests.Session)
 
     def __post_init__(self):
         if not self.api_key:
@@ -76,5 +80,5 @@ class NPSGateway(Gateway):
             return body.get("data", [])[0].get("images", [])
 
         except (json.JSONDecodeError, KeyError, IndexError):
-            logger.exception('Error parsing json response for %s', request_data)
+            logger.exception("Error parsing json response for %s", request_data)
             return []

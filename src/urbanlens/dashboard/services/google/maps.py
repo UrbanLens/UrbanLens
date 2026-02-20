@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import dataclass, field
 import json
 import logging
 import math
@@ -46,14 +47,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
 class GoogleMapsGateway(Gateway):
     """
     Gateway for the Google Maps API.
     """
 
-    def __init__(self, api_key):
-        self.api_key = api_key
-        self.session = requests.Session()
+    api_key: str
 
     def get_directions(self, origin, destination, mode="driving"):
         """

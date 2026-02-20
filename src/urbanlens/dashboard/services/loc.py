@@ -26,19 +26,20 @@
 
 from __future__ import annotations
 
-import requests
+from dataclasses import dataclass
+
+from urbanlens.dashboard.services.gateway import Gateway
 
 
-class LOCJsonGateway:
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LOCJsonGateway(Gateway):
     """
     Gateway for accessing JSON data from the Library of Congress.
     """
 
-    def __init__(self):
-        self.session = requests.Session()
-        self.base_url = "https://loc.gov/api"
+    base_url: str = "https://loc.gov/api"
 
-    def search_collections(self, query):
+    def search_collections(self, query) -> dict:
         """
         Search the Library of Congress collections.
         """

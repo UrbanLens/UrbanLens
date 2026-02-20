@@ -26,17 +26,20 @@
 
 from __future__ import annotations
 
-import requests
 from dataclasses import dataclass, field
+
+import requests
+
 from urbanlens.dashboard.services.gateway import Gateway
 
-@dataclass(frozen=True, slots=True)
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class GooglePlacesGateway(Gateway):
     """
     Gateway for the Google Places API.
     """
+
     api_key: str
-    session: requests.Session = field(default_factory=requests.Session)
 
     def get_data(self, latitude, longitude, radius=1000, place_type=None):
         """

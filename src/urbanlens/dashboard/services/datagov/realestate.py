@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 import requests
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class RealEstateSalesGateway:
     """
     Gateway for accessing real estate sales data from data.gov
@@ -39,7 +39,6 @@ class RealEstateSalesGateway:
 
     base_url: str = "https://data.ct.gov/api/views/5mzw-sjtu/rows.json"
     data_dictionary_url: str = "https://data.ct.gov/api/views/5mzw-sjtu/columns.json"
-    session: requests.Session = field(default_factory=requests.Session)
 
     def get_sales_data(self, access_type="DOWNLOAD") -> dict:
         """

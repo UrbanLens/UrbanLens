@@ -25,23 +25,25 @@
 *********************************************************************************************************************"""
 
 from __future__ import annotations
-from typing import Any
+
 from dataclasses import dataclass
 import json
 import logging
 import re
 import sys
-
-import requests
+from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
+if TYPE_CHECKING:
+    import requests
+
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class GoogleGeocodingGateway(Gateway):
     api_key: str | None = settings.google_maps_api_key
     base_url: str = "https://maps.googleapis.com/maps/api/geocode/json"
@@ -116,7 +118,7 @@ class GoogleGeocodingGateway(Gateway):
         return self.get(params)
 
     def get(self, params: dict[str, Any]) -> dict[str, Any] | None:
-        response = requests.get(self.base_url, params=params, timeout=60)
+        response = self.session.get(self.base_url, params=params, timeout=60)
         response.raise_for_status()
         return self.handle_response(response, params)
 

@@ -42,7 +42,7 @@ class FriendshipViewSet(viewsets.ModelViewSet):
         from_profile = Profile.objects.get(pk=request.data["from_profile"])
         to_profile = Profile.objects.get(pk=request.data["to_profile"])
         friendship = Friendship.objects.create(
-            from_profile=from_profile, to_profile=to_profile, relationship_type=request.data["relationship_type"]
+            from_profile=from_profile, to_profile=to_profile, relationship_type=request.data["relationship_type"],
         )
         friendship.save()
         return Response(status=status.HTTP_201_CREATED)

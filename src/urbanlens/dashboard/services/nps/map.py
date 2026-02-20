@@ -26,17 +26,18 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 
 import geopandas as gpd
-import requests
 from shapely.geometry import Point
-from dataclasses import dataclass, field
+
 from urbanlens.dashboard.services.gateway import Gateway
 
 logger = logging.getLogger(__name__)
 
-@dataclass(frozen=True, slots=True)
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class NPSMapGateway(Gateway):
     base_url: str = "https://mapservices.nps.gov/arcgis/rest/services/ParkBoundaries/FeatureServer/0/query"
 
@@ -56,7 +57,7 @@ class NPSMapGateway(Gateway):
         }
 
         # Make the request to the GIS data service
-        response = requests.get(self.base_url, params=params, timeout=60)
+        response = self.session.get(self.base_url, params=params, timeout=60)
         response.raise_for_status()
 
         # Load the GeoJSON into a GeoDataFrame
