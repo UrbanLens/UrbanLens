@@ -95,6 +95,6 @@ class WeatherForecastGateway(Gateway):
             # Parse the date into a date object
             forecast_item["date"] = datetime.strptime(date, "%Y-%m-%d %H:%M:%S")
 
-            if date.endswith("12:00:00") or date.endswith("21:00:00"):
+            if date.endswith(("12:00:00", "21:00:00")):
                 filtered_forecast.append(forecast_item)
         return filtered_forecast

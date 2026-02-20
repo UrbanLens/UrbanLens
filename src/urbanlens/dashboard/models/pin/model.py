@@ -67,6 +67,7 @@ class Pin(abstract.Model):
     """
     Records pin data.
     """
+
     name = CharField(max_length=255)
     icon = CharField(max_length=255, null=True, blank=True)
     description = CharField(max_length=500, null=True, blank=True)
@@ -75,7 +76,6 @@ class Pin(abstract.Model):
     latitude = DecimalField(max_digits=9, decimal_places=6)
     longitude = DecimalField(max_digits=9, decimal_places=6)
     custom_icon = ImageField()
-    icon = CharField(max_length=255, null=True, blank=True)
     status = CharField(choices=PinStatus.choices, default=PinStatus.WISH_TO_VISIT)
     point = PointField(geography=True, default=Point(0, 0))
 
@@ -122,7 +122,7 @@ class Pin(abstract.Model):
         """
         if self.cached_place_name:
             return self.cached_place_name
-        
+
         return self.get_place_name()
 
     @property
@@ -146,14 +146,14 @@ class Pin(abstract.Model):
             address += f"{self.zipcode}"
 
         return address or None
-    
+
     @property
     def address_basic(self) -> str | None:
         """
         Returns the address of the pin.
         """
         # address = f"{self.street_number} {self.route}"
-        
+
         address = ""
         if self.street_number:
             address += f"{self.street_number} "
@@ -161,7 +161,7 @@ class Pin(abstract.Model):
             address += f"{self.route}"
 
         return address or None
-    
+
     @property
     def address_extended(self) -> str | None:
         """
@@ -177,42 +177,42 @@ class Pin(abstract.Model):
             address += f"{self.locality}"
 
         return address or None
-    
+
     @property
     def state(self) -> str | None:
         """
         Returns the state of the pin.
         """
         return self.administrative_area_level_1
-    
+
     @state.setter
     def state(self, value: str):
         """
         Sets the state of the pin.
         """
         self.administrative_area_level_1 = value
-    
+
     @property
     def county(self) -> str | None:
         """
         Returns the county of the pin.
         """
         return self.administrative_area_level_2
-    
+
     @county.setter
     def county(self, value: str):
         """
         Sets the county of the pin.
         """
         self.administrative_area_level_2 = value
-    
+
     @property
     def city(self) -> str | None:
         """
         Returns the city of the pin.
         """
         return self.locality
-    
+
     @city.setter
     def city(self, value: str):
         """
@@ -230,10 +230,10 @@ class Pin(abstract.Model):
             logger.debug("no rating found for pin %s", self.id)
 
         return 0
-    
+
     def get_place_name(self) -> str | None:
         result = GoogleGeocodingGateway(settings.google_maps_api_key).get_place_name(self.latitude, self.longitude)
-        
+
         # We don't want to keep making requests to the API for results with no info,
         # so cache a string instead of None
         if not result:
@@ -243,18 +243,19 @@ class Pin(abstract.Model):
             self.cached_place_name = result
             self.save()
         return result
-    
+
     def has_place_name(self) -> bool:
         if not self.place_name:
             return False
-        
+
         if self.place_name == "No Information Available":
             return False
-        
+
         return True
 
     def change_category(self, category_id: int) -> None:
         from urbanlens.dashboard.models.categories.model import Category
+
         category = Category.objects.get(id=category_id)
         self.categories.clear()
         self.categories.add(category)
@@ -262,13 +263,16 @@ class Pin(abstract.Model):
 
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
         from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
-        instructions = "" +\
-            "Look at the following information about a location and determine what category it belongs in. Example categories are:" +\
-            "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, " +\
-            "Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, Library, Lighthouse, Mall, Mansion, Military Base, " +\
-            "Monument, Police Station, Power Plant, Prison, Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel" +\
-            "If the pin does not fit into any of these categories, provide a new category that is broad enough to include a variety " +\
-            "of similar urbex locations. Do not answer with the name of the pin; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
+
+        instructions = (
+            ""
+            + "Look at the following information about a location and determine what category it belongs in. Example categories are:"
+            + "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, "
+            + "Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, Library, Lighthouse, Mall, Mansion, Military Base, "
+            + "Monument, Police Station, Power Plant, Prison, Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel"
+            + "If the pin does not fit into any of these categories, provide a new category that is broad enough to include a variety "
+            + "of similar urbex locations. Do not answer with the name of the pin; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
+        )
 
         prompt = ""
         if self.address:
@@ -289,18 +293,19 @@ class Pin(abstract.Model):
         category_name = gateway.send_prompt(prompt)
         if not category_name:
             return None
-        
+
         if len(category_name) < 3:
             logger.debug("category too short: %s", category_name)
             return None
-        
+
         if append_suggestion:
             self.add_category(category_name, save=False)
-        
+
         return category_name
-    
+
     def add_category(self, category_name: str, save: bool = True) -> Category | None:
         from urbanlens.dashboard.models.categories.model import Category
+
         category_name = category_name.lower()
         try:
             category, _created = Category.objects.get_or_create(name=category_name)
@@ -309,10 +314,10 @@ class Pin(abstract.Model):
                 if save:
                     self.save()
                 return category
-            
+
         except Exception as e:
             logger.error("failed to add category %s to pin -> %s", category_name, e)
-        
+
         return None
 
     def __str__(self):
@@ -347,7 +352,7 @@ class Pin(abstract.Model):
             "profile": self.profile.id,
             "rating": self.rating,
         }
-    
+
     def save(self, *args, **kwargs):
         # update the pin field accordingly for distance calculations in postgis
         if self.latitude is not None and self.longitude is not None:

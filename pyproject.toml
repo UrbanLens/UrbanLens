@@ -767,7 +767,6 @@ ignore = [
     "TRY",
     "W2",
     "BLE001",  # catch blind Exception
-    "PLW",
     "G00",
     "PLR",
     "B02",

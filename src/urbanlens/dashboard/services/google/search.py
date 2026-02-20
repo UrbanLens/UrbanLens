@@ -97,7 +97,7 @@ class GoogleCustomSearchGateway(Gateway):
                 continue
 
             term = term.strip()
-            if term.startswith('"') or term.startswith("("):
+            if term.startswith(('"', "(")):
                 query_terms.append(term)
             else:
                 # sanitize existing quotes in term
