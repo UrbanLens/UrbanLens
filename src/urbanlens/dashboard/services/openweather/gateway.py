@@ -48,9 +48,6 @@ class WeatherForecastGateway(Gateway):
         """
         Retrieve a weather forecast for the given coordinates.
         """
-        if not latitude or not longitude:
-            raise ValueError("Latitude and longitude must be provided to get weather forecast.")
-
         params = {
             "lat": latitude,
             "lon": longitude,

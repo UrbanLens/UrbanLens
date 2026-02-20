@@ -45,7 +45,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if not self.request:
             return Review.objects.none()
-        return Review.objects.filter(user=self.request.user)
+        return Review.objects.all().filter(user=self.request.user)
 
     def create(self, request, pin_id, *args, **kwargs):
         logger.info("Create request initiated by user %s", request.user.id)
@@ -99,7 +99,9 @@ class ReviewViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         if instance.user != request.user:
             logger.error(
-                "User %s attempted to update review %s, but does not have permission", request.user.id, instance.id,
+                "User %s attempted to update review %s, but does not have permission",
+                request.user.id,
+                instance.id,
             )
             return Response(status=status.HTTP_403_FORBIDDEN)
         data = request.data
@@ -115,7 +117,9 @@ class ReviewViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         if instance.user != request.user:
             logger.error(
-                "User %s attempted to delete review %s, but does not have permission", request.user.id, instance.id,
+                "User %s attempted to delete review %s, but does not have permission",
+                request.user.id,
+                instance.id,
             )
             return Response(status=status.HTTP_403_FORBIDDEN)
         logger.info("Review with id %s deleted", instance.id)

@@ -44,7 +44,7 @@ class PinViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if not self.request:
             return Pin.objects.none()
-        return Pin.objects.filter(profile__user=self.request.user)
+        return Pin.objects.all().filter(profile__user=self.request.user)
 
     def create(self, request, *args, **kwargs):
         logger.info("Create request initiated by user %s", request.user.id)
@@ -55,7 +55,8 @@ class PinViewSet(viewsets.ModelViewSet):
         nearby_pins = Pin.objects.nearby_pins(latitude, longitude, radius=0.1)
         if nearby_pins.exists():
             return Response(
-                {"detail": "A pin already exists within a small radius."}, status=status.HTTP_400_BAD_REQUEST,
+                {"detail": "A pin already exists within a small radius."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
@@ -74,7 +75,9 @@ class PinViewSet(viewsets.ModelViewSet):
         logger.info("Update request initiated by user %s", request.user.id)
         if instance.profile.user != request.user:
             logger.error(
-                "User %s attempted to update pin %s, but does not have permission", request.user.id, instance.id,
+                "User %s attempted to update pin %s, but does not have permission",
+                request.user.id,
+                instance.id,
             )
             return Response(status=status.HTTP_403_FORBIDDEN)
         serializer = self.get_serializer(instance, data=request.data, partial=True)
@@ -88,7 +91,9 @@ class PinViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         if instance.profile.user != request.user:
             logger.error(
-                "User %s attempted to delete pin %s, but does not have permission", request.user.id, instance.id,
+                "User %s attempted to delete pin %s, but does not have permission",
+                request.user.id,
+                instance.id,
             )
             return Response(status=status.HTTP_403_FORBIDDEN)
         logger.info("Pin with id %s deleted", instance.id)

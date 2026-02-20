@@ -23,6 +23,7 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from __future__ import annotations
 
 from rest_framework import status, viewsets
@@ -40,7 +41,9 @@ class FriendshipViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         from_profile = Profile.objects.get(pk=request.data["from_profile"])
         to_profile = Profile.objects.get(pk=request.data["to_profile"])
-        friendship = Friendship.objects.create(from_profile=from_profile, to_profile=to_profile, relationship_type=request.data["relationship_type"])
+        friendship = Friendship.objects.create(
+            from_profile=from_profile, to_profile=to_profile, relationship_type=request.data["relationship_type"]
+        )
         friendship.save()
         return Response(status=status.HTTP_201_CREATED)
 
@@ -59,4 +62,4 @@ class FriendshipViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.is_authenticated:
             return Friendship.objects.none()
-        return Friendship.objects.filter(from_profile__user=user)
+        return Friendship.objects.all().filter(from_profile__user=user)

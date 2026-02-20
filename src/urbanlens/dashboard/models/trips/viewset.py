@@ -45,7 +45,7 @@ class TripViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.is_authenticated:
             return Trip.objects.none()
-        return Trip.objects.filter(profiles__user=user)
+        return Trip.objects.all().filter(profiles__user=user)
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data, context={"request": request})

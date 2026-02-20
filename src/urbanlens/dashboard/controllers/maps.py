@@ -136,7 +136,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         logger.info("Searching map...")
         search_form = SearchForm(request.POST)
         if search_form.is_valid():
-            query = Pin.objects.filter(profile=request.user.profile).filter_by_criteria(search_form.cleaned_data)
+            query = Pin.objects.all().filter(profile=request.user.profile).filter_by_criteria(search_form.cleaned_data)
             data = self.get_map_data(request, query)
             return render(request, "dashboard/pages/map/data.html", {"pins": data})
 
@@ -158,7 +158,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def post_advanced_search(self, request, *args, **kwargs):
         form = AdvancedSearchForm(request.POST)
         if form.is_valid():
-            pins = Pin.objects.filter_by_criteria(form.cleaned_data)
+            pins = Pin.objects.all().filter_by_criteria(form.cleaned_data)
             return render(request, "dashboard/pages/map/index.html", {"pins": pins})
         return None
 

@@ -59,4 +59,4 @@ class SearchForm(forms.Form):
             query &= Q(tags__in=self.cleaned_data["tags"])
         if self.cleaned_data["status"]:
             query &= Q(status=self.cleaned_data["status"])
-        return Pin.objects.filter(query)
+        return Pin.objects.all().filter(query)

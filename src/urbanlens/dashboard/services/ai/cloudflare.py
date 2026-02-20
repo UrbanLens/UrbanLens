@@ -69,13 +69,13 @@ class CloudflareGateway(LLMGateway[Response]):
         """
         Send a request to the Cloudflare AI API and return the response.
 
-            Args:
-                message_queue (MessageQueue):
-                    The message queue containing the messages to send to the model.
+        Args:
+            message_queue (MessageQueue):
+                The message queue containing the messages to send to the model.
 
-            Returns:
-                Response | None:
-                    The response from the Cloudflare AI API, or None if the request fails.
+        Returns:
+            Response | None:
+                The response from the Cloudflare AI API, or None if the request fails.
 
         """
         headers = {"Authorization": f"Bearer {self.api_key}"}
@@ -111,19 +111,19 @@ class CloudflareGateway(LLMGateway[Response]):
         """
         Parse the response from the Cloudflare AI API.
 
-            Args:
-                response (Response):
-                    The response from the Cloudflare AI API.
+        Args:
+            response (Response):
+                The response from the Cloudflare AI API.
 
-            Returns:
-                str | None:
-                    The response body, or None if the response could not be parsed.
+        Returns:
+            str | None:
+                The response body, or None if the response could not be parsed.
 
         """
         try:
             body = response["result"]["response"]
-        except KeyError as e:
-            logger.exception("Failed to parse Cloudflare AI result.response: '%s' -> %s", response, e)
+        except KeyError:
+            logger.exception("Failed to parse Cloudflare AI result.response: '%s'", response)
             return None
 
         return body

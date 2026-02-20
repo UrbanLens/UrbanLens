@@ -27,7 +27,7 @@
 from __future__ import annotations
 
 import logging
-
+import json
 import requests
 from dataclasses import dataclass, field
 from urbanlens.dashboard.services.gateway import Gateway
@@ -75,6 +75,6 @@ class NPSGateway(Gateway):
             body = response.json()
             return body.get("data", [])[0].get("images", [])
 
-        except Exception as e:
-            logger.exception('Error parsing json response for %s -> Message: "%s"', request_data, e)
+        except (json.JSONDecodeError, KeyError, IndexError):
+            logger.exception('Error parsing json response for %s', request_data)
             return []

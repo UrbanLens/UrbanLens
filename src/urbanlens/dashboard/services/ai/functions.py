@@ -51,7 +51,7 @@ def estimate_tokens(prompt: str) -> int:
     tokens = prompt.split()
 
     # Further split on common punctuation to better approximate model tokenization
-    punctuations = [".", ",", "!", "?", ";", ":", "-", "—", "(", ")", "[", "]", "{", "}", '"', "'"]
+    punctuations = [".", ",", "!", "?", ";", ":", "-", "-", "(", ")", "[", "]", "{", "}", '"', "'"]
     refined_tokens = []
     for token in tokens:
         temp_token = [token]
