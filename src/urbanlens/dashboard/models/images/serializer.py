@@ -24,9 +24,11 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from rest_framework import serializers
+
 from urbanlens.dashboard.models.images.model import Image
+
 
 class ImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Image
-        fields = ['image', 'pin']
+        fields = ["image", "pin"]

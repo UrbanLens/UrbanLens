@@ -25,11 +25,11 @@
 *********************************************************************************************************************"""
 
 from __future__ import annotations
+
 from pydantic import validator
 
-from urbanlens.UrbanLens.environments.types import EnvironmentTypes
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
-from urbanlens.UrbanLens.environments.types import DebugTypes
+from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes
 
 
 class Production(BaseEnvironment):
@@ -45,6 +45,7 @@ class Production(BaseEnvironment):
         )
 
     @validator("debug_override")
+    @classmethod
     def debug_override_must_be_off(cls, value):
         """
         Debug mode is not allowed in production

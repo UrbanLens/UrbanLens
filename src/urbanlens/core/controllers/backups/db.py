@@ -23,15 +23,17 @@
 *        2024-02-19     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 import os
 import subprocess
-from datetime import datetime
 from threading import Lock
 
 from django.core.signals import request_finished
+
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -55,10 +57,10 @@ class DatabaseBackup:
 
         try:
             os.makedirs(self.backup_dir)
-            logger.info(f"Created backup directory: {self.backup_dir}")
+            logger.info("Created backup directory: %s", self.backup_dir)
             return True
         except OSError as e:
-            logger.error(f"Failed to create backup directory: {self.backup_dir}. Error: {e}")
+            logger.exception("Failed to create backup directory: %s. Error: %s", self.backup_dir, e)
 
         return False
 
@@ -75,15 +77,15 @@ class DatabaseBackup:
                 file_path = os.path.join(self.backup_dir, file)
                 try:
                     os.remove(file_path)
-                    logger.info(f"Removed old backup: {file}")
+                    logger.info("Removed old backup: %s", file)
                 except OSError as e:
-                    logger.error(f"Failed to remove old backup: {file}. Error: {e}")
+                    logger.exception("Failed to remove old backup: %s. Error: %s", file, e)
 
     def run(self) -> bool:
         # TODO temporarily disable
-        datetime.now().date()
+        datetime.now(tz=settings.TIME_ZONE).date()
 
-        backup_filename = f'backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.sql'
+        backup_filename = f'backup_{datetime.now(tz=settings.TIME_ZONE).strftime("%Y%m%d_%H%M%S")}.sql'
 
         pg_dump_command = [
             "pg_dump",
@@ -100,24 +102,24 @@ class DatabaseBackup:
 
         try:
             subprocess.run(pg_dump_command, check=True)
-            logger.info(f"Backup completed successfully: {backup_filename}")
+            logger.info("Backup completed successfully: %s", backup_filename)
 
             # Update the last backup date
-            datetime.now().date()
+            datetime.now(tz=settings.TIME_ZONE).date()
 
             self.purge_old_backups()
         except subprocess.CalledProcessError as e:
-            logger.error(f"Error occurred while performing database backup: {e}")
+            logger.exception("Error occurred while performing database backup: %s", e)
             return False
 
         return True
 
     def schedule_backup(self) -> bool:
         # TODO: Temporarily disable
-        last_backup_date = datetime.now().date()
+        last_backup_date = datetime.now(tz=settings.TIME_ZONE).date()
 
         # Check if backup was already performed today
-        current_date = datetime.now().date()
+        current_date = datetime.now(tz=settings.TIME_ZONE).date()
         if last_backup_date >= current_date:
             return False
 
@@ -127,7 +129,7 @@ class DatabaseBackup:
                 self.create_backup_dir()
                 result = self.run()
             except Exception as e:
-                logger.error(f"Error occurred while scheduling database backup: {e}")
+                logger.exception("Error occurred while scheduling database backup: %s", e)
                 return False
 
         return result

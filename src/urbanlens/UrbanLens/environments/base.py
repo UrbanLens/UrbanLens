@@ -24,20 +24,31 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-import logging
+from __future__ import annotations
+
 from abc import ABC
-from pydantic import BaseModel, Field, validator
-from urbanlens.UrbanLens.environments.types import EnvironmentTypes, DebugTypes
+import logging
+
+from pydantic import BaseModel, Field, field_validator
+
+from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes
 
 logger = logging.getLogger(__name__)
+
 
 class BaseEnvironment(BaseModel, ABC):
     name: str = Field(default="Unknown Environment")
     env_type: EnvironmentTypes = Field(default=EnvironmentTypes.LOCAL)
     in_network: bool = Field(default=False)
     is_public: bool = Field(default=True)
-    debug_default: bool = Field(default=False, description="Default debug setting for this environment if one is not explicitly set")
-    debug_override: DebugTypes = Field(default=DebugTypes.DEFAULT, description="Overrides the default debug setting, if set to _ON or _OFF, otherwise uses the default")
+    debug_default: bool = Field(
+        default=False,
+        description="Default debug setting for this environment if one is not explicitly set",
+    )
+    debug_override: DebugTypes = Field(
+        default=DebugTypes.DEFAULT,
+        description="Overrides the default debug setting, if set to _ON or _OFF, otherwise uses the default",
+    )
 
     @property
     def debug(self) -> bool:
@@ -47,15 +58,17 @@ class BaseEnvironment(BaseModel, ABC):
             return False
         return self.debug_default
 
-    @validator("env_type", pre=True)
-    def validate_env_type(cls, value):
-        if isinstance(value, str):
+    @field_validator("env_type", mode="before")
+    @classmethod
+    def validate_env_type(cls, value: str | EnvironmentTypes) -> EnvironmentTypes:
+        if not isinstance(value, EnvironmentTypes):
             return EnvironmentTypes(value.lower())
         return value
 
-    @validator("debug_override", pre=True)
-    def validate_debug_override(cls, value):
-        if isinstance(value, str):
+    @field_validator("debug_override", mode="before")
+    @classmethod
+    def validate_debug_override(cls, value: str | DebugTypes) -> DebugTypes:
+        if not isinstance(value, DebugTypes):
             return DebugTypes(value.lower())
         return value
 
@@ -65,11 +78,11 @@ class BaseEnvironment(BaseModel, ABC):
     def __repr__(self):
         return f"Environment(name={self.name}, env_type={self.env_type})"
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, EnvironmentTypes):
             return self.env_type == other
-        elif isinstance(other, str):
+        if isinstance(other, str):
             return self.env_type.value.lower() == other.lower()
-        elif isinstance(other, BaseEnvironment):
+        if isinstance(other, BaseEnvironment):
             return self.env_type == other.env_type
         return NotImplemented

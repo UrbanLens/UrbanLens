@@ -26,12 +26,14 @@
 
 # Generic imports
 from __future__ import annotations
+
 from django.apps import AppConfig
 
-class DashboardConfig(AppConfig):
-	default_auto_field = 'django.db.models.BigAutoField'
-	name = 'urbanlens.dashboard'
 
-	def ready(self):
-		# Import signals
-		pass
+class DashboardConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "urbanlens.dashboard"
+
+    def ready(self):
+        # Import signals
+        pass

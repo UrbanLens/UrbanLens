@@ -24,9 +24,12 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
+
 from django.db.models import CharField
+
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.categories.queryset import CategoryManager
+
 
 class Category(abstract.Model):
     """
@@ -34,23 +37,23 @@ class Category(abstract.Model):
     """
     name = CharField(max_length=255, unique=True)
     icon = CharField(max_length=255, choices=[
-        ('church', 'church'),
-        ('factory', 'factory'),
-        ('home', 'home'),
-        ('hospital', 'hospital'),
-        ('school', 'school'),
-        ('warehouse', 'warehouse'),
-        ('office_building', 'office_building'),
-        ('shopping_mall', 'shopping_mall'),
-        ('hotel', 'hotel'),
-        ('stadium', 'stadium'),
+        ("church", "church"),
+        ("factory", "factory"),
+        ("home", "home"),
+        ("hospital", "hospital"),
+        ("school", "school"),
+        ("warehouse", "warehouse"),
+        ("office_building", "office_building"),
+        ("shopping_mall", "shopping_mall"),
+        ("hotel", "hotel"),
+        ("stadium", "stadium"),
     ], null=True, blank=True)
 
     objects = CategoryManager()
 
     def __str__(self):
-        return f'{self.name}'
+        return f"{self.name}"
 
     class Meta(abstract.Model.Meta):
-        db_table = 'dashboard_categories'
-        get_latest_by = 'updated'
+        db_table = "dashboard_categories"
+        get_latest_by = "updated"

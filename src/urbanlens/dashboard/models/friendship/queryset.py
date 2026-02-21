@@ -24,33 +24,38 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
-from typing import Self, TYPE_CHECKING
+
 import logging
-from django.contrib.auth.models import User
+from typing import TYPE_CHECKING, Self
+
 from django.db.models import Q
+
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.friendship.model import Friendship
 
 if TYPE_CHECKING:
+    from django.contrib.auth.models import User
+
     from urbanlens.dashboard.models.profile import Profile
-    from urbanlens.dashboard.models.friendship.model import Friendship
 
 logger = logging.getLogger(__name__)
 
+
 class QuerySet(abstract.QuerySet):
-    def profile(self, profile : 'Profile | int') -> Self:
+    def profile(self, profile: Profile | int) -> Self:
         """
         Return a list of all friendships for a given profile.
         """
         if isinstance(profile, int):
             return self.filter(
-                Q(from_profile__id=profile) | Q(to_profile__id=profile)
+                Q(from_profile__id=profile) | Q(to_profile__id=profile),
             )
 
         return self.filter(
-            Q(from_profile=profile) | Q(to_profile=profile)
+            Q(from_profile=profile) | Q(to_profile=profile),
         )
 
-    def between(self, from_profile : 'Profile | int', to_profile : 'Profile | int') -> 'Friendship' | None:
+    def between(self, from_profile: Profile | int, to_profile: Profile | int) -> Friendship | None:
         """
         Return a list of all friendships between two profiles.
         """
@@ -58,30 +63,30 @@ class QuerySet(abstract.QuerySet):
         q2 = {}
 
         if isinstance(from_profile, int):
-            q1['from_profile__id'] = from_profile
-            q2['to_profile__id'] = from_profile
+            q1["from_profile__id"] = from_profile
+            q2["to_profile__id"] = from_profile
         else:
-            q1['from_profile'] = from_profile
-            q2['to_profile'] = from_profile
+            q1["from_profile"] = from_profile
+            q2["to_profile"] = from_profile
 
         if isinstance(to_profile, int):
-            q1['to_profile__id'] = to_profile
-            q2['from_profile__id'] = to_profile
+            q1["to_profile__id"] = to_profile
+            q2["from_profile__id"] = to_profile
         else:
-            q1['to_profile'] = to_profile
-            q2['from_profile'] = to_profile
+            q1["to_profile"] = to_profile
+            q2["from_profile"] = to_profile
 
-        return self.filter( Q(**q1) | Q(**q2) ).get()
+        return self.filter(Q(**q1) | Q(**q2)).get()
 
-    def user(self, user : 'User') -> Self:
+    def user(self, user: User) -> Self:
         """
         Return a list of all friendships for a given user.
         """
         return self.filter(
-            Q(from_profile__user=user) | Q(to_profile__user=user)
+            Q(from_profile__user=user) | Q(to_profile__user=user),
         )
 
-    def status(self, status : str) -> Self:
+    def status(self, status: str) -> Self:
         """
         Return a list of all friendships with a given status.
         """
@@ -99,17 +104,18 @@ class QuerySet(abstract.QuerySet):
         """
         return self.exclude(status=Friendship.FriendshipStatus.ACCEPTED)
 
-    def relationship_type(self, relationship_type : str) -> Self:
+    def relationship_type(self, relationship_type: str) -> Self:
         """
         Return a list of all friendships with a given type.
         """
         return self.filter(relationship_type=relationship_type)
 
-    def has_permission(self, permission : str) -> Self:
+    def has_permission(self, permission: str) -> Self:
         """
         Return a list of all friendships with a given permission.
         """
         return self.filter(permissions=permission)
+
 
 class Manager(abstract.Manager.from_queryset(QuerySet)):
     pass

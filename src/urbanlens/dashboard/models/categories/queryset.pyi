@@ -23,11 +23,10 @@
 *        2024-03-22     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from django.db import models
+
 from urbanlens.dashboard.models.abstract import models
 
-class CategoryQuerySet(models.QuerySet):
-    pass
+class CategoryQuerySet(models.QuerySet): ...
 
 class CategoryManager(models.Manager, CategoryQuerySet):
-    def all(self) -> "CategoryQuerySet": ...
+    def all(self) -> CategoryQuerySet: ...

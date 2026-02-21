@@ -23,27 +23,38 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect, render
 from django.views import View
-from django.contrib.auth.mixins import LoginRequiredMixin
+
 from urbanlens.dashboard.forms.profile import ProfileForm
 from urbanlens.dashboard.models.profile.model import Profile
 
+if TYPE_CHECKING:
+    from django.http import HttpRequest, HttpResponse
+
+
 class ViewProfileView(LoginRequiredMixin, View):
-    def get(self, request, *args, **kwargs):
-        profile, created = Profile.objects.get_or_create(user=request.user)
-        return render(request, 'dashboard/pages/profile/index.html', {'profile': profile})
+    def get(self, request: HttpRequest) -> HttpResponse:
+        profile, _created = Profile.objects.get_or_create(user=request.user)
+        return render(request, "dashboard/pages/profile/index.html", {"profile": profile})
+
 
 class EditProfileView(LoginRequiredMixin, View):
-    def get(self, request, *args, **kwargs):
-        profile, created = Profile.objects.get_or_create(user=request.user)
+    def get(self, request: HttpRequest) -> HttpResponse:
+        profile, _created = Profile.objects.get_or_create(user=request.user)
         form = ProfileForm(instance=profile)
-        return render(request, 'dashboard/pages/profile/edit.html', {'form': form})
+        return render(request, "dashboard/pages/profile/edit.html", {"form": form})
 
-    def post(self, request, *args, **kwargs):
-        profile = Profile.objects.get(user=request.user)
+    def post(self, request: HttpRequest) -> HttpResponse:
+        profile: Profile = Profile.objects.get(user=request.user)
         form = ProfileForm(request.POST, request.FILES, instance=profile)
         if form.is_valid():
             form.save()
-            return redirect('view_profile')
-        return render(request, 'dashboard/pages/profile/edit.html', {'form': form})
+            return redirect("view_profile")
+        return render(request, "dashboard/pages/profile/edit.html", {"form": form})

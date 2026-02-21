@@ -25,28 +25,41 @@
 *********************************************************************************************************************"""
 
 from __future__ import annotations
+
 import os
+from typing import TYPE_CHECKING
 
-from urbanlens.UrbanLens.environments.types import EnvironmentTypes
-from urbanlens.UrbanLens.environments.base import BaseEnvironment
-from urbanlens.UrbanLens.environments.local import Local
 from urbanlens.UrbanLens.environments.dev import Development
-from urbanlens.UrbanLens.environments.test import Testing
-from urbanlens.UrbanLens.environments.staging import Staging
+from urbanlens.UrbanLens.environments.local import Local
+from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 from urbanlens.UrbanLens.environments.prod import Production
+from urbanlens.UrbanLens.environments.staging import Staging
+from urbanlens.UrbanLens.environments.test import Testing
+
+if TYPE_CHECKING:
+    from urbanlens.UrbanLens.environments.base import BaseEnvironment
 
 
-def select_environment(env_type: EnvironmentTypes | None = None, default: EnvironmentTypes = EnvironmentTypes.LOCAL) -> BaseEnvironment:
-    """Selects the environment to use based on the environment type.
+def select_environment(
+    env_type: EnvironmentTypes | None = None,
+    default: EnvironmentTypes = EnvironmentTypes.LOCAL,
+) -> BaseEnvironment:
+    """
+    Selects the environment to use based on the environment type.
 
     Args:
+    ----
         env_type (EnvironmentTypes): The environment type to use.
+        default (EnvironmentTypes): The default environment type to use if none is provided (default: EnvironmentTypes.LOCAL).
 
     Returns:
+    -------
         BaseEnvironment: The environment to use.
 
     Raises:
+    ------
         ValueError: If the environment type is unknown.
+
     """
     if not env_type:
         # Get and validate the environment type from the environment variable

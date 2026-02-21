@@ -24,15 +24,17 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from rest_framework import serializers
+
 from urbanlens.dashboard.models.pin.model import Pin
+
 
 class PinSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pin
-        fields = ['name', 'icon', 'categories', 'last_visited', 'latitude', 'longitude', 'created', 'updated', 'profile', 'status', 'tags', 'rating']
+        fields = ["name", "icon", "categories", "last_visited", "latitude", "longitude", "created", "updated", "profile", "status", "tags", "rating"]
 
     def create(self, validated_data):
-        user = validated_data.pop('user')
+        user = validated_data.pop("user")
         pin = Pin.objects.create(**validated_data)
         pin.user = user
         pin.save()

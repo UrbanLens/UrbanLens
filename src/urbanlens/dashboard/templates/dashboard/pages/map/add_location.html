@@ -1,157 +1,157 @@
 
-	    <div id="screen" style="position: fixed; width: 100%; height: 100%; top: 0; left: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 999;"></div>
-	    <div class="dialog" id="addPinModal">
-	        <button id="closeDialog" style="float: right;">X</button>
-	        <h2>Add Location</h2>
-	        <form id="addPinForm" method="POST" action="{% url 'add_pin' %}" hx-post="{% url 'add_pin' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
-				<label for="name">Name:</label><br>
-				<input type="text" id="name" name="name" autocomplete="name" required><br>
-				<label for="latitude">Latitude:</label><br>
-				<input type="text" id="latitude" name="latitude" autocomplete="latitude" pattern="^-?([1-8]?[1-9]|[1-9]0)\.{1}\d{1,6}" readonly><br>
-				<label for="longitude">Longitude:</label><br>
-				<input type="text" id="longitude" name="longitude" autocomplete="longitude" pattern="^-?([1-8]?[1-9]|[1-9]0)\.{1}\d{1,6}" readonly><br>
-				<div id="iconGrid" class="icon-grid">
-					<i class="pin bank" data-value="bank"></i>
-					<i class="pin car" data-value="car"></i>
-					<i class="pin church" data-value="church"></i>
-					<i class="pin firehouse" data-value="firehouse"></i>
-					<i class="pin hospital" data-value="hospital"></i>
-					<i class="pin military" data-value="military"></i>
-					<i class="pin plane" data-value="plane"></i>
-					<i class="pin school" data-value="school"></i>
-					<i class="pin tunnel" data-value="tunnel"></i>
-					<i class="pin boat" data-value="boat"></i>
-					<i class="pin castle" data-value="castle"></i>
-					<i class="pin dam" data-value="dam"></i>
-					<i class="pin graffiti" data-value="graffiti"></i>
-					<i class="pin house" data-value="house"></i>
-					<i class="pin museum" data-value="museum"></i>
-					<i class="pin powerplant" data-value="powerplant"></i>
-					<i class="pin statue" data-value="statue"></i>
-					<i class="pin bridge" data-value="bridge"></i>
-					<i class="pin cave" data-value="cave"></i>
-					<i class="pin factory" data-value="factory"></i>
-					<i class="pin graveyard" data-value="graveyard"></i>
-					<i class="pin library" data-value="library"></i>
-					<i class="pin park" data-value="park"></i>
-					<i class="pin prison" data-value="prison"></i>
-					<i class="pin train" data-value="train"></i>
-					<!--
-					<i class="pin windmill"></i>
-					<i class="pin lighthouse"></i>
-					<i class="pin water-tower"></i>
-					<i class="pin barn"></i>
-					<i class="pin silo"></i>
-					<i class="pin police-station"></i>
-					<i class="pin farm"></i>
-					<i class="pin stadium"></i>
-					<i class="pin theater"></i>
-					<i class="pin construction"></i>
-					-->
-				</div>
-				<input type="hidden" id="selectedIcon" name="icon">
+        <div id="screen" style="position: fixed; width: 100%; height: 100%; top: 0; left: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 999;"></div>
+        <div class="dialog" id="addPinModal">
+            <button id="closeDialog" style="float: right;">X</button>
+            <h2>Add Location</h2>
+            <form id="addPinForm" method="POST" action="{% url 'pin.add' %}" hx-post="{% url 'pin.add' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
+			    <label for="name">Name:</label><br>
+			    <input type="text" id="name" name="name" autocomplete="name" required><br>
+			    <label for="latitude">Latitude:</label><br>
+			    <input type="text" id="latitude" name="latitude" autocomplete="latitude" pattern="^-?([1-8]?[1-9]|[1-9]0)\.{1}\d{1,6}" readonly><br>
+			    <label for="longitude">Longitude:</label><br>
+			    <input type="text" id="longitude" name="longitude" autocomplete="longitude" pattern="^-?([1-8]?[1-9]|[1-9]0)\.{1}\d{1,6}" readonly><br>
+			    <div id="iconGrid" class="icon-grid">
+				    <i class="pin bank" data-value="bank"></i>
+				    <i class="pin car" data-value="car"></i>
+				    <i class="pin church" data-value="church"></i>
+				    <i class="pin firehouse" data-value="firehouse"></i>
+				    <i class="pin hospital" data-value="hospital"></i>
+				    <i class="pin military" data-value="military"></i>
+				    <i class="pin plane" data-value="plane"></i>
+				    <i class="pin school" data-value="school"></i>
+				    <i class="pin tunnel" data-value="tunnel"></i>
+				    <i class="pin boat" data-value="boat"></i>
+				    <i class="pin castle" data-value="castle"></i>
+				    <i class="pin dam" data-value="dam"></i>
+				    <i class="pin graffiti" data-value="graffiti"></i>
+				    <i class="pin house" data-value="house"></i>
+				    <i class="pin museum" data-value="museum"></i>
+				    <i class="pin powerplant" data-value="powerplant"></i>
+				    <i class="pin statue" data-value="statue"></i>
+				    <i class="pin bridge" data-value="bridge"></i>
+				    <i class="pin cave" data-value="cave"></i>
+				    <i class="pin factory" data-value="factory"></i>
+				    <i class="pin graveyard" data-value="graveyard"></i>
+				    <i class="pin library" data-value="library"></i>
+				    <i class="pin park" data-value="park"></i>
+				    <i class="pin prison" data-value="prison"></i>
+				    <i class="pin train" data-value="train"></i>
+				    <!--
+				    <i class="pin windmill"></i>
+				    <i class="pin lighthouse"></i>
+				    <i class="pin water-tower"></i>
+				    <i class="pin barn"></i>
+				    <i class="pin silo"></i>
+				    <i class="pin police-station"></i>
+				    <i class="pin farm"></i>
+				    <i class="pin stadium"></i>
+				    <i class="pin theater"></i>
+				    <i class="pin construction"></i>
+				    -->
+			    </div>
+			    <input type="hidden" id="selectedIcon" name="icon">
 
-				<input type="button" id="submitAddPinForm" value="Submit" class="submit-button">
-	        </form>
+			    <input type="button" id="submitAddPinForm" value="Submit" class="submit-button">
+            </form>
 
-			<script>
-				function closeDialog( removePin = true ) {
-					const dialog = document.getElementById('addPinModal');
-					const screen = document.getElementById('screen');
+		    <script>
+			    function closeDialog( removePin = true ) {
+				    const dialog = document.getElementById('addPinModal');
+				    const screen = document.getElementById('screen');
 
-					if (removePin) {
-						if (window.pin) {
-							window.pin.remove();
-							window.pin.closePopup();
-							window.pin.closeTooltip();
-							window.map.removeLayer(window.pin);
-							window.pin = null;
-						}
-					}
+				    if (removePin) {
+					    if (window.pin) {
+						    window.pin.remove();
+						    window.pin.closePopup();
+						    window.pin.closeTooltip();
+						    window.map.removeLayer(window.pin);
+						    window.pin = null;
+					    }
+				    }
 
-					if (screen) {
-						screen.style.display = 'none';
-						screen.remove();
-					}
-					dialog.style.display = 'none';
-				}
+				    if (screen) {
+					    screen.style.display = 'none';
+					    screen.remove();
+				    }
+				    dialog.style.display = 'none';
+			    }
 
-				function initializeDialog() {
-					const iconGrid = document.getElementById('iconGrid');
-					const selectedIconInput = document.getElementById('selectedIcon');
-					const dialog = document.getElementById('addPinModal');
-					const screen = document.getElementById('screen');
-					const closeDialogButton = document.getElementById('closeDialog');
+			    function initializeDialog() {
+				    const iconGrid = document.getElementById('iconGrid');
+				    const selectedIconInput = document.getElementById('selectedIcon');
+				    const dialog = document.getElementById('addPinModal');
+				    const screen = document.getElementById('screen');
+				    const closeDialogButton = document.getElementById('closeDialog');
 
-					iconGrid.addEventListener('click', (e) => {
-						if (e.target.tagName === 'I') {
-							selectedIconInput.value = e.target.dataset.value;
-							// Remove "selected" class from all icons
-							document.querySelectorAll('#iconGrid i').forEach(icon => {
-								icon.classList.remove('selected');
-							});
-							// Add "selected" class to clicked icon
-							e.target.classList.add('selected');
-							// Update window.pin to use this icon
-							if (window.pin) {
-								const iconName = e.target.classList[1];
-								window.pin.setIcon(L.divIcon({
-									className: iconName,
-									html: `<i class="pin ${iconName}"></i>`,
-									iconSize: [30, 42],
-									iconAnchor: [15, 42]
-								}));
-							}
-						}
-					});
+				    iconGrid.addEventListener('click', (e) => {
+					    if (e.target.tagName === 'I') {
+						    selectedIconInput.value = e.target.dataset.value;
+						    // Remove "selected" class from all icons
+						    document.querySelectorAll('#iconGrid i').forEach(icon => {
+							    icon.classList.remove('selected');
+						    });
+						    // Add "selected" class to clicked icon
+						    e.target.classList.add('selected');
+						    // Update window.pin to use this icon
+						    if (window.pin) {
+							    const iconName = e.target.classList[1];
+							    window.pin.setIcon(L.divIcon({
+								    className: iconName,
+								    html: `<i class="pin ${iconName}"></i>`,
+								    iconSize: [30, 42],
+								    iconAnchor: [15, 42]
+							    }));
+						    }
+					    }
+				    });
 
-					screen.addEventListener('click', () => closeDialog());
-					closeDialogButton.addEventListener('click', () => closeDialog());
-				}
-				document.addEventListener('dialogLoaded', () => initializeDialog());
+				    screen.addEventListener('click', () => closeDialog());
+				    closeDialogButton.addEventListener('click', () => closeDialog());
+			    }
+			    document.addEventListener('dialogLoaded', () => initializeDialog());
 
-				// AJAX form submission
-				document.getElementById('submitAddPinForm').addEventListener('click', function(e) {
-					e.preventDefault();
-					const form = document.getElementById('addPinForm');
-					const formData = new FormData(form);
-					console.log('submitting form', formData);
-					fetch(form.action, {
-						method: 'POST',
-						body: formData,
-						headers: {
-							'X-CSRFToken': '{{ csrf_token }}'
-						}
-					})
-					.then(response => {
-						console.log('received response ', response);
-						if (!response.ok) {
-							throw new Error('Network response was not ok');
-						}
-						toastr.options = {
-  							"closeButton": false,
-							"debug": false,
-							"newestOnTop": false,
-							"progressBar": false,
-							"positionClass": "toast-bottom-right",
-							"preventDuplicates": false,
-							"onclick": null,
-							"showDuration": "300",
-							"hideDuration": "1000",
-							"timeOut": "5000",
-							"extendedTimeOut": "1000",
-							"showEasing": "swing",
-							"hideEasing": "linear",
-							"showMethod": "fadeIn",
-							"hideMethod": "fadeOut"
-						}
-						toastr["success"]("Location added successfully!");
-						closeDialog(false);
-					})
-					.catch(error => {
-						console.error('There has been a problem with your fetch operation:', error);
-					});
-				});
-			</script>
+			    // AJAX form submission
+			    document.getElementById('submitAddPinForm').addEventListener('click', function(e) {
+				    e.preventDefault();
+				    const form = document.getElementById('addPinForm');
+				    const formData = new FormData(form);
+				    console.log('submitting form', formData);
+				    fetch(form.action, {
+					    method: 'POST',
+					    body: formData,
+					    headers: {
+						    'X-CSRFToken': '{{ csrf_token }}'
+					    }
+				    })
+				    .then(response => {
+					    console.log('received response ', response);
+					    if (!response.ok) {
+						    throw new Error('Network response was not ok');
+					    }
+					    toastr.options = {
+  						    "closeButton": false,
+						    "debug": false,
+						    "newestOnTop": false,
+						    "progressBar": false,
+						    "positionClass": "toast-bottom-right",
+						    "preventDuplicates": false,
+						    "onclick": null,
+						    "showDuration": "300",
+						    "hideDuration": "1000",
+						    "timeOut": "5000",
+						    "extendedTimeOut": "1000",
+						    "showEasing": "swing",
+						    "hideEasing": "linear",
+						    "showMethod": "fadeIn",
+						    "hideMethod": "fadeOut"
+					    }
+					    toastr["success"]("Location added successfully!");
+					    closeDialog(false);
+				    })
+				    .catch(error => {
+					    console.error('There has been a problem with your fetch operation:', error);
+				    });
+			    });
+		    </script>
 
-	    </div>
+        </div>

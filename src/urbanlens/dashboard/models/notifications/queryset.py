@@ -26,19 +26,22 @@
 
 # Generic imports
 from __future__ import annotations
+
 # Django Imports
 # Lib Imports
 # App Imports
 from urbanlens.dashboard.models import abstract
 
+
 class QuerySet(abstract.QuerySet):
-	"""
-	A queryset for interacting with our local DB.
-	"""
+    """
+    A queryset for interacting with our local DB.
+    """
+
 
 class Manager(abstract.Manager.from_queryset(QuerySet)):
-	"""
-	A manager for creating querysets.
+    """
+    A manager for creating querysets.
 
-	This class inherits the methods from QuerySet in this module (although VSCode doesn't show them as hints)
-	"""
+    This class inherits the methods from QuerySet in this module (although VSCode doesn't show them as hints)
+    """

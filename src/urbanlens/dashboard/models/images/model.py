@@ -24,10 +24,12 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
-from django.db.models import ImageField, CASCADE
-from django.db.models import ForeignKey
+
+from django.db.models import CASCADE, ForeignKey, ImageField
+
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.images.queryset import ImageManager
+
 
 class Image(abstract.Model):
     """
@@ -35,13 +37,13 @@ class Image(abstract.Model):
     """
     image = ImageField()
     pin = ForeignKey(
-        'dashboard.Pin',
+        "dashboard.Pin",
         on_delete=CASCADE,
-        related_name='images'
+        related_name="images",
     )
 
     objects = ImageManager()
 
     class Meta(abstract.Model.Meta):
-        db_table = 'dashboard_images'
-        get_latest_by = 'updated'
+        db_table = "dashboard_images"
+        get_latest_by = "updated"

@@ -26,14 +26,17 @@
 
 # Generic imports
 from __future__ import annotations
+
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 
-class NotificationType(TextChoices):
-	"""
-	Choices used for recording the status of a notification.
 
-	This is used as a class, and never instantiated.
-	"""
-	ERROR	= 'error'
-	WARNING = 'warning'
-	INFO	= 'info'
+class NotificationType(TextChoices):
+    """
+    Choices used for recording the status of a notification.
+
+    This is used as a class, and never instantiated.
+    """
+
+    ERROR = "error"
+    WARNING = "warning"
+    INFO = "info"

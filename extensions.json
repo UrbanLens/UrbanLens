@@ -1,6 +1,6 @@
 {
     "recommendations": [
-		"eamodio.gitlens",
+        "eamodio.gitlens",
         "github.vscode-pull-request-github",
         "ms-python.vscode-pylance",
         "ms-python.python",

@@ -23,19 +23,22 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-#!/usr/bin/env python
+# !/usr/bin/env python
 
 # Generic imports
 import argparse
-import textwrap
+from enum import Enum
+import logging
 import os
 import re
-from enum import Enum
-import subprocess
 from shutil import which
+import subprocess
+import sys
+import textwrap
 import time
+
 from tqdm import tqdm
-import logging
+
 # Our imports
 from bin.utils.action import EnumAction
 
@@ -45,17 +48,18 @@ logger = logging.getLogger(__name__)
 DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Default path to the data directory, which we pass directly to postgres
-DEFAULT_DATA_PATH = os.environ.get('urbanlens_db_data_path', f'{DIR}/pgsql/data')
+DEFAULT_DATA_PATH = os.environ.get("URBANLENS_DB_DATA_PATH", f"{DIR}/pgsql/data")
 # Default path to the logfile we want to use.
-DEFAULT_LOG_PATH = os.environ.get('urbanlens_log_path', f'{DIR}/pgsql/pgsql.log')
+DEFAULT_LOG_PATH = os.environ.get("URBANLENS_LOG_PATH", f"{DIR}/pgsql/pgsql.log")
 # Command to use to interact with the DB. This must be in our path.
-EXE = os.environ.get('urbanlens_postgres_bin', "pg_ctl")
+EXE = os.environ.get("URBANLENS_POSTGRES_BIN", "pg_ctl")
+
 
 class Db:
-    _data_path : str
-    _log_path : str
-    _user : str
-    _database : str
+    _data_path: str
+    _log_path: str
+    _user: str
+    _database: str
 
     @property
     def log_path(self) -> str:
@@ -74,28 +78,34 @@ class Db:
         return self._database
 
     @log_path.setter
-    def log_path(self, user_input_path : str) -> None:
+    def log_path(self, user_input_path: str) -> None:
         """
         Sets the log path. Assumes that input_path is user input and sanitizes it accordingly.
 
         Args:
+        ----
             user_input_path (str): The path provided via user input to sanitize and set.
 
         Returns:
+        -------
             None
+
         """
         self._log_path = self.sanitize_path(user_input_path)
 
     @data_path.setter
-    def data_path(self, user_input_path : str) -> None:
+    def data_path(self, user_input_path: str) -> None:
         """
         Sets the data directory path. Assumes that input_path is user input and sanitizes it accordingly.
 
         Args:
+        ----
             user_input_path(str): The path provided via user input to sanitize and set.
 
         Returns:
+        -------
             None
+
         """
         self._data_path = self.sanitize_path(user_input_path)
 
@@ -104,20 +114,23 @@ class Db:
         Sets up our Db object with config options we'll use for this run.
 
         Args:
+        ----
             data_path (str, optional):
                 The data directory path to use, which is passed directly to Postgres.
                 Note: This is sanitized and only accepts these characters: a-zA-Z0-9/_.-
                 On windows, this also accepts colons and backslashes.
                 Defaults to the DEFAULT_DATA_PATH constant.
-            log_path
+            log_path:
                 The logfile we want Postgres to use.
                 Note: This is sanitized and only accepts these characters: a-zA-Z0-9/_.-
                 On windows, this also accepts colons and backslashes.
                 Defaults to the DEFAULT_LOG_PATH constant.
 
         Raises:
+        ------
             ValueError: If the config options provided are not valid, or the files they reference are not found.
             FileNotFoundError: If the postgres executable cannot be found.
+
         """
         # Validation
         if not os.path.isdir(data_path):
@@ -131,8 +144,8 @@ class Db:
         self.data_path = data_path
         self.log_path = log_path
 
-        self._user = os.environ.get('urbanlens_db_user', 'postgres')
-        self._database = os.environ.get('urbanlens_db_database', 'UrbanLens')
+        self._user = os.environ.get("URBANLENS_DB_USER", "postgres")
+        self._database = os.environ.get("URBANLENS_DB_DATABASE", "UrbanLens")
 
     def start(self) -> int:
         """
@@ -140,8 +153,10 @@ class Db:
 
         If the server is already running, prints a message indicating so, but does NOT attempt to restart.
 
-        Returns:
+        Returns
+        -------
             int: The exit code returned from executing the postgres command (pg_ctl), or -1 if the server is already running.
+
         """
         # If we're already running, then just return right away.
         if self.is_running():
@@ -149,62 +164,100 @@ class Db:
             return -1
 
         # Okay, not running. Try starting it.
-        return os.system(f'{EXE} -D {self.data_path} -l {self.log_path} start')
+        return os.system(f"{EXE} -D {self.data_path} -l {self.log_path} start")
 
     def restart(self) -> int:
         """
         Restarts the PostgresSQL server and prints all output to stdout.
 
-        Returns:
+        Returns
+        -------
             int: The exit code returned from executing the postgres command (pg_ctl)
+
         """
-        return os.system(f'{EXE} -D {self.data_path} -l {self.log_path} restart')
+        return os.system(f"{EXE} -D {self.data_path} -l {self.log_path} restart")
 
     def stop(self) -> int:
         """
         Stops the PostgresSQL server and prints all output to stdout.
 
-        Returns:
+        Returns
+        -------
             int: The exit code returned from executing the postgres command (pg_ctl)
+
         """
-        return os.system(f'{EXE} -D {self.data_path} -l {self.log_path} stop')
+        return os.system(f"{EXE} -D {self.data_path} -l {self.log_path} stop")
 
     def status(self) -> int:
         """
         Checks the status of the postgres server and prints all output to stdout.
 
-        Returns:
+        Returns
+        -------
             int: The exit code returned from executing the postgres command (pg_ctl)
+
         """
-        return os.system(f'{EXE} -D {self.data_path} -l {self.log_path} status')
+        return os.system(f"{EXE} -D {self.data_path} -l {self.log_path} status")
 
     def check_errors(self) -> int:
-        cmd = ['psql', '-U', self.user, '-d', self.database, '-c', "SELECT * FROM pg_stat_database_conflicts WHERE datname = current_database();"]
+        cmd = [
+            "psql",
+            "-U",
+            self.user,
+            "-d",
+            self.database,
+            "-c",
+            "SELECT * FROM pg_stat_database_conflicts WHERE datname = current_database();",
+        ]
         return subprocess.call(cmd)
 
     def analyze(self) -> int:
-        cmd = ['psql', '-U', self.user, '-d', self.database, '-c', "ANALYZE VERBOSE;"]
+        cmd = ["psql", "-U", self.user, "-d", self.database, "-c", "ANALYZE VERBOSE;"]
         return subprocess.call(cmd)
 
     def repair_errors(self) -> int:
-        cmd = ['psql', '-U', self.user, '-d', self.database, '-c', "REINDEX DATABASE current_database;"]
+        cmd = ["psql", "-U", self.user, "-d", self.database, "-c", "REINDEX DATABASE current_database;"]
         return subprocess.call(cmd)
 
     def dead_rows(self) -> int:
-        cmd = ['psql', '-U', self.user, '-d', self.database, '-c', "SELECT relname, n_dead_tup FROM pg_stat_user_tables WHERE n_dead_tup > 0;"]
+        cmd = [
+            "psql",
+            "-U",
+            self.user,
+            "-d",
+            self.database,
+            "-c",
+            "SELECT relname, n_dead_tup FROM pg_stat_user_tables WHERE n_dead_tup > 0;",
+        ]
         return subprocess.call(cmd)
 
     def long_queries(self) -> int:
-        cmd = ['psql', '-U', self.user, '-d', self.database, '-c', "SELECT pid, now() - pg_stat_activity.query_start AS duration, query FROM pg_stat_activity WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';"]
+        cmd = [
+            "psql",
+            "-U",
+            self.user,
+            "-d",
+            self.database,
+            "-c",
+            "SELECT pid, now() - pg_stat_activity.query_start AS duration, query FROM pg_stat_activity WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';",
+        ]
         return subprocess.call(cmd)
 
     def locks(self) -> int:
-        cmd = ['psql', '-U', self.user, '-d', self.database, '-c', "SELECT pid, relation::regclass, mode, granted FROM pg_locks WHERE NOT granted;"]
+        cmd = [
+            "psql",
+            "-U",
+            self.user,
+            "-d",
+            self.database,
+            "-c",
+            "SELECT pid, relation::regclass, mode, granted FROM pg_locks WHERE NOT granted;",
+        ]
         return subprocess.call(cmd)
 
     def backup(self) -> int:
-        BACKUP_DIR = 'Z:/DEV/backups/db/postgres'
-        name = 'backup.sql'
+        BACKUP_DIR = "Z:/DEV/backups/db/postgres"
+        name = "backup.sql"
 
         # Check if directory exists
         if not os.path.exists(BACKUP_DIR):
@@ -218,10 +271,10 @@ class Db:
             count = 0
             while os.path.exists(os.path.join(BACKUP_DIR, name)):
                 count += 1
-                name = f'backup_{str(int(time.time()))}_{count}.sql'
+                name = f"backup_{int(time.time())!s}_{count}.sql"
 
         try:
-            cmd = ['pg_dump', '-U', self.user, '-d', self.database, '-f', os.path.join(BACKUP_DIR, name)]
+            cmd = ["pg_dump", "-U", self.user, "-d", self.database, "-f", os.path.join(BACKUP_DIR, name)]
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
             # Progress bar
@@ -230,15 +283,15 @@ class Db:
                     progress_bar.update(1)
                     time.sleep(1)
 
-            stdout, stderr = process.communicate()
+            _stdout, stderr = process.communicate()
 
             if process.returncode != 0:
-                logger.error(f"pg_dump failed with error: {stderr.decode('utf-8')}")
+                logger.error("pg_dump failed with error: %s", stderr.decode("utf-8"))
 
             return process.pid
 
         except Exception as e:
-            logger.error(f'Error backing up database: {e}')
+            logger.exception("Error backing up database: %s", e)
 
         return -1
 
@@ -255,14 +308,17 @@ class Db:
         """
         Determines if the postgres server is running, without printing anything to stdout.
 
-        Returns:
+        Returns
+        -------
             bool: True if the server is running, False otherwise.
 
-        Raises:
+        Raises
+        ------
             FileNotFoundError: If postgres is not able to find the data directory
+
         """
         # Create a child process, supressing output
-        child = subprocess.run([EXE, '-D', self.data_path, 'status'], stdout = subprocess.PIPE)
+        child = subprocess.run([EXE, "-D", self.data_path, "status"], stdout=subprocess.PIPE, check=False)
 
         """
         Postgres returns exit code 3 if the server is NOT running, and 4 on error. It returns 0 otherwise.
@@ -274,10 +330,10 @@ class Db:
              If an accessible data directory is not specified, pg_ctl returns an exit status of 4.
         """
         if child.returncode == 4:
-            raise FileNotFoundError(f'Postgres is not able to find the data directory: {self.data_path}')
+            raise FileNotFoundError(f"Postgres is not able to find the data directory: {self.data_path}")
         return child.returncode == 0
 
-    def sanitize_path(self, user_input_path : str) -> str:
+    def sanitize_path(self, user_input_path: str) -> str:
         """
         Takes arbitrary user input, and sanitizes it to prevent injection attacks.
 
@@ -285,19 +341,23 @@ class Db:
         so we must be especially careful with what we return.
 
         Args:
+        ----
             user_input_path (str): The user input to turn into a path
 
         Returns:
+        -------
             str: The sanitized path
+
         """
         # Whitelist "good" characters and remove all others
 
-        if os.name == 'nt':
+        if os.name == "nt":
             # If we're running on windows, we must accept colons and backslashes
-            return re.sub(r'[^a-zA-Z0-9:/\\_.-]', '', user_input_path)
+            return re.sub(r"[^a-zA-Z0-9:/\\_.-]", "", user_input_path)
 
         # If we're running on a sane operating system, don't allow colons or backslashes.
-        return re.sub(r'[^a-zA-Z0-9/_.-]', '', user_input_path)
+        return re.sub(r"[^a-zA-Z0-9/_.-]", "", user_input_path)
+
 
 class Actions(Enum):
     """
@@ -313,17 +373,18 @@ class Actions(Enum):
         stop:
             stop the DB (if it is running)
     """
-    start = 'start'
-    restart = 'restart'
-    status = 'status'
-    stop = 'stop'
-    check_errors = 'check_errors'
-    analyze = 'analyze'
-    repair_errors = 'repair_errors'
-    manage = 'manage'
-    dead_rows = 'dead_rows'
-    long_queries = 'long_queries'
-    locks = 'locks'
+
+    start = "start"
+    restart = "restart"
+    status = "status"
+    stop = "stop"
+    check_errors = "check_errors"
+    analyze = "analyze"
+    repair_errors = "repair_errors"
+    manage = "manage"
+    dead_rows = "dead_rows"
+    long_queries = "long_queries"
+    locks = "locks"
 
     def __str__(self):
         """
@@ -333,41 +394,45 @@ class Actions(Enum):
 
 
 def main():
-    """
-        This code is only run when this script is called directly (i.e. python bin/db.py)
-    """
-
     # Setup the basic configuration for the parser
     parser = argparse.ArgumentParser(
-            formatter_class=argparse.RawTextHelpFormatter,
-             description=textwrap.dedent("""
+        formatter_class=argparse.RawTextHelpFormatter,
+        description=textwrap.dedent("""
                 Interact with the application's local DB
             """),
-            epilog="",
+        epilog="",
     )
 
     # Define the arguments we will accept from the command line.
-    parser.add_argument('action',
-                     type=Actions,
-                     action=EnumAction,
-                     help=textwrap.dedent("""\
+    parser.add_argument(
+        "action",
+        type=Actions,
+        action=EnumAction,
+        help=textwrap.dedent("""\
                         Start the local application DB
 
                         status: check the DB status
                         start: start the DB (if it is not already running)
                         restart: stop the DB (if it is running) and start it again.
                         stop: stop the DB (if it is running)
-                     """))
-    parser.add_argument('-l', '--log',
-                         type=str,
-                        metavar='path',
-                        default=DEFAULT_LOG_PATH,
-                          help="Path to the log file for the DB.")
-    parser.add_argument('-d', '--data',
-                         type=str,
-                        metavar='path',
-                        default=DEFAULT_DATA_PATH,
-                          help="Path to the data directory for postgres.")
+                     """),
+    )
+    parser.add_argument(
+        "-l",
+        "--log",
+        type=str,
+        metavar="path",
+        default=DEFAULT_LOG_PATH,
+        help="Path to the log file for the DB.",
+    )
+    parser.add_argument(
+        "-d",
+        "--data",
+        type=str,
+        metavar="path",
+        default=DEFAULT_DATA_PATH,
+        help="Path to the data directory for postgres.",
+    )
 
     # Parse the arguments provided to our script from the command line
     # These are used as attributes. For example: options.action
@@ -378,12 +443,12 @@ def main():
         db = Db(data_path=options.data, log_path=options.log)
     except ValueError as ve:
         # One of the options contains bad data. Print the message and exit.
-        print(f'Bad option provided: {ve}')
-        exit()
+        print(f"Bad option provided: {ve}")
+        sys.exit()
     except FileNotFoundError as fnf:
         # The options were okay, but we can't find a necessary file (probably the executable)
-        print(f'Unable to find a necessary file: {fnf}')
-        exit()
+        print(f"Unable to find a necessary file: {fnf}")
+        sys.exit()
 
     match options.action:
         case Actions.start:
@@ -415,8 +480,9 @@ def main():
         case _:
             print("Error: Unknown action. Try --help to see how to call this script.")
 
-    logger.debug('Result is %s', result)
-    exit()
+    logger.debug("Result is %s", result)
+    sys.exit()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

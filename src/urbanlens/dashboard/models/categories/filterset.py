@@ -23,10 +23,15 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
+from __future__ import annotations
+
 import django_filters
+
 from urbanlens.dashboard.models.categories.model import Category
+
 
 class CategoryFilter(django_filters.FilterSet):
     class Meta:
         model = Category
-        fields = ['name']
+        fields = ["name"]

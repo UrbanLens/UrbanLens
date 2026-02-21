@@ -24,12 +24,13 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
+
 from django.contrib.auth.models import User
-from django.db.models import CASCADE, Index
-from django.db.models import ImageField
-from django.db.models import OneToOneField, CharField, TextField, DateField
+from django.db.models import CASCADE, CharField, DateField, ImageField, Index, OneToOneField, TextField
+
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.profile.queryset import Manager
+
 
 class Profile(abstract.Model):
     avatar = ImageField()
@@ -42,7 +43,7 @@ class Profile(abstract.Model):
 
     user = OneToOneField(
         User,
-        on_delete=CASCADE
+        on_delete=CASCADE,
     )
 
     objects = Manager()
@@ -71,8 +72,8 @@ class Profile(abstract.Model):
         return self.username
 
     class Meta(abstract.Model.Meta):
-        db_table = 'dashboard_profiles'
+        db_table = "dashboard_profiles"
 
         indexes = [
-            Index(fields=['user']),
+            Index(fields=["user"]),
         ]

@@ -23,18 +23,20 @@
 *        2024-01-01     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 # Generic imports
 from __future__ import annotations
-from typing import TYPE_CHECKING
+
 import logging
+from typing import TYPE_CHECKING
+
 from django.db import models as django_models
+
 # Django Imports
 # Lib Imports
 # App Imports
 
 # Typechecking imports
-if TYPE_CHECKING:
-	pass
 
 #
 # Set up logging for this module. __name__ includes the namespace (e.g. dashboard.models.cases).
@@ -45,22 +47,24 @@ logger = logging.getLogger(__name__)
 
 '''
 class QuerySet(models.QuerySet):
-	"""
-	A custom queryset. All models below will use this for interacting with results from the db.
-	"""
+    """
+    A custom queryset. All models below will use this for interacting with results from the db.
+    """
 
 class Manager(models.PostgresManager.from_queryset(QuerySet)):
-	"""
-	A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
-	"""
+    """
+    A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
+    """
 '''
 
+
 class QuerySet(django_models.QuerySet):
-	"""
-	A custom queryset. All models below will use this for interacting with results from the db.
-	"""
+    """
+    A custom queryset. All models below will use this for interacting with results from the db.
+    """
+
 
 class Manager(django_models.Manager.from_queryset(QuerySet)):
-	"""
-	A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
-	"""
+    """
+    A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
+    """

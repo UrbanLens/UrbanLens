@@ -26,23 +26,21 @@
 
 # Generic imports
 from __future__ import annotations
-from typing import TYPE_CHECKING
+
 import logging
+from typing import TYPE_CHECKING
+
 # Django Imports
-from django.db.models import Index
+from django.db.models import Index, ManyToManyField
 from django.db.models.fields import CharField, DateTimeField
-from django.db.models import ManyToManyField
 
 # App Imports
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin.queryset import PinManager
 from urbanlens.dashboard.models.profile import Profile
 
-if TYPE_CHECKING:
-    # Imports required for type checking, but not program execution.
-    pass
-
 logger = logging.getLogger(__name__)
+
 
 class Trip(abstract.Model):
     """
@@ -56,19 +54,19 @@ class Trip(abstract.Model):
     profiles = ManyToManyField(
         Profile,
         blank=True,
-        related_name='trips',
+        related_name="trips",
     )
 
     pins = ManyToManyField(
-        'dashboard.Pin',
+        "dashboard.Pin",
         blank=True,
-        default=list
+        default=list,
     )
 
     objects = PinManager()
 
     def __str__(self):
-        pins = ', '.join([str(pin) for pin in self.pins.all()]) if self.pins.all() else []
+        pins = ", ".join([str(pin) for pin in self.pins.all()]) if self.pins.all() else []
         return f"Name: {self.name}\nDescription: {self.description or ''}\nStart Date: {self.start_date}\nEnd Date: {self.end_date}\nLocations: {pins}"
 
     def to_json(self):
@@ -76,20 +74,20 @@ class Trip(abstract.Model):
         Returns a dictionary that can be JSON serialized.
         """
         return {
-            'id': self.id,
-            'name': self.name,
-            'description': self.description,
-            'start_date': self.start_date.isoformat() if self.start_date else "never",
-            'end_date': self.end_date.isoformat() if self.end_date else "never",
-            'pins': [pin.id for pin in self.pins.all()],
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "start_date": self.start_date.isoformat() if self.start_date else "never",
+            "end_date": self.end_date.isoformat() if self.end_date else "never",
+            "pins": [pin.id for pin in self.pins.all()],
         }
 
     class Meta(abstract.Model.Meta):
-        db_table = 'dashboard_trips'
-        get_latest_by = 'updated'
+        db_table = "dashboard_trips"
+        get_latest_by = "updated"
 
         indexes = [
-            Index(fields=['name']),
-            Index(fields=['start_date']),
-            Index(fields=['end_date']),
+            Index(fields=["name"]),
+            Index(fields=["start_date"]),
+            Index(fields=["end_date"]),
         ]

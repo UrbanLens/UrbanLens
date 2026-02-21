@@ -37,7 +37,7 @@ from pydantic._internal._model_construction import ModelMetaclass
 from django import conf
 from django.conf import LazySettings
 
-from urbanlens.UrbanLens.environments.types import EnvironmentTypes
+from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 from urbanlens.UrbanLens.environments.factory import select_environment
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
 from urbanlens.UrbanLens.settings.meta.app import DEFAULT_PATH_PARENTS, DEFAULT_ROOT
@@ -258,7 +258,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                     else:
                         value.mkdir(parents=True, exist_ok=True)
             except FileNotFoundError:
-                logger.error(f"Error ensuring path: {key} - {value}")
+                logger.error("Error ensuring path: %s - %s", key, value)
 
         # Ensure app.log, debugging.log, and test.log exist in log dir
         for filename in ['app.log', 'debugging.log', 'test.log']:
@@ -308,7 +308,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
         if new_environment_name:
             self.environment_name = new_environment_name
-            logger.info(f"Switching to environment: {new_environment_name}")
+            logger.info("Switching to environment: %s", new_environment_name)
         self._environment = select_environment(self.environment_name)
 
         # If we set debug_override to any bool, propogate it to the new env

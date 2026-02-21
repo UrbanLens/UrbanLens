@@ -25,55 +25,59 @@
 *********************************************************************************************************************"""
 
 from __future__ import annotations
-import os
-import sys
-import re
+
 import argparse
-from pathlib import Path
-import subprocess
 import logging
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
 
 logger = logging.getLogger(__name__)
+
 
 class UnrecoverableError(Exception):
     """
     An error that cannot be recovered. This will result in a sys.exit(1)
     """
 
-ROOT_DIR = Path('/app')
-SRC_DIR = ROOT_DIR / 'src'
-APP_DIR = SRC_DIR / 'urbanlens'
+
+ROOT_DIR = Path("/app")
+SRC_DIR = ROOT_DIR / "src"
+APP_DIR = SRC_DIR / "urbanlens"
+
 
 class DjangoProjectInitializer:
-    _db_host : str
-    _db_port : int
-    _db_name : str
-    _db_user : str
-    _db_pass : str
-    _environment : str
+    _db_host: str
+    _db_port: int
+    _db_name: str
+    _db_user: str
+    _db_pass: str
+    _environment: str
 
-    def __init__(self, no_runserver : bool = False, environment : str | None = None):
+    def __init__(self, no_runserver: bool = False, environment: str | None = None):
         self.no_runserver = no_runserver
 
         # Get database details from environment variables
-        self.db_host = os.environ.get('UL_DB_HOST', 'localhost')
-        self.db_port = int(os.environ.get('UL_DB_PORT', 5432))
-        self.db_name = os.environ.get('UL_DB_NAME', 'UrbanLens')
-        self.db_user = os.environ.get('UL_DB_USER', 'postgres')
-        self.db_pass = os.environ.get('UL_DB_PASS', 'postgres')
-        self.environment = environment if environment else os.environ.get('ENVIRONMENT', 'production')
+        self.db_host = os.environ.get("UL_DB_HOST", "localhost")
+        self.db_port = int(os.environ.get("UL_DB_PORT", "5432"))
+        self.db_name = os.environ.get("UL_DB_NAME", "UrbanLens")
+        self.db_user = os.environ.get("UL_DB_USER", "postgres")
+        self.db_pass = os.environ.get("UL_DB_PASS", "postgres")
+        self.environment = environment or os.environ.get("ENVIRONMENT", "production")
 
     @property
     def db_host(self) -> str:
         return self._db_host
 
     @db_host.setter
-    def db_host(self, value : str):
+    def db_host(self, value: str):
         # Strip special characters from the host
-        self._db_host = re.sub(r'[^a-zA-Z0-9_-]', '', value)
+        self._db_host = re.sub(r"[^a-zA-Z0-9_-]", "", value)
         if value != self._db_host:
             # Only log the "safe" value to prevent injection attacks into the logfile
-            logger.error('Invalid host name. Stripped special characters to %s', self._db_host)
+            logger.error("Invalid host name. Stripped special characters to %s", self._db_host)
             raise UnrecoverableError("Invalid host name.")
 
     @property
@@ -81,25 +85,25 @@ class DjangoProjectInitializer:
         return self._db_port
 
     @db_port.setter
-    def db_port(self, value : int):
+    def db_port(self, value: int):
         # validate that value is a number
         try:
             self._db_port = int(value)
-        except ValueError:
-            logger.error('Invalid port number')
-            raise UnrecoverableError()
+        except ValueError as ve:
+            logger.exception("Invalid port number")
+            raise UnrecoverableError("Invalid port number") from ve
 
     @property
     def db_name(self) -> str:
         return self._db_name
 
     @db_name.setter
-    def db_name(self, value : str):
+    def db_name(self, value: str):
         # Strip special characters from the name
-        self._db_name = re.sub(r'[^a-zA-Z0-9_-]', '', value)
+        self._db_name = re.sub(r"[^a-zA-Z0-9_-]", "", value)
         if value != self._db_name:
             # Only log the "safe" value to prevent injection attacks into the logfile
-            logger.error('Invalid database name. Stripped special characters to %s', self._db_name)
+            logger.error("Invalid database name. Stripped special characters to %s", self._db_name)
             raise UnrecoverableError("Invalid database name.")
 
     @property
@@ -107,12 +111,12 @@ class DjangoProjectInitializer:
         return self._db_user
 
     @db_user.setter
-    def db_user(self, value : str):
+    def db_user(self, value: str):
         # Strip special characters from the user
-        self._db_user = re.sub(r'[^a-zA-Z0-9_-]', '', value)
+        self._db_user = re.sub(r"[^a-zA-Z0-9_-]", "", value)
         if value != self._db_user:
             # Only log the "safe" value to prevent injection attacks into the logfile
-            logger.error('Invalid database user. Stripped special characters to %s', self._db_user)
+            logger.error("Invalid database user. Stripped special characters to %s", self._db_user)
             raise UnrecoverableError("Invalid database user.")
 
     @property
@@ -120,12 +124,12 @@ class DjangoProjectInitializer:
         return self._db_pass
 
     @db_pass.setter
-    def db_pass(self, value : str):
+    def db_pass(self, value: str):
         # Strip special characters from the pass
-        self._db_pass = re.sub(r'[^a-zA-Z0-9!@#$^*()_-]', '', value)
+        self._db_pass = re.sub(r"[^a-zA-Z0-9!@#$^*()_-]", "", value)
         if value != self._db_pass:
             # Only log the "safe" value to prevent injection attacks into the logfile
-            logger.error('Invalid database password. Stripped special characters.')
+            logger.error("Invalid database password. Stripped special characters.")
             raise UnrecoverableError("Invalid database password.")
 
     @property
@@ -133,12 +137,12 @@ class DjangoProjectInitializer:
         return self._environment
 
     @environment.setter
-    def environment(self, value : str):
+    def environment(self, value: str):
         # Ensure environment is a known option
-        if value not in ['development', 'test', 'production']:
-            safe_value = re.sub(r'[^a-zA-Z0-9_-]', '', value)
-            logger.error(f'Invalid environment: {safe_value}')
-            raise UnrecoverableError(f'Invalid environment: {safe_value}')
+        if value not in {"development", "test", "production"}:
+            safe_value = re.sub(r"[^a-zA-Z0-9_-]", "", value)
+            logger.error("Invalid environment: %s", safe_value)
+            raise UnrecoverableError(f"Invalid environment: {safe_value}")
 
         self._environment = value
 
@@ -148,64 +152,69 @@ class DjangoProjectInitializer:
 
         Raises:
             UnrecoverableError: if the git configuration fails
+
         """
-        git_user = os.environ.get('GIT_NAME')
-        git_email = os.environ.get('GIT_EMAIL')
+        git_user = os.environ.get("GIT_NAME")
+        git_email = os.environ.get("GIT_EMAIL")
         try:
             if git_user:
-                subprocess.run(['git', 'config', '--global', 'user.name', git_user], check=True, cwd='/app')
+                subprocess.run(["git", "config", "--global", "user.name", git_user], check=True, cwd="/app")
             if git_email:
-                subprocess.run(['git', 'config', '--global', 'user.email', git_email], check=True, cwd='/app')
-            logger.info('Git configured with username %s and email %s.', git_user, git_email)
-            
+                subprocess.run(["git", "config", "--global", "user.email", git_email], check=True, cwd="/app")
+            logger.info("Git configured with username %s and email %s.", git_user, git_email)
+
         except subprocess.CalledProcessError as e:
-            logger.error('Error configuring git: %s', e)
+            logger.exception("Error configuring git: %s", e)
 
     def init_db(self):
         """
         Create the "UrbanLens" database in postgres
         """
         self.create_pgpass()
-        
+
         if self.check_db():
-            logger.info('Database %s already exists.', self.db_name)
+            logger.info("Database %s already exists.", self.db_name)
             return
 
-        logger.info('Database %s does not exist. Creating...', self.db_name)
+        logger.info("Database %s does not exist. Creating...", self.db_name)
 
         # Create the database
-        self.run_command(['psql', '-U', self.db_user, '-h', self.db_host, '-w', '-c', f'CREATE DATABASE {self.db_name}'], 'creating database')
+        self.run_command(
+            ["psql", "-U", self.db_user, "-h", self.db_host, "-w", "-c", f"CREATE DATABASE {self.db_name}"],
+            "creating database",
+        )
 
         if not self.check_db():
-            logger.error('Database %s was not created.', self.db_name)
-            raise UnrecoverableError(f'Database {self.db_name} was not created.')
-        
+            logger.error("Database %s was not created.", self.db_name)
+            raise UnrecoverableError(f"Database {self.db_name} was not created.")
+
     def copy_sample_env(self):
         """
         Copies .env-sample to .env
 
         Raises:
             UnrecoverableError: if the file cannot be copied
+
         """
-        if Path('/app/.env').exists():
+        if Path("/app/.env").exists():
             return
-        
+
         try:
-            with open('/app/.env-sample', 'r') as sample_file:
+            with Path("/app/.env-sample").open(encoding="utf-8") as sample_file:
                 sample_data = sample_file.read()
-            with open('/app/.env', 'w') as new_file:
+            with Path("/app/.env").open("w", encoding="utf-8") as new_file:
                 new_file.write(sample_data)
-            logger.info('Copied .env-sample to .env.')
-        except IOError as e:
-            logger.error(f'Error copying .env-sample: {e}')
-            raise UnrecoverableError() from e
+            logger.info("Copied .env-sample to .env.")
+        except OSError as e:
+            logger.exception("Error copying .env-sample: %s", e)
+            raise UnrecoverableError from e
 
         # Check that it now exists
-        if not Path('/app/.env').exists():
-            logger.error('.env was copied but still does not exist.')
-            raise UnrecoverableError('.env was copied but still does not exist.')
+        if not Path("/app/.env").exists():
+            logger.error(".env was copied but still does not exist.")
+            raise UnrecoverableError(".env was copied but still does not exist.")
 
-    def update_env(self, username : str, email : str):
+    def update_env(self, username: str, email: str):
         """
         Updates the env file with the git username and email
 
@@ -217,40 +226,42 @@ class DjangoProjectInitializer:
 
         Raises:
             UnrecoverableError: if the file cannot be updated
+
         """
         try:
-            with open('/app/.env', 'r') as file:
+            with Path("/app/.env").open(encoding="utf-8") as file:
                 data = file.readlines()
 
             for i, line in enumerate(data):
-                if line.startswith('GIT_USERNAME='):
-                    data[i] = f'GIT_USERNAME={username}\n'
-                elif line.startswith('GIT_EMAIL='):
-                    data[i] = f'GIT_EMAIL={email}\n'
+                if line.startswith("GIT_USERNAME="):
+                    data[i] = f"GIT_USERNAME={username}\n"
+                elif line.startswith("GIT_EMAIL="):
+                    data[i] = f"GIT_EMAIL={email}\n"
 
-            with open('/app/.env', 'w') as file:
+            with Path("/app/.env").open("w", encoding="utf-8") as file:
                 file.writelines(data)
-            logger.info('Updated git username and email in .env.')
-        except IOError as e:
-            logger.error(f'Error updating .env: {e}')
-            raise UnrecoverableError() from e
+            logger.info("Updated git username and email in .env.")
+        except OSError as e:
+            logger.exception("Error updating .env: %s", e)
+            raise UnrecoverableError from e
 
         # Check that it now exists
-        if not Path('/app/.env').exists():
-            logger.error('.env was updated but still does not exist.')
-            raise UnrecoverableError('.env was updated but still does not exist.')
+        if not Path("/app/.env").exists():
+            logger.error(".env was updated but still does not exist.")
+            raise UnrecoverableError(".env was updated but still does not exist.")
 
     def npm_init(self):
         """
         Runs npm init.
 
-        This should ideally be performed within Docker so that the results can be cached. 
+        This should ideally be performed within Docker so that the results can be cached.
         npm typically takes a long time to install.
 
         Raises:
             UnrecoverableError: if npm init fails
+
         """
-        self.run_command(['npm', 'install', '-y'], 'during npm init')
+        self.run_command(["npm", "install", "-y"], "during npm init")
 
     def build_frontend(self):
         """
@@ -258,28 +269,33 @@ class DjangoProjectInitializer:
 
         Raises:
             UnrecoverableError: if the frontend fails to build
+
         """
         # First, ensure that all directories for build files exist.
         # This is necessary because the build process will not create them, and will fail if they do not exist.
-        apps = [ 'dashboard', 'core' ]
-        dirs : list[Path] = []
+        apps = ["dashboard", "core"]
+        dirs: list[Path] = []
         for app in apps:
-            dirs.append(APP_DIR / app / 'frontend' / 'static' / app / 'js')
-            dirs.append(APP_DIR / app / 'frontend' / 'static' / app / 'css')
+            dirs.extend(
+                (
+                    APP_DIR / app / "frontend" / "static" / app / "js",
+                    APP_DIR / app / "frontend" / "static" / app / "css",
+                ),
+            )
 
-        for dir in dirs:
-            if not dir.exists():
-                os.makedirs(dir)
-                logger.debug(f'Created directory {dir}')
+        for frontend_dir in dirs:
+            if not frontend_dir.exists():
+                frontend_dir.mkdir(parents=True, exist_ok=True)
+                logger.debug("Created directory %s", frontend_dir)
 
         # Ensure entrypoint (dashboard/frontend/static/dashboard/js/index.js) exists
-        entry = APP_DIR / 'dashboard' / 'frontend' / 'static' / 'dashboard' / 'js' / 'index.js'
+        entry = APP_DIR / "dashboard" / "frontend" / "static" / "dashboard" / "js" / "index.js"
         if not entry.exists():
-            with open(entry, 'w') as file:
-                file.write('')
-            logger.debug(f'Created empty file {entry}')
+            with entry.open("w") as file:
+                file.write("")
+            logger.debug("Created empty file %s", entry)
 
-        self.run_command(['npm', 'run', 'sass'], 'compiling sass', raise_error = False)
+        self.run_command(["npm", "run", "sass"], "compiling sass", raise_error=False)
 
         match self.environment:
             case "development":
@@ -288,18 +304,25 @@ class DjangoProjectInitializer:
                 command = ["npm", "run", "deploy"]
 
         self.run_command(command, "building frontend")
-        self.run_command(['python', 'src/urbanlens/manage.py', 'collectstatic', '--noinput'], 'collecting static files')
-        
+        self.run_command(["python", "src/urbanlens/manage.py", "collectstatic", "--noinput"], "collecting static files")
+
     def run_migrations(self):
         """
         Runs django migrations (i.e. creates the django DB tables)
 
         Raises:
             UnrecoverableError: if the migrations fails
-        """
-        self.run_command(['python', 'src/urbanlens/manage.py', 'migrate'], 'migrating db')
 
-    def run_command(self, command : list[str], description : str | None = None, cwd : str | Path = '/app', raise_error : bool = True) -> bool:
+        """
+        self.run_command(["python", "src/urbanlens/manage.py", "migrate"], "migrating db")
+
+    def run_command(
+        self,
+        command: list[str],
+        description: str | None = None,
+        cwd: str | Path = "/app",
+        raise_error: bool = True,
+    ) -> bool:
         """
         Run a command
 
@@ -307,21 +330,23 @@ class DjangoProjectInitializer:
             command (List[str]): the command to run
             description (str): a description of the command
             cwd (str): the directory to run the command in
+            raise_error (bool): whether to raise an error if the command fails (default: True)
 
         Raises:
             UnrecoverableError: if the command fails
+
         """
         try:
             subprocess.run(command, check=True, cwd=cwd)
             return True
-        
+
         except subprocess.CalledProcessError as e:
-            description = description or 'running command: ' + ' '.join(command)
-            logger.error('Error occurred %s: %s', description, e)
-            
+            description = description or "running command: " + " ".join(command)
+            logger.exception("Error occurred %s: %s", description, e)
+
             if raise_error:
-                raise UnrecoverableError() from e
-            
+                raise UnrecoverableError from e
+
             return False
 
     def run_dev_server(self):
@@ -330,8 +355,9 @@ class DjangoProjectInitializer:
 
         Raises:
             UnrecoverableError: if the server fails to run
+
         """
-        self.run_command(['python', 'src/urbanlens/manage.py', 'runserver'], 'running development server')
+        self.run_command(["python", "src/urbanlens/manage.py", "runserver"], "running development server")
 
     def run_prod_server(self):
         """
@@ -339,8 +365,9 @@ class DjangoProjectInitializer:
 
         Raises:
             UnrecoverableError: if the server fails to run
+
         """
-        self.run_command(['npm', 'run', 'start'], 'running production server')
+        self.run_command(["npm", "run", "start"], "running production server")
 
     def check_network(self) -> bool:
         """
@@ -348,9 +375,10 @@ class DjangoProjectInitializer:
 
         Returns:
             bool: True if the network is functioning, False otherwise
+
         """
         # Check that we can ping google.com
-        return self.run_command(['ping', '-c', '1', 'google.com'], 'checking network connection', raise_error=False)
+        return self.run_command(["ping", "-c", "1", "google.com"], "checking network connection", raise_error=False)
 
     def create_pgpass(self):
         """
@@ -358,33 +386,36 @@ class DjangoProjectInitializer:
 
         Raises:
             UnrecoverableError: if the file cannot be created
+
         """
-        pgpass = os.path.expanduser('~/.pgpass')
+        pgpass = os.path.expanduser("~/.pgpass")
         if Path(pgpass).exists():
-            logger.debug('.pgpass file already exists.')
+            logger.debug(".pgpass file already exists.")
             return
-        
+
         try:
-            with open(pgpass, 'w') as file:
-                file.write(f'{self.db_host}:{self.db_port}:*:{self.db_user}:{self.db_pass}\n')
+            with Path(pgpass).open("w", encoding="utf-8") as file:
+                file.write(f"{self.db_host}:{self.db_port}:*:{self.db_user}:{self.db_pass}\n")
             os.chmod(pgpass, 0o600)
-            #file_contents = open(pgpass, 'r').read()
-            #logger.debug('Created .pgpass file: %s', file_contents)
-        except IOError as e:
-            logger.error(f'Error creating .pgpass file: {e}')
-            raise UnrecoverableError() from e
+            # file_contents = open(pgpass, 'r').read()
+            # logger.debug('Created .pgpass file: %s', file_contents)
+        except OSError as e:
+            logger.exception("Error creating .pgpass file: %s", e)
+            raise UnrecoverableError from e
 
     def check_dependencies(self):
         """
-        TODO
+        Todo:
+
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def install_dependencies(self):
         """
-        TODO
+        Todo:
+
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def check_db(self) -> bool:
         """
@@ -392,9 +423,21 @@ class DjangoProjectInitializer:
 
         Returns:
             bool: True if the database exists, False otherwise
+
         """
-        command = ['psql', '-U', self.db_user, '-h', self.db_host, '-p', str(self.db_port), '-w', '-c', f'SELECT 1 FROM pg_database WHERE datname=\'{self.db_name}\'']
-        return self.run_command(command, 'checking database', raise_error=False)
+        command = [
+            "psql",
+            "-U",
+            self.db_user,
+            "-h",
+            self.db_host,
+            "-p",
+            str(self.db_port),
+            "-w",
+            "-c",
+            f"SELECT 1 FROM pg_database WHERE datname='{self.db_name}'",  # noqa: S608 - Safe data, but TODO: parameterize
+        ]
+        return self.run_command(command, "checking database", raise_error=False)
 
     def initialize_project(self):
         """
@@ -402,10 +445,11 @@ class DjangoProjectInitializer:
 
         Raises:
             UnrecoverableError: if the project cannot be initialized
+
         """
         # Clone the repo
-        if not Path('/app').exists():
-            logger.warning('Project source files cannot be found.')
+        if not Path("/app").exists():
+            logger.warning("Project source files cannot be found.")
             return
 
         """
@@ -417,7 +461,7 @@ class DjangoProjectInitializer:
         self.copy_sample_env()
 
         # Install and build the frontend
-        #self.npm_init()
+        # self.npm_init()
         self.build_frontend()
 
         # Setup the DB
@@ -427,45 +471,57 @@ class DjangoProjectInitializer:
         if not self.no_runserver:
             self.run_prod_server()
 
+
 def main():
     """
     Run the initializer.
     """
     logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.StreamHandler(),
-                logging.FileHandler(os.path.join('/var', 'log', 'urbanlens', 'init.log')),
-            ]
-        )
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(os.path.join("/var", "log", "urbanlens", "init.log")),
+        ],
+    )
 
-    parser = argparse.ArgumentParser(description='Initialize Django project and run server')
-    parser.add_argument('--no-runserver', '-x', action='store_true', help='Do not run the development server after migration')
-    parser.add_argument('--debug', '-v', action='store_true', help='Enable debug logging')
-    parser.add_argument('--environment', '-e', choices=['development', 'test', 'production'], help='Set the environment')
+    parser = argparse.ArgumentParser(description="Initialize Django project and run server")
+    parser.add_argument(
+        "--no-runserver",
+        "-x",
+        action="store_true",
+        help="Do not run the development server after migration",
+    )
+    parser.add_argument("--debug", "-v", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "--environment",
+        "-e",
+        choices=["development", "test", "production"],
+        help="Set the environment",
+    )
     args = parser.parse_args()
 
     if args.debug:
         # Replace root logger after config change (I'm not certain this is necessary TODO)
-        #logger = logging.getLogger(__name__)
+        # logger = logging.getLogger(__name__)
         # Change the loglevel
         logger.setLevel(logging.DEBUG)
-        logger.info('Debug logging enabled.')
+        logger.info("Debug logging enabled.")
 
     try:
         initializer = DjangoProjectInitializer(no_runserver=args.no_runserver, environment=args.environment)
         initializer.initialize_project()
     except KeyboardInterrupt:
-        logger.info('Initialization cancelled.')
+        logger.info("Initialization cancelled.")
         sys.exit(0)
     except UnrecoverableError:
-        logger.error('Initialization failed.')
+        logger.exception("Initialization failed.")
         sys.exit(1)
 
     sys.exit(0)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     """
     If the script is called directly...
     """

@@ -1,27 +1,31 @@
 """
 
-	Metadata:
+Metadata:
 
-		File: queue.py
-		Project: UrbanLens
+        File: queue.py
+        Project: UrbanLens
 
-		Author: Jess Mann
-		Email: jess@urbanlens.org
+        Author: Jess Mann
+        Email: jess@urbanlens.org
 
-		-----
+        -----
 
 
-		Modified By: Jess Mann
+        Modified By: Jess Mann
 
-		-----
+        -----
 
-		Copyright (c) 2023 UrbanLens
+        Copyright (c) 2023 UrbanLens
 """
+
 # Generic imports
 from __future__ import annotations
+
 import logging
+
 # App imports
-from djangofoundry.helpers import queue
+from djangofoundry import helpers
+
 #
 # Set up logging for this module. __name__ includes the namespace (e.g. dashboard.models.cases).
 #
@@ -29,5 +33,6 @@ from djangofoundry.helpers import queue
 #
 logger = logging.getLogger(__name__)
 
-class Queue(queue.Queue):
-	unique_key = ['id']
+
+class Queue(helpers.queue.Queue):
+    unique_key = ["id"]

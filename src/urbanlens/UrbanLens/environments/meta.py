@@ -25,10 +25,11 @@
 *********************************************************************************************************************"""
 
 from __future__ import annotations
-from enum import Enum
+
+from enum import StrEnum
 
 
-class EnvironmentTypes(str, Enum):
+class EnvironmentTypes(StrEnum):
     DEV = "dev"
     TEST = "test"
     PROD = "prod"
@@ -36,7 +37,7 @@ class EnvironmentTypes(str, Enum):
     LOCAL = "local"
 
 
-class DebugTypes(str, Enum):
+class DebugTypes(StrEnum):
     OVERRIDE_ON = "override_on"
     OVERRIDE_OFF = "override_off"
     DEFAULT = "default"

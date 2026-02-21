@@ -24,10 +24,12 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.ai.message import MessageQueue
+
 
 def estimate_tokens(prompt: str) -> int:
     """
@@ -43,12 +45,13 @@ def estimate_tokens(prompt: str) -> int:
     Returns:
         int:
             The estimated token count for the given prompt.
+
     """
     # Basic whitespace tokenization as a rough approximation
     tokens = prompt.split()
 
     # Further split on common punctuation to better approximate model tokenization
-    punctuations = [".", ",", "!", "?", ";", ":", "-", "—", "(", ")", "[", "]", "{", "}", '"', "'"]
+    punctuations = [".", ",", "!", "?", ";", ":", "-", "-", "(", ")", "[", "]", "{", "}", '"', "'"]
     refined_tokens = []
     for token in tokens:
         temp_token = [token]
@@ -58,7 +61,8 @@ def estimate_tokens(prompt: str) -> int:
 
     return len(refined_tokens)
 
-def estimate_combined_tokens(messages: 'MessageQueue | list[dict[str, str]]') -> int:
+
+def estimate_combined_tokens(messages: MessageQueue | list[dict[str, str]]) -> int:
     """
     Estimate the combined token count of a list of messages.
     
@@ -71,8 +75,9 @@ def estimate_combined_tokens(messages: 'MessageQueue | list[dict[str, str]]') ->
     Returns:
         int:
             The estimated combined token count for the given list of messages.
+
     """
     tokens = 0
     for message in messages:
-        tokens += estimate_tokens(message['content'])
+        tokens += estimate_tokens(message["content"])
     return tokens
