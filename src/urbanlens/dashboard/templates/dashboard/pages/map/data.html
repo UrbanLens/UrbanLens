@@ -1,0 +1,58 @@
+<script>
+    function addMarker(pin) {
+        let coords = [pin.latitude, pin.longitude];
+        let marker = L.marker(coords);
+
+        if (pin.icon && pin.icon !== 'undefined') {
+            marker.setIcon(L.divIcon({
+                className: pin.icon,
+                html: `<i class="pin ${pin.icon}"></i>`,
+                iconSize: [30, 42],
+                iconAnchor: [15, 42]
+            }));
+        }
+
+        let popupContent = `
+            <div class="pin-popup" data-id="${pin.id}">
+                <div data-name="title">${pin.name}</div>
+                <div data-name="description">${pin.description}</div>
+                <div class="stars rating-${pin.rating || 0}">
+                    ${[1, 2, 3, 4, 5].map(i => `
+                        <input type="radio" name="star" class="star-${i}" id="star-${i}" value="${i}" ${pin.rating == i ? 'checked' : ''} />
+                        <label class="star-${i}" for="star-${i}">★</label>
+                    `).join('')}
+                </div>
+                <div data-name="status"><span class="value">${pin.status}</span></div>
+                <div data-name="categories"><span class="value">${pin.categories}</span></div>
+                <div class="last-visited" data-name="last_visited">
+                    <span class="label">Last Visited:</span>
+                    <span class="value">${pin.last_visited}</span>
+                </div>
+                <div class="tags">${pin.tags}</div>
+                <a href="${pin.viewLocationUrl}" class="view-full-pin">View Full Details</a>
+                <button class="delete-button" onclick="deletePin(this)"><i class="material-icons">delete</i></button>
+            </div>
+        `;
+
+        // Add it to the pinsLayerGroup
+        marker.addTo(window.pinsLayerGroup).bindPopup(popupContent);
+
+    }
+
+    {% for pin in map_data %}
+    addMarker({
+        latitude: "{{ pin.latitude }}",
+        longitude: "{{ pin.longitude }}",
+        icon: "{{ pin.icon|default_if_none:'' }}",
+        id: "{{ pin.id }}",
+        name: "{{ pin.name }}",
+        description: "{{ pin.description }}",
+        rating: "{{ pin.rating|stringformat:'s' }}",
+        status: "{{ pin.status }}",
+        categories: "{{ pin.categories }}",
+        last_visited: "{{ pin.last_visited }}",
+        tags: "{{ pin.tags }}",
+        viewLocationUrl: "{% url 'pin.details' pin.id %}"
+    });
+    {% endfor %}
+</script>

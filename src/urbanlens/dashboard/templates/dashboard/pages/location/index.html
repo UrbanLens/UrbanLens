@@ -1,0 +1,91 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="section">
+    <h1 class="pin-title">{{ pin.name }}</h1>
+
+    <div class="pin-details modern-style details-grid">
+        {% if pin.description %}<div><span class="field-label"><strong>Description:</strong></span> {{ pin.description }}</div>{% endif %}
+        <div><span class="field-label"><strong>Rating:</strong></span> {% if pin.rating %}{{ pin.rating }}{% else %}No rating{% endif %}</div>
+        {% if pin.status %}<div><span class="field-label"><strong>Status:</strong></span> {{ pin.status }}</div>{% else %}<div>No status</div>{% endif %}
+        <div><span class="field-label"><strong>Categories:</strong></span> {% if pin.categories.all %}{{ pin.categories.all }}{% else %}No categories{% endif %}</div>
+        <div><span class="field-label"><strong>Last Visited:</strong></span> {% if pin.last_visited %}{{ pin.last_visited }}{% else %}Never visited{% endif %}</div>
+        <div><span class="field-label"><strong>Tags:</strong></span> {% if pin.tags.all %}{{ pin.tags.all }}{% else %}No tags{% endif %}</div>
+        {% if pin.place_name %}<div><span class="field-label"><strong>Place Name:</strong></span> {{ pin.place_name }}</div>{% endif %}
+    </div>
+
+    <div class="pin-map">
+        <div id="map"></div>
+    </div>
+
+    <div class="satellite-view card">
+        <h2>Satellite View</h2>
+        <img src="{% url 'pin.satellite_view' pin.id %}" alt="Satellite view of {{ pin.name }}" style="width: 100%; height: auto;">
+    </div>
+
+    <div class="street-view card">
+        <h2>Street View</h2>
+        <img src="{% url 'pin.street_view' pin.id %}" alt="Street view of {{ pin.name }}" style="width: 100%; height: auto;">
+    </div>
+
+    <div hx-get="{% url 'pin.weather_forecast' pin.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="weather-forecast card">
+        <div class="loading">Loading...</div>
+        <div class="error" style="display: none;">An error occurred. Please try again later.</div>
+    </div>
+
+    <div hx-get="{% url 'smithsonian_images' pin.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="smithsonian-images card">
+        <div class="loading">Loading...</div>
+        <div class="error" style="display: none;">An error occurred. Please try again later.</div>
+    </div>
+
+    <div hx-get="{% url 'pin.web_search' pin.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="web-search card">
+        <div class="loading">Loading...</div>
+        <div class="error" style="display: none;">An error occurred. Please try again later.</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        const map = L.map('map').setView(["{{ pin.latitude }}", "{{ pin.longitude }}"], 13);
+        window.map = map;
+        window.pin = null;
+        map.invalidateSize();
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+        }).addTo(map);
+
+        // Add a marker for the pin
+        L.marker(["{{ pin.latitude }}", "{{ pin.longitude }}"]).addTo(map);
+
+        // Update the Leaflet icon URLs
+        var newIcon = L.icon({
+            iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+            iconSize: [25, 41],
+            shadowSize: [41, 41],
+            iconAnchor: [12, 41],
+            shadowAnchor: [12, 41],
+            popupAnchor: [1, -34]
+        });
+        L.Marker.prototype.options.icon = newIcon;
+        document.addEventListener('htmx:configRequest', (event) => {
+            event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+            console.log("htmx is loaded");
+        });
+
+        document.body.addEventListener('htmx:afterOnLoad', function () {
+            // Dispatch a custom event after the dialog is loaded
+            setTimeout(() => {
+                const event = new Event('dialogLoaded');
+                document.dispatchEvent(event);
+            }, 250);
+        });
+    </script>
+{% endblock %}

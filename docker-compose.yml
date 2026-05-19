@@ -37,9 +37,9 @@ services:
     volumes:
       - logs:/var/log
       - static_volume:/app/frontend/static
-    
+
     ports:
-      - "6565:8000"
+      - "${URBANLENS_PORT:-21800}:8000"
 
     networks:
       app_network:
@@ -51,11 +51,11 @@ services:
       - GIT_NAME=${GIT_NAME}
       - GH_TOKEN=${GH_TOKEN}
       - SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
-      - UL_DATABASE_USER=${UL_DATABASE_USER:-postgres}
-      - UL_DATABASE_NAME=${UL_DATABASE_NAME:-postgres}
-      - UL_DATABASE_PASS=${UL_DATABASE_PASS:-postgres}
-      - UL_DATABASE_HOST=${UL_DATABASE_HOST:-urbanlens_db}
-      - UL_DATABASE_PORT=${UL_DATABASE_PORT:-5432}
+      - UL_DB_USER=${UL_DB_USER:-postgres}
+      - UL_DB_NAME=${UL_DB_NAME:-postgres}
+      - UL_DB_PASS=${UL_DB_PASS:-postgres}
+      - UL_DB_HOST=${UL_DB_HOST:-urbanlens_db}
+      - UL_DB_PORT=${UL_DB_PORT:-5432}
       - ENVIRONMENT=${ENVIRONMENT:-production}
 
     healthcheck:
@@ -72,7 +72,7 @@ services:
       - static_volume:/app/frontend/static
       - ./config/nginx:/etc/nginx/conf.d
     ports:
-      - "6464:80"
+      - "${NGINX_PORT:-21080}:80"
     depends_on:
       - app
     networks:
@@ -99,13 +99,13 @@ services:
           - urbanlens_db
 
     environment:
-      - POSTGRES_USER=${UL_DATABASE_USER:-postgres}
-      - POSTGRES_DB=${UL_DATABASE_NAME:-postgres}
-      - POSTGRES_PASSWORD=${UL_DATABASE_PASS:-postgres}
-      - POSTGRES_PORT=${UL_DATABASE_PORT:-5432}
+      - POSTGRES_USER=${UL_DB_USER:-postgres}
+      - POSTGRES_DB=${UL_DB_NAME:-postgres}
+      - POSTGRES_PASSWORD=${UL_DB_PASS:-postgres}
+      - POSTGRES_PORT=${UL_DB_PORT:-5432}
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${UL_DATABASE_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${UL_DB_USER}"]
       interval: 10s
       timeout: 10s
       retries: 9
@@ -119,7 +119,7 @@ services:
 volumes:
   postgres-data:
   logs:
-  static_volume: 
+  static_volume:
 
 networks:
   app_network:

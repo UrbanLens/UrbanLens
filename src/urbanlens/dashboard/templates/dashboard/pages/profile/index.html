@@ -1,0 +1,89 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="section">
+    <h1 class="center">{{ profile.user.username }}</h1>
+
+    <div class="avatar">
+        {% if profile.avatar %}
+            <img src="{{ profile.avatar.url }}" alt="Avatar" />
+        {% else %}
+            <div class="avatar-placeholder">
+                {{ profile.user.first_name|first }}
+            </div>
+        {% endif %}
+        <form id="upload-avatar-form" method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div id="upload-avatar-button" class="upload-button" onclick="document.getElementById('avatar-file-input').click();">
+                <i class="material-icons">file_upload</i>
+                <input type="file" id="avatar-file-input" name="avatar" onchange="this.form.submit()" style="display: none;">
+            </div>
+        </form>
+    </div>
+
+    <p class="light">
+        <strong>Name:</strong> {{ profile.user.first_name }} {{ profile.user.last_name }}<br>
+        {% if profile.email %}
+            <strong>Email:</strong> {{ profile.user.email }}<br>
+        {% endif %}
+        {% if profile.area %}
+            <strong>Location:</strong> {{ profile.area }}<br>
+        {% endif %}
+        {% if profile.birthdate %}
+            <strong>Birthdate:</strong> {{ profile.birthdate }}<br>
+        {% endif %}
+        {% if profile.bio %}
+            <strong>Bio:</strong> {{ profile.bio }}<br>
+        {% endif %}
+
+        {% if profile.discord %}
+            <strong>Discord:</strong> {{ profile.discord }}<br>
+        {% endif %}
+
+        {% if profile.twitter %}
+            <strong>Twitter:</strong> {{ profile.twitter }}<br>
+        {% endif %}
+
+        {% if profile.facebook %}
+            <strong>Facebook:</strong> {{ profile.facebook }}<br>
+        {% endif %}
+
+        {% if profile.instagram %}
+            <strong>Instagram:</strong> {{ profile.instagram }}<br>
+        {% endif %}
+
+        {% if profile.youtube %}
+            <strong>YouTube:</strong> {{ profile.youtube }}<br>
+        {% endif %}
+
+        {% if profile.reddit %}
+            <strong>Reddit:</strong> {{ profile.reddit }}<br>
+        {% endif %}
+
+        {% if profile.website %}
+            <strong>Website:</strong> {{ profile.website }}<br>
+        {% endif %}
+
+        {% if profile.github %}
+            <strong>GitHub:</strong> {{ profile.github }}<br>
+        {% endif %}
+
+        {% if profile.linkedin %}
+            <strong>LinkedIn:</strong> {{ profile.linkedin }}<br>
+        {% endif %}
+
+        {% if profile.tiktok %}
+            <strong>TikTok:</strong> {{ profile.tiktok }}<br>
+        {% endif %}
+
+        {% if profile.user == request.user %}
+            <a href="{% url 'profile.edit' %}">Edit Profile</a>
+        {% endif %}
+    </p>
+
+    <div id="friend_list" hx-get="{% url 'friend.list' profile.id %}" hx-trigger="load" hx-swap="outerHTML">
+        <h2>Friends</h2>
+        Loading...
+    </div>
+</div>
+{% endblock %}
