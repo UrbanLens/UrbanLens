@@ -23,7 +23,7 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from urbanlens.dashboard.models.abstract import QuerySet as AbstractQuerySet, Manager as AbstractManager
+from urbanlens.dashboard.models.abstract import Manager as AbstractManager, QuerySet as AbstractQuerySet
 
 class QuerySet(AbstractQuerySet):
     ...

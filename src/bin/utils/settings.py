@@ -113,8 +113,7 @@ class Settings:
         """
         Makes the syntax for getting the settings dict a little less clunky (i.e. Settings.all() instead of Settings.settings)
 
-        Returns
-        -------
+        Returns:
             SettingsFile: A dictionary of settings.
 
         """
@@ -126,11 +125,9 @@ class Settings:
         Retrieves the value at the provided key.
 
         Args:
-        ----
                 key (str): A key to retrieve
 
         Returns:
-        -------
                 Any: The value stored at the provided key
 
         """

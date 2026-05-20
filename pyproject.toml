@@ -806,6 +806,9 @@ max-complexity = 10
 [tool.ruff.lint.pylint]
 max-args = 6
 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [dependency-groups]
 dev = [
     "channels>=4.2.0",

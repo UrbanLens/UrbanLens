@@ -82,12 +82,10 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
         Send a message to OpenAI and return the response.
 
         Args:
-        ----
             message_queue (MessageQueue):
                 The queue of messages to send to OpenAI.
 
         Returns:
-        -------
             ChatCompletion:
                 The response from OpenAI.
 
@@ -111,12 +109,10 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
         Parse the response from OpenAI and return the message body.
 
         Args:
-        ----
             response (ChatCompletion):
                 The response from OpenAI.
 
         Returns:
-        -------
             str:
                 The parsed response from OpenAI.
 

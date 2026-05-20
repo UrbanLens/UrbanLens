@@ -149,7 +149,6 @@ class TestCase(test.TestCase):
         ======================================================================
         FAIL: test_example_foo (dashboard.tests.models.example.FooTestCase)
         Test that something or another is true
-        ----------------------------------------------------------------------
 
         Args:
             msg (str): The message to prepend

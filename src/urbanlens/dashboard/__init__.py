@@ -7,7 +7,5 @@
         Author: Jess Mann
         Email: jess@urbanlens.org
 
-        -----
-
         Copyright (c) 2023 Urban Lens
 """

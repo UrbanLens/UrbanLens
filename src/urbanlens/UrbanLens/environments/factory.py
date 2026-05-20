@@ -48,16 +48,13 @@ def select_environment(
     Selects the environment to use based on the environment type.
 
     Args:
-    ----
         env_type (EnvironmentTypes): The environment type to use.
         default (EnvironmentTypes): The default environment type to use if none is provided (default: EnvironmentTypes.LOCAL).
 
     Returns:
-    -------
         BaseEnvironment: The environment to use.
 
     Raises:
-    ------
         ValueError: If the environment type is unknown.
 
     """

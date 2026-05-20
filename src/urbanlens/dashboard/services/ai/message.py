@@ -26,11 +26,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import TYPE_CHECKING, TypedDict
 
 from urbanlens.dashboard.services.ai.functions import estimate_combined_tokens, estimate_tokens
 from urbanlens.dashboard.services.ai.meta import MAX_TOKENS, SHORTEST_MESSAGE
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 class MessageType(TypedDict):

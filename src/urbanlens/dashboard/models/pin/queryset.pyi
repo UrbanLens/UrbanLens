@@ -23,7 +23,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-from urbanlens.dashboard.models.abstract import QuerySet, Manager
+from urbanlens.dashboard.models.abstract import Manager, QuerySet
 
 class PinQuerySet(QuerySet): ...
 

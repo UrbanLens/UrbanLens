@@ -14,11 +14,7 @@
         Project: Urban Lens
         Author: Jess Mann
 
-        -----
-
         Modified By: Jess Mann
-
-        -----
 
         Copyright (c) 2022 Urban Lens
 """
