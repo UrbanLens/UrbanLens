@@ -24,12 +24,12 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-from urbanlens.Urbanlens.environments.meta import EnvironmentTypes, DebugTypes
-from urbanlens.Urbanlens.environments.base import BaseEnvironment
+from urbanlens.UrbanLens.environments.meta import EnvironmentTypes, DebugTypes
+from urbanlens.UrbanLens.environments.base import BaseEnvironment
 
-from urbanlens.Urbanlens.environments.local import Local
-from urbanlens.Urbanlens.environments.dev import Development
-from urbanlens.Urbanlens.environments.test import Testing
-from urbanlens.Urbanlens.environments.staging import Staging
-from urbanlens.Urbanlens.environments.prod import Production
-from urbanlens.Urbanlens.environments.factory import select_environment
+from urbanlens.UrbanLens.environments.local import Local
+from urbanlens.UrbanLens.environments.dev import Development
+from urbanlens.UrbanLens.environments.test import Testing
+from urbanlens.UrbanLens.environments.staging import Staging
+from urbanlens.UrbanLens.environments.prod import Production
+from urbanlens.UrbanLens.environments.factory import select_environment

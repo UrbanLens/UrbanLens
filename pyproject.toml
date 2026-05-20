@@ -823,6 +823,7 @@ dev = [
     "django-picklefield>=3.2",
     "django-postgres-extra>=2.0.4",
     "django-stubs>=5.2.9",
+    "django-stubs-ext>=5.2.9",
     "djangofoundry>=0.0.9",
     "djangorestframework>=3.15.2",
     "fastkml>=1.1.0",

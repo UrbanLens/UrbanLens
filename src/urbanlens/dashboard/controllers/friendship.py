@@ -33,7 +33,7 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 from rest_framework.viewsets import GenericViewSet
 
-from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         friendship = Friendship.objects.create(
             from_profile=request.user.profile,
             to_profile=profile,
-            relationship_type=Friendship.FriendshipStatus.BLOCKED,
+            status=FriendshipStatus.BLOCKED,
         )
         friendship.save()
         return HttpResponse("Profile blocked.")

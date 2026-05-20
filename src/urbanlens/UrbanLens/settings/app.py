@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import logging
-from typing import Any, Optional, Self
+from typing import Any, Self
 
 from pydantic import Field
 from pydantic_core import Url

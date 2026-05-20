@@ -31,7 +31,7 @@ import logging
 from django.db.models import CASCADE, CharField, ForeignKey
 
 from urbanlens.dashboard.models.abstract import Model, TextChoices
-from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.queryset import Manager
 from urbanlens.dashboard.models.profile import Profile
 
@@ -39,18 +39,9 @@ logger = logging.getLogger(__name__)
 
 
 class Friendship(Model):
-    class FriendshipType(TextChoices):
-        FOLLOWING = "Following", "Following"
-        FRIEND = "Friend", "Friend"
-        CLOSE_FRIEND = "Close Friend", "Close Friend"
-
-    class Permission(TextChoices):
-        SEND_MESSAGE = "Send Message", "Send Message"
-        INVITE_TO_EVENTS = "Invite to Events", "Invite to Events"
-        SHARE_LOCATIONS = "Share Pins", "Share Pins"
-        VIEW_PROFILE = "View Profile", "View Profile"
-        VIEW_FRIENDS = "View Friends", "View Friends"
-        VIEW_TRIPS = "View Trips", "View Trips"
+    status = CharField(max_length=10, choices=FriendshipStatus.choices)
+    relationship_type = CharField(max_length=12, choices=FriendshipType.choices)
+    permissions = CharField(max_length=16, choices=Permission.choices)
 
     from_profile = ForeignKey(
         "dashboard.Profile",
@@ -62,10 +53,6 @@ class Friendship(Model):
         on_delete=CASCADE,
         related_name="friends_to_me",
     )
-
-    status = CharField(max_length=10, choices=FriendshipStatus.choices)
-    relationship_type = CharField(max_length=12, choices=FriendshipType.choices)
-    permissions = CharField(max_length=16, choices=Permission.choices)
 
     objects = Manager()
 
