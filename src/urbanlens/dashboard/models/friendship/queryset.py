@@ -27,7 +27,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from django.db.models import Q
 
@@ -62,8 +62,8 @@ class QuerySet(abstract.QuerySet):
         """
         Return a list of all friendships between two profiles.
         """
-        q1 = {}
-        q2 = {}
+        q1: dict[str, Any] = {}
+        q2: dict[str, Any] = {}
 
         if isinstance(from_profile, int):
             q1["from_profile__id"] = from_profile

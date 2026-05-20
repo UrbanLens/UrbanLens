@@ -35,3 +35,4 @@ bin/settings.py
 *db.sqlite3
 pgsql
 src/urbanlens/frontend/static/dashboard/images/
+.claude/settings.local.json

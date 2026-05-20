@@ -24,9 +24,9 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-from urbanlens.dashboard.models.abstract import models
+from urbanlens.dashboard.models.abstract import QuerySet, Manager
 
-class CommentQuerySet(models.QuerySet): ...
+class CommentQuerySet(QuerySet): ...
 
-class CommentManager(models.Manager, CommentQuerySet):
+class CommentManager(Manager, CommentQuerySet):
     def all(self) -> CommentQuerySet: ...

@@ -40,7 +40,7 @@ class SearchForm(forms.Form):
         required=False
     )
     """
-    tags = forms.ModelMultipleChoiceField(
+    tags: forms.ModelMultipleChoiceField = forms.ModelMultipleChoiceField(
         queryset=Tag.objects.all(),
         widget=forms.CheckboxSelectMultiple,
         required=False,

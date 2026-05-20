@@ -90,22 +90,22 @@ urlpatterns = [
                 ),
                 path(
                     "edit/<int:pin_id>/",
-                    map.MapController.as_view({"get": "get_edit_pin", "post": "edit_pin"}),
+                    maps.MapController.as_view({"get": "get_edit_pin", "post": "edit_pin"}),
                     name="pin.edit",
                 ),
                 path(
                     "search/",
-                    map.MapController.as_view({"get": "search_map", "post": "search_map_post"}),
+                    maps.MapController.as_view({"get": "search_map", "post": "search_map_post"}),
                     name="map.search",
                 ),
                 path(
                     "upload_image/<int:pin_id>/",
-                    map.MapController.as_view({"post": "upload_image"}),
+                    maps.MapController.as_view({"post": "upload_image"}),
                     name="pin.upload_image",
                 ),
                 path(
                     "change_category/<int:pin_id>/",
-                    map.MapController.as_view({"post": "change_category"}),
+                    maps.MapController.as_view({"post": "change_category"}),
                     name="pin.change_category",
                 ),
                 # path('delete/<int:pin_id>/', MapController.delete_pin, name='delete_pin'),

@@ -28,6 +28,7 @@ from datetime import datetime
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from requests.exceptions import HTTPError
@@ -161,7 +162,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Pin does not exist", status=404)
 
         # Instantiate the SmithsonianGateway with the API key
-        smithsonian_gateway = SmithsonianGateway(settings.smithsonian_api_key)
+        smithsonian_gateway = SmithsonianGateway(api_key=settings.smithsonian_api_key or "")
 
         # Get historic images from the Smithsonian's API
         smithsonian_images = smithsonian_gateway.get_data(pin.name)
@@ -235,7 +236,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Pin does not exist", status=404)
 
         # Instantiate the GoogleMapsGateway with the API key
-        google_maps_gateway = GoogleMapsGateway(settings.google_maps_api_key)
+        google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
 
         # Get the satellite view image from the Google Maps API
         satellite_image = google_maps_gateway.get_satellite_view(pin.latitude, pin.longitude)
@@ -252,7 +253,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Pin does not exist", status=404)
 
         # Instantiate the GoogleMapsGateway with the API key
-        google_maps_gateway = GoogleMapsGateway(settings.google_maps_api_key)
+        google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
 
         # Get the street view image from the Google Maps API
         street_view_image = google_maps_gateway.get_street_view(pin.latitude, pin.longitude)
@@ -278,7 +279,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 datafile = form.cleaned_data["file"]
 
                 # Instantiate the GoogleMapsGateway with the API key
-                google_maps_gateway = GoogleMapsGateway(settings.google_maps_api_key)
+                google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
 
                 # Get the file extension
                 pins = google_maps_gateway.import_pins_from_file(datafile, request.user.profile)

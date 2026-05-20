@@ -69,4 +69,4 @@ class Serializer(serializers.Serializer):
         fields = [
             "id",
         ]
-        generated_fields = []
+        generated_fields: list[str] = []

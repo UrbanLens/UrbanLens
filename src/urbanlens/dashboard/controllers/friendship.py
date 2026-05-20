@@ -29,6 +29,7 @@ from __future__ import annotations
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 from rest_framework.viewsets import GenericViewSet

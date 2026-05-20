@@ -70,7 +70,7 @@ class GoogleGeocodingGateway(Gateway):
         if geocoded_location:
             # parse json_response
             try:
-                return json.loads(geocoded_location.json_response)
+                return json.loads(geocoded_location.json_response or "null")
             except json.JSONDecodeError as e:
                 logger.exception('Error decoding cached json_response for %s -> Message: "%s"', place_name, e)
                 logger.exception("json_response: %s", geocoded_location.json_response)
@@ -101,7 +101,7 @@ class GoogleGeocodingGateway(Gateway):
         if geocoded_location:
             # parse json_response
             try:
-                return json.loads(geocoded_location.json_response)
+                return json.loads(geocoded_location.json_response or "null")
             except json.JSONDecodeError as e:
                 logger.exception('Error decoding json_response for %s, %s -> Message: "%s"', latitude, longitude, e)
                 logger.exception("json_response: %s", geocoded_location.json_response)
@@ -130,7 +130,7 @@ class GoogleGeocodingGateway(Gateway):
             request_data = {}
 
         if getattr(response, "status_code", None) != 200 or getattr(response, "error_message", None) is not None:
-            logger.error('Error getting place name for %s -> Message: "%s"', request_data, response.error_message)
+            logger.error('Error getting place name for %s -> Message: "%s"', request_data, getattr(response, "error_message", None))
             return None
 
         try:
@@ -232,7 +232,7 @@ class GoogleGeocodingGateway(Gateway):
                 return None, None
 
             place_name = self.decode_place_name(place_name)
-            latitude, longitude = self.get_coordinates(place_name)
+            latitude, longitude = self.get_coordinates(place_name)  # type: ignore[assignment]
 
             if not latitude or not longitude:
                 logger.error('Unable to geocode place name "%s" from url: %s', place_name, url)

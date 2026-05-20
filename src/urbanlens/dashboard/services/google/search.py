@@ -45,8 +45,8 @@ class GoogleCustomSearchGateway(Gateway):
     Gateway for the Google Custom Search API.
     """
 
-    api_key: str = settings.google_search_api_key
-    cx: str = settings.google_search_tenant
+    api_key: str | None = settings.google_search_api_key
+    cx: str | None = settings.google_search_tenant
     base_url: str = "https://customsearch.googleapis.com/customsearch/v1"
 
     def search(self, terms: str | list[str | list[str]], max_results: int = 20) -> list[dict[str, Any]]:

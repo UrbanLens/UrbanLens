@@ -27,7 +27,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import openai
 from openai import OpenAI
@@ -50,7 +50,7 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
     @property
     def api_key(self) -> str | None:
         return self._api_key
-    
+
     @api_key.setter
     def api_key(self, value: str | None):
         openai.api_key = value
@@ -59,12 +59,12 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
     def _lookup_model(self, model_name: str | None) -> str:
         if not model_name:
             return DEFAULT_MODEL
-        
+
         if result := super()._lookup_model(model_name):
             return result
 
         return DEFAULT_MODEL
-    
+
     def setup(self, **kwargs):
         if not self.api_key:
             self.api_key = settings.openai_api_key
@@ -81,13 +81,15 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
         """
         Send a message to OpenAI and return the response.
 
-            Args:
-                message_queue (MessageQueue):
-                    The queue of messages to send to OpenAI.
+        Args:
+        ----
+            message_queue (MessageQueue):
+                The queue of messages to send to OpenAI.
 
-            Returns:
-                ChatCompletion:
-                    The response from OpenAI.
+        Returns:
+        -------
+            ChatCompletion:
+                The response from OpenAI.
 
         """
         try:
@@ -108,13 +110,15 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
         """
         Parse the response from OpenAI and return the message body.
 
-            Args:
-                response (ChatCompletion):
-                    The response from OpenAI.
+        Args:
+        ----
+            response (ChatCompletion):
+                The response from OpenAI.
 
-            Returns:
-                str:
-                    The parsed response from OpenAI.
+        Returns:
+        -------
+            str:
+                The parsed response from OpenAI.
 
         """
         try:

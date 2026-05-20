@@ -201,7 +201,7 @@ class Location(abstract.Model):
     @property
     def rating(self) -> int:
         try:
-            review = self.reviews.all().latest()
+            review = self.reviews.all().latest()  # type: ignore[attr-defined]
             if review:
                 return review.rating
         except Exception:
@@ -210,7 +210,10 @@ class Location(abstract.Model):
         return 0
 
     def get_place_name(self) -> str | None:
-        result = GoogleGeocodingGateway(settings.google_maps_api_key).get_place_name(self.latitude, self.longitude)
+        result = GoogleGeocodingGateway(api_key=settings.google_maps_api_key).get_place_name(
+            self.latitude,
+            self.longitude,
+        )
 
         # We don't want to keep making requests to the API for results with no info,
         # so cache a string instead of None

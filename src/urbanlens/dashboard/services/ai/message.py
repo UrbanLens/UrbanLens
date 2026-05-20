@@ -26,6 +26,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import TYPE_CHECKING, TypedDict
 
 from urbanlens.dashboard.services.ai.functions import estimate_combined_tokens, estimate_tokens
@@ -60,7 +61,7 @@ class MessageQueue:
 
         return tokens
 
-    def __iter__(self) -> iter[MessageType]:
+    def __iter__(self) -> Iterator[MessageType]:
         return iter(self.messages)
 
     def __len__(self) -> int:

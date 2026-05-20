@@ -23,10 +23,10 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from urbanlens.dashboard.models.abstract import models
+from urbanlens.dashboard.models.abstract import QuerySet as AbstractQuerySet, Manager as AbstractManager
 
-class QuerySet(models.QuerySet):
+class QuerySet(AbstractQuerySet):
     ...
 
-class Manager(models.Manager, QuerySet):
+class Manager(AbstractManager, QuerySet):
     def all(self) -> QuerySet: ...

@@ -37,7 +37,7 @@ from pydantic._internal._model_construction import ModelMetaclass
 from django import conf
 from django.conf import LazySettings
 
-from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
+from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes
 from urbanlens.UrbanLens.environments.factory import select_environment
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
 from urbanlens.UrbanLens.settings.meta.app import DEFAULT_PATH_PARENTS, DEFAULT_ROOT
@@ -48,7 +48,7 @@ class AppSettingsMeta(ModelMetaclass):
     """
     Metaclass to ensure only one instance of the class is created
     """
-    _instances = {}
+    _instances: dict[type, Any] = {}
 
     def __call__(cls, *args, **kwargs):
         if cls not in cls._instances:
@@ -89,13 +89,13 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     static_url : str = Field(default = 'static/', description = "The static url")
 
     # Directory settings
-    base_dir: Path = Field(default='UrbanLens', description="The name of the base directory")
-    media_root: Path = Field(default='downloads', description="The name of the media directory")
-    downloads_dir : Path = Field(default = 'downloads', description = "The name of the downloads directory")
-    backups_dir : Path = Field(default = 'backups', description = "The name of the backups directory")
-    log_root: Path = Field(default='logs', description="The name of the log directory")
-    exports_dir : Path = Field(default = 'exports', description = "The name of the exports directory")
-    static_root : Path = Field(default = 'frontend/static', description = "The name of the static directory")
+    base_dir: Path = Field(default=Path('UrbanLens'), description="The name of the base directory")
+    media_root: Path = Field(default=Path('downloads'), description="The name of the media directory")
+    downloads_dir: Path = Field(default=Path('downloads'), description="The name of the downloads directory")
+    backups_dir: Path = Field(default=Path('backups'), description="The name of the backups directory")
+    log_root: Path = Field(default=Path('logs'), description="The name of the log directory")
+    exports_dir: Path = Field(default=Path('exports'), description="The name of the exports directory")
+    static_root: Path = Field(default=Path('frontend/static'), description="The name of the static directory")
 
     # APIs
     cloudflare_ai_endpoint : Url | None = Field(default=None, description = "The cloudflare ai endpoint")
@@ -150,7 +150,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         self.debug_override = value
 
         if self._environment:
-            self._environment.debug_override = value
+            self._environment.debug_override = DebugTypes.OVERRIDE_ON if value else DebugTypes.OVERRIDE_OFF
 
     @property
     def environment(self) -> BaseEnvironment | None:
@@ -204,6 +204,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
     @property
     def ENVIRONMENT(self) -> BaseEnvironment:
+        if self.environment is None:
+            raise RuntimeError("Environment has not been initialized.")
         return self.environment
 
     def __init__(self, *args, **kwargs):
@@ -229,10 +231,9 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         parts = key.split('.')
         value = self._secrets
         for part in parts:
-            if part in value:
-                value = value[part]
-            else:
+            if value is None or part not in value:
                 return default
+            value = value[part]
 
         return value or default
 
@@ -247,7 +248,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                     setattr(self, key, value)
 
                 if not value.is_absolute():
-                    parent = getattr(self, DEFAULT_PATH_PARENTS[key])
+                    parent = getattr(self, str(DEFAULT_PATH_PARENTS[key]))
                     value = Path(parent, value)
                     setattr(self, key, value)
 
@@ -313,7 +314,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
         # If we set debug_override to any bool, propogate it to the new env
         if self.debug_override is True or self.debug_override is False:
-            self._environment.debug_override = self.debug_override
+            self._environment.debug_override = DebugTypes.OVERRIDE_ON if self.debug_override else DebugTypes.OVERRIDE_OFF
 
         self.refresh_django()
         return self._environment

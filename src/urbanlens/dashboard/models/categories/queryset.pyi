@@ -24,9 +24,9 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-from urbanlens.dashboard.models.abstract import models
+from urbanlens.dashboard.models.abstract import QuerySet, Manager
 
-class CategoryQuerySet(models.QuerySet): ...
+class CategoryQuerySet(QuerySet): ...
 
-class CategoryManager(models.Manager, CategoryQuerySet):
+class CategoryManager(Manager, CategoryQuerySet):
     def all(self) -> CategoryQuerySet: ...

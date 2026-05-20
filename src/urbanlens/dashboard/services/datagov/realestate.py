@@ -30,9 +30,11 @@ from dataclasses import dataclass, field
 
 import requests
 
+from urbanlens.dashboard.services.gateway import Gateway
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class RealEstateSalesGateway:
+class RealEstateSalesGateway(Gateway):
     """
     Gateway for accessing real estate sales data from data.gov
     """

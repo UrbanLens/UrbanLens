@@ -23,9 +23,9 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-from urbanlens.dashboard.models.abstract import models
+from urbanlens.dashboard.models.abstract import QuerySet, Manager
 
-class PinQuerySet(models.QuerySet): ...
+class PinQuerySet(QuerySet): ...
 
-class PinManager(models.Manager, PinQuerySet):
+class PinManager(Manager, PinQuerySet):
     def all(self) -> PinQuerySet: ...

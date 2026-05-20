@@ -227,7 +227,7 @@ class GoogleMapsGateway(Gateway):
             k.from_string(file_contents)
 
             pins: list[dict[str, Any]] = []
-            for feature in k.features():
+            for feature in k.features():  # type: ignore[operator]
                 for placemark in feature.features():
                     coords = placemark.geometry.coords[0]
 

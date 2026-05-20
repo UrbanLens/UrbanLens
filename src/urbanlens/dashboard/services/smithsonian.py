@@ -66,11 +66,11 @@ class SmithsonianGateway(Gateway):
         from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 
         # Get the place name from the coordinates
-        google_gateway = GoogleGeocodingGateway(settings.google_maps_api_key)
+        google_gateway = GoogleGeocodingGateway(api_key=settings.google_maps_api_key)
         place_name = google_gateway.get_place_name(latitude, longitude)
 
         # Get the images from the Smithsonian API
-        return self.get_data(place_name)
+        return self.get_data(place_name or "")
 
     def parse_response(self, data: dict) -> list[dict]:
         images = []

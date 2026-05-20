@@ -24,9 +24,9 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-from urbanlens.dashboard.models.abstract import models
+from urbanlens.dashboard.models.abstract import QuerySet, Manager
 
-class ImageQuerySet(models.QuerySet): ...
+class ImageQuerySet(QuerySet): ...
 
-class ImageManager(models.Manager, ImageQuerySet):
+class ImageManager(Manager, ImageQuerySet):
     def all(self) -> ImageQuerySet: ...

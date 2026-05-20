@@ -61,7 +61,7 @@ class TripController(LoginRequiredMixin, GenericViewSet):
         Fetch users associated with a trip.
         """
         trip: Trip = Trip.objects.get(id=trip_id)
-        users = [user.to_json() for user in trip.users.all()]
+        users = [user.to_json() for user in trip.users.all()]  # type: ignore[attr-defined]
         return HttpResponse(users, status=200)
 
     def get_trip_pins(self, request: HttpRequest, trip_id: int) -> HttpResponse:
