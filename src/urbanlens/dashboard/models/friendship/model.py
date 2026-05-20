@@ -23,6 +23,7 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from __future__ import annotations
 
 import logging
@@ -30,6 +31,7 @@ import logging
 from django.db.models import CASCADE, CharField, ForeignKey
 
 from urbanlens.dashboard.models.abstract import Model, TextChoices
+from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.queryset import Manager
 from urbanlens.dashboard.models.profile import Profile
 
@@ -37,26 +39,6 @@ logger = logging.getLogger(__name__)
 
 
 class Friendship(Model):
-    class FriendshipStatus(TextChoices):
-        REQUESTED = "Requested", "Requested"
-        ACCEPTED = "Accepted", "Accepted"
-        DECLINED = "Declined", "Declined"
-        REMOVED = "Removed", "Removed"
-        MUTED = "Muted", "Muted"
-        BLOCKED = "Blocked", "Blocked"
-
-        @classmethod
-        def is_friend(cls, status: str) -> bool:
-            return status == cls.ACCEPTED
-
-        @classmethod
-        def rejected(cls, status: str) -> bool:
-            return status in {cls.DECLINED, cls.REMOVED, cls.BLOCKED, cls.MUTED}
-
-        @classmethod
-        def can_request(cls, status: str) -> bool:
-            return status in {cls.DECLINED, cls.REMOVED}
-
     class FriendshipType(TextChoices):
         FOLLOWING = "Following", "Following"
         FRIEND = "Friend", "Friend"
@@ -88,7 +70,12 @@ class Friendship(Model):
     objects = Manager()
 
     @classmethod
-    def request(cls, from_profile: Profile | int, to_profile: Profile | int, relationship_type: str = FriendshipType.FRIEND) -> Friendship | None:
+    def request(
+        cls,
+        from_profile: Profile | int,
+        to_profile: Profile | int,
+        relationship_type: str = FriendshipType.FRIEND,
+    ) -> Friendship | None:
         """
         Create a new friendship request.
         """
@@ -96,12 +83,12 @@ class Friendship(Model):
         friendship = cls.objects.between(from_profile, to_profile)
         if friendship:
             # Check if we can make another request
-            if not cls.FriendshipStatus.can_request(friendship.status):
+            if not FriendshipStatus.can_request(friendship.status):
                 logger.warning("Cannot request another friendship")
                 return None
 
             # Update the status to requested
-            friendship.status = cls.FriendshipStatus.REQUESTED
+            friendship.status = FriendshipStatus.REQUESTED
 
         else:
             if isinstance(from_profile, int):
@@ -117,7 +104,7 @@ class Friendship(Model):
                 from_profile=from_profile,
                 to_profile=to_profile,
                 relationship_type=relationship_type,
-                status=cls.FriendshipStatus.REQUESTED,
+                status=FriendshipStatus.REQUESTED,
             )
 
         friendship.save()
@@ -127,21 +114,21 @@ class Friendship(Model):
         """
         Accept a friendship request.
         """
-        self.status = self.FriendshipStatus.ACCEPTED
+        self.status = FriendshipStatus.ACCEPTED
         self.save()
 
     def decline(self):
         """
         Decline a friendship request.
         """
-        self.status = self.FriendshipStatus.DECLINED
+        self.status = FriendshipStatus.DECLINED
         self.save()
 
     def remove(self):
         """
         Remove a friendship.
         """
-        self.status = self.FriendshipStatus.REMOVED
+        self.status = FriendshipStatus.REMOVED
         self.save()
 
     @classmethod
@@ -151,7 +138,7 @@ class Friendship(Model):
         """
         friendship = cls.objects.between(from_profile, to_profile)
         if friendship:
-            friendship.status = cls.FriendshipStatus.BLOCKED
+            friendship.status = FriendshipStatus.BLOCKED
             friendship.save()
             return friendship
 
@@ -168,7 +155,7 @@ class Friendship(Model):
         return cls.objects.create(
             from_profile=from_profile,
             to_profile=to_profile,
-            status=cls.FriendshipStatus.BLOCKED,
+            status=FriendshipStatus.BLOCKED,
         )
 
     @classmethod
@@ -178,7 +165,7 @@ class Friendship(Model):
         """
         friendship = cls.objects.between(from_profile, to_profile)
         if friendship:
-            friendship.status = cls.FriendshipStatus.MUTED
+            friendship.status = FriendshipStatus.MUTED
             friendship.save()
             return friendship
 
@@ -195,7 +182,7 @@ class Friendship(Model):
         return cls.objects.create(
             from_profile=from_profile,
             to_profile=to_profile,
-            status=cls.FriendshipStatus.MUTED,
+            status=FriendshipStatus.MUTED,
         )
 
     def __str__(self):

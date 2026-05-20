@@ -23,6 +23,7 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.queryset import QuerySet, Manager
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.friendship.serializer import FriendshipSerializer

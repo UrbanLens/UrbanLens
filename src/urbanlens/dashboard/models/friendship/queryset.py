@@ -23,6 +23,7 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from __future__ import annotations
 
 import logging
@@ -31,12 +32,14 @@ from typing import TYPE_CHECKING, Self
 from django.db.models import Q
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
 
+    from urbanlens.dashboard.models.friendship.model import Friendship
     from urbanlens.dashboard.models.profile import Profile
+
 
 logger = logging.getLogger(__name__)
 
@@ -96,13 +99,13 @@ class QuerySet(abstract.QuerySet):
         """
         Return a list of all friendships with a status of accepted.
         """
-        return self.filter(status=Friendship.FriendshipStatus.ACCEPTED)
+        return self.filter(status=FriendshipStatus.ACCEPTED)
 
     def not_friend(self) -> Self:
         """
         Return a list of all friendships with a status other than accepted.
         """
-        return self.exclude(status=Friendship.FriendshipStatus.ACCEPTED)
+        return self.exclude(status=FriendshipStatus.ACCEPTED)
 
     def relationship_type(self, relationship_type: str) -> Self:
         """
