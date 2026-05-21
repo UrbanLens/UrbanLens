@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 import json
 import logging
 import re
@@ -130,7 +131,11 @@ class GoogleGeocodingGateway(Gateway):
             request_data = {}
 
         if getattr(response, "status_code", None) != 200 or getattr(response, "error_message", None) is not None:
-            logger.error('Error getting place name for %s -> Message: "%s"', request_data, getattr(response, "error_message", None))
+            logger.error(
+                'Error getting place name for %s -> Message: "%s"',
+                request_data,
+                getattr(response, "error_message", None),
+            )
             return None
 
         try:
@@ -160,10 +165,13 @@ class GoogleGeocodingGateway(Gateway):
 
         return body
 
-    def get_place_name(self, latitude: float, longitude: float) -> str | None:
+    def get_place_name(self, latitude: float | Decimal, longitude: float | Decimal) -> str | None:
         if not latitude or not longitude:
             logger.error("Latitude and longitude must be provided to get_place_name.")
             return None
+
+        latitude = float(latitude)
+        longitude = float(longitude)
 
         try:
             body = self.geocode_coordinates(latitude, longitude)
