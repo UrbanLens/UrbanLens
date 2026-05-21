@@ -32,7 +32,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect, render
 from django.views import View
 
-from urbanlens.dashboard.forms.profile import ProfileForm
+from urbanlens.dashboard.forms.profile_form import ProfileForm
 from urbanlens.dashboard.models.profile.model import Profile
 
 if TYPE_CHECKING:
