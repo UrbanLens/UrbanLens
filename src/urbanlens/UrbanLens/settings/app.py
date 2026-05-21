@@ -44,6 +44,13 @@ from urbanlens.UrbanLens.settings.meta.app import DEFAULT_PATH_PARENTS, DEFAULT_
 
 logger = logging.getLogger(__name__)
 
+# DEFAULT_ROOT is src/, but .env lives one level up at the project root.
+# List both so either location works; later entry wins if both exist.
+_ENV_FILE_PATHS = [
+    Path(DEFAULT_ROOT, '.env'),
+    Path(DEFAULT_ROOT.parent, '.env'),
+]
+
 class AppSettingsMeta(ModelMetaclass):
     """
     Metaclass to ensure only one instance of the class is created
@@ -126,9 +133,9 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     _environment : BaseEnvironment | None = None
 
     model_config = SettingsConfigDict(
-        env_file=Path(DEFAULT_ROOT, '.env'),
+        env_file=_ENV_FILE_PATHS,
         env_prefix='UL_',
-        str_strip_whitespace = True
+        str_strip_whitespace=True,
     )
 
     @property
@@ -210,8 +217,19 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
+        self._check_env_file()
         self.ensure_paths()
+
+    def _check_env_file(self) -> None:
+        for env_path in _ENV_FILE_PATHS:
+            if env_path.exists():
+                if env_path.stat().st_size == 0:
+                    logger.warning("Found .env file but it is empty: %s", env_path)
+                return
+        logger.warning(
+            ".env file not found; API keys and secrets will be missing. Checked: %s",
+            ", ".join(str(p) for p in _ENV_FILE_PATHS),
+        )
 
     def get_secret(self, key : str, default : Any | None = None) -> Any:
         """
