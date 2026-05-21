@@ -26,6 +26,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any
@@ -49,7 +50,12 @@ class GoogleCustomSearchGateway(Gateway):
     cx: str | None = settings.google_search_tenant
     base_url: str = "https://customsearch.googleapis.com/customsearch/v1"
 
-    def search(self, terms: str | list[str | list[str]], max_results: int = 20) -> list[dict[str, Any]]:
+    def search(
+        self,
+        terms: str | list[str | list[str | None] | None],
+        *,
+        max_results: int = 20,
+    ) -> list[dict[str, Any]]:
         """
         Perform a search using the Google Custom Search API.
         """
@@ -84,7 +90,7 @@ class GoogleCustomSearchGateway(Gateway):
             results.append(result)
         return results
 
-    def preprocess_query_terms(self, terms: list[str]) -> list[str]:
+    def preprocess_query_terms(self, terms: Sequence[str | None]) -> list[str]:
         """
         Build a query string from a list of search terms using OR.
 
@@ -109,7 +115,7 @@ class GoogleCustomSearchGateway(Gateway):
 
         return query_terms
 
-    def build_query_or(self, terms: list[str]) -> str:
+    def build_query_or(self, terms: Sequence[str | None]) -> str:
         """
         Build a query string from a list of search terms using OR.
 
@@ -124,7 +130,7 @@ class GoogleCustomSearchGateway(Gateway):
             return f"({query})"
         return query
 
-    def build_query_and(self, terms: list[str]) -> str:
+    def build_query_and(self, terms: Sequence[str | None]) -> str:
         """
         Build a query string from a list of search terms using AND.
 
@@ -139,7 +145,7 @@ class GoogleCustomSearchGateway(Gateway):
             return f"({query})"
         return query
 
-    def build_query(self, terms: str | list[str | list[str]]) -> str:
+    def build_query(self, terms: str | list[str | list[str | None] | None]) -> str:
         """
         Accepts input like:
         [
@@ -161,7 +167,7 @@ class GoogleCustomSearchGateway(Gateway):
         for term in terms:
             if isinstance(term, list):
                 query_terms.append(self.build_query_and(term))
-            else:
+            elif term is not None:
                 query_terms.append(term)
 
         return self.build_query_or(query_terms)

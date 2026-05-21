@@ -281,7 +281,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 # Instantiate the GoogleMapsGateway with the API key
                 google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
 
-                # Get the file extension
+                if not isinstance(request.user, User):
+                    return JsonResponse({"error": "Authentication required."}, status=401)
                 pins = google_maps_gateway.import_pins_from_file(datafile, request.user.profile)
 
                 return JsonResponse({"pins": [pin.to_json() for pin in pins]})

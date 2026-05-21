@@ -41,23 +41,26 @@ if TYPE_CHECKING:
 
 
 def select_environment(
-    env_type: EnvironmentTypes | None = None,
+    env_type: str | EnvironmentTypes | None = None,
     default: EnvironmentTypes = EnvironmentTypes.LOCAL,
 ) -> BaseEnvironment:
     """
     Selects the environment to use based on the environment type.
 
     Args:
-        env_type (EnvironmentTypes): The environment type to use.
+        env_type (str | EnvironmentTypes | None): The environment type to use. Strings are coerced to EnvironmentTypes.
         default (EnvironmentTypes): The default environment type to use if none is provided (default: EnvironmentTypes.LOCAL).
 
     Returns:
         BaseEnvironment: The environment to use.
 
     Raises:
-        ValueError: If the environment type is unknown.
+        ValueError: If the environment type is unknown or the string cannot be coerced.
 
     """
+    if isinstance(env_type, str):
+        env_type = EnvironmentTypes(env_type)
+
     if not env_type:
         # Get and validate the environment type from the environment variable
         env_type = EnvironmentTypes(os.getenv("UL_ENVIRONMENT", default=default))

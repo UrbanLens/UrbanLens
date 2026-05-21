@@ -26,7 +26,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 from urbanlens.dashboard.services.ai.functions import estimate_combined_tokens, estimate_tokens
 from urbanlens.dashboard.services.ai.meta import MAX_TOKENS, SHORTEST_MESSAGE
@@ -35,26 +35,41 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 
-class MessageType(TypedDict):
-    role: str
+class SystemMessage(TypedDict):
+    role: Literal["system"]
     content: str
+
+
+class UserMessage(TypedDict):
+    role: Literal["user"]
+    content: str
+
+
+class AssistantMessage(TypedDict):
+    role: Literal["assistant"]
+    content: str
+
+
+MessageType = SystemMessage | UserMessage | AssistantMessage
 
 
 class MessageQueue:
     messages: list[MessageType] = []
     max_tokens: int = MAX_TOKENS
 
-    def add_message(self, message: str, role: str = "user") -> None:
+    def add_message(self, message: str, role: Literal["user", "system", "assistant"] = "user") -> None:
         tokens = self.estimate_tokens(message)
         if tokens + SHORTEST_MESSAGE > self.max_tokens:
             raise ValueError(f"Message length {tokens} would exceed maximum token limit of {self.max_tokens}.")
 
-        self.messages.append(
-            {
-                "role": role,
-                "content": message,
-            },
-        )
+        msg: MessageType
+        if role == "system":
+            msg = SystemMessage(role="system", content=message)
+        elif role == "assistant":
+            msg = AssistantMessage(role="assistant", content=message)
+        else:
+            msg = UserMessage(role="user", content=message)
+        self.messages.append(msg)
 
     def estimate_tokens(self, additional_prompt: str | None = None) -> int:
         tokens = estimate_combined_tokens(self.messages)

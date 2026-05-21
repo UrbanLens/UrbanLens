@@ -28,7 +28,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.services.ai.message import MessageQueue
+    from urbanlens.dashboard.services.ai.message import MessageQueue, MessageType
 
 
 def estimate_tokens(prompt: str) -> int:
@@ -62,7 +62,7 @@ def estimate_tokens(prompt: str) -> int:
     return len(refined_tokens)
 
 
-def estimate_combined_tokens(messages: MessageQueue | list[dict[str, str]]) -> int:
+def estimate_combined_tokens(messages: MessageQueue | list[MessageType]) -> int:
     """
     Estimate the combined token count of a list of messages.
     

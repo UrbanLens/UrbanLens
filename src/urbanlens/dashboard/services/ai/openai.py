@@ -31,7 +31,13 @@ from typing import TYPE_CHECKING, Any
 
 import openai
 from openai import OpenAI
-from openai.types.chat import ChatCompletion
+from openai.types.chat import (
+    ChatCompletion,
+    ChatCompletionAssistantMessageParam,
+    ChatCompletionMessageParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 
 from urbanlens.dashboard.services.ai.gateway import LLMGateway
 from urbanlens.UrbanLens.settings.app import settings
@@ -93,9 +99,20 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
         try:
             client = self.get_client()
 
+            messages: list[ChatCompletionMessageParam] = []
+            for msg in message_queue.messages:
+                role = msg["role"]
+                content = msg["content"]
+                if role == "system":
+                    messages.append(ChatCompletionSystemMessageParam(role="system", content=content))
+                elif role == "assistant":
+                    messages.append(ChatCompletionAssistantMessageParam(role="assistant", content=content))
+                else:
+                    messages.append(ChatCompletionUserMessageParam(role="user", content=content))
+
             response = client.chat.completions.create(
                 model=self.model,
-                messages=message_queue.messages,
+                messages=messages,
                 max_tokens=self.max_tokens,
             )
         except openai.BadRequestError as e:

@@ -87,17 +87,22 @@ class DatabaseBackup:
 
         backup_filename = f'backup_{datetime.now(tz=settings.TIME_ZONE).strftime("%Y%m%d_%H%M%S")}.sql'
 
+        db = settings.databases["default"]
+        db_user = db.get("USER")
+        db_host = db.get("HOST") or "localhost"
+        db_port = str(db.get("PORT") or 5432)
+        db_name = db.get("NAME")
+
+        if not db_user or not db_name:
+            raise RuntimeError("Database USER and NAME must be configured for backups.")
+
         pg_dump_command = [
             "pg_dump",
-            "-U",
-            settings.databases["default"]["USER"],
-            "-h",
-            settings.databases["default"]["HOST"],
-            "-p",
-            str(settings.databases["default"]["PORT"]),
-            settings.databases["default"]["NAME"],
-            "-f",
-            os.path.join(self.backup_dir, backup_filename),
+            "-U", db_user,
+            "-h", db_host,
+            "-p", db_port,
+            db_name,
+            "-f", os.path.join(self.backup_dir, backup_filename),
         ]
 
         try:

@@ -27,7 +27,9 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
+
+from typing_extensions import TypeVar
 
 import requests
 
@@ -41,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "@cf/mistral/mistral-7b-instruct-v0.1"
 
-Response = TypeVar("Response", bound=dict[str, Any])
+Response = TypeVar("Response", bound=dict[str, Any], default=dict[str, Any])
 
 
 class CloudflareGateway(LLMGateway[Response]):

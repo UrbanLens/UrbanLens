@@ -26,6 +26,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 import json
 import logging
 
@@ -46,13 +47,13 @@ class WeatherForecastGateway(Gateway):
         if not self.api_key:
             raise ValueError("OpenWeatherMap API key must be provided.")
 
-    def get_weather_forecast(self, latitude: float, longitude: float) -> list[dict] | None:
+    def get_weather_forecast(self, latitude: float | Decimal, longitude: float | Decimal) -> list[dict] | None:
         """
         Retrieve a weather forecast for the given coordinates.
         """
         params = {
-            "lat": latitude,
-            "lon": longitude,
+            "lat": float(latitude),
+            "lon": float(longitude),
             # "cnt": 7,
             "appid": self.api_key,
             "units": "imperial",

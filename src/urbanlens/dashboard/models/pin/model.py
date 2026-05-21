@@ -28,7 +28,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
@@ -223,7 +223,7 @@ class Pin(abstract.Model):
     @property
     def rating(self) -> int:
         try:
-            review = self.reviews.all().latest()  # type: ignore[attr-defined]
+            review = self.reviews.all().latest()
             if review:
                 return review.rating
         except Exception:

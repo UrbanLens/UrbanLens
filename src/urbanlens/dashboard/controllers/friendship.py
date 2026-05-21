@@ -42,6 +42,8 @@ logger = logging.getLogger(__name__)
 
 class FriendController(LoginRequiredMixin, GenericViewSet):
     def request_friend(self, request: HttpRequest, profile_id: int):
+        if not isinstance(request.user, User):
+            return HttpResponse("Authentication required.", status=401)
         friendship = Friendship.request(from_profile=request.user.profile, to_profile=profile_id)
         if not friendship:
             return HttpResponse("Could not request friend.", status=400)
@@ -49,6 +51,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse("Friend request sent.")
 
     def accept_friend(self, request: HttpRequest, profile_id: int):
+        if not isinstance(request.user, User):
+            return HttpResponse("Authentication required.", status=401)
         friendship = Friendship.objects.all().between(profile_id, request.user.profile)
         if not friendship:
             return HttpResponse("Friend request not found.", status=404)
@@ -57,6 +61,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse("Friend request accepted.")
 
     def reject_friend(self, request: HttpRequest, profile_id: int):
+        if not isinstance(request.user, User):
+            return HttpResponse("Authentication required.", status=401)
         friendship = Friendship.objects.all().between(profile_id, request.user.profile)
         if not friendship:
             return HttpResponse("Friend request not found.", status=404)
@@ -65,6 +71,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse("Friend request rejected.")
 
     def block_friend(self, request: HttpRequest, profile_id: int):
+        if not isinstance(request.user, User):
+            return HttpResponse("Authentication required.", status=401)
         # If a friendship already exists
         friendship = Friendship.objects.all().between(profile_id, request.user.profile)
         if friendship:
@@ -84,6 +92,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse("Profile blocked.")
 
     def mute_friend(self, request: HttpRequest, profile_id: int):
+        if not isinstance(request.user, User):
+            return HttpResponse("Authentication required.", status=401)
         friendship = Friendship.objects.all().between(profile_id, request.user.profile)
         if not friendship:
             return HttpResponse("Friend request not found.", status=404)
@@ -92,6 +102,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse("Friend request muted.")
 
     def remove_friend(self, request: HttpRequest, profile_id: int):
+        if not isinstance(request.user, User):
+            return HttpResponse("Authentication required.", status=401)
         friendship = Friendship.objects.all().between(profile_id, request.user.profile)
         if not friendship:
             return HttpResponse("Friend request not found.", status=404)
