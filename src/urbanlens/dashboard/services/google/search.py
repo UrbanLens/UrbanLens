@@ -26,7 +26,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any
@@ -35,6 +34,8 @@ from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     import requests
 
 logger = logging.getLogger(__name__)

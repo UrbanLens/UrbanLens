@@ -27,7 +27,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
 import json
 import logging
 import re
@@ -39,6 +38,8 @@ from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
+    from decimal import Decimal
+
     import requests
 
 logger = logging.getLogger(__name__)

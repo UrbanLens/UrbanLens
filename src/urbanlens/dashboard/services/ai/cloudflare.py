@@ -29,9 +29,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from typing_extensions import TypeVar
-
 import requests
+from typing_extensions import TypeVar
 
 from urbanlens.dashboard.services.ai.gateway import LLMGateway
 from urbanlens.UrbanLens.settings.app import settings
