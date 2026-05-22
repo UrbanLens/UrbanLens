@@ -263,15 +263,27 @@ class Pin(abstract.Model):
 
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
         from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
+        from urbanlens.dashboard.services.ai.keywords import categorize_by_keywords
 
+        # --- Fast path: keyword matching against name and place_name only.
+        # Addresses are intentionally excluded to avoid false positives (e.g. "123 Church St").
+        keyword_text_parts = [p for p in (self.name, self.place_name if self.has_place_name() else None) if p]
+        if keyword_text_parts:
+            category_name = categorize_by_keywords(" ".join(keyword_text_parts))
+            if category_name:
+                logger.debug("Keyword-matched category '%s' for pin %s", category_name, self.pk)
+                if append_suggestion:
+                    self.add_category(category_name, save=False)
+                return category_name
+
+        # --- Slow path: ask the AI gateway.
         instructions = (
-            ""
-            + "Look at the following information about a location and determine what category it belongs in. Example categories are:"
-            + "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, "
-            + "Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, Library, Lighthouse, Mall, Mansion, Military Base, "
-            + "Monument, Police Station, Power Plant, Prison, Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel"
-            + "If the pin does not fit into any of these categories, provide a new category that is broad enough to include a variety "
-            + "of similar urbex locations. Do not answer with the name of the pin; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
+            "Look at the following information about a location and determine what category it belongs in. Example categories are: "
+            "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, "
+            "Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, Library, Lighthouse, Mall, Mansion, Military Base, "
+            "Monument, Police Station, Power Plant, Prison, Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel. "
+            "If the pin does not fit into any of these categories, provide a new category that is broad enough to include a variety "
+            "of similar urbex locations. Do not answer with the name of the pin; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
         )
 
         prompt = ""
