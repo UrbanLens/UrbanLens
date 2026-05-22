@@ -252,8 +252,8 @@ class GoogleMapsGateway(Gateway):
                 logger.warning("Failed to geocode URL %s: %s", url, e)
                 yield None
 
-    def import_pins_streaming(self, file, user_profile: "Profile"):
-        """Generator that yields SSE data strings while importing pins from a file.
+    def import_pins_streaming(self, files: list[tuple[str, bytes]], user_profile: "Profile"):
+        """Generator that yields SSE data strings while importing pins from a list of files.
 
         Each yielded string is a complete SSE event in the format ``data: {...}\\n\\n``.
 
@@ -264,52 +264,58 @@ class GoogleMapsGateway(Gateway):
         - ``{type: "complete", total, created, exists, skipped}``
         - ``{type: "error", message}``
 
+        Files whose content does not match a supported format are skipped silently.
+        A parse failure on one file does not abort the remaining files.
+
         Args:
-            file: Uploaded file object with a ``.name`` and ``.read()`` method.
+            files: List of ``(filename, raw_bytes)`` pairs to import.
+                   Archives must already be expanded by the caller.
             user_profile: The profile to associate with imported pins.
 
         Yields:
             str: SSE-formatted data lines.
         """
 
+        from urbanlens.dashboard.services.archive_extractor import validate_content_type
+
         def sse(data: dict) -> str:
             return f"data: {json.dumps(data)}\n\n"
 
-        parts = file.name.split(".")
-        if not parts or len(parts) < 2:
-            yield sse({"type": "error", "message": "No file extension provided."})
+        # First pass: validate and parse every file so we can report an accurate
+        # grand total upfront.  CSV rows are counted by line (cheap); JSON and KML
+        # are parsed fully and the results cached for the second pass.
+        # Files that fail validation or parsing are skipped with a warning.
+        parsed: list[tuple[str, Any, int]] = []  # (fmt, data_or_text, file_total)
+        grand_total = 0
+
+        for filename, raw_bytes in files:
+            fmt = validate_content_type(filename, raw_bytes)
+            if fmt is None:
+                logger.info("Skipping unrecognised file during import: %s", filename)
+                continue
+
+            try:
+                text = raw_bytes.decode("utf-8")
+                if fmt == "json":
+                    data_list = self.takeout_json_to_dict(text, user_profile)
+                    parsed.append((fmt, data_list, len(data_list)))
+                    grand_total += len(data_list)
+                elif fmt == "kml":
+                    data_list = self.takeout_kml_to_dict(text, user_profile)
+                    parsed.append((fmt, data_list, len(data_list)))
+                    grand_total += len(data_list)
+                elif fmt == "csv":
+                    file_total = max(0, len(text.splitlines()) - 1)
+                    parsed.append((fmt, text, file_total))
+                    grand_total += file_total
+            except Exception as exc:
+                logger.warning("Failed to parse '%s', skipping: %s", filename, exc)
+
+        if not parsed:
+            yield sse({"type": "error", "message": "No valid location files found in the upload."})
             return
 
-        extension = parts[-1].lower()
-
-        try:
-            file_contents = file.read().decode("utf-8")
-        except Exception as e:
-            yield sse({"type": "error", "message": f"Failed to read file: {e}"})
-            return
-
-        try:
-            match extension:
-                case "kml":
-                    data = self.takeout_kml_to_dict(file_contents, user_profile)
-                    total = len(data)
-                    pin_iter = iter(data)
-                case "json":
-                    data = self.takeout_json_to_dict(file_contents, user_profile)
-                    total = len(data)
-                    pin_iter = iter(data)
-                case "csv":
-                    lines = file_contents.splitlines()
-                    total = max(0, len(lines) - 1)
-                    pin_iter = self._csv_row_iter(file_contents, user_profile)
-                case _:
-                    yield sse({"type": "error", "message": "Unsupported file format. Supported formats are KML, JSON, and CSV."})
-                    return
-        except Exception as e:
-            yield sse({"type": "error", "message": f"Failed to parse file: {e}"})
-            return
-
-        yield sse({"type": "start", "total": total})
+        yield sse({"type": "start", "total": grand_total})
 
         created_count = 0
         exists_count = 0
@@ -317,51 +323,58 @@ class GoogleMapsGateway(Gateway):
         current = 0
 
         try:
-            for pin_data in pin_iter:
-                current += 1
-                name = ""
+            for fmt, file_data, _file_total in parsed:
+                pin_iter = (
+                    self._csv_row_iter(file_data, user_profile)
+                    if fmt == "csv"
+                    else iter(file_data)
+                )
 
-                if pin_data is None:
-                    skipped_count += 1
-                else:
-                    name = pin_data.get("name", "")
-                    try:
-                        pin, created = Pin.objects.get_nearby_or_create(
-                            latitude=pin_data["latitude"],
-                            longitude=pin_data["longitude"],
-                            profile=user_profile,
-                            defaults=pin_data,
-                        )
-                        if pin:
-                            if created:
-                                created_count += 1
-                            else:
-                                exists_count += 1
-                        else:
-                            skipped_count += 1
-                    except Exception as e:
-                        logger.warning("Failed to create pin '%s': %s", name, e)
+                for pin_data in pin_iter:
+                    current += 1
+                    pin_name = ""
+
+                    if pin_data is None:
                         skipped_count += 1
+                    else:
+                        pin_name = pin_data.get("name", "")
+                        try:
+                            pin, created = Pin.objects.get_nearby_or_create(
+                                latitude=pin_data["latitude"],
+                                longitude=pin_data["longitude"],
+                                profile=user_profile,
+                                defaults=pin_data,
+                            )
+                            if pin:
+                                if created:
+                                    created_count += 1
+                                else:
+                                    exists_count += 1
+                            else:
+                                skipped_count += 1
+                        except Exception as exc:
+                            logger.warning("Failed to create pin '%s': %s", pin_name, exc)
+                            skipped_count += 1
 
-                percent = min(100, int(current / total * 100)) if total > 0 else 100
-                yield sse({
-                    "type": "progress",
-                    "current": current,
-                    "total": total,
-                    "percent": percent,
-                    "created": created_count,
-                    "exists": exists_count,
-                    "skipped": skipped_count,
-                    "name": name,
-                })
-        except Exception as e:
-            logger.exception("Unexpected error during streaming import: %s", e)
-            yield sse({"type": "error", "message": f"Import failed unexpectedly: {e}"})
+                    percent = min(100, int(current / grand_total * 100)) if grand_total > 0 else 100
+                    yield sse({
+                        "type": "progress",
+                        "current": current,
+                        "total": grand_total,
+                        "percent": percent,
+                        "created": created_count,
+                        "exists": exists_count,
+                        "skipped": skipped_count,
+                        "name": pin_name,
+                    })
+        except Exception as exc:
+            logger.exception("Unexpected error during streaming import: %s", exc)
+            yield sse({"type": "error", "message": f"Import failed unexpectedly: {exc}"})
             return
 
         yield sse({
             "type": "complete",
-            "total": total,
+            "total": grand_total,
             "created": created_count,
             "exists": exists_count,
             "skipped": skipped_count,

@@ -269,8 +269,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
     @action(detail=True, methods=["post"])
     def upload_takeout(self, request: HttpRequest):
         """
-        Upload a Google Takeout file and stream import progress as Server-Sent Events.
+        Upload one or more Google Takeout files and stream import progress as SSE.
+
+        Accepts individual KML, JSON, and CSV files as well as ZIP and TGZ archives.
+        Archives are extracted securely before parsing; malformed or unsupported
+        entries are skipped without aborting the whole import.
         """
+        from urbanlens.dashboard.services.archive_extractor import extract_archive, is_archive
+
         form = UploadDataFile(request.POST, request.FILES)
         if not form.is_valid():
             return JsonResponse({"error": "Invalid form"}, status=400)
@@ -278,12 +284,44 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not isinstance(request.user, User):
             return JsonResponse({"error": "Authentication required."}, status=401)
 
-        datafile = form.cleaned_data["file"]
+        uploaded_files = form.cleaned_data["files"]
+
+        # Expand every uploaded file into a flat list of (name, raw_bytes) pairs,
+        # recursing one level to handle KMZ (ZIP-inside-ZIP) found in an archive.
+        all_files: list[tuple[str, bytes]] = []
+        for uploaded_file in uploaded_files:
+            try:
+                data = uploaded_file.read()
+            except Exception as exc:
+                return JsonResponse(
+                    {"error": f"Failed to read {uploaded_file.name}: {exc}"},
+                    status=400,
+                )
+
+            if is_archive(data):
+                try:
+                    extracted = extract_archive(data)
+                except ValueError as exc:
+                    return JsonResponse({"error": str(exc)}, status=400)
+
+                for entry in extracted:
+                    # Handle KMZ files (nested ZIPs) found inside an outer archive.
+                    if is_archive(entry.data):
+                        try:
+                            inner = extract_archive(entry.data)
+                            all_files.extend((x.name, x.data) for x in inner)
+                        except ValueError:
+                            logger.warning("Could not extract nested archive: %s", entry.name)
+                    else:
+                        all_files.append((entry.name, entry.data))
+            else:
+                all_files.append((uploaded_file.name, data))
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
 
         response = StreamingHttpResponse(
-            google_maps_gateway.import_pins_streaming(datafile, profile),
+            google_maps_gateway.import_pins_streaming(all_files, profile),
             content_type="text/event-stream",
         )
         response["Cache-Control"] = "no-cache"
