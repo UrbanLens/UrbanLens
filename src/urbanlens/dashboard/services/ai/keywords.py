@@ -323,17 +323,13 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
     ],
     "Factory": [
         r"\bfactor(?:y|ies)\b",
-        r"\bmill\b",
         r"\bfoundr(?:y|ies)\b",
-        r"\bforge\b",
-        r"\bsmelter\b",
         r"\bbrewerk(?:y|ies)\b",
         r"\bdistiller(?:y|ies)\b",
         r"\bcanner(?:y|ies)\b",
         r"\btanner(?:y|ies)\b",
         r"\brefiner(?:y|ies)\b",
         r"\bmanufacturing\b",
-        r"\bworks\b",
         r"\busine\b",  # French for factory
         r"\bfábrica\b",
     ],
