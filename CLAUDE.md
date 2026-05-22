@@ -24,6 +24,7 @@ docker-compose up --build
 Full stack: Django app on port 21800, Nginx on 21080, PostgreSQL/PostGIS.
 
 ### Building & Compiling
+These commands only work in Ubuntu on WSL, not in Powershell. You do not need to run these manually during normal development - they are handled automatically by the `docker-compose` setup. 
 
 ```bash
 # SCSS → CSS
@@ -172,7 +173,7 @@ dashboard/
 
 **HTMX is the preferred approach for all interactivity.** New features should use HTMX (hx-get, hx-post, hx-swap, etc.) to request server-rendered HTML fragments, minimizing hand-written JavaScript. Reach for JavaScript only when HTMX cannot accomplish the interaction (e.g., Leaflet map manipulation, drag-and-drop, real-time updates). Every existing JS-heavy interaction is a candidate for HTMX refactoring.
 
-- SCSS source: `src/urbanlens/dashboard/frontend/sass/style.scss` → compile with `bun run sass`
+- SCSS source: `src/urbanlens/dashboard/frontend/sass/style.scss` → compile within Ubuntu with `bun run sass`
 - Templates in `src/urbanlens/dashboard/templates/dashboard/`
 
 ### API Integrations

@@ -4,6 +4,8 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" crossorigin="" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js" crossorigin=""></script>
 {% endblock %}
 
 {% block content %}
@@ -22,6 +24,21 @@
 
     <div class="pin-map">
         <div id="map"></div>
+    </div>
+
+    <div class="campus-editor card">
+        <h2>Campus Boundary</h2>
+        <p class="campus-description">
+            Define the spatial extent of this location. The shaded region will appear as an overlay on the main map.
+        </p>
+        <div id="campus-map"></div>
+        <div class="campus-editor-controls">
+            <button id="edit-campus-btn" class="submit-button" onclick="startEditCampus()">Edit Boundary</button>
+            <div id="campus-save-controls" style="display:none">
+                <button class="submit-button" onclick="saveCampus()">Save</button>
+                <button class="submit-button campus-cancel-btn" onclick="cancelCampusEdit()">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <div class="satellite-view card">
@@ -53,6 +70,7 @@
 
 {% block scripts %}
     <script>
+        // ── Pin location map ──────────────────────────────────────────────────────
         const map = L.map('map').setView(["{{ pin.latitude }}", "{{ pin.longitude }}"], 13);
         window.map = map;
         window.pin = null;
@@ -75,6 +93,7 @@
             popupAnchor: [1, -34]
         });
         L.Marker.prototype.options.icon = newIcon;
+
         document.addEventListener('htmx:configRequest', (event) => {
             event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
             console.log("htmx is loaded");
@@ -87,5 +106,103 @@
                 document.dispatchEvent(event);
             }, 250);
         });
+
+        // ── Campus boundary editor ────────────────────────────────────────────────
+        const pinLat = {{ pin.effective_latitude|default:"42.6525" }};
+        const pinLng = {{ pin.effective_longitude|default:"-73.7579" }};
+        const campusApiUrl = "{% url 'campus.pin' pin.id %}";
+
+        const campusMap = L.map('campus-map').setView([pinLat, pinLng], 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(campusMap);
+
+        // Marker so the user can see where the pin is while drawing
+        L.marker([pinLat, pinLng]).addTo(campusMap);
+
+        // Feature group holds the polygon that Leaflet.draw manages
+        const campusItems = new L.FeatureGroup().addTo(campusMap);
+
+        const campusStyle = { color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 };
+        let campusDrawControl = null;
+
+        // Load the saved campus on page load
+        fetch(campusApiUrl)
+            .then(r => r.json())
+            .then(data => {
+                if (data.polygon) {
+                    const layer = L.geoJSON(data.polygon, { style: campusStyle });
+                    layer.eachLayer(l => campusItems.addLayer(l));
+                    campusMap.fitBounds(campusItems.getBounds().pad(0.25));
+                }
+            })
+            .catch(err => console.warn('Could not load campus:', err));
+
+        function startEditCampus() {
+            if (campusDrawControl) return;
+
+            campusDrawControl = new L.Control.Draw({
+                draw: {
+                    polygon: {
+                        allowIntersection: false,
+                        drawError: { color: '#ffcc00', message: 'Boundaries cannot intersect!' },
+                        shapeOptions: campusStyle,
+                        showArea: true,
+                    },
+                    marker: false,
+                    circle: false,
+                    rectangle: false,
+                    polyline: false,
+                    circlemarker: false,
+                },
+                edit: { featureGroup: campusItems },
+            });
+            campusMap.addControl(campusDrawControl);
+
+            // When a new polygon is finished, replace any existing one
+            campusMap.on(L.Draw.Event.CREATED, function (e) {
+                campusItems.clearLayers();
+                campusItems.addLayer(e.layer);
+            });
+
+            document.getElementById('edit-campus-btn').style.display = 'none';
+            document.getElementById('campus-save-controls').style.display = '';
+        }
+
+        function saveCampus() {
+            const layers = campusItems.getLayers();
+            if (layers.length === 0) {
+                toastr.warning('Draw a boundary on the map first.');
+                return;
+            }
+
+            const geometry = layers[0].toGeoJSON().geometry;
+
+            fetch(campusApiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}',
+                },
+                body: JSON.stringify({ polygon: geometry }),
+            })
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(() => {
+                toastr.success('Campus boundary saved.');
+                cancelCampusEdit();
+            })
+            .catch(() => toastr.error('Failed to save campus boundary.'));
+        }
+
+        function cancelCampusEdit() {
+            if (campusDrawControl) {
+                campusMap.removeControl(campusDrawControl);
+                campusDrawControl = null;
+            }
+            campusMap.off(L.Draw.Event.CREATED);
+            document.getElementById('edit-campus-btn').style.display = '';
+            document.getElementById('campus-save-controls').style.display = 'none';
+        }
     </script>
 {% endblock %}

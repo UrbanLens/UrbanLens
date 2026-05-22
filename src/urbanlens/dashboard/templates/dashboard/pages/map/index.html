@@ -31,6 +31,9 @@
             <div>
                 <button id="weather-button" title="Weather View" onclick="toggleWeatherView()"></button>
             </div>
+            <div>
+                <button id="campus-button" title="Campus Boundaries" onclick="toggleCampusBoundaries()"></button>
+            </div>
             <div hx-get="{% url 'pin.import.form' %}" hx-trigger="click" hx-target="#importPinsModal" hx-swap="innerHTML">
                 <button id="import-pins-button" title="Import Pins" class="map-button"></button>
             </div>
@@ -425,9 +428,50 @@
         }
 
         // Add the selected layer
-        rainLayer.addTo(map);  
-        cloudLayer.addTo(map);      
+        rainLayer.addTo(map);
+        cloudLayer.addTo(map);
         document.querySelector('#weather-button').classList.toggle('active');
+    }
+
+    // Campus boundary overlay
+    const campusStyle = { color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 };
+    const campusLayerGroup = L.layerGroup();
+    let campusLoaded = false;
+
+    async function toggleCampusBoundaries() {
+        const btn = document.querySelector('#campus-button');
+        if (map.hasLayer(campusLayerGroup)) {
+            map.removeLayer(campusLayerGroup);
+            btn.classList.remove('active');
+            return;
+        }
+
+        // Load data once; re-use the layer on subsequent toggles
+        if (!campusLoaded) {
+            try {
+                const response = await fetch("{% url 'campus.list' %}");
+                const data = await response.json();
+                data.campuses.forEach(c => {
+                    if (c.polygon) {
+                        L.geoJSON(c.polygon, { style: campusStyle }).addTo(campusLayerGroup);
+                    } else {
+                        // No polygon — fall back to a circle
+                        L.circle([c.latitude, c.longitude], {
+                            radius: c.default_radius_meters,
+                            ...campusStyle,
+                        }).addTo(campusLayerGroup);
+                    }
+                });
+                campusLoaded = true;
+            } catch (err) {
+                toastr.error('Failed to load campus boundaries.');
+                console.error('Campus load error:', err);
+                return;
+            }
+        }
+
+        campusLayerGroup.addTo(map);
+        btn.classList.add('active');
     }
 
     // Update the Leaflet icon URLs

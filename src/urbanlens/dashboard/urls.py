@@ -36,7 +36,7 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import friendship, maps, pin, userprofile
+from urbanlens.dashboard.controllers import campus, friendship, maps, pin, userprofile
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -84,6 +84,11 @@ urlpatterns = [
                 path("", maps.MapController.as_view({"get": "view_map"}), name="map.view"),
                 path("init/", maps.MapController.as_view({"get": "init_map"}), name="map.init"),
                 path(
+                    "campus/",
+                    campus.CampusController.as_view({"get": "list_campuses"}),
+                    name="campus.list",
+                ),
+                path(
                     "add/",
                     maps.MapController.as_view({"get": "add_pin", "post": "post_add_pin"}),
                     name="pin.add",
@@ -115,6 +120,11 @@ urlpatterns = [
                     include(
                         [
                             path("<int:pin_id>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
+                            path(
+                                "<int:pin_id>/campus/",
+                                campus.CampusController.as_view({"get": "get_campus", "post": "save_campus"}),
+                                name="campus.pin",
+                            ),
                             path(
                                 "<int:pin_id>/smithsonian/",
                                 pin.PinController.as_view({"get": "get_smithsonian_images"}),
