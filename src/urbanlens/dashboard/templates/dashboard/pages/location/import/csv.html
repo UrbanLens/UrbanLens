@@ -28,6 +28,7 @@
             <span>Existed <strong id="import-count-exists" style="color:#1a1a1a">0</strong></span>
             <span>Skipped <strong id="import-count-skipped" style="color:#1a1a1a">0</strong></span>
         </div>
+        <button id="import-another-btn" class="submit-button" style="display:none;margin-top:16px;width:100%">Import Another File</button>
     </div>
 </div>
 
@@ -45,6 +46,20 @@
 
     document.getElementById('import-screen').addEventListener('click', closeDialog);
     document.getElementById('closeImportDialog').addEventListener('click', closeDialog);
+
+    document.getElementById('import-another-btn').addEventListener('click', function () {
+        document.getElementById('import-another-btn').style.display = 'none';
+        document.getElementById('import-progress-bar').style.width = '0%';
+        document.getElementById('import-progress-pct').textContent = '0%';
+        document.getElementById('import-progress-count').textContent = 'Preparing…';
+        document.getElementById('import-current-name').textContent = '';
+        document.getElementById('import-count-created').textContent = '0';
+        document.getElementById('import-count-exists').textContent = '0';
+        document.getElementById('import-count-skipped').textContent = '0';
+        document.getElementById('upload_takeout_form').reset();
+        document.getElementById('import-progress-section').style.display = 'none';
+        document.getElementById('import-form-section').style.display = 'block';
+    });
 
     document.getElementById('upload_takeout_form').addEventListener('submit', async function (e) {
         e.preventDefault();
@@ -114,6 +129,7 @@
                     { timeOut: 8000 }
                 );
                 document.getElementById('closeImportDialog').disabled = false;
+                document.getElementById('import-another-btn').style.display = 'block';
                 break;
             case 'error':
                 toastr.error(evt.message, 'Import error');

@@ -27,11 +27,11 @@ Full stack: Django app on port 21800, Nginx on 21080, PostgreSQL/PostGIS.
 
 ```bash
 # SCSS → CSS
-npm run sass
+bun run sass
 # Outputs to: src/urbanlens/dashboard/frontend/static/dashboard/style.css
 
 # TypeScript/JSX
-npm run build
+bun run build
 # Outputs to: src/urbanlens/dashboard/frontend/static/dashboard/js/
 ```
 
@@ -153,7 +153,7 @@ dashboard/
 
 **HTMX is the preferred approach for all interactivity.** New features should use HTMX (hx-get, hx-post, hx-swap, etc.) to request server-rendered HTML fragments, minimizing hand-written JavaScript. Reach for JavaScript only when HTMX cannot accomplish the interaction (e.g., Leaflet map manipulation, drag-and-drop, real-time updates). Every existing JS-heavy interaction is a candidate for HTMX refactoring.
 
-- SCSS source: `src/urbanlens/dashboard/frontend/sass/style.scss` → compile with `npm run sass`
+- SCSS source: `src/urbanlens/dashboard/frontend/sass/style.scss` → compile with `bun run sass`
 - Templates in `src/urbanlens/dashboard/templates/dashboard/`
 
 ### API Integrations

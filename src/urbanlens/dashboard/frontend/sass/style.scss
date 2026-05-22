@@ -589,11 +589,58 @@ i.train {
     align-items: center;
     gap: 6px;
     padding: 8px;
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.18);
     border-radius: $radius-md;
-    box-shadow: 0 2px 8px rgba(0,0,0,.14), 0 0 0 1px rgba(0,0,0,.06);
+    box-shadow: 0 1px 4px rgba(0,0,0,.07);
+    opacity: 0.45;
+    transition: opacity 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 
-    > div button {
+    &:hover {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 2px 8px rgba(0,0,0,.14), 0 0 0 1px rgba(0,0,0,.06);
+    }
+
+    #toggle-map-buttons {
+        background: transparent;
+        border: 1.5px solid transparent;
+        border-radius: $radius-sm;
+        width: 2.5rem;
+        height: 2.5rem;
+        font-size: 1.1rem;
+        line-height: 1;
+        color: #333;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+        flex-shrink: 0;
+
+        &:hover, &:focus {
+            background-color: rgba(33, 150, 243, 0.08);
+            border-color: rgba(33, 150, 243, 0.25);
+        }
+    }
+
+    .map-buttons-content {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
+        overflow: hidden;
+        max-width: 500px;
+        transition: max-width 0.2s ease, opacity 0.2s ease, gap 0.2s ease;
+        opacity: 1;
+    }
+
+    &.collapsed .map-buttons-content {
+        max-width: 0;
+        opacity: 0;
+        gap: 0;
+    }
+
+    .map-buttons-content > div button {
         background-size: 52%;
         background-repeat: no-repeat;
         background-position: center center;
@@ -621,28 +668,23 @@ i.train {
             border-color: rgba(33, 150, 243, 0.4);
         }
     }
+
     #search-pins-button {
-        // Use the icon /static/dashboard/images/search.png
         background-image: url("/static/dashboard/images/search.png");
     }
     #topography-button {
-        // Use the icon /static/dashboard/images/topography.png
         background-image: url("/static/dashboard/images/topography.png");
     }
     #satellite-button {
-        // Use the icon /static/dashboard/images/satellite.png
         background-image: url("/static/dashboard/images/satellite.png");
     }
     #toggle-pins-button {
-        // Use the icon /static/dashboard/images/pins.png
         background-image: url("/static/dashboard/images/pins.png");
     }
     #import-pins-button {
-        // Use the icon /static/dashboard/images/import.png
         background-image: url("/static/dashboard/images/import.png");
     }
     #weather-button {
-        // Use the icon /static/dashboard/images/weather.png
         background-image: url("/static/dashboard/images/weather.png");
     }
 

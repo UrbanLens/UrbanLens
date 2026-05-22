@@ -10,27 +10,30 @@
 
 {% block content %}
 <div id="map" hx-boost="true">
-    <div class="map-buttons">
-        <div hx-get="{% url 'pin.add' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="innerHTML">
-            <button id="add-pin-button" class="map-button">Add Pin</button>
-        </div>
-        <div hx-get="{% url 'map.search' %}" hx-trigger="click" hx-target="#searchPinModal" hx-swap="innerHTML">
-            <button id="search-pins-button" title="Search" class="map-button"></button>
-        </div>
-        <div>
-            <button id="topography-button" title="Topography View" onclick="toggleTopographyView()"></button>
-        </div>
-        <div>
-            <button id="satellite-button" title="Satellite view" onclick="toggleSatelliteView()"></button>
-        </div>
-        <div>
-            <button id="toggle-pins-button" title="Hide Pins" onclick="togglePins()"></button>
-        </div>
-        <div>
-            <button id="weather-button" title="Weather View" onclick="toggleWeatherView()"></button>
-        </div>
-        <div hx-get="{% url 'pin.import.form' %}" hx-trigger="click" hx-target="#importPinsModal" hx-swap="innerHTML">
-            <button id="import-pins-button" title="Import Pins" class="map-button"></button>
+    <div class="map-buttons" id="map-buttons">
+        <button id="toggle-map-buttons" title="Collapse map controls">&#9776;</button>
+        <div class="map-buttons-content">
+            <div hx-get="{% url 'pin.add' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="innerHTML">
+                <button id="add-pin-button" class="map-button">Add Pin</button>
+            </div>
+            <div hx-get="{% url 'map.search' %}" hx-trigger="click" hx-target="#searchPinModal" hx-swap="innerHTML">
+                <button id="search-pins-button" title="Search" class="map-button"></button>
+            </div>
+            <div>
+                <button id="topography-button" title="Topography View" onclick="toggleTopographyView()"></button>
+            </div>
+            <div>
+                <button id="satellite-button" title="Satellite view" onclick="toggleSatelliteView()"></button>
+            </div>
+            <div>
+                <button id="toggle-pins-button" title="Hide Pins" onclick="togglePins()"></button>
+            </div>
+            <div>
+                <button id="weather-button" title="Weather View" onclick="toggleWeatherView()"></button>
+            </div>
+            <div hx-get="{% url 'pin.import.form' %}" hx-trigger="click" hx-target="#importPinsModal" hx-swap="innerHTML">
+                <button id="import-pins-button" title="Import Pins" class="map-button"></button>
+            </div>
         </div>
     </div>
 
@@ -469,6 +472,12 @@
             toastr.error(`Failed to delete pin`);
         });
     }
+
+    document.getElementById('toggle-map-buttons').addEventListener('click', function() {
+        const panel = document.getElementById('map-buttons');
+        const collapsed = panel.classList.toggle('collapsed');
+        this.title = collapsed ? 'Expand map controls' : 'Collapse map controls';
+    });
 
 </script>
 
