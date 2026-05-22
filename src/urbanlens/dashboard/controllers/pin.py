@@ -168,7 +168,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         return render(
             request,
-            "dashboard/pages/pin/smithsonian.html",
+            "dashboard/pages/location/smithsonian.html",
             {
                 "images": smithsonian_images,
             },
