@@ -37,6 +37,11 @@
     <div id="loading-pins-message">
         <span>Loading...</span>
     </div>
+
+    <div id="pin-counter">
+        <span id="pin-counter-value">0</span>
+        <span id="pin-counter-label">pins</span>
+    </div>
     <div id="map-body" hx-get="{% url 'map.init' %}" hx-trigger="load" hx-swap="outerHTML">
     </div>
 
@@ -58,6 +63,13 @@
     function hideLoadingMessage() {
         $('#loading-pins-message').hide();
     }
+
+    function updatePinCounter() {
+        const count = pinsVisible ? pinsLayerGroup.getLayers().length : 0;
+        document.getElementById('pin-counter-value').textContent = count;
+        document.getElementById('pin-counter-label').textContent = count === 1 ? 'pin' : 'pins';
+    }
+    window.updatePinCounter = updatePinCounter;
 
     var pinsLayerGroup = L.layerGroup().addTo(map);
 
@@ -376,6 +388,7 @@
         }
         pinsVisible = !pinsVisible;
         document.querySelector('#toggle-pins-button').classList.toggle('active');
+        updatePinCounter();
     }
 
     function toggleMapView( layer ) {
@@ -445,6 +458,7 @@
                         pinsLayerGroup.removeLayer(layer);
                     }
                 });
+                updatePinCounter();
             } else {
                 console.error(`Failed to delete pin with id ${pinId}`);
                 toastr.error(`Failed to delete pin`);

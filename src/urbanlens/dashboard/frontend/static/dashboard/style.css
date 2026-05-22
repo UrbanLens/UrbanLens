@@ -480,6 +480,32 @@ body.page-location-details div.section {
     font-size: 0.9em;
     color: #424242; }
 
+#pin-counter {
+  position: absolute;
+  bottom: 30px;
+  right: 10px;
+  z-index: 1000;
+  background-color: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.3s ease; }
+  #pin-counter:hover {
+    opacity: 0.9; }
+  #pin-counter #pin-counter-value {
+    font-size: 1.1rem;
+    font-weight: 600; }
+  #pin-counter #pin-counter-label {
+    font-size: 0.75rem;
+    opacity: 0.8; }
+
 #loading-pins-message {
   position: absolute;
   top: 0;

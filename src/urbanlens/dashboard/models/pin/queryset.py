@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging
+import math
 from typing import TYPE_CHECKING, Self
 
 from django.contrib.gis.geos import Point
@@ -153,6 +154,18 @@ class PinManager(abstract.Manager.from_queryset(PinQuerySet)):
         if latitude is None or longitude is None:
             logger.warning("get_nearby_or_create called with None coordinates, skipping.")
             return None, False
+
+        try:
+            lat_f, lon_f = float(latitude), float(longitude)
+        except (TypeError, ValueError):
+            logger.warning("get_nearby_or_create called with non-numeric coordinates (%s, %s), skipping.", latitude, longitude)
+            return None, False
+
+        if math.isnan(lat_f) or math.isnan(lon_f) or math.isinf(lat_f) or math.isinf(lon_f):
+            logger.warning("get_nearby_or_create called with invalid coordinates (%s, %s), skipping.", latitude, longitude)
+            return None, False
+
+        latitude, longitude = lat_f, lon_f
 
         point = Point(float(longitude), float(latitude), srid=4326)
 

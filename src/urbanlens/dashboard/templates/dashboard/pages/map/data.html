@@ -55,4 +55,5 @@
         viewLocationUrl: "{% url 'pin.details' pin.id %}"
     });
     {% endfor %}
+    if (window.updatePinCounter) { window.updatePinCounter(); }
 </script>
