@@ -33,6 +33,8 @@ import re
 import sys
 from typing import TYPE_CHECKING, Any
 
+import s2sphere
+
 from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
@@ -256,17 +258,13 @@ class GoogleGeocodingGateway(Gateway):
 
         if body.get("status") != "OK":
             status = body.get("status")
-            if status == "REQUEST_DENIED":
-                logger.error(
-                    "Places Details API REQUEST_DENIED for CID %d - check key restrictions in Google Cloud Console",
-                    cid,
-                )
-            else:
-                logger.warning(
-                    "Places Details API returned status %s for CID %d",
-                    status,
-                    cid,
-                )
+            # REQUEST_DENIED is expected for residential addresses and locations
+            # without a Google Places listing — not a key/config problem.
+            logger.warning(
+                "Places Details API returned status %s for CID %d",
+                status,
+                cid,
+            )
             return None, None
 
         loc = body.get("result", {}).get("geometry", {}).get("location", {})
@@ -287,16 +285,35 @@ class GoogleGeocodingGateway(Gateway):
             return None, None
         return float(lat), float(lng)
 
+    def _decode_s2_cell(self, s2_hex: str) -> tuple[float | None, float | None]:
+        """Decode an S2 cell ID hex string to (latitude, longitude).
+
+        Args:
+            s2_hex: Hex string of the S2 cell ID (without 0x prefix).
+
+        Returns:
+            Tuple of (latitude, longitude), or (None, None) if decoding fails.
+        """
+        cell = s2sphere.CellId(int(s2_hex, 16))
+        if not cell.is_valid():
+            return None, None
+        ll = cell.to_lat_lng()
+        lat = ll.lat().degrees
+        lon = ll.lng().degrees
+        if -90 <= lat <= 90 and -180 <= lon <= 180:
+            return lat, lon
+        return None, None
+
     def extract_coordinates_from_url(self, url: str) -> tuple[float | None, float | None]:
         """Extract latitude and longitude from a Google Maps URL.
 
         Handles:
 
-        - ``/maps/search/{lat},{lon}`` - direct coordinates, no API call needed.
-        - ``/maps/place/{name}/data=...`` - CID extracted from the ``data`` segment
-          and resolved via the Places Details API (precise), falling back to
-          geocoding the place name when the CID lookup fails.
-        - ``/maps/place/{name}`` - geocoding by place name only.
+        - ``/maps/search/{lat},{lon}`` — direct coordinates, no API call needed.
+        - ``/maps/place/{name}/data=...`` — S2 cell decoded from the ``!1s0x{CELL}:0x{CID}``
+          segment (precise, no API call, works for all locations including residential
+          addresses). Falls back to CID lookup, then geocoding by place name.
+        - ``/maps/place/{name}`` — geocoding by place name only.
 
         Args:
             url: Google Maps URL to parse.
@@ -321,14 +338,22 @@ class GoogleGeocodingGateway(Gateway):
             place_name = self.decode_place_name(m.group("name"))
             data_param = m.group("data") or ""
 
-            # The data segment encodes a compound ID as !1s0x{S2_CELL}:0x{PLACE_CID}.
-            # The CID (second hex value) is what Places Details API expects.
-            # Using the CID avoids geocoding ambiguity for bare addresses like
-            # "3 Racecourse St" that have no city/country context.
-            cid_match = re.search(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)", data_param)
-            if cid_match:
+            # The data segment encodes !1s0x{S2_CELL}:0x{PLACE_CID}.
+            # The S2 cell (first hex value) directly encodes the pin location —
+            # no API call needed, works for every URL including residential addresses.
+            feature_match = re.search(r"!1s0x([0-9a-fA-F]+):0x([0-9a-fA-F]+)", data_param)
+            if feature_match:
+                s2_hex = feature_match.group(1)
+                cid = int(feature_match.group(2), 16)
+
                 try:
-                    cid = int(cid_match.group(1), 16)
+                    lat, lon = self._decode_s2_cell(s2_hex)
+                    if lat is not None and lon is not None:
+                        return lat, lon
+                except Exception as exc:
+                    logger.warning("S2 cell decode failed for %s: %s", url, exc)
+
+                try:
                     lat, lon = self.get_coordinates_by_cid(cid)
                     if lat is not None and lon is not None:
                         return lat, lon

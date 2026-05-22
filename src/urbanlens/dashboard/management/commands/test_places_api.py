@@ -7,12 +7,14 @@ import json
 from django.core.management.base import BaseCommand
 import requests
 
+from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-# A well-known place with a stable place_id (Empire State Building)
+# A well-known place with a stable place_id and URL (Empire State Building)
 KNOWN_PLACE_ID = "ChIJaXQRs6lZwokRY6EFpJnhNNE"
 KNOWN_LAT = 40.7484
 KNOWN_LNG = -73.9967
+KNOWN_URL = "https://www.google.com/maps/place/Empire+State+Building/@40.7484405,-73.9856644,17z/data=!3m1!4b1!4m6!3m5!1s0x89c259a9b3117469:0xd134e199a405a163!8m2!3d40.7484405!4d-73.9856644"
 
 PLACES_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
 NEARBY_SEARCH_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
@@ -24,7 +26,7 @@ def _mask(key: str | None) -> str:
         return "(not set)"
     if len(key) <= 8:
         return "***"
-    return key[:4] + "..." + key[-4:]
+    return key[:3] + "..." + key[-3:]
 
 
 def _print_result(label: str, response: requests.Response) -> None:
@@ -65,10 +67,17 @@ class Command(BaseCommand):
             default=None,
             help="Override the API key (default: UL_GOOGLE_PLACES_API_KEY from settings)",
         )
+        parser.add_argument(
+            "--url",
+            type=str,
+            default=KNOWN_URL,
+            help="Google Maps URL to test end-to-end via extract_coordinates_from_url (default: Empire State Building)",
+        )
 
     def handle(self, *args, **options):
         key = options["key"] or app_settings.google_places_api_key
         cid = options["cid"]
+        url = options["url"]
 
         print()
         print("=" * 60)
@@ -182,8 +191,48 @@ class Command(BaseCommand):
             _print_result(f"Place Details cid:{cid} [maps key]", resp)
 
         # ------------------------------------------------------------------
-        # Test 7: Use our code to call the places API
+        # Test 7: Exercise the real GoogleGeocodingGateway code paths
         # ------------------------------------------------------------------
+        print("--- Test 7: App code — GoogleGeocodingGateway ---")
+        print(f"  Note: gateway uses google_maps_api_key ({_mask(app_settings.google_maps_api_key)})")
+        print("        (not google_places_api_key — CID lookups go through the Maps key)")
+        print()
+
+        gateway_key = app_settings.google_maps_api_key
+        if not gateway_key:
+            print("  [SKIP] google_maps_api_key is not set — cannot instantiate GoogleGeocodingGateway\n")
+        else:
+            try:
+                gateway = GoogleGeocodingGateway(api_key=gateway_key)
+            except Exception as exc:
+                print(f"  [FAIL] Could not instantiate GoogleGeocodingGateway: {exc}\n")
+                gateway = None
+
+            if gateway:
+                # 7a: get_coordinates_by_cid
+                print(f"  7a: get_coordinates_by_cid({cid})")
+                try:
+                    lat, lon = gateway.get_coordinates_by_cid(cid)
+                    if lat is not None and lon is not None:
+                        print(f"  [PASS] Resolved to ({lat}, {lon})")
+                    else:
+                        print("  [FAIL] Returned (None, None) — CID not in Places database or key rejected")
+                except Exception as exc:
+                    print(f"  [FAIL] Exception: {exc}")
+                print()
+
+                # 7b: extract_coordinates_from_url — full end-to-end code path
+                print("  7b: extract_coordinates_from_url")
+                print(f"       URL: {url}")
+                try:
+                    lat, lon = gateway.extract_coordinates_from_url(url)
+                    if lat is not None and lon is not None:
+                        print(f"  [PASS] Resolved to ({lat}, {lon})")
+                    else:
+                        print("  [FAIL] Returned (None, None) — both CID lookup and name geocoding failed")
+                except Exception as exc:
+                    print(f"  [FAIL] Exception: {exc}")
+                print()
 
         print("=" * 60)
         print("  Summary")
@@ -192,4 +241,9 @@ class Command(BaseCommand):
         if not t1_ok:
             print("  ! Nearby Search failed - the key itself may be invalid or")
             print("    the Places API is not enabled for this key.")
+        else:
+            print("  + Basic Places API calls (Tests 1-3) succeeded.")
+        if gateway_key and gateway_key != key:
+            print("  ! google_maps_api_key and google_places_api_key are different keys.")
+            print("    CID lookups (Test 7) use the Maps key; check its restrictions separately.")
         print()
