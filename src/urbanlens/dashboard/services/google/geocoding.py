@@ -245,7 +245,7 @@ class GoogleGeocodingGateway(Gateway):
             except (json.JSONDecodeError, TypeError):
                 cached.delete()
 
-        params = {"place_id": f"cid:{cid}", "fields": "geometry", "key": self.api_key}
+        params = {"cid": str(cid), "fields": "geometry", "key": self.api_key}
         response = self.session.get(
             "https://maps.googleapis.com/maps/api/place/details/json",
             params=params,
