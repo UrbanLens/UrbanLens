@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class CampusQuerySet(abstract.QuerySet):
-    """QuerySet for Campus — spatial region data for a Location.
+    """QuerySet for Campus - spatial region data for a Location.
 
     Campus is distinct from Location (canonical place data) and Pin (user visit
     records).  Filters here operate on region/boundary data.
@@ -42,7 +42,7 @@ class CampusManager(abstract.Manager.from_queryset(CampusQuerySet)):
         Resolution order:
         1. User's personal override, if profile is given and one exists.
         2. Admin-defined default for the location, if one exists.
-        3. None — caller should fall back to a generated circle around
+        3. None - caller should fall back to a generated circle around
            Location.latitude / Location.longitude.
 
         Args:

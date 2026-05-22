@@ -1,0 +1,89 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="settings-page">
+    <div class="settings-header">
+        <h1 class="settings-title">Settings</h1>
+        <p class="settings-subtitle">Manage your account preferences</p>
+    </div>
+
+    {# ── Privacy ───────────────────────────────────────────────────────────── #}
+    <section class="settings-section">
+        <div class="settings-section-header">
+            <i class="material-icons">lock</i>
+            <div>
+                <h2 class="settings-section-title">Privacy</h2>
+                <p class="settings-section-desc">Control who can see your profile and activity.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="privacy-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="privacy">
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.profile_visibility.id_for_label }}">
+                    {{ privacy_form.profile_visibility.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.profile_visibility.help_text }}</p>
+                {{ privacy_form.profile_visibility }}
+                {% if privacy_form.profile_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.profile_visibility.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.comment_visibility.id_for_label }}">
+                    {{ privacy_form.comment_visibility.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.comment_visibility.help_text }}</p>
+                {{ privacy_form.comment_visibility }}
+                {% if privacy_form.comment_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.comment_visibility.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field settings-field--inline">
+                <div class="settings-toggle-wrap">
+                    {{ privacy_form.allow_friend_requests }}
+                    <label class="settings-toggle-label" for="{{ privacy_form.allow_friend_requests.id_for_label }}">
+                        {{ privacy_form.allow_friend_requests.label }}
+                    </label>
+                </div>
+                <p class="settings-help">{{ privacy_form.allow_friend_requests.help_text }}</p>
+                {% if privacy_form.allow_friend_requests.errors %}
+                <p class="settings-error">{{ privacy_form.allow_friend_requests.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save Privacy Settings</button>
+            </div>
+        </form>
+    </section>
+
+    {# ── Contact ───────────────────────────────────────────────────────────── #}
+    <section class="settings-section settings-section--placeholder">
+        <div class="settings-section-header">
+            <i class="material-icons">mail</i>
+            <div>
+                <h2 class="settings-section-title">Contact</h2>
+                <p class="settings-section-desc">Notification and contact preferences - coming soon.</p>
+            </div>
+        </div>
+        <p class="settings-coming-soon">Email notifications and messaging preferences will appear here.</p>
+    </section>
+
+    {# ── Style ─────────────────────────────────────────────────────────────── #}
+    <section class="settings-section settings-section--placeholder">
+        <div class="settings-section-header">
+            <i class="material-icons">palette</i>
+            <div>
+                <h2 class="settings-section-title">Style</h2>
+                <p class="settings-section-desc">Theme and display preferences - coming soon.</p>
+            </div>
+        </div>
+        <p class="settings-coming-soon">Map style, color scheme, and display options will appear here.</p>
+    </section>
+</div>
+{% endblock %}

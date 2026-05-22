@@ -3,7 +3,18 @@
         <a href="{% url 'home' %}" class="brand-logo" alt="Urban Lens Logo"><img src="/static/logo.png" alt="Logo"></a>
         <ul id="nav-mobile" class="right hide-on-med-and-down">
             <li><a href="{% url 'map.view' %}">Map</a></li>
+            {% if user.is_authenticated %}
             <li><a href="{% url 'profile.view' %}">Profile</a></li>
+            <li><a href="{% url 'settings.view' %}"><i class="material-icons" style="vertical-align:middle;font-size:1.1rem;">settings</i></a></li>
+            <li>
+                <form method="post" action="{% url 'logout' %}" class="nav-logout-form">
+                    {% csrf_token %}
+                    <button type="submit" class="nav-logout-btn">Logout</button>
+                </form>
+            </li>
+            {% else %}
+            <li><a href="{% url 'login' %}">Login</a></li>
+            {% endif %}
         </ul>
     </div>
 </nav>

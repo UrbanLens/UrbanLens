@@ -26,20 +26,40 @@
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from django.db.models import CASCADE, CharField, DateField, ImageField, Index, OneToOneField, TextField
+from django.db.models import CASCADE, BooleanField, CharField, DateField, ImageField, Index, OneToOneField, TextField
+from django.db.models import TextChoices
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.profile.queryset import Manager
 
 
+class VisibilityChoice(TextChoices):
+    """Who can see a particular piece of profile data."""
+    ONLY_ME = "only_me", "Only Me"
+    FRIENDS = "friends", "Friends Only"
+    COMMON_LOCATIONS = "common_locations", "People with Common Locations"
+    EVERYONE = "everyone", "Everyone"
+
+
 class Profile(abstract.Model):
     avatar = ImageField()
-    instagram = CharField(max_length=255, null=True, blank=True)
-    discord = CharField(max_length=255, null=True, blank=True)
     bio = TextField(null=True, blank=True)
     area = CharField(max_length=255, null=True, blank=True)
     birth_date = DateField(null=True, blank=True)
     started_exploring = DateField(null=True, blank=True)
+
+    # Privacy settings
+    profile_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.EVERYONE,
+    )
+    comment_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.EVERYONE,
+    )
+    allow_friend_requests = BooleanField(default=True)
 
     user = OneToOneField(
         User,

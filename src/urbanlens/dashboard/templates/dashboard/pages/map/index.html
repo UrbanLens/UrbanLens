@@ -455,7 +455,7 @@
                     if (c.polygon) {
                         L.geoJSON(c.polygon, { style: campusStyle }).addTo(campusLayerGroup);
                     } else {
-                        // No polygon — fall back to a circle
+                        // No polygon - fall back to a circle
                         L.circle([c.latitude, c.longitude], {
                             radius: c.default_radius_meters,
                             ...campusStyle,

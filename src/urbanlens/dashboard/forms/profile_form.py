@@ -1,37 +1,37 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    profile.py                                                                                           *
-*        Path:    /dashboard/forms/profile.py                                                                          *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-01-16     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
+"""Profile info and social-link forms."""
+
 from django import forms
 
 from urbanlens.dashboard.models.profile.model import Profile
 
-RATING_CHOICES = [(i, str(i)) for i in range(1, 6)]  # Assuming the rating is from 1 to 5
-
 
 class ProfileForm(forms.ModelForm):
+    """Bio, location, and dates - social links are managed separately."""
+
     class Meta:
         model = Profile
-        fields = ["avatar", "instagram", "discord"]
+        fields = [
+            "avatar",
+            "bio",
+            "area",
+            "birth_date",
+            "started_exploring",
+        ]
+        widgets = {
+            "bio": forms.Textarea(attrs={"rows": 4, "class": "edit-textarea"}),
+            "area": forms.TextInput(attrs={"class": "edit-input"}),
+            "birth_date": forms.DateInput(attrs={"type": "date", "class": "edit-input"}),
+            "started_exploring": forms.DateInput(attrs={"type": "date", "class": "edit-input"}),
+        }
 
+
+class DiscordHandleForm(forms.Form):
+    """Discord does not have a public profile URL; handle is entered directly."""
+
+    discord = forms.CharField(
+        max_length=100,
+        required=False,
+        widget=forms.TextInput(
+            attrs={"class": "edit-input", "placeholder": "Your Discord username"},
+        ),
+    )

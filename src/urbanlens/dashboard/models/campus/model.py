@@ -20,7 +20,7 @@ _DEFAULT_RADIUS_METERS = 50
 class Campus(abstract.Model):
     """Spatial region for a Location, optionally scoped to a specific user.
 
-    Campus defines *how much of the map* a Location occupies — its boundary
+    Campus defines *how much of the map* a Location occupies - its boundary
     polygon.  It is a separate concern from:
     - Location: canonical address, coordinates, and Google Maps metadata.
     - Pin: a user's personal record for visiting or tracking a place.
@@ -75,7 +75,7 @@ class Campus(abstract.Model):
     def effective_polygon(self):
         """The stored polygon, or a generated circle if polygon is None.
 
-        The circle buffers in degrees (WGS84), which is approximate — it
+        The circle buffers in degrees (WGS84), which is approximate - it
         slightly distorts shape at high latitudes.  Adequate for map display;
         for metric-accurate buffering use PostGIS ST_Buffer on the server side.
 

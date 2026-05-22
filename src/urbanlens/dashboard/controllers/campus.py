@@ -1,4 +1,4 @@
-"""Campus boundary controller — get, save, and list campus regions."""
+"""Campus boundary controller - get, save, and list campus regions."""
 
 from __future__ import annotations
 
@@ -46,12 +46,14 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
             profile = None
 
         campus = Campus.objects.effective_for(pin.location, profile)
-        return JsonResponse({
-            "polygon": json.loads(campus.polygon.geojson) if campus and campus.polygon else None,
-            "default_radius_meters": campus.default_radius_meters if campus else 50,
-            "latitude": lat,
-            "longitude": lon,
-        })
+        return JsonResponse(
+            {
+                "polygon": json.loads(campus.polygon.geojson) if campus and campus.polygon else None,
+                "default_radius_meters": campus.default_radius_meters if campus else 50,
+                "latitude": lat,
+                "longitude": lon,
+            }
+        )
 
     def save_campus(self, request: HttpRequest, pin_id: int):
         """Create or update the current user's campus boundary for a pin's location."""
@@ -93,15 +95,12 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
 
         if profile:
             personal_location_ids = set(
-                Campus.objects.filter(profile=profile).values_list("location_id", flat=True)
+                Campus.objects.filter(profile=profile).values_list("location_id", flat=True),
             )
-            campuses = (
-                list(Campus.objects.filter(profile=profile).select_related("location"))
-                + list(
-                    Campus.objects.filter(profile__isnull=True)
-                    .exclude(location_id__in=personal_location_ids)
-                    .select_related("location")
-                )
+            campuses = list(Campus.objects.filter(profile=profile).select_related("location")) + list(
+                Campus.objects.filter(profile__isnull=True)
+                .exclude(location_id__in=personal_location_ids)
+                .select_related("location"),
             )
         else:
             campuses = list(Campus.objects.filter(profile__isnull=True).select_related("location"))

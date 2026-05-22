@@ -1,89 +1,138 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block content %}
-<div class="section">
-    <h1 class="center">{{ profile.user.username }}</h1>
+<div class="profile-page">
 
-    <div class="avatar">
-        {% if profile.avatar %}
-            <img src="{{ profile.avatar.url }}" alt="Avatar" />
-        {% else %}
-            <div class="avatar-placeholder">
-                {{ profile.user.first_name|first }}
+    {# ── Hero card ─────────────────────────────────────────────────────────── #}
+    <div class="profile-hero">
+        <div class="profile-avatar-col">
+            <div class="profile-avatar-wrap">
+                {% if profile.avatar %}
+                    <img class="profile-avatar-img" src="{{ profile.avatar.url }}" alt="Avatar">
+                {% else %}
+                    <div class="profile-avatar-placeholder">
+                        {% if profile.first_name %}{{ profile.first_name|first|upper }}{% elif profile.username %}{{ profile.username|first|upper }}{% else %}?{% endif %}
+                    </div>
+                {% endif %}
+                {% if profile.user == request.user %}
+                <form method="post" action="{% url 'profile.view' %}" enctype="multipart/form-data" class="avatar-upload-form">
+                    {% csrf_token %}
+                    <label class="avatar-upload-btn" title="Change photo">
+                        <i class="material-icons">photo_camera</i>
+                        <input type="file" name="avatar" onchange="this.form.submit()" style="display:none;">
+                    </label>
+                </form>
+                {% endif %}
             </div>
-        {% endif %}
-        <form id="upload-avatar-form" method="post" enctype="multipart/form-data">
-            {% csrf_token %}
-            <div id="upload-avatar-button" class="upload-button" onclick="document.getElementById('avatar-file-input').click();">
-                <i class="material-icons">file_upload</i>
-                <input type="file" id="avatar-file-input" name="avatar" onchange="this.form.submit()" style="display: none;">
+        </div>
+
+        <div class="profile-info-col">
+            <div class="profile-name-row">
+                <div>
+                    <h1 class="profile-full-name">
+                        {% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}
+                    </h1>
+                    <p class="profile-username">@{{ profile.username }}</p>
+                </div>
+                {% if profile.user == request.user %}
+                <a href="{% url 'profile.edit' %}" class="edit-profile-btn">
+                    <i class="material-icons">edit</i> Edit Profile
+                </a>
+                {% endif %}
             </div>
-        </form>
+
+            {% if profile.bio %}
+            <p class="profile-bio">{{ profile.bio }}</p>
+            {% else %}
+            <p class="profile-bio empty">No bio added yet.</p>
+            {% endif %}
+
+            <div class="profile-meta-row">
+                {% if profile.area %}
+                <span class="profile-meta-item">
+                    <i class="material-icons">place</i>{{ profile.area }}
+                </span>
+                {% endif %}
+                {% if profile.started_exploring %}
+                <span class="profile-meta-item">
+                    <i class="material-icons">explore</i>Exploring since {{ profile.started_exploring|date:"Y" }}
+                </span>
+                {% endif %}
+                {% if profile.email %}
+                <span class="profile-meta-item">
+                    <i class="material-icons">email</i>{{ profile.email }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
     </div>
 
-    <p class="light">
-        <strong>Name:</strong> {{ profile.user.first_name }} {{ profile.user.last_name }}<br>
-        {% if profile.email %}
-            <strong>Email:</strong> {{ profile.user.email }}<br>
+    {# ── Stats row ─────────────────────────────────────────────────────────── #}
+    <div class="profile-stats-row">
+        <div class="profile-stat">
+            <span class="stat-value">{{ profile.pins.count }}</span>
+            <span class="stat-label">Pins</span>
+        </div>
+        {% if profile.started_exploring %}
+        <div class="profile-stat">
+            <span class="stat-value">{{ profile.started_exploring|date:"Y" }}</span>
+            <span class="stat-label">Exploring Since</span>
+        </div>
         {% endif %}
-        {% if profile.area %}
-            <strong>Location:</strong> {{ profile.area }}<br>
+        {% if common_pin_count is not None %}
+        <div class="profile-stat">
+            <span class="stat-value">{{ common_pin_count }}</span>
+            <span class="stat-label">In Common</span>
+        </div>
         {% endif %}
-        {% if profile.birthdate %}
-            <strong>Birthdate:</strong> {{ profile.birthdate }}<br>
-        {% endif %}
-        {% if profile.bio %}
-            <strong>Bio:</strong> {{ profile.bio }}<br>
-        {% endif %}
-
-        {% if profile.discord %}
-            <strong>Discord:</strong> {{ profile.discord }}<br>
-        {% endif %}
-
-        {% if profile.twitter %}
-            <strong>Twitter:</strong> {{ profile.twitter }}<br>
-        {% endif %}
-
-        {% if profile.facebook %}
-            <strong>Facebook:</strong> {{ profile.facebook }}<br>
-        {% endif %}
-
-        {% if profile.instagram %}
-            <strong>Instagram:</strong> {{ profile.instagram }}<br>
-        {% endif %}
-
-        {% if profile.youtube %}
-            <strong>YouTube:</strong> {{ profile.youtube }}<br>
-        {% endif %}
-
-        {% if profile.reddit %}
-            <strong>Reddit:</strong> {{ profile.reddit }}<br>
-        {% endif %}
-
-        {% if profile.website %}
-            <strong>Website:</strong> {{ profile.website }}<br>
-        {% endif %}
-
-        {% if profile.github %}
-            <strong>GitHub:</strong> {{ profile.github }}<br>
-        {% endif %}
-
-        {% if profile.linkedin %}
-            <strong>LinkedIn:</strong> {{ profile.linkedin }}<br>
-        {% endif %}
-
-        {% if profile.tiktok %}
-            <strong>TikTok:</strong> {{ profile.tiktok }}<br>
-        {% endif %}
-
-        {% if profile.user == request.user %}
-            <a href="{% url 'profile.edit' %}">Edit Profile</a>
-        {% endif %}
-    </p>
-
-    <div id="friend_list" hx-get="{% url 'friend.list' profile.id %}" hx-trigger="load" hx-swap="outerHTML">
-        <h2>Friends</h2>
-        Loading...
     </div>
+
+    {# ── Social links ──────────────────────────────────────────────────────── #}
+    {% if social_links %}
+    <div class="profile-section">
+        <h3 class="profile-section-title">Social</h3>
+        <div class="social-links">
+            {% for link in social_links %}
+            {% if link.url %}
+            <a href="{{ link.url }}" class="social-link" target="_blank" rel="noopener">
+                <i class="{{ link.icon }}"></i>
+                <span>{{ link.handle }}</span>
+            </a>
+            {% else %}
+            <span class="social-link">
+                <i class="{{ link.icon }}"></i>
+                <span>{{ link.handle }}</span>
+            </span>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {# ── Shared visited locations (only when viewing another user) ─────────── #}
+    {% if shared_visited %}
+    <div class="profile-section">
+        <h3 class="profile-section-title">Places You've Both Visited</h3>
+        <ul class="shared-visited-list">
+            {% for location in shared_visited %}
+            <li class="shared-visited-item">
+                <i class="material-icons">location_on</i>
+                <span>{{ location.name }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {# ── Friends ───────────────────────────────────────────────────────────── #}
+    <div id="friend_list"
+         hx-get="{% url 'friend.list' profile.id %}"
+         hx-trigger="load"
+         hx-swap="outerHTML"
+         class="profile-section profile-friends-loading">
+        <h3 class="profile-section-title">Friends</h3>
+        <p class="loading-text">Loading friends…</p>
+    </div>
+
 </div>
 {% endblock %}

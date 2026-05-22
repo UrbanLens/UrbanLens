@@ -29,6 +29,8 @@ from __future__ import annotations
 
 from djangofoundry.controllers import ListController
 
+from django.shortcuts import redirect
+
 from urbanlens.dashboard.models.profile import Profile
 
 
@@ -36,9 +38,7 @@ class IndexController(ListController):
     template_name = "dashboard/pages/home/index.html"
     model = Profile
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["project_description"] = "This is a modern homepage for our project."
-        context["hero_image_url"] = "/static/images/hero.jpg"
-        context["profile_picture_url"] = "/static/images/profile.jpg"  # TODO: Replace
-        return context
+    def get(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return redirect("map.view")
+        return super().get(request, *args, **kwargs)

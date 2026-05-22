@@ -36,7 +36,7 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import campus, friendship, maps, pin, userprofile
+from urbanlens.dashboard.controllers import campus, friendship, maps, pin, settings, userprofile
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -184,9 +184,11 @@ urlpatterns = [
             [
                 path("", userprofile.ViewProfileView.as_view(), name="profile.view"),
                 path("edit/", userprofile.EditProfileView.as_view(), name="profile.edit"),
+                path("<int:profile_id>/", userprofile.ViewProfileView.as_view(), name="profile.view_user"),
             ],
         ),
     ),
+    path("settings/", settings.SettingsView.as_view(), name="settings.view"),
     path(
         "friendship/",
         include(

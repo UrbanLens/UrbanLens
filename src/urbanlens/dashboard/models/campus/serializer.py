@@ -6,7 +6,7 @@ from urbanlens.dashboard.models.campus.model import Campus
 
 
 class CampusSerializer(serializers.ModelSerializer):
-    """Serializer for Campus — the spatial region boundary for a Location.
+    """Serializer for Campus - the spatial region boundary for a Location.
 
     polygon is serialized as WKT.  When polygon is null, the client should
     render a circle with radius default_radius_meters around the Location's

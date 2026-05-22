@@ -1,4 +1,4 @@
-"""Campus — spatial region data for a Location."""
+"""Campus - spatial region data for a Location."""
 
 from urbanlens.dashboard.models.campus.queryset import CampusQuerySet, CampusManager
 from urbanlens.dashboard.models.campus.model import Campus
