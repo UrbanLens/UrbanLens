@@ -164,7 +164,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         smithsonian_gateway = SmithsonianGateway(api_key=settings.smithsonian_api_key or "")
 
         # Get historic images from the Smithsonian's API
-        smithsonian_images = smithsonian_gateway.get_data(pin.name)
+        smithsonian_images = smithsonian_gateway.get_data(pin.nickname)
 
         return render(
             request,
@@ -206,16 +206,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 f"{pin.latitude}, {pin.longitude}",
             ]
 
-            if pin.name and pin.address_basic != pin.name:
+            if pin.nickname and pin.address_basic != pin.nickname:
                 query.append(
                     [
-                        pin.name,
+                        pin.nickname,
                         pin.city,
                     ],
                 )
 
             place_name = pin.place_name
-            if place_name and place_name not in {pin.address_basic, pin.name}:
+            if place_name and place_name not in {pin.address_basic, pin.nickname}:
                 query.append(place_name)
 
             search_results = google_gateway.search(query)

@@ -43,8 +43,10 @@ logger = logging.getLogger(__name__)
 
 
 class LocationQuerySet(abstract.QuerySet):
-    """
-    A custom queryset. All models below will use this for interacting with results from the db.
+    """QuerySet for Location - the shared, user-agnostic half of the place model.
+
+    Filters here operate on global place data (coordinates, name, CID, address).
+    For per-user filtering (by profile, visit status, priority) use PinQuerySet.
     """
 
     def by_category(self, category):
@@ -59,6 +61,9 @@ class LocationQuerySet(abstract.QuerySet):
     def by_longitude(self, longitude):
         return self.filter(longitude=longitude)
 
+    def by_cid(self, cid: int):
+        return self.filter(cid=cid)
+
     def by_name(self, name):
         return self.filter(name__icontains=name)
 
@@ -72,6 +77,7 @@ class LocationQuerySet(abstract.QuerySet):
         from math import atan2, cos, radians, sin, sqrt
 
         from django.db.models import F
+
         R = 6371  # radius of the Earth in km
         lat1 = radians(latitude)
         lon1 = radians(longitude)
@@ -79,7 +85,7 @@ class LocationQuerySet(abstract.QuerySet):
         lon2 = radians(F("longitude"))
         dlon = lon2 - lon1
         dlat = lat2 - lat1
-        a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+        a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
         c = 2 * atan2(sqrt(a), sqrt(1 - a))
         distance = R * c
         return self.filter(distance__lte=distance)
@@ -96,9 +102,8 @@ class LocationQuerySet(abstract.QuerySet):
 
 
 class LocationManager(abstract.Manager.from_queryset(LocationQuerySet)):
-    """
-    A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
-    """
+    """Manager for Location. Use get_nearby_or_create to avoid duplicate rows for the same place."""
+
     def get_nearby_or_create(self, latitude, longitude, threshold_meters=50, defaults=None):
         """
         Get or create a Location instance, considering two locations the same if they are within a certain distance threshold.
@@ -114,16 +119,16 @@ class LocationManager(abstract.Manager.from_queryset(LocationQuerySet)):
 
         """
         point = Point(longitude, latitude, srid=4326)
-        
+
         # Find existing locations within the threshold distance
         existing_locations = self.filter(
             point__distance_lte=(point, D(m=threshold_meters)),
         )
-        
+
         if existing_locations.exists():
             # Return the first close enough location and False for 'created'
             return existing_locations.first(), False
-        
+
         # No existing location found within the threshold, create a new one
         location_data = {
             "latitude": latitude,
@@ -132,6 +137,6 @@ class LocationManager(abstract.Manager.from_queryset(LocationQuerySet)):
             **(defaults or {}),
         }
         location = self.create(**location_data)
-        
+
         # Return the new location and True for 'created'
         return location, True

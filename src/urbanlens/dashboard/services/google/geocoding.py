@@ -259,7 +259,7 @@ class GoogleGeocodingGateway(Gateway):
         if body.get("status") != "OK":
             status = body.get("status")
             # REQUEST_DENIED is expected for residential addresses and locations
-            # without a Google Places listing — not a key/config problem.
+            # without a Google Places listing - not a key/config problem.
             logger.warning(
                 "Places Details API returned status %s for CID %d",
                 status,
@@ -309,11 +309,11 @@ class GoogleGeocodingGateway(Gateway):
 
         Handles:
 
-        - ``/maps/search/{lat},{lon}`` — direct coordinates, no API call needed.
-        - ``/maps/place/{name}/data=...`` — S2 cell decoded from the ``!1s0x{CELL}:0x{CID}``
+        - ``/maps/search/{lat},{lon}`` - direct coordinates, no API call needed.
+        - ``/maps/place/{name}/data=...`` - S2 cell decoded from the ``!1s0x{CELL}:0x{CID}``
           segment (precise, no API call, works for all locations including residential
           addresses). Falls back to CID lookup, then geocoding by place name.
-        - ``/maps/place/{name}`` — geocoding by place name only.
+        - ``/maps/place/{name}`` - geocoding by place name only.
 
         Args:
             url: Google Maps URL to parse.
@@ -340,7 +340,7 @@ class GoogleGeocodingGateway(Gateway):
             data_param = m.group("data") or ""
 
             # The data segment encodes !1s0x{S2_CELL}:0x{PLACE_CID}.
-            # The S2 cell (first hex value) directly encodes the pin location —
+            # The S2 cell (first hex value) directly encodes the pin location -
             # no API call needed, works for every URL including residential addresses.
             feature_match = re.search(r"!1s0x([0-9a-fA-F]+):0x([0-9a-fA-F]+)", data_param)
             if feature_match:

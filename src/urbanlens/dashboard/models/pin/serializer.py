@@ -23,15 +23,37 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.pin.model import Pin
 
 
 class PinSerializer(serializers.ModelSerializer):
+    """Serializer for Pin - exposes user-specific fields only.
+
+    Address, place name, and canonical coordinates are NOT included here because
+    they live on the related Location.  If API consumers need place-level data,
+    nest a LocationSerializer or add read-only source= fields pointing through
+    the location FK (e.g. source="location.address").
+    """
+
     class Meta:
         model = Pin
-        fields = ["name", "icon", "categories", "last_visited", "latitude", "longitude", "created", "updated", "profile", "status", "tags", "rating"]
+        fields = [
+            "name",
+            "icon",
+            "categories",
+            "last_visited",
+            "latitude",
+            "longitude",
+            "created",
+            "updated",
+            "profile",
+            "status",
+            "tags",
+            "rating",
+        ]
 
     def create(self, validated_data):
         user = validated_data.pop("user")

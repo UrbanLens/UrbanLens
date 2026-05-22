@@ -112,6 +112,25 @@ src/urbanlens/
 
 ## Architecture Patterns
 
+### Location vs Pin - core distinction
+
+These two models are often confused. Keep their responsibilities strictly separate:
+
+**`Location`** - shared, globally recognised data about a physical place.
+- Canonical name, description, address components, coordinates, Google Maps CID
+- Not user-specific - many users may pin the same Location
+- The authoritative source for address, place metadata, and geo coordinates
+- Inherits `AddressableMixin` for address fields and derived properties
+
+**`Pin`** - a specific user's personal record for a location.
+- `location` FK pointing at the shared Location
+- User-specific fields: custom name override, personal notes (`description`), icon, priority, last-visited date, status, and an optional coordinate override (so the user can nudge the marker on their own map)
+- `name` is nullable - `None` means "display the location's canonical name" (use `pin.effective_name`)
+- `latitude`/`longitude` are nullable - `None` means "use the location's coordinates" (use `pin.effective_latitude` / `pin.effective_longitude`)
+- Address and place metadata are accessed via read-only proxy properties that delegate to `self.location`; never store address data directly on Pin
+
+**Rule of thumb**: if the data describes the place itself, it belongs on `Location`. If it describes what a particular user thinks or knows about the place, it belongs on `Pin`.
+
 ### OOP and Inheritance
 
 OOP is the standard approach throughout this codebase. Prefer inheritance (with Python generics where applicable) for abstraction and extensibility - this avoids code duplication across similar models, views, serializers, and services. All major base classes live in `dashboard/models/abstract/` and should be used as the foundation for new code.

@@ -1,30 +1,5 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    model.py                                                                                             *
-*        Path:    /dashboard/models/pins/model.py                                                                 *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
+"""Pin model - a user's personal record for a location."""
 
-# Generic imports
 from __future__ import annotations
 
 import logging
@@ -32,24 +7,15 @@ from typing import TYPE_CHECKING, Any
 
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
-
-# Django Imports
-from django.db.models import CASCADE, ForeignKey, Index, ManyToManyField
-
-# 3rd Party Imports
+from django.db.models import CASCADE, SET_NULL, ForeignKey, Index, ManyToManyField
 from django.db.models.fields import CharField, DateTimeField, DecimalField, IntegerField, TextField
 from django.forms import ImageField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager
-from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
-
-# App Imports
-from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
-    # Imports required for type checking, but not program execution.
     from urbanlens.dashboard.models.categories.model import Category
     from urbanlens.dashboard.models.reviews import Manager as ReviewManager
 
@@ -64,34 +30,57 @@ class PinStatus(TextChoices):
 
 
 class Pin(abstract.Model):
-    """
-    Records pin data.
+    """A user's personal record for a physical location.
+
+    Pin is the *personal* half of the two-model design:
+    - Location  - one row per real-world place, shared across all users.
+    - Pin       - one row per (user, place) pair; links to a Location via FK.
+
+    A Pin belongs to exactly one Profile (user). Multiple users can each have
+    their own Pin that references the same Location. Everything stored here is
+    specific to that one user: their custom label, notes, visit history, status,
+    priority, and an optional coordinate override to reposition the marker.
+
+    What does NOT belong here:
+    - Canonical address components (street, city, state …) → Location / AddressableMixin
+    - Authoritative coordinates → Location.latitude / Location.longitude
+    - Google Maps CID or cached place name → Location
+    - Place-level categories shared across users → Location.categories
+
+    Nullable override fields - None means "inherit from Location":
+    - name      → falls back to location.name       (use effective_name)
+    - latitude  → falls back to location.latitude   (use effective_latitude)
+    - longitude → falls back to location.longitude  (use effective_longitude)
+
+    Address and place metadata are accessed through proxy properties defined
+    below that delegate to self.location.  Do not add address fields directly
+    to Pin - they live on AddressableMixin which only Location inherits.
     """
 
-    name = CharField(max_length=255)
+    # The shared place this pin points at. SET_NULL so deleting a Location
+    # doesn't cascade-delete all users' Pins for that place.
+    location = ForeignKey(
+        "dashboard.Location",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pins",
+    )
+    # User's custom label. None = show location.name instead (see effective_name).
+    # Do NOT store canonical place names here - those belong on Location.
+    nickname = CharField(max_length=255, null=True, blank=True)
     icon = CharField(max_length=255, null=True, blank=True)
+    # User's personal notes. Unrelated to Location.description (place-level info).
     description = TextField(null=True, blank=True)
     priority = IntegerField(default=0)
     last_visited = DateTimeField(null=True, blank=True)
-    latitude = DecimalField(max_digits=9, decimal_places=6)
-    longitude = DecimalField(max_digits=9, decimal_places=6)
+    # Per-user coordinate override. None = use location.latitude/longitude (see effective_latitude/longitude).
+    # Only set these when the user wants to reposition the marker from the canonical Location coords.
+    latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     custom_icon = ImageField()
     status = CharField(choices=PinStatus.choices, default=PinStatus.WISH_TO_VISIT)
     point = PointField(geography=True, default=Point(0, 0))
-
-    # Address
-    street_number = CharField(max_length=50, null=True, blank=True)
-    route = CharField(max_length=80, null=True, blank=True)
-    locality = CharField(max_length=80, null=True, blank=True)
-    administrative_area_level_1 = CharField(max_length=30, null=True, blank=True)
-    administrative_area_level_2 = CharField(max_length=50, null=True, blank=True)
-    administrative_area_level_3 = CharField(max_length=50, null=True, blank=True)
-    country = CharField(max_length=20, default="United States")
-    zipcode = CharField(max_length=10, null=True, blank=True)
-    zipcode_suffix = CharField(max_length=10, null=True, blank=True)
-
-    # Cached api data
-    cached_place_name = CharField(max_length=255, null=True, blank=True)
 
     profile = ForeignKey(
         "dashboard.Profile",
@@ -111,114 +100,84 @@ class Pin(abstract.Model):
 
     if TYPE_CHECKING:
         profile_id: int
+        location_id: int | None
         reviews: ReviewManager
 
     objects = PinManager()
 
-    @property
-    def place_name(self):
-        """
-        Returns the place name of the pin.
-        """
-        if self.cached_place_name:
-            return self.cached_place_name
+    # ------------------------------------------------------------------
+    # Effective values - resolve overrides against the linked Location
+    # ------------------------------------------------------------------
 
-        return self.get_place_name()
+    @property
+    def effective_name(self) -> str:
+        """User's custom name, or the location's canonical name."""
+        return self.nickname or (self.location.name if self.location_id else "")
+
+    @property
+    def effective_latitude(self) -> float | None:
+        """User's position override, or the location's latitude."""
+        if self.latitude is not None:
+            return float(self.latitude)
+        return float(self.location.latitude) if self.location_id else None
+
+    @property
+    def effective_longitude(self) -> float | None:
+        """User's position override, or the location's longitude."""
+        if self.longitude is not None:
+            return float(self.longitude)
+        return float(self.location.longitude) if self.location_id else None
+
+    # ------------------------------------------------------------------
+    # Location proxies
+    # Address, place name, and geo metadata all live on the shared Location.
+    # These properties are convenience accessors so callers don't need to
+    # write `pin.location.city` everywhere - but the data is NOT duplicated
+    # on Pin.  Never add address fields directly to this model.
+    # ------------------------------------------------------------------
+
+    @property
+    def place_name(self) -> str | None:
+        return self.location.place_name if self.location_id else None
 
     @property
     def address(self) -> str | None:
-        """
-        Returns the address of the pin.
-        """
-        # Do this, but skip over any attributes that are None
-        # address = f"{self.street_number} {self.route}, {self.locality}, {self.administrative_area_level_1} {self.zipcode}"
-
-        address = ""
-        if self.street_number:
-            address += f"{self.street_number} "
-        if self.route:
-            address += f"{self.route}, "
-        if self.locality:
-            address += f"{self.locality}, "
-        if self.administrative_area_level_1:
-            address += f"{self.administrative_area_level_1} "
-        if self.zipcode:
-            address += f"{self.zipcode}"
-
-        return address or None
+        return self.location.address if self.location_id else None
 
     @property
     def address_basic(self) -> str | None:
-        """
-        Returns the address of the pin.
-        """
-        # address = f"{self.street_number} {self.route}"
-
-        address = ""
-        if self.street_number:
-            address += f"{self.street_number} "
-        if self.route:
-            address += f"{self.route}"
-
-        return address or None
+        return self.location.address_basic if self.location_id else None
 
     @property
     def address_extended(self) -> str | None:
-        """
-        Returns the address of the pin.
-        """
-        # address = f"{self.street_number} {self.route}, {self.locality}"
-        address = ""
-        if self.street_number:
-            address += f"{self.street_number} "
-        if self.route:
-            address += f"{self.route}, "
-        if self.locality:
-            address += f"{self.locality}"
-
-        return address or None
+        return self.location.address_extended if self.location_id else None
 
     @property
     def state(self) -> str | None:
-        """
-        Returns the state of the pin.
-        """
-        return self.administrative_area_level_1
-
-    @state.setter
-    def state(self, value: str):
-        """
-        Sets the state of the pin.
-        """
-        self.administrative_area_level_1 = value
+        return self.location.state if self.location_id else None
 
     @property
     def county(self) -> str | None:
-        """
-        Returns the county of the pin.
-        """
-        return self.administrative_area_level_2
-
-    @county.setter
-    def county(self, value: str):
-        """
-        Sets the county of the pin.
-        """
-        self.administrative_area_level_2 = value
+        return self.location.county if self.location_id else None
 
     @property
     def city(self) -> str | None:
-        """
-        Returns the city of the pin.
-        """
-        return self.locality
+        return self.location.city if self.location_id else None
 
-    @city.setter
-    def city(self, value: str):
-        """
-        Sets the city of the pin.
-        """
-        self.locality = value
+    @property
+    def country(self) -> str | None:
+        return self.location.country if self.location_id else None
+
+    @property
+    def cached_place_name(self) -> str | None:
+        return self.location.cached_place_name if self.location_id else None
+
+    def has_place_name(self) -> bool:
+        return self.location.has_place_name() if self.location_id else False
+
+    # ------------------------------------------------------------------
+    # Rating
+    # ------------------------------------------------------------------
 
     @property
     def rating(self) -> int:
@@ -228,30 +187,11 @@ class Pin(abstract.Model):
                 return review.rating
         except Exception:
             logger.debug("no rating found for pin %s", self.id)
-
         return 0
 
-    def get_place_name(self) -> str | None:
-        result = GoogleGeocodingGateway(api_key=settings.google_maps_api_key).get_place_name(
-            self.latitude,
-            self.longitude,
-        )
-
-        # We don't want to keep making requests to the API for results with no info,
-        # so cache a string instead of None
-        if not result:
-            result = "No Information Available"
-
-        if not self.cached_place_name:
-            self.cached_place_name = result
-            self.save()
-        return result
-
-    def has_place_name(self) -> bool:
-        if not self.place_name:
-            return False
-
-        return self.place_name != "No Information Available"
+    # ------------------------------------------------------------------
+    # Category helpers (personal classification for this pin)
+    # ------------------------------------------------------------------
 
     def change_category(self, category_id: int) -> None:
         from urbanlens.dashboard.models.categories.model import Category
@@ -262,21 +202,19 @@ class Pin(abstract.Model):
         self.save()
 
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
+        """Suggest a category using the pin's personal context and location metadata."""
         from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
         from urbanlens.dashboard.services.ai.keywords import categorize_by_keywords
 
-        # --- Fast path: keyword matching against name and place_name only.
-        # Addresses are intentionally excluded to avoid false positives (e.g. "123 Church St").
-        keyword_text_parts = [p for p in (self.name, self.place_name if self.has_place_name() else None) if p]
-        if keyword_text_parts:
-            category_name = categorize_by_keywords(" ".join(keyword_text_parts))
+        keyword_parts = [p for p in (self.effective_name, self.place_name if self.has_place_name() else None) if p]
+        if keyword_parts:
+            category_name = categorize_by_keywords(" ".join(keyword_parts))
             if category_name:
                 logger.debug("Keyword-matched category '%s' for pin %s", category_name, self.pk)
                 if append_suggestion:
                     self.add_category(category_name, save=False)
                 return category_name
 
-        # --- Slow path: ask the AI gateway.
         instructions = (
             "Look at the following information about a location and determine what category it belongs in. Example categories are: "
             "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, "
@@ -292,8 +230,8 @@ class Pin(abstract.Model):
         if self.has_place_name():
             prompt += f"google maps description: {self.place_name}\n"
             instructions += "\nThe google maps description may be helpful, but it also may be inaccurate. Use your best judgement.\n"
-        if self.name:
-            prompt += f"location title: {self.name}\n"
+        if self.effective_name:
+            prompt += f"location title: {self.effective_name}\n"
         if self.description:
             prompt += f"user notes: {self.description}\n"
 
@@ -301,18 +239,12 @@ class Pin(abstract.Model):
             return None
 
         gateway = CloudflareGateway(instructions=instructions)
-
         category_name = gateway.send_prompt(prompt)
-        if not category_name:
-            return None
-
-        if len(category_name) < 3:
-            logger.debug("category too short: %s", category_name)
+        if not category_name or len(category_name) < 3:
             return None
 
         if append_suggestion:
             self.add_category(category_name, save=False)
-
         return category_name
 
     def add_category(self, category_name: str, save: bool = True) -> Category | None:
@@ -326,29 +258,28 @@ class Pin(abstract.Model):
                 if save:
                     self.save()
                 return category
-
         except Exception as e:
             logger.exception("failed to add category %s to pin -> %s", category_name, e)
-
         return None
 
-    def __str__(self):
-        return f"""
-            Name: {self.name}
-            Description: {self.description or ''}
-            Google Place Name: {self.place_name}
-            Priority: {self.priority}
-            Last Visited: {self.last_visited}
-            Status: {PinStatus(self.status).label}
-        """
+    # ------------------------------------------------------------------
+    # Serialisation / display
+    # ------------------------------------------------------------------
 
-    def to_json(self):
-        """
-        Returns a dictionary that can be JSON serialized.
-        """
+    def __str__(self) -> str:
+        return (
+            f"Name: {self.effective_name}\n"
+            f"Description: {self.description or ''}\n"
+            f"Google Place Name: {self.place_name}\n"
+            f"Priority: {self.priority}\n"
+            f"Last Visited: {self.last_visited}\n"
+            f"Status: {PinStatus(self.status).label}"
+        )
+
+    def to_json(self) -> dict[str, Any]:
         return {
             "id": self.id,
-            "name": self.name,
+            "name": self.effective_name,
             "icon": self.icon,
             "place_name": self.place_name,
             "description": self.description,
@@ -358,31 +289,29 @@ class Pin(abstract.Model):
             "country": self.country,
             "priority": self.priority,
             "last_visited": self.last_visited.isoformat() if self.last_visited else "never",
-            "latitude": float(self.latitude),
-            "longitude": float(self.longitude),
+            "latitude": self.effective_latitude,
+            "longitude": self.effective_longitude,
             "status": PinStatus.get_name(self.status) or PinStatus.NOT_VISITED.label,
             "profile": self.profile.id,
             "rating": self.rating,
         }
 
-    def save(self, *args, **kwargs):
-        # update the pin field accordingly for distance calculations in postgis
-        if self.latitude is not None and self.longitude is not None:
-            self.point = Point(float(self.longitude), float(self.latitude), srid=4326)
-
+    def save(self, *args, **kwargs) -> None:
+        lat = self.effective_latitude
+        lon = self.effective_longitude
+        if lat is not None and lon is not None:
+            self.point = Point(float(lon), float(lat), srid=4326)
         super().save(*args, **kwargs)
 
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_user_pins"
         get_latest_by = "updated"
-
         indexes = [
             Index(fields=["profile"]),
             Index(fields=["profile", "priority"]),
             Index(fields=["profile", "last_visited"]),
             Index(fields=["latitude", "longitude"]),
         ]
-
         unique_together = [
             ["latitude", "longitude", "profile"],
         ]

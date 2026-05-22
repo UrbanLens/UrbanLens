@@ -193,14 +193,14 @@ class Command(BaseCommand):
         # ------------------------------------------------------------------
         # Test 7: Exercise the real GoogleGeocodingGateway code paths
         # ------------------------------------------------------------------
-        print("--- Test 7: App code — GoogleGeocodingGateway ---")
+        print("--- Test 7: App code - GoogleGeocodingGateway ---")
         print(f"  Note: gateway uses google_maps_api_key ({_mask(app_settings.google_maps_api_key)})")
-        print("        (not google_places_api_key — CID lookups go through the Maps key)")
+        print("        (not google_places_api_key - CID lookups go through the Maps key)")
         print()
 
         gateway_key = app_settings.google_maps_api_key
         if not gateway_key:
-            print("  [SKIP] google_maps_api_key is not set — cannot instantiate GoogleGeocodingGateway\n")
+            print("  [SKIP] google_maps_api_key is not set - cannot instantiate GoogleGeocodingGateway\n")
         else:
             try:
                 gateway = GoogleGeocodingGateway(api_key=gateway_key)
@@ -216,12 +216,12 @@ class Command(BaseCommand):
                     if lat is not None and lon is not None:
                         print(f"  [PASS] Resolved to ({lat}, {lon})")
                     else:
-                        print("  [FAIL] Returned (None, None) — CID not in Places database or key rejected")
+                        print("  [FAIL] Returned (None, None) - CID not in Places database or key rejected")
                 except Exception as exc:
                     print(f"  [FAIL] Exception: {exc}")
                 print()
 
-                # 7b: extract_coordinates_from_url — full end-to-end code path
+                # 7b: extract_coordinates_from_url - full end-to-end code path
                 print("  7b: extract_coordinates_from_url")
                 print(f"       URL: {url}")
                 try:
@@ -229,7 +229,7 @@ class Command(BaseCommand):
                     if lat is not None and lon is not None:
                         print(f"  [PASS] Resolved to ({lat}, {lon})")
                     else:
-                        print("  [FAIL] Returned (None, None) — both CID lookup and name geocoding failed")
+                        print("  [FAIL] Returned (None, None) - both CID lookup and name geocoding failed")
                 except Exception as exc:
                     print(f"  [FAIL] Exception: {exc}")
                 print()

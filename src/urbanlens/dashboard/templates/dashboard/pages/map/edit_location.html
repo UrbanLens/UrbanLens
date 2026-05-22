@@ -2,7 +2,7 @@
 <div class="dialog">
     <form method="POST" hx-post="{% url 'pin.edit' pin.id %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
         <label for="name">Name:</label><br>
-        <input type="text" id="name" name="name" value="{{ pin.name }}"><br>
+        <input type="text" id="name" name="name" value="{{ pin.nickname }}"><br>
         <label for="description">Description:</label><br>
         <input type="text" id="description" name="description" value="{{ pin.description }}"><br>
         <label for="latitude">Latitude:</label><br>

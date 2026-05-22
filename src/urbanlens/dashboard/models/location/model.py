@@ -1,30 +1,5 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    model.py                                                                                             *
-*        Path:    /dashboard/models/locations/model.py                                                                 *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
+"""Location model - shared, globally recognised data about a physical place."""
 
-# Generic imports
 from __future__ import annotations
 
 import logging
@@ -32,52 +7,60 @@ from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
-
-# Django Imports
 from django.db.models import Index, ManyToManyField
-
-# 3rd Party Imports
-from django.db.models.fields import CharField, DecimalField
+from django.db.models.fields import CharField, DecimalField, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.location.queryset import LocationManager
 from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
-
-# App Imports
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
-    # Imports required for type checking, but not program execution.
     from urbanlens.dashboard.models.categories.model import Category
 
 logger = logging.getLogger(__name__)
 
 
-class Location(abstract.Model):
-    """
-    Records location data.
+class Location(abstract.AddressableMixin, abstract.Model):
+    """Shared, globally recognised data about a physical place.
+
+    Location is the *global* half of the two-model design:
+    - Location  - one row per real-world place, shared across all users.
+    - Pin       - one row per (user, place) pair; links to a Location via FK.
+
+    A Location is never user-specific. Many users can each have a Pin that
+    points at the same Location. The Location stores the canonical name,
+    coordinates, address components (via AddressableMixin), Google Maps CID,
+    and any other data that is the same regardless of who is looking.
+
+    What does NOT belong here:
+    - Custom labels or notes a user gave the place → Pin.nickname / Pin.description
+    - Visit history or visit status → Pin.last_visited / Pin.status
+    - Per-user coordinate overrides → Pin.latitude / Pin.longitude
+    - Priority rankings → Pin.priority
+    - User reviews → Review model (FK to Pin, not Location)
+
+    Address fields (street_number, route, locality, etc.) are inherited from
+    AddressableMixin and accessed via the state/city/county/address properties
+    defined there.  Pin does NOT inherit AddressableMixin; it proxies those
+    same properties through its location FK.
     """
 
+    # Canonical name of the place - NOT a user's personal label (that's Pin.nickname).
     name = CharField(max_length=255)
-    description = CharField(max_length=500, null=True, blank=True)
+    description = TextField(null=True, blank=True)
+    # Authoritative coordinates for this place. Pin may override these per-user.
     latitude = DecimalField(max_digits=9, decimal_places=6)
     longitude = DecimalField(max_digits=9, decimal_places=6)
     point = PointField(geography=True, default=Point(0, 0))
 
-    # Address
-    street_number = CharField(max_length=50, null=True, blank=True)
-    route = CharField(max_length=80, null=True, blank=True)
-    locality = CharField(max_length=80, null=True, blank=True)
-    administrative_area_level_1 = CharField(max_length=30, null=True, blank=True)
-    administrative_area_level_2 = CharField(max_length=50, null=True, blank=True)
-    administrative_area_level_3 = CharField(max_length=50, null=True, blank=True)
-    country = CharField(max_length=20, default="United States")
-    zipcode = CharField(max_length=10, null=True, blank=True)
-    zipcode_suffix = CharField(max_length=10, null=True, blank=True)
+    # Google Maps CID - unsigned 64-bit identifier embedded in place URLs.
+    # Stored as Decimal to handle values above signed int64 range (> 2^63-1).
+    # Used to de-duplicate Location rows on import and to look up Places API data.
+    cid = DecimalField(max_digits=20, decimal_places=0, null=True, blank=True, unique=True)
 
-    # Cached api data
-    cached_place_name = CharField(max_length=255, null=True, blank=True)
-
+    # Shared taxonomy - these represent the real-world place's type, not a user's classification.
+    # Users apply their own categories/tags via the Pin's M2M fields.
     categories = ManyToManyField(
         "dashboard.Category",
         blank=True,
@@ -94,142 +77,26 @@ class Location(abstract.Model):
     objects = LocationManager()
 
     @property
-    def place_name(self):
-        """
-        Returns the place name of the location.
-        """
+    def place_name(self) -> str | None:
         if self.cached_place_name:
             return self.cached_place_name
-
         return self.get_place_name()
 
-    @property
-    def address(self) -> str | None:
-        """
-        Returns the address of the location.
-        """
-        # Do this, but skip over any attributes that are None
-        # address = f"{self.street_number} {self.route}, {self.locality}, {self.administrative_area_level_1} {self.zipcode}"
-
-        address = ""
-        if self.street_number:
-            address += f"{self.street_number} "
-        if self.route:
-            address += f"{self.route}, "
-        if self.locality:
-            address += f"{self.locality}, "
-        if self.administrative_area_level_1:
-            address += f"{self.administrative_area_level_1} "
-        if self.zipcode:
-            address += f"{self.zipcode}"
-
-        return address or None
-
-    @property
-    def address_basic(self) -> str | None:
-        """
-        Returns the address of the location.
-        """
-        # address = f"{self.street_number} {self.route}"
-
-        address = ""
-        if self.street_number:
-            address += f"{self.street_number} "
-        if self.route:
-            address += f"{self.route}"
-
-        return address or None
-
-    @property
-    def address_extended(self) -> str | None:
-        """
-        Returns the address of the location.
-        """
-        # address = f"{self.street_number} {self.route}, {self.locality}"
-        address = ""
-        if self.street_number:
-            address += f"{self.street_number} "
-        if self.route:
-            address += f"{self.route}, "
-        if self.locality:
-            address += f"{self.locality}"
-
-        return address or None
-
-    @property
-    def state(self) -> str | None:
-        """
-        Returns the state of the location.
-        """
-        return self.administrative_area_level_1
-
-    @state.setter
-    def state(self, value: str):
-        """
-        Sets the state of the location.
-        """
-        self.administrative_area_level_1 = value
-
-    @property
-    def county(self) -> str | None:
-        """
-        Returns the county of the location.
-        """
-        return self.administrative_area_level_2
-
-    @county.setter
-    def county(self, value: str):
-        """
-        Sets the county of the location.
-        """
-        self.administrative_area_level_2 = value
-
-    @property
-    def city(self) -> str | None:
-        """
-        Returns the city of the location.
-        """
-        return self.locality
-
-    @city.setter
-    def city(self, value: str):
-        """
-        Sets the city of the location.
-        """
-        self.locality = value
-
-    @property
-    def rating(self) -> int:
-        try:
-            review = self.reviews.all().latest()  # type: ignore[attr-defined]
-            if review:
-                return review.rating
-        except Exception:
-            logger.debug("no rating found for location %s", self.id)
-
-        return 0
-
     def get_place_name(self) -> str | None:
+        """Fetch the canonical place name from Google and cache it."""
         result = GoogleGeocodingGateway(api_key=settings.google_maps_api_key).get_place_name(
             self.latitude,
             self.longitude,
         )
-
-        # We don't want to keep making requests to the API for results with no info,
-        # so cache a string instead of None
         if not result:
             result = "No Information Available"
-
         if not self.cached_place_name:
             self.cached_place_name = result
             self.save()
         return result
 
     def has_place_name(self) -> bool:
-        if not self.place_name:
-            return False
-
-        return self.place_name != "No Information Available"
+        return bool(self.place_name) and self.place_name != "No Information Available"
 
     def change_category(self, category_id: int) -> None:
         from urbanlens.dashboard.models.categories.model import Category
@@ -243,13 +110,12 @@ class Location(abstract.Model):
         from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
 
         instructions = (
-            ""
-            + "Look at the following information about a location and determine what category it belongs in. Example categories are:"
-            + "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, "
-            + "Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, Library, Lighthouse, Mall, Mansion, Military Base, "
-            + "Monument, Police Station, Power Plant, Prison, Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel"
-            + "If the location does not fit into any of these categories, provide a new category that is broad enough to include a variety "
-            + "of similar urbex locations. Do not answer with the name of the location; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
+            "Look at the following information about a location and determine what category it belongs in. Example categories are: "
+            "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, "
+            "Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, Library, Lighthouse, Mall, Mansion, Military Base, "
+            "Monument, Police Station, Power Plant, Prison, Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel. "
+            "If the location does not fit into any of these categories, provide a new category that is broad enough to include a variety "
+            "of similar urbex locations. Do not answer with the name of the location; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
         )
 
         prompt = ""
@@ -261,24 +127,18 @@ class Location(abstract.Model):
         if self.name:
             prompt += f"location title: {self.name}\n"
         if self.description:
-            prompt += f"user notes: {self.description}\n"
+            prompt += f"description: {self.description}\n"
 
         if not prompt:
             return None
 
         gateway = CloudflareGateway(instructions=instructions)
-
         category_name = gateway.send_prompt(prompt)
-        if not category_name:
-            return None
-
-        if len(category_name) < 3:
-            logger.debug("category too short: %s", category_name)
+        if not category_name or len(category_name) < 3:
             return None
 
         if append_suggestion:
             self.add_category(category_name, save=False)
-
         return category_name
 
     def add_category(self, category_name: str, save: bool = True) -> Category | None:
@@ -292,10 +152,8 @@ class Location(abstract.Model):
                 if save:
                     self.save()
                 return category
-
         except Exception as e:
             logger.exception("failed to add category %s to location -> %s", category_name, e)
-
         return None
 
     def __str__(self):
@@ -305,7 +163,7 @@ class Location(abstract.Model):
             Google Place Name: {self.place_name}
         """
 
-    def to_json(self):
+    def to_json(self) -> dict:
         """
         Returns a dictionary that can be JSON serialized.
         """
@@ -322,22 +180,19 @@ class Location(abstract.Model):
             "longitude": float(self.longitude),
         }
 
-    def save(self, *args, **kwargs):
-        # update the location field accordingly for distance calculations in postgis
+    def save(self, *args, **kwargs) -> None:
         if self.latitude is not None and self.longitude is not None:
             self.point = Point(float(self.longitude), float(self.latitude), srid=4326)
-
         super().save(*args, **kwargs)
 
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_locations"
         get_latest_by = "updated"
-
         indexes = [
             Index(fields=["latitude", "longitude"]),
             Index(fields=["name"]),
+            Index(fields=["cid"]),
         ]
-
         unique_together = [
             ["latitude", "longitude"],
         ]

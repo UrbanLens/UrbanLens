@@ -46,8 +46,11 @@ logger = logging.getLogger(__name__)
 
 
 class PinQuerySet(abstract.QuerySet):
-    """
-    A custom queryset. All models below will use this for interacting with results from the db.
+    """QuerySet for Pin - the user-specific half of the place model.
+
+    Filters here operate on per-user data (profile, visit history, status, priority).
+    For filtering by place attributes (address, CID, canonical name) use LocationQuerySet
+    or join through the location FK: Pin.objects.filter(location__name__icontains=...).
     """
 
     def never_visited(self):
@@ -132,9 +135,7 @@ class PinQuerySet(abstract.QuerySet):
 
 
 class PinManager(abstract.Manager.from_queryset(PinQuerySet)):
-    """
-    A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
-    """
+    """Manager for Pin. Use get_nearby_or_create to avoid duplicate pins for the same profile+location."""
 
     def get_nearby_or_create(self, latitude, longitude, profile, threshold_meters=50, defaults=None):
         """
@@ -158,11 +159,15 @@ class PinManager(abstract.Manager.from_queryset(PinQuerySet)):
         try:
             lat_f, lon_f = float(latitude), float(longitude)
         except (TypeError, ValueError):
-            logger.warning("get_nearby_or_create called with non-numeric coordinates (%s, %s), skipping.", latitude, longitude)
+            logger.warning(
+                "get_nearby_or_create called with non-numeric coordinates (%s, %s), skipping.", latitude, longitude
+            )
             return None, False
 
         if math.isnan(lat_f) or math.isnan(lon_f) or math.isinf(lat_f) or math.isinf(lon_f):
-            logger.warning("get_nearby_or_create called with invalid coordinates (%s, %s), skipping.", latitude, longitude)
+            logger.warning(
+                "get_nearby_or_create called with invalid coordinates (%s, %s), skipping.", latitude, longitude
+            )
             return None, False
 
         latitude, longitude = lat_f, lon_f

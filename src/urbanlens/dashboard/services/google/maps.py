@@ -31,15 +31,19 @@ from dataclasses import dataclass, field
 import json
 import logging
 import math
+import re
 from typing import TYPE_CHECKING, Any
 
 from fastkml import kml
 import requests
 from tqdm import tqdm
 
+from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+
+_CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile import Profile
@@ -254,12 +258,16 @@ class GoogleMapsGateway(Gateway):
                 yield None
                 continue
 
+            cid_match = _CID_RE.search(url)
+            cid = int(cid_match.group(1), 16) if cid_match else None
+
             yield {
                 "latitude": latitude,
                 "longitude": longitude,
                 "profile": user_profile,
                 "name": row.get("Title", "")[:255],
                 "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
+                "cid": cid,
             }
 
     def import_pins_streaming(self, files: list[tuple[str, bytes]], user_profile: Profile):
@@ -343,11 +351,21 @@ class GoogleMapsGateway(Gateway):
                     if pin_data is None:
                         skipped_count += 1
                     else:
-                        pin_name = pin_data.get("name", "")
+                        cid = pin_data.pop("cid", None)
+                        location = Location.objects.by_cid(cid).first() if cid is not None else None
+                        if location:
+                            pin_data["location"] = location
+                            # Clear the coordinate override - pin inherits location's coords.
+                            pin_data.pop("latitude", None)
+                            pin_data.pop("longitude", None)
+
+                        pin_name = pin_data.get("name") or (location.name if location else "")
+                        lookup_lat = pin_data.get("latitude") or (location.latitude if location else None)
+                        lookup_lon = pin_data.get("longitude") or (location.longitude if location else None)
                         try:
                             pin, created = Pin.objects.get_nearby_or_create(
-                                latitude=pin_data["latitude"],
-                                longitude=pin_data["longitude"],
+                                latitude=lookup_lat,
+                                longitude=lookup_lon,
                                 profile=user_profile,
                                 defaults=pin_data,
                             )
@@ -373,7 +391,7 @@ class GoogleMapsGateway(Gateway):
                             "exists": exists_count,
                             "skipped": skipped_count,
                             "name": pin_name,
-                        }
+                        },
                     )
         except Exception as exc:
             logger.exception("Unexpected error during streaming import: %s", exc)
@@ -387,7 +405,7 @@ class GoogleMapsGateway(Gateway):
                 "created": created_count,
                 "exists": exists_count,
                 "skipped": skipped_count,
-            }
+            },
         )
 
     def takeout_kml_to_dict(self, file_contents: str, user_profile: Profile) -> list[dict[str, Any]]:

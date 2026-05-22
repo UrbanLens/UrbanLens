@@ -61,7 +61,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def edit_pin(self, request, pin_id, *args, **kwargs):
         pin: Pin = Pin.objects.get(id=pin_id)
         # Update the pin based on the form data
-        pin.name = request.POST.get("name")
+        pin.nickname = request.POST.get("name")
         pin.description = request.POST.get("description")
         pin.latitude = request.POST.get("latitude")
         pin.longitude = request.POST.get("longitude")
@@ -122,7 +122,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 tag, _created = Tag.objects.get_or_create(name=tag_name)
                 pin.tags.add(tag)
             pin.save()
-            logger.critical("New pin created: %s", pin.name)
+            logger.critical("New pin created: %s", pin.nickname)
             logger.critical("Profile is %s", request.user.profile)
             return HttpResponse(status=200)
         except Exception as e:
