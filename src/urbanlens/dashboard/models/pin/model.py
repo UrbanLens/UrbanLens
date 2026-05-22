@@ -37,7 +37,7 @@ from django.contrib.gis.geos import Point
 from django.db.models import CASCADE, ForeignKey, Index, ManyToManyField
 
 # 3rd Party Imports
-from django.db.models.fields import CharField, DateTimeField, DecimalField, IntegerField
+from django.db.models.fields import CharField, DateTimeField, DecimalField, IntegerField, TextField
 from django.forms import ImageField
 
 from urbanlens.dashboard.models import abstract
@@ -70,7 +70,7 @@ class Pin(abstract.Model):
 
     name = CharField(max_length=255)
     icon = CharField(max_length=255, null=True, blank=True)
-    description = CharField(max_length=500, null=True, blank=True)
+    description = TextField(null=True, blank=True)
     priority = IntegerField(default=0)
     last_visited = DateTimeField(null=True, blank=True)
     latitude = DecimalField(max_digits=9, decimal_places=6)

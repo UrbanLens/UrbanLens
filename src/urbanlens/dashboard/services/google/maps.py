@@ -236,8 +236,11 @@ class GoogleMapsGateway(Gateway):
         for row in reader:
             url = row.get("URL", "")
             if not url:
-                logger.warning("Skipping CSV row with no URL: %s", row)
-                yield None
+                if any(v.strip() for v in row.values()):
+                    logger.warning("Skipping CSV row with no URL: %s", row)
+                    yield None
+                else:
+                    logger.debug("Skipping blank CSV row")
                 continue
             try:
                 latitude, longitude = gateway.extract_coordinates_from_url(url)
@@ -255,7 +258,7 @@ class GoogleMapsGateway(Gateway):
                 "latitude": latitude,
                 "longitude": longitude,
                 "profile": user_profile,
-                "name": row.get("Title", ""),
+                "name": row.get("Title", "")[:255],
                 "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
             }
 

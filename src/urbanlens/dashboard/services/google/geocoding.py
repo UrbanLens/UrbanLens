@@ -330,8 +330,9 @@ class GoogleGeocodingGateway(Gateway):
             return float(m.group("lat")), float(m.group("lon"))
 
         # Place URL: .../maps/place/{name}[/data={encoded}]
+        # name can be empty when Google omits the place name from the URL.
         m = re.search(
-            r"maps/place/(?P<name>[^/?#]+)(?:/data=(?P<data>[^?#]*))?",
+            r"maps/place/(?P<name>[^/?#]*)(?:/data=(?P<data>[^?#]*))?",
             url,
         )
         if m:
