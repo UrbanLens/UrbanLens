@@ -1,62 +1,125 @@
-<div id="upload_takeout" class="dialog">
-    <h2>Upload Google Takeout File</h2>
-    <form id="upload_takeout_form" action="{% url 'pin.upload.takeout' %}" method="post" enctype="multipart/form-data">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <input type="submit" value="Upload">
-    </form>
-    <div id="progress-container" style="display:none;">
-        <div id="progress-bar" style="width: 0%; height: 20px; background-color: blue;"></div>
+<div class="dialog-overlay" id="import-screen"></div>
+<div class="dialog" id="import-dialog">
+    <button class="btn-close" id="closeImportDialog" aria-label="Close">×</button>
+    <h2>Import Pins</h2>
+
+    <div id="import-form-section">
+        <p style="color:#888;font-size:.85rem;margin:-8px 0 18px">Supported: KML, GeoJSON, CSV (Google Takeout)</p>
+        <form id="upload_takeout_form" action="{% url 'pin.upload.takeout' %}" enctype="multipart/form-data">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <input type="submit" value="Import" class="submit-button">
+        </form>
+    </div>
+
+    <div id="import-progress-section" style="display:none">
+        <div style="background:#f0f0f0;border-radius:6px;overflow:hidden;height:6px;margin-bottom:12px">
+            <div id="import-progress-bar"
+                 style="width:0%;height:100%;background:#2196F3;border-radius:6px;transition:width .3s ease"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+            <strong id="import-progress-pct" style="color:#2196F3;font-size:1.4rem;font-weight:700;letter-spacing:-.02em">0%</strong>
+            <span id="import-progress-count" style="color:#888;font-size:.85rem">Preparing…</span>
+        </div>
+        <div id="import-current-name"
+             style="color:#555;font-size:.85rem;height:1.1em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:18px"></div>
+        <div style="display:flex;gap:16px;font-size:.82rem;color:#666;padding-top:12px;border-top:1px solid #eee">
+            <span>Created <strong id="import-count-created" style="color:#1a1a1a">0</strong></span>
+            <span>Existed <strong id="import-count-exists" style="color:#1a1a1a">0</strong></span>
+            <span>Skipped <strong id="import-count-skipped" style="color:#1a1a1a">0</strong></span>
+        </div>
     </div>
 </div>
 
 <script>
-    $(document).ready(function () {
-            $('#upload_takeout_form').on('submit', function (e) {
-                e.preventDefault();
+(function () {
+    var abortCtrl = null;
 
-                var formData = new FormData(this);
-                var csrftoken = $('[name=csrfmiddlewaretoken]').val();
-                $.ajax({
-                    url: $(this).attr('action'),
-                    type: 'POST',
-                    data: formData,
-                    headers: {
-                        'X-CSRFToken': csrftoken,
-                    },
-                    xhr: function () {
-                        var xhr = new window.XMLHttpRequest();
-                        xhr.upload.addEventListener("progress", function (evt) {
-                            if (evt.lengthComputable) {
-                                var percentComplete = evt.loaded / evt.total;
-                                percentComplete = parseInt(percentComplete * 100);
-                                $('#progress-bar').width(percentComplete + '%');
+    function closeDialog() {
+        if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
+        var screen = document.getElementById('import-screen');
+        var dialog = document.getElementById('import-dialog');
+        if (screen) screen.remove();
+        if (dialog) dialog.remove();
+    }
 
-                                if (percentComplete === 100) {
-                                    // Hide progress bar when upload is complete
-                                    $('#progress-container').hide();
-                                }
-                            }
-                        }, false);
-                        return xhr;
-                    },
-                    beforeSend: function () {
-                        // Show the progress bar
-                        $('#progress-container').show();
-                    },
-                    success: function (response) {
-                        // Handle success
-                        console.log("Success:", response);
-                    },
-                    error: function (response) {
-                        // Handle error
-                        console.log("Error:", response);
-                    },
-                    cache: false,
-                    contentType: false,
-                    processData: false
-                });
+    document.getElementById('import-screen').addEventListener('click', closeDialog);
+    document.getElementById('closeImportDialog').addEventListener('click', closeDialog);
+
+    document.getElementById('upload_takeout_form').addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        document.getElementById('import-form-section').style.display = 'none';
+        document.getElementById('import-progress-section').style.display = 'block';
+        document.getElementById('closeImportDialog').disabled = true;
+
+        abortCtrl = new AbortController();
+
+        try {
+            var response = await fetch(this.action, {
+                method: 'POST',
+                body: new FormData(this),
+                signal: abortCtrl.signal,
             });
-        });
 
+            if (!response.ok) throw new Error('Server returned ' + response.status);
+
+            var reader = response.body.getReader();
+            var decoder = new TextDecoder();
+            var buffer = '';
+
+            while (true) {
+                var chunk = await reader.read();
+                if (chunk.done) break;
+                buffer += decoder.decode(chunk.value, { stream: true });
+
+                var parts = buffer.split('\n\n');
+                buffer = parts.pop();
+
+                for (var i = 0; i < parts.length; i++) {
+                    var line = parts[i].trim();
+                    if (!line.startsWith('data: ')) continue;
+                    try { handleEvent(JSON.parse(line.slice(6))); } catch (_) {}
+                }
+            }
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+            toastr.error('Import failed: ' + err.message);
+            document.getElementById('closeImportDialog').disabled = false;
+        }
+    });
+
+    function handleEvent(evt) {
+        switch (evt.type) {
+            case 'start':
+                document.getElementById('import-progress-count').textContent = '0 of ' + evt.total;
+                break;
+            case 'progress':
+                document.getElementById('import-progress-bar').style.width = evt.percent + '%';
+                document.getElementById('import-progress-pct').textContent = evt.percent + '%';
+                document.getElementById('import-progress-count').textContent = evt.current + ' of ' + evt.total;
+                document.getElementById('import-current-name').textContent = evt.name || '';
+                document.getElementById('import-count-created').textContent = evt.created;
+                document.getElementById('import-count-exists').textContent = evt.exists;
+                document.getElementById('import-count-skipped').textContent = evt.skipped;
+                break;
+            case 'complete':
+                document.getElementById('import-progress-bar').style.width = '100%';
+                document.getElementById('import-progress-pct').textContent = '100%';
+                document.getElementById('import-progress-count').textContent = 'Done';
+                document.getElementById('import-current-name').textContent = '';
+                toastr.success(
+                    evt.created + ' created · ' + evt.exists + ' existed · ' + evt.skipped + ' skipped',
+                    'Import complete',
+                    { timeOut: 8000 }
+                );
+                document.getElementById('closeImportDialog').disabled = false;
+                break;
+            case 'error':
+                toastr.error(evt.message, 'Import error');
+                document.getElementById('closeImportDialog').disabled = false;
+                break;
+        }
+    }
+})();
 </script>

@@ -13,8 +13,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
 
     <script src="https://code.jquery.com/jquery-4.0.0-beta.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
 
     {% load static %}
     {% block header %}{% endblock %}
@@ -39,6 +39,13 @@
     <!--  Scripts-->
     <script>
         var csrftoken = '{{ csrf_token }}';
+        toastr.options = {
+            positionClass: 'toast-bottom-right',
+            progressBar: true,
+            timeOut: 4000,
+            closeButton: true,
+            newestOnTop: true,
+        };
     </script>
     {% block scripts %}{% endblock %}
 

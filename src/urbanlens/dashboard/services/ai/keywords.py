@@ -105,6 +105,7 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\bé?glise\b",
         r"\bkirche\b",
         r"\bsantuario\b",
+        r"\bErmita\b",
     ],
     "Fire Tower": [
         r"\bfire[\s-]+(?:tower|lookout)\b",

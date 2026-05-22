@@ -221,6 +221,152 @@ class GoogleMapsGateway(Gateway):
 
         return pins
 
+    def _csv_row_iter(self, file_contents: str, user_profile: "Profile"):
+        """Generator yielding one pin_data dict per CSV row, geocoding on demand. Yields None for rows that fail.
+
+        Args:
+            file_contents: Raw CSV text.
+            user_profile: The profile to associate with each pin.
+
+        Yields:
+            dict with pin fields, or None when geocoding fails.
+        """
+        gateway = GoogleGeocodingGateway()
+        reader = csv.DictReader(file_contents.splitlines())
+        for row in reader:
+            url = row.get("URL", "")
+            if not url:
+                logger.error("No url to extract coordinates from: row -> %s", row)
+                yield None
+                continue
+            try:
+                latitude, longitude = gateway.extract_coordinates_from_url(url)
+                yield {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "profile": user_profile,
+                    "name": row.get("Title", ""),
+                    "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
+                }
+            except Exception as e:
+                logger.warning("Failed to geocode URL %s: %s", url, e)
+                yield None
+
+    def import_pins_streaming(self, file, user_profile: "Profile"):
+        """Generator that yields SSE data strings while importing pins from a file.
+
+        Each yielded string is a complete SSE event in the format ``data: {...}\\n\\n``.
+
+        Event shapes:
+
+        - ``{type: "start", total: N}``
+        - ``{type: "progress", current, total, percent, created, exists, skipped, name}``
+        - ``{type: "complete", total, created, exists, skipped}``
+        - ``{type: "error", message}``
+
+        Args:
+            file: Uploaded file object with a ``.name`` and ``.read()`` method.
+            user_profile: The profile to associate with imported pins.
+
+        Yields:
+            str: SSE-formatted data lines.
+        """
+
+        def sse(data: dict) -> str:
+            return f"data: {json.dumps(data)}\n\n"
+
+        parts = file.name.split(".")
+        if not parts or len(parts) < 2:
+            yield sse({"type": "error", "message": "No file extension provided."})
+            return
+
+        extension = parts[-1].lower()
+
+        try:
+            file_contents = file.read().decode("utf-8")
+        except Exception as e:
+            yield sse({"type": "error", "message": f"Failed to read file: {e}"})
+            return
+
+        try:
+            match extension:
+                case "kml":
+                    data = self.takeout_kml_to_dict(file_contents, user_profile)
+                    total = len(data)
+                    pin_iter = iter(data)
+                case "json":
+                    data = self.takeout_json_to_dict(file_contents, user_profile)
+                    total = len(data)
+                    pin_iter = iter(data)
+                case "csv":
+                    lines = file_contents.splitlines()
+                    total = max(0, len(lines) - 1)
+                    pin_iter = self._csv_row_iter(file_contents, user_profile)
+                case _:
+                    yield sse({"type": "error", "message": "Unsupported file format. Supported formats are KML, JSON, and CSV."})
+                    return
+        except Exception as e:
+            yield sse({"type": "error", "message": f"Failed to parse file: {e}"})
+            return
+
+        yield sse({"type": "start", "total": total})
+
+        created_count = 0
+        exists_count = 0
+        skipped_count = 0
+        current = 0
+
+        try:
+            for pin_data in pin_iter:
+                current += 1
+                name = ""
+
+                if pin_data is None:
+                    skipped_count += 1
+                else:
+                    name = pin_data.get("name", "")
+                    try:
+                        pin, created = Pin.objects.get_nearby_or_create(
+                            latitude=pin_data["latitude"],
+                            longitude=pin_data["longitude"],
+                            profile=user_profile,
+                            defaults=pin_data,
+                        )
+                        if pin:
+                            if created:
+                                created_count += 1
+                            else:
+                                exists_count += 1
+                        else:
+                            skipped_count += 1
+                    except Exception as e:
+                        logger.warning("Failed to create pin '%s': %s", name, e)
+                        skipped_count += 1
+
+                percent = min(100, int(current / total * 100)) if total > 0 else 100
+                yield sse({
+                    "type": "progress",
+                    "current": current,
+                    "total": total,
+                    "percent": percent,
+                    "created": created_count,
+                    "exists": exists_count,
+                    "skipped": skipped_count,
+                    "name": name,
+                })
+        except Exception as e:
+            logger.exception("Unexpected error during streaming import: %s", e)
+            yield sse({"type": "error", "message": f"Import failed unexpectedly: {e}"})
+            return
+
+        yield sse({
+            "type": "complete",
+            "total": total,
+            "created": created_count,
+            "exists": exists_count,
+            "skipped": skipped_count,
+        })
+
     def takeout_kml_to_dict(self, file_contents: str, user_profile: Profile) -> list[dict[str, Any]]:
         try:
             k = kml.KML()

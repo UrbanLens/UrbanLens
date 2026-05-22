@@ -29,7 +29,7 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import render
 from requests.exceptions import HTTPError
 from rest_framework.decorators import action
@@ -269,27 +269,26 @@ class PinController(LoginRequiredMixin, GenericViewSet):
     @action(detail=True, methods=["post"])
     def upload_takeout(self, request: HttpRequest):
         """
-        Upload a Google Takeout file
+        Upload a Google Takeout file and stream import progress as Server-Sent Events.
         """
-        logger.critical("Uploading a takeout file")
-        try:
-            form = UploadDataFile(request.POST, request.FILES)
-            if form.is_valid():
-                datafile = form.cleaned_data["file"]
-
-                # Instantiate the GoogleMapsGateway with the API key
-                google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
-
-                if not isinstance(request.user, User):
-                    return JsonResponse({"error": "Authentication required."}, status=401)
-                profile, _ = Profile.objects.get_or_create(user=request.user)
-                pins = google_maps_gateway.import_pins_from_file(datafile, profile)
-
-                return JsonResponse({"pins": [pin.to_json() for pin in pins]})
+        form = UploadDataFile(request.POST, request.FILES)
+        if not form.is_valid():
             return JsonResponse({"error": "Invalid form"}, status=400)
 
-        except ValidationError as e:
-            return JsonResponse({"error": str(e)}, status=400)
+        if not isinstance(request.user, User):
+            return JsonResponse({"error": "Authentication required."}, status=401)
+
+        datafile = form.cleaned_data["file"]
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
+
+        response = StreamingHttpResponse(
+            google_maps_gateway.import_pins_streaming(datafile, profile),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
 
     def weather_forecast(self, request: HttpRequest, pin_id):
         """
