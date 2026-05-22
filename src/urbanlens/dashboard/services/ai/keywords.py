@@ -137,16 +137,11 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\blookout\s+tower\b",
     ],
     "Firehouse": [
-        r"\bfirehouse\b",
-        r"\bfire\s+station\b",
-        r"\bfire\s+hall\b",
-        r"\bfire\s+house\b",
+        r"\bfire[\s-]*(station|hall|house)\b",
     ],
     "Funeral Home": [
         r"\bfuneral\s+home\b",
         r"\bfuneral\s+parlou?r\b",
-        r"\bfuneral\s+chapel\b",
-        r"\bchapel\s+of\s+rest\b",
         r"\bmortuary\b",
         r"\bcremator(?:y|ium)\b",
         r"\bmorgue\b",
