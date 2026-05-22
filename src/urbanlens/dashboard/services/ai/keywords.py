@@ -280,7 +280,7 @@ _COMPILED: dict[str, list[re.Pattern[str]]] | None = None
 
 def _get_compiled() -> dict[str, list[re.Pattern[str]]]:
     """Return the lazily-compiled pattern dict, building it on first access."""
-    global _COMPILED
+    global _COMPILED  # noqa: PLW0603 # TODO Temporarily allow this approach.
     if _COMPILED is None:
         _COMPILED = {
             category: [re.compile(p, re.IGNORECASE | re.UNICODE) for p in patterns]
