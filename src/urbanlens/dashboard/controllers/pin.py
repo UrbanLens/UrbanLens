@@ -37,7 +37,8 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
-from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin import Pin
+from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.google.search import GoogleCustomSearchGateway
 from urbanlens.dashboard.services.smithsonian import SmithsonianGateway
@@ -67,8 +68,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         Test the AI. TODO Temporary function that can be deleted at any time with no side effects.
         """
-        from urbanlens.dashboard.models.profile import Profile
-
         profile = Profile.objects.get(pk=1)
         pin, _created = Pin.objects.get_nearby_or_create(
             latitude=43.0423439,
@@ -283,7 +282,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
                 if not isinstance(request.user, User):
                     return JsonResponse({"error": "Authentication required."}, status=401)
-                pins = google_maps_gateway.import_pins_from_file(datafile, request.user.profile)
+                profile, _ = Profile.objects.get_or_create(user=request.user)
+                pins = google_maps_gateway.import_pins_from_file(datafile, profile)
 
                 return JsonResponse({"pins": [pin.to_json() for pin in pins]})
             return JsonResponse({"error": "Invalid form"}, status=400)

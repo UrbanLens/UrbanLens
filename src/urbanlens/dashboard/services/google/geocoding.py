@@ -96,7 +96,7 @@ class GoogleGeocodingGateway(Gateway):
         """
         Use Google Geocoding API to retrieve a data about a location given its coordinates
         """
-        if not latitude or not longitude:
+        if latitude is None or longitude is None:
             raise ValueError("Latitude and longitude must be provided to retrieve_place_name.")
 
         # Check if the geocoded data for the given place name already exists in the database
@@ -170,7 +170,7 @@ class GoogleGeocodingGateway(Gateway):
         return body
 
     def get_place_name(self, latitude: float | Decimal, longitude: float | Decimal) -> str | None:
-        if not latitude or not longitude:
+        if latitude is None or longitude is None:
             logger.error("Latitude and longitude must be provided to get_place_name.")
             return None
 

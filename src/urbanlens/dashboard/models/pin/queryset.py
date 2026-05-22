@@ -150,7 +150,11 @@ class PinManager(abstract.Manager.from_queryset(PinQuerySet)):
             (Pin, bool): Tuple of (Pin instance, created boolean)
 
         """
-        point = Point(longitude, latitude, srid=4326)
+        if latitude is None or longitude is None:
+            logger.warning("get_nearby_or_create called with None coordinates, skipping.")
+            return None, False
+
+        point = Point(float(longitude), float(latitude), srid=4326)
 
         # Find existing pins within the threshold distance
         existing_pins = self.filter(

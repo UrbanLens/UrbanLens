@@ -35,5 +35,6 @@ class DashboardConfig(AppConfig):
     name = "urbanlens.dashboard"
 
     def ready(self):
-        # Import signals
-        pass
+        import urbanlens.dashboard.models.pin.signals  # noqa: F401
+        import urbanlens.dashboard.models.location.signals  # noqa: F401
+        import urbanlens.dashboard.models.profile.signals  # noqa: F401

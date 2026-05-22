@@ -258,22 +258,25 @@ class GoogleMapsGateway(Gateway):
                 geometry = feature.get("geometry", {})
                 properties = feature.get("properties", {})
 
-                # Ensure the geometry type is Point for extracting coordinates
-                if geometry.get("type") == "Point":
-                    coordinates = geometry.get("coordinates", [])
+                if geometry.get("type") != "Point":
+                    continue
 
-                    # Coordinates are expected to be in [longitude, latitude] format
-                    longitude, latitude = coordinates if len(coordinates) == 2 else (None, None)
+                coordinates = geometry.get("coordinates", [])
+                if len(coordinates) != 2:
+                    logger.warning("Skipping feature with unexpected coordinates: %s", coordinates)
+                    continue
 
-                    pins.append(
-                        {
-                            "latitude": latitude,
-                            "longitude": longitude,
-                            "profile": user_profile,
-                            "name": properties.get("name", "Unknown Location"),
-                            "description": f"{properties.get('description', '')} {properties.get('address', '')}",
-                        },
-                    )
+                # Coordinates are in [longitude, latitude] format
+                longitude, latitude = coordinates
+                pins.append(
+                    {
+                        "latitude": latitude,
+                        "longitude": longitude,
+                        "profile": user_profile,
+                        "name": properties.get("name", "Unknown Location"),
+                        "description": f"{properties.get('description', '')} {properties.get('address', '')}",
+                    },
+                )
 
             logger.info("Converted %s pins from JSON file to dicts.", len(pins))
 

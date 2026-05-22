@@ -41,6 +41,7 @@ from urbanlens.dashboard.forms.search import SearchForm
 from urbanlens.dashboard.models.categories.model import Category
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.tags.model import Tag
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -173,7 +174,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
     def get_map_data(self, request, query: PinQuerySet | None = None):
         if query is None:
-            query = Pin.objects.all().filter(profile=request.user.profile)
+            profile, _ = Profile.objects.get_or_create(user=request.user)
+            query = Pin.objects.all().filter(profile=profile)
 
         if not query:
             # Default map data
