@@ -112,7 +112,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     return HttpResponse("Error: Unable to convert address to lat/lng.", status=400)
 
             pin = Pin.objects.create(
-                name=name,
+                nickname=name,
                 latitude=latitude,
                 longitude=longitude,
                 icon=icon,

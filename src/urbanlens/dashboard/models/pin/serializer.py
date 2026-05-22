@@ -41,7 +41,7 @@ class PinSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pin
         fields = [
-            "name",
+            "nickname",
             "icon",
             "categories",
             "last_visited",

@@ -74,7 +74,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             longitude=-76.1501928,
             profile=profile,
             defaults={
-                "name": "Syracuse Central High School",
+                "nickname": "Syracuse Central High School",
                 "description": "",
             },
         )

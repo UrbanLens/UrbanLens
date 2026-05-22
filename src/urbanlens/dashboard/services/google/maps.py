@@ -202,6 +202,10 @@ class GoogleMapsGateway(Gateway):
         skipped = 0
         with tqdm(total=total, desc="Importing pins") as pbar:
             for pin_data in data:
+                # If pin_data contains "name", convert to "nickname"
+                if "name" in pin_data:
+                    pin_data["nickname"] = pin_data.pop("name")
+
                 try:
                     pin, created = Pin.objects.get_nearby_or_create(
                         latitude=pin_data["latitude"],
@@ -359,10 +363,15 @@ class GoogleMapsGateway(Gateway):
                             pin_data.pop("latitude", None)
                             pin_data.pop("longitude", None)
 
-                        pin_name = pin_data.get("name") or (location.name if location else "")
+                        pin_name = (
+                            pin_data.get("name") or pin_data.get("nickname") or (location.name if location else "")
+                        )
                         lookup_lat = pin_data.get("latitude") or (location.latitude if location else None)
                         lookup_lon = pin_data.get("longitude") or (location.longitude if location else None)
                         try:
+                            # If pin_data contains "name", convert to "nickname"
+                            if "name" in pin_data:
+                                pin_data["nickname"] = pin_data.pop("name")
                             pin, created = Pin.objects.get_nearby_or_create(
                                 latitude=lookup_lat,
                                 longitude=lookup_lon,
@@ -374,6 +383,13 @@ class GoogleMapsGateway(Gateway):
                                     created_count += 1
                                 else:
                                     exists_count += 1
+                                # Backfill: if the import carried a CID but no existing
+                                # Location was found by that CID, the nearby-match may
+                                # have returned a Location that still lacks one.  Set it
+                                # now so future imports resolve via CID instead of coords.
+                                if cid is not None and location is None and pin.location_id and not pin.location.cid:
+                                    pin.location.cid = cid
+                                    pin.location.save(update_fields=["cid"])
                             else:
                                 skipped_count += 1
                         except Exception as exc:

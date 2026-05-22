@@ -93,8 +93,13 @@
         <h3 class="profile-section-title">Social</h3>
         <div class="social-links">
             {% for link in social_links %}
-            {% if link.url %}
-            <a href="{{ link.url }}" class="social-link" target="_blank" rel="noopener">
+            {% if link.platform == "website" %}
+            <a href="#" class="social-link" data-external-url="{{ link.url }}" title="{{ link.url }}">
+                <i class="{{ link.icon }}"></i>
+                <span>{{ link.handle|truncatechars:40 }}</span>
+            </a>
+            {% elif link.url %}
+            <a href="{{ link.url }}" class="social-link" target="_blank" rel="noopener noreferrer">
                 <i class="{{ link.icon }}"></i>
                 <span>{{ link.handle }}</span>
             </a>
@@ -135,4 +140,68 @@
     </div>
 
 </div>
+
+{# ── External-link warning dialog ──────────────────────────────────────────── #}
+<div id="ext-warn-overlay" class="dialog-overlay" style="display:none;" aria-hidden="true">
+    <div class="dialog ext-warn-dialog" role="alertdialog" aria-labelledby="ext-warn-title" aria-describedby="ext-warn-desc">
+        <h2 id="ext-warn-title">
+            <i class="material-icons ext-warn-icon">warning</i>
+            External Link
+        </h2>
+        <p id="ext-warn-desc" class="ext-warn-desc">
+            This link was added by a user and has <strong>not been verified</strong> by UrbanLens.
+            It may lead to content outside our control.
+        </p>
+        <p class="ext-warn-url-label">Destination:</p>
+        <p class="ext-warn-url" id="ext-warn-url"></p>
+        <div class="ext-warn-actions">
+            <button id="ext-warn-cancel" class="ext-warn-cancel-btn">Cancel</button>
+            <a id="ext-warn-continue" href="#" target="_blank" rel="noopener noreferrer" class="submit-button">
+                Continue to site
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const overlay   = document.getElementById('ext-warn-overlay');
+    const urlEl     = document.getElementById('ext-warn-url');
+    const continueEl = document.getElementById('ext-warn-continue');
+    const cancelBtn  = document.getElementById('ext-warn-cancel');
+
+    function openDialog(url) {
+        urlEl.textContent  = url;
+        continueEl.href    = url;
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+        cancelBtn.focus();
+    }
+
+    function closeDialog() {
+        overlay.style.display = 'none';
+        overlay.setAttribute('aria-hidden', 'true');
+        continueEl.href = '#';
+    }
+
+    document.querySelectorAll('[data-external-url]').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+            e.preventDefault();
+            openDialog(el.dataset.externalUrl);
+        });
+    });
+
+    cancelBtn.addEventListener('click', closeDialog);
+
+    overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) closeDialog();
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && overlay.style.display !== 'none') closeDialog();
+    });
+}());
+</script>
 {% endblock %}

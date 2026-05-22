@@ -72,7 +72,7 @@ class PinQuerySet(abstract.QuerySet):
         return self.filter(longitude=longitude)
 
     def by_name(self, name):
-        return self.filter(name__icontains=name)
+        return self.filter(nickname__icontains=name)
 
     def by_profile(self, profile):
         return self.filter(profile=profile)
@@ -160,13 +160,17 @@ class PinManager(abstract.Manager.from_queryset(PinQuerySet)):
             lat_f, lon_f = float(latitude), float(longitude)
         except (TypeError, ValueError):
             logger.warning(
-                "get_nearby_or_create called with non-numeric coordinates (%s, %s), skipping.", latitude, longitude
+                "get_nearby_or_create called with non-numeric coordinates (%s, %s), skipping.",
+                latitude,
+                longitude,
             )
             return None, False
 
         if math.isnan(lat_f) or math.isnan(lon_f) or math.isinf(lat_f) or math.isinf(lon_f):
             logger.warning(
-                "get_nearby_or_create called with invalid coordinates (%s, %s), skipping.", latitude, longitude
+                "get_nearby_or_create called with invalid coordinates (%s, %s), skipping.",
+                latitude,
+                longitude,
             )
             return None, False
 
