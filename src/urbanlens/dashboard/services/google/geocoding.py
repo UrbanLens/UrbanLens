@@ -245,7 +245,7 @@ class GoogleGeocodingGateway(Gateway):
             except (json.JSONDecodeError, TypeError):
                 cached.delete()
 
-        params = {"cid": str(cid), "fields": "geometry", "key": self.api_key}
+        params = {"place_id": f"cid:{cid}", "fields": "geometry", "key": self.api_key}
         response = self.session.get(
             "https://maps.googleapis.com/maps/api/place/details/json",
             params=params,
@@ -258,7 +258,7 @@ class GoogleGeocodingGateway(Gateway):
             status = body.get("status")
             if status == "REQUEST_DENIED":
                 logger.error(
-                    "Places Details API REQUEST_DENIED for CID %d — the API key likely needs the Places API enabled in Google Cloud Console",
+                    "Places Details API REQUEST_DENIED for CID %d — check key restrictions in Google Cloud Console",
                     cid,
                 )
             else:
