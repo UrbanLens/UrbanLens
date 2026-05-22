@@ -36,7 +36,7 @@ from typing import Any, Generic, TypeVar
 import tiktoken
 
 from urbanlens.dashboard.services.ai.message import MessageQueue
-from urbanlens.dashboard.services.ai.meta import FORMATTING, INSTRUCTIONS, MAX_TOKENS, PROJECT_DESCRIPTION
+from urbanlens.dashboard.services.ai.meta import FORMATTING, INSTRUCTIONS, MAX_TOKENS, PROJECT_DESCRIPTION, SHORTEST_MESSAGE
 
 logger = logging.getLogger(__name__)
 
@@ -335,10 +335,6 @@ class LLMGateway[Response](ABC):
             prompt (str):
                 The text prompt to be used for chat completion.
 
-        Raises:
-            ValueError:
-                If the prompt exceeds the maximum token limit.
-
         Returns:
             list[dict]:
                 A list of messages to be used for chat completion.
@@ -346,9 +342,29 @@ class LLMGateway[Response](ABC):
         """
         queue = MessageQueue()
         system_prompt = self.prepare_system_prompt()
-        queue.add_message(system_prompt, role="system")
-        queue.add_message(prompt, role="user")
 
+        # Truncate system prompt if it somehow exceeds the budget, leaving room for user input.
+        system_budget = self.max_tokens - SHORTEST_MESSAGE * 2
+        system_tokens = queue.estimate_tokens(system_prompt)
+        if system_tokens > system_budget:
+            # ~4 chars per token as a rough estimate
+            system_prompt = system_prompt[: system_budget * 4]
+            logger.warning("System prompt truncated to fit token budget (was ~%d tokens)", system_tokens)
+
+        queue.add_message(system_prompt, role="system")
+
+        used = queue.estimate_tokens()
+        user_budget = self.max_tokens - used - SHORTEST_MESSAGE
+        if user_budget <= 0:
+            logger.warning("System prompt consumes entire token budget; user prompt skipped")
+            return queue
+
+        user_tokens = queue.estimate_tokens(prompt)
+        if user_tokens - used > user_budget:
+            prompt = prompt[: user_budget * 4]
+            logger.warning("User prompt truncated to fit token budget")
+
+        queue.add_message(prompt, role="user")
         return queue
 
     def send_prompt(self, prompt: str, **kwargs) -> str | None:
@@ -363,7 +379,11 @@ class LLMGateway[Response](ABC):
             str | None: The answer from the AI model.
 
         """
-        queue = self.construct_messages(prompt)
+        try:
+            queue = self.construct_messages(prompt)
+        except ValueError:
+            logger.warning("Prompt exceeds token limit for model '%s'; skipping AI call", self.model)
+            return None
         self.send_tokens(queue)
 
         if response := self._get_response(queue):

@@ -54,13 +54,16 @@ MessageType = SystemMessage | UserMessage | AssistantMessage
 
 
 class MessageQueue:
-    messages: list[MessageType] = []
-    max_tokens: int = MAX_TOKENS
+    def __init__(self, max_tokens: int = MAX_TOKENS):
+        self.messages: list[MessageType] = []
+        self.max_tokens: int = max_tokens
 
     def add_message(self, message: str, role: Literal["user", "system", "assistant"] = "user") -> None:
         tokens = self.estimate_tokens(message)
         if tokens + SHORTEST_MESSAGE > self.max_tokens:
-            raise ValueError(f"Message length {tokens} would exceed maximum token limit of {self.max_tokens}.")
+            raise ValueError(
+                f"Message length {tokens} would exceed maximum token limit of {self.max_tokens}. Message = {message[:20]}...{message[-20:]}",
+            )
 
         msg: MessageType
         if role == "system":

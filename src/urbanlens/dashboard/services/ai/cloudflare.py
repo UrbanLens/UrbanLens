@@ -81,7 +81,7 @@ class CloudflareGateway(LLMGateway[Response]):
         """
         headers = {"Authorization": f"Bearer {self.api_key}"}
         message_input = {"messages": message_queue.messages}
-        url = f"{self.api_url}{self.model}"
+        url = f"{str(self.api_url).rstrip('/')}/{self.model.lstrip('/')}"
 
         try:
             logger.info("Cloudflare request: %s", message_input)
