@@ -221,7 +221,7 @@ class GoogleMapsGateway(Gateway):
 
         return pins
 
-    def _csv_row_iter(self, file_contents: str, user_profile: "Profile"):
+    def _csv_row_iter(self, file_contents: str, user_profile: Profile):
         """Generator yielding one pin_data dict per CSV row, geocoding on demand. Yields None for rows that fail.
 
         Args:
@@ -236,24 +236,31 @@ class GoogleMapsGateway(Gateway):
         for row in reader:
             url = row.get("URL", "")
             if not url:
-                logger.error("No url to extract coordinates from: row -> %s", row)
+                logger.warning("Skipping CSV row with no URL: %s", row)
                 yield None
                 continue
             try:
                 latitude, longitude = gateway.extract_coordinates_from_url(url)
-                yield {
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "profile": user_profile,
-                    "name": row.get("Title", ""),
-                    "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
-                }
-            except Exception as e:
-                logger.warning("Failed to geocode URL %s: %s", url, e)
+            except Exception as exc:
+                logger.warning("Failed to extract coordinates from URL %s: %s", url, exc)
                 yield None
+                continue
 
-    def import_pins_streaming(self, files: list[tuple[str, bytes]], user_profile: "Profile"):
-        """Generator that yields SSE data strings while importing pins from a list of files.
+            if latitude is None or longitude is None:
+                logger.warning("Could not resolve coordinates for URL: %s", url)
+                yield None
+                continue
+
+            yield {
+                "latitude": latitude,
+                "longitude": longitude,
+                "profile": user_profile,
+                "name": row.get("Title", ""),
+                "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
+            }
+
+    def import_pins_streaming(self, files: list[tuple[str, bytes]], user_profile: Profile):
+        r"""Generator that yields SSE data strings while importing pins from a list of files.
 
         Each yielded string is a complete SSE event in the format ``data: {...}\\n\\n``.
 
@@ -324,11 +331,7 @@ class GoogleMapsGateway(Gateway):
 
         try:
             for fmt, file_data, _file_total in parsed:
-                pin_iter = (
-                    self._csv_row_iter(file_data, user_profile)
-                    if fmt == "csv"
-                    else iter(file_data)
-                )
+                pin_iter = self._csv_row_iter(file_data, user_profile) if fmt == "csv" else iter(file_data)
 
                 for pin_data in pin_iter:
                     current += 1
@@ -357,28 +360,32 @@ class GoogleMapsGateway(Gateway):
                             skipped_count += 1
 
                     percent = min(100, int(current / grand_total * 100)) if grand_total > 0 else 100
-                    yield sse({
-                        "type": "progress",
-                        "current": current,
-                        "total": grand_total,
-                        "percent": percent,
-                        "created": created_count,
-                        "exists": exists_count,
-                        "skipped": skipped_count,
-                        "name": pin_name,
-                    })
+                    yield sse(
+                        {
+                            "type": "progress",
+                            "current": current,
+                            "total": grand_total,
+                            "percent": percent,
+                            "created": created_count,
+                            "exists": exists_count,
+                            "skipped": skipped_count,
+                            "name": pin_name,
+                        }
+                    )
         except Exception as exc:
             logger.exception("Unexpected error during streaming import: %s", exc)
             yield sse({"type": "error", "message": f"Import failed unexpectedly: {exc}"})
             return
 
-        yield sse({
-            "type": "complete",
-            "total": grand_total,
-            "created": created_count,
-            "exists": exists_count,
-            "skipped": skipped_count,
-        })
+        yield sse(
+            {
+                "type": "complete",
+                "total": grand_total,
+                "created": created_count,
+                "exists": exists_count,
+                "skipped": skipped_count,
+            }
+        )
 
     def takeout_kml_to_dict(self, file_contents: str, user_profile: Profile) -> list[dict[str, Any]]:
         try:

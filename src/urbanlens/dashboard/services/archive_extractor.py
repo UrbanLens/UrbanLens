@@ -114,7 +114,7 @@ def validate_content_type(name: str, data: bytes) -> str | None:
         return None
 
     # KML: XML document that contains a <kml element within the first 2 kB.
-    if text.startswith("<?xml") or text.startswith("<kml"):
+    if text.startswith(("<?xml", "<kml")):
         if "<kml" in text[:2000]:
             return "kml"
         logger.debug("File is XML but does not look like KML: %s", name)

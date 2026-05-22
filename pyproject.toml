@@ -749,8 +749,9 @@ ignore = [
     "W293",    # blank line contains whitespace
     "W391",    # blank line at end of file
     # Ambivalent about turning these on/off
-    "C901", # function is too complex
-    "B019", # possible memleak
+    "C901",   # function is too complex
+    "B019",   # possible memleak
+    "ARG001", # unused argument
     # Fix issues and turn these on
     "D1",      # Missing docstring...
     "S321",    # FTP functions are insecure

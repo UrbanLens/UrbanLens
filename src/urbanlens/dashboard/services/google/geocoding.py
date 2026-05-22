@@ -219,37 +219,121 @@ class GoogleGeocodingGateway(Gateway):
 
         return latitude, longitude
 
+    def get_coordinates_by_cid(self, cid: int) -> tuple[float | None, float | None]:
+        """Look up coordinates by Google Maps CID via the Places Details API.
+
+        CIDs are extracted from the ``!1s0x...`` segment of Google Maps place URLs.
+        Results are cached in :class:`GeocodedLocation` under the key ``cid:{cid}``.
+
+        Args:
+            cid: Decimal CID value derived from the hex identifier in the URL.
+
+        Returns:
+            Tuple of (latitude, longitude), or (None, None) if the lookup fails.
+        """
+        cache_key = f"cid:{cid}"
+        cached = GeocodedLocation.objects.filter(place_name=cache_key).first()
+        if cached:
+            try:
+                body = json.loads(cached.json_response or "null")
+                if body:
+                    loc = body.get("result", {}).get("geometry", {}).get("location", {})
+                    lat = loc.get("lat")
+                    lng = loc.get("lng")
+                    if lat is not None and lng is not None:
+                        return float(lat), float(lng)
+            except (json.JSONDecodeError, TypeError):
+                cached.delete()
+
+        params = {"cid": str(cid), "fields": "geometry", "key": self.api_key}
+        response = self.session.get(
+            "https://maps.googleapis.com/maps/api/place/details/json",
+            params=params,
+            timeout=60,
+        )
+        response.raise_for_status()
+        body = response.json()
+
+        if body.get("status") != "OK":
+            logger.warning(
+                "Places Details API returned status %s for CID %d",
+                body.get("status"),
+                cid,
+            )
+            return None, None
+
+        loc = body.get("result", {}).get("geometry", {}).get("location", {})
+        lat = loc.get("lat")
+        lng = loc.get("lng")
+
+        try:
+            GeocodedLocation.objects.create(
+                place_name=cache_key,
+                latitude=lat,
+                longitude=lng,
+                json_response=json.dumps(body),
+            )
+        except Exception:
+            logger.warning("Failed to cache CID lookup for %d", cid)
+
+        if lat is None or lng is None:
+            return None, None
+        return float(lat), float(lng)
+
     def extract_coordinates_from_url(self, url: str) -> tuple[float | None, float | None]:
+        """Extract latitude and longitude from a Google Maps URL.
+
+        Handles:
+
+        - ``/maps/search/{lat},{lon}`` — direct coordinates, no API call needed.
+        - ``/maps/place/{name}/data=...`` — CID extracted from the ``data`` segment
+          and resolved via the Places Details API (precise), falling back to
+          geocoding the place name when the CID lookup fails.
+        - ``/maps/place/{name}`` — geocoding by place name only.
+
+        Args:
+            url: Google Maps URL to parse.
+
+        Returns:
+            Tuple of (latitude, longitude), or (None, None) when extraction fails.
         """
-        Extracts latitude and longitude from a Google Maps URL.
-        """
-        # Grab coordinates from this format first: https://www.google.com/maps/search/42.960773,-74.250664
-        matches = re.match(
-            r".*maps/search/(?P<latitude>-?[0-9]+(\.[0-9]+)?),(?P<longitude>-?[0-9]+(\.[0-9]+)?)/?$",
+        # Direct coordinates: .../maps/search/42.960773,-74.250664
+        m = re.search(
+            r"maps/search/(?P<lat>-?[0-9]+\.[0-9]+),(?P<lon>-?[0-9]+\.[0-9]+)",
             url,
         )
-        if matches:
-            latitude = float(matches.group("latitude"))
-            longitude = float(matches.group("longitude"))
-            return latitude, longitude
+        if m:
+            return float(m.group("lat")), float(m.group("lon"))
 
-        # Handle urls like: https://www.google.com/maps/place/CharlesTown+USA+Mall/data=!4m2!3m1!1s0x89d9464ca04ccc2b:0x1046b3e3426a2065
-        # -- get the place name, then use the api to convert to coordinates
-        matches = re.match(r".*maps/place/(?P<place_name>[^/]+)/data", url)
+        # Place URL: .../maps/place/{name}[/data={encoded}]
+        m = re.search(
+            r"maps/place/(?P<name>[^/?#]+)(?:/data=(?P<data>[^?#]*))?",
+            url,
+        )
+        if m:
+            place_name = self.decode_place_name(m.group("name"))
+            data_param = m.group("data") or ""
 
-        if matches:
-            place_name = matches.group("place_name")
-            if not place_name:
-                logger.error("Unable to extract place name from url: %s", url)
-                return None, None
+            # The data segment encodes a CID as !1s0x{HEX}[:0x{HEX}].
+            # Using the CID avoids geocoding ambiguity for bare addresses like
+            # "3 Racecourse St" that have no city/country context.
+            cid_match = re.search(r"!1s0x([0-9a-fA-F]+)", data_param)
+            if cid_match:
+                try:
+                    cid = int(cid_match.group(1), 16)
+                    lat, lon = self.get_coordinates_by_cid(cid)
+                    if lat is not None and lon is not None:
+                        return lat, lon
+                except Exception as exc:
+                    logger.warning("CID lookup failed for %s: %s", url, exc)
 
-            place_name = self.decode_place_name(place_name)
-            latitude, longitude = self.get_coordinates(place_name)  # type: ignore[assignment]
+            # Fall back to geocoding by place name.
+            lat, lon = self.get_coordinates(place_name)
+            if lat is not None and lon is not None:
+                return lat, lon
 
-            if not latitude or not longitude:
-                logger.error('Unable to geocode place name "%s" from url: %s', place_name, url)
-                return None, None
-            return latitude, longitude
+            logger.warning('Unable to resolve place "%s" from url: %s', place_name, url)
+            return None, None
 
-        logger.error("Unable to extract coordinates from url: %s", url)
+        logger.warning("Unrecognised Google Maps URL format: %s", url)
         return None, None

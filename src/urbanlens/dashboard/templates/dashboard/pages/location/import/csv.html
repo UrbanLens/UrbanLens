@@ -4,7 +4,7 @@
     <h2>Import Pins</h2>
 
     <div id="import-form-section">
-        <p style="color:#888;font-size:.85rem;margin:-8px 0 18px">Supported: KML, GeoJSON, CSV (Google Takeout)</p>
+        <p style="color:#888;font-size:.85rem;margin:-8px 0 18px">Supported: KML, KMZ, GeoJSON, CSV (Google Takeout) — or a ZIP / TGZ containing any of the above. Multiple files accepted.</p>
         <form id="upload_takeout_form" action="{% url 'pin.upload.takeout' %}" enctype="multipart/form-data">
             {% csrf_token %}
             {{ form.as_p }}
