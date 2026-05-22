@@ -255,11 +255,18 @@ class GoogleGeocodingGateway(Gateway):
         body = response.json()
 
         if body.get("status") != "OK":
-            logger.warning(
-                "Places Details API returned status %s for CID %d",
-                body.get("status"),
-                cid,
-            )
+            status = body.get("status")
+            if status == "REQUEST_DENIED":
+                logger.error(
+                    "Places Details API REQUEST_DENIED for CID %d — the API key likely needs the Places API enabled in Google Cloud Console",
+                    cid,
+                )
+            else:
+                logger.warning(
+                    "Places Details API returned status %s for CID %d",
+                    status,
+                    cid,
+                )
             return None, None
 
         loc = body.get("result", {}).get("geometry", {}).get("location", {})
@@ -314,10 +321,11 @@ class GoogleGeocodingGateway(Gateway):
             place_name = self.decode_place_name(m.group("name"))
             data_param = m.group("data") or ""
 
-            # The data segment encodes a CID as !1s0x{HEX}[:0x{HEX}].
+            # The data segment encodes a compound ID as !1s0x{S2_CELL}:0x{PLACE_CID}.
+            # The CID (second hex value) is what Places Details API expects.
             # Using the CID avoids geocoding ambiguity for bare addresses like
             # "3 Racecourse St" that have no city/country context.
-            cid_match = re.search(r"!1s0x([0-9a-fA-F]+)", data_param)
+            cid_match = re.search(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)", data_param)
             if cid_match:
                 try:
                     cid = int(cid_match.group(1), 16)
