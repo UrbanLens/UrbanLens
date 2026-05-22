@@ -226,7 +226,7 @@ def _extract_tgz(data: bytes) -> list[ExtractedFile]:
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
             for member in tf.getmembers():
-                # Only regular files — skip dirs, symlinks, hardlinks, devices.
+                # Only regular files - skip dirs, symlinks, hardlinks, devices.
                 if not member.isfile():
                     continue
 

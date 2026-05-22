@@ -258,7 +258,7 @@ class GoogleGeocodingGateway(Gateway):
             status = body.get("status")
             if status == "REQUEST_DENIED":
                 logger.error(
-                    "Places Details API REQUEST_DENIED for CID %d — check key restrictions in Google Cloud Console",
+                    "Places Details API REQUEST_DENIED for CID %d - check key restrictions in Google Cloud Console",
                     cid,
                 )
             else:
@@ -292,11 +292,11 @@ class GoogleGeocodingGateway(Gateway):
 
         Handles:
 
-        - ``/maps/search/{lat},{lon}`` — direct coordinates, no API call needed.
-        - ``/maps/place/{name}/data=...`` — CID extracted from the ``data`` segment
+        - ``/maps/search/{lat},{lon}`` - direct coordinates, no API call needed.
+        - ``/maps/place/{name}/data=...`` - CID extracted from the ``data`` segment
           and resolved via the Places Details API (precise), falling back to
           geocoding the place name when the CID lookup fails.
-        - ``/maps/place/{name}`` — geocoding by place name only.
+        - ``/maps/place/{name}`` - geocoding by place name only.
 
         Args:
             url: Google Maps URL to parse.

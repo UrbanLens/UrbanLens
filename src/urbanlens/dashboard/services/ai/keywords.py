@@ -32,7 +32,7 @@ import re
 logger = logging.getLogger(__name__)
 
 # Ordered so that more specific multi-word patterns (e.g. "Fire Tower") beat their
-# single-word subsets (e.g. "Firehouse") — first match wins.
+# single-word subsets (e.g. "Firehouse") - first match wins.
 #
 # Separator convention:
 #   [\s-]+  between words where a gap is always expected  ("fire station", "fire-station")
@@ -292,7 +292,7 @@ def categorize_by_keywords(text: str) -> str | None:
 
     Iterates through known urbex categories in priority order and returns the first
     category whose patterns match the supplied text.  Only name and place_name fields
-    should be passed in — avoid addresses, which produce too many false positives
+    should be passed in - avoid addresses, which produce too many false positives
     (e.g. "Church Street" → Church).
 
     Args:

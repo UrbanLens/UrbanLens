@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 UrbanLens is a Django-based web mapping application for photographers and urban explorers to organize and share urbex locations responsibly. The stack includes Django 5.1+, Django REST Framework, PostGIS for spatial data, HTMX for interactivity, and a TypeScript/SCSS frontend.
 
-**This project is under active development.** Irregularities, inconsistencies, or suboptimal patterns in existing code are bugs to be fixed — not conventions to follow or replicate. When something looks wrong, it probably is.
+**This project is under active development.** Irregularities, inconsistencies, or suboptimal patterns in existing code are bugs to be fixed - not conventions to follow or replicate. When something looks wrong, it probably is.
 
 ## Development Environment
 
@@ -51,7 +51,7 @@ pytest src/urbanlens/dashboard/tests/test_models.py::PinTestCase::test_pin_creat
 coverage run --source='.' manage.py test && coverage report
 ```
 
-> Common development commands should be consolidated into `pyproject.toml` scripts, `package.json`, and/or VSCode tasks — add new ones there rather than leaving them undocumented.
+> Common development commands should be consolidated into `pyproject.toml` scripts, `package.json`, and/or VSCode tasks - add new ones there rather than leaving them undocumented.
 
 ## Project Structure
 
@@ -114,18 +114,18 @@ src/urbanlens/
 
 ### OOP and Inheritance
 
-OOP is the standard approach throughout this codebase. Prefer inheritance (with Python generics where applicable) for abstraction and extensibility — this avoids code duplication across similar models, views, serializers, and services. All major base classes live in `dashboard/models/abstract/` and should be used as the foundation for new code.
+OOP is the standard approach throughout this codebase. Prefer inheritance (with Python generics where applicable) for abstraction and extensibility - this avoids code duplication across similar models, views, serializers, and services. All major base classes live in `dashboard/models/abstract/` and should be used as the foundation for new code.
 
 ### Models & ORM
 
 All models inherit from `urbanlens.dashboard.models.abstract.Model`, which provides `created`/`updated` fields and the custom manager.
 
 Each entity under `models/` has:
-- `model.py` — ORM model
-- `queryset.py` — Custom QuerySet with domain logic
-- `serializer.py` — DRF serializer
-- `viewset.py` — DRF ViewSet
-- `filterset.py` — django-filter config
+- `model.py` - ORM model
+- `queryset.py` - Custom QuerySet with domain logic
+- `serializer.py` - DRF serializer
+- `viewset.py` - DRF ViewSet
+- `filterset.py` - django-filter config
 
 **QuerySet/Manager pattern**: Custom QuerySets on `objects` handle filtering, annotation, and geo queries (PostGIS `__distance`, `__contains`, etc.). Always use `select_related`/`prefetch_related` appropriately.
 
@@ -134,9 +134,9 @@ Each entity under `models/` has:
 REST API endpoints use DRF ViewSets registered via a `DefaultRouter` under `/rest/`. Custom actions use `@action(detail=True, methods=[...])`.
 
 Template/HTMX views use `TemplateView` or `ViewMixin` and return rendered HTML. Key controllers:
-- `maps.MapController` — Map display, pin add/edit, search
-- `pin.PinController` — Pin detail, image/weather/search integrations
-- `userprofile.ViewProfileView/EditProfileView` — Profile CRUD
+- `maps.MapController` - Map display, pin add/edit, search
+- `pin.PinController` - Pin detail, image/weather/search integrations
+- `userprofile.ViewProfileView/EditProfileView` - Profile CRUD
 
 ### URL Routing
 
@@ -158,13 +158,13 @@ dashboard/
 
 ### API Integrations
 
-The project connects to many external APIs (Google Maps/Places/Search, OpenWeatherMap, Smithsonian, NPS, OpenAI, etc.) via service classes in `dashboard/services/`. Each service wraps one API. New API integrations that provide useful data about locations are almost always welcome additions — add them as service classes following the existing pattern.
+The project connects to many external APIs (Google Maps/Places/Search, OpenWeatherMap, Smithsonian, NPS, OpenAI, etc.) via service classes in `dashboard/services/`. Each service wraps one API. New API integrations that provide useful data about locations are almost always welcome additions - add them as service classes following the existing pattern.
 
 When calling any paid API, track usage and cost per call (keep a running estimate). This is required groundwork for future cost reporting.
 
 ## Code Quality Standards
 
-**Docstrings**: All classes and methods must have Google-style docstrings (Args, Returns, Raises sections). These will be consumed by Sphinx for ReadTheDocs-style documentation — completeness matters.
+**Docstrings**: All classes and methods must have Google-style docstrings (Args, Returns, Raises sections). These will be consumed by Sphinx for ReadTheDocs-style documentation - completeness matters.
 
 **Linting & Formatting**:
 - Ruff enforces Google style, tabs for indentation, max line length 250
@@ -193,7 +193,7 @@ Deployed in production via Portainer on Ubuntu.
 
 ## Roadmap / Known TODOs
 
-These are planned features — treat any missing implementation as a gap to fill, not a deliberate omission:
+These are planned features - treat any missing implementation as a gap to fill, not a deliberate omission:
 
 - **AI support**: Add AI-assisted suggestions and customization throughout the application (OpenAI integration exists, extend it)
 - **UI modernization**: Current UI is functional but dated. Move toward a sleek, professional, modern aesthetic
@@ -203,7 +203,7 @@ These are planned features — treat any missing implementation as a gap to fill
 - **Google Search integration**: Surface recent news articles about a location on the pin detail page
 - **API cost tracking**: Log and aggregate cost estimates on every external API call
 - **Celery / async tasks**: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure
-- **Data encryption & access control**: All user data must be encrypted at rest and scoped strictly to the submitting user — this will become a hard requirement
+- **Data encryption & access control**: All user data must be encrypted at rest and scoped strictly to the submitting user - this will become a hard requirement
 - **Hypothesis unit tests**: Add property-based tests for critical business logic (e.g., geospatial queries, API response parsing)
 
 ## UI & UX Standards

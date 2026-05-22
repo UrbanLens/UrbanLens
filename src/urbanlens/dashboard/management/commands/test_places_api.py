@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-import requests
 
 from django.core.management.base import BaseCommand
+import requests
 
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -87,62 +87,80 @@ class Command(BaseCommand):
         session = requests.Session()
 
         # ------------------------------------------------------------------
-        # Test 1: Nearby search — confirms the key works for Places API at all
+        # Test 1: Nearby search - confirms the key works for Places API at all
         # ------------------------------------------------------------------
         print("--- Test 1: Nearby Search (confirms Places API enabled) ---")
-        resp = session.get(NEARBY_SEARCH_URL, params={
-            "location": f"{KNOWN_LAT},{KNOWN_LNG}",
-            "radius": 100,
-            "key": key,
-        }, timeout=10)
+        resp = session.get(
+            NEARBY_SEARCH_URL,
+            params={
+                "location": f"{KNOWN_LAT},{KNOWN_LNG}",
+                "radius": 100,
+                "key": key,
+            },
+            timeout=10,
+        )
         body1 = _print_result("Nearby Search", resp)
 
         # ------------------------------------------------------------------
-        # Test 2: Find Place from text — another basic endpoint
+        # Test 2: Find Place from text - another basic endpoint
         # ------------------------------------------------------------------
         print("--- Test 2: Find Place from Text ---")
-        resp = session.get(FIND_PLACE_URL, params={
-            "input": "Empire State Building",
-            "inputtype": "textquery",
-            "fields": "name,place_id",
-            "key": key,
-        }, timeout=10)
+        resp = session.get(
+            FIND_PLACE_URL,
+            params={
+                "input": "Empire State Building",
+                "inputtype": "textquery",
+                "fields": "name,place_id",
+                "key": key,
+            },
+            timeout=10,
+        )
         _print_result("Find Place from Text", resp)
 
         # ------------------------------------------------------------------
         # Test 3: Place Details with a known stable place_id
         # ------------------------------------------------------------------
         print("--- Test 3: Place Details with standard place_id ---")
-        resp = session.get(PLACES_DETAILS_URL, params={
-            "place_id": KNOWN_PLACE_ID,
-            "fields": "name,geometry",
-            "key": key,
-        }, timeout=10)
+        resp = session.get(
+            PLACES_DETAILS_URL,
+            params={
+                "place_id": KNOWN_PLACE_ID,
+                "fields": "name,geometry",
+                "key": key,
+            },
+            timeout=10,
+        )
         _print_result(f"Place Details (place_id={KNOWN_PLACE_ID[:12]}...)", resp)
 
         # ------------------------------------------------------------------
-        # Test 4: CID lookup — CURRENT (broken) format: ?cid=NUMBER
+        # Test 4: CID lookup - CURRENT (broken) format: ?cid=NUMBER
         # This is what the code currently does at geocoding.py:248
         # ------------------------------------------------------------------
-        print("--- Test 4: CID lookup — current code format (?cid=NUMBER) ---")
-        print("  (This is the format your code uses — expected to FAIL)")
-        resp = session.get(PLACES_DETAILS_URL, params={
-            "cid": str(cid),
-            "fields": "geometry",
-            "key": key,
-        }, timeout=10)
+        print("--- Test 4: CID lookup - ?cid=NUMBER ---")
+        resp = session.get(
+            PLACES_DETAILS_URL,
+            params={
+                "cid": str(cid),
+                "fields": "geometry",
+                "key": key,
+            },
+            timeout=10,
+        )
         _print_result(f"Place Details cid={cid} [broken format]", resp)
 
         # ------------------------------------------------------------------
-        # Test 5: CID lookup — CORRECT format: ?place_id=cid:NUMBER
+        # Test 5: CID lookup - CORRECT format: ?place_id=cid:NUMBER
         # ------------------------------------------------------------------
-        print("--- Test 5: CID lookup — correct format (?place_id=cid:NUMBER) ---")
-        print("  (This is the format the Places API actually expects)")
-        resp = session.get(PLACES_DETAILS_URL, params={
-            "place_id": f"cid:{cid}",
-            "fields": "geometry",
-            "key": key,
-        }, timeout=10)
+        print("--- Test 5: CID lookup - ?place_id=cid:NUMBER) ---")
+        resp = session.get(
+            PLACES_DETAILS_URL,
+            params={
+                "place_id": f"cid:{cid}",
+                "fields": "geometry",
+                "key": key,
+            },
+            timeout=10,
+        )
         _print_result(f"Place Details place_id=cid:{cid} [correct format]", resp)
 
         # ------------------------------------------------------------------
@@ -152,24 +170,26 @@ class Command(BaseCommand):
         if maps_key and maps_key != key:
             print("--- Test 6: CID lookup with google_maps_api_key instead ---")
             print("  (Testing in case your CID lookups should use the Maps key)")
-            resp = session.get(PLACES_DETAILS_URL, params={
-                "place_id": f"cid:{cid}",
-                "fields": "geometry",
-                "key": maps_key,
-            }, timeout=10)
+            resp = session.get(
+                PLACES_DETAILS_URL,
+                params={
+                    "place_id": f"cid:{cid}",
+                    "fields": "geometry",
+                    "key": maps_key,
+                },
+                timeout=10,
+            )
             _print_result(f"Place Details cid:{cid} [maps key]", resp)
+
+        # ------------------------------------------------------------------
+        # Test 7: Use our code to call the places API
+        # ------------------------------------------------------------------
 
         print("=" * 60)
         print("  Summary")
         print("=" * 60)
         t1_ok = body1.get("status") == "OK"
         if not t1_ok:
-            print("  ! Nearby Search failed — the key itself may be invalid or")
+            print("  ! Nearby Search failed - the key itself may be invalid or")
             print("    the Places API is not enabled for this key.")
-        else:
-            print("  + Basic Places API calls succeed.")
-            print("  + If Test 4 failed and Test 5 passed, the fix is in geocoding.py:248 —")
-            print('    change `"cid": str(cid)` to `"place_id": f"cid:{cid}"`.')
-            print("  + If both Tests 4 and 5 failed, check API key restrictions")
-            print("    (the key may not allow the Place Details endpoint).")
         print()
