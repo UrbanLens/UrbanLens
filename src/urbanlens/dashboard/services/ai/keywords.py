@@ -46,7 +46,7 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\bflughafen\b",
     ],
     "Amusement Park": [
-        r"\b(?:amusement|theme)[\s-]+park\b",
+        r"\b(?:amusement|theme)[\s-]*park\b",
         r"\b(fun|renaissance)[\s-]*fair\b",
         r"\bcarnival\b",
         r"\bwater[\s-]*park\b",
@@ -62,6 +62,8 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\bmadhouse\b",
         r"\bmanicomio\b",
         r"\bmental[\s-]+(?:health|hospital)\b",
+        r"\binsan(e|ity)\b",
+        r"\bretar[dt](ed|ation)?\b",
     ],
     "Bank": [
         r"\bbank\b",
@@ -73,18 +75,15 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\bviaduct\b",
         r"\btrestle\b",
         r"\boverpass\b",
-        # French/Spanish — short words kept last to reduce false positives
-        r"\bpont\b",
-        r"\bpuente\b",
     ],
     "Bunker": [
         r"\bbunker\b",
-        r"\b(?:bomb|fallout|air[\s-]*raid)[\s-]+shelter\b",
+        r"\b(?:bomb|fallout|air[\s-]*raid)[\s-]*shelter\b",
     ],
     "Cars": [
         r"\bjunkyard\b",
         r"\bscrapyard\b",
-        r"\b(?:salvage|wrecking)[\s-]+yard\b",
+        r"\b(?:salvage|wrecking)[\s-]*yard\b",
         r"\b(?:auto|car)[\s-]+graveyard\b",
     ],
     "Castle": [
@@ -102,22 +101,22 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\b(?:monastery|convent|abbey|priory|friary|rectory)\b",
         r"\b(?:synagogue|mosque|minaret|temple|shrine|parish|sanctuary)\b",
         r"\biglesia\b",
-        r"\bé?glise\b",
+        r"\b[eé]?glise\b",
         r"\bkirche\b",
         r"\bsantuario\b",
         r"\bErmita\b",
     ],
     "Fire Tower": [
-        r"\bfire[\s-]+(?:tower|lookout)\b",
+        r"\bfire[\s-]*(?:tower|lookout)\b",
         r"\blookout[\s-]+tower\b",
     ],
     "Firehouse": [
         r"\bfire[\s-]*(station|hall|house)\b",
     ],
     "Funeral Home": [
-        r"\bfuneral[\s-]+(?:home|parlou?r)\b",
+        r"\bfuneral[\s-]*(?:home|parlou?r)\b",
         r"\bmortuary\b",
-        r"\bcremator(?:y|ium)\b",
+        r"\bcremator(?:y|ium|ie)\b",
         r"\bmorgue\b",
     ],
     "Graveyard": [
@@ -126,7 +125,7 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\bburial[\s-]+ground\b",
         r"\b(?:mausoleum|necropolis|churchyard|crypt|tomb)\b",
         r"\bcamposanto\b",
-        r"\bcimetière\b",
+        r"\bcimeti[eè]re\b",
         r"\bfriedhof\b",
     ],
     "Hospital": [
@@ -134,7 +133,7 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\binfirmary\b",
         r"\bmedical[\s-]+cent(?:er|re)\b",
         r"\bdispensary\b",
-        r"\bhôpital\b",
+        r"\bh[oô]pital\b",
         r"\bkrankenhaus\b",
     ],
     "Hotel": [
@@ -156,27 +155,23 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
     ],
     "Library": [
         r"\blibrar(?:y|ies)\b",
-        r"\bbibliothèque\b",
+        r"\bbiblioth[eè]que\b",
         r"\bbiblioteca\b",
-        r"\bbücherei\b",
+        r"\bb[uü]cherei\b",
     ],
     "Lighthouse": [
-        r"\blighthouse\b",
-        r"\blight[\s-]+station\b",
+        r"\blight[\s-]*(house|station)\b",
     ],
     "Mall": [
-        r"\bshopping[\s-]+(?:mall|cent(?:er|re)|plaza|arcade)\b",
+        r"\bshopping[\s-]*(?:mall|cent(?:er|re)|plaza|arcade)\b",
         r"\bgalleria\b",
     ],
     "Mansion": [
         r"\bmansion\b",
-        r"\bmanor(?:[\s-]+house)?\b",
-        r"\bgrand[\s-]+house\b",
+        r"\b(manor|grand)[\s-]*house\b",
     ],
     "Military Base": [
-        r"\b(?:military|army|naval)[\s-]+base\b",
-        r"\bair[\s-]+force[\s-]+base\b",
-        r"\bmilitary[\s-]+install",
+        r"\b(military|army|naval|air[\s-]*force|coast[\s-]*guard)\b",
         r"\bbarracks\b",
         r"\bcaserne\b",
     ],
@@ -187,7 +182,7 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\bstatue\b",
     ],
     "Police Station": [
-        r"\bpolice[\s-]+(?:station|department|dept)\b",
+        r"\bpolice[\s-]*(?:station|department|dept?)\b",
         r"\bcommissariat\b",
         r"\bconstabular(?:y|ies)\b",
         r"\bprecinct\b",
@@ -195,9 +190,10 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\bjailhouse\b",
     ],
     "Power Plant": [
-        r"\bpower[\s-]+(?:plant|station)\b",
+        r"\bpower[\s-]*(?:plant|station)\b",
         r"\b(?:nuclear|coal|gas)[\s-]+(?:plant|station)\b",
         r"\b(?:generating|electrical)[\s-]+station\b",
+        r"\bsub[\s-]*station\b",
     ],
     "Prison": [
         r"\bprison\b",
@@ -207,7 +203,7 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\breformator(?:y|ies)\b",
         r"\bpenal[\s-]+(?:colony|institution|farm)\b",
         r"\bjail\b",
-        r"\bpénitencier\b",
+        r"\bp[eé]nitencier\b",
     ],
     "Resort": [
         r"\bresort\b",
@@ -216,9 +212,10 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
     ],
     "Ruins": [
         r"\bruins?\b",
+        r"\bdemolished\b",
     ],
     "School": [
-        r"\b(?:high|elementary|middle)[\s-]+school\b",
+        r"\b(?:high|elementary|middle)[\s-]*school\b",
         r"\bschool\b",
         r"\bacademy\b",
         r"\buniversity\b",
@@ -226,7 +223,7 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\bseminar(?:y|ies)\b",
         r"\binstitute\b",
         r"\bdormi(?:tory|tories)\b",
-        r"\bé?cole\b",
+        r"\b[eé]?cole\b",
         r"\bescuela\b",
         r"\bschule\b",
     ],
@@ -242,7 +239,7 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
     "Theater": [
         r"\btheat(?:er|re)\b",
         r"\bcinema\b",
-        r"\b(?:movie|opera)[\s-]+house\b",
+        r"\b(?:movie|opera)[\s-]*house\b",
         r"\bplayhouse\b",
         r"\bauditorium\b",
         r"\bdrive[\s-]*in\b",
@@ -254,7 +251,7 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\blocomotiv(?:e|es)\b",
     ],
     "Train Station": [
-        r"\b(?:train|rail(?:way|road)?)[\s-]+station\b",
+        r"\b(?:train|rail(?:way|road)?)[\s-]*station\b",
         r"\bterminus\b",
         r"\bdepot\b",
         r"\bestaci[oó]n\b",
@@ -270,7 +267,7 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
         r"\b(?:foundr|brewer|distiller|canner|tanner|refiner)(?:y|ies)\b",
         r"\bmanufacturing\b",
         r"\busine\b",
-        r"\bfábrica\b",
+        r"\bf[aá]brica\b",
     ],
 }
 
