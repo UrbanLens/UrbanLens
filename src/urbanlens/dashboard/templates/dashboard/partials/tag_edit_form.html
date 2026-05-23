@@ -27,40 +27,31 @@
         <div class="form-field">
             <label class="form-label">Icon</label>
             <div class="icon-picker-wrap">
-                <div class="icon-picker" id="edit-icon-picker-{{ tag.id }}">
-                    <input type="hidden" name="icon" id="edit-icon-value-{{ tag.id }}" value="{{ tag.icon|default:'' }}">
-                    {% for key, label in icon_choices %}
-                    <button type="button"
-                            class="icon-option {% if not tag.custom_icon and tag.icon == key %}selected{% endif %}"
-                            data-icon="{{ key }}" title="{{ label }}"
-                            onclick="editPickStandardIcon('{{ tag.id }}', '{{ key }}', this)">
-                        <i class="material-icons">{{ key }}</i>
-                    </button>
-                    {% endfor %}
-                </div>
-                <div class="icon-picker-actions">
-                    <button type="button"
-                            class="icon-option icon-clear {% if not tag.custom_icon and not tag.icon %}selected{% endif %}"
-                            title="No icon"
-                            onclick="editPickStandardIcon('{{ tag.id }}', '', this)">
-                        <i class="material-icons">block</i>
-                    </button>
-                    <label class="icon-option icon-upload-btn {% if tag.custom_icon %}selected{% endif %}"
-                           id="edit-upload-btn-{{ tag.id }}" title="Upload custom icon">
-                        {% if tag.custom_icon %}
-                        <img src="{{ tag.custom_icon.url }}" id="edit-custom-preview-{{ tag.id }}" class="icon-custom-thumb">
-                        {% else %}
-                        <i class="material-icons" id="edit-upload-glyph-{{ tag.id }}">upload</i>
-                        <img id="edit-custom-preview-{{ tag.id }}" class="icon-custom-thumb" style="display:none">
-                        {% endif %}
-                        <input type="file" name="custom_icon" id="edit-custom-input-{{ tag.id }}" accept="image/*" style="display:none"
-                               onchange="editPickCustomIcon('{{ tag.id }}', this)">
-                    </label>
-                </div>
+                {% with picker_id=tag.id|stringformat:"d" current_icon=tag.icon|default:"" field_name="icon" %}
+                {% include 'dashboard/partials/_icon_picker.html' %}
+                {% endwith %}
+            </div>
+
+            {# Custom icon upload (separate from the standard icon picker) #}
+            <div class="icon-custom-upload-area" style="margin-top:8px;">
+                {% if tag.custom_icon %}
+                <img src="{{ tag.custom_icon.url }}" class="icon-custom-preview-thumb"
+                     id="edit-custom-preview-{{ tag.id }}" alt="Custom icon">
+                {% else %}
+                <img id="edit-custom-preview-{{ tag.id }}" class="icon-custom-preview-thumb" style="display:none" alt="">
+                {% endif %}
+                <label class="icon-custom-upload-btn" title="Upload a custom image icon">
+                    <i class="material-icons">upload</i>
+                    Upload custom
+                    <input type="file" name="custom_icon" id="edit-custom-input-{{ tag.id }}"
+                           accept="image/*" style="display:none"
+                           onchange="showCustomPreview('{{ tag.id }}', this)">
+                </label>
             </div>
             {% if tag.custom_icon %}
             <label class="checkbox-label" style="margin-top:6px;font-size:.82rem;color:#888;">
-                <input type="checkbox" name="clear_custom_icon" value="1" id="edit-clear-custom-{{ tag.id }}"> Remove custom icon
+                <input type="checkbox" name="clear_custom_icon" value="1"
+                       id="edit-clear-custom-{{ tag.id }}"> Remove custom icon
             </label>
             {% endif %}
         </div>
@@ -95,7 +86,12 @@
                 <input type="checkbox" name="parent_ids" value="{{ t.id }}"
                        {% if t.id|in_list:parent_ids %}checked{% endif %}>
                 {% if t.custom_icon %}<img src="{{ t.custom_icon.url }}" class="tag-parent-icon-img" alt="">
-                {% elif t.icon %}<i class="material-icons" {% if t.color %}style="color:{{ t.color }}"{% endif %}>{{ t.icon }}</i>
+                {% elif t.icon %}
+                    {% if t.icon|is_material_icon %}
+                    <i class="material-icons" {% if t.color %}style="color:{{ t.color }}"{% endif %}>{{ t.icon }}</i>
+                    {% else %}
+                    <span>{{ t.icon }}</span>
+                    {% endif %}
                 {% endif %}
                 {{ t.name }}
             </label>
@@ -113,42 +109,24 @@
 </form>
 
 <script>
-function editPickStandardIcon(tagId, iconKey, btn) {
-    var customInput = document.getElementById('edit-custom-input-' + tagId);
-    var hasNewFile = customInput && customInput.files && customInput.files.length > 0;
-    var hasExisting = document.getElementById('edit-clear-custom-' + tagId) !== null;
-    if (hasNewFile || hasExisting) {
-        if (!confirm('Use this standard icon instead of your custom icon?')) return;
-        if (customInput) customInput.value = '';
-        var preview = document.getElementById('edit-custom-preview-' + tagId);
-        if (preview) { preview.style.display = 'none'; preview.src = ''; }
-        var glyph = document.getElementById('edit-upload-glyph-' + tagId);
-        if (glyph) glyph.style.display = '';
-        var uploadBtn = document.getElementById('edit-upload-btn-' + tagId);
-        if (uploadBtn) uploadBtn.classList.remove('selected');
-        var clearChk = document.getElementById('edit-clear-custom-' + tagId);
-        if (clearChk) clearChk.checked = true;
-    }
-    document.getElementById('edit-icon-picker-' + tagId).querySelectorAll('.icon-option').forEach(function (b) { b.classList.remove('selected'); });
-    btn.classList.add('selected');
-    document.getElementById('edit-icon-value-' + tagId).value = iconKey;
-}
-
-function editPickCustomIcon(tagId, input) {
+function showCustomPreview(tagId, input) {
     if (!input.files || !input.files[0]) return;
-    document.getElementById('edit-icon-picker-' + tagId).querySelectorAll('.icon-option').forEach(function (b) { b.classList.remove('selected'); });
-    document.getElementById('edit-icon-value-' + tagId).value = '';
-    var clearChk = document.getElementById('edit-clear-custom-' + tagId);
-    if (clearChk) clearChk.checked = false;
+    var preview = document.getElementById('edit-custom-preview-' + tagId);
+    if (!preview) return;
     var reader = new FileReader();
-    reader.onload = function (e) {
-        var preview = document.getElementById('edit-custom-preview-' + tagId);
+    reader.onload = function(e) {
         preview.src = e.target.result;
         preview.style.display = 'block';
-        var glyph = document.getElementById('edit-upload-glyph-' + tagId);
-        if (glyph) glyph.style.display = 'none';
-        document.getElementById('edit-upload-btn-' + tagId).classList.add('selected');
     };
     reader.readAsDataURL(input.files[0]);
 }
+
+function pickColor(pickerId, valueId, colorHex, btn) {
+    var picker = document.getElementById(pickerId);
+    picker.querySelectorAll('.color-swatch').forEach(function(b) { b.classList.remove('selected'); });
+    btn.classList.add('selected');
+    document.getElementById(valueId).value = colorHex;
+}
+
+// IconPicker is defined in tags/index.html; available globally after initial load.
 </script>

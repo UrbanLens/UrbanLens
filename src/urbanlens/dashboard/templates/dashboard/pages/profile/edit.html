@@ -256,7 +256,12 @@ function closeDateErrorDialog() {
                     }
                 } else {
                     var msg = data.error || 'Save failed.';
-                    setStatus(field, 'error', msg);
+                    // Clear the field value and show a red X indicator
+                    var input = document.querySelector('[data-autosave="' + field + '"]');
+                    if (input && input.type !== 'file') { input.value = ''; }
+                    setStatus(field, 'error', '✗');
+                    // Full message via toastr
+                    toastr.error(msg);
                     if (field === 'birth_date' || field === 'started_exploring') {
                         showDateDialog(msg);
                     }

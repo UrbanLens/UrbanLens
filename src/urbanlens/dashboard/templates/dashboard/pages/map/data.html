@@ -5,9 +5,17 @@
 
         if (pin.icon && pin.icon !== 'undefined') {
             var color = (pin.color && pin.color !== 'None') ? pin.color : '#555555';
+            var iconHtml;
+            if (/^[a-z_]+$/.test(pin.icon)) {
+                // Material Icons name
+                iconHtml = '<i class="material-icons map-pin-icon" style="color:' + color + ';">' + pin.icon + '</i>';
+            } else {
+                // Emoji or unicode icon
+                iconHtml = '<span class="map-pin-emoji">' + pin.icon + '</span>';
+            }
             marker.setIcon(L.divIcon({
                 className: 'map-pin-icon-wrap',
-                html: '<i class="material-icons map-pin-icon" style="color:' + color + ';">' + pin.icon + '</i>',
+                html: iconHtml,
                 iconSize: [28, 28],
                 iconAnchor: [14, 14]
             }));

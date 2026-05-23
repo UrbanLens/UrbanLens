@@ -11,7 +11,7 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.tags.model import COLOR_CHOICES, ICON_CHOICES, Tag
+from urbanlens.dashboard.models.tags.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Tag
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ class TagIndexView(LoginRequiredMixin, View):
         return render(request, "dashboard/pages/tags/index.html", {
             "tags": tags,
             "icon_choices": ICON_CHOICES,
+            "icon_categories": ICON_CATEGORIES,
             "color_choices": COLOR_CHOICES,
         })
 
@@ -62,6 +63,7 @@ class TagCreateView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/tag_rows.html", {
             "tags": tags,
             "icon_choices": ICON_CHOICES,
+            "icon_categories": ICON_CATEGORIES,
             "color_choices": COLOR_CHOICES,
             "new_tag_id": tag.id,
         })
@@ -80,6 +82,7 @@ class TagEditView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/tag_edit_form.html", {
             "tag": tag,
             "icon_choices": ICON_CHOICES,
+            "icon_categories": ICON_CATEGORIES,
             "color_choices": COLOR_CHOICES,
             "available_parents": available_parents,
             "parent_ids": parent_ids,
@@ -120,6 +123,7 @@ class TagEditView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/tag_rows.html", {
             "tags": tags,
             "icon_choices": ICON_CHOICES,
+            "icon_categories": ICON_CATEGORIES,
             "color_choices": COLOR_CHOICES,
         })
 
@@ -139,6 +143,7 @@ class TagDeleteView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/tag_rows.html", {
             "tags": tags,
             "icon_choices": ICON_CHOICES,
+            "icon_categories": ICON_CATEGORIES,
             "color_choices": COLOR_CHOICES,
         })
 
@@ -154,8 +159,11 @@ class TagReorderView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Invalid data"}, status=400)
 
         profile = request.user.profile
+        total = len(tag_ids)
         for i, tag_id in enumerate(tag_ids):
-            Tag.objects.filter(id=tag_id, profile=profile).update(order=i)
+            # Assign descending values so top item gets the highest order,
+            # matching the ordered() queryset which sorts by -order.
+            Tag.objects.filter(id=tag_id, profile=profile).update(order=total - i)
 
         return JsonResponse({"ok": True})
 

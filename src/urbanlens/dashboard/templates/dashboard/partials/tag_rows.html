@@ -15,7 +15,11 @@
             {% if tag.custom_icon %}
             <img src="{{ tag.custom_icon.url }}" alt="" class="tag-icon-img">
             {% elif tag.icon %}
-            <i class="material-icons tag-icon-std" {% if tag.color %}style="color:{{ tag.color }}"{% endif %}>{{ tag.icon }}</i>
+                {% if tag.icon|is_material_icon %}
+                <i class="material-icons tag-icon-std" {% if tag.color %}style="color:{{ tag.color }}"{% endif %}>{{ tag.icon }}</i>
+                {% else %}
+                <span class="tag-icon-emoji">{{ tag.icon }}</span>
+                {% endif %}
             {% else %}
             <i class="material-icons tag-icon-std tag-icon-empty">label</i>
             {% endif %}
@@ -48,6 +52,7 @@
 
         {% if tag.profile %}
         <div class="tag-card-actions">
+            <span class="tag-order-badge" title="Order">{{ forloop.counter }}</span>
             <button type="button" class="btn-icon" title="Edit"
                     hx-get="{% url 'tag.edit' tag.id %}"
                     hx-target="#tag-card-{{ tag.id }}"

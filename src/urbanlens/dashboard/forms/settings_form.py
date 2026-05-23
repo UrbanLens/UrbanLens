@@ -10,13 +10,13 @@ class PrivacySettingsForm(forms.ModelForm):
 
     profile_visibility = forms.ChoiceField(
         choices=VisibilityChoice.choices,
-        widget=forms.Select(attrs={"class": "settings-select"}),
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Profile Visibility",
         help_text="Who can view your profile page.",
     )
     comment_visibility = forms.ChoiceField(
         choices=VisibilityChoice.choices,
-        widget=forms.Select(attrs={"class": "settings-select"}),
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Comment Visibility",
         help_text="Who can see your comments on locations.",
     )
@@ -38,7 +38,11 @@ class ContactSettingsForm(forms.Form):
     email = forms.EmailField(
         label="Email Address",
         help_text="Used for account recovery and notifications.",
-        widget=forms.EmailInput(attrs={"class": "settings-input", "autocomplete": "email"}),
+        widget=forms.EmailInput(attrs={
+            "class": "settings-input",
+            "autocomplete": "email",
+            "placeholder": "your@email.com",
+        }),
     )
 
 
