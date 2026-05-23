@@ -26,4 +26,4 @@ class TagSerializer(serializers.ModelSerializer):
         return None
 
     def get_pin_count(self, obj: Tag) -> int:
-        return obj.pin_set.count()
+        return obj.pins.count()

@@ -26,7 +26,7 @@
             <div class="tag-card-meta">
                 <span class="tag-pin-count">
                     <i class="material-icons">push_pin</i>
-                    {{ tag.pin_set.count }} pin{{ tag.pin_set.count|pluralize }}
+                    {{ tag.pins.count }} pin{{ tag.pins.count|pluralize }}
                 </span>
                 {% if tag.color %}
                 <span class="tag-color-dot" style="background:{{ tag.color }};" title="{{ tag.color }}"></span>
