@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
@@ -37,6 +36,7 @@ class ViewProfileView(LoginRequiredMixin, View):
             profile, _ = Profile.objects.get_or_create(user=request.user)
 
         from urbanlens.dashboard.services.social_links import get_profile_links
+
         context = {
             "profile": profile,
             "social_links": get_profile_links(profile),
@@ -75,6 +75,7 @@ class ViewProfileView(LoginRequiredMixin, View):
 
         if visibility == VisibilityChoice.FRIENDS:
             from urbanlens.dashboard.models.friendship.model import Friendship
+
             try:
                 friendship = Friendship.objects.between(my_profile, profile)
                 return FriendshipStatus.is_friend(friendship.status)
@@ -83,12 +84,10 @@ class ViewProfileView(LoginRequiredMixin, View):
 
         if visibility == VisibilityChoice.COMMON_LOCATIONS:
             my_loc_ids = set(
-                Pin.objects.filter(profile=my_profile, location__isnull=False)
-                .values_list("location_id", flat=True),
+                Pin.objects.filter(profile=my_profile, location__isnull=False).values_list("location_id", flat=True),
             )
             their_loc_ids = set(
-                Pin.objects.filter(profile=profile, location__isnull=False)
-                .values_list("location_id", flat=True),
+                Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True),
             )
             return bool(my_loc_ids & their_loc_ids)
 
@@ -106,13 +105,11 @@ class ViewProfileView(LoginRequiredMixin, View):
 
         # Location IDs pinned by this profile
         their_loc_ids = set(
-            Pin.objects.filter(profile=profile, location__isnull=False)
-            .values_list("location_id", flat=True),
+            Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True),
         )
         # Location IDs pinned by the current user
         my_loc_ids = set(
-            Pin.objects.filter(profile=my_profile, location__isnull=False)
-            .values_list("location_id", flat=True),
+            Pin.objects.filter(profile=my_profile, location__isnull=False).values_list("location_id", flat=True),
         )
         common_ids = their_loc_ids & my_loc_ids
 
@@ -132,8 +129,7 @@ class ViewProfileView(LoginRequiredMixin, View):
 
         context["common_pin_count"] = len(common_ids)
         context["shared_visited"] = (
-            Location.objects.filter(id__in=shared_visited_ids)
-            .order_by("name")
+            Location.objects.filter(id__in=shared_visited_ids).order_by("name")
             if shared_visited_ids
             else Location.objects.none()
         )
@@ -194,8 +190,15 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
 
 
 class EditProfileView(LoginRequiredMixin, View):
-    def _build_context(self, profile: Profile, form: ProfileForm, discord_form: DiscordHandleForm, link_error: str = "") -> dict:
+    def _build_context(
+        self,
+        profile: Profile,
+        form: ProfileForm,
+        discord_form: DiscordHandleForm,
+        link_error: str = "",
+    ) -> dict:
         from urbanlens.dashboard.services.social_links import get_profile_links
+
         discord_link = profile.social_links.filter(platform="discord").first()
         if not discord_form.is_bound:
             discord_form = DiscordHandleForm(initial={"discord": discord_link.handle if discord_link else ""})
@@ -226,19 +229,21 @@ class EditProfileView(LoginRequiredMixin, View):
         return redirect("profile.edit")
 
     def _save_profile(self, request: HttpRequest, profile: Profile) -> HttpResponse:
+        if not request.user.is_authenticated:
+            return redirect("login")
         form = ProfileForm(request.POST, request.FILES, instance=profile)
         if form.is_valid():
             form.save()
-            if request.user.is_authenticated:
-                request.user.first_name = request.POST.get("first_name", "").strip()
-                request.user.last_name = request.POST.get("last_name", "").strip()
-                request.user.save(update_fields=["first_name", "last_name"])
+            request.user.first_name = request.POST.get("first_name", "").strip()
+            request.user.last_name = request.POST.get("last_name", "").strip()
+            request.user.save(update_fields=["first_name", "last_name"])
             return redirect("profile.edit")
         context = self._build_context(profile, form, DiscordHandleForm())
         return render(request, "dashboard/pages/profile/edit.html", context)
 
     def _save_discord(self, request: HttpRequest, profile: Profile) -> HttpResponse:
         from urbanlens.dashboard.models.social_link.model import SocialLink
+
         discord_form = DiscordHandleForm(request.POST)
         if discord_form.is_valid():
             handle = discord_form.cleaned_data.get("discord", "").strip()
@@ -257,6 +262,7 @@ class EditProfileView(LoginRequiredMixin, View):
     def _add_link(self, request: HttpRequest, profile: Profile) -> HttpResponse:
         from urbanlens.dashboard.models.social_link.model import SocialLink
         from urbanlens.dashboard.services.social_links import parse_social_link
+
         raw = request.POST.get("link_input", "").strip()
         result = parse_social_link(raw) if raw else None
         if not result:
@@ -277,6 +283,7 @@ class EditProfileView(LoginRequiredMixin, View):
 
     def _remove_link(self, request: HttpRequest, profile: Profile) -> HttpResponse:
         from urbanlens.dashboard.services.social_links import KNOWN_PLATFORMS
+
         platform = request.POST.get("remove_platform", "")
         if platform in KNOWN_PLATFORMS:
             profile.social_links.filter(platform=platform).delete()
