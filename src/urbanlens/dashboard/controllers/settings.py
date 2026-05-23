@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 class SettingsView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
+        if not request.user.is_authenticated:
+            return redirect("login")
         profile, _ = Profile.objects.get_or_create(user=request.user)
         context = {
             "privacy_form": PrivacySettingsForm(instance=profile),
@@ -27,6 +29,8 @@ class SettingsView(LoginRequiredMixin, View):
         return render(request, "dashboard/pages/settings/index.html", context)
 
     def post(self, request: HttpRequest) -> HttpResponse:
+        if not request.user.is_authenticated:
+            return redirect("login")
         profile, _ = Profile.objects.get_or_create(user=request.user)
         section = request.POST.get("section")
 

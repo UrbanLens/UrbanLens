@@ -191,7 +191,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
             # Turn arrays into csv
             if pin.get("tags"):
-                pin["tags"] = ", ".join(pin["tags"])
+                tags = pin["tags"]
+                if tags and isinstance(tags[0], dict):
+                    pin["tags"] = ", ".join(t["name"] for t in tags)
+                else:
+                    pin["tags"] = ", ".join(tags)
             else:
                 pin["tags"] = ""
             if pin.get("categories"):

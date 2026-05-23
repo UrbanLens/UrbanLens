@@ -80,7 +80,7 @@ class Pin(abstract.Model):
     )
     # The shared place this pin points at. SET_NULL so deleting a Location
     # doesn't cascade-delete all users' Pins for that place.
-    location: Location | None = ForeignKey(
+    location = ForeignKey(
         "dashboard.Location",
         on_delete=SET_NULL,
         null=True,

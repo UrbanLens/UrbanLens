@@ -26,33 +26,37 @@
     <div class="tag-icon-color-row">
         <div class="form-field">
             <label class="form-label">Icon</label>
-            <div class="icon-picker" id="edit-icon-picker-{{ tag.id }}">
-                <input type="hidden" name="icon" id="edit-icon-value-{{ tag.id }}" value="{{ tag.icon|default:'' }}">
-                {% for key, label in icon_choices %}
-                <button type="button"
-                        class="icon-option {% if not tag.custom_icon and tag.icon == key %}selected{% endif %}"
-                        data-icon="{{ key }}" title="{{ label }}"
-                        onclick="editPickStandardIcon('{{ tag.id }}', '{{ key }}', this)">
-                    <i class="material-icons">{{ key }}</i>
-                </button>
-                {% endfor %}
-                <button type="button"
-                        class="icon-option icon-clear {% if not tag.custom_icon and not tag.icon %}selected{% endif %}"
-                        title="No icon"
-                        onclick="editPickStandardIcon('{{ tag.id }}', '', this)">
-                    <i class="material-icons">block</i>
-                </button>
-                <label class="icon-option icon-upload-btn {% if tag.custom_icon %}selected{% endif %}"
-                       id="edit-upload-btn-{{ tag.id }}" title="Upload custom icon">
-                    {% if tag.custom_icon %}
-                    <img src="{{ tag.custom_icon.url }}" id="edit-custom-preview-{{ tag.id }}" class="icon-custom-thumb">
-                    {% else %}
-                    <i class="material-icons" id="edit-upload-glyph-{{ tag.id }}">upload</i>
-                    <img id="edit-custom-preview-{{ tag.id }}" class="icon-custom-thumb" style="display:none">
-                    {% endif %}
-                    <input type="file" name="custom_icon" id="edit-custom-input-{{ tag.id }}" accept="image/*" style="display:none"
-                           onchange="editPickCustomIcon('{{ tag.id }}', this)">
-                </label>
+            <div class="icon-picker-wrap">
+                <div class="icon-picker" id="edit-icon-picker-{{ tag.id }}">
+                    <input type="hidden" name="icon" id="edit-icon-value-{{ tag.id }}" value="{{ tag.icon|default:'' }}">
+                    {% for key, label in icon_choices %}
+                    <button type="button"
+                            class="icon-option {% if not tag.custom_icon and tag.icon == key %}selected{% endif %}"
+                            data-icon="{{ key }}" title="{{ label }}"
+                            onclick="editPickStandardIcon('{{ tag.id }}', '{{ key }}', this)">
+                        <i class="material-icons">{{ key }}</i>
+                    </button>
+                    {% endfor %}
+                </div>
+                <div class="icon-picker-actions">
+                    <button type="button"
+                            class="icon-option icon-clear {% if not tag.custom_icon and not tag.icon %}selected{% endif %}"
+                            title="No icon"
+                            onclick="editPickStandardIcon('{{ tag.id }}', '', this)">
+                        <i class="material-icons">block</i>
+                    </button>
+                    <label class="icon-option icon-upload-btn {% if tag.custom_icon %}selected{% endif %}"
+                           id="edit-upload-btn-{{ tag.id }}" title="Upload custom icon">
+                        {% if tag.custom_icon %}
+                        <img src="{{ tag.custom_icon.url }}" id="edit-custom-preview-{{ tag.id }}" class="icon-custom-thumb">
+                        {% else %}
+                        <i class="material-icons" id="edit-upload-glyph-{{ tag.id }}">upload</i>
+                        <img id="edit-custom-preview-{{ tag.id }}" class="icon-custom-thumb" style="display:none">
+                        {% endif %}
+                        <input type="file" name="custom_icon" id="edit-custom-input-{{ tag.id }}" accept="image/*" style="display:none"
+                               onchange="editPickCustomIcon('{{ tag.id }}', this)">
+                    </label>
+                </div>
             </div>
             {% if tag.custom_icon %}
             <label class="checkbox-label" style="margin-top:6px;font-size:.82rem;color:#888;">

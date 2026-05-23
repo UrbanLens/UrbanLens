@@ -68,4 +68,4 @@ class _MultipleFileField(forms.FileField):
 class UploadDataFile(forms.Form):
     """Form for uploading one or more location data files."""
 
-    files = _MultipleFileField(label="Files")
+    upload_files = _MultipleFileField(label="Files")

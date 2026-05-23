@@ -12,6 +12,7 @@ from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.models.campus.model import Campus
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +41,11 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
         if not pin.location_id:
             return JsonResponse({"polygon": None, "default_radius_meters": 50, "latitude": lat, "longitude": lon})
 
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Authentication required."}, status=401)
         try:
-            profile = request.user.profile
-        except Exception:
+            profile: Profile | None = request.user.profile
+        except Profile.DoesNotExist:
             profile = None
 
         campus = Campus.objects.effective_for(pin.location, profile)
@@ -70,9 +73,13 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Authentication required."}, status=401)
         try:
-            profile = request.user.profile
-        except Exception:
+            profile: Profile | None = request.user.profile
+        except Profile.DoesNotExist:
+            return JsonResponse({"error": "User has no profile"}, status=403)
+        if profile is None:
             return JsonResponse({"error": "User has no profile"}, status=403)
 
         polygon_geojson = data.get("polygon")
@@ -88,9 +95,11 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
         Returns personal campuses for the user plus admin defaults for locations
         where the user has no personal campus.
         """
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Authentication required."}, status=401)
         try:
-            profile = request.user.profile
-        except Exception:
+            profile: Profile | None = request.user.profile
+        except Profile.DoesNotExist:
             profile = None
 
         if profile:

@@ -101,8 +101,8 @@ class Tag(abstract.Model):
 
     if TYPE_CHECKING:
         profile_id: int | None
-        pins: ManyToManyField[Pin]
-        categories: ManyToManyField[Category]
+        pins: ManyToManyField[Pin, Pin]
+        categories: ManyToManyField[Category, Category]
 
     @classmethod
     def get_tag_and_descendants(cls, tag_id: int) -> set[int]:

@@ -295,7 +295,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not isinstance(request.user, User):
             return JsonResponse({"error": "Authentication required."}, status=401)
 
-        uploaded_files = form.cleaned_data["files"]
+        uploaded_files = form.cleaned_data["upload_files"]
 
         # Expand every uploaded file into a flat list of (name, raw_bytes) pairs,
         # recursing one level to handle KMZ (ZIP-inside-ZIP) found in an archive.

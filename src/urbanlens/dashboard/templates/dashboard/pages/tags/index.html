@@ -41,24 +41,28 @@
             <div class="tag-icon-color-row">
                 <div class="form-field">
                     <label class="form-label">Icon</label>
-                    <div class="icon-picker" id="new-icon-picker">
-                        <input type="hidden" name="icon" id="new-icon-value">
-                        {% for key, label in icon_choices %}
-                        <button type="button" class="icon-option" data-icon="{{ key }}" title="{{ label }}"
-                                onclick="newPickStandardIcon('{{ key }}', this)">
-                            <i class="material-icons">{{ key }}</i>
-                        </button>
-                        {% endfor %}
-                        <button type="button" class="icon-option icon-clear" title="No icon"
-                                onclick="newPickStandardIcon('', this)">
-                            <i class="material-icons">block</i>
-                        </button>
-                        <label class="icon-option icon-upload-btn" id="new-upload-btn" title="Upload custom icon">
-                            <i class="material-icons" id="new-upload-glyph">upload</i>
-                            <img id="new-custom-preview" class="icon-custom-thumb" style="display:none">
-                            <input type="file" name="custom_icon" id="new-custom-input" accept="image/*" style="display:none"
-                                   onchange="newPickCustomIcon(this)">
-                        </label>
+                    <div class="icon-picker-wrap">
+                        <div class="icon-picker" id="new-icon-picker">
+                            <input type="hidden" name="icon" id="new-icon-value">
+                            {% for key, label in icon_choices %}
+                            <button type="button" class="icon-option" data-icon="{{ key }}" title="{{ label }}"
+                                    onclick="newPickStandardIcon('{{ key }}', this)">
+                                <i class="material-icons">{{ key }}</i>
+                            </button>
+                            {% endfor %}
+                        </div>
+                        <div class="icon-picker-actions">
+                            <button type="button" class="icon-option icon-clear" title="No icon"
+                                    onclick="newPickStandardIcon('', this)">
+                                <i class="material-icons">block</i>
+                            </button>
+                            <label class="icon-option icon-upload-btn" id="new-upload-btn" title="Upload custom icon">
+                                <i class="material-icons" id="new-upload-glyph">upload</i>
+                                <img id="new-custom-preview" class="icon-custom-thumb" style="display:none">
+                                <input type="file" name="custom_icon" id="new-custom-input" accept="image/*" style="display:none"
+                                       onchange="newPickCustomIcon(this)">
+                            </label>
+                        </div>
                     </div>
                 </div>
 
@@ -114,9 +118,31 @@
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
 <script>
 (function () {
+    function resetNewTagForm() {
+        var container = document.getElementById('new-tag-form');
+        container.querySelector('form').reset();
+        // Clear icon picker selection
+        container.querySelectorAll('.icon-option').forEach(function (b) { b.classList.remove('selected'); });
+        container.querySelector('#new-icon-value').value = '';
+        // Clear custom icon preview
+        var preview = container.querySelector('#new-custom-preview');
+        preview.src = '';
+        preview.style.display = 'none';
+        document.getElementById('new-upload-glyph').style.display = '';
+        document.getElementById('new-upload-btn').classList.remove('selected');
+        // Clear color picker selection
+        container.querySelectorAll('.color-swatch').forEach(function (b) { b.classList.remove('selected'); });
+        container.querySelector('#new-color-value').value = '';
+    }
+
     document.getElementById('new-tag-btn').addEventListener('click', function () {
         var form = document.getElementById('new-tag-form');
-        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        if (form.style.display === 'none') {
+            resetNewTagForm();
+            form.style.display = 'block';
+        } else {
+            form.style.display = 'none';
+        }
     });
 
     function initSortable() {

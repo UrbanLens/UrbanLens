@@ -147,6 +147,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
     _USER_FIELDS = frozenset({"first_name", "last_name"})
 
     def post(self, request: HttpRequest) -> JsonResponse:
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Authentication required."}, status=401)
         field = request.POST.get("field", "")
 
         if field in self._USER_FIELDS:
@@ -227,9 +229,10 @@ class EditProfileView(LoginRequiredMixin, View):
         form = ProfileForm(request.POST, request.FILES, instance=profile)
         if form.is_valid():
             form.save()
-            request.user.first_name = request.POST.get("first_name", "").strip()
-            request.user.last_name = request.POST.get("last_name", "").strip()
-            request.user.save(update_fields=["first_name", "last_name"])
+            if request.user.is_authenticated:
+                request.user.first_name = request.POST.get("first_name", "").strip()
+                request.user.last_name = request.POST.get("last_name", "").strip()
+                request.user.save(update_fields=["first_name", "last_name"])
             return redirect("profile.edit")
         context = self._build_context(profile, form, DiscordHandleForm())
         return render(request, "dashboard/pages/profile/edit.html", context)

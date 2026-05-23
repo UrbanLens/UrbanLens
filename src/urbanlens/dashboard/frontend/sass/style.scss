@@ -29,7 +29,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     background: $nav-bg;
     height: 4rem;
     position: relative;
-    z-index: 200;
+    z-index: 1100; // must exceed Leaflet's control-container (1000)
 }
 
 .app-nav-inner {
@@ -327,6 +327,7 @@ div.container {
     display: flex;
     flex-direction: column;
     position: relative;
+    z-index: 1; // creates stacking context, confining Leaflet z-indexes within it
 }
 
 div.section {
@@ -2573,12 +2574,27 @@ textarea.form-input { resize: vertical; }
 }
 
 // Icon picker
+.icon-picker-wrap {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 0;
+}
+
 .icon-picker {
+    flex: 1;
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    padding: 8px 0;
 }
+
+.icon-picker-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
 .icon-option {
     width: 38px;
     height: 38px;
@@ -2594,7 +2610,14 @@ textarea.form-input { resize: vertical; }
 
     &:hover { border-color: $primary-color; i { color: $primary-color; } }
     &.selected { border-color: $primary-color; background: #e3f2fd; i { color: $primary-color; } }
-    &.icon-clear i { color: $text-muted; }
+}
+
+// "No icon" and upload are utility buttons — blue border to distinguish them
+.icon-clear,
+.icon-upload-btn {
+    border-color: $primary-color;
+    i { color: $primary-color; }
+    &:hover { background: rgba($primary-color, 0.08); border-color: darken($primary-color, 10%); }
 }
 
 // Custom icon upload
@@ -3123,7 +3146,6 @@ textarea.form-input { resize: vertical; }
     flex-direction: column;
     gap: 2px;
     font-size: 0.6rem;
-    color: $text-secondary;
 
     input[type="file"] { display: none; }
 
@@ -3131,8 +3153,6 @@ textarea.form-input { resize: vertical; }
         border-color: $primary-color;
         background: rgba($primary-color, 0.08);
     }
-
-    &:hover { background: #f0f0f0; }
 }
 
 .icon-custom-thumb {
