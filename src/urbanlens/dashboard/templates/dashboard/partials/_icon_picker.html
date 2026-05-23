@@ -1,6 +1,4 @@
 {% load dashboard_tags %}
-{# Reusable icon picker dropdown widget.
-   Context vars: picker_id, current_icon, field_name, icon_categories #}
 <div class="icon-picker-dropdown" data-picker="{{ picker_id }}">
     <input type="hidden" name="{{ field_name }}" id="icon-value-{{ picker_id }}" value="{{ current_icon|default:'' }}">
 
