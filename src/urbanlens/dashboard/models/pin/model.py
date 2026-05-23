@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.pin.queryset import PinManager
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.categories.model import Category
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.reviews import Manager as ReviewManager
 
 logger = logging.getLogger(__name__)
@@ -56,15 +57,6 @@ class Pin(abstract.Model):
     to Pin - they live on AddressableMixin which only Location inherits.
     """
 
-    # The shared place this pin points at. SET_NULL so deleting a Location
-    # doesn't cascade-delete all users' Pins for that place.
-    location = ForeignKey(
-        "dashboard.Location",
-        on_delete=SET_NULL,
-        null=True,
-        blank=True,
-        related_name="pins",
-    )
     # User's custom label. None = show location.name instead (see effective_name).
     # Do NOT store canonical place names here - those belong on Location.
     nickname = CharField(max_length=255, null=True, blank=True)
@@ -84,6 +76,15 @@ class Pin(abstract.Model):
     profile = ForeignKey(
         "dashboard.Profile",
         on_delete=CASCADE,
+        related_name="pins",
+    )
+    # The shared place this pin points at. SET_NULL so deleting a Location
+    # doesn't cascade-delete all users' Pins for that place.
+    location: Location | None = ForeignKey(
+        "dashboard.Location",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
         related_name="pins",
     )
     categories = ManyToManyField(

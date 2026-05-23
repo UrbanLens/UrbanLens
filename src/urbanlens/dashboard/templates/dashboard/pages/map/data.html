@@ -14,7 +14,7 @@
 
         let popupContent = `
             <div class="pin-popup" data-id="${pin.id}">
-                <div data-name="title">${pin.nickname}</div>
+                <div data-name="title">${pin.effective_name}</div>
                 <div data-name="description">${pin.description}</div>
                 <div class="stars rating-${pin.rating || 0}">
                     ${[1, 2, 3, 4, 5].map(i => `
@@ -45,7 +45,7 @@
         longitude: "{{ pin.longitude }}",
         icon: "{{ pin.icon|default_if_none:'' }}",
         id: "{{ pin.id }}",
-        name: "{{ pin.nickname }}",
+        effective_name: "{{ pin.effective_name }}",
         description: "{{ pin.description }}",
         rating: "{{ pin.rating|stringformat:'s' }}",
         status: "{{ pin.status }}",

@@ -10,7 +10,7 @@
 
 {% block content %}
 <div class="section">
-    <h1 class="pin-title">{{ pin.nickname }}</h1>
+    <h1 class="pin-title">{{ pin.effective_name }}</h1>
 
     <div class="pin-details modern-style details-grid">
         {% if pin.description %}<div><span class="field-label"><strong>Description:</strong></span> {{ pin.description }}</div>{% endif %}
@@ -55,12 +55,12 @@
 
     <div class="satellite-view card">
         <h2>Satellite View</h2>
-        <img src="{% url 'pin.satellite_view' pin.id %}" alt="Satellite view of {{ pin.nickname }}" style="width: 100%; height: auto;">
+        <img src="{% url 'pin.satellite_view' pin.id %}" alt="Satellite view of {{ pin.effective_name }}" style="width: 100%; height: auto;">
     </div>
 
     <div class="street-view card">
         <h2>Street View</h2>
-        <img src="{% url 'pin.street_view' pin.id %}" alt="Street view of {{ pin.nickname }}" style="width: 100%; height: auto;">
+        <img src="{% url 'pin.street_view' pin.id %}" alt="Street view of {{ pin.effective_name }}" style="width: 100%; height: auto;">
     </div>
 
     <div hx-get="{% url 'pin.weather_forecast' pin.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="weather-forecast card">
