@@ -29,7 +29,7 @@ import logging
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
@@ -50,12 +50,17 @@ logger = logging.getLogger(__name__)
 
 class MapController(LoginRequiredMixin, GenericViewSet):
     def view_map(self, request, *args, **kwargs):
-        pins = Pin.objects.all()
-
+        from urbanlens.dashboard.models.pin.model import PinStatus
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        tags = Tag.objects.filter(profile=profile).order_by("order", "name")
         return render(
             request,
             "dashboard/pages/map/index.html",
-            {"pins": pins, "openweathermap_api_key": settings.openweathermap_api_key},
+            {
+                "openweathermap_api_key": settings.openweathermap_api_key,
+                "tags": tags,
+                "status_choices": PinStatus.choices,
+            },
         )
 
     def edit_pin(self, request, pin_id, *args, **kwargs):
@@ -137,9 +142,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         logger.info("Searching map...")
         search_form = SearchForm(request.POST)
         if search_form.is_valid():
-            query = Pin.objects.all().filter(profile=request.user.profile).filter_by_criteria(search_form.cleaned_data)
-            data = self.get_map_data(request, query)
-            return render(request, "dashboard/pages/map/data.html", {"pins": data})
+            profile, _ = Profile.objects.get_or_create(user=request.user)
+            query = Pin.objects.filter(profile=profile).filter_by_criteria(search_form.cleaned_data)
+            map_data = self.get_map_data(request, query)
+            return render(request, "dashboard/pages/map/data.html", {"map_data": map_data})
 
         logger.error("Invalid search criteria: %s", search_form.errors)
         return HttpResponse(status=400, content="Invalid search criteria.")
@@ -167,6 +173,39 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         form = AdvancedSearchForm()
         return render(request, "dashboard/pages/map/advanced_search.html", {"form": form})
 
+    def map_pins_json(self, request, *args, **kwargs):
+        """Return pin data as JSON with optional bbox filtering for two-phase map loading.
+
+        Query params:
+            bbox: "south,west,north,east" floats — restrict to this bounding box.
+        """
+        from django.contrib.gis.geos import Polygon
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        query = (
+            Pin.objects.filter(profile=profile)
+            .select_related("location")
+            .prefetch_related("tags")
+        )
+
+        bbox_str = request.GET.get("bbox", "").strip()
+        if bbox_str:
+            try:
+                parts = [float(x) for x in bbox_str.split(",")]
+                if len(parts) == 4:
+                    south, west, north, east = parts
+                    bbox_poly = Polygon.from_bbox((west, south, east, north))
+                    bbox_poly.srid = 4326
+                    query = query.filter(point__within=bbox_poly)
+            except Exception:
+                pass
+
+        map_data = self.get_map_data(request, query)
+        for pin_dict in map_data:
+            pin_dict["viewLocationUrl"] = f"/dashboard/map/pin/{pin_dict['id']}/"
+
+        return JsonResponse({"pins": map_data})
+
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data(request)
 
@@ -175,7 +214,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def get_map_data(self, request, query: PinQuerySet | None = None):
         if query is None:
             profile, _ = Profile.objects.get_or_create(user=request.user)
-            query = Pin.objects.all().filter(profile=profile)
+            query = Pin.objects.filter(profile=profile).select_related("location")
 
         query = query.prefetch_related("tags")
 

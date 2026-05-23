@@ -1055,46 +1055,113 @@ i.train {
 }
 
 .card {
+    border-radius: 8px;
+    background: var(--card-bg, #fff);
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    overflow: hidden;
 
-    h1,
-    h2,
-    h3,
-    h4,
-    h5,
-    h6 {
+    .card-header {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .75rem 1rem;
+        border-bottom: 1px solid var(--border-color, #e5e7eb);
+        font-weight: 600;
+        font-size: .95rem;
+
+        .material-icons { font-size: 1.1rem; opacity: .7; }
+        h3 { margin: 0; font-size: .95rem; font-weight: 600; }
+    }
+
+    h1, h2, h3, h4, h5, h6 {
         text-align: center;
     }
 }
 
+.view-loading, .view-unavailable {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    padding: 2rem 1rem;
+    color: #888;
+    font-size: .9rem;
+
+    .material-icons { font-size: 1.4rem; opacity: .5; }
+}
+
+.view-image {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+.material-icons.spin { animation: spin 1.2s linear infinite; }
+
 body.page-location-details div.section {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    grid-template-rows: 1fr;
+    gap: 1rem;
     grid-template-areas:
         "title title title"
         "details details details"
+        "visits visits tags"
         "map map map"
         "campus campus campus"
         "satellite aerial street"
         "smithsonian smithsonian smithsonian"
+        "weather weather weather"
         "search search search";
     justify-items: stretch;
+    align-items: start;
 
     .location-title {
         grid-area: title;
         text-align: center;
+        margin: .5rem 0;
     }
 
     .location-details {
         grid-area: details;
-        margin-bottom: 1rem;
+
+        .details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: .5rem;
+            padding: .75rem 1rem;
+
+            .detail-row {
+                display: flex;
+                flex-direction: column;
+                gap: .15rem;
+
+                &.full-width { grid-column: 1 / -1; }
+            }
+
+            .field-label {
+                font-size: .72rem;
+                text-transform: uppercase;
+                letter-spacing: .04em;
+                color: #888;
+                font-weight: 600;
+            }
+
+            .field-value { font-size: .9rem; }
+        }
     }
+
+    .visit-history { grid-area: visits; }
+    .tag-panel     { grid-area: tags; }
 
     .location-map {
         grid-area: map;
 
         #map {
-            height: 40rem;
+            height: 28rem;
             width: 100%;
         }
     }
@@ -1107,16 +1174,58 @@ body.page-location-details div.section {
         grid-area: street;
     }
 
-    .smithsonian-images {
-        grid-area: smithsonian;
-    }
-
     .aerial-view {
         grid-area: aerial;
     }
 
+    .smithsonian-images {
+        grid-area: smithsonian;
+
+        .smithsonian-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: .5rem;
+            padding: .75rem;
+
+            .smithsonian-image {
+                a {
+                    display: flex;
+                    flex-direction: column;
+                    gap: .25rem;
+                    text-decoration: none;
+                    color: inherit;
+                }
+                img { width: 100%; height: 120px; object-fit: cover; border-radius: 4px; }
+                .smithsonian-title { font-size: .75rem; color: #555; }
+            }
+        }
+    }
+
+    .weather-widget { grid-area: weather; }
+
     .web-search {
         grid-area: search;
+
+        .search-results-list { padding: .5rem 1rem; }
+
+        .search-result {
+            padding: .6rem 0;
+            border-bottom: 1px solid var(--border-color, #e5e7eb);
+            &:last-child { border-bottom: none; }
+        }
+
+        .search-result-title {
+            font-weight: 600;
+            font-size: .9rem;
+            color: var(--link-color, #1a73e8);
+            &:hover { text-decoration: underline; }
+        }
+
+        .search-result-snippet {
+            font-size: .82rem;
+            color: #555;
+            margin: .2rem 0 0;
+        }
     }
 
     .campus-editor {

@@ -168,6 +168,63 @@ class TagReorderView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True})
 
 
+class TagRowsView(LoginRequiredMixin, View):
+    """Return the tag-rows partial (used by cancel buttons in inline forms)."""
+
+    def get(self, request, *args, **kwargs):
+        profile = request.user.profile
+        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins")
+        return render(request, "dashboard/partials/tag_rows.html", {
+            "tags": tags,
+            "icon_choices": ICON_CHOICES,
+            "icon_categories": ICON_CATEGORIES,
+            "color_choices": COLOR_CHOICES,
+        })
+
+
+class TagMergeView(LoginRequiredMixin, View):
+    """Merge one user-owned tag into another, transferring all pin memberships."""
+
+    def get(self, request, tag_id, *args, **kwargs):
+        """Return the merge-confirmation form for the given tag."""
+        tag = get_object_or_404(Tag, id=tag_id)
+        if tag.profile is None or tag.profile.user != request.user:
+            return HttpResponseForbidden()
+        profile = request.user.profile
+        candidates = Tag.objects.visible_to(profile).ordered().exclude(id=tag_id)
+        return render(request, "dashboard/partials/tag_merge_form.html", {
+            "tag": tag,
+            "candidates": candidates,
+        })
+
+    def post(self, request, tag_id, *args, **kwargs):
+        """Perform the merge: move all pins to the target tag, then delete source."""
+        source = get_object_or_404(Tag, id=tag_id)
+        if source.profile is None or source.profile.user != request.user:
+            return HttpResponseForbidden()
+
+        target_id = request.POST.get("target_tag_id", "").strip()
+        if not target_id:
+            return HttpResponse("Target tag is required.", status=400)
+
+        profile = request.user.profile
+        target = get_object_or_404(Tag.objects.visible_to(profile), id=target_id)
+        if target.id == source.id:
+            return HttpResponse("Cannot merge a tag into itself.", status=400)
+
+        # Transfer all pins from source → target in one bulk operation, then remove source.
+        target.pins.add(*source.pins.all())
+        source.delete()
+
+        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins")
+        return render(request, "dashboard/partials/tag_rows.html", {
+            "tags": tags,
+            "icon_choices": ICON_CHOICES,
+            "icon_categories": ICON_CATEGORIES,
+            "color_choices": COLOR_CHOICES,
+        })
+
+
 class TagMembershipView(LoginRequiredMixin, View):
     """Add or remove a tag from a specific pin (HTMX panel on pin detail page)."""
 

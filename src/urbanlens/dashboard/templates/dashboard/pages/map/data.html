@@ -1,52 +1,7 @@
+<div id="map-body">
 <script>
-    function addMarker(pin) {
-        let coords = [pin.latitude, pin.longitude];
-        let marker = L.marker(coords);
-
-        if (pin.icon && pin.icon !== 'undefined') {
-            var color = (pin.color && pin.color !== 'None') ? pin.color : '#555555';
-            var iconHtml;
-            if (/^[a-z_]+$/.test(pin.icon)) {
-                // Material Icons name
-                iconHtml = '<i class="material-icons map-pin-icon" style="color:' + color + ';">' + pin.icon + '</i>';
-            } else {
-                // Emoji or unicode icon
-                iconHtml = '<span class="map-pin-emoji">' + pin.icon + '</span>';
-            }
-            marker.setIcon(L.divIcon({
-                className: 'map-pin-icon-wrap',
-                html: iconHtml,
-                iconSize: [28, 28],
-                iconAnchor: [14, 14]
-            }));
-        }
-
-        let popupContent = `
-            <div class="pin-popup" data-id="${pin.id}">
-                <div data-name="title">${pin.effective_name}</div>
-                <div data-name="description">${pin.description}</div>
-                <div class="stars rating-${pin.rating || 0}">
-                    ${[1, 2, 3, 4, 5].map(i => `
-                        <input type="radio" name="star" class="star-${i}" id="star-${i}" value="${i}" ${pin.rating == i ? 'checked' : ''} />
-                        <label class="star-${i}" for="star-${i}">★</label>
-                    `).join('')}
-                </div>
-                <div data-name="status"><span class="value">${pin.status}</span></div>
-                <div data-name="categories"><span class="value">${pin.categories}</span></div>
-                <div class="last-visited" data-name="last_visited">
-                    <span class="label">Last Visited:</span>
-                    <span class="value">${pin.last_visited}</span>
-                </div>
-                <div class="tags">${pin.tags}</div>
-                <a href="${pin.viewLocationUrl}" class="view-full-pin">View Full Details</a>
-                <button class="delete-button" onclick="deletePin(this)"><i class="material-icons">delete</i></button>
-            </div>
-        `;
-
-        // Add it to the pinsLayerGroup
-        marker.addTo(window.pinsLayerGroup).bindPopup(popupContent);
-
-    }
+    pinsLayerGroup.clearLayers();
+    if (window._loadedPinIds) { window._loadedPinIds.clear(); }
 
     {% for pin in map_data %}
     addMarker({
@@ -54,16 +9,17 @@
         longitude: "{{ pin.longitude }}",
         icon: "{{ pin.icon|default_if_none:'' }}",
         color: "{{ pin.color|default_if_none:'' }}",
-        id: "{{ pin.id }}",
-        effective_name: "{{ pin.effective_name }}",
-        description: "{{ pin.description }}",
+        id: {{ pin.id }},
+        name: "{{ pin.name|default_if_none:''|escapejs }}",
+        description: "{{ pin.description|default_if_none:''|escapejs }}",
         rating: "{{ pin.rating|stringformat:'s' }}",
-        status: "{{ pin.status }}",
-        categories: "{{ pin.categories }}",
-        last_visited: "{{ pin.last_visited }}",
-        tags: "{{ pin.tags }}",
+        status: "{{ pin.status|default_if_none:''|escapejs }}",
+        categories: "{{ pin.categories|default_if_none:''|escapejs }}",
+        last_visited: "{{ pin.last_visited|default_if_none:'Never'|escapejs }}",
+        tags: "{{ pin.tags|default_if_none:''|escapejs }}",
         viewLocationUrl: "{% url 'pin.details' pin.id %}"
     });
     {% endfor %}
     if (window.updatePinCounter) { window.updatePinCounter(); }
 </script>
+</div>

@@ -36,7 +36,7 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import campus, friendship, maps, pin, settings, tags, userprofile
+from urbanlens.dashboard.controllers import campus, friendship, maps, pin, settings, tags, userprofile, visits
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -83,6 +83,7 @@ urlpatterns = [
             [
                 path("", maps.MapController.as_view({"get": "view_map"}), name="map.view"),
                 path("init/", maps.MapController.as_view({"get": "init_map"}), name="map.init"),
+                path("pins/", maps.MapController.as_view({"get": "map_pins_json"}), name="map.pins"),
                 path(
                     "campus/",
                     campus.CampusController.as_view({"get": "list_campuses"}),
@@ -156,6 +157,16 @@ urlpatterns = [
                                 name="pin.weather_forecast",
                             ),
                             path(
+                                "<int:pin_id>/visits/",
+                                visits.VisitHistoryView.as_view(),
+                                name="pin.visits",
+                            ),
+                            path(
+                                "<int:pin_id>/visits/<int:visit_id>/delete/",
+                                visits.VisitDeleteView.as_view(),
+                                name="pin.visit.delete",
+                            ),
+                            path(
                                 "import/",
                                 include(
                                     [
@@ -198,6 +209,8 @@ urlpatterns = [
                 path("create/", tags.TagCreateView.as_view(), name="tag.create"),
                 path("<int:tag_id>/edit/", tags.TagEditView.as_view(), name="tag.edit"),
                 path("<int:tag_id>/delete/", tags.TagDeleteView.as_view(), name="tag.delete"),
+                path("<int:tag_id>/merge/", tags.TagMergeView.as_view(), name="tag.merge"),
+                path("rows/", tags.TagRowsView.as_view(), name="tag.rows"),
                 path("reorder/", tags.TagReorderView.as_view(), name="tag.reorder"),
                 path("pin/<int:pin_id>/", tags.TagMembershipView.as_view(), name="tag.membership"),
             ],

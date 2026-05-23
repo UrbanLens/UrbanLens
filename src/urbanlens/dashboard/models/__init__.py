@@ -40,3 +40,4 @@ from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.models.trips import Trip
 from urbanlens.dashboard.models.campus import Campus
 from urbanlens.dashboard.models.social_link import SocialLink
+from urbanlens.dashboard.models.visits import PinVisit, VisitSource

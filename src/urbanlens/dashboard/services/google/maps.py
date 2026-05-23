@@ -45,6 +45,20 @@ from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
 
+
+def _filename_stem(filename: str) -> str:
+    """Return the filename without its extension or directory path.
+
+    Examples:
+        "Demolished Structures.csv" -> "Demolished Structures"
+        "path/to/Saved Places.json" -> "Saved Places"
+    """
+    name = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    if "." in name:
+        name = name.rsplit(".", 1)[0]
+    return name.strip()
+
+
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile import Profile
 
@@ -274,7 +288,13 @@ class GoogleMapsGateway(Gateway):
                 "cid": cid,
             }
 
-    def import_pins_streaming(self, files: list[tuple[str, bytes]], user_profile: Profile, tags: list | None = None):
+    def import_pins_streaming(
+        self,
+        files: list[tuple[str, bytes]],
+        user_profile: Profile,
+        tags: list | None = None,
+        tag_by_filename: bool = False,
+    ):
         r"""Generator that yields SSE data strings while importing pins from a list of files.
 
         Each yielded string is a complete SSE event in the format ``data: {...}\\n\\n``.
@@ -295,21 +315,31 @@ class GoogleMapsGateway(Gateway):
             user_profile: The profile to associate with imported pins.
             tags: Optional list of Tag objects to apply to every imported pin
                   (both newly created and pre-existing).
+            tag_by_filename: When True, each source file that produces at least one
+                pin gets a tag created (or reused) from the file's stem name and
+                applied to every pin from that file.  Tag lookup is case-insensitive.
 
         Yields:
             str: SSE-formatted data lines.
         """
 
         from urbanlens.dashboard.services.archive_extractor import validate_content_type
+        from urbanlens.dashboard.services.google.location_history import (
+            import_location_history_streaming,
+        )
 
         def sse(data: dict) -> str:
             return f"data: {json.dumps(data)}\n\n"
+
+        # Separate files into pin-data files and location-history files so each
+        # category can be reported with an accurate total.
+        location_history_files: list[tuple[str, bytes]] = []
 
         # First pass: validate and parse every file so we can report an accurate
         # grand total upfront.  CSV rows are counted by line (cheap); JSON and KML
         # are parsed fully and the results cached for the second pass.
         # Files that fail validation or parsing are skipped with a warning.
-        parsed: list[tuple[str, Any, int]] = []  # (fmt, data_or_text, file_total)
+        parsed: list[tuple[str, str, Any, int]] = []  # (filename, fmt, data_or_text, file_total)
         grand_total = 0
 
         for filename, raw_bytes in files:
@@ -318,19 +348,23 @@ class GoogleMapsGateway(Gateway):
                 logger.info("Skipping unrecognised file during import: %s", filename)
                 continue
 
+            if fmt == "location_history":
+                location_history_files.append((filename, raw_bytes))
+                continue
+
             try:
                 text = raw_bytes.decode("utf-8")
                 if fmt == "json":
                     data_list = self.takeout_json_to_dict(text, user_profile)
-                    parsed.append((fmt, data_list, len(data_list)))
+                    parsed.append((filename, fmt, data_list, len(data_list)))
                     grand_total += len(data_list)
                 elif fmt == "kml":
                     data_list = self.takeout_kml_to_dict(text, user_profile)
-                    parsed.append((fmt, data_list, len(data_list)))
+                    parsed.append((filename, fmt, data_list, len(data_list)))
                     grand_total += len(data_list)
                 elif fmt == "csv":
                     file_total = max(0, len(text.splitlines()) - 1)
-                    parsed.append((fmt, text, file_total))
+                    parsed.append((filename, fmt, text, file_total))
                     grand_total += file_total
             except Exception as exc:
                 logger.warning("Failed to parse '%s', skipping: %s", filename, exc)
@@ -347,7 +381,9 @@ class GoogleMapsGateway(Gateway):
         current = 0
 
         try:
-            for fmt, file_data, _file_total in parsed:
+            for filename, fmt, file_data, _file_total in parsed:
+                # Accumulate pins per file only when needed for filename tagging.
+                file_pins: list[Pin] | None = [] if tag_by_filename else None
                 pin_iter = self._csv_row_iter(file_data, user_profile) if fmt == "csv" else iter(file_data)
 
                 for pin_data in pin_iter:
@@ -387,6 +423,8 @@ class GoogleMapsGateway(Gateway):
                                     exists_count += 1
                                 if tags:
                                     pin.tags.add(*tags)
+                                if file_pins is not None:
+                                    file_pins.append(pin)
                                 # Backfill: if the import carried a CID but no existing
                                 # Location was found by that CID, the nearby-match may
                                 # have returned a Location that still lacks one.  Set it
@@ -413,6 +451,16 @@ class GoogleMapsGateway(Gateway):
                             "name": pin_name,
                         },
                     )
+
+                # Apply a per-file tag to every pin produced from this file.
+                if file_pins:
+                    from urbanlens.dashboard.models.tags.model import Tag as TagModel
+                    tag_name = _filename_stem(filename)
+                    file_tag = TagModel.objects.filter(
+                        profile=user_profile, name__iexact=tag_name
+                    ).first() or TagModel.objects.create(profile=user_profile, name=tag_name)
+                    for pin in file_pins:
+                        pin.tags.add(file_tag)
         except Exception as exc:
             logger.exception("Unexpected error during streaming import: %s", exc)
             yield sse({"type": "error", "message": f"Import failed unexpectedly: {exc}"})
@@ -427,6 +475,12 @@ class GoogleMapsGateway(Gateway):
                 "skipped": skipped_count,
             },
         )
+
+        # Process any Semantic Location History files found in the same upload.
+        # These are streamed as a second pass with subtype="location_history" so
+        # the frontend can distinguish them from the pin-import events above.
+        if location_history_files:
+            yield from import_location_history_streaming(location_history_files, user_profile)
 
     def takeout_kml_to_dict(self, file_contents: str, user_profile: Profile) -> list[dict[str, Any]]:
         try:

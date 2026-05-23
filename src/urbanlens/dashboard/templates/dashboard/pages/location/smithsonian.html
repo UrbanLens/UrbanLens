@@ -1,15 +1,25 @@
-<div>
+<div class="smithsonian-images card" id="smithsonian-section">
+    <div class="card-header">
+        <i class="material-icons">collections</i>
+        <h3>Smithsonian Archives</h3>
+    </div>
     {% if images %}
-    <h2>Smithsonian Images</h2>
-    <div id="smithsonian-images">
+    <div class="smithsonian-grid">
         {% for image in images %}
-            {% if image.url != None %}
-                <div class="smithsonian-image">
-                    <img src="{{ image.thumbnail }}" alt="{{ image.title }}" />
-                    <a href="{{ image.url }}" target="_blank">{{ image.title }}</a>
-                </div>
-            {% endif %}
+        {% if image.url %}
+        <div class="smithsonian-image">
+            <a href="{{ image.url }}" target="_blank" rel="noopener">
+                <img src="{{ image.thumbnail }}" alt="{{ image.title }}" loading="lazy">
+                <span class="smithsonian-title">{{ image.title }}</span>
+            </a>
+        </div>
+        {% endif %}
         {% endfor %}
+    </div>
+    {% else %}
+    <div class="view-unavailable">
+        <i class="material-icons">image_search</i>
+        <span>No historical images found.</span>
     </div>
     {% endif %}
 </div>

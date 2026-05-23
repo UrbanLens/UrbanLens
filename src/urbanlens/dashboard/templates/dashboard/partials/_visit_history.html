@@ -1,0 +1,75 @@
+{% load dashboard_tags %}
+<div class="visit-history card" id="visit-history-panel">
+    <div class="card-header">
+        <i class="material-icons">history</i>
+        <h3>Visit History</h3>
+        {% if visits %}
+        <span class="visit-count badge">{{ visits|length }}</span>
+        {% endif %}
+    </div>
+
+    {% if visits %}
+    <ul class="visit-list">
+        {% for visit in visits %}
+        <li class="visit-item">
+            <div class="visit-item-main">
+                <span class="visit-date">{{ visit.visited_at|date:"N j, Y" }}</span>
+                {% if visit.visited_at|time:"H:i" != "00:00" %}
+                <span class="visit-time">{{ visit.visited_at|time:"g:i A" }}</span>
+                {% endif %}
+                <span class="visit-source visit-source--{{ visit.source }}" title="{{ visit.get_source_display }}">
+                    {% if visit.source == "google_takeout" %}
+                    <i class="material-icons" style="font-size:14px">cloud_download</i>
+                    {% else %}
+                    <i class="material-icons" style="font-size:14px">edit</i>
+                    {% endif %}
+                    {{ visit.get_source_display }}
+                </span>
+            </div>
+            {% if visit.notes %}
+            <div class="visit-notes">{{ visit.notes }}</div>
+            {% endif %}
+            <button type="button"
+                    hx-post="{% url 'pin.visit.delete' pin.id visit.id %}"
+                    hx-target="#visit-history-panel"
+                    hx-swap="outerHTML"
+                    hx-confirm="Delete this visit record?"
+                    class="icon-btn visit-delete-btn"
+                    title="Delete visit">
+                <i class="material-icons">delete_outline</i>
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="visit-empty">No visits recorded yet.</p>
+    {% endif %}
+
+    <details class="visit-add-section">
+        <summary class="visit-add-toggle">
+            <i class="material-icons">add_circle_outline</i>
+            Add a visit
+        </summary>
+        <form hx-post="{% url 'pin.visits' pin.id %}"
+              hx-target="#visit-history-panel"
+              hx-swap="outerHTML"
+              class="visit-add-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="visited_at_{{ pin.id }}">Date &amp; time</label>
+                <input type="datetime-local"
+                       name="visited_at"
+                       id="visited_at_{{ pin.id }}"
+                       required>
+            </div>
+            <div class="form-row">
+                <label for="visit_notes_{{ pin.id }}">Notes <small>(optional)</small></label>
+                <textarea name="notes"
+                          id="visit_notes_{{ pin.id }}"
+                          rows="2"
+                          placeholder="What did you see?"></textarea>
+            </div>
+            <button type="submit" class="submit-button">Save visit</button>
+        </form>
+    </details>
+</div>

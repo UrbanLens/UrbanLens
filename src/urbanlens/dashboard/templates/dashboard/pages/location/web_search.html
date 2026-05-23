@@ -1,13 +1,26 @@
-<div>
+<div class="web-search card" id="web-search-section">
+    <div class="card-header">
+        <i class="material-icons">search</i>
+        <h3>Web Results</h3>
+    </div>
     {% if search_results %}
-    <h2>Web Search</h2>
-    <div id="search_results">
+    <div class="search-results-list">
         {% for result in search_results %}
-        <div class="result">
-            <a href="{{ result.link }}" target="_blank">{{ result.title }}</a>
-            <p>{{ result.snippet }}</p>
+        <div class="search-result">
+            <a href="{{ result.link }}" target="_blank" rel="noopener" class="search-result-title">{{ result.title }}</a>
+            <p class="search-result-snippet">{{ result.snippet }}</p>
         </div>
         {% endfor %}
+    </div>
+    {% elif error %}
+    <div class="view-unavailable">
+        <i class="material-icons">wifi_off</i>
+        <span>{{ error }}</span>
+    </div>
+    {% else %}
+    <div class="view-unavailable">
+        <i class="material-icons">search_off</i>
+        <span>No results found.</span>
     </div>
     {% endif %}
 </div>

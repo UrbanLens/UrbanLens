@@ -10,19 +10,67 @@
 
 {% block content %}
 <div class="section">
-    <h1 class="pin-title">{{ pin.effective_name }}</h1>
 
-    <div class="pin-details modern-style details-grid">
-        {% if pin.description %}<div><span class="field-label"><strong>Description:</strong></span> {{ pin.description }}</div>{% endif %}
-        <div><span class="field-label"><strong>Rating:</strong></span> {% if pin.rating %}{{ pin.rating }}{% else %}No rating{% endif %}</div>
-        {% if pin.status %}<div><span class="field-label"><strong>Status:</strong></span> {{ pin.status }}</div>{% else %}<div>No status</div>{% endif %}
-        <div><span class="field-label"><strong>Categories:</strong></span> {% if pin.categories.all %}{{ pin.categories.all }}{% else %}No categories{% endif %}</div>
-        <div><span class="field-label"><strong>Last Visited:</strong></span> {% if pin.last_visited %}{{ pin.last_visited }}{% else %}Never visited{% endif %}</div>
-        <div><span class="field-label"><strong>Tags:</strong></span> {% if pin.tags.all %}{{ pin.tags.all }}{% else %}No tags{% endif %}</div>
-        {% if pin.place_name %}<div><span class="field-label"><strong>Place Name:</strong></span> {{ pin.place_name }}</div>{% endif %}
+    {# ── Title ────────────────────────────────────────────────────────────── #}
+    <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
+
+    {# ── Details ──────────────────────────────────────────────────────────── #}
+    <div class="pin-details location-details card">
+        <div class="details-grid">
+            {% if pin.description %}
+            <div class="detail-row full-width">
+                <span class="field-label">Description</span>
+                <span class="field-value">{{ pin.description }}</span>
+            </div>
+            {% endif %}
+            <div class="detail-row">
+                <span class="field-label">Status</span>
+                <span class="field-value">{% if pin.status %}{{ pin.status|title }}{% else %}<em>Not set</em>{% endif %}</span>
+            </div>
+            <div class="detail-row">
+                <span class="field-label">Rating</span>
+                <span class="field-value">{% if pin.rating %}{{ pin.rating }} / 5{% else %}<em>No rating</em>{% endif %}</span>
+            </div>
+            <div class="detail-row">
+                <span class="field-label">Last Visited</span>
+                <span class="field-value">{% if pin.last_visited %}{{ pin.last_visited|date:"N j, Y" }}{% else %}<em>Never</em>{% endif %}</span>
+            </div>
+            <div class="detail-row">
+                <span class="field-label">Categories</span>
+                <span class="field-value">
+                    {% if pin.categories.all %}
+                    {% for cat in pin.categories.all %}{{ cat.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    {% else %}<em>None</em>{% endif %}
+                </span>
+            </div>
+            {% if pin.place_name %}
+            <div class="detail-row">
+                <span class="field-label">Place Name</span>
+                <span class="field-value">{{ pin.place_name }}</span>
+            </div>
+            {% endif %}
+            {% if pin.address_basic %}
+            <div class="detail-row">
+                <span class="field-label">Address</span>
+                <span class="field-value">{{ pin.address_basic }}{% if pin.city %}, {{ pin.city }}{% endif %}{% if pin.state %}, {{ pin.state }}{% endif %}</span>
+            </div>
+            {% endif %}
+        </div>
     </div>
 
-    {# ── Tags panel ───────────────────────────────────────────────────────────── #}
+    {# ── Visit history ────────────────────────────────────────────────────── #}
+    <div hx-get="{% url 'pin.visits' pin.id %}"
+         hx-trigger="load"
+         hx-swap="outerHTML"
+         class="visit-history card">
+        <div class="card-header">
+            <i class="material-icons">history</i>
+            <span>Visit History</span>
+        </div>
+        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+    </div>
+
+    {# ── Tags panel ───────────────────────────────────────────────────────── #}
     <div hx-get="{% url 'tag.membership' pin.id %}"
          hx-trigger="load"
          hx-swap="outerHTML"
@@ -34,12 +82,21 @@
         <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
 
-    <div class="pin-map">
+    {# ── Pin location map ─────────────────────────────────────────────────── #}
+    <div class="location-map pin-map card">
+        <div class="card-header">
+            <i class="material-icons">place</i>
+            <h3>Location</h3>
+        </div>
         <div id="map"></div>
     </div>
 
+    {# ── Campus boundary editor ───────────────────────────────────────────── #}
     <div class="campus-editor card">
-        <h2>Campus Boundary</h2>
+        <div class="card-header">
+            <i class="material-icons">pentagon</i>
+            <h3>Campus Boundary</h3>
+        </div>
         <p class="campus-description">
             Define the spatial extent of this location. The shaded region will appear as an overlay on the main map.
         </p>
@@ -53,168 +110,176 @@
         </div>
     </div>
 
-    <div class="satellite-view card">
-        <h2>Satellite View</h2>
-        <img src="{% url 'pin.satellite_view' pin.id %}" alt="Satellite view of {{ pin.effective_name }}" style="width: 100%; height: auto;">
+    {# ── Satellite view ───────────────────────────────────────────────────── #}
+    <div id="satellite-view-section" class="satellite-view card"
+         hx-get="{% url 'pin.satellite_view' pin.id %}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+        <div class="card-header">
+            <i class="material-icons">satellite_alt</i>
+            <h3>Satellite View</h3>
+        </div>
+        <div class="view-loading">
+            <i class="material-icons spin">autorenew</i>
+            Loading…
+        </div>
     </div>
 
-    <div class="street-view card">
-        <h2>Street View</h2>
-        <img src="{% url 'pin.street_view' pin.id %}" alt="Street view of {{ pin.effective_name }}" style="width: 100%; height: auto;">
+    {# ── Street view ──────────────────────────────────────────────────────── #}
+    <div id="street-view-section" class="street-view card"
+         hx-get="{% url 'pin.street_view' pin.id %}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+        <div class="card-header">
+            <i class="material-icons">streetview</i>
+            <h3>Street View</h3>
+        </div>
+        <div class="view-loading">
+            <i class="material-icons spin">autorenew</i>
+            Loading…
+        </div>
     </div>
 
-    <div hx-get="{% url 'pin.weather_forecast' pin.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="weather-forecast card">
-        <div class="loading">Loading...</div>
-        <div class="error" style="display: none;">An error occurred. Please try again later.</div>
+    {# ── Weather forecast ─────────────────────────────────────────────────── #}
+    <div id="weather-forecast-section" class="weather-widget card"
+         hx-get="{% url 'pin.weather_forecast' pin.id %}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+        <div class="card-header">
+            <i class="material-icons">wb_sunny</i>
+            <h3>Weather Forecast</h3>
+        </div>
+        <div class="view-loading">
+            <i class="material-icons spin">autorenew</i>
+            Loading…
+        </div>
     </div>
 
-    <div hx-get="{% url 'smithsonian_images' pin.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="smithsonian-images card">
-        <div class="loading">Loading...</div>
-        <div class="error" style="display: none;">An error occurred. Please try again later.</div>
+    {# ── Smithsonian images ───────────────────────────────────────────────── #}
+    <div id="smithsonian-section" class="smithsonian-images card"
+         hx-get="{% url 'smithsonian_images' pin.id %}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+        <div class="card-header">
+            <i class="material-icons">collections</i>
+            <h3>Smithsonian Archives</h3>
+        </div>
+        <div class="view-loading">
+            <i class="material-icons spin">autorenew</i>
+            Loading…
+        </div>
     </div>
 
-    <div hx-get="{% url 'pin.web_search' pin.id %}" hx-trigger="load error" hx-swap-oob="true" hx-boost="true" class="web-search card">
-        <div class="loading">Loading...</div>
-        <div class="error" style="display: none;">An error occurred. Please try again later.</div>
+    {# ── Web search results ───────────────────────────────────────────────── #}
+    <div id="web-search-section" class="web-search card"
+         hx-get="{% url 'pin.web_search' pin.id %}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+        <div class="card-header">
+            <i class="material-icons">search</i>
+            <h3>Web Results</h3>
+        </div>
+        <div class="view-loading">
+            <i class="material-icons spin">autorenew</i>
+            Loading…
+        </div>
     </div>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
-    <script>
-        // ── Pin location map ──────────────────────────────────────────────────────
-        const map = L.map('map').setView(["{{ pin.latitude }}", "{{ pin.longitude }}"], 13);
-        window.map = map;
-        window.pin = null;
-        map.invalidateSize();
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-        }).addTo(map);
+<script>
+    // ── Pin location map ──────────────────────────────────────────────────────
+    const pinLat = {{ pin.effective_latitude|default:"42.6525" }};
+    const pinLng = {{ pin.effective_longitude|default:"-73.7579" }};
 
-        // Add a marker for the pin
-        L.marker(["{{ pin.latitude }}", "{{ pin.longitude }}"]).addTo(map);
+    const map = L.map('map').setView([pinLat, pinLng], 15);
+    window.map = map;
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
-        // Update the Leaflet icon URLs
-        var newIcon = L.icon({
-            iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-            iconSize: [25, 41],
-            shadowSize: [41, 41],
-            iconAnchor: [12, 41],
-            shadowAnchor: [12, 41],
-            popupAnchor: [1, -34]
-        });
-        L.Marker.prototype.options.icon = newIcon;
+    const markerIcon = L.icon({
+        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+        iconSize: [25, 41], shadowSize: [41, 41],
+        iconAnchor: [12, 41], shadowAnchor: [12, 41], popupAnchor: [1, -34],
+    });
+    L.Marker.prototype.options.icon = markerIcon;
+    L.marker([pinLat, pinLng]).addTo(map);
+    setTimeout(() => map.invalidateSize(), 300);
 
-        document.addEventListener('htmx:configRequest', (event) => {
-            event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
-            console.log("htmx is loaded");
-        });
+    // ── Campus boundary editor ────────────────────────────────────────────────
+    const campusApiUrl = "{% url 'campus.pin' pin.id %}";
+    const campusMap = L.map('campus-map').setView([pinLat, pinLng], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(campusMap);
+    L.marker([pinLat, pinLng]).addTo(campusMap);
 
-        document.body.addEventListener('htmx:afterOnLoad', function () {
-            // Dispatch a custom event after the dialog is loaded
-            setTimeout(() => {
-                const event = new Event('dialogLoaded');
-                document.dispatchEvent(event);
-            }, 250);
-        });
+    const campusItems = new L.FeatureGroup().addTo(campusMap);
+    const campusStyle = { color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 };
+    let campusDrawControl = null;
 
-        // ── Campus boundary editor ────────────────────────────────────────────────
-        const pinLat = {{ pin.effective_latitude|default:"42.6525" }};
-        const pinLng = {{ pin.effective_longitude|default:"-73.7579" }};
-        const campusApiUrl = "{% url 'campus.pin' pin.id %}";
+    setTimeout(() => campusMap.invalidateSize(), 300);
 
-        const campusMap = L.map('campus-map').setView([pinLat, pinLng], 16);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(campusMap);
-
-        // Marker so the user can see where the pin is while drawing
-        L.marker([pinLat, pinLng]).addTo(campusMap);
-
-        // Feature group holds the polygon that Leaflet.draw manages
-        const campusItems = new L.FeatureGroup().addTo(campusMap);
-
-        const campusStyle = { color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 };
-        let campusDrawControl = null;
-
-        // Load the saved campus on page load
-        fetch(campusApiUrl)
-            .then(r => r.json())
-            .then(data => {
-                if (data.polygon) {
-                    const layer = L.geoJSON(data.polygon, { style: campusStyle });
-                    layer.eachLayer(l => campusItems.addLayer(l));
-                    campusMap.fitBounds(campusItems.getBounds().pad(0.25));
-                }
-            })
-            .catch(err => console.warn('Could not load campus:', err));
-
-        function startEditCampus() {
-            if (campusDrawControl) return;
-
-            campusDrawControl = new L.Control.Draw({
-                draw: {
-                    polygon: {
-                        allowIntersection: false,
-                        drawError: { color: '#ffcc00', message: 'Boundaries cannot intersect!' },
-                        shapeOptions: campusStyle,
-                        showArea: true,
-                    },
-                    marker: false,
-                    circle: false,
-                    rectangle: false,
-                    polyline: false,
-                    circlemarker: false,
-                },
-                edit: { featureGroup: campusItems },
-            });
-            campusMap.addControl(campusDrawControl);
-
-            // When a new polygon is finished, replace any existing one
-            campusMap.on(L.Draw.Event.CREATED, function (e) {
-                campusItems.clearLayers();
-                campusItems.addLayer(e.layer);
-            });
-
-            document.getElementById('edit-campus-btn').style.display = 'none';
-            document.getElementById('campus-save-controls').style.display = '';
-        }
-
-        function saveCampus() {
-            const layers = campusItems.getLayers();
-            if (layers.length === 0) {
-                toastr.warning('Draw a boundary on the map first.');
-                return;
+    fetch(campusApiUrl)
+        .then(r => r.json())
+        .then(data => {
+            if (data.polygon) {
+                const layer = L.geoJSON(data.polygon, { style: campusStyle });
+                layer.eachLayer(l => campusItems.addLayer(l));
+                campusMap.fitBounds(campusItems.getBounds().pad(0.25));
+                campusMap.invalidateSize();
             }
+        })
+        .catch(err => console.warn('Could not load campus:', err));
 
-            const geometry = layers[0].toGeoJSON().geometry;
-
-            fetch(campusApiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}',
+    function startEditCampus() {
+        if (campusDrawControl) return;
+        campusDrawControl = new L.Control.Draw({
+            draw: {
+                polygon: {
+                    allowIntersection: false,
+                    drawError: { color: '#ffcc00', message: 'Boundaries cannot intersect!' },
+                    shapeOptions: campusStyle,
+                    showArea: true,
                 },
-                body: JSON.stringify({ polygon: geometry }),
-            })
-            .then(r => {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.json();
-            })
-            .then(() => {
-                toastr.success('Campus boundary saved.');
-                cancelCampusEdit();
-            })
-            .catch(() => toastr.error('Failed to save campus boundary.'));
-        }
+                marker: false, circle: false, rectangle: false, polyline: false, circlemarker: false,
+            },
+            edit: { featureGroup: campusItems },
+        });
+        campusMap.addControl(campusDrawControl);
+        campusMap.on(L.Draw.Event.CREATED, function (e) {
+            campusItems.clearLayers();
+            campusItems.addLayer(e.layer);
+        });
+        document.getElementById('edit-campus-btn').style.display = 'none';
+        document.getElementById('campus-save-controls').style.display = '';
+    }
 
-        function cancelCampusEdit() {
-            if (campusDrawControl) {
-                campusMap.removeControl(campusDrawControl);
-                campusDrawControl = null;
-            }
-            campusMap.off(L.Draw.Event.CREATED);
-            document.getElementById('edit-campus-btn').style.display = '';
-            document.getElementById('campus-save-controls').style.display = 'none';
+    function saveCampus() {
+        const layers = campusItems.getLayers();
+        if (layers.length === 0) {
+            toastr.warning('Draw a boundary on the map first.');
+            return;
         }
-    </script>
+        fetch(campusApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+            body: JSON.stringify({ polygon: layers[0].toGeoJSON().geometry }),
+        })
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(() => { toastr.success('Campus boundary saved.'); cancelCampusEdit(); })
+        .catch(() => toastr.error('Failed to save campus boundary.'));
+    }
+
+    function cancelCampusEdit() {
+        if (campusDrawControl) { campusMap.removeControl(campusDrawControl); campusDrawControl = null; }
+        campusMap.off(L.Draw.Event.CREATED);
+        document.getElementById('edit-campus-btn').style.display = '';
+        document.getElementById('campus-save-controls').style.display = 'none';
+    }
+
+    document.addEventListener('htmx:configRequest', (event) => {
+        event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+    });
+</script>
 {% endblock %}

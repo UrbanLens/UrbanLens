@@ -1,0 +1,51 @@
+{% load dashboard_tags %}
+<div class="tag-card-view tag-card-merge-view">
+    <div class="tag-card-icon" {% if tag.color %}style="background:{{ tag.color }}22; border-color:{{ tag.color }}44;"{% endif %}>
+        {% if tag.custom_icon %}
+        <img src="{{ tag.custom_icon.url }}" alt="" class="tag-icon-img">
+        {% elif tag.icon %}
+            {% if tag.icon|is_material_icon %}
+            <i class="material-icons tag-icon-std" {% if tag.color %}style="color:{{ tag.color }}"{% endif %}>{{ tag.icon }}</i>
+            {% else %}
+            <span class="tag-icon-emoji">{{ tag.icon }}</span>
+            {% endif %}
+        {% else %}
+        <i class="material-icons tag-icon-std tag-icon-empty">label</i>
+        {% endif %}
+    </div>
+
+    <div class="tag-card-body" style="flex:1;min-width:0;">
+        <div class="tag-card-name" style="margin-bottom:6px;">
+            Merge <strong>{{ tag.name }}</strong>
+        </div>
+        <div style="font-size:.78rem;color:#888;margin-bottom:10px;">
+            {{ tag.pins.count }} pin{{ tag.pins.count|pluralize }} will be moved to the target tag, then this tag will be deleted.
+        </div>
+
+        <form hx-post="{% url 'tag.merge' tag.id %}"
+              hx-target="#tag-rows"
+              hx-swap="innerHTML"
+              style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+            {% csrf_token %}
+            <select name="target_tag_id" class="form-input" style="flex:1;min-width:140px;max-width:260px;" required>
+                <option value="">— Merge into… —</option>
+                {% for candidate in candidates %}
+                <option value="{{ candidate.id }}">
+                    {{ candidate.name }}{% if not candidate.profile %} (global){% endif %}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn-primary btn-sm"
+                    onclick="return confirm('Merge \'{{ tag.name|escapejs }}\' into the selected tag?\n\nThis cannot be undone.')">
+                <i class="material-icons" style="font-size:1rem;vertical-align:middle;">merge</i>
+                Merge
+            </button>
+            <button type="button" class="btn-ghost btn-sm"
+                    hx-get="{% url 'tag.rows' %}"
+                    hx-target="#tag-rows"
+                    hx-swap="innerHTML">
+                Cancel
+            </button>
+        </form>
+    </div>
+</div>

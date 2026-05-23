@@ -4,6 +4,163 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<style>
+/* ── Filter panel ─────────────────────────────────────────────────── */
+#filter-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 268px;
+    background: rgba(14, 16, 22, 0.93);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-left: 1px solid rgba(255,255,255,0.08);
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.22s cubic-bezier(.4,0,.2,1);
+    font-size: 0.82rem;
+    color: #d8d8e0;
+}
+#filter-panel.open { transform: translateX(0); }
+
+.fp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 15px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.fp-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.45);
+}
+.fp-close {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.4);
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 1rem;
+    line-height: 1;
+    transition: color 0.15s, background 0.15s;
+}
+.fp-close:hover { color: #fff; background: rgba(255,255,255,0.1); }
+
+#filter-form {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px 16px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.12) transparent;
+}
+
+.fp-section { margin-bottom: 14px; }
+
+.fp-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.35);
+    margin-bottom: 7px;
+}
+
+.fp-search {
+    width: 100%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.11);
+    border-radius: 8px;
+    color: #fff;
+    padding: 7px 11px;
+    font-size: 0.82rem;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.15s, background 0.15s;
+}
+.fp-search:focus {
+    border-color: rgba(90,150,255,0.5);
+    background: rgba(255,255,255,0.09);
+}
+.fp-search::placeholder { color: rgba(255,255,255,0.25); }
+
+.fp-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.fp-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    cursor: pointer;
+    color: rgba(255,255,255,0.55);
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    user-select: none;
+    white-space: nowrap;
+    font-size: 0.78rem;
+}
+.fp-chip:hover { background: rgba(255,255,255,0.11); color: #fff; }
+.fp-chip input { display: none; }
+.fp-chip:has(input:checked) {
+    background: rgba(70,120,255,0.28);
+    border-color: rgba(70,120,255,0.55);
+    color: #c8d8ff;
+}
+
+.fp-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-height: 190px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.12) transparent;
+}
+
+.fp-reset {
+    width: 100%;
+    padding: 7px;
+    margin-top: 6px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: rgba(255,255,255,0.4);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.fp-reset:hover {
+    background: rgba(255,70,70,0.18);
+    border-color: rgba(255,70,70,0.35);
+    color: #ff9999;
+}
+
+/* Active-filter dot on the search button */
+#search-pins-button { position: relative; }
+#search-pins-button.has-filters::after {
+    content: '';
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #5082ff;
+    pointer-events: none;
+}
+</style>
 {% endblock %}
 
 {% block title %}Map{% endblock %}
@@ -16,8 +173,8 @@
             <div hx-get="{% url 'pin.add' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="innerHTML">
                 <button id="add-pin-button" class="map-button">Add Pin</button>
             </div>
-            <div hx-get="{% url 'map.search' %}" hx-trigger="click" hx-target="#searchPinModal" hx-swap="innerHTML">
-                <button id="search-pins-button" title="Search" class="map-button"></button>
+            <div>
+                <button id="search-pins-button" title="Filter Pins" class="map-button" onclick="toggleFilterPanel()"></button>
             </div>
             <div>
                 <button id="topography-button" title="Topography View" onclick="toggleTopographyView()"></button>
@@ -40,6 +197,71 @@
         </div>
     </div>
 
+    {# ── Filter panel ──────────────────────────────────────────────────── #}
+    <div id="filter-panel">
+        <div class="fp-header">
+            <span class="fp-title">Filter Pins</span>
+            <button class="fp-close" onclick="toggleFilterPanel()" title="Close">✕</button>
+        </div>
+        <form id="filter-form"
+              hx-post="{% url 'map.search' %}"
+              hx-trigger="change, input delay:600ms from:[name=name]"
+              hx-target="#map-body"
+              hx-swap="outerHTML">
+            {% csrf_token %}
+
+            <div class="fp-section">
+                <div class="fp-label">Search</div>
+                <input type="text" name="name" class="fp-search" placeholder="Search pins…" autocomplete="off">
+            </div>
+
+            <div class="fp-section">
+                <div class="fp-label">Status</div>
+                <div class="fp-chips">
+                    {% for value, label in status_choices %}
+                    <label class="fp-chip">
+                        <input type="checkbox" name="status" value="{{ value }}">
+                        <span>{{ label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="fp-section">
+                <div class="fp-label">Min Rating</div>
+                <div class="fp-chips">
+                    <label class="fp-chip">
+                        <input type="radio" name="min_rating" value="" checked>
+                        <span>Any</span>
+                    </label>
+                    {% for star in "12345"|make_list %}
+                    <label class="fp-chip">
+                        <input type="radio" name="min_rating" value="{{ star }}">
+                        <span>{{ star }}★+</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {% if tags %}
+            <div class="fp-section">
+                <div class="fp-label">Tags</div>
+                <div class="fp-tags">
+                    {% for tag in tags %}
+                    <label class="fp-chip">
+                        <input type="checkbox" name="tags" value="{{ tag.id }}">
+                        {% if tag.icon %}<span>{{ tag.icon }}</span>{% endif %}
+                        <span>{{ tag.name }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <button type="button" class="fp-reset" onclick="resetFilters()">Reset Filters</button>
+        </form>
+    </div>
+
     <div id="loading-pins-message">
         <span>Loading...</span>
     </div>
@@ -48,12 +270,10 @@
         <span id="pin-counter-value">0</span>
         <span id="pin-counter-label">pins</span>
     </div>
-    <div id="map-body" hx-get="{% url 'map.init' %}" hx-trigger="load" hx-swap="outerHTML">
-    </div>
+    <div id="map-body"></div>
 
 </div>
 <div id="addPinModal"></div>
-<div id="searchPinModal"></div>
 <div id="importPinsModal"></div>
 {% endblock %}
 
@@ -79,6 +299,86 @@
 
     var pinsLayerGroup = L.layerGroup().addTo(map);
 
+    // ── Pin marker renderer (also used by search results in data.html) ────────
+    function addMarker(pin) {
+        if (!pin.latitude || !pin.longitude) return;
+        const coords = [parseFloat(pin.latitude), parseFloat(pin.longitude)];
+        let marker = L.marker(coords);
+
+        if (pin.icon && pin.icon !== 'undefined' && pin.icon !== 'null') {
+            const color = (pin.color && pin.color !== 'None') ? pin.color : '#555555';
+            let iconHtml;
+            if (/^[a-z_]+$/.test(pin.icon)) {
+                iconHtml = '<i class="material-icons map-pin-icon" style="color:' + color + ';">' + pin.icon + '</i>';
+            } else {
+                iconHtml = '<span class="map-pin-emoji">' + pin.icon + '</span>';
+            }
+            marker.setIcon(L.divIcon({ className: 'map-pin-icon-wrap', html: iconHtml, iconSize: [28, 28], iconAnchor: [14, 14] }));
+        }
+
+        const popupContent = `
+            <div class="pin-popup" data-id="${pin.id}">
+                <div data-name="title">${pin.name || ''}</div>
+                <div data-name="description">${pin.description || ''}</div>
+                <div class="stars rating-${pin.rating || 0}">
+                    ${[1, 2, 3, 4, 5].map(i => `
+                        <input type="radio" name="star" class="star-${i}" id="star-${i}-${pin.id}" value="${i}" ${pin.rating == i ? 'checked' : ''} />
+                        <label class="star-${i}" for="star-${i}-${pin.id}">★</label>
+                    `).join('')}
+                </div>
+                <div data-name="status"><span class="value">${pin.status || ''}</span></div>
+                <div data-name="categories"><span class="value">${pin.categories || ''}</span></div>
+                <div class="last-visited" data-name="last_visited">
+                    <span class="label">Last Visited:</span>
+                    <span class="value">${pin.last_visited || 'Never'}</span>
+                </div>
+                <div class="tags">${pin.tags || ''}</div>
+                <a href="${pin.viewLocationUrl}" class="view-full-pin">View Full Details</a>
+                <button class="delete-button" onclick="deletePin(this)"><i class="material-icons">delete</i></button>
+            </div>
+        `;
+        marker.addTo(pinsLayerGroup).bindPopup(popupContent);
+    }
+    window.addMarker = addMarker;
+
+    // ── Two-phase pin loading ─────────────────────────────────────────────────
+    // Phase 1 loads only pins within the current viewport (fast).
+    // Phase 2 loads the remaining pins in the background.
+    window._loadedPinIds = new Set();
+
+    async function _fetchAndAddPins(url) {
+        const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        if (!resp.ok) throw new Error('Pin fetch failed: ' + resp.status);
+        const data = await resp.json();
+        (data.pins || []).forEach(pin => {
+            if (!window._loadedPinIds.has(pin.id)) {
+                window._loadedPinIds.add(pin.id);
+                addMarker(pin);
+            }
+        });
+        updatePinCounter();
+        return (data.pins || []).length;
+    }
+
+    (async () => {
+        try {
+            // Phase 1: pins in the initial viewport
+            const b = map.getBounds();
+            const bbox = `${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}`;
+            await _fetchAndAddPins(`{% url 'map.pins' %}?bbox=${encodeURIComponent(bbox)}`);
+        } catch (err) {
+            console.warn('Phase 1 pin load failed:', err);
+        } finally {
+            hideLoadingMessage();
+        }
+
+        // Phase 2: remaining pins in the background — short delay lets the map settle
+        setTimeout(() => {
+            _fetchAndAddPins('{% url 'map.pins' %}')
+                .catch(err => console.warn('Background pin load failed:', err));
+        }, 300);
+    })();
+
     const standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
     }).addTo(map);
@@ -93,7 +393,7 @@
     const rainLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{openweathermap_api_key}}', {
         attribution: 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
         layer: 'precipitation_new',
-    }); 
+    });
     const cloudLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{openweathermap_api_key}}', {
         attribution: 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
         layer: 'clouds_new',
@@ -148,8 +448,9 @@
                     input = document.createElement('select');
                     const options = [
                         { display: 'Visited', value: 'visited' },
-                        { display: 'Not Visited', value: 'not_visited' },
-                        { display: 'Wish to Visit', value: 'wish_to_visit' }
+                        { display: 'Not Visited', value: 'not visited' },
+                        { display: 'Wish to Visit', value: 'wish to visit' },
+                        { display: 'Demolished', value: 'demolished' },
                     ];
                     options.forEach(function (option) {
                         const optionElement = document.createElement('option');
@@ -521,6 +822,39 @@
         const panel = document.getElementById('map-buttons');
         const collapsed = panel.classList.toggle('collapsed');
         this.title = collapsed ? 'Expand map controls' : 'Collapse map controls';
+    });
+
+    // ── Filter panel ──────────────────────────────────────────────────────
+    function toggleFilterPanel() {
+        const panel = document.getElementById('filter-panel');
+        const btn = document.getElementById('search-pins-button');
+        const isOpen = panel.classList.toggle('open');
+        btn.classList.toggle('active', isOpen);
+    }
+
+    function resetFilters() {
+        const form = document.getElementById('filter-form');
+        // Uncheck all checkboxes
+        form.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
+        // Reset radio to "Any" (value="")
+        const anyRadio = form.querySelector('input[type=radio][value=""]');
+        if (anyRadio) anyRadio.checked = true;
+        // Clear text
+        form.querySelectorAll('input[type=text]').forEach(t => t.value = '');
+        // Trigger a fresh search
+        htmx.trigger(form, 'change');
+        // Remove active-filter indicator
+        document.getElementById('search-pins-button').classList.remove('has-filters');
+    }
+
+    // Show the active-filters dot whenever any filter is set
+    document.getElementById('filter-form').addEventListener('change', function () {
+        const form = this;
+        const anyChecked = form.querySelector('input[type=checkbox]:checked') !== null;
+        const nonAnyRating = form.querySelector('input[type=radio][name=min_rating]:checked')?.value !== '';
+        const hasText = (form.querySelector('input[name=name]')?.value || '').trim() !== '';
+        const hasFilters = anyChecked || nonAnyRating || hasText;
+        document.getElementById('search-pins-button').classList.toggle('has-filters', hasFilters);
     });
 
 </script>

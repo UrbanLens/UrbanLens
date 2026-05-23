@@ -1,3 +1,53 @@
+<style>
+.import-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    cursor: pointer;
+    padding: 12px 0 4px;
+    border-top: 1px solid rgba(0,0,0,.07);
+    margin-top: 8px;
+    user-select: none;
+}
+.import-toggle input[type=checkbox] { display: none; }
+.import-toggle-track {
+    flex-shrink: 0;
+    position: relative;
+    width: 38px;
+    height: 21px;
+    background: #ccc;
+    border-radius: 11px;
+    transition: background .18s;
+    margin-top: 1px;
+}
+.import-toggle input:checked + .import-toggle-track { background: #2196F3; }
+.import-toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 17px;
+    height: 17px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    transition: left .18s;
+}
+.import-toggle input:checked + .import-toggle-track .import-toggle-thumb { left: 19px; }
+.import-toggle-title {
+    display: block;
+    font-size: .85rem;
+    font-weight: 600;
+    color: #333;
+    line-height: 1.3;
+}
+.import-toggle-hint {
+    display: block;
+    font-size: .74rem;
+    color: #888;
+    margin-top: 3px;
+    line-height: 1.4;
+}
+</style>
 <div class="dialog-overlay" id="import-screen"></div>
 <div class="dialog" id="import-dialog">
     <button class="btn-close" id="closeImportDialog" aria-label="Close">×</button>
@@ -28,6 +78,17 @@
                 </div>
             </div>
             {% endif %}
+
+            <label class="import-toggle">
+                <input type="checkbox" name="tag_by_filename" value="1">
+                <span class="import-toggle-track">
+                    <span class="import-toggle-thumb"></span>
+                </span>
+                <span>
+                    <span class="import-toggle-title">Create tags from filenames</span>
+                    <span class="import-toggle-hint">Pins in "Demolished Structures.csv" will be tagged "Demolished Structures"</span>
+                </span>
+            </label>
 
             <input type="submit" value="Import" class="submit-button" style="margin-top:16px;">
         </form>

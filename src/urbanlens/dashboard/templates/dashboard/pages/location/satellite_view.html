@@ -1,0 +1,16 @@
+<div id="satellite-view-section" class="satellite-view card">
+    <div class="card-header">
+        <i class="material-icons">satellite_alt</i>
+        <h3>Satellite View</h3>
+    </div>
+    {% if image_b64 %}
+    <img src="data:image/jpeg;base64,{{ image_b64 }}"
+         alt="Satellite view{% if pin %} of {{ pin.effective_name }}{% endif %}"
+         class="view-image">
+    {% else %}
+    <div class="view-unavailable">
+        <i class="material-icons">broken_image</i>
+        <span>{{ error|default:"Satellite image unavailable." }}</span>
+    </div>
+    {% endif %}
+</div>

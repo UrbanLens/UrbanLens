@@ -61,7 +61,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(
             request,
             "dashboard/pages/location/index.html",
-            {"pin": pin, "google_maps_api_key": settings.google_maps_api_key},
+            {"pin": pin, "google_maps_api_key": settings.google_maps_api_key, "page_name": "location-details"},
         )
 
     def test_ai(self, request: HttpRequest, *args, **kwargs):
@@ -219,45 +219,63 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 query.append(place_name)
 
             search_results = google_gateway.search(query)
-        except HTTPError as e:
-            logger.exception("Unable to contact Google Search API. Is the API Key valid? Exception ---> %s", e)
-            return HttpResponse("Unable to search. This is unlikely to be resolved by multiple requests.", status=500)
+        except Exception as e:
+            logger.exception("Unable to contact Google Search API: %s", e)
+            return render(request, "dashboard/pages/location/web_search.html", {"error": "Search unavailable. Please try again later."})
 
         return render(request, "dashboard/pages/location/web_search.html", {"search_results": search_results})
 
     def satellite_view_google_image(self, request: HttpRequest, **kwargs):
         """
-        Returns the satellite view image for a pin.
+        Returns an HTML fragment containing the satellite view image for a pin.
         """
+        import base64
+
         try:
             pin = Pin.objects.get(id=kwargs["pin_id"])
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        # Instantiate the GoogleMapsGateway with the API key
-        google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
+        lat = pin.effective_latitude
+        lng = pin.effective_longitude
+        if lat is None or lng is None:
+            return render(request, "dashboard/pages/location/satellite_view.html", {"error": "No coordinates available."})
 
-        # Get the satellite view image from the Google Maps API
-        satellite_image = google_maps_gateway.get_satellite_view(pin.latitude, pin.longitude)
+        try:
+            google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
+            image_bytes = google_maps_gateway.get_satellite_view(lat, lng)
+            image_b64 = base64.b64encode(image_bytes).decode("ascii")
+        except Exception as exc:
+            logger.warning("Satellite view unavailable for pin %s: %s", kwargs["pin_id"], exc)
+            return render(request, "dashboard/pages/location/satellite_view.html", {"error": "Satellite image unavailable."})
 
-        return HttpResponse(satellite_image, content_type="image/jpeg")
+        return render(request, "dashboard/pages/location/satellite_view.html", {"image_b64": image_b64, "pin": pin})
 
     def street_view(self, request: HttpRequest, **kwargs):
         """
-        Returns the street view image for a pin.
+        Returns an HTML fragment containing the street view image for a pin.
         """
+        import base64
+
         try:
             pin = Pin.objects.get(id=kwargs["pin_id"])
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        # Instantiate the GoogleMapsGateway with the API key
-        google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
+        lat = pin.effective_latitude
+        lng = pin.effective_longitude
+        if lat is None or lng is None:
+            return render(request, "dashboard/pages/location/street_view.html", {"error": "No coordinates available."})
 
-        # Get the street view image from the Google Maps API
-        street_view_image = google_maps_gateway.get_street_view(pin.latitude, pin.longitude)
+        try:
+            google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
+            image_bytes = google_maps_gateway.get_street_view(lat, lng)
+            image_b64 = base64.b64encode(image_bytes).decode("ascii")
+        except Exception as exc:
+            logger.warning("Street view unavailable for pin %s: %s", kwargs["pin_id"], exc)
+            return render(request, "dashboard/pages/location/street_view.html", {"error": "Street view unavailable."})
 
-        return HttpResponse(street_view_image, content_type="image/jpeg")
+        return render(request, "dashboard/pages/location/street_view.html", {"image_b64": image_b64, "pin": pin})
 
     @action(detail=True, methods=["get"])
     def import_form(self, request: HttpRequest):
@@ -334,11 +352,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         tag_ids = request.POST.getlist("tag_ids")
         import_tags = list(Tag.objects.visible_to(profile).filter(id__in=tag_ids)) if tag_ids else []
+        tag_by_filename = request.POST.get("tag_by_filename") == "1"
 
         google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
 
         response = StreamingHttpResponse(
-            google_maps_gateway.import_pins_streaming(all_files, profile, tags=import_tags),
+            google_maps_gateway.import_pins_streaming(all_files, profile, tags=import_tags, tag_by_filename=tag_by_filename),
             content_type="text/event-stream",
         )
         response["Cache-Control"] = "no-cache"

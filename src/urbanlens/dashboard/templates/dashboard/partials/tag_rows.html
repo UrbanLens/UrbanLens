@@ -59,6 +59,12 @@
                     hx-swap="innerHTML">
                 <i class="material-icons">edit</i>
             </button>
+            <button type="button" class="btn-icon" title="Merge into another tag"
+                    hx-get="{% url 'tag.merge' tag.id %}"
+                    hx-target="#tag-card-{{ tag.id }}"
+                    hx-swap="innerHTML">
+                <i class="material-icons">merge</i>
+            </button>
             <form hx-post="{% url 'tag.delete' tag.id %}"
                   hx-target="#tag-rows"
                   hx-swap="innerHTML"

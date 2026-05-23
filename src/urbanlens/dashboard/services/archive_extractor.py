@@ -101,16 +101,22 @@ def validate_content_type(name: str, data: bytes) -> str | None:
     if not text:
         return None
 
-    # JSON: must start with '{' or '[' and parse successfully as GeoJSON.
+    # JSON: must start with '{' or '[' and parse successfully.
+    # Recognised variants:
+    #   "json"             — GeoJSON Saved Places (has "features")
+    #   "location_history" — Google Semantic Location History (has "timelineObjects")
     if text[0] in "{[":
         try:
             parsed = json.loads(text)
         except json.JSONDecodeError:
             logger.debug("File has JSON-like start but failed to parse: %s", name)
             return None
-        if isinstance(parsed, dict) and "features" in parsed:
-            return "json"
-        logger.debug("File is valid JSON but not recognised GeoJSON: %s", name)
+        if isinstance(parsed, dict):
+            if "features" in parsed:
+                return "json"
+            if "timelineObjects" in parsed:
+                return "location_history"
+        logger.debug("File is valid JSON but not a recognised import format: %s", name)
         return None
 
     # KML: XML document that contains a <kml element within the first 2 kB.

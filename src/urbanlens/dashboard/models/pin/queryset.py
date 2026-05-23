@@ -109,17 +109,32 @@ class PinQuerySet(abstract.QuerySet):
         tag_ids = Tag.get_tag_and_descendants(tag_id)
         return self.filter(tags__id__in=tag_ids).distinct()
 
-    def filter_by_criteria(self, criteria):
-        query = Q()
-        if criteria.get("date_added"):
-            query &= Q(created__date=criteria["date_added"])
-        if criteria.get("popularity"):
-            query &= Q(popularity__gte=criteria["popularity"])
-        if criteria.get("tags"):
-            tags = criteria["tags"].split(",")
+    def filter_by_criteria(self, criteria) -> Self:
+        """Filter pins by the criteria dict produced by SearchForm.cleaned_data.
+
+        Args:
+            criteria: Dict with optional keys: name, status (list), tags (QuerySet),
+                min_rating (int).
+
+        Returns:
+            Filtered QuerySet (distinct).
+        """
+        qs = self
+        if name := (criteria.get("name") or "").strip():
+            qs = qs.filter(
+                Q(nickname__icontains=name) | Q(location__name__icontains=name)
+            )
+        if statuses := criteria.get("status"):
+            qs = qs.filter(status__in=statuses)
+        if tags := criteria.get("tags"):
             for tag in tags:
-                query &= Q(tags__name__in=[tag])
-        return self.filter(query)
+                qs = qs.filter(tags=tag)
+        if min_rating := criteria.get("min_rating"):
+            try:
+                qs = qs.filter(reviews__rating__gte=int(min_rating))
+            except (ValueError, TypeError):
+                pass
+        return qs.distinct()
 
     def rated(self, rating) -> Self:
         """
