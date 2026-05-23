@@ -4,11 +4,12 @@
         let marker = L.marker(coords);
 
         if (pin.icon && pin.icon !== 'undefined') {
+            var color = (pin.color && pin.color !== 'None') ? pin.color : '#555555';
             marker.setIcon(L.divIcon({
-                className: pin.icon,
-                html: `<i class="pin ${pin.icon}"></i>`,
-                iconSize: [30, 42],
-                iconAnchor: [15, 42]
+                className: 'map-pin-icon-wrap',
+                html: '<i class="material-icons map-pin-icon" style="color:' + color + ';">' + pin.icon + '</i>',
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
             }));
         }
 
@@ -44,6 +45,7 @@
         latitude: "{{ pin.latitude }}",
         longitude: "{{ pin.longitude }}",
         icon: "{{ pin.icon|default_if_none:'' }}",
+        color: "{{ pin.color|default_if_none:'' }}",
         id: "{{ pin.id }}",
         effective_name: "{{ pin.effective_name }}",
         description: "{{ pin.description }}",

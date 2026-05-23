@@ -16,7 +16,6 @@ from urbanlens.dashboard.models.pin.queryset import PinManager
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.categories.model import Category
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.reviews import Manager as ReviewManager
 
 logger = logging.getLogger(__name__)
@@ -132,6 +131,17 @@ class Pin(abstract.Model):
                 return tag.custom_icon.url
             if tag.icon:
                 return tag.icon
+        return None
+
+    @property
+    def effective_color(self) -> str | None:
+        """Color hex string for this pin, inherited from the highest-order tag with a color.
+
+        Prefetch tags when calling in bulk (e.g. get_map_data).
+        """
+        for tag in self.tags.order_by("-order"):
+            if tag.color:
+                return tag.color
         return None
 
     @property
@@ -279,7 +289,7 @@ class Pin(abstract.Model):
 
         category_name = category_name.lower()
         try:
-            category, _created = Category.objects.get_or_create(name=category_name)
+            category, _ = Category.objects.get_or_create(name=category_name)
             if category:
                 self.categories.add(category)
                 if save:
@@ -321,6 +331,7 @@ class Pin(abstract.Model):
             "status": PinStatus.get_name(self.status) or PinStatus.NOT_VISITED.label,
             "profile": self.profile.id,
             "rating": self.rating,
+            "color": self.effective_color,
             "tags": [{"id": t.id, "name": t.name, "color": t.color, "icon": t.icon} for t in self.tags.all()],
         }
 

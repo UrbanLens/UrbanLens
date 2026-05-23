@@ -577,28 +577,22 @@ input[type="submit"] {
     }
 }
 
-i.pin {
-    width: 3rem;
-    height: 3rem;
-    background-size: 100% 100%;
-    background-repeat: no-repeat;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    opacity: 0.7;
-    background-image: url("/static/icons/house.png");
+// Map pin icon (Material Icons rendered via Leaflet divIcon)
+.map-pin-icon-wrap {
+    background: none !important;
+    border: none !important;
 }
 
-i.pin:hover {
-    opacity: 1;
-    filter: invert(0%) sepia(100%) saturate(100%) hue-rotate(130deg) brightness(100%) contrast(100%);
-}
+.map-pin-icon {
+    font-size: 24px !important;
+    display: block !important;
+    line-height: 1 !important;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+    transition: filter 0.15s;
 
-i.pin.selected,
-i.pin:focus {
-    opacity: 1;
-    filter: invert(0%) sepia(100%) saturate(100%) hue-rotate(0deg) brightness(100%) contrast(100%);
+    &:hover {
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7)) brightness(1.15);
+    }
 }
 
 i.bank {
