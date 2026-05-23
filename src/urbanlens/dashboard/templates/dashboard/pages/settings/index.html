@@ -63,27 +63,91 @@
     </section>
 
     {# ── Contact ───────────────────────────────────────────────────────────── #}
-    <section class="settings-section settings-section--placeholder">
+    <section class="settings-section">
         <div class="settings-section-header">
             <i class="material-icons">mail</i>
             <div>
                 <h2 class="settings-section-title">Contact</h2>
-                <p class="settings-section-desc">Notification and contact preferences - coming soon.</p>
+                <p class="settings-section-desc">Manage your contact information.</p>
             </div>
         </div>
-        <p class="settings-coming-soon">Email notifications and messaging preferences will appear here.</p>
+
+        <form method="post" class="settings-form" id="contact-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="contact">
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ contact_form.email.id_for_label }}">
+                    {{ contact_form.email.label }}
+                </label>
+                <p class="settings-help">{{ contact_form.email.help_text }}</p>
+                {{ contact_form.email }}
+                {% if contact_form.email.errors %}
+                <p class="settings-error">{{ contact_form.email.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save Contact Settings</button>
+            </div>
+        </form>
     </section>
 
     {# ── Style ─────────────────────────────────────────────────────────────── #}
-    <section class="settings-section settings-section--placeholder">
+    <section class="settings-section">
         <div class="settings-section-header">
             <i class="material-icons">palette</i>
             <div>
                 <h2 class="settings-section-title">Style</h2>
-                <p class="settings-section-desc">Theme and display preferences - coming soon.</p>
+                <p class="settings-section-desc">Theme and display preferences.</p>
             </div>
         </div>
-        <p class="settings-coming-soon">Map style, color scheme, and display options will appear here.</p>
+
+        <form method="post" class="settings-form" id="style-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="style">
+
+            <div class="settings-field">
+                <label class="settings-label">Color Theme</label>
+                <p class="settings-help">Choose how the app looks.</p>
+                <div class="settings-theme-row">
+                    <label class="settings-theme-option {% if not style_form.dark_mode.value %}active{% endif %}">
+                        <input type="radio" name="dark_mode_choice" value="light"
+                               {% if not style_form.dark_mode.value %}checked{% endif %}
+                               onchange="applyThemePreview('light')">
+                        <i class="material-icons">light_mode</i>
+                        <span>Light</span>
+                    </label>
+                    <label class="settings-theme-option {% if style_form.dark_mode.value %}active{% endif %}">
+                        <input type="radio" name="dark_mode_choice" value="dark"
+                               {% if style_form.dark_mode.value %}checked{% endif %}
+                               onchange="applyThemePreview('dark')">
+                        <i class="material-icons">dark_mode</i>
+                        <span>Dark</span>
+                    </label>
+                </div>
+                {# hidden checkbox that the form actually submits #}
+                <input type="hidden" name="dark_mode" id="dark-mode-hidden" value="{% if style_form.dark_mode.value %}on{% endif %}">
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save Style Settings</button>
+            </div>
+        </form>
     </section>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyThemePreview(theme) {
+    document.getElementById('html-root').setAttribute('data-theme', theme);
+    document.getElementById('dark-mode-hidden').value = theme === 'dark' ? 'on' : '';
+    document.querySelectorAll('.settings-theme-option').forEach(function (el) {
+        el.classList.remove('active');
+    });
+    var chosen = theme === 'dark' ? 1 : 0;
+    document.querySelectorAll('.settings-theme-option')[chosen].classList.add('active');
+}
+</script>
 {% endblock %}

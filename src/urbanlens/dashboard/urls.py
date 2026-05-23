@@ -184,6 +184,7 @@ urlpatterns = [
             [
                 path("", userprofile.ViewProfileView.as_view(), name="profile.view"),
                 path("edit/", userprofile.EditProfileView.as_view(), name="profile.edit"),
+                path("edit/field/", userprofile.ProfileFieldUpdateView.as_view(), name="profile.field.update"),
                 path("<int:profile_id>/", userprofile.ViewProfileView.as_view(), name="profile.view_user"),
             ],
         ),
@@ -197,6 +198,7 @@ urlpatterns = [
                 path("create/", tags.TagCreateView.as_view(), name="tag.create"),
                 path("<int:tag_id>/edit/", tags.TagEditView.as_view(), name="tag.edit"),
                 path("<int:tag_id>/delete/", tags.TagDeleteView.as_view(), name="tag.delete"),
+                path("reorder/", tags.TagReorderView.as_view(), name="tag.reorder"),
                 path("pin/<int:pin_id>/", tags.TagMembershipView.as_view(), name="tag.membership"),
             ],
         ),

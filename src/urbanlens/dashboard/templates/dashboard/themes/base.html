@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html id="html-root" {% if request.user.is_authenticated and request.user.profile.dark_mode %}data-theme="dark"{% endif %}>
 
 <head>
     <meta charset="utf-8">
@@ -37,6 +37,15 @@
     {% include 'dashboard/partials/footer.html' %}
 
     <!--  Scripts-->
+    {% if messages %}
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        {% for message in messages %}
+        toastr['{{ message.tags }}']('{{ message.message|escapejs }}');
+        {% endfor %}
+    });
+    </script>
+    {% endif %}
     <script>
         var csrftoken = '{{ csrf_token }}';
         toastr.options = {

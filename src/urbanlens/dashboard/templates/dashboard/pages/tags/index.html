@@ -20,7 +20,8 @@
               hx-target="#tag-rows"
               hx-swap="innerHTML"
               enctype="multipart/form-data"
-              class="tag-form">
+              class="tag-form"
+              hx-on::after-request="if(event.detail.successful){ document.getElementById('new-tag-form').style.display='none'; toastr.success('Tag created.'); }">
             {% csrf_token %}
             <div class="tag-form-grid">
                 <div class="form-field">
@@ -39,19 +40,25 @@
 
             <div class="tag-icon-color-row">
                 <div class="form-field">
-                    <label class="form-label">Standard icon</label>
+                    <label class="form-label">Icon</label>
                     <div class="icon-picker" id="new-icon-picker">
                         <input type="hidden" name="icon" id="new-icon-value">
                         {% for key, label in icon_choices %}
                         <button type="button" class="icon-option" data-icon="{{ key }}" title="{{ label }}"
-                                onclick="pickIcon('new-icon-picker','new-icon-value','{{ key }}',this)">
+                                onclick="newPickStandardIcon('{{ key }}', this)">
                             <i class="material-icons">{{ key }}</i>
                         </button>
                         {% endfor %}
                         <button type="button" class="icon-option icon-clear" title="No icon"
-                                onclick="pickIcon('new-icon-picker','new-icon-value','',this)">
+                                onclick="newPickStandardIcon('', this)">
                             <i class="material-icons">block</i>
                         </button>
+                        <label class="icon-option icon-upload-btn" id="new-upload-btn" title="Upload custom icon">
+                            <i class="material-icons" id="new-upload-glyph">upload</i>
+                            <img id="new-custom-preview" class="icon-custom-thumb" style="display:none">
+                            <input type="file" name="custom_icon" id="new-custom-input" accept="image/*" style="display:none"
+                                   onchange="newPickCustomIcon(this)">
+                        </label>
                     </div>
                 </div>
 
@@ -70,17 +77,6 @@
                             <i class="material-icons" style="font-size:1rem;">block</i>
                         </button>
                     </div>
-                </div>
-
-                <div class="form-field">
-                    <label class="form-label">Custom icon (overrides standard)</label>
-                    <label class="custom-icon-upload">
-                        <i class="material-icons">upload</i>
-                        <span>Upload image</span>
-                        <input type="file" name="custom_icon" accept="image/*" class="custom-icon-input"
-                               onchange="previewCustomIcon(this,'new-custom-preview')">
-                    </label>
-                    <img id="new-custom-preview" class="custom-icon-preview" style="display:none;">
                 </div>
             </div>
 
@@ -115,19 +111,73 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
 <script>
 (function () {
     document.getElementById('new-tag-btn').addEventListener('click', function () {
         var form = document.getElementById('new-tag-form');
         form.style.display = form.style.display === 'none' ? 'block' : 'none';
     });
+
+    function initSortable() {
+        var rows = document.getElementById('tag-rows');
+        if (!rows) return;
+        if (rows._sortable) { rows._sortable.destroy(); }
+        rows._sortable = new Sortable(rows, {
+            handle: '.tag-drag-handle',
+            animation: 150,
+            ghostClass: 'tag-card--ghost',
+            onEnd: function () {
+                var ids = Array.from(rows.querySelectorAll('.tag-card[data-tag-id]')).map(function (el) {
+                    return parseInt(el.dataset.tagId, 10);
+                });
+                fetch('{% url "tag.reorder" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)[1] || '',
+                    },
+                    body: JSON.stringify({ tag_ids: ids }),
+                }).catch(function (err) { toastr.error('Reorder failed: ' + err.message); });
+            },
+        });
+    }
+
+    initSortable();
+
+    // Re-init after HTMX swaps tag-rows content
+    document.getElementById('tag-rows').addEventListener('htmx:afterSwap', initSortable);
 }());
 
-function pickIcon(pickerId, valueId, iconKey, btn) {
-    var picker = document.getElementById(pickerId);
-    picker.querySelectorAll('.icon-option').forEach(function (b) { b.classList.remove('selected'); });
+function newPickStandardIcon(iconKey, btn) {
+    var customInput = document.getElementById('new-custom-input');
+    if (customInput && customInput.files && customInput.files.length > 0) {
+        if (!confirm('Use this standard icon instead of your uploaded custom icon?')) return;
+        customInput.value = '';
+        var preview = document.getElementById('new-custom-preview');
+        preview.style.display = 'none';
+        preview.src = '';
+        document.getElementById('new-upload-glyph').style.display = '';
+        document.getElementById('new-upload-btn').classList.remove('selected');
+    }
+    document.getElementById('new-icon-picker').querySelectorAll('.icon-option').forEach(function (b) { b.classList.remove('selected'); });
     btn.classList.add('selected');
-    document.getElementById(valueId).value = iconKey;
+    document.getElementById('new-icon-value').value = iconKey;
+}
+
+function newPickCustomIcon(input) {
+    if (!input.files || !input.files[0]) return;
+    document.getElementById('new-icon-picker').querySelectorAll('.icon-option').forEach(function (b) { b.classList.remove('selected'); });
+    document.getElementById('new-icon-value').value = '';
+    var reader = new FileReader();
+    reader.onload = function (e) {
+        var preview = document.getElementById('new-custom-preview');
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+        document.getElementById('new-upload-glyph').style.display = 'none';
+        document.getElementById('new-upload-btn').classList.add('selected');
+    };
+    reader.readAsDataURL(input.files[0]);
 }
 
 function pickColor(pickerId, valueId, colorHex, btn) {
@@ -135,18 +185,6 @@ function pickColor(pickerId, valueId, colorHex, btn) {
     picker.querySelectorAll('.color-swatch').forEach(function (b) { b.classList.remove('selected'); });
     btn.classList.add('selected');
     document.getElementById(valueId).value = colorHex;
-}
-
-function previewCustomIcon(input, previewId) {
-    var preview = document.getElementById(previewId);
-    if (input.files && input.files[0]) {
-        var reader = new FileReader();
-        reader.onload = function (e) {
-            preview.src = e.target.result;
-            preview.style.display = 'block';
-        };
-        reader.readAsDataURL(input.files[0]);
-    }
 }
 </script>
 {% endblock %}

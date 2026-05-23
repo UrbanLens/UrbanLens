@@ -1,10 +1,16 @@
 {% load dashboard_tags %}
 {% if tags %}
 {% for tag in tags %}
-<div class="tag-card" id="tag-card-{{ tag.id }}">
+<div class="tag-card" id="tag-card-{{ tag.id }}" data-tag-id="{{ tag.id }}">
 
     {# ── View mode ────────────────────────────────────────────────────── #}
     <div class="tag-card-view" id="tag-view-{{ tag.id }}">
+        {% if tag.profile %}
+        <div class="tag-drag-handle" title="Drag to reorder">
+            <i class="material-icons">drag_indicator</i>
+        </div>
+        {% endif %}
+
         <div class="tag-card-icon" {% if tag.color %}style="background:{{ tag.color }}22; border-color:{{ tag.color }}44;"{% endif %}>
             {% if tag.custom_icon %}
             <img src="{{ tag.custom_icon.url }}" alt="" class="tag-icon-img">

@@ -4,13 +4,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from datetime import datetime
+
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
-from urbanlens.dashboard.forms.profile_form import DiscordHandleForm, ProfileForm
+from urbanlens.dashboard.forms.profile_form import (
+    DiscordHandleForm,
+    ProfileForm,
+    validate_birth_date,
+    validate_started_exploring,
+)
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -132,6 +139,58 @@ class ViewProfileView(LoginRequiredMixin, View):
         )
 
 
+class ProfileFieldUpdateView(LoginRequiredMixin, View):
+    """Save a single profile field immediately (auto-save AJAX endpoint)."""
+
+    _PROFILE_TEXT = frozenset({"bio", "area"})
+    _PROFILE_DATES = frozenset({"birth_date", "started_exploring"})
+    _USER_FIELDS = frozenset({"first_name", "last_name"})
+
+    def post(self, request: HttpRequest) -> JsonResponse:
+        field = request.POST.get("field", "")
+
+        if field in self._USER_FIELDS:
+            value = request.POST.get("value", "").strip()
+            setattr(request.user, field, value)
+            request.user.save(update_fields=[field])
+            return JsonResponse({"ok": True})
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        if field == "avatar":
+            file = request.FILES.get("file_value")
+            if not file:
+                return JsonResponse({"error": "No file provided."}, status=400)
+            profile.avatar = file
+            profile.save(update_fields=["avatar"])
+            return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
+
+        if field in self._PROFILE_TEXT:
+            value = request.POST.get("value", "").strip()
+            setattr(profile, field, value or None)
+            profile.save(update_fields=[field])
+            return JsonResponse({"ok": True})
+
+        if field in self._PROFILE_DATES:
+            raw = request.POST.get("value", "").strip()
+            if raw:
+                try:
+                    parsed = datetime.strptime(raw, "%Y-%m-%d").date()
+                except ValueError:
+                    return JsonResponse({"error": "Invalid date format."}, status=400)
+                validator = validate_birth_date if field == "birth_date" else validate_started_exploring
+                error = validator(parsed)
+                if error:
+                    return JsonResponse({"error": error})
+                setattr(profile, field, parsed)
+            else:
+                setattr(profile, field, None)
+            profile.save(update_fields=[field])
+            return JsonResponse({"ok": True})
+
+        return JsonResponse({"error": "Unknown field."}, status=400)
+
+
 class EditProfileView(LoginRequiredMixin, View):
     def _build_context(self, profile: Profile, form: ProfileForm, discord_form: DiscordHandleForm, link_error: str = "") -> dict:
         from urbanlens.dashboard.services.social_links import get_profile_links
@@ -168,6 +227,9 @@ class EditProfileView(LoginRequiredMixin, View):
         form = ProfileForm(request.POST, request.FILES, instance=profile)
         if form.is_valid():
             form.save()
+            request.user.first_name = request.POST.get("first_name", "").strip()
+            request.user.last_name = request.POST.get("last_name", "").strip()
+            request.user.save(update_fields=["first_name", "last_name"])
             return redirect("profile.edit")
         context = self._build_context(profile, form, DiscordHandleForm())
         return render(request, "dashboard/pages/profile/edit.html", context)

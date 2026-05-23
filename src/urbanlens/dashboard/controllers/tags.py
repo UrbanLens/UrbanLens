@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse, HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -140,6 +141,23 @@ class TagDeleteView(LoginRequiredMixin, View):
             "icon_choices": ICON_CHOICES,
             "color_choices": COLOR_CHOICES,
         })
+
+
+class TagReorderView(LoginRequiredMixin, View):
+    """Persist a new drag-and-drop order for the current user's tags."""
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            tag_ids = [int(x) for x in data.get("tag_ids", [])]
+        except (json.JSONDecodeError, ValueError, AttributeError):
+            return JsonResponse({"error": "Invalid data"}, status=400)
+
+        profile = request.user.profile
+        for i, tag_id in enumerate(tag_ids):
+            Tag.objects.filter(id=tag_id, profile=profile).update(order=i)
+
+        return JsonResponse({"ok": True})
 
 
 class TagMembershipView(LoginRequiredMixin, View):

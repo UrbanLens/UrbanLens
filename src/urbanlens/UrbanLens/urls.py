@@ -43,6 +43,8 @@ Including another URLconf
 
 import logging
 
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path, re_path
 from django.views.generic import TemplateView
@@ -65,4 +67,5 @@ urlpatterns = [
     path("", IndexController.as_view(), name="index"),
     # 404
     re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),
+    *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
 ]

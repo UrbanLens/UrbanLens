@@ -137,21 +137,21 @@ class Pin(abstract.Model):
     @property
     def effective_name(self) -> str:
         """User's custom name, or the location's canonical name."""
-        return self.nickname or (self.location.name if self.location_id else "")
+        return self.nickname or (self.location.name if self.location else "")
 
     @property
     def effective_latitude(self) -> float | None:
         """User's position override, or the location's latitude."""
         if self.latitude is not None:
             return float(self.latitude)
-        return float(self.location.latitude) if self.location_id else None
+        return float(self.location.latitude) if self.location else None
 
     @property
     def effective_longitude(self) -> float | None:
         """User's position override, or the location's longitude."""
         if self.longitude is not None:
             return float(self.longitude)
-        return float(self.location.longitude) if self.location_id else None
+        return float(self.location.longitude) if self.location else None
 
     # ------------------------------------------------------------------
     # Location proxies
@@ -163,42 +163,44 @@ class Pin(abstract.Model):
 
     @property
     def place_name(self) -> str | None:
-        return self.location.place_name if self.location_id else None
+        return self.location.place_name if self.location else None
 
     @property
     def address(self) -> str | None:
-        return self.location.address if self.location_id else None
+        return self.location.address if self.location else None
 
     @property
     def address_basic(self) -> str | None:
-        return self.location.address_basic if self.location_id else None
+        return self.location.address_basic if self.location else None
 
     @property
     def address_extended(self) -> str | None:
-        return self.location.address_extended if self.location_id else None
+        return self.location.address_extended if self.location else None
 
     @property
     def state(self) -> str | None:
-        return self.location.state if self.location_id else None
+        return self.location.state if self.location else None
 
     @property
     def county(self) -> str | None:
-        return self.location.county if self.location_id else None
+        return self.location.county if self.location else None
 
     @property
     def city(self) -> str | None:
-        return self.location.city if self.location_id else None
+        return self.location.city if self.location else None
 
     @property
     def country(self) -> str | None:
-        return self.location.country if self.location_id else None
+        return self.location.country if self.location else None
 
     @property
     def cached_place_name(self) -> str | None:
-        return self.location.cached_place_name if self.location_id else None
+        return self.location.cached_place_name if self.location else None
 
     def has_place_name(self) -> bool:
-        return self.location.has_place_name() if self.location_id else False
+        if not self.location:
+            return False
+        return self.location.has_place_name()
 
     # ------------------------------------------------------------------
     # Rating

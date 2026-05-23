@@ -8,7 +8,28 @@
         <form id="upload_takeout_form" action="{% url 'pin.upload.takeout' %}" enctype="multipart/form-data">
             {% csrf_token %}
             {{ form.as_p }}
-            <input type="submit" value="Import" class="submit-button">
+
+            {% if tags %}
+            <div class="import-tag-section">
+                <label class="form-label" style="display:block;margin-bottom:6px;font-weight:600;">Apply tags to imported pins <span style="font-weight:400;color:#888;">(optional)</span></label>
+                <div class="import-tag-grid">
+                    {% for tag in tags %}
+                    <label class="import-tag-pill" style="{% if tag.color %}--tag-color:{{ tag.color }};{% endif %}">
+                        <input type="checkbox" name="tag_ids" value="{{ tag.id }}" class="import-tag-checkbox">
+                        {% if tag.custom_icon %}
+                        <img src="{{ tag.custom_icon.url }}" alt="" class="import-tag-icon-img">
+                        {% elif tag.icon %}
+                        <i class="material-icons import-tag-icon" {% if tag.color %}style="color:{{ tag.color }}"{% endif %}>{{ tag.icon }}</i>
+                        {% endif %}
+                        <span>{{ tag.name }}</span>
+                        {% if not tag.profile %}<span class="tag-global-badge">global</span>{% endif %}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <input type="submit" value="Import" class="submit-button" style="margin-top:16px;">
         </form>
     </div>
 

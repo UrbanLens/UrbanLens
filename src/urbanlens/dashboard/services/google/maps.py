@@ -274,7 +274,7 @@ class GoogleMapsGateway(Gateway):
                 "cid": cid,
             }
 
-    def import_pins_streaming(self, files: list[tuple[str, bytes]], user_profile: Profile):
+    def import_pins_streaming(self, files: list[tuple[str, bytes]], user_profile: Profile, tags: list | None = None):
         r"""Generator that yields SSE data strings while importing pins from a list of files.
 
         Each yielded string is a complete SSE event in the format ``data: {...}\\n\\n``.
@@ -293,6 +293,8 @@ class GoogleMapsGateway(Gateway):
             files: List of ``(filename, raw_bytes)`` pairs to import.
                    Archives must already be expanded by the caller.
             user_profile: The profile to associate with imported pins.
+            tags: Optional list of Tag objects to apply to every imported pin
+                  (both newly created and pre-existing).
 
         Yields:
             str: SSE-formatted data lines.
@@ -383,6 +385,8 @@ class GoogleMapsGateway(Gateway):
                                     created_count += 1
                                 else:
                                     exists_count += 1
+                                if tags:
+                                    pin.tags.add(*tags)
                                 # Backfill: if the import carried a CID but no existing
                                 # Location was found by that CID, the nearby-match may
                                 # have returned a Location that still lacks one.  Set it

@@ -37,6 +37,7 @@ services:
     volumes:
       - logs:/var/log
       - static_volume:/app/frontend/static
+      - media_volume:/app/media
 
     ports:
       - "${URBANLENS_PORT:-21800}:8000"
@@ -70,7 +71,8 @@ services:
     image: nginx:alpine
     volumes:
       - static_volume:/app/frontend/static
-      - ./config/nginx:/etc/nginx/conf.d
+      - media_volume:/app/media
+      - ./src/urbanlens/config/nginx:/etc/nginx/conf.d
     ports:
       - "${NGINX_PORT:-21080}:80"
     depends_on:
@@ -120,6 +122,7 @@ volumes:
   postgres-data:
   logs:
   static_volume:
+  media_volume:
 
 networks:
   app_network:

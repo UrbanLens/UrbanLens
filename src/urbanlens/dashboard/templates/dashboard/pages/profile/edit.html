@@ -1,6 +1,24 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block content %}
+{% with date_errors=form.birth_date.errors|add:form.started_exploring.errors %}
+{% if date_errors %}
+<div class="dialog-overlay" id="date-error-overlay"></div>
+<div class="dialog" id="date-error-dialog" role="alertdialog" aria-modal="true" aria-labelledby="date-error-title">
+    <button class="btn-close" id="date-error-close" aria-label="Close">×</button>
+    <h2 id="date-error-title"><i class="material-icons" style="vertical-align:middle;color:#d32f2f;margin-right:6px;">event_busy</i>Invalid Date</h2>
+    <ul class="date-error-list">
+        {% for error in form.birth_date.errors %}<li>{{ error }}</li>{% endfor %}
+        {% for error in form.started_exploring.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    <p class="date-error-hint">Please choose a different date.</p>
+    <div style="margin-top:16px;text-align:right;">
+        <button type="button" class="settings-save-btn" onclick="closeDateErrorDialog()">OK</button>
+    </div>
+</div>
+{% endif %}
+{% endwith %}
+
 <div class="edit-profile-page">
 
     <div class="edit-profile-header">
@@ -8,49 +26,88 @@
             <i class="material-icons">arrow_back</i> Back to Profile
         </a>
         <h1 class="edit-profile-title">Edit Profile</h1>
+        <p class="edit-profile-autosave-hint">Changes are saved automatically.</p>
     </div>
 
     {# ── Profile info ──────────────────────────────────────────────────────── #}
     <section class="edit-card">
         <h2 class="edit-card-title">Profile Info</h2>
-        <form method="post" enctype="multipart/form-data" action="{% url 'profile.edit' %}">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="save_profile">
 
+        {# Avatar #}
+        <div class="edit-field edit-avatar-field">
+            <label class="edit-label">Profile Photo <span class="field-status" data-field-status="avatar"></span></label>
+            <div class="edit-avatar-wrap">
+                {% if form.instance.avatar %}
+                <img src="{{ form.instance.avatar.url }}" class="edit-avatar-preview" id="avatar-preview" alt="Avatar">
+                {% else %}
+                <div class="edit-avatar-placeholder" id="avatar-preview">
+                    <i class="material-icons">person</i>
+                </div>
+                {% endif %}
+                <label class="edit-avatar-upload-btn">
+                    <i class="material-icons">photo_camera</i>
+                    <span>Change Photo</span>
+                    <input type="file" accept="image/*" data-autosave="avatar" style="display:none">
+                </label>
+            </div>
+        </div>
+
+        {# Name #}
+        <div class="edit-field-row">
             <div class="edit-field">
-                <label class="edit-label" for="{{ form.avatar.id_for_label }}">Profile Photo</label>
-                {{ form.avatar }}
-                {% if form.avatar.errors %}<p class="edit-error">{{ form.avatar.errors|join:", " }}</p>{% endif %}
+                <label class="edit-label">
+                    First Name
+                    <span class="field-status" data-field-status="first_name"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="150"
+                       value="{{ request.user.first_name }}"
+                       data-autosave="first_name">
             </div>
-
             <div class="edit-field">
-                <label class="edit-label" for="{{ form.bio.id_for_label }}">Bio</label>
-                {{ form.bio }}
-                {% if form.bio.errors %}<p class="edit-error">{{ form.bio.errors|join:", " }}</p>{% endif %}
+                <label class="edit-label">
+                    Last Name
+                    <span class="field-status" data-field-status="last_name"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="150"
+                       value="{{ request.user.last_name }}"
+                       data-autosave="last_name">
             </div>
+        </div>
 
-            <div class="edit-field-row">
-                <div class="edit-field">
-                    <label class="edit-label" for="{{ form.area.id_for_label }}">Location / Area</label>
-                    {{ form.area }}
-                    {% if form.area.errors %}<p class="edit-error">{{ form.area.errors|join:", " }}</p>{% endif %}
-                </div>
-                <div class="edit-field">
-                    <label class="edit-label" for="{{ form.started_exploring.id_for_label }}">Exploring Since</label>
-                    {{ form.started_exploring }}
-                    {% if form.started_exploring.errors %}<p class="edit-error">{{ form.started_exploring.errors|join:", " }}</p>{% endif %}
-                </div>
-                <div class="edit-field">
-                    <label class="edit-label" for="{{ form.birth_date.id_for_label }}">Birth Date</label>
-                    {{ form.birth_date }}
-                    {% if form.birth_date.errors %}<p class="edit-error">{{ form.birth_date.errors|join:", " }}</p>{% endif %}
-                </div>
-            </div>
+        {# Bio #}
+        <div class="edit-field">
+            <label class="edit-label" for="{{ form.bio.id_for_label }}">
+                Bio
+                <span class="field-status" data-field-status="bio"></span>
+            </label>
+            {{ form.bio }}
+        </div>
 
-            <div class="edit-actions">
-                <button type="submit" class="edit-save-btn">Save Changes</button>
+        {# Area / dates #}
+        <div class="edit-field-row">
+            <div class="edit-field">
+                <label class="edit-label" for="{{ form.area.id_for_label }}">
+                    Location / Area
+                    <span class="field-status" data-field-status="area"></span>
+                </label>
+                {{ form.area }}
             </div>
-        </form>
+            <div class="edit-field">
+                <label class="edit-label" for="{{ form.started_exploring.id_for_label }}">
+                    Exploring Since
+                    <span class="field-status" data-field-status="started_exploring"></span>
+                </label>
+                {{ form.started_exploring }}
+            </div>
+            <div class="edit-field">
+                <label class="edit-label" for="{{ form.birth_date.id_for_label }}">
+                    Birth Date
+                    <span class="field-status" data-field-status="birth_date"></span>
+                </label>
+                {{ form.birth_date }}
+            </div>
+        </div>
+
     </section>
 
     {# ── Social links ──────────────────────────────────────────────────────── #}
@@ -58,7 +115,6 @@
         <h2 class="edit-card-title">Social Links</h2>
         <p class="edit-card-desc">Paste a profile URL - the platform is detected automatically.</p>
 
-        {# Existing links #}
         {% if social_links %}
         <ul class="edit-links-list">
             {% for link in social_links %}
@@ -83,18 +139,14 @@
         </ul>
         {% endif %}
 
-        {# Add link input #}
         <form method="post" action="{% url 'profile.edit' %}" class="edit-add-link-form">
             {% csrf_token %}
             <input type="hidden" name="action" value="add_link">
             <div class="edit-add-link-row">
-                <input
-                    type="text"
-                    name="link_input"
-                    class="edit-add-link-input{% if link_error %} edit-add-link-input--error{% endif %}"
-                    placeholder="https://instagram.com/you  ·  https://reddit.com/u/you  ·  etc."
-                    autofocus
-                >
+                <input type="text" name="link_input"
+                       class="edit-add-link-input{% if link_error %} edit-add-link-input--error{% endif %}"
+                       placeholder="https://instagram.com/you  ·  https://reddit.com/u/you  ·  etc."
+                       autofocus>
                 <button type="submit" class="edit-add-link-btn">Add</button>
             </div>
             {% if link_error %}
@@ -102,7 +154,6 @@
             {% endif %}
         </form>
 
-        {# Discord: no public profile URL - enter handle directly #}
         <details class="edit-discord-details">
             <summary class="edit-discord-summary">
                 <i class="fa-brands fa-discord"></i> Set Discord username
@@ -126,4 +177,111 @@
     </section>
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function closeDateErrorDialog() {
+    var overlay = document.getElementById('date-error-overlay');
+    var dialog  = document.getElementById('date-error-dialog');
+    if (overlay) overlay.remove();
+    if (dialog)  dialog.remove();
+}
+
+(function () {
+    var SAVE_URL = '{% url "profile.field.update" %}';
+
+    // ── date error dialog (created dynamically for auto-save errors) ──────────
+    function showDateDialog(message) {
+        closeDateErrorDialog();
+        var overlay = document.createElement('div');
+        overlay.className = 'dialog-overlay';
+        overlay.id = 'date-error-overlay';
+        overlay.addEventListener('click', closeDateErrorDialog);
+
+        var dialog = document.createElement('div');
+        dialog.className = 'dialog';
+        dialog.id = 'date-error-dialog';
+        dialog.setAttribute('role', 'alertdialog');
+        dialog.innerHTML =
+            '<button class="btn-close" aria-label="Close" onclick="closeDateErrorDialog()">×</button>' +
+            '<h2><i class="material-icons" style="vertical-align:middle;color:#d32f2f;margin-right:6px;">event_busy</i>Invalid Date</h2>' +
+            '<ul class="date-error-list"><li>' + message + '</li></ul>' +
+            '<p class="date-error-hint">Please choose a different date.</p>' +
+            '<div style="margin-top:16px;text-align:right;"><button type="button" class="settings-save-btn" onclick="closeDateErrorDialog()">OK</button></div>';
+
+        document.body.appendChild(overlay);
+        document.body.appendChild(dialog);
+    }
+
+    // ── per-field status indicator ────────────────────────────────────────────
+    function setStatus(field, state, text) {
+        var el = document.querySelector('[data-field-status="' + field + '"]');
+        if (!el) return;
+        el.className = 'field-status' + (state ? ' field-status--' + state : '');
+        el.textContent = text;
+        if (state === 'saved') {
+            setTimeout(function () { setStatus(field, '', ''); }, 2500);
+        }
+    }
+
+    // ── core save ─────────────────────────────────────────────────────────────
+    function saveField(field, value, isFile) {
+        setStatus(field, 'saving', 'Saving…');
+        var fd = new FormData();
+        fd.append('csrfmiddlewaretoken', csrftoken);
+        fd.append('field', field);
+        if (isFile) {
+            fd.append('file_value', value);
+        } else {
+            fd.append('value', value);
+        }
+        fetch(SAVE_URL, { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.ok) {
+                    setStatus(field, 'saved', '✓ Saved');
+                    if (data.avatar_url) {
+                        var el = document.getElementById('avatar-preview');
+                        if (el.tagName === 'IMG') {
+                            el.src = data.avatar_url;
+                        } else {
+                            var img = document.createElement('img');
+                            img.src = data.avatar_url;
+                            img.className = 'edit-avatar-preview';
+                            img.id = 'avatar-preview';
+                            img.alt = 'Avatar';
+                            el.parentNode.replaceChild(img, el);
+                        }
+                    }
+                } else {
+                    var msg = data.error || 'Save failed.';
+                    setStatus(field, 'error', msg);
+                    if (field === 'birth_date' || field === 'started_exploring') {
+                        showDateDialog(msg);
+                    }
+                }
+            })
+            .catch(function () { setStatus(field, 'error', 'Save failed.'); });
+    }
+
+    // ── wire up all autosave inputs ───────────────────────────────────────────
+    document.querySelectorAll('[data-autosave]').forEach(function (el) {
+        var field = el.getAttribute('data-autosave');
+        if (el.type === 'file') {
+            el.addEventListener('change', function () {
+                if (el.files.length > 0) saveField(field, el.files[0], true);
+            });
+        } else {
+            el.addEventListener('change', function () { saveField(field, el.value, false); });
+        }
+    });
+
+    // ── server-rendered date dialog close wiring ──────────────────────────────
+    var overlay = document.getElementById('date-error-overlay');
+    var closeBtn = document.getElementById('date-error-close');
+    if (overlay) overlay.addEventListener('click', closeDateErrorDialog);
+    if (closeBtn) closeBtn.addEventListener('click', closeDateErrorDialog);
+}());
+</script>
 {% endblock %}

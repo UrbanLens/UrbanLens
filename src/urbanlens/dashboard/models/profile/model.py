@@ -41,7 +41,7 @@ class VisibilityChoice(TextChoices):
 
 
 class Profile(abstract.Model):
-    avatar = ImageField()
+    avatar = ImageField(upload_to="avatars/", null=True, blank=True)
     bio = TextField(null=True, blank=True)
     area = CharField(max_length=255, null=True, blank=True)
     birth_date = DateField(null=True, blank=True)
@@ -59,6 +59,9 @@ class Profile(abstract.Model):
         default=VisibilityChoice.EVERYONE,
     )
     allow_friend_requests = BooleanField(default=True)
+
+    # Style preferences
+    dark_mode = BooleanField(default=False)
 
     user = OneToOneField(
         User,

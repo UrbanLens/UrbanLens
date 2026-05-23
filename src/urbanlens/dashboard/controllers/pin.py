@@ -264,7 +264,18 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         View the import pins form
         """
-        return render(request, "dashboard/pages/location/import/csv.html", {"form": UploadDataFile()})
+        from urbanlens.dashboard.models.tags.model import Tag
+
+        profile = Profile.objects.get(user=request.user)
+        tags = Tag.objects.visible_to(profile).ordered()
+        return render(
+            request,
+            "dashboard/pages/location/import/csv.html",
+            {
+                "form": UploadDataFile(),
+                "tags": tags,
+            },
+        )
 
     @action(detail=True, methods=["post"])
     def upload_takeout(self, request: HttpRequest):
@@ -318,10 +329,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 all_files.append((uploaded_file.name, data))
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        from urbanlens.dashboard.models.tags.model import Tag
+
+        tag_ids = request.POST.getlist("tag_ids")
+        import_tags = list(Tag.objects.visible_to(profile).filter(id__in=tag_ids)) if tag_ids else []
+
         google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
 
         response = StreamingHttpResponse(
-            google_maps_gateway.import_pins_streaming(all_files, profile),
+            google_maps_gateway.import_pins_streaming(all_files, profile, tags=import_tags),
             content_type="text/event-stream",
         )
         response["Cache-Control"] = "no-cache"
@@ -337,6 +354,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             pin: Pin = Pin.objects.get(id=pin_id)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
+
+        if not pin.latitude or not pin.longitude:
+            return HttpResponse("Pin does not have valid coordinates", status=400)
 
         from urbanlens.dashboard.services.openweather.gateway import WeatherForecastGateway
 
