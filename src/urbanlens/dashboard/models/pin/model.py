@@ -7,9 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
-from django.db.models import CASCADE, SET_NULL, ForeignKey, Index, ManyToManyField
+from django.db.models import CASCADE, SET_NULL, ForeignKey, ImageField, Index, ManyToManyField
 from django.db.models.fields import CharField, DateTimeField, DecimalField, IntegerField, TextField
-from django.forms import ImageField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
@@ -78,7 +77,7 @@ class Pin(abstract.Model):
     # Only set these when the user wants to reposition the marker from the canonical Location coords.
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    custom_icon = ImageField()
+    custom_icon = ImageField(upload_to="pin_custom_icons/", null=True, blank=True)
     status = CharField(choices=PinStatus.choices, default=PinStatus.WISH_TO_VISIT)
     point = PointField(geography=True, default=Point(0, 0))
 
