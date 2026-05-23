@@ -4,24 +4,24 @@
         <h3>Weather Forecast</h3>
     </div>
     {% if forecast %}
-    <div id="weather-forecast">
-        {% for item in forecast %}
-        <div class="weather-card">
-            <div class="weather-date-time">{{ item.date|date:"F j" }} at {{ item.date|date:"g A" }}</div>
-            <div class="weather-temperature">
-                <span class="temp-value">{{ item.main.temp|floatformat:"-1" }}°F</span>
-                <span class="temp-feels-like">Feels like {{ item.main.feels_like|floatformat:"-1" }}°F</span>
+    <div class="weather-strip-scroll">
+        <div class="weather-strip">
+            {% for item in forecast %}
+            <div class="wx-entry">
+                <div class="wx-time">{{ item.date|date:"D" }}<br>{{ item.date|date:"g A" }}</div>
+                <img class="wx-icon"
+                     src="https://openweathermap.org/img/wn/{{ item.weather.0.icon }}@2x.png"
+                     alt="{{ item.weather.0.main }}"
+                     width="48" height="48">
+                <div class="wx-temp">{{ item.main.temp|floatformat:"0" }}°<span class="wx-unit">F</span></div>
+                <div class="wx-condition">{{ item.weather.0.main }}</div>
+                <div class="wx-meta">
+                    <span title="Humidity"><i class="material-icons">water_drop</i>{{ item.main.humidity }}%</span>
+                    <span title="Wind"><i class="material-icons">air</i>{{ item.wind.speed|floatformat:"0" }}</span>
+                </div>
             </div>
-            <div class="weather-conditions">
-                <div class="weather-main">{{ item.weather.0.main }}</div>
-                <div class="weather-description">{{ item.weather.0.description }}</div>
-                <img src="https://openweathermap.org/img/wn/{{ item.weather.0.icon }}.png"
-                    alt="{{ item.weather.0.main }}" class="weather-icon">
-            </div>
-            <div class="weather-humidity">Humidity: {{ item.main.humidity }}%</div>
-            <div class="weather-wind">Wind: {{ item.wind.speed }} m/s</div>
+            {% endfor %}
         </div>
-        {% endfor %}
     </div>
     {% elif error %}
     <div class="view-unavailable">

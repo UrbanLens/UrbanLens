@@ -97,6 +97,7 @@
             <i class="material-icons">pentagon</i>
             <h3>Campus Boundary</h3>
         </div>
+        {% if pin.location %}
         <p class="campus-description">
             Define the spatial extent of this location. The shaded region will appear as an overlay on the main map.
         </p>
@@ -108,6 +109,12 @@
                 <button class="submit-button campus-cancel-btn" onclick="cancelCampusEdit()">Cancel</button>
             </div>
         </div>
+        {% else %}
+        <div class="view-unavailable">
+            <i class="material-icons">location_off</i>
+            <span>No linked location — campus boundaries are unavailable for this pin.</span>
+        </div>
+        {% endif %}
     </div>
 
     {# ── Satellite view ───────────────────────────────────────────────────── #}
@@ -196,7 +203,29 @@
 
     const map = L.map('map').setView([pinLat, pinLng], 15);
     window.map = map;
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+    const _stdLayer  = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    const _satLayer  = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 19,
+    });
+    const _topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 });
+
+    const _baseLayers = { 'Street': _stdLayer, 'Satellite': _satLayer, 'Topographic': _topoLayer };
+    const _overlays = {};
+
+    {% if openweathermap_api_key %}
+    const _rainLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{ openweathermap_api_key }}', {
+        layer: 'precipitation_new', opacity: 0.7, attribution: '&copy; OpenWeatherMap',
+    });
+    const _cloudLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{ openweathermap_api_key }}', {
+        layer: 'clouds_new', opacity: 0.5, attribution: '&copy; OpenWeatherMap',
+    });
+    _overlays['Rain'] = _rainLayer;
+    _overlays['Clouds'] = _cloudLayer;
+    {% endif %}
+
+    L.control.layers(_baseLayers, _overlays, { position: 'topright', collapsed: true }).addTo(map);
 
     const markerIcon = L.icon({
         iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
@@ -209,6 +238,7 @@
     setTimeout(() => map.invalidateSize(), 300);
 
     // ── Campus boundary editor ────────────────────────────────────────────────
+    {% if pin.location %}
     const campusApiUrl = "{% url 'campus.pin' pin.id %}";
     const campusMap = L.map('campus-map').setView([pinLat, pinLng], 16);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(campusMap);
@@ -217,23 +247,36 @@
     const campusItems = new L.FeatureGroup().addTo(campusMap);
     const campusStyle = { color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 };
     let campusDrawControl = null;
+    let _savedCampusGeoJSON = null;   // tracks last-saved state for cancel restore
 
     setTimeout(() => campusMap.invalidateSize(), 300);
+
+    function _loadSavedCampus(geojson) {
+        campusItems.clearLayers();
+        if (geojson) {
+            L.geoJSON(geojson, { style: campusStyle }).eachLayer(l => campusItems.addLayer(l));
+            if (campusItems.getLayers().length) {
+                campusMap.fitBounds(campusItems.getBounds().pad(0.25));
+            }
+        }
+        campusMap.invalidateSize();
+    }
 
     fetch(campusApiUrl)
         .then(r => r.json())
         .then(data => {
-            if (data.polygon) {
-                const layer = L.geoJSON(data.polygon, { style: campusStyle });
-                layer.eachLayer(l => campusItems.addLayer(l));
-                campusMap.fitBounds(campusItems.getBounds().pad(0.25));
-                campusMap.invalidateSize();
-            }
+            _savedCampusGeoJSON = data.polygon || null;
+            _loadSavedCampus(_savedCampusGeoJSON);
         })
         .catch(err => console.warn('Could not load campus:', err));
 
     function startEditCampus() {
         if (campusDrawControl) return;
+
+        if (_savedCampusGeoJSON || campusItems.getLayers().length > 0) {
+            toastr.info('Drawing a new boundary will replace the existing one when saved. Click Cancel to keep the current boundary.');
+        }
+
         campusDrawControl = new L.Control.Draw({
             draw: {
                 polygon: {
@@ -250,6 +293,7 @@
         campusMap.on(L.Draw.Event.CREATED, function (e) {
             campusItems.clearLayers();
             campusItems.addLayer(e.layer);
+            toastr.info('New boundary drawn. Click Save to confirm or Cancel to restore the previous boundary.');
         });
         document.getElementById('edit-campus-btn').style.display = 'none';
         document.getElementById('campus-save-controls').style.display = '';
@@ -261,22 +305,33 @@
             toastr.warning('Draw a boundary on the map first.');
             return;
         }
+        const geometry = layers[0].toGeoJSON().geometry;
         fetch(campusApiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-            body: JSON.stringify({ polygon: layers[0].toGeoJSON().geometry }),
+            body: JSON.stringify({ polygon: geometry }),
         })
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(() => { toastr.success('Campus boundary saved.'); cancelCampusEdit(); })
+        .then(() => {
+            _savedCampusGeoJSON = geometry;
+            toastr.success('Campus boundary saved.');
+            _exitCampusEdit();
+        })
         .catch(() => toastr.error('Failed to save campus boundary.'));
     }
 
-    function cancelCampusEdit() {
+    function _exitCampusEdit() {
         if (campusDrawControl) { campusMap.removeControl(campusDrawControl); campusDrawControl = null; }
         campusMap.off(L.Draw.Event.CREATED);
         document.getElementById('edit-campus-btn').style.display = '';
         document.getElementById('campus-save-controls').style.display = 'none';
     }
+
+    function cancelCampusEdit() {
+        _exitCampusEdit();
+        _loadSavedCampus(_savedCampusGeoJSON);  // restore last-saved state
+    }
+    {% endif %}
 
     document.addEventListener('htmx:configRequest', (event) => {
         event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';

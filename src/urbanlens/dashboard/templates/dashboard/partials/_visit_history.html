@@ -3,9 +3,12 @@
     <div class="card-header">
         <i class="material-icons">history</i>
         <h3>Visit History</h3>
-        {% if visits %}
-        <span class="visit-count badge">{{ visits|length }}</span>
-        {% endif %}
+        {% if visits %}<span class="visit-count badge">{{ visits|length }}</span>{% endif %}
+        <button type="button" class="btn-icon-sm" style="margin-left:auto"
+                onclick="document.getElementById('visit-add-dialog-{{ pin.id }}').showModal()"
+                title="Log a visit">
+            <i class="material-icons">add</i>
+        </button>
     </div>
 
     {% if visits %}
@@ -45,10 +48,14 @@
     <p class="visit-empty">No visits recorded yet.</p>
     {% endif %}
 
-    <details class="visit-add-section">
-        <summary class="visit-add-toggle">
-            Add a visit
-        </summary>
+    {# ── Log-a-visit dialog ──────────────────────────────────────────── #}
+    <dialog id="visit-add-dialog-{{ pin.id }}" class="visit-add-dialog">
+        <div class="dialog-header">
+            <span>Log a Visit</span>
+            <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+                <i class="material-icons">close</i>
+            </button>
+        </div>
         <form hx-post="{% url 'pin.visits' pin.id %}"
               hx-target="#visit-history-panel"
               hx-swap="outerHTML"
@@ -56,19 +63,16 @@
             {% csrf_token %}
             <div class="form-row">
                 <label for="visited_at_{{ pin.id }}">Date &amp; time</label>
-                <input type="datetime-local"
-                       name="visited_at"
-                       id="visited_at_{{ pin.id }}"
-                       required>
+                <input type="datetime-local" name="visited_at" id="visited_at_{{ pin.id }}" required>
             </div>
             <div class="form-row">
                 <label for="visit_notes_{{ pin.id }}">Notes <small>(optional)</small></label>
-                <textarea name="notes"
-                          id="visit_notes_{{ pin.id }}"
-                          rows="2"
-                          placeholder="What did you see?"></textarea>
+                <textarea name="notes" id="visit_notes_{{ pin.id }}" rows="3" placeholder="What did you see?"></textarea>
             </div>
-            <button type="submit" class="submit-button">Save visit</button>
+            <div class="form-actions">
+                <button type="submit" class="submit-button">Save Visit</button>
+                <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            </div>
         </form>
-    </details>
+    </dialog>
 </div>

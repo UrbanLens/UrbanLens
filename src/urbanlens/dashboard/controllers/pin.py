@@ -61,7 +61,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(
             request,
             "dashboard/pages/location/index.html",
-            {"pin": pin, "google_maps_api_key": settings.google_maps_api_key, "page_name": "location-details"},
+            {
+                "pin": pin,
+                "google_maps_api_key": settings.google_maps_api_key,
+                "openweathermap_api_key": settings.openweathermap_api_key,
+                "page_name": "location-details",
+            },
         )
 
     def test_ai(self, request: HttpRequest, *args, **kwargs):

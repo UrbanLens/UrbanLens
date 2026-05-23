@@ -1268,81 +1268,302 @@ body.page-location-details div.section {
         }
     }
 
-    .weather-widget {
-        margin: 0 1rem 0 1rem;
+    .weather-widget { grid-area: weather; }
 
-        h2 {
-            text-align: center;
-            color: $dark-neutral-color;
+}
+
+// ── Compact weather forecast strip ─────────────────────────────────────────
+.weather-widget {
+    .weather-strip-scroll {
+        overflow-x: auto;
+        padding: .5rem .75rem .85rem;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0,0,0,.12) transparent;
+
+        &::-webkit-scrollbar { height: 4px; }
+        &::-webkit-scrollbar-track { background: transparent; }
+        &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 4px; }
+    }
+
+    .weather-strip {
+        display: flex;
+        gap: .35rem;
+        width: max-content;
+    }
+
+    .wx-entry {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: .1rem;
+        padding: .55rem .5rem .45rem;
+        border-radius: 10px;
+        background: rgba(0,0,0,.035);
+        min-width: 68px;
+        text-align: center;
+        transition: background .15s;
+        cursor: default;
+
+        &:hover { background: rgba(0,0,0,.065); }
+    }
+
+    .wx-time {
+        font-size: .65rem;
+        color: #888;
+        font-weight: 700;
+        line-height: 1.3;
+        letter-spacing: .02em;
+        text-transform: uppercase;
+    }
+
+    .wx-icon {
+        width: 44px;
+        height: 44px;
+        margin: -.45rem 0 -.3rem;  // compensate for OWM icon's built-in padding
+    }
+
+    .wx-temp {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1a1a1a;
+        line-height: 1.1;
+
+        .wx-unit {
+            font-size: .6rem;
+            font-weight: 400;
+            color: #999;
+            vertical-align: super;
         }
     }
 
-    #weather-forecast {
+    .wx-condition {
+        font-size: .63rem;
+        color: #666;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 66px;
+    }
+
+    .wx-meta {
         display: flex;
-        flex-flow: row wrap;
-        justify-content: space-between;
-        gap: 1rem 1rem;
-    }
+        gap: .3rem;
+        font-size: .6rem;
+        color: #aaa;
+        margin-top: .1rem;
 
-    .weather-card {
-        flex: 1 0 40%;
-        background-color: $light-neutral-color;
-        border-radius: 4px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        padding: 15px;
-    }
+        span {
+            display: flex;
+            align-items: center;
+            gap: 1px;
+        }
 
-    .weather-date-time {
-        font-size: 0.85em;
-        color: $dark-neutral-color;
-        margin-bottom: 5px;
+        .material-icons { font-size: .65rem; }
     }
+}
 
-    .weather-temperature {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        margin-bottom: 5px;
+// ── Small icon button (used in card headers) ────────────────────────────────
+.btn-icon-sm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #666;
+    transition: background .15s, color .15s;
+    flex-shrink: 0;
+
+    .material-icons { font-size: 1.1rem; }
+    &:hover { background: rgba(0,0,0,.07); color: #222; }
+}
+
+// ── Tag chips (pin detail page) ─────────────────────────────────────────────
+.tag-chips-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    padding: .6rem .75rem .75rem;
+    min-height: 2.5rem;
+    align-items: center;
+}
+
+.tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .25rem .45rem .25rem .55rem;
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--tag-color, #6366f1) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--tag-color, #6366f1) 30%, transparent);
+    font-size: .78rem;
+    font-weight: 500;
+    color: #333;
+    line-height: 1.3;
+
+    .tag-chip-icon { line-height: 1; }
+
+    .tag-chip-remove {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: .1rem;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(0,0,0,.12);
+        cursor: pointer;
+        font-size: .75rem;
+        line-height: 1;
+        color: #555;
+        transition: background .12s, color .12s;
+        padding: 0;
+        &:hover { background: rgba(200,0,0,.2); color: #c00; }
     }
+}
 
-    .temp-value {
-        font-size: 1.5em;
-        color: $dark-neutral-color;
-    }
+.tag-chips-empty { font-size: .82rem; color: #aaa; font-style: italic; }
 
-    .temp-feels-like {
-        font-size: 0.85em;
-        color: $dark-neutral-color;
-    }
+// ── Modal-style dialog (shared by tag-add and visit-add) ────────────────────
+.tag-add-dialog,
+.visit-add-dialog {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.18);
+    padding: 0;
+    width: min(400px, 95vw);
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 
-    .weather-conditions {
+    &::backdrop { background: rgba(0,0,0,.35); }
+
+    .dialog-header {
         display: flex;
         align-items: center;
-        margin-bottom: 5px;
+        justify-content: space-between;
+        padding: .75rem 1rem;
+        border-bottom: 1px solid #e5e7eb;
+        font-weight: 600;
+        font-size: .95rem;
+        flex-shrink: 0;
     }
 
-    .weather-main {
-        font-weight: bold;
-        color: $dark-neutral-color;
-        margin-right: 10px;
+    .dialog-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        color: #888;
+        transition: background .15s, color .15s;
+        .material-icons { font-size: 1.1rem; }
+        &:hover { background: rgba(0,0,0,.07); color: #333; }
     }
 
-    .weather-description {
-        color: $dark-neutral-color;
+    .dialog-footer {
+        padding: .6rem 1rem;
+        border-top: 1px solid #e5e7eb;
+        flex-shrink: 0;
+
+        .dialog-manage-link {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            font-size: .8rem;
+            color: #888;
+            text-decoration: none;
+            .material-icons { font-size: .9rem; }
+            &:hover { color: #444; text-decoration: underline; }
+        }
+    }
+}
+
+// ── Tag-add dialog specifics ────────────────────────────────────────────────
+.tag-add-dialog {
+    .dialog-search {
+        margin: .6rem .75rem;
+        padding: .45rem .7rem;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-size: .85rem;
+        width: calc(100% - 1.5rem);
+        box-sizing: border-box;
+        outline: none;
+        flex-shrink: 0;
+        &:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
     }
 
-    .weather-icon {
-        margin-left: auto;
-        width: 40px;
-        height: 40px;
+    .tag-dialog-list {
+        list-style: none;
+        padding: 0 .5rem .5rem;
+        margin: 0;
+        overflow-y: auto;
+        flex: 1;
     }
 
-    .weather-humidity,
-    .weather-wind {
-        font-size: 0.9em;
-        color: $dark-neutral-color;
+    .tag-dialog-item { margin-bottom: 2px; }
+
+    .tag-dialog-btn {
+        display: flex;
+        align-items: center;
+        gap: .55rem;
+        width: 100%;
+        padding: .5rem .6rem;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        cursor: pointer;
+        font-size: .88rem;
+        text-align: left;
+        transition: background .12s;
+        &:hover { background: rgba(99,102,241,.08); }
     }
 
+    .tag-dialog-icon { width: 20px; text-align: center; flex-shrink: 0; }
+    .tag-dialog-name { font-weight: 500; flex: 1; }
+}
+
+// ── Visit-add dialog specifics ──────────────────────────────────────────────
+.visit-add-dialog {
+    .visit-add-form {
+        padding: .75rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: .75rem;
+    }
+
+    .form-row {
+        display: flex;
+        flex-direction: column;
+        gap: .3rem;
+
+        label { font-size: .82rem; font-weight: 600; color: #555; }
+        input, textarea {
+            padding: .45rem .65rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: .88rem;
+            outline: none;
+            &:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+        }
+        textarea { resize: vertical; }
+    }
+
+    .form-actions {
+        display: flex;
+        gap: .5rem;
+        padding-top: .25rem;
+    }
 }
 
 #pin-counter {
