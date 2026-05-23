@@ -1,0 +1,78 @@
+{% load dashboard_tags %}
+{% if tags %}
+{% for tag in tags %}
+<div class="tag-card" id="tag-card-{{ tag.id }}">
+
+    {# ── View mode ────────────────────────────────────────────────────── #}
+    <div class="tag-card-view" id="tag-view-{{ tag.id }}">
+        <div class="tag-card-icon" {% if tag.color %}style="background:{{ tag.color }}22; border-color:{{ tag.color }}44;"{% endif %}>
+            {% if tag.custom_icon %}
+            <img src="{{ tag.custom_icon.url }}" alt="" class="tag-icon-img">
+            {% elif tag.icon %}
+            <i class="material-icons tag-icon-std" {% if tag.color %}style="color:{{ tag.color }}"{% endif %}>{{ tag.icon }}</i>
+            {% else %}
+            <i class="material-icons tag-icon-std tag-icon-empty">label</i>
+            {% endif %}
+        </div>
+
+        <div class="tag-card-body">
+            <div class="tag-card-name">
+                {{ tag.name }}
+                {% if not tag.profile %}<span class="tag-global-badge">global</span>{% endif %}
+            </div>
+            {% if tag.description %}
+            <div class="tag-card-desc">{{ tag.description }}</div>
+            {% endif %}
+            <div class="tag-card-meta">
+                <span class="tag-pin-count">
+                    <i class="material-icons">push_pin</i>
+                    {{ tag.pin_set.count }} pin{{ tag.pin_set.count|pluralize }}
+                </span>
+                {% if tag.color %}
+                <span class="tag-color-dot" style="background:{{ tag.color }};" title="{{ tag.color }}"></span>
+                {% endif %}
+                {% if tag.parents.exists %}
+                <span class="tag-parents-summary">
+                    <i class="material-icons" style="font-size:.9rem;">account_tree</i>
+                    {% for parent in tag.parents.all %}{{ parent.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if tag.profile %}
+        <div class="tag-card-actions">
+            <button type="button" class="btn-icon" title="Edit"
+                    hx-get="{% url 'tag.edit' tag.id %}"
+                    hx-target="#tag-card-{{ tag.id }}"
+                    hx-swap="innerHTML">
+                <i class="material-icons">edit</i>
+            </button>
+            <form hx-post="{% url 'tag.delete' tag.id %}"
+                  hx-target="#tag-rows"
+                  hx-swap="innerHTML"
+                  hx-confirm="Delete '{{ tag.name }}'? Pins will keep their other tags."
+                  style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn-icon btn-icon--danger" title="Delete">
+                    <i class="material-icons">delete</i>
+                </button>
+            </form>
+        </div>
+        {% else %}
+        <div class="tag-card-actions">
+            <span class="tag-readonly-badge" title="Global tags cannot be deleted">
+                <i class="material-icons" style="font-size:1rem;opacity:.5;">lock</i>
+            </span>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endfor %}
+{% else %}
+<div class="tag-empty">
+    <i class="material-icons">label_off</i>
+    <p>No tags yet. Create one to start organizing your pins.</p>
+</div>
+{% endif %}

@@ -23,4 +23,6 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
-from urbanlens.dashboard.models.tags.model import Tag
+from urbanlens.dashboard.models.tags.queryset import TagQuerySet, TagManager
+from urbanlens.dashboard.models.tags.model import Tag, ICON_CHOICES, COLOR_CHOICES
+from urbanlens.dashboard.models.tags.serializer import TagSerializer

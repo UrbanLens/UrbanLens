@@ -1,0 +1,152 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load dashboard_tags %}
+
+{% block content %}
+<div class="tag-page">
+
+    <div class="tag-header">
+        <div>
+            <h1 class="tag-title">My Tags</h1>
+            <p class="tag-subtitle">Organize your pins with custom tags. Global tags are shared across all users.</p>
+        </div>
+        <button class="btn-primary" id="new-tag-btn" type="button">
+            <i class="material-icons">add</i> New Tag
+        </button>
+    </div>
+
+    {# ── Create form (hidden by default) ─────────────────────────────────── #}
+    <div class="tag-create-card" id="new-tag-form" style="display:none;">
+        <form hx-post="{% url 'tag.create' %}"
+              hx-target="#tag-rows"
+              hx-swap="innerHTML"
+              enctype="multipart/form-data"
+              class="tag-form">
+            {% csrf_token %}
+            <div class="tag-form-grid">
+                <div class="form-field">
+                    <label class="form-label" for="new-name">Tag name</label>
+                    <input id="new-name" name="name" type="text" class="form-input" placeholder="e.g. Road trip" required>
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="new-order">Order (higher = higher priority)</label>
+                    <input id="new-order" name="order" type="number" class="form-input" value="0">
+                </div>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="new-desc">Description (optional)</label>
+                <textarea id="new-desc" name="description" class="form-input" rows="2" placeholder="What is this tag for?"></textarea>
+            </div>
+
+            <div class="tag-icon-color-row">
+                <div class="form-field">
+                    <label class="form-label">Standard icon</label>
+                    <div class="icon-picker" id="new-icon-picker">
+                        <input type="hidden" name="icon" id="new-icon-value">
+                        {% for key, label in icon_choices %}
+                        <button type="button" class="icon-option" data-icon="{{ key }}" title="{{ label }}"
+                                onclick="pickIcon('new-icon-picker','new-icon-value','{{ key }}',this)">
+                            <i class="material-icons">{{ key }}</i>
+                        </button>
+                        {% endfor %}
+                        <button type="button" class="icon-option icon-clear" title="No icon"
+                                onclick="pickIcon('new-icon-picker','new-icon-value','',this)">
+                            <i class="material-icons">block</i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-field">
+                    <label class="form-label">Color</label>
+                    <div class="color-picker" id="new-color-picker">
+                        <input type="hidden" name="color" id="new-color-value">
+                        {% for hex, label in color_choices %}
+                        <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}"
+                                style="background:{{ hex }};"
+                                onclick="pickColor('new-color-picker','new-color-value','{{ hex }}',this)">
+                        </button>
+                        {% endfor %}
+                        <button type="button" class="color-swatch color-clear" title="No color"
+                                onclick="pickColor('new-color-picker','new-color-value','',this)">
+                            <i class="material-icons" style="font-size:1rem;">block</i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-field">
+                    <label class="form-label">Custom icon (overrides standard)</label>
+                    <label class="custom-icon-upload">
+                        <i class="material-icons">upload</i>
+                        <span>Upload image</span>
+                        <input type="file" name="custom_icon" accept="image/*" class="custom-icon-input"
+                               onchange="previewCustomIcon(this,'new-custom-preview')">
+                    </label>
+                    <img id="new-custom-preview" class="custom-icon-preview" style="display:none;">
+                </div>
+            </div>
+
+            <div class="form-field">
+                <label class="form-label">Parent tags (optional)</label>
+                <div class="tag-parent-select">
+                    {% for t in tags %}
+                    <label class="tag-parent-option">
+                        <input type="checkbox" name="parent_ids" value="{{ t.id }}">
+                        {% if t.custom_icon %}<img src="{{ t.custom_icon.url }}" class="tag-parent-icon-img" alt="">
+                        {% elif t.icon %}<i class="material-icons" {% if t.color %}style="color:{{ t.color }}"{% endif %}>{{ t.icon }}</i>
+                        {% endif %}
+                        {{ t.name }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="tag-form-actions">
+                <button type="submit" class="btn-primary">Create</button>
+                <button type="button" class="btn-ghost" onclick="document.getElementById('new-tag-form').style.display='none'">Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    {# ── Tag rows ─────────────────────────────────────────────────────────── #}
+    <div id="tag-rows">
+        {% include 'dashboard/partials/tag_rows.html' %}
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    document.getElementById('new-tag-btn').addEventListener('click', function () {
+        var form = document.getElementById('new-tag-form');
+        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    });
+}());
+
+function pickIcon(pickerId, valueId, iconKey, btn) {
+    var picker = document.getElementById(pickerId);
+    picker.querySelectorAll('.icon-option').forEach(function (b) { b.classList.remove('selected'); });
+    btn.classList.add('selected');
+    document.getElementById(valueId).value = iconKey;
+}
+
+function pickColor(pickerId, valueId, colorHex, btn) {
+    var picker = document.getElementById(pickerId);
+    picker.querySelectorAll('.color-swatch').forEach(function (b) { b.classList.remove('selected'); });
+    btn.classList.add('selected');
+    document.getElementById(valueId).value = colorHex;
+}
+
+function previewCustomIcon(input, previewId) {
+    var preview = document.getElementById(previewId);
+    if (input.files && input.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+            preview.src = e.target.result;
+            preview.style.display = 'block';
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+</script>
+{% endblock %}

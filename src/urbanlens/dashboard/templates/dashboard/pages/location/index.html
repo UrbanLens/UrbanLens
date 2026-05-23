@@ -22,6 +22,18 @@
         {% if pin.place_name %}<div><span class="field-label"><strong>Place Name:</strong></span> {{ pin.place_name }}</div>{% endif %}
     </div>
 
+    {# ── Tags panel ───────────────────────────────────────────────────────────── #}
+    <div hx-get="{% url 'tag.membership' pin.id %}"
+         hx-trigger="load"
+         hx-swap="outerHTML"
+         class="tag-panel">
+        <div class="tag-panel-header">
+            <i class="material-icons">label</i>
+            <span>Tags</span>
+        </div>
+        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+    </div>
+
     <div class="pin-map">
         <div id="map"></div>
     </div>

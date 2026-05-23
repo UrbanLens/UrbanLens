@@ -27,9 +27,8 @@
 # Generic imports
 from __future__ import annotations
 
-from djangofoundry.controllers import ListController
-
 from django.shortcuts import redirect
+from djangofoundry.controllers import ListController
 
 from urbanlens.dashboard.models.profile import Profile
 

@@ -177,6 +177,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             profile, _ = Profile.objects.get_or_create(user=request.user)
             query = Pin.objects.all().filter(profile=profile)
 
+        query = query.prefetch_related("tags")
+
         if not query:
             # Default map data
             map_data = []  # {'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Pin', 'description': 'No pins saved yet.'}]

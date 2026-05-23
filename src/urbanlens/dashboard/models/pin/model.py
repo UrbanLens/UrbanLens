@@ -110,6 +110,29 @@ class Pin(abstract.Model):
     # ------------------------------------------------------------------
 
     @property
+    def effective_icon(self) -> str | None:
+        """Icon to display for this pin following the priority chain.
+
+        Priority:
+        1. custom_icon uploaded directly for this pin (returns URL)
+        2. standard icon key selected for this pin
+        3. highest-order tag that has any icon (custom_icon beats icon)
+        4. None - caller should fall back to location category or default marker
+
+        Prefetch tags when calling in bulk (e.g. get_map_data).
+        """
+        if self.custom_icon:
+            return self.custom_icon.url
+        if self.icon:
+            return self.icon
+        for tag in self.tags.order_by("-order"):
+            if tag.custom_icon:
+                return tag.custom_icon.url
+            if tag.icon:
+                return tag.icon
+        return None
+
+    @property
     def effective_name(self) -> str:
         """User's custom name, or the location's canonical name."""
         return self.nickname or (self.location.name if self.location_id else "")
@@ -280,7 +303,7 @@ class Pin(abstract.Model):
         return {
             "id": self.id,
             "name": self.effective_name,
-            "icon": self.icon,
+            "icon": self.effective_icon,
             "place_name": self.place_name,
             "description": self.description,
             "address": self.address,
@@ -294,6 +317,7 @@ class Pin(abstract.Model):
             "status": PinStatus.get_name(self.status) or PinStatus.NOT_VISITED.label,
             "profile": self.profile.id,
             "rating": self.rating,
+            "tags": [{"id": t.id, "name": t.name, "color": t.color, "icon": t.icon} for t in self.tags.all()],
         }
 
     def save(self, *args, **kwargs) -> None:

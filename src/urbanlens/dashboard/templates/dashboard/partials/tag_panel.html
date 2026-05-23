@@ -1,0 +1,49 @@
+{% load dashboard_tags %}
+{# Tag membership panel - shown on the pin detail page (HTMX) #}
+<div class="tag-panel" id="tag-panel">
+    <div class="tag-panel-header">
+        <i class="material-icons">label</i>
+        <span>Tags</span>
+    </div>
+
+    {% if all_tags %}
+    <ul class="tag-panel-list">
+        {% for tag in all_tags %}
+        {% with is_member=tag.id|in_list:member_ids %}
+        <li class="tag-panel-item {% if is_member %}is-member{% endif %}">
+            <div class="tag-panel-icon" {% if tag.color %}style="color:{{ tag.color }}"{% endif %}>
+                {% if tag.custom_icon %}
+                <img src="{{ tag.custom_icon.url }}" alt="" class="tag-panel-icon-img">
+                {% elif tag.icon %}
+                <i class="material-icons">{{ tag.icon }}</i>
+                {% else %}
+                <i class="material-icons" style="opacity:.4">label</i>
+                {% endif %}
+            </div>
+            <span class="tag-panel-name">{{ tag.name }}{% if not tag.profile %} <span class="tag-global-badge">global</span>{% endif %}</span>
+            <form hx-post="{% url 'tag.membership' pin.id %}"
+                  hx-target="#tag-panel"
+                  hx-swap="outerHTML"
+                  class="tag-toggle-form">
+                {% csrf_token %}
+                <input type="hidden" name="tag_id" value="{{ tag.id }}">
+                <input type="hidden" name="action" value="{% if is_member %}remove{% else %}add{% endif %}">
+                <button type="submit" class="tag-toggle-btn {% if is_member %}is-active{% endif %}"
+                        title="{% if is_member %}Remove tag{% else %}Add tag{% endif %}">
+                    <i class="material-icons">{% if is_member %}check_circle{% else %}add_circle_outline{% endif %}</i>
+                </button>
+            </form>
+        </li>
+        {% endwith %}
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="tag-panel-empty">
+        <a href="{% url 'tag.index' %}">Create a tag</a> to start organizing.
+    </p>
+    {% endif %}
+
+    <a href="{% url 'tag.index' %}" class="tag-panel-manage">
+        <i class="material-icons">settings</i> Manage tags
+    </a>
+</div>

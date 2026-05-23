@@ -2126,3 +2126,702 @@ textarea.edit-textarea {
         color: $text-color;
     }
 }
+
+// ── Pin Lists ────────────────────────────────────────────────────────────────
+
+.pinlist-page {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.pinlist-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.75rem;
+
+    .pinlist-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: $text-primary;
+        margin: 0 0 0.25rem;
+    }
+    .pinlist-subtitle {
+        font-size: 0.9rem;
+        color: $text-secondary;
+        margin: 0;
+    }
+}
+
+// shared button helpers
+.btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: $primary-color;
+    color: #fff;
+    border: none;
+    border-radius: $radius-sm;
+    padding: 9px 18px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+
+    i { font-size: 1.1rem; }
+
+    &:hover { background: color.adjust($primary-color, $lightness: -8%); }
+}
+.btn-ghost {
+    background: none;
+    border: 1px solid $border-color;
+    border-radius: $radius-sm;
+    padding: 9px 18px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: $text-secondary;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    &:hover { background: #f5f5f5; color: $text-primary; }
+}
+.btn-icon {
+    background: none;
+    border: none;
+    border-radius: $radius-sm;
+    padding: 6px;
+    cursor: pointer;
+    color: $text-secondary;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.12s, color 0.12s;
+    &:hover { background: #f0f0f0; color: $text-primary; }
+    &.btn-icon--danger:hover { background: #fdecea; color: #c62828; }
+    i { font-size: 1.15rem; }
+}
+
+// Create card
+.pinlist-create-card {
+    background: #fff;
+    border: 1px solid $border-color;
+    border-radius: $radius-md;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05);
+}
+
+// List cards
+.pinlist-card {
+    background: #fff;
+    border: 1px solid $border-color;
+    border-radius: $radius-md;
+    margin-bottom: 0.75rem;
+    transition: box-shadow 0.15s;
+
+    &:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+}
+
+.pinlist-card-view {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+}
+
+.pinlist-card-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #f0f4ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+
+    .pinlist-icon-std { color: $primary-color; font-size: 1.4rem; }
+    .pinlist-icon-empty { color: $text-muted; }
+    .pinlist-icon-img { width: 100%; height: 100%; object-fit: cover; }
+}
+
+.pinlist-card-body {
+    flex: 1;
+    min-width: 0;
+}
+.pinlist-card-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: $text-primary;
+    margin-bottom: 0.2rem;
+}
+.pinlist-card-desc {
+    font-size: 0.85rem;
+    color: $text-secondary;
+    margin-bottom: 0.4rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pinlist-card-meta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.8rem;
+    color: $text-muted;
+    align-items: center;
+}
+.pinlist-pin-count {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    i { font-size: 0.95rem; }
+}
+.pinlist-order-badge {
+    background: #f5f5f5;
+    border-radius: 20px;
+    padding: 1px 8px;
+}
+
+.pinlist-card-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+// Inline edit form (replaces card content via HTMX)
+.pinlist-inline-edit {
+    padding: 1.25rem;
+}
+
+// Shared form elements
+.pinlist-form-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.form-field { display: flex; flex-direction: column; gap: 4px; }
+.form-label { font-size: 0.8rem; font-weight: 600; color: $text-secondary; text-transform: uppercase; letter-spacing: .04em; }
+.form-input {
+    border: 1px solid $border-color;
+    border-radius: $radius-sm;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    color: $text-primary;
+    background: #fff;
+    transition: border-color 0.15s;
+    &:focus { outline: none; border-color: $primary-color; }
+    &[type="number"] { width: 90px; }
+}
+textarea.form-input { resize: vertical; }
+
+.pinlist-icon-row {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+}
+
+// Icon picker
+.icon-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0;
+}
+.icon-option {
+    width: 38px;
+    height: 38px;
+    border: 2px solid $border-color;
+    border-radius: $radius-sm;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+    i { font-size: 1.2rem; color: $text-secondary; transition: color 0.12s; }
+
+    &:hover { border-color: $primary-color; i { color: $primary-color; } }
+    &.selected { border-color: $primary-color; background: #e3f2fd; i { color: $primary-color; } }
+    &.icon-clear i { color: $text-muted; }
+}
+
+// Custom icon upload
+.custom-icon-upload {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px dashed $border-color;
+    border-radius: $radius-sm;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: $text-secondary;
+    transition: border-color 0.15s, color 0.15s;
+    &:hover { border-color: $primary-color; color: $primary-color; }
+    i { font-size: 1.1rem; }
+}
+.custom-icon-input { display: none; }
+.custom-icon-preview {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    border-radius: $radius-sm;
+    border: 1px solid $border-color;
+    margin-top: 6px;
+}
+.current-custom-icon {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85rem;
+    color: $text-secondary;
+    cursor: pointer;
+}
+
+.pinlist-form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 1rem;
+}
+
+// Empty state
+.pinlist-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: $text-muted;
+    i { font-size: 3rem; display: block; margin-bottom: 0.75rem; }
+    p { margin: 0; }
+}
+
+// ── Pin list membership panel (on pin detail page) ───────────────────────────
+
+.pinlist-panel {
+    background: #fff;
+    border: 1px solid $border-color;
+    border-radius: $radius-md;
+    overflow: hidden;
+}
+
+.pinlist-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0.75rem 1rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid $border-color;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: $text-primary;
+    i { font-size: 1.1rem; color: $primary-color; }
+}
+
+.pinlist-panel-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.pinlist-panel-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.1s;
+
+    &:last-child { border-bottom: none; }
+    &:hover { background: #f8f9fa; }
+    &.is-member { background: #f0f7ff; }
+}
+
+.pinlist-panel-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #f0f4ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+    i { font-size: 1rem; color: $primary-color; }
+    .pinlist-panel-icon-img { width: 100%; height: 100%; object-fit: cover; }
+}
+
+.pinlist-panel-name {
+    flex: 1;
+    font-size: 0.9rem;
+    color: $text-primary;
+}
+
+.pinlist-toggle-form { display: inline; }
+.pinlist-toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    color: $text-muted;
+    border-radius: 50%;
+    transition: background 0.12s, color 0.12s;
+    i { font-size: 1.25rem; }
+    &:hover { background: #e3f2fd; color: $primary-color; }
+    &.is-active { color: $primary-color; }
+}
+
+.pinlist-panel-empty {
+    padding: 1rem;
+    font-size: 0.85rem;
+    color: $text-secondary;
+    text-align: center;
+    a { color: $primary-color; }
+}
+
+.pinlist-panel-manage {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+    color: $text-secondary;
+    text-decoration: none;
+    border-top: 1px solid $border-color;
+    background: #fafafa;
+    transition: color 0.12s;
+    i { font-size: 1rem; }
+    &:hover { color: $primary-color; }
+}
+
+// ── Tags (replaces pin lists) ─────────────────────────────────────────────────
+
+.tag-page {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.tag-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.75rem;
+
+    .tag-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: $text-primary;
+        margin: 0 0 0.25rem;
+    }
+    .tag-subtitle {
+        font-size: 0.9rem;
+        color: $text-secondary;
+        margin: 0;
+    }
+}
+
+// Create card
+.tag-create-card {
+    background: #fff;
+    border: 1px solid $border-color;
+    border-radius: $radius-md;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+// Tag cards
+.tag-card {
+    background: #fff;
+    border: 1px solid $border-color;
+    border-radius: $radius-md;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+}
+
+.tag-card-view {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.9rem 1rem;
+}
+
+.tag-card-icon {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 2px solid $border-color;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+
+    .tag-icon-std { color: $primary-color; font-size: 1.4rem; }
+    .tag-icon-empty { color: $text-muted; }
+    .tag-icon-img { width: 100%; height: 100%; object-fit: cover; }
+}
+
+.tag-card-body {
+    flex: 1;
+    min-width: 0;
+}
+.tag-card-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: $text-primary;
+    margin-bottom: 0.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.tag-card-desc {
+    font-size: 0.85rem;
+    color: $text-secondary;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tag-card-meta {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.3rem;
+    font-size: 0.8rem;
+    color: $text-muted;
+    align-items: center;
+}
+.tag-pin-count {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    i { font-size: 0.95rem; }
+}
+.tag-color-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    border: 1px solid rgba(0,0,0,.15);
+}
+.tag-parents-summary {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 0.78rem;
+    color: $text-muted;
+}
+
+// Global and readonly badges
+.tag-global-badge {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: $text-muted;
+    background: #f0f0f0;
+    border-radius: 4px;
+    padding: 1px 5px;
+}
+.tag-readonly-badge { display: flex; align-items: center; padding: 0 4px; }
+
+.tag-card-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+// Inline edit form (replaces card content via HTMX)
+.tag-inline-edit {
+    padding: 1.25rem;
+}
+
+// Shared form layout for tag forms
+.tag-form-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.tag-icon-color-row {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    align-items: flex-start;
+}
+
+.tag-form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 1rem;
+}
+
+// Empty state
+.tag-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: $text-muted;
+    i { font-size: 3rem; display: block; margin-bottom: 0.75rem; }
+}
+
+// Color picker
+.color-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 0.5rem;
+}
+
+.color-swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.1s, border-color 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+
+    &:hover { transform: scale(1.15); }
+    &.selected { border-color: $text-primary; transform: scale(1.1); }
+}
+.color-clear {
+    background: #f5f5f5 !important;
+    color: $text-muted;
+    i { color: $text-muted; }
+}
+
+// Parent tag selector
+.tag-parent-select {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
+    max-height: 140px;
+    overflow-y: auto;
+    border: 1px solid $border-color;
+    border-radius: $radius-sm;
+    padding: 0.5rem;
+}
+.tag-parent-option {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 20px;
+    border: 1px solid $border-color;
+    background: #fafafa;
+    transition: background 0.1s;
+    &:hover { background: #f0f0f0; }
+    input { margin: 0; cursor: pointer; }
+}
+.tag-parent-icon-img {
+    width: 16px;
+    height: 16px;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+// ── Tag membership panel (on pin detail page) ─────────────────────────────────
+
+.tag-panel {
+    background: #fff;
+    border: 1px solid $border-color;
+    border-radius: $radius-md;
+    overflow: hidden;
+}
+
+.tag-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    border-bottom: 1px solid $border-color;
+    background: #fafafa;
+    i { color: $primary-color; }
+}
+
+.tag-panel-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.tag-panel-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid $border-color;
+    &:last-child { border-bottom: none; }
+    &.is-member { background: rgba($primary-color, 0.04); }
+}
+
+.tag-panel-icon {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    i { font-size: 1rem; color: $primary-color; }
+    .tag-panel-icon-img { width: 100%; height: 100%; object-fit: cover; }
+}
+
+.tag-panel-name {
+    flex: 1;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tag-toggle-form { display: inline; }
+.tag-toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    color: $text-muted;
+    line-height: 1;
+    transition: color 0.12s;
+    i { font-size: 1.25rem; vertical-align: middle; }
+    &.is-active { color: $primary-color; }
+    &:hover { color: $primary-color; }
+}
+
+.tag-panel-empty {
+    padding: 1rem;
+    font-size: 0.85rem;
+    color: $text-secondary;
+    a { color: $primary-color; }
+}
+
+.tag-panel-manage {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+    color: $text-secondary;
+    text-decoration: none;
+    border-top: 1px solid $border-color;
+    background: #fafafa;
+    transition: color 0.12s;
+    i { font-size: 1rem; }
+    &:hover { color: $primary-color; }
+}

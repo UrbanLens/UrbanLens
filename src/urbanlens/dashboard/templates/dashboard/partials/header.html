@@ -10,6 +10,9 @@
         {# ── Primary links ───────────────────────────────────────────────────── #}
         <ul class="app-nav-links">
             <li><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
+            {% if user.is_authenticated %}
+            <li><a href="{% url 'tag.index' %}" class="app-nav-link">Tags</a></li>
+            {% endif %}
         </ul>
 
         {# ── Right: user menu or login ────────────────────────────────────────── #}

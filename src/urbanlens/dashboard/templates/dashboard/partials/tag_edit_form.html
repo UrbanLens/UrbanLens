@@ -1,0 +1,111 @@
+{# Inline edit form for a single tag card (HTMX swap target) #}
+<form hx-post="{% url 'tag.edit' tag.id %}"
+      hx-target="#tag-rows"
+      hx-swap="innerHTML"
+      enctype="multipart/form-data"
+      class="tag-inline-edit">
+    {% csrf_token %}
+
+    <div class="tag-form-grid">
+        <div class="form-field">
+            <label class="form-label">Name</label>
+            <input name="name" type="text" class="form-input" value="{{ tag.name }}" required>
+        </div>
+        <div class="form-field">
+            <label class="form-label">Order</label>
+            <input name="order" type="number" class="form-input" value="{{ tag.order }}">
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label class="form-label">Description</label>
+        <textarea name="description" class="form-input" rows="2">{{ tag.description|default:'' }}</textarea>
+    </div>
+
+    <div class="tag-icon-color-row">
+        <div class="form-field">
+            <label class="form-label">Standard icon</label>
+            <div class="icon-picker" id="edit-icon-picker-{{ tag.id }}">
+                <input type="hidden" name="icon" id="edit-icon-value-{{ tag.id }}" value="{{ tag.icon|default:'' }}">
+                {% for key, label in icon_choices %}
+                <button type="button"
+                        class="icon-option {% if tag.icon == key %}selected{% endif %}"
+                        data-icon="{{ key }}" title="{{ label }}"
+                        onclick="pickIcon('edit-icon-picker-{{ tag.id }}','edit-icon-value-{{ tag.id }}','{{ key }}',this)">
+                    <i class="material-icons">{{ key }}</i>
+                </button>
+                {% endfor %}
+                <button type="button"
+                        class="icon-option icon-clear {% if not tag.icon %}selected{% endif %}"
+                        title="No icon"
+                        onclick="pickIcon('edit-icon-picker-{{ tag.id }}','edit-icon-value-{{ tag.id }}','',this)">
+                    <i class="material-icons">block</i>
+                </button>
+            </div>
+        </div>
+
+        <div class="form-field">
+            <label class="form-label">Color</label>
+            <div class="color-picker" id="edit-color-picker-{{ tag.id }}">
+                <input type="hidden" name="color" id="edit-color-value-{{ tag.id }}" value="{{ tag.color|default:'' }}">
+                {% for hex, label in color_choices %}
+                <button type="button"
+                        class="color-swatch {% if tag.color == hex %}selected{% endif %}"
+                        data-color="{{ hex }}" title="{{ label }}"
+                        style="background:{{ hex }};"
+                        onclick="pickColor('edit-color-picker-{{ tag.id }}','edit-color-value-{{ tag.id }}','{{ hex }}',this)">
+                </button>
+                {% endfor %}
+                <button type="button"
+                        class="color-swatch color-clear {% if not tag.color %}selected{% endif %}"
+                        title="No color"
+                        onclick="pickColor('edit-color-picker-{{ tag.id }}','edit-color-value-{{ tag.id }}','',this)">
+                    <i class="material-icons" style="font-size:1rem;">block</i>
+                </button>
+            </div>
+        </div>
+
+        <div class="form-field">
+            <label class="form-label">Custom icon</label>
+            {% if tag.custom_icon %}
+            <div class="current-custom-icon">
+                <img src="{{ tag.custom_icon.url }}" alt="" class="custom-icon-preview">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="clear_custom_icon" value="1"> Remove
+                </label>
+            </div>
+            {% endif %}
+            <label class="custom-icon-upload">
+                <i class="material-icons">upload</i>
+                <span>{% if tag.custom_icon %}Replace{% else %}Upload{% endif %}</span>
+                <input type="file" name="custom_icon" accept="image/*" class="custom-icon-input"
+                       onchange="previewCustomIcon(this,'edit-custom-preview-{{ tag.id }}')">
+            </label>
+            <img id="edit-custom-preview-{{ tag.id }}" class="custom-icon-preview" style="display:none;">
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label class="form-label">Parent tags</label>
+        <div class="tag-parent-select">
+            {% for t in available_parents %}
+            <label class="tag-parent-option">
+                <input type="checkbox" name="parent_ids" value="{{ t.id }}"
+                       {% if t.id|in_list:parent_ids %}checked{% endif %}>
+                {% if t.custom_icon %}<img src="{{ t.custom_icon.url }}" class="tag-parent-icon-img" alt="">
+                {% elif t.icon %}<i class="material-icons" {% if t.color %}style="color:{{ t.color }}"{% endif %}>{{ t.icon }}</i>
+                {% endif %}
+                {{ t.name }}
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="tag-form-actions">
+        <button type="submit" class="btn-primary">Save</button>
+        <button type="button" class="btn-ghost"
+                hx-get="{% url 'tag.index' %}"
+                hx-target="#tag-rows"
+                hx-swap="innerHTML">Cancel</button>
+    </div>
+</form>

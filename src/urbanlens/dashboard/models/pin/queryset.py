@@ -103,6 +103,12 @@ class PinQuerySet(abstract.QuerySet):
         distance = R * c
         return self.filter(distance__lte=distance)
 
+    def by_tag(self, tag_id: int) -> Self:
+        """Filter pins that have this tag or any of its descendant tags."""
+        from urbanlens.dashboard.models.tags.model import Tag
+        tag_ids = Tag.get_tag_and_descendants(tag_id)
+        return self.filter(tags__id__in=tag_ids).distinct()
+
     def filter_by_criteria(self, criteria):
         query = Q()
         if criteria.get("date_added"):

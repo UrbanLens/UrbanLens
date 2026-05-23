@@ -31,7 +31,7 @@ from urbanlens.dashboard.models.location import Location
 
 
 @receiver(post_save, sender=Location)
-def suggest_and_add_categories(sender, instance: Location, created, **kwargs):  # noqa: ARG001
+def suggest_and_add_categories(sender, instance: Location, created, **kwargs):
     """
     Suggests categories for a newly created Location instance and adds them.
 

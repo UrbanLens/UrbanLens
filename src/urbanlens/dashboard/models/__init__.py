@@ -35,7 +35,7 @@ from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.notifications import NotificationLog
 from urbanlens.dashboard.models.reviews import Review
-from urbanlens.dashboard.models.tags import Tag
+from urbanlens.dashboard.models.tags import Tag, ICON_CHOICES, COLOR_CHOICES, TagSerializer
 from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.models.trips import Trip
 from urbanlens.dashboard.models.campus import Campus

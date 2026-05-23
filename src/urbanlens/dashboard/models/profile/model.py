@@ -26,8 +26,7 @@
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from django.db.models import CASCADE, BooleanField, CharField, DateField, ImageField, Index, OneToOneField, TextField
-from django.db.models import TextChoices
+from django.db.models import CASCADE, BooleanField, CharField, DateField, ImageField, Index, OneToOneField, TextChoices, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.profile.queryset import Manager

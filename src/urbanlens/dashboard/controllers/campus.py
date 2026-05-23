@@ -52,7 +52,7 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
                 "default_radius_meters": campus.default_radius_meters if campus else 50,
                 "latitude": lat,
                 "longitude": lon,
-            }
+            },
         )
 
     def save_campus(self, request: HttpRequest, pin_id: int):

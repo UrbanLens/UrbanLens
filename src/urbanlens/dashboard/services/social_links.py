@@ -1,4 +1,4 @@
-"""Social link URL parser and profile-link renderer.
+r"""Social link URL parser and profile-link renderer.
 
 Security contract
 -----------------
@@ -96,7 +96,7 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
     except Exception:
         return None
 
-    if parsed.scheme not in ("http", "https"):
+    if parsed.scheme not in {"http", "https"}:
         return None
 
     host = (parsed.hostname or "").lower().removeprefix("www.")
@@ -123,7 +123,7 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
         return None
 
     # ── Facebook ──────────────────────────────────────────────────────────────
-    if host in ("facebook.com", "fb.com", "fb.me"):
+    if host in {"facebook.com", "fb.com", "fb.me"}:
         handle = _clean_handle(path_parts[0] if path_parts else None)
         return ("facebook", handle) if handle else None
 
@@ -136,12 +136,12 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
         return None
 
     # ── YouTube ───────────────────────────────────────────────────────────────
-    if host in ("youtube.com", "youtu.be"):
+    if host in {"youtube.com", "youtu.be"}:
         if path_parts:
             first = path_parts[0]
             if first.startswith("@"):
                 return ("youtube", first[1:])
-            if first in ("channel", "user", "c") and len(path_parts) > 1:
+            if first in {"channel", "user", "c"} and len(path_parts) > 1:
                 return ("youtube", path_parts[1])
         return None
 
@@ -154,15 +154,15 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
         return None
 
     # ── Reddit ────────────────────────────────────────────────────────────────
-    if host in ("reddit.com", "redd.it"):
+    if host in {"reddit.com", "redd.it"}:
         # /u/<name> or /user/<name>
-        if len(path_parts) >= 2 and path_parts[0] in ("u", "user"):
+        if len(path_parts) >= 2 and path_parts[0] in {"u", "user"}:
             handle = _clean_handle(path_parts[1])
             return ("reddit", handle) if handle else None
         return None
 
     # ── Generic website ───────────────────────────────────────────────────────
-    if parsed.scheme in ("http", "https") and parsed.hostname:
+    if parsed.scheme in {"http", "https"} and parsed.hostname:
         safe = parsed._replace(fragment="").geturl()
         if len(safe) <= 500:
             return ("website", safe)
