@@ -10,6 +10,8 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.tags.queryset import TagManager
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.categories.model import Category
+    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
 
 
@@ -99,6 +101,8 @@ class Tag(abstract.Model):
 
     if TYPE_CHECKING:
         profile_id: int | None
+        pins: ManyToManyField[Pin]
+        categories: ManyToManyField[Category]
 
     @classmethod
     def get_tag_and_descendants(cls, tag_id: int) -> set[int]:

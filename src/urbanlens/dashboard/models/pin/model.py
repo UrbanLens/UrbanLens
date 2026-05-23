@@ -91,11 +91,13 @@ class Pin(abstract.Model):
         "dashboard.Category",
         blank=True,
         default=list,
+        related_name="pins",
     )
     tags = ManyToManyField(
         "dashboard.Tag",
         blank=True,
         default=list,
+        related_name="pins",
     )
 
     if TYPE_CHECKING:
