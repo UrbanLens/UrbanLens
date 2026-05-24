@@ -143,6 +143,19 @@
             </div>
         </div>
 
+        {# ── Aliases ─────────────────────────────────────────────────────── #}
+        <div hx-get="{% url 'location.wiki.aliases' location.uuid %}"
+             hx-trigger="load"
+             hx-swap="outerHTML"
+             id="location-aliases-panel"
+             class="wiki-card aliases-panel">
+            <div class="card-header">
+                <i class="material-icons">label_important</i>
+                <span>Aliases</span>
+            </div>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+        </div>
+
         {# ── Tabs: Details / Edit history ────────────────────────────────── #}
         <div class="wiki-card wiki-tabs-card">
             <div class="wiki-tabs">

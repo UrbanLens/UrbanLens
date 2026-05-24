@@ -41,3 +41,4 @@ from urbanlens.dashboard.models.trips import Trip
 from urbanlens.dashboard.models.campus import Campus
 from urbanlens.dashboard.models.social_link import SocialLink
 from urbanlens.dashboard.models.visits import PinVisit, VisitSource
+from urbanlens.dashboard.models.aliases import PinAlias, LocationAlias

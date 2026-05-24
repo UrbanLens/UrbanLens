@@ -60,13 +60,28 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
 
     def save_campus(self, request: HttpRequest, pin_uuid):
         """Create or update the current user's campus boundary for a pin's location."""
+        from urbanlens.dashboard.models.location.model import Location
+
         try:
             pin = Pin.objects.select_related("location").get(uuid=pin_uuid)
         except Pin.DoesNotExist:
             return JsonResponse({"error": "Pin not found"}, status=404)
 
+        # Auto-create a Location for legacy pins that don't have one yet.
         if not pin.location_id:
-            return JsonResponse({"error": "Pin has no linked location"}, status=400)
+            lat = pin.effective_latitude
+            lon = pin.effective_longitude
+            if not lat or not lon:
+                return JsonResponse({"error": "Pin has no coordinates"}, status=400)
+            location = Location.objects.get_for_point(lat, lon)
+            if not location:
+                location = Location.objects.create(
+                    name=pin.effective_name or "Unnamed Location",
+                    latitude=lat,
+                    longitude=lon,
+                )
+            pin.location = location
+            pin.save(update_fields=["location"])
 
         try:
             data = json.loads(request.body)

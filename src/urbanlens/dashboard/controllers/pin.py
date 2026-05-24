@@ -56,7 +56,24 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         View the pin page
         """
-        pin = Pin.objects.get(uuid=kwargs["pin_uuid"])
+        from urbanlens.dashboard.models.location.model import Location
+
+        pin = Pin.objects.select_related("location").get(uuid=kwargs["pin_uuid"])
+
+        # Auto-link legacy pins that pre-date the Location requirement.
+        if pin.location is None and pin.effective_latitude and pin.effective_longitude:
+            lat, lon = pin.effective_latitude, pin.effective_longitude
+            location = Location.objects.get_for_point(lat, lon)
+            if not location:
+                location = Location.objects.create(
+                    name=pin.effective_name or "Unnamed Location",
+                    latitude=lat,
+                    longitude=lon,
+                )
+            pin.location = location
+            pin.save(update_fields=["location"])
+
+        from urbanlens.dashboard.models.pin.model import PinType
 
         return render(
             request,
@@ -66,6 +83,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "google_maps_api_key": settings.google_maps_api_key,
                 "openweathermap_api_key": settings.openweathermap_api_key,
                 "page_name": "location-details",
+                "pin_type_choices": PinType.choices,
             },
         )
 
@@ -251,7 +269,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             image_bytes = google_maps_gateway.get_satellite_view(lat, lng)
             image_b64 = base64.b64encode(image_bytes).decode("ascii")
         except Exception as exc:
-            logger.warning("Satellite view unavailable for pin %s: %s", kwargs["pin_id"], exc)
+            logger.warning("Satellite view unavailable for pin %s: %s", kwargs.get("pin_uuid"), exc)
             return render(request, "dashboard/pages/location/satellite_view.html", {"error": "Satellite image unavailable."})
 
         return render(request, "dashboard/pages/location/satellite_view.html", {"image_b64": image_b64, "pin": pin})
@@ -277,7 +295,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             image_bytes = google_maps_gateway.get_street_view(lat, lng)
             image_b64 = base64.b64encode(image_bytes).decode("ascii")
         except Exception as exc:
-            logger.warning("Street view unavailable for pin %s: %s", kwargs["pin_id"], exc)
+            logger.warning("Street view unavailable for pin %s: %s", kwargs.get("pin_uuid"), exc)
             return render(request, "dashboard/pages/location/street_view.html", {"error": "Street view unavailable."})
 
         return render(request, "dashboard/pages/location/street_view.html", {"image_b64": image_b64, "pin": pin})

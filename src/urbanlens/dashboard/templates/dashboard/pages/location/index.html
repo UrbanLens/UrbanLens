@@ -104,6 +104,19 @@
         <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
 
+    {# ── Aliases ──────────────────────────────────────────────────────────── #}
+    <div hx-get="{% url 'pin.aliases' pin.uuid %}"
+         hx-trigger="load"
+         hx-swap="outerHTML"
+         id="pin-aliases-panel"
+         class="aliases-panel card">
+        <div class="card-header">
+            <i class="material-icons">label_important</i>
+            <span>Aliases</span>
+        </div>
+        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+    </div>
+
     {# ── Pin location map ─────────────────────────────────────────────────── #}
     <div class="location-map pin-map card">
         <div class="card-header">
@@ -119,7 +132,6 @@
             <i class="material-icons">pentagon</i>
             <h3>Campus Boundary</h3>
         </div>
-        {% if pin.location %}
         <p class="campus-description">
             Define the spatial extent of this location. The shaded region will appear as an overlay on the main map.
         </p>
@@ -131,12 +143,6 @@
                 <button class="submit-button campus-cancel-btn" onclick="cancelCampusEdit()">Cancel</button>
             </div>
         </div>
-        {% else %}
-        <div class="view-unavailable">
-            <i class="material-icons">location_off</i>
-            <span>No linked location - campus boundaries are unavailable for this pin.</span>
-        </div>
-        {% endif %}
     </div>
 
     {# ── Satellite view ───────────────────────────────────────────────────── #}
@@ -215,6 +221,56 @@
     </div>
 
 </div>
+
+{# ── Add detail-pin dialog — lives outside the HTMX-swapped panel ────────── #}
+<dialog id="detail-pin-add-dialog" class="detail-pin-add-dialog">
+    <div class="dialog-header">
+        <span>Add Detail Pin</span>
+        <button type="button" class="dialog-close" id="detail-pin-dialog-close">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <p class="detail-pin-add-hint">
+        <i class="material-icons">place</i>
+        Click anywhere on the map to place the pin, then fill in the details.
+    </p>
+    <div id="detail-pin-picker-map"></div>
+    <p id="detail-pin-no-location" class="detail-pin-no-location">
+        No location selected yet — click the map above.
+    </p>
+    <form id="detail-pin-add-form" class="detail-pin-add-form" novalidate>
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="dp-type">Type</label>
+            <select id="dp-type" name="pin_type">
+                {% for value, label in pin_type_choices %}
+                {% if value != "location" %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-row">
+            <label for="dp-name">Name <span class="form-optional">(optional)</span></label>
+            <input type="text" id="dp-name" name="name" placeholder="e.g. Main Entrance">
+        </div>
+        <div class="form-row">
+            <label for="dp-description">Notes <span class="form-optional">(optional)</span></label>
+            <textarea id="dp-description" name="description" rows="2"
+                      placeholder="Any useful details…"></textarea>
+        </div>
+        <input type="hidden" id="dp-lat" name="latitude">
+        <input type="hidden" id="dp-lon" name="longitude">
+        <div class="form-actions">
+            <button type="submit" id="detail-pin-submit-btn" class="submit-button" disabled>
+                Add Pin
+            </button>
+            <button type="button" class="submit-button cancel-btn" id="detail-pin-cancel-btn">
+                Cancel
+            </button>
+        </div>
+    </form>
+</dialog>
 {% endblock %}
 
 {% block scripts %}
@@ -300,7 +356,6 @@
     loadDetailPins();
 
     // ── Campus boundary editor ────────────────────────────────────────────────
-    {% if pin.location %}
     const campusApiUrl = "{% url 'campus.pin' pin.uuid %}";
     const campusMap = L.map('campus-map').setView([pinLat, pinLng], 16);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(campusMap);
@@ -393,10 +448,113 @@
         _exitCampusEdit();
         _loadSavedCampus(_savedCampusGeoJSON);  // restore last-saved state
     }
-    {% endif %}
 
     document.addEventListener('htmx:configRequest', (event) => {
         event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
     });
+
+    // ── Detail-pin add dialog ─────────────────────────────────────────────────
+    (function () {
+        const dlg       = document.getElementById('detail-pin-add-dialog');
+        const form      = document.getElementById('detail-pin-add-form');
+        const submitBtn = document.getElementById('detail-pin-submit-btn');
+        const noLocMsg  = document.getElementById('detail-pin-no-location');
+        let _pickerMap    = null;
+        let _pickerMarker = null;
+        let _submitting   = false;
+
+        function _resetDialog() {
+            form.reset();
+            document.getElementById('dp-lat').value = '';
+            document.getElementById('dp-lon').value = '';
+            submitBtn.disabled  = true;
+            submitBtn.textContent = 'Add Pin';
+            _submitting = false;
+            noLocMsg.style.display = '';
+            if (_pickerMarker && _pickerMap) {
+                _pickerMap.removeLayer(_pickerMarker);
+                _pickerMarker = null;
+            }
+            if (_pickerMap) {
+                _pickerMap.setView([pinLat, pinLng], 17);
+                setTimeout(() => _pickerMap.invalidateSize(), 100);
+            }
+        }
+
+        function _initPickerMap() {
+            if (_pickerMap) {
+                _pickerMap.setView([pinLat, pinLng], 17);
+                setTimeout(() => _pickerMap.invalidateSize(), 150);
+                return;
+            }
+            _pickerMap = L.map('detail-pin-picker-map').setView([pinLat, pinLng], 17);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(_pickerMap);
+            L.marker([pinLat, pinLng], { opacity: 0.4, title: 'Pin location' }).addTo(_pickerMap);
+            _pickerMap.on('click', function (e) {
+                const { lat, lng } = e.latlng;
+                document.getElementById('dp-lat').value = lat.toFixed(6);
+                document.getElementById('dp-lon').value = lng.toFixed(6);
+                if (_pickerMarker) _pickerMap.removeLayer(_pickerMarker);
+                _pickerMarker = L.marker([lat, lng]).addTo(_pickerMap);
+                submitBtn.disabled = false;
+                noLocMsg.style.display = 'none';
+            });
+            setTimeout(() => _pickerMap.invalidateSize(), 200);
+        }
+
+        dlg.addEventListener('toggle', (e) => {
+            if (e.newState === 'open') {
+                _resetDialog();
+                _initPickerMap();
+            }
+        });
+
+        document.getElementById('detail-pin-dialog-close').addEventListener('click', () => dlg.close());
+        document.getElementById('detail-pin-cancel-btn').addEventListener('click', () => dlg.close());
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            if (_submitting) return;
+            const lat = document.getElementById('dp-lat').value;
+            const lon = document.getElementById('dp-lon').value;
+            if (!lat || !lon) {
+                toastr.warning('Click a point on the map to set the location first.');
+                return;
+            }
+            _submitting = true;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Saving…';
+            const data = {};
+            new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
+            fetch("{% url 'pin.detail_pins' pin.uuid %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}',
+                },
+                body: JSON.stringify(data),
+            })
+            .then(r => r.json())
+            .then(resp => {
+                if (resp.ok) {
+                    toastr.success('Detail pin added.');
+                    dlg.close();
+                    htmx.trigger('#detail-pins-panel', 'reload-detail-pins');
+                    if (typeof loadDetailPins === 'function') loadDetailPins();
+                } else {
+                    toastr.error(resp.error || 'Failed to add detail pin.');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Add Pin';
+                    _submitting = false;
+                }
+            })
+            .catch(() => {
+                toastr.error('Network error — please try again.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Pin';
+                _submitting = false;
+            });
+        });
+    }());
 </script>
 {% endblock %}

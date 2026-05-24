@@ -36,7 +36,7 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import campus, detail_pins, friendship, location_wiki, maps, pin, settings, tags, userprofile, visits
+from urbanlens.dashboard.controllers import aliases, campus, detail_pins, friendship, location_wiki, maps, pin, settings, tags, userprofile, visits
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -182,6 +182,16 @@ urlpatterns = [
                                 name="pin.detail_pin.edit",
                             ),
                             path(
+                                "<uuid:pin_uuid>/aliases/",
+                                aliases.PinAliasView.as_view(),
+                                name="pin.aliases",
+                            ),
+                            path(
+                                "<uuid:pin_uuid>/aliases/<int:alias_id>/delete/",
+                                aliases.PinAliasDeleteView.as_view(),
+                                name="pin.alias.delete",
+                            ),
+                            path(
                                 "import/",
                                 include(
                                     [
@@ -306,6 +316,16 @@ urlpatterns = [
                     "<uuid:location_uuid>/wiki/detail-pins/json/",
                     detail_pins.LocationDetailPinJsonView.as_view(),
                     name="location.wiki.detail_pins.json",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/aliases/",
+                    aliases.LocationAliasView.as_view(),
+                    name="location.wiki.aliases",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/aliases/<int:alias_id>/delete/",
+                    aliases.LocationAliasDeleteView.as_view(),
+                    name="location.wiki.alias.delete",
                 ),
             ],
         ),
