@@ -23,7 +23,7 @@ class Migration(migrations.Migration):
         ),
         # 2. Populate every existing row with a unique UUID.
         migrations.RunSQL(
-            sql='UPDATE "dashboard_location" SET "uuid" = gen_random_uuid() WHERE "uuid" IS NULL',
+            sql='UPDATE "dashboard_locations" SET "uuid" = gen_random_uuid() WHERE "uuid" IS NULL',
             reverse_sql=migrations.RunSQL.noop,
         ),
         # 3. Tighten to NOT NULL + UNIQUE.
