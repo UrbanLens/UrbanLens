@@ -1057,7 +1057,7 @@ i.train {
 .card {
     border-radius: 8px;
     background: var(--card-bg, #fff);
-    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .08);
     overflow: hidden;
 
     .card-header {
@@ -1069,16 +1069,30 @@ i.train {
         font-weight: 600;
         font-size: .95rem;
 
-        .material-icons { font-size: 1.1rem; opacity: .7; }
-        h3 { margin: 0; font-size: .95rem; font-weight: 600; }
+        .material-icons {
+            font-size: 1.1rem;
+            opacity: .7;
+        }
+
+        h3 {
+            margin: 0;
+            font-size: .95rem;
+            font-weight: 600;
+        }
     }
 
-    h1, h2, h3, h4, h5, h6 {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
         text-align: center;
     }
 }
 
-.view-loading, .view-unavailable {
+.view-loading,
+.view-unavailable {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1087,7 +1101,10 @@ i.train {
     color: #888;
     font-size: .9rem;
 
-    .material-icons { font-size: 1.4rem; opacity: .5; }
+    .material-icons {
+        font-size: 1.4rem;
+        opacity: .5;
+    }
 }
 
 .view-image {
@@ -1097,10 +1114,18 @@ i.train {
 }
 
 @keyframes spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
-.material-icons.spin { animation: spin 1.2s linear infinite; }
+
+.material-icons.spin {
+    animation: spin 1.2s linear infinite;
+}
 
 body.page-location-details div.section {
     display: grid;
@@ -1139,7 +1164,9 @@ body.page-location-details div.section {
                 flex-direction: column;
                 gap: .15rem;
 
-                &.full-width { grid-column: 1 / -1; }
+                &.full-width {
+                    grid-column: 1 / -1;
+                }
             }
 
             .field-label {
@@ -1150,12 +1177,19 @@ body.page-location-details div.section {
                 font-weight: 600;
             }
 
-            .field-value { font-size: .9rem; }
+            .field-value {
+                font-size: .9rem;
+            }
         }
     }
 
-    .visit-history { grid-area: visits; }
-    .tag-panel     { grid-area: tags; }
+    .visit-history {
+        grid-area: visits;
+    }
+
+    .tag-panel {
+        grid-area: tags;
+    }
 
     .location-map {
         grid-area: map;
@@ -1195,30 +1229,50 @@ body.page-location-details div.section {
                     text-decoration: none;
                     color: inherit;
                 }
-                img { width: 100%; height: 120px; object-fit: cover; border-radius: 4px; }
-                .smithsonian-title { font-size: .75rem; color: #555; }
+
+                img {
+                    width: 100%;
+                    height: 120px;
+                    object-fit: cover;
+                    border-radius: 4px;
+                }
+
+                .smithsonian-title {
+                    font-size: .75rem;
+                    color: #555;
+                }
             }
         }
     }
 
-    .weather-widget { grid-area: weather; }
+    .weather-widget {
+        grid-area: weather;
+    }
 
     .web-search {
         grid-area: search;
 
-        .search-results-list { padding: .5rem 1rem; }
+        .search-results-list {
+            padding: .5rem 1rem;
+        }
 
         .search-result {
             padding: .6rem 0;
             border-bottom: 1px solid var(--border-color, #e5e7eb);
-            &:last-child { border-bottom: none; }
+
+            &:last-child {
+                border-bottom: none;
+            }
         }
 
         .search-result-title {
             font-weight: 600;
             font-size: .9rem;
             color: var(--link-color, #1a73e8);
-            &:hover { text-decoration: underline; }
+
+            &:hover {
+                text-decoration: underline;
+            }
         }
 
         .search-result-snippet {
@@ -1268,7 +1322,9 @@ body.page-location-details div.section {
         }
     }
 
-    .weather-widget { grid-area: weather; }
+    .weather-widget {
+        grid-area: weather;
+    }
 
 }
 
@@ -1278,11 +1334,20 @@ body.page-location-details div.section {
         overflow-x: auto;
         padding: .5rem .75rem .85rem;
         scrollbar-width: thin;
-        scrollbar-color: rgba(0,0,0,.12) transparent;
+        scrollbar-color: rgba(0, 0, 0, .12) transparent;
 
-        &::-webkit-scrollbar { height: 4px; }
-        &::-webkit-scrollbar-track { background: transparent; }
-        &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 4px; }
+        &::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        &::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        &::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, .15);
+            border-radius: 4px;
+        }
     }
 
     .weather-strip {
@@ -1298,13 +1363,15 @@ body.page-location-details div.section {
         gap: .1rem;
         padding: .55rem .5rem .45rem;
         border-radius: 10px;
-        background: rgba(0,0,0,.035);
+        background: rgba(0, 0, 0, .035);
         min-width: 68px;
         text-align: center;
         transition: background .15s;
         cursor: default;
 
-        &:hover { background: rgba(0,0,0,.065); }
+        &:hover {
+            background: rgba(0, 0, 0, .065);
+        }
     }
 
     .wx-time {
@@ -1319,7 +1386,7 @@ body.page-location-details div.section {
     .wx-icon {
         width: 44px;
         height: 44px;
-        margin: -.45rem 0 -.3rem;  // compensate for OWM icon's built-in padding
+        margin: -.45rem 0 -.3rem; // compensate for OWM icon's built-in padding
     }
 
     .wx-temp {
@@ -1358,7 +1425,9 @@ body.page-location-details div.section {
             gap: 1px;
         }
 
-        .material-icons { font-size: .65rem; }
+        .material-icons {
+            font-size: .65rem;
+        }
     }
 }
 
@@ -1377,8 +1446,14 @@ body.page-location-details div.section {
     transition: background .15s, color .15s;
     flex-shrink: 0;
 
-    .material-icons { font-size: 1.1rem; }
-    &:hover { background: rgba(0,0,0,.07); color: #222; }
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: rgba(0, 0, 0, .07);
+        color: #222;
+    }
 }
 
 // ── Tag chips (pin detail page) ─────────────────────────────────────────────
@@ -1404,7 +1479,9 @@ body.page-location-details div.section {
     color: #333;
     line-height: 1.3;
 
-    .tag-chip-icon { line-height: 1; }
+    .tag-chip-icon {
+        line-height: 1;
+    }
 
     .tag-chip-remove {
         display: inline-flex;
@@ -1415,18 +1492,26 @@ body.page-location-details div.section {
         height: 16px;
         border-radius: 50%;
         border: none;
-        background: rgba(0,0,0,.12);
+        background: rgba(0, 0, 0, .12);
         cursor: pointer;
         font-size: .75rem;
         line-height: 1;
         color: #555;
         transition: background .12s, color .12s;
         padding: 0;
-        &:hover { background: rgba(200,0,0,.2); color: #c00; }
+
+        &:hover {
+            background: rgba(200, 0, 0, .2);
+            color: #c00;
+        }
     }
 }
 
-.tag-chips-empty { font-size: .82rem; color: #aaa; font-style: italic; }
+.tag-chips-empty {
+    font-size: .82rem;
+    color: #aaa;
+    font-style: italic;
+}
 
 // ── Modal-style dialog (shared by tag-add, visit-add, detail-pin-add) ───────
 .tag-add-dialog,
@@ -1434,7 +1519,7 @@ body.page-location-details div.section {
 .detail-pin-add-dialog {
     border: none;
     border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0,0,0,.18);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
     padding: 0;
     width: min(400px, 95vw);
     max-height: 80vh;
@@ -1445,7 +1530,9 @@ body.page-location-details div.section {
         flex-direction: column;
     }
 
-    &::backdrop { background: rgba(0,0,0,.35); }
+    &::backdrop {
+        background: rgba(0, 0, 0, .35);
+    }
 
     .dialog-header {
         display: flex;
@@ -1470,8 +1557,15 @@ body.page-location-details div.section {
         cursor: pointer;
         color: #888;
         transition: background .15s, color .15s;
-        .material-icons { font-size: 1.1rem; }
-        &:hover { background: rgba(0,0,0,.07); color: #333; }
+
+        .material-icons {
+            font-size: 1.1rem;
+        }
+
+        &:hover {
+            background: rgba(0, 0, 0, .07);
+            color: #333;
+        }
     }
 
     .dialog-footer {
@@ -1486,8 +1580,15 @@ body.page-location-details div.section {
             font-size: .8rem;
             color: #888;
             text-decoration: none;
-            .material-icons { font-size: .9rem; }
-            &:hover { color: #444; text-decoration: underline; }
+
+            .material-icons {
+                font-size: .9rem;
+            }
+
+            &:hover {
+                color: #444;
+                text-decoration: underline;
+            }
         }
     }
 }
@@ -1505,7 +1606,11 @@ body.page-location-details div.section {
         box-sizing: border-box;
         outline: none;
         flex-shrink: 0;
-        &:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+
+        &:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, .12);
+        }
     }
 
     .tag-dialog-list {
@@ -1516,7 +1621,9 @@ body.page-location-details div.section {
         flex: 1;
     }
 
-    .tag-dialog-item { margin-bottom: 2px; }
+    .tag-dialog-item {
+        margin-bottom: 2px;
+    }
 
     .tag-dialog-btn {
         display: flex;
@@ -1531,15 +1638,31 @@ body.page-location-details div.section {
         font-size: .88rem;
         text-align: left;
         transition: background .12s;
-        &:hover { background: rgba(99,102,241,.08); }
+
+        &:hover {
+            background: rgba(99, 102, 241, .08);
+        }
     }
 
-    .tag-dialog-icon { width: 20px; text-align: center; flex-shrink: 0; }
-    .tag-dialog-name { font-weight: 500; flex: 1; }
+    .tag-dialog-icon {
+        width: 20px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .tag-dialog-name {
+        font-weight: 500;
+        flex: 1;
+    }
 }
 
 // ── Visit history panel ─────────────────────────────────────────────────────
-.visit-empty { padding: .6rem 1rem; font-size: .85rem; color: #999; font-style: italic; }
+.visit-empty {
+    padding: .6rem 1rem;
+    font-size: .85rem;
+    color: #999;
+    font-style: italic;
+}
 
 .visit-list {
     list-style: none;
@@ -1552,14 +1675,45 @@ body.page-location-details div.section {
         gap: .5rem;
         padding: .5rem 1rem;
         border-bottom: 1px solid #f0f0f0;
-        &:last-child { border-bottom: none; }
+
+        &:last-child {
+            border-bottom: none;
+        }
     }
 
-    .visit-item-main { display: flex; align-items: center; gap: .5rem; flex: 1; flex-wrap: wrap; }
-    .visit-date { font-weight: 500; font-size: .88rem; }
-    .visit-time { font-size: .82rem; color: #777; }
-    .visit-source { font-size: .75rem; color: #aaa; display: inline-flex; align-items: center; gap: 2px; }
-    .visit-notes { font-size: .82rem; color: #666; margin-top: .2rem; padding: 0 1rem .35rem; }
+    .visit-item-main {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        flex: 1;
+        flex-wrap: wrap;
+    }
+
+    .visit-date {
+        font-weight: 500;
+        font-size: .88rem;
+    }
+
+    .visit-time {
+        font-size: .82rem;
+        color: #777;
+    }
+
+    .visit-source {
+        font-size: .75rem;
+        color: #aaa;
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+    }
+
+    .visit-notes {
+        font-size: .82rem;
+        color: #666;
+        margin-top: .2rem;
+        padding: 0 1rem .35rem;
+    }
+
     .visit-delete-btn {
         margin-left: auto;
         background: none;
@@ -1568,8 +1722,16 @@ body.page-location-details div.section {
         color: #ccc;
         padding: 2px;
         border-radius: 4px;
-        &:hover { color: #e55; background: rgba(220,50,50,.07); }
-        .material-icons { font-size: 1rem; display: block; }
+
+        &:hover {
+            color: #e55;
+            background: rgba(220, 50, 50, .07);
+        }
+
+        .material-icons {
+            font-size: 1rem;
+            display: block;
+        }
     }
 }
 
@@ -1587,8 +1749,14 @@ body.page-location-details div.section {
         flex-direction: column;
         gap: .3rem;
 
-        label { font-size: .82rem; font-weight: 600; color: #555; }
-        input, textarea {
+        label {
+            font-size: .82rem;
+            font-weight: 600;
+            color: #555;
+        }
+
+        input,
+        textarea {
             padding: .45rem .65rem;
             border: 1px solid #ddd;
             border-radius: 8px;
@@ -1596,9 +1764,16 @@ body.page-location-details div.section {
             outline: none;
             width: 100%;
             box-sizing: border-box;
-            &:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+
+            &:focus {
+                border-color: #6366f1;
+                box-shadow: 0 0 0 3px rgba(99, 102, 241, .12);
+            }
         }
-        textarea { resize: vertical; }
+
+        textarea {
+            resize: vertical;
+        }
     }
 
     .form-actions {
@@ -4259,8 +4434,14 @@ textarea.form-input {
     font-size: .83rem;
     color: #0369a1;
 
-    .material-icons { font-size: 1rem; flex-shrink: 0; }
-    span { flex: 1; }
+    .material-icons {
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    span {
+        flex: 1;
+    }
 }
 
 .wiki-link-btn {
@@ -4276,8 +4457,14 @@ textarea.form-input {
     font-weight: 600;
     text-decoration: none;
     transition: background .15s;
-    .material-icons { font-size: .85rem; }
-    &:hover { background: #0e7490; }
+
+    .material-icons {
+        font-size: .85rem;
+    }
+
+    &:hover {
+        background: #0e7490;
+    }
 }
 
 // ── Location community wiki ────────────────────────────────────────────────────
@@ -4307,8 +4494,8 @@ textarea.form-input {
         display: inline-flex;
         align-items: center;
         gap: .35rem;
-        background: rgba(255,255,255,.18);
-        border: 1px solid rgba(255,255,255,.35);
+        background: rgba(255, 255, 255, .18);
+        border: 1px solid rgba(255, 255, 255, .35);
         border-radius: 999px;
         padding: .25rem .75rem;
         font-size: .78rem;
@@ -4316,7 +4503,10 @@ textarea.form-input {
         letter-spacing: .04em;
         text-transform: uppercase;
         margin-bottom: .5rem;
-        .material-icons { font-size: .9rem; }
+
+        .material-icons {
+            font-size: .9rem;
+        }
     }
 
     .wiki-title {
@@ -4333,21 +4523,32 @@ textarea.form-input {
         font-size: .88rem;
         opacity: .85;
         margin: 0;
-        .material-icons { font-size: 1rem; }
+
+        .material-icons {
+            font-size: 1rem;
+        }
     }
 
     .wiki-notice {
         display: flex;
         align-items: flex-start;
         gap: .5rem;
-        background: rgba(255,255,255,.15);
+        background: rgba(255, 255, 255, .15);
         border-radius: 10px;
         padding: .65rem 1rem;
         font-size: .83rem;
         max-width: 320px;
         line-height: 1.45;
-        .material-icons { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
-        strong { opacity: 1; }
+
+        .material-icons {
+            font-size: 1rem;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        strong {
+            opacity: 1;
+        }
     }
 
     .wiki-back-link {
@@ -4355,8 +4556,8 @@ textarea.form-input {
         align-items: center;
         gap: .35rem;
         margin-top: .75rem;
-        background: rgba(255,255,255,.2);
-        border: 1px solid rgba(255,255,255,.4);
+        background: rgba(255, 255, 255, .2);
+        border: 1px solid rgba(255, 255, 255, .4);
         border-radius: 8px;
         padding: .45rem .9rem;
         font-size: .85rem;
@@ -4364,8 +4565,14 @@ textarea.form-input {
         color: #fff;
         text-decoration: none;
         transition: background .15s;
-        .material-icons { font-size: 1rem; }
-        &:hover { background: rgba(255,255,255,.3); }
+
+        .material-icons {
+            font-size: 1rem;
+        }
+
+        &:hover {
+            background: rgba(255, 255, 255, .3);
+        }
     }
 
     // ── Body grid ─────────────────────────────────────────────────────────
@@ -4376,14 +4583,31 @@ textarea.form-input {
         gap: 1rem;
         align-items: start;
 
-        .wiki-details  { grid-column: 1; }
-        .wiki-stats    { grid-column: 2; }
-        .wiki-bbox     { grid-column: 1 / -1; }
-        .wiki-tabs-card{ grid-column: 1 / -1; }
+        .wiki-details {
+            grid-column: 1;
+        }
+
+        .wiki-stats {
+            grid-column: 2;
+        }
+
+        .wiki-bbox {
+            grid-column: 1 / -1;
+        }
+
+        .wiki-tabs-card {
+            grid-column: 1 / -1;
+        }
 
         @media (max-width: 700px) {
             grid-template-columns: 1fr;
-            .wiki-details, .wiki-stats, .wiki-bbox, .wiki-tabs-card { grid-column: 1; }
+
+            .wiki-details,
+            .wiki-stats,
+            .wiki-bbox,
+            .wiki-tabs-card {
+                grid-column: 1;
+            }
         }
     }
 
@@ -4393,7 +4617,7 @@ textarea.form-input {
         border: 1px solid #e2e8f0;
         border-radius: 14px;
         overflow: hidden;
-        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
     }
 
     .wiki-card-header {
@@ -4404,8 +4628,18 @@ textarea.form-input {
         border-bottom: 1px solid #e2e8f0;
         background: #f8fafc;
 
-        .material-icons { font-size: 1.1rem; color: #0891b2; }
-        h2 { margin: 0; font-size: .95rem; font-weight: 600; flex: 1; color: #0f172a; }
+        .material-icons {
+            font-size: 1.1rem;
+            color: #0891b2;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: .95rem;
+            font-weight: 600;
+            flex: 1;
+            color: #0f172a;
+        }
     }
 
     .wiki-edit-btn {
@@ -4422,8 +4656,15 @@ textarea.form-input {
         font-weight: 600;
         cursor: pointer;
         transition: background .15s, color .15s;
-        .material-icons { font-size: .95rem; }
-        &:hover { background: #0891b2; color: #fff; }
+
+        .material-icons {
+            font-size: .95rem;
+        }
+
+        &:hover {
+            background: #0891b2;
+            color: #fff;
+        }
     }
 
     .wiki-card-desc {
@@ -4445,11 +4686,28 @@ textarea.form-input {
         grid-template-columns: 130px 1fr;
         gap: .25rem 1rem;
         padding: .5rem 1.1rem;
-        &:not(:last-child) { border-bottom: 1px solid #f1f5f9; }
-        &.full { grid-template-columns: 1fr; }
 
-        dt { font-size: .78rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
-        dd { font-size: .9rem; color: #1e293b; margin: 0; }
+        &:not(:last-child) {
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        &.full {
+            grid-template-columns: 1fr;
+        }
+
+        dt {
+            font-size: .78rem;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        dd {
+            font-size: .9rem;
+            color: #1e293b;
+            margin: 0;
+        }
     }
 
     // ── Stats ─────────────────────────────────────────────────────────────
@@ -4473,7 +4731,10 @@ textarea.form-input {
         line-height: 1;
     }
 
-    .wiki-stat-label { font-size: .8rem; color: #64748b; }
+    .wiki-stat-label {
+        font-size: .8rem;
+        color: #64748b;
+    }
 
     // ── Bounding box map ──────────────────────────────────────────────────
     #bbox-map {
@@ -4504,14 +4765,25 @@ textarea.form-input {
         font-weight: 500;
         cursor: pointer;
         transition: background .15s, border-color .15s, color .15s;
-        .material-icons { font-size: 1rem; }
-        &:hover { background: #f1f5f9; border-color: #94a3b8; }
+
+        .material-icons {
+            font-size: 1rem;
+        }
+
+        &:hover {
+            background: #f1f5f9;
+            border-color: #94a3b8;
+        }
 
         &--primary {
             background: #0891b2;
             border-color: #0891b2;
             color: #fff;
-            &:hover { background: #0e7490; border-color: #0e7490; }
+
+            &:hover {
+                background: #0e7490;
+                border-color: #0e7490;
+            }
         }
     }
 
@@ -4538,8 +4810,16 @@ textarea.form-input {
         color: #64748b;
         cursor: pointer;
         transition: color .15s, border-color .15s;
-        .material-icons { font-size: 1rem; }
-        &--active, &:hover { color: #0891b2; border-bottom-color: #0891b2; }
+
+        .material-icons {
+            font-size: 1rem;
+        }
+
+        &--active,
+        &:hover {
+            color: #0891b2;
+            border-bottom-color: #0891b2;
+        }
     }
 
     .wiki-tab-content {
@@ -4553,7 +4833,10 @@ textarea.form-input {
         gap: .5rem;
         color: #94a3b8;
         font-size: .88rem;
-        .material-icons { font-size: 1.1rem; }
+
+        .material-icons {
+            font-size: 1.1rem;
+        }
     }
 
     // ── Edit history ──────────────────────────────────────────────────────
@@ -4601,7 +4884,11 @@ textarea.form-input {
         font-size: .83rem;
         font-weight: 600;
         color: #1e293b;
-        .material-icons { font-size: .9rem; color: #94a3b8; }
+
+        .material-icons {
+            font-size: .9rem;
+            color: #94a3b8;
+        }
     }
 
     .wiki-history-date {
@@ -4618,9 +4905,15 @@ textarea.form-input {
         padding: .15rem .55rem;
         border-radius: 999px;
         font-weight: 600;
-        .material-icons { font-size: .8rem; }
 
-        &--reverted { background: #fef3c7; color: #92400e; }
+        .material-icons {
+            font-size: .8rem;
+        }
+
+        &--reverted {
+            background: #fef3c7;
+            color: #92400e;
+        }
     }
 
     .wiki-history-changes {
@@ -4661,7 +4954,10 @@ textarea.form-input {
         white-space: nowrap;
     }
 
-    .wiki-change-arrow { font-size: .85rem; color: #94a3b8; }
+    .wiki-change-arrow {
+        font-size: .85rem;
+        color: #94a3b8;
+    }
 
     .wiki-change-to {
         color: #15803d;
@@ -4688,8 +4984,15 @@ textarea.form-input {
         font-weight: 500;
         cursor: pointer;
         transition: background .15s, border-color .15s;
-        .material-icons { font-size: .85rem; }
-        &:hover { background: #fef2f2; border-color: #dc2626; }
+
+        .material-icons {
+            font-size: .85rem;
+        }
+
+        &:hover {
+            background: #fef2f2;
+            border-color: #dc2626;
+        }
     }
 
     // ── Suggest-edits dialog ──────────────────────────────────────────────
@@ -4703,7 +5006,12 @@ textarea.form-input {
         border-radius: 8px;
         font-size: .82rem;
         color: #1d4ed8;
-        .material-icons { font-size: .95rem; flex-shrink: 0; margin-top: 1px; }
+
+        .material-icons {
+            font-size: .95rem;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
     }
 
     .wiki-edit-form {
@@ -4716,8 +5024,15 @@ textarea.form-input {
             display: flex;
             flex-direction: column;
             gap: .3rem;
-            label { font-size: .82rem; font-weight: 600; color: #555; }
-            input, textarea {
+
+            label {
+                font-size: .82rem;
+                font-weight: 600;
+                color: #555;
+            }
+
+            input,
+            textarea {
                 padding: .45rem .65rem;
                 border: 1px solid #ddd;
                 border-radius: 8px;
@@ -4725,9 +5040,16 @@ textarea.form-input {
                 outline: none;
                 width: 100%;
                 box-sizing: border-box;
-                &:focus { border-color: #0891b2; box-shadow: 0 0 0 3px rgba(8,145,178,.12); }
+
+                &:focus {
+                    border-color: #0891b2;
+                    box-shadow: 0 0 0 3px rgba(8, 145, 178, .12);
+                }
             }
-            textarea { resize: vertical; }
+
+            textarea {
+                resize: vertical;
+            }
         }
 
         .form-actions {
@@ -4759,7 +5081,9 @@ textarea.form-input {
         font-size: .8rem;
         cursor: pointer;
 
-        &:hover { background: #1d4ed8; }
+        &:hover {
+            background: #1d4ed8;
+        }
     }
 
     .detail-pin-empty {
@@ -4780,9 +5104,11 @@ textarea.form-input {
     align-items: flex-start;
     gap: .75rem;
     padding: .75rem 1.25rem;
-    border-bottom: 1px solid rgba(128,128,128,.15);
+    border-bottom: 1px solid rgba(128, 128, 128, .15);
 
-    &:last-child { border-bottom: none; }
+    &:last-child {
+        border-bottom: none;
+    }
 
     .detail-pin-type-icon {
         font-size: 1.35rem;
@@ -4796,9 +5122,21 @@ textarea.form-input {
         flex-direction: column;
         gap: .15rem;
 
-        .detail-pin-name  { font-weight: 600; font-size: .9rem; }
-        .detail-pin-desc  { font-size: .8rem; color: #888; }
-        .detail-pin-coords { font-size: .75rem; color: #aaa; font-family: monospace; }
+        .detail-pin-name {
+            font-weight: 600;
+            font-size: .9rem;
+        }
+
+        .detail-pin-desc {
+            font-size: .8rem;
+            color: #888;
+        }
+
+        .detail-pin-coords {
+            font-size: .75rem;
+            color: #aaa;
+            font-family: monospace;
+        }
     }
 
     .detail-pin-actions {
@@ -4817,15 +5155,35 @@ textarea.form-input {
         display: flex;
         align-items: center;
 
-        &:hover { background: rgba(220,38,38,.1); color: #dc2626; }
+        &:hover {
+            background: rgba(220, 38, 38, .1);
+            color: #dc2626;
+        }
     }
 
-    &.detail-pin-type--building  .detail-pin-type-icon { color: #6b7280; }
-    &.detail-pin-type--entrance  .detail-pin-type-icon { color: #16a34a; }
-    &.detail-pin-type--poi       .detail-pin-type-icon { color: #d97706; }
-    &.detail-pin-type--danger    .detail-pin-type-icon { color: #dc2626; }
-    &.detail-pin-type--other     .detail-pin-type-icon { color: #7c3aed; }
-    &.detail-pin-type--location  .detail-pin-type-icon { color: #2563eb; }
+    &.detail-pin-type--building .detail-pin-type-icon {
+        color: #6b7280;
+    }
+
+    &.detail-pin-type--entrance .detail-pin-type-icon {
+        color: #16a34a;
+    }
+
+    &.detail-pin-type--poi .detail-pin-type-icon {
+        color: #d97706;
+    }
+
+    &.detail-pin-type--danger .detail-pin-type-icon {
+        color: #dc2626;
+    }
+
+    &.detail-pin-type--other .detail-pin-type-icon {
+        color: #7c3aed;
+    }
+
+    &.detail-pin-type--location .detail-pin-type-icon {
+        color: #2563eb;
+    }
 }
 
 .detail-pin-no-location {
@@ -4854,7 +5212,9 @@ textarea.form-input {
         flex-direction: column;
     }
 
-    &::backdrop { background: rgba(0,0,0,.4); }
+    &::backdrop {
+        background: rgba(0, 0, 0, .4);
+    }
 
     .detail-pin-add-hint {
         display: flex;
@@ -4881,9 +5241,15 @@ textarea.form-input {
             gap: .3rem;
             margin-bottom: .8rem;
 
-            label { font-size: .82rem; font-weight: 600; color: #555; }
+            label {
+                font-size: .82rem;
+                font-weight: 600;
+                color: #555;
+            }
 
-            input, select, textarea {
+            input,
+            select,
+            textarea {
                 width: 100%;
                 box-sizing: border-box;
                 border: 1px solid #d1d5db;
@@ -4891,20 +5257,29 @@ textarea.form-input {
                 padding: .45rem .6rem;
                 font-size: .9rem;
 
-                &:focus { outline: 2px solid #2563eb; border-color: transparent; }
+                &:focus {
+                    outline: 2px solid #2563eb;
+                    border-color: transparent;
+                }
             }
 
             &.form-row--coords {
                 flex-direction: row;
                 gap: .75rem;
-                > div { flex: 1; display: flex; flex-direction: column; gap: .3rem; }
+
+                >div {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    gap: .3rem;
+                }
             }
         }
     }
 }
 
 .detail-map-icon {
-    text-shadow: 0 1px 3px rgba(0,0,0,.4);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .4);
     display: block;
 }
 
@@ -4927,12 +5302,24 @@ textarea.form-input {
     background: #f9fafb;
     cursor: pointer;
     transition: border-color .12s, background .12s;
-    .material-icons { font-size: 18px; color: #555; }
-    &:hover { background: #eff6ff; border-color: #93c5fd; }
+
+    .material-icons {
+        font-size: 18px;
+        color: #555;
+    }
+
+    &:hover {
+        background: #eff6ff;
+        border-color: #93c5fd;
+    }
+
     &.dp-icon-btn--active {
         background: #dbeafe;
         border-color: #2563eb;
-        .material-icons { color: #2563eb; }
+
+        .material-icons {
+            color: #2563eb;
+        }
     }
 }
 
@@ -4950,7 +5337,11 @@ textarea.form-input {
     border: 2px solid transparent;
     cursor: pointer;
     transition: border-color .12s, transform .1s;
-    &:hover { transform: scale(1.15); }
+
+    &:hover {
+        transform: scale(1.15);
+    }
+
     &.dp-color-swatch--active {
         border-color: #1e293b;
         box-shadow: 0 0 0 2px #fff inset;
@@ -4974,9 +5365,11 @@ textarea.form-input {
     align-items: flex-start;
     gap: .75rem;
     padding: .6rem 1.25rem;
-    border-bottom: 1px solid rgba(128,128,128,.12);
+    border-bottom: 1px solid rgba(128, 128, 128, .12);
 
-    &:last-child { border-bottom: none; }
+    &:last-child {
+        border-bottom: none;
+    }
 
     .detail-pin-wiki-attr {
         margin-left: auto;
@@ -5025,14 +5418,19 @@ textarea.form-input {
     color: #333;
     line-height: 1.3;
 
-    .alias-chip-name { flex: 1; }
+    .alias-chip-name {
+        flex: 1;
+    }
 
     .alias-chip-author {
         font-size: .72rem;
         color: #777;
         font-style: italic;
         padding: 0 .2rem;
-        &::before { content: '— '; }
+
+        &::before {
+            content: '— ';
+        }
     }
 
     .alias-chip-remove {
@@ -5044,13 +5442,21 @@ textarea.form-input {
         height: 18px;
         border-radius: 50%;
         border: none;
-        background: rgba(0,0,0,.1);
+        background: rgba(0, 0, 0, .1);
         cursor: pointer;
         padding: 0;
         color: #666;
         transition: background .12s, color .12s;
-        .material-icons { font-size: 12px; line-height: 1; }
-        &:hover { background: rgba(200,0,0,.18); color: #c00; }
+
+        .material-icons {
+            font-size: 12px;
+            line-height: 1;
+        }
+
+        &:hover {
+            background: rgba(200, 0, 0, .18);
+            color: #c00;
+        }
     }
 }
 
@@ -5075,7 +5481,11 @@ textarea.form-input {
         border-radius: 6px;
         font-size: .85rem;
         outline: none;
-        &:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,.15); }
+
+        &:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, .15);
+        }
     }
 
     .alias-add-btn {
@@ -5089,8 +5499,14 @@ textarea.form-input {
         border-radius: 6px;
         cursor: pointer;
         transition: background .15s;
-        .material-icons { font-size: 18px; }
-        &:hover { background: #4f46e5; }
+
+        .material-icons {
+            font-size: 18px;
+        }
+
+        &:hover {
+            background: #4f46e5;
+        }
     }
 }
 
@@ -5098,7 +5514,7 @@ textarea.form-input {
 .wiki-edit-dialog {
     border: none;
     border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0,0,0,.18);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
     padding: 0;
     width: min(480px, 95vw);
     max-height: 90vh;
@@ -5136,12 +5552,22 @@ textarea.form-input {
     gap: .4rem;
     color: #1e293b;
 
-    .material-icons { font-size: 1.7rem; color: #3b82f6; }
+    .material-icons {
+        font-size: 1.7rem;
+        color: #3b82f6;
+    }
 }
 
-.trips-subtitle { margin: 0; color: #64748b; font-size: .9rem; }
+.trips-subtitle {
+    margin: 0;
+    color: #64748b;
+    font-size: .9rem;
+}
 
-.trips-header-right { display: flex; align-items: center; }
+.trips-header-right {
+    display: flex;
+    align-items: center;
+}
 
 .trips-empty {
     text-align: center;
@@ -5155,9 +5581,14 @@ textarea.form-input {
         color: #cbd5e1;
     }
 
-    p { margin: .25rem 0; font-size: .95rem; }
+    p {
+        margin: .25rem 0;
+        font-size: .95rem;
+    }
 
-    .btn-primary { margin-top: 1.5rem; }
+    .btn-primary {
+        margin-top: 1.5rem;
+    }
 }
 
 .trip-card-list {
@@ -5176,7 +5607,7 @@ textarea.form-input {
     transition: box-shadow .15s, border-color .15s;
 
     &:hover {
-        box-shadow: 0 4px 16px rgba(0,0,0,.08);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
         border-color: #93c5fd;
     }
 }
@@ -5200,7 +5631,10 @@ textarea.form-input {
     justify-content: center;
     flex-shrink: 0;
 
-    .material-icons { color: #3b82f6; font-size: 1.3rem; }
+    .material-icons {
+        color: #3b82f6;
+        font-size: 1.3rem;
+    }
 }
 
 .trip-card-body {
@@ -5211,8 +5645,19 @@ textarea.form-input {
     gap: .2rem;
 }
 
-.trip-card-name { font-weight: 600; font-size: 1rem; color: #1e293b; }
-.trip-card-desc { font-size: .85rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trip-card-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1e293b;
+}
+
+.trip-card-desc {
+    font-size: .85rem;
+    color: #64748b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
 .trip-card-meta {
     display: flex;
@@ -5227,11 +5672,17 @@ textarea.form-input {
         font-size: .78rem;
         color: #94a3b8;
 
-        .material-icons { font-size: 1rem; }
+        .material-icons {
+            font-size: 1rem;
+        }
     }
 }
 
-.trip-card-arrow { color: #cbd5e1; margin-left: auto; flex-shrink: 0; }
+.trip-card-arrow {
+    color: #cbd5e1;
+    margin-left: auto;
+    flex-shrink: 0;
+}
 
 // ── Trip detail page ──────────────────────────────────────────────────────
 
@@ -5261,8 +5712,13 @@ textarea.form-input {
     text-decoration: none;
     margin-bottom: .5rem;
 
-    &:hover { color: #3b82f6; }
-    .material-icons { font-size: 1rem; }
+    &:hover {
+        color: #3b82f6;
+    }
+
+    .material-icons {
+        font-size: 1rem;
+    }
 }
 
 .trip-detail-title {
@@ -5272,7 +5728,10 @@ textarea.form-input {
     color: #1e293b;
 }
 
-.trip-detail-description { margin: 0 0 .5rem; color: #475569; }
+.trip-detail-description {
+    margin: 0 0 .5rem;
+    color: #475569;
+}
 
 .trip-detail-dates {
     display: inline-flex;
@@ -5280,7 +5739,10 @@ textarea.form-input {
     gap: .3rem;
     font-size: .88rem;
     color: #64748b;
-    .material-icons { font-size: 1.1rem; }
+
+    .material-icons {
+        font-size: 1.1rem;
+    }
 }
 
 .trip-detail-header-right {
@@ -5304,8 +5766,13 @@ textarea.form-input {
     cursor: pointer;
     transition: background .15s, color .15s;
 
-    &:hover { background: #fef2f2; }
-    .material-icons { font-size: 1rem; }
+    &:hover {
+        background: #fef2f2;
+    }
+
+    .material-icons {
+        font-size: 1rem;
+    }
 }
 
 .trip-detail-body {
@@ -5319,7 +5786,9 @@ textarea.form-input {
     }
 }
 
-.trip-detail-section { min-width: 0; }
+.trip-detail-section {
+    min-width: 0;
+}
 
 .trip-detail-aside {
     display: flex;
@@ -5331,7 +5800,9 @@ textarea.form-input {
 // ── Trip panels (shared) ──────────────────────────────────────────────────
 
 .trip-panel {
-    &.card { padding: 0; }
+    &.card {
+        padding: 0;
+    }
 
     .card-header {
         display: flex;
@@ -5351,7 +5822,9 @@ textarea.form-input {
             padding: 1px 7px;
         }
 
-        .detail-pin-add-btn { margin-left: auto; }
+        .detail-pin-add-btn {
+            margin-left: auto;
+        }
     }
 }
 
@@ -5372,8 +5845,19 @@ textarea.form-input {
     font-size: .85rem;
 }
 
-@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-.rotating { animation: spin 1s linear infinite; }
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.rotating {
+    animation: spin 1s linear infinite;
+}
 
 // ── Activities ────────────────────────────────────────────────────────────
 
@@ -5391,8 +5875,14 @@ textarea.form-input {
     border-bottom: 1px solid #f1f5f9;
     transition: opacity .2s;
 
-    &:last-child { border-bottom: none; }
-    &.is-deleting { opacity: .25; pointer-events: none; }
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &.is-deleting {
+        opacity: .25;
+        pointer-events: none;
+    }
 }
 
 .trip-activity-icon {
@@ -5404,7 +5894,11 @@ textarea.form-input {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    .material-icons { font-size: 1.1rem; color: #3b82f6; }
+
+    .material-icons {
+        font-size: 1.1rem;
+        color: #3b82f6;
+    }
 }
 
 .trip-activity-body {
@@ -5415,17 +5909,33 @@ textarea.form-input {
     gap: .15rem;
 }
 
-.trip-activity-name { font-weight: 600; font-size: .9rem; color: #1e293b; }
+.trip-activity-name {
+    font-weight: 600;
+    font-size: .9rem;
+    color: #1e293b;
+}
+
 .trip-activity-time {
     display: inline-flex;
     align-items: center;
     gap: .2rem;
     font-size: .78rem;
     color: #64748b;
-    .material-icons { font-size: .95rem; }
+
+    .material-icons {
+        font-size: .95rem;
+    }
 }
-.trip-activity-notes { font-size: .82rem; color: #64748b; }
-.trip-activity-attr { font-size: .75rem; color: #94a3b8; }
+
+.trip-activity-notes {
+    font-size: .82rem;
+    color: #64748b;
+}
+
+.trip-activity-attr {
+    font-size: .75rem;
+    color: #94a3b8;
+}
 
 // ── Members ───────────────────────────────────────────────────────────────
 
@@ -5443,8 +5953,14 @@ textarea.form-input {
     border-bottom: 1px solid #f1f5f9;
     transition: opacity .2s;
 
-    &:last-child { border-bottom: none; }
-    &.is-deleting { opacity: .25; pointer-events: none; }
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &.is-deleting {
+        opacity: .25;
+        pointer-events: none;
+    }
 }
 
 .trip-member-avatar {
@@ -5459,7 +5975,12 @@ textarea.form-input {
     justify-content: center;
 }
 
-.trip-member-avatar-img { width: 100%; height: 100%; object-fit: cover; }
+.trip-member-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 .trip-member-avatar-initial {
     font-weight: 700;
     font-size: .9rem;
@@ -5473,8 +5994,16 @@ textarea.form-input {
     flex-direction: column;
 }
 
-.trip-member-name { font-weight: 600; font-size: .88rem; color: #1e293b; }
-.trip-member-username { font-size: .78rem; color: #94a3b8; }
+.trip-member-name {
+    font-weight: 600;
+    font-size: .88rem;
+    color: #1e293b;
+}
+
+.trip-member-username {
+    font-size: .78rem;
+    color: #94a3b8;
+}
 
 .trip-member-badge {
     font-size: .7rem;
@@ -5509,8 +6038,14 @@ textarea.form-input {
     border-bottom: 1px solid #f1f5f9;
     transition: opacity .2s;
 
-    &:last-child { border-bottom: none; }
-    &.is-deleting { opacity: .25; pointer-events: none; }
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &.is-deleting {
+        opacity: .25;
+        pointer-events: none;
+    }
 }
 
 .trip-comment-body {
@@ -5525,10 +6060,27 @@ textarea.form-input {
     margin-bottom: .2rem;
 }
 
-.trip-comment-author { font-weight: 600; font-size: .85rem; color: #1e293b; }
-.trip-comment-date { font-size: .75rem; color: #94a3b8; }
-.trip-comment-text { margin: 0; font-size: .88rem; color: #475569; white-space: pre-wrap; }
-.trip-comment-empty { margin-bottom: 0; }
+.trip-comment-author {
+    font-weight: 600;
+    font-size: .85rem;
+    color: #1e293b;
+}
+
+.trip-comment-date {
+    font-size: .75rem;
+    color: #94a3b8;
+}
+
+.trip-comment-text {
+    margin: 0;
+    font-size: .88rem;
+    color: #475569;
+    white-space: pre-wrap;
+}
+
+.trip-comment-empty {
+    margin-bottom: 0;
+}
 
 .trip-comment-form {
     padding: .75rem 1rem;
@@ -5544,10 +6096,17 @@ textarea.form-input {
         font-family: inherit;
         box-sizing: border-box;
 
-        &:focus { outline: none; border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+        &:focus {
+            outline: none;
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
+        }
     }
 
-    .form-actions { margin-top: .5rem; justify-content: flex-end; }
+    .form-actions {
+        margin-top: .5rem;
+        justify-content: flex-end;
+    }
 }
 
 // ── Create/edit trip dialog ───────────────────────────────────────────────
@@ -5555,7 +6114,7 @@ textarea.form-input {
 .trip-create-dialog {
     border: none;
     border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0,0,0,.18);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
     padding: 0;
     width: min(480px, 95vw);
     max-height: 90vh;
@@ -5564,6 +6123,10 @@ textarea.form-input {
     &[open] {
         display: flex;
         flex-direction: column;
+    }
+
+    &::backdrop {
+        background: rgba(0, 0, 0, .35);
     }
 
     .trip-create-form {
@@ -5576,7 +6139,9 @@ textarea.form-input {
 
 // ── Location search autocomplete ──────────────────────────────────────────
 
-.activity-location-search-wrap { position: relative; }
+.activity-location-search-wrap {
+    position: relative;
+}
 
 .location-suggestions {
     position: absolute;
@@ -5587,7 +6152,7 @@ textarea.form-input {
     border: 1px solid #e2e8f0;
     border-top: none;
     border-radius: 0 0 6px 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .1);
     z-index: 100;
     max-height: 220px;
     overflow-y: auto;
@@ -5595,7 +6160,9 @@ textarea.form-input {
     padding: 0;
     margin: 0;
 
-    &[hidden] { display: none; }
+    &[hidden] {
+        display: none;
+    }
 }
 
 .location-suggestion-item {
@@ -5604,7 +6171,9 @@ textarea.form-input {
     cursor: pointer;
     color: #1e293b;
 
-    &:hover { background: #f0f9ff; }
+    &:hover {
+        background: #f0f9ff;
+    }
 }
 
 .activity-location-display {
@@ -5613,7 +6182,4 @@ textarea.form-input {
     font-size: .82rem;
     color: #3b82f6;
     font-style: italic;
-}
-
-    &::backdrop { background: rgba(0,0,0,.35); }
 }
