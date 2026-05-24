@@ -5,6 +5,8 @@ we either find an existing Location whose bounding box contains the pin's
 coordinates, or create a new one.  This is the same logic as post_add_pin.
 """
 
+import uuid
+
 from django.db import migrations
 
 
@@ -34,6 +36,7 @@ def _backfill(apps, schema_editor):
 
         if location is None:
             location = Location.objects.create(
+                uuid=uuid.uuid4(),
                 name=pin.nickname or "Unnamed Location",
                 latitude=lat,
                 longitude=lon,
