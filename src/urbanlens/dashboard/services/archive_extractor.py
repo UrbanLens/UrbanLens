@@ -103,8 +103,8 @@ def validate_content_type(name: str, data: bytes) -> str | None:
 
     # JSON: must start with '{' or '[' and parse successfully.
     # Recognised variants:
-    #   "json"             — GeoJSON Saved Places (has "features")
-    #   "location_history" — Google Semantic Location History (has "timelineObjects")
+    #   "json"             - GeoJSON Saved Places (has "features")
+    #   "location_history" - Google Semantic Location History (has "timelineObjects")
     if text[0] in "{[":
         try:
             parsed = json.loads(text)

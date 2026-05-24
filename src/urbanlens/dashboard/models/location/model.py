@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
-from django.contrib.gis.db.models import PointField
+from django.contrib.gis.db.models import PointField, PolygonField
 from django.contrib.gis.geos import Point
-from django.db.models import Index, ManyToManyField
+from django.db.models import Index, ManyToManyField, UUIDField
 from django.db.models.fields import CharField, DecimalField, TextField
 
 from urbanlens.dashboard.models import abstract
@@ -17,6 +18,10 @@ from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.categories.model import Category
+
+# ~50 m radius expressed in degrees (at mid-latitudes). Used as the default
+# bounding box when a new Location is created without an explicit boundary.
+_DEFAULT_BBOX_DEGREES = 0.00045
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +51,10 @@ class Location(abstract.AddressableMixin, abstract.Model):
     same properties through its location FK.
     """
 
+    # Public-facing identifier. Non-sequential so users cannot infer location counts
+    # or enumerate other locations from a known URL.
+    uuid = UUIDField(default=uuid4, unique=True, editable=False)
+
     # Canonical name of the place - NOT a user's personal label (that's Pin.nickname).
     name = CharField(max_length=255)
     description = TextField(null=True, blank=True)
@@ -53,6 +62,11 @@ class Location(abstract.AddressableMixin, abstract.Model):
     latitude = DecimalField(max_digits=9, decimal_places=6)
     longitude = DecimalField(max_digits=9, decimal_places=6)
     point = PointField(geography=True, default=Point(0, 0))
+
+    # Bounding box for this location. Used to auto-link new pins whose coordinates
+    # fall within this polygon. Defaults to a small circle (~50 m) around the point.
+    # Users can expand this to cover a campus or multi-building site via the wiki.
+    bounding_box = PolygonField(geography=True, null=True, blank=True, srid=4326)
 
     # Google Maps CID - unsigned 64-bit identifier embedded in place URLs.
     # Stored as Decimal to handle values above signed int64 range (> 2^63-1).
@@ -183,12 +197,24 @@ class Location(abstract.AddressableMixin, abstract.Model):
     def save(self, *args, **kwargs) -> None:
         if self.latitude is not None and self.longitude is not None:
             self.point = Point(float(self.longitude), float(self.latitude), srid=4326)
+            if self.bounding_box is None:
+                self.bounding_box = self.point.buffer(_DEFAULT_BBOX_DEGREES)
+                if self.bounding_box is not None:
+                    self.bounding_box.srid = 4326
+                else:
+                    logger.warning(
+                        "Failed to create bounding box for location %s (%s, %s)",
+                        self.name,
+                        self.latitude,
+                        self.longitude,
+                    )
         super().save(*args, **kwargs)
 
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_locations"
         get_latest_by = "updated"
         indexes = [
+            Index(fields=["uuid"]),
             Index(fields=["latitude", "longitude"]),
             Index(fields=["name"]),
             Index(fields=["cid"]),

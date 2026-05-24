@@ -4,7 +4,7 @@
         <i class="material-icons">label</i>
         <h3>Tags</h3>
         <button type="button" class="btn-icon-sm" style="margin-left:auto"
-                onclick="document.getElementById('tag-add-dialog-{{ pin.id }}').showModal()"
+                onclick="document.getElementById('tag-add-dialog-{{ pin.uuid }}').showModal()"
                 title="Add a tag">
             <i class="material-icons">add</i>
         </button>
@@ -23,7 +23,7 @@
             </span>
             {% endif %}
             <span class="tag-chip-name">{{ tag.name }}</span>
-            <form hx-post="{% url 'tag.membership' pin.id %}" hx-target="#tag-panel" hx-swap="outerHTML" style="display:inline">
+            <form hx-post="{% url 'tag.membership' pin.uuid %}" hx-target="#tag-panel" hx-swap="outerHTML" style="display:inline">
                 {% csrf_token %}
                 <input type="hidden" name="tag_id" value="{{ tag.id }}">
                 <input type="hidden" name="action" value="remove">
@@ -38,7 +38,7 @@
     </div>
 
     {# ── Add-tag dialog ──────────────────────────────────────────────── #}
-    <dialog id="tag-add-dialog-{{ pin.id }}" class="tag-add-dialog">
+    <dialog id="tag-add-dialog-{{ pin.uuid }}" class="tag-add-dialog">
         <div class="dialog-header">
             <span>Add Tags</span>
             <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
@@ -51,7 +51,7 @@
             {% for tag in all_tags %}
             {% if tag.id not in member_ids %}
             <li class="tag-dialog-item" data-name="{{ tag.name|lower }}">
-                <form hx-post="{% url 'tag.membership' pin.id %}" hx-target="#tag-panel" hx-swap="outerHTML">
+                <form hx-post="{% url 'tag.membership' pin.uuid %}" hx-target="#tag-panel" hx-swap="outerHTML">
                     {% csrf_token %}
                     <input type="hidden" name="tag_id" value="{{ tag.id }}">
                     <input type="hidden" name="action" value="add">
@@ -78,3 +78,22 @@
         </div>
     </dialog>
 </div>
+<script>
+(function () {
+    if (window._tagDialogSetup) return;
+    window._tagDialogSetup = true;
+    var _pendingTagDlgId = null;
+    document.body.addEventListener('htmx:beforeRequest', function (e) {
+        var el = e.target;
+        if (!el || !el.closest) return;
+        var dlg = el.closest('dialog.tag-add-dialog');
+        if (dlg && dlg.open) _pendingTagDlgId = dlg.id;
+    });
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+        if (!_pendingTagDlgId) return;
+        var dlg = document.getElementById(_pendingTagDlgId);
+        if (dlg) dlg.showModal();
+        _pendingTagDlgId = null;
+    });
+}());
+</script>

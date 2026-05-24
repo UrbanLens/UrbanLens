@@ -1,0 +1,152 @@
+<div id="detail-pins-panel" class="detail-pins-panel card">
+    <div class="card-header">
+        <i class="material-icons">push_pin</i>
+        <span>Detail Pins</span>
+        <button type="button" class="detail-pin-add-btn"
+                onclick="document.getElementById('detail-pin-add-dialog').showModal()">
+            <i class="material-icons">add_location</i> Add
+        </button>
+    </div>
+
+    {% if detail_pins %}
+    <ul class="detail-pin-list">
+        {% for dp in detail_pins %}
+        <li class="detail-pin-item detail-pin-type--{{ dp.pin_type }}"
+            id="detail-pin-{{ dp.uuid }}">
+            <span class="detail-pin-type-icon material-icons">
+                {% if dp.pin_type == "building" %}business
+                {% elif dp.pin_type == "entrance" %}door_front
+                {% elif dp.pin_type == "poi" %}star
+                {% elif dp.pin_type == "danger" %}warning
+                {% else %}place{% endif %}
+            </span>
+            <div class="detail-pin-info">
+                <span class="detail-pin-name">{{ dp.effective_name }}</span>
+                {% if dp.description %}
+                <span class="detail-pin-desc">{{ dp.description }}</span>
+                {% endif %}
+                <span class="detail-pin-coords">{{ dp.effective_latitude|floatformat:5 }}, {{ dp.effective_longitude|floatformat:5 }}</span>
+            </div>
+            <div class="detail-pin-actions">
+                <button type="button" class="detail-pin-action-btn"
+                        title="Delete"
+                        hx-delete="{% url 'dashboard:pin.detail_pin.edit' pin.uuid dp.uuid %}"
+                        hx-target="#detail-pin-{{ dp.uuid }}"
+                        hx-swap="outerHTML"
+                        hx-confirm="Delete this detail pin?">
+                    <i class="material-icons">delete</i>
+                </button>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="detail-pin-empty">No detail pins yet. Add markers for buildings, entrances, points of interest, or hazards.</p>
+    {% endif %}
+</div>
+
+{# ── Add detail-pin dialog ────────────────────────────────────────────────── #}
+<dialog id="detail-pin-add-dialog" class="detail-pin-add-dialog">
+    <div class="dialog-header">
+        <span>Add Detail Pin</span>
+        <button type="button" class="dialog-close"
+                onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <p class="detail-pin-add-hint">
+        <i class="material-icons">info_outline</i>
+        Click a point on the map below to set the location, then fill in the details.
+    </p>
+    <div id="detail-pin-picker-map"></div>
+    <form id="detail-pin-add-form" class="detail-pin-add-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="dp-type">Type</label>
+            <select id="dp-type" name="pin_type" required>
+                {% for value, label in pin_type_choices %}
+                {% if value != "location" %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-row">
+            <label for="dp-name">Name</label>
+            <input type="text" id="dp-name" name="name" placeholder="Optional label">
+        </div>
+        <div class="form-row">
+            <label for="dp-description">Notes</label>
+            <textarea id="dp-description" name="description" rows="2"
+                      placeholder="Optional description"></textarea>
+        </div>
+        <div class="form-row form-row--coords">
+            <div>
+                <label for="dp-lat">Latitude</label>
+                <input type="number" id="dp-lat" name="latitude" step="0.000001" required>
+            </div>
+            <div>
+                <label for="dp-lon">Longitude</label>
+                <input type="number" id="dp-lon" name="longitude" step="0.000001" required>
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="submit-button">Add Pin</button>
+            <button type="button" class="submit-button cancel-btn"
+                    onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+<script>
+(function () {
+    var _pickerMap = null;
+    var _pickerMarker = null;
+
+    function _initPickerMap() {
+        if (_pickerMap) { _pickerMap.invalidateSize(); return; }
+        _pickerMap = L.map('detail-pin-picker-map').setView([pinLat, pinLng], 17);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(_pickerMap);
+        L.marker([pinLat, pinLng], { opacity: 0.5 }).addTo(_pickerMap);
+        _pickerMap.on('click', function (e) {
+            var lat = e.latlng.lat, lng = e.latlng.lng;
+            document.getElementById('dp-lat').value = lat.toFixed(6);
+            document.getElementById('dp-lon').value = lng.toFixed(6);
+            if (_pickerMarker) _pickerMap.removeLayer(_pickerMarker);
+            _pickerMarker = L.marker([lat, lng]).addTo(_pickerMap);
+        });
+        setTimeout(function () { _pickerMap.invalidateSize(); }, 200);
+    }
+
+    document.getElementById('detail-pin-add-dialog').addEventListener('toggle', function (e) {
+        if (e.newState === 'open') _initPickerMap();
+    });
+
+    document.getElementById('detail-pin-add-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var data = {};
+        new FormData(this).forEach(function (v, k) { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
+        fetch("{% url 'dashboard:pin.detail_pins' pin.uuid %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: JSON.stringify(data),
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (resp) {
+            if (resp.ok) {
+                toastr.success('Detail pin added.');
+                document.getElementById('detail-pin-add-dialog').close();
+                // Reload the panel and the detail pin layer.
+                htmx.trigger('#detail-pins-panel', 'reload-detail-pins');
+                if (typeof loadDetailPins === 'function') loadDetailPins();
+            } else {
+                toastr.error(resp.error || 'Failed to add detail pin.');
+            }
+        })
+        .catch(function () { toastr.error('Network error.'); });
+    });
+}());
+</script>

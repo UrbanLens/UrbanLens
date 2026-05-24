@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
-from django.db.models import CASCADE, SET_NULL, ForeignKey, ImageField, Index, ManyToManyField
+from django.db.models import CASCADE, SET_NULL, ForeignKey, ImageField, Index, ManyToManyField, Q, UniqueConstraint, UUIDField
 from django.db.models.fields import CharField, DateTimeField, DecimalField, IntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
@@ -26,6 +27,15 @@ class PinStatus(TextChoices):
     VISITED = "visited"
     WISH_TO_VISIT = "wish to visit"
     DEMOLISHED = "demolished"
+
+
+class PinType(TextChoices):
+    LOCATION_MARKER = "location", "Location"
+    BUILDING = "building", "Building"
+    ENTRANCE = "entrance", "Entrance"
+    POINT_OF_INTEREST = "poi", "Point of Interest"
+    DANGER = "danger", "Danger"
+    OTHER = "other", "Other"
 
 
 class Pin(abstract.Model):
@@ -56,6 +66,9 @@ class Pin(abstract.Model):
     to Pin - they live on AddressableMixin which only Location inherits.
     """
 
+    # Public-facing identifier. Non-sequential so users cannot enumerate other pins.
+    uuid = UUIDField(default=uuid4, unique=True, editable=False)
+
     # User's custom label. None = show location.name instead (see effective_name).
     # Do NOT store canonical place names here - those belong on Location.
     nickname = CharField(max_length=255, null=True, blank=True)
@@ -70,6 +83,7 @@ class Pin(abstract.Model):
     longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     custom_icon = ImageField(upload_to="pin_custom_icons/", null=True, blank=True)
     status = CharField(choices=PinStatus.choices, default=PinStatus.WISH_TO_VISIT)
+    pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
     point = PointField(geography=True, default=Point(0, 0))
 
     profile = ForeignKey(
@@ -97,6 +111,14 @@ class Pin(abstract.Model):
         blank=True,
         default=list,
         related_name="pins",
+    )
+    # Self-referential FK for detail pins. None = this is a root pin.
+    parent_pin = ForeignKey(
+        "self",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="detail_pins",
     )
 
     if TYPE_CHECKING:
@@ -315,7 +337,7 @@ class Pin(abstract.Model):
 
     def to_json(self) -> dict[str, Any]:
         return {
-            "id": self.id,
+            "uuid": str(self.uuid),
             "name": self.effective_name,
             "icon": self.effective_icon,
             "place_name": self.place_name,
@@ -335,6 +357,19 @@ class Pin(abstract.Model):
             "tags": [{"id": t.id, "name": t.name, "color": t.color, "icon": t.icon} for t in self.tags.all()],
         }
 
+    def to_detail_json(self) -> dict:
+        """Compact serialisation for detail-pin map markers."""
+        return {
+            "uuid": str(self.uuid),
+            "name": self.effective_name,
+            "description": self.description or "",
+            "pin_type": self.pin_type,
+            "latitude": self.effective_latitude,
+            "longitude": self.effective_longitude,
+            "icon": self.effective_icon,
+            "color": self.effective_color,
+        }
+
     def save(self, *args, **kwargs) -> None:
         lat = self.effective_latitude
         lon = self.effective_longitude
@@ -346,11 +381,17 @@ class Pin(abstract.Model):
         db_table = "dashboard_user_pins"
         get_latest_by = "updated"
         indexes = [
+            Index(fields=["uuid"]),
             Index(fields=["profile"]),
             Index(fields=["profile", "priority"]),
             Index(fields=["profile", "last_visited"]),
             Index(fields=["latitude", "longitude"]),
+            Index(fields=["parent_pin"]),
         ]
-        unique_together = [
-            ["latitude", "longitude", "profile"],
+        constraints = [
+            UniqueConstraint(
+                fields=["latitude", "longitude", "profile"],
+                condition=Q(parent_pin__isnull=True),
+                name="dashboard_pin_unique_location_per_profile",
+            ),
         ]

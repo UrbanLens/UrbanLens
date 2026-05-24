@@ -1,7 +1,7 @@
 <div id="map-body">
 <script>
     pinsLayerGroup.clearLayers();
-    if (window._loadedPinIds) { window._loadedPinIds.clear(); }
+    if (window._loadedPinUuids) { window._loadedPinUuids.clear(); }
 
     {% for pin in map_data %}
     addMarker({
@@ -9,7 +9,7 @@
         longitude: "{{ pin.longitude }}",
         icon: "{{ pin.icon|default_if_none:'' }}",
         color: "{{ pin.color|default_if_none:'' }}",
-        id: {{ pin.id }},
+        uuid: "{{ pin.uuid }}",
         name: "{{ pin.name|default_if_none:''|escapejs }}",
         description: "{{ pin.description|default_if_none:''|escapejs }}",
         rating: "{{ pin.rating|stringformat:'s' }}",
@@ -17,7 +17,7 @@
         categories: "{{ pin.categories|default_if_none:''|escapejs }}",
         last_visited: "{{ pin.last_visited|default_if_none:'Never'|escapejs }}",
         tags: "{{ pin.tags|default_if_none:''|escapejs }}",
-        viewLocationUrl: "{% url 'pin.details' pin.id %}"
+        viewLocationUrl: "{% url 'pin.details' pin.uuid %}"
     });
     {% endfor %}
     if (window.updatePinCounter) { window.updatePinCounter(); }

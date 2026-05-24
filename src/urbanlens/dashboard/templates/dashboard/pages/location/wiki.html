@@ -1,0 +1,391 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" crossorigin="" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js" crossorigin=""></script>
+{% endblock %}
+
+{% block content %}
+<div class="wiki-page">
+
+    {# ── Wiki identity banner ────────────────────────────────────────────── #}
+    <div class="wiki-banner">
+        <div class="wiki-banner-left">
+            <span class="wiki-badge">
+                <i class="material-icons">public</i> Community Wiki
+            </span>
+            <h1 class="wiki-title">{{ location.name }}</h1>
+            {% if location.address %}
+            <p class="wiki-address">
+                <i class="material-icons">place</i>
+                {{ location.address }}{% if location.city %}, {{ location.city }}{% endif %}{% if location.state %}, {{ location.state }}{% endif %}
+            </p>
+            {% endif %}
+        </div>
+        <div class="wiki-banner-right">
+            <div class="wiki-notice">
+                <i class="material-icons">info_outline</i>
+                <span>Everything on this page is <strong>shared with all users</strong> who have this location pinned.</span>
+            </div>
+            {% if user_pin %}
+            <a href="{% url 'dashboard:pin.details' user_pin.uuid %}" class="wiki-back-link">
+                <i class="material-icons">arrow_back</i> Back to my pin
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ── Body grid ───────────────────────────────────────────────────────── #}
+    <div class="wiki-body">
+
+        {# ── Main details card ───────────────────────────────────────────── #}
+        <div class="wiki-card wiki-details">
+            <div class="wiki-card-header">
+                <i class="material-icons">info</i>
+                <h2>Location Details</h2>
+                <button type="button" class="wiki-edit-btn"
+                        onclick="document.getElementById('wiki-edit-dialog').showModal()">
+                    <i class="material-icons">edit_note</i>
+                    Suggest edits
+                </button>
+            </div>
+            <dl class="wiki-dl">
+                <div class="wiki-dl-row">
+                    <dt>Name</dt>
+                    <dd id="wiki-field-name">{{ location.name }}</dd>
+                </div>
+                {% if location.description %}
+                <div class="wiki-dl-row full">
+                    <dt>Description</dt>
+                    <dd id="wiki-field-description">{{ location.description }}</dd>
+                </div>
+                {% endif %}
+                <div class="wiki-dl-row">
+                    <dt>Coordinates</dt>
+                    <dd>{{ location.latitude }}, {{ location.longitude }}</dd>
+                </div>
+                {% if location.address %}
+                <div class="wiki-dl-row">
+                    <dt>Address</dt>
+                    <dd>{{ location.address_extended }}</dd>
+                </div>
+                {% endif %}
+                {% if location.categories.all %}
+                <div class="wiki-dl-row">
+                    <dt>Categories</dt>
+                    <dd>{% for cat in location.categories.all %}{{ cat.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</dd>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+
+        {# ── Community stats card ────────────────────────────────────────── #}
+        <div class="wiki-card wiki-stats">
+            <div class="wiki-card-header">
+                <i class="material-icons">people</i>
+                <h2>Community</h2>
+            </div>
+            <div class="wiki-stats-grid">
+                <div class="wiki-stat">
+                    <span class="wiki-stat-value">{{ pin_count }}</span>
+                    <span class="wiki-stat-label">{{ pin_count|pluralize:"user has,users have" }} this pinned</span>
+                </div>
+                {% if first_pinned %}
+                <div class="wiki-stat">
+                    <span class="wiki-stat-value">{{ first_pinned.created|date:"M Y" }}</span>
+                    <span class="wiki-stat-label">First pinned</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# ── Bounding box editor ─────────────────────────────────────────── #}
+        <div class="wiki-card wiki-bbox">
+            <div class="wiki-card-header">
+                <i class="material-icons">crop_free</i>
+                <h2>Location Boundary</h2>
+            </div>
+            <p class="wiki-card-desc">
+                The boundary defines which coordinates are considered part of this location.
+                New pins within this area will automatically link here.
+                The default is a 50 m radius around the centre point; expand it for campuses or multi-building sites.
+            </p>
+            <div id="bbox-map"></div>
+            <div class="wiki-bbox-controls">
+                <button id="bbox-edit-btn" class="wiki-action-btn" onclick="startBboxEdit()">
+                    <i class="material-icons">edit</i> Edit boundary
+                </button>
+                <div id="bbox-save-controls" style="display:none">
+                    <button class="wiki-action-btn wiki-action-btn--primary" onclick="saveBbox()">
+                        <i class="material-icons">save</i> Save
+                    </button>
+                    <button class="wiki-action-btn" onclick="cancelBboxEdit()">
+                        <i class="material-icons">close</i> Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        {# ── Detail pins (shared sub-markers) ──────────────────────────────── #}
+        <div class="wiki-card wiki-detail-pins">
+            <div class="wiki-card-header">
+                <i class="material-icons">push_pin</i>
+                <h2>Detail Pins</h2>
+            </div>
+            <p class="wiki-card-desc">
+                Sub-markers placed by users within this location - buildings, entrances, points of interest, and hazards.
+            </p>
+            <div id="detail-pins-wiki-list" class="detail-pin-wiki-list">
+                <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            </div>
+        </div>
+
+        {# ── Tabs: Details / Edit history ────────────────────────────────── #}
+        <div class="wiki-card wiki-tabs-card">
+            <div class="wiki-tabs">
+                <button class="wiki-tab wiki-tab--active" data-tab="history"
+                        hx-get="{% url 'dashboard:location.wiki.history' location.uuid %}"
+                        hx-target="#wiki-tab-content"
+                        hx-swap="innerHTML"
+                        hx-trigger="click, load">
+                    <i class="material-icons">history</i> Edit History
+                </button>
+            </div>
+            <div id="wiki-tab-content" class="wiki-tab-content">
+                <div class="wiki-loading">
+                    <i class="material-icons spin">autorenew</i> Loading…
+                </div>
+            </div>
+        </div>
+
+    </div>{# end wiki-body #}
+
+    {# ── Suggest-edits dialog ─────────────────────────────────────────────── #}
+    <dialog id="wiki-edit-dialog" class="wiki-edit-dialog">
+        <div class="dialog-header">
+            <span>Suggest Edits</span>
+            <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+                <i class="material-icons">close</i>
+            </button>
+        </div>
+        <p class="wiki-edit-notice">
+            <i class="material-icons">public</i>
+            Changes apply immediately and are visible to everyone.
+        </p>
+        <form id="wiki-edit-form" class="wiki-edit-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="wiki-name">Name</label>
+                <input type="text" id="wiki-name" name="name" value="{{ location.name }}" required>
+            </div>
+            <div class="form-row">
+                <label for="wiki-description">Description</label>
+                <textarea id="wiki-description" name="description" rows="4">{{ location.description|default:"" }}</textarea>
+            </div>
+            <div class="form-row">
+                <label for="wiki-latitude">Latitude</label>
+                <input type="number" id="wiki-latitude" name="latitude" step="0.000001"
+                       value="{{ location.latitude }}" required>
+            </div>
+            <div class="form-row">
+                <label for="wiki-longitude">Longitude</label>
+                <input type="number" id="wiki-longitude" name="longitude" step="0.000001"
+                       value="{{ location.longitude }}" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="wiki-action-btn wiki-action-btn--primary">Save changes</button>
+                <button type="button" class="wiki-action-btn" onclick="this.closest('dialog').close()">Cancel</button>
+            </div>
+        </form>
+    </dialog>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const locLat = {{ location.latitude }};
+    const locLng = {{ location.longitude }};
+    const bboxApiUrl = "{% url 'dashboard:location.wiki.bbox' location.uuid %}";
+    const csrfToken = '{{ csrf_token }}';
+
+    // ── Bounding-box map ────────────────────────────────────────────────────
+    const bboxMap = L.map('bbox-map').setView([locLat, locLng], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(bboxMap);
+    L.marker([locLat, locLng]).addTo(bboxMap);
+
+    const bboxItems = new L.FeatureGroup().addTo(bboxMap);
+    const bboxStyle = { color: '#0ea5e9', fillColor: '#38bdf8', fillOpacity: 0.15, weight: 2 };
+    let bboxDrawControl = null;
+    let _savedBboxGeoJSON = null;
+
+    setTimeout(() => bboxMap.invalidateSize(), 300);
+
+    function _loadSavedBbox(geojson) {
+        bboxItems.clearLayers();
+        if (geojson) {
+            L.geoJSON(geojson, { style: bboxStyle }).eachLayer(l => bboxItems.addLayer(l));
+            if (bboxItems.getLayers().length) {
+                bboxMap.fitBounds(bboxItems.getBounds().pad(0.25));
+            }
+        }
+        bboxMap.invalidateSize();
+    }
+
+    fetch(bboxApiUrl)
+        .then(r => r.json())
+        .then(data => {
+            _savedBboxGeoJSON = data.polygon || null;
+            _loadSavedBbox(_savedBboxGeoJSON);
+        })
+        .catch(err => console.warn('Could not load boundary:', err));
+
+    function startBboxEdit() {
+        if (bboxDrawControl) return;
+        if (_savedBboxGeoJSON || bboxItems.getLayers().length > 0) {
+            toastr.info('Drawing a new boundary will replace the existing one when saved.');
+        }
+        bboxDrawControl = new L.Control.Draw({
+            draw: {
+                polygon: {
+                    allowIntersection: false,
+                    drawError: { color: '#f59e0b', message: 'Boundaries cannot intersect!' },
+                    shapeOptions: bboxStyle,
+                    showArea: true,
+                },
+                marker: false, circle: false, rectangle: false, polyline: false, circlemarker: false,
+            },
+            edit: { featureGroup: bboxItems },
+        });
+        bboxMap.addControl(bboxDrawControl);
+        bboxMap.on(L.Draw.Event.CREATED, function (e) {
+            bboxItems.clearLayers();
+            bboxItems.addLayer(e.layer);
+            toastr.info('Boundary drawn. Click Save to confirm or Cancel to restore.');
+        });
+        document.getElementById('bbox-edit-btn').style.display = 'none';
+        document.getElementById('bbox-save-controls').style.display = '';
+    }
+
+    function saveBbox() {
+        const layers = bboxItems.getLayers();
+        if (!layers.length) { toastr.warning('Draw a boundary first.'); return; }
+        const geometry = layers[0].toGeoJSON().geometry;
+        fetch(bboxApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ polygon: geometry }),
+        })
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(() => {
+            _savedBboxGeoJSON = geometry;
+            toastr.success('Boundary saved.');
+            _exitBboxEdit();
+        })
+        .catch(() => toastr.error('Failed to save boundary.'));
+    }
+
+    function _exitBboxEdit() {
+        if (bboxDrawControl) { bboxMap.removeControl(bboxDrawControl); bboxDrawControl = null; }
+        bboxMap.off(L.Draw.Event.CREATED);
+        document.getElementById('bbox-edit-btn').style.display = '';
+        document.getElementById('bbox-save-controls').style.display = 'none';
+    }
+
+    function cancelBboxEdit() {
+        _exitBboxEdit();
+        _loadSavedBbox(_savedBboxGeoJSON);
+    }
+
+    // ── Suggest-edits form ──────────────────────────────────────────────────
+    document.getElementById('wiki-edit-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const data = {};
+        new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
+        fetch("{% url 'dashboard:location.wiki.edit' location.uuid %}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify(data),
+        })
+        .then(r => r.json())
+        .then(resp => {
+            if (resp.ok) {
+                toastr.success('Changes saved.');
+                document.getElementById('wiki-edit-dialog').close();
+                // Update visible fields without reload.
+                if (data.name) document.getElementById('wiki-field-name').textContent = data.name;
+                if (data.description !== undefined) {
+                    const dd = document.getElementById('wiki-field-description');
+                    if (dd) dd.textContent = data.description;
+                }
+                // Refresh the history tab.
+                htmx.trigger('[data-tab="history"]', 'click');
+            } else {
+                toastr.error(resp.error || 'Failed to save changes.');
+            }
+        })
+        .catch(() => toastr.error('Network error saving changes.'));
+    });
+
+    document.addEventListener('htmx:configRequest', (event) => {
+        event.detail.headers['X-CSRFToken'] = csrfToken;
+    });
+
+    // ── Detail pins ─────────────────────────────────────────────────────────
+    const _dpColors = {
+        building: '#6b7280', entrance: '#16a34a', poi: '#d97706',
+        danger: '#dc2626', other: '#7c3aed', location: '#2563eb',
+    };
+    const _dpIconNames = {
+        building: 'business', entrance: 'door_front', poi: 'star',
+        danger: 'warning', other: 'info', location: 'place',
+    };
+    const _dpLayer = L.layerGroup().addTo(bboxMap);
+
+    function _dpMarkerIcon(pinType) {
+        const color = _dpColors[pinType] || '#2563eb';
+        const icon  = _dpIconNames[pinType] || 'place';
+        return L.divIcon({
+            className: '',
+            html: `<span class="material-icons detail-map-icon" style="color:${color};font-size:22px;line-height:1;">${icon}</span>`,
+            iconSize: [22, 22], iconAnchor: [11, 22], popupAnchor: [0, -24],
+        });
+    }
+
+    function _renderDetailPinsList(detailPins) {
+        const container = document.getElementById('detail-pins-wiki-list');
+        if (!detailPins.length) {
+            container.innerHTML = '<p class="detail-pin-wiki-empty">No detail pins have been added for this location yet.</p>';
+            return;
+        }
+        const rows = detailPins.map(dp => `
+            <div class="detail-pin-wiki-item detail-pin-type--${dp.pin_type}">
+                <span class="material-icons detail-pin-type-icon">${_dpIconNames[dp.pin_type] || 'place'}</span>
+                <div class="detail-pin-info">
+                    <span class="detail-pin-name">${dp.name || dp.pin_type}</span>
+                    ${dp.description ? `<span class="detail-pin-desc">${dp.description}</span>` : ''}
+                    <span class="detail-pin-coords">${dp.latitude?.toFixed(5)}, ${dp.longitude?.toFixed(5)}</span>
+                </div>
+                <span class="detail-pin-wiki-attr">by ${dp.added_by}</span>
+            </div>`).join('');
+        container.innerHTML = rows;
+    }
+
+    fetch("{% url 'dashboard:location.wiki.detail_pins.json' location.uuid %}")
+        .then(r => r.json())
+        .then(data => {
+            const dps = data.detail_pins || [];
+            _renderDetailPinsList(dps);
+            dps.forEach(dp => {
+                if (!dp.latitude || !dp.longitude) return;
+                L.marker([dp.latitude, dp.longitude], { icon: _dpMarkerIcon(dp.pin_type) })
+                    .bindPopup(`<strong>${dp.name || dp.pin_type}</strong> <em>(by ${dp.added_by})</em>${dp.description ? '<br>' + dp.description : ''}`)
+                    .addTo(_dpLayer);
+            });
+        })
+        .catch(err => console.warn('Could not load detail pins:', err));
+</script>
+{% endblock %}

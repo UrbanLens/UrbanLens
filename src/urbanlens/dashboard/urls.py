@@ -36,7 +36,7 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import campus, friendship, maps, pin, settings, tags, userprofile, visits
+from urbanlens.dashboard.controllers import campus, detail_pins, friendship, location_wiki, maps, pin, settings, tags, userprofile, visits
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -95,7 +95,7 @@ urlpatterns = [
                     name="pin.add",
                 ),
                 path(
-                    "edit/<int:pin_id>/",
+                    "edit/<uuid:pin_uuid>/",
                     maps.MapController.as_view({"get": "get_edit_pin", "post": "edit_pin"}),
                     name="pin.edit",
                 ),
@@ -105,66 +105,81 @@ urlpatterns = [
                     name="map.search",
                 ),
                 path(
-                    "upload_image/<int:pin_id>/",
+                    "upload_image/<uuid:pin_uuid>/",
                     maps.MapController.as_view({"post": "upload_image"}),
                     name="pin.upload_image",
                 ),
                 path(
-                    "change_category/<int:pin_id>/",
+                    "change_category/<uuid:pin_uuid>/",
                     maps.MapController.as_view({"post": "change_category"}),
                     name="pin.change_category",
                 ),
-                # path('delete/<int:pin_id>/', MapController.delete_pin, name='delete_pin'),
-                # path('add_review/<int:pin_id>/', map.MapController.as_view(), name='add_review'),
+                # path('delete/<uuid:pin_uuid>/', MapController.delete_pin, name='delete_pin'),
+                # path('add_review/<uuid:pin_uuid>/', map.MapController.as_view(), name='add_review'),
                 path(
                     "pin/",
                     include(
                         [
-                            path("<int:pin_id>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
+                            path("<uuid:pin_uuid>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
                             path(
-                                "<int:pin_id>/campus/",
+                                "<uuid:pin_uuid>/campus/",
                                 campus.CampusController.as_view({"get": "get_campus", "post": "save_campus"}),
                                 name="campus.pin",
                             ),
                             path(
-                                "<int:pin_id>/smithsonian/",
+                                "<uuid:pin_uuid>/smithsonian/",
                                 pin.PinController.as_view({"get": "get_smithsonian_images"}),
                                 name="smithsonian_images",
                             ),
                             path(
-                                "<int:pin_id>/google/",
+                                "<uuid:pin_uuid>/google/",
                                 pin.PinController.as_view({"get": "get_google_images"}),
                                 name="google_images",
                             ),
                             path(
-                                "<int:pin_id>/search/",
+                                "<uuid:pin_uuid>/search/",
                                 pin.PinController.as_view({"get": "web_search"}),
                                 name="pin.web_search",
                             ),
                             path(
-                                "<int:pin_id>/satellite_view/",
+                                "<uuid:pin_uuid>/satellite_view/",
                                 pin.PinController.as_view({"get": "satellite_view_google_image"}),
                                 name="pin.satellite_view",
                             ),
                             path(
-                                "<int:pin_id>/street_view/",
+                                "<uuid:pin_uuid>/street_view/",
                                 pin.PinController.as_view({"get": "street_view"}),
                                 name="pin.street_view",
                             ),
                             path(
-                                "<int:pin_id>/weather/",
+                                "<uuid:pin_uuid>/weather/",
                                 pin.PinController.as_view({"get": "weather_forecast"}),
                                 name="pin.weather_forecast",
                             ),
                             path(
-                                "<int:pin_id>/visits/",
+                                "<uuid:pin_uuid>/visits/",
                                 visits.VisitHistoryView.as_view(),
                                 name="pin.visits",
                             ),
                             path(
-                                "<int:pin_id>/visits/<int:visit_id>/delete/",
+                                "<uuid:pin_uuid>/visits/<int:visit_id>/delete/",
                                 visits.VisitDeleteView.as_view(),
                                 name="pin.visit.delete",
+                            ),
+                            path(
+                                "<uuid:pin_uuid>/detail-pins/",
+                                detail_pins.DetailPinPanelView.as_view(),
+                                name="pin.detail_pins",
+                            ),
+                            path(
+                                "<uuid:pin_uuid>/detail-pins/json/",
+                                detail_pins.DetailPinJsonView.as_view(),
+                                name="pin.detail_pins.json",
+                            ),
+                            path(
+                                "<uuid:pin_uuid>/detail-pins/<uuid:detail_pin_uuid>/",
+                                detail_pins.DetailPinEditView.as_view(),
+                                name="pin.detail_pin.edit",
                             ),
                             path(
                                 "import/",
@@ -212,7 +227,7 @@ urlpatterns = [
                 path("<int:tag_id>/merge/", tags.TagMergeView.as_view(), name="tag.merge"),
                 path("rows/", tags.TagRowsView.as_view(), name="tag.rows"),
                 path("reorder/", tags.TagReorderView.as_view(), name="tag.reorder"),
-                path("pin/<int:pin_id>/", tags.TagMembershipView.as_view(), name="tag.membership"),
+                path("pin/<uuid:pin_uuid>/", tags.TagMembershipView.as_view(), name="tag.membership"),
             ],
         ),
     ),
@@ -254,6 +269,43 @@ urlpatterns = [
                     "mute/<int:profile_id>",
                     friendship.FriendController.as_view({"post": "mute_friend"}),
                     name="friend.mute",
+                ),
+            ],
+        ),
+    ),
+    path(
+        "location/",
+        include(
+            [
+                path(
+                    "<uuid:location_uuid>/wiki/",
+                    location_wiki.LocationWikiView.as_view(),
+                    name="location.wiki",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/edit/",
+                    location_wiki.LocationWikiEditView.as_view(),
+                    name="location.wiki.edit",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/bbox/",
+                    location_wiki.LocationWikiBboxView.as_view(),
+                    name="location.wiki.bbox",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/history/",
+                    location_wiki.LocationWikiHistoryView.as_view(),
+                    name="location.wiki.history",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/history/<int:edit_id>/revert/",
+                    location_wiki.LocationWikiRevertView.as_view(),
+                    name="location.wiki.revert",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/detail-pins/json/",
+                    detail_pins.LocationDetailPinJsonView.as_view(),
+                    name="location.wiki.detail_pins.json",
                 ),
             ],
         ),

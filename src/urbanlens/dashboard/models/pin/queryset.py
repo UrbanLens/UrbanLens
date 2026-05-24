@@ -27,6 +27,7 @@
 # Generic imports
 from __future__ import annotations
 
+import contextlib
 from datetime import datetime
 import logging
 import math
@@ -52,6 +53,14 @@ class PinQuerySet(abstract.QuerySet):
     For filtering by place attributes (address, CID, canonical name) use LocationQuerySet
     or join through the location FK: Pin.objects.filter(location__name__icontains=...).
     """
+
+    def root_pins(self) -> Self:
+        """Return only top-level pins (not detail pins)."""
+        return self.filter(parent_pin__isnull=True)
+
+    def detail_pins(self) -> Self:
+        """Return only detail pins (sub-markers within a parent pin's area)."""
+        return self.filter(parent_pin__isnull=False)
 
     def never_visited(self):
         return self.filter(last_visited__isnull=True)
@@ -106,6 +115,7 @@ class PinQuerySet(abstract.QuerySet):
     def by_tag(self, tag_id: int) -> Self:
         """Filter pins that have this tag or any of its descendant tags."""
         from urbanlens.dashboard.models.tags.model import Tag
+
         tag_ids = Tag.get_tag_and_descendants(tag_id)
         return self.filter(tags__id__in=tag_ids).distinct()
 
@@ -122,7 +132,7 @@ class PinQuerySet(abstract.QuerySet):
         qs = self
         if name := (criteria.get("name") or "").strip():
             qs = qs.filter(
-                Q(nickname__icontains=name) | Q(location__name__icontains=name)
+                Q(nickname__icontains=name) | Q(location__name__icontains=name),
             )
         if statuses := criteria.get("status"):
             qs = qs.filter(status__in=statuses)
@@ -130,10 +140,8 @@ class PinQuerySet(abstract.QuerySet):
             for tag in tags:
                 qs = qs.filter(tags=tag)
         if min_rating := criteria.get("min_rating"):
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 qs = qs.filter(reviews__rating__gte=int(min_rating))
-            except (ValueError, TypeError):
-                pass
         return qs.distinct()
 
     def rated(self, rating) -> Self:

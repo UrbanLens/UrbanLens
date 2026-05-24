@@ -4,7 +4,7 @@ Processes the monthly JSON timeline files that Google Takeout places under
 ``Semantic Location History/YYYY/YYYY_MONTH.json``.  Each ``placeVisit``
 entry whose coordinates fall within VISIT_MATCH_RADIUS_M metres of an
 existing pin owned by the target profile has a PinVisit record created for
-it.  Raw ``Records.json`` GPS-point logs are detected but skipped — they
+it.  Raw ``Records.json`` GPS-point logs are detected but skipped - they
 require clustering that is outside the scope of this import.
 
 Typical usage (called from maps.GoogleMapsGateway.import_pins_streaming):
@@ -14,17 +14,20 @@ Typical usage (called from maps.GoogleMapsGateway.import_pins_streaming):
         import_location_history_streaming,
     )
 """
+
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import logging
-from datetime import datetime
-from typing import TYPE_CHECKING, Any, Generator, Iterator
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 
 if TYPE_CHECKING:
+    from collections.abc import Generator, Iterator
+
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -83,7 +86,7 @@ def _parse_semantic(json_data: dict) -> Generator[dict[str, Any], None, None]:
         if not start_ts:
             continue
         try:
-            visited_at = datetime.fromisoformat(start_ts.replace("Z", "+00:00"))
+            visited_at = datetime.fromisoformat(start_ts)
         except ValueError:
             logger.debug("Unparseable placeVisit timestamp: %s", start_ts)
             continue
@@ -103,7 +106,7 @@ def _nearest_pin(lat: float, lon: float, profile: Profile, radius_m: int) -> Pin
     Args:
         lat: Visit latitude.
         lon: Visit longitude.
-        profile: Owner profile — only this profile's pins are searched.
+        profile: Owner profile - only this profile's pins are searched.
         radius_m: Maximum match distance in metres.
 
     Returns:
@@ -112,11 +115,7 @@ def _nearest_pin(lat: float, lon: float, profile: Profile, radius_m: int) -> Pin
     from urbanlens.dashboard.models.pin.model import Pin
 
     point = Point(lon, lat, srid=4326)
-    return (
-        Pin.objects.filter(point__distance_lte=(point, D(m=radius_m)), profile=profile)
-        .order_by("point")
-        .first()
-    )
+    return Pin.objects.filter(point__distance_lte=(point, D(m=radius_m)), profile=profile).order_by("point").first()
 
 
 def import_location_history_streaming(
@@ -124,11 +123,11 @@ def import_location_history_streaming(
     profile: Profile,
     radius_m: int = VISIT_MATCH_RADIUS_M,
 ) -> Iterator[str]:
-    """Stream SSE events while importing Google Takeout Semantic Location History.
+    r"""Stream SSE events while importing Google Takeout Semantic Location History.
 
     Iterates over every ``placeVisit`` in each uploaded timeline file and
     attempts to match it to an existing pin.  On a match a PinVisit row is
-    created (idempotent — duplicates are skipped).  ``pin.last_visited`` is
+    created (idempotent - duplicates are skipped).  ``pin.last_visited`` is
     updated whenever a newer visit is matched.
 
     SSE event shapes emitted:
@@ -168,14 +167,20 @@ def import_location_history_streaming(
             all_visits.extend(batch)
         elif fmt == "raw":
             logger.info(
-                "Skipping raw GPS log (Records.json) — point clustering not supported: %s",
+                "Skipping raw GPS log (Records.json) - point clustering not supported: %s",
                 filename,
             )
         else:
             logger.debug("File is not a location history format: %s", filename)
 
     if not all_visits:
-        yield sse({"type": "error", "message": "No location history entries found in uploaded files.", "subtype": "location_history"})
+        yield sse(
+            {
+                "type": "error",
+                "message": "No location history entries found in uploaded files.",
+                "subtype": "location_history",
+            },
+        )
         return
 
     total = len(all_visits)
@@ -211,20 +216,24 @@ def import_location_history_streaming(
         else:
             skipped += 1
 
-        yield sse({
-            "type": "progress",
-            "current": i,
+        yield sse(
+            {
+                "type": "progress",
+                "current": i,
+                "total": total,
+                "percent": min(100, int(i / total * 100)),
+                "matched": matched,
+                "skipped": skipped,
+                "subtype": "location_history",
+            },
+        )
+
+    yield sse(
+        {
+            "type": "complete",
             "total": total,
-            "percent": min(100, int(i / total * 100)),
             "matched": matched,
             "skipped": skipped,
             "subtype": "location_history",
-        })
-
-    yield sse({
-        "type": "complete",
-        "total": total,
-        "matched": matched,
-        "skipped": skipped,
-        "subtype": "location_history",
-    })
+        },
+    )

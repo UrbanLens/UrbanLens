@@ -90,6 +90,12 @@ class LocationQuerySet(abstract.QuerySet):
         distance = R * c
         return self.filter(distance__lte=distance)
 
+    def within_bounding_box(self, latitude: float, longitude: float):
+        """Return Locations whose bounding_box contains this coordinate."""
+        from django.contrib.gis.geos import Point as GEOSPoint
+        pt = GEOSPoint(float(longitude), float(latitude), srid=4326)
+        return self.filter(bounding_box__contains=pt)
+
     def filter_by_criteria(self, criteria):
         query = Q()
         if criteria.get("date_added"):
@@ -102,7 +108,24 @@ class LocationQuerySet(abstract.QuerySet):
 
 
 class LocationManager(abstract.Manager.from_queryset(LocationQuerySet)):
-    """Manager for Location. Use get_nearby_or_create to avoid duplicate rows for the same place."""
+    """Manager for Location. Use get_for_point to find a Location whose bounding box contains a coordinate."""
+
+    def get_for_point(self, latitude: float, longitude: float):
+        """Return the first Location whose bounding_box contains (lat, lon), or None.
+
+        Falls back to a 50 m proximity check for any Locations that have no
+        bounding_box set (e.g. rows created before migration 0021).
+        """
+        from django.contrib.gis.geos import Point as GEOSPoint
+        from django.contrib.gis.measure import D
+
+        pt = GEOSPoint(float(longitude), float(latitude), srid=4326)
+        # Primary: bounding-box containment
+        match = self.filter(bounding_box__contains=pt).first()
+        if match:
+            return match
+        # Fallback: proximity for legacy rows without bounding_box
+        return self.filter(bounding_box__isnull=True, point__distance_lte=(pt, D(m=50))).first()
 
     def get_nearby_or_create(self, latitude, longitude, threshold_meters=50, defaults=None):
         """
@@ -133,7 +156,6 @@ class LocationManager(abstract.Manager.from_queryset(LocationQuerySet)):
         location_data = {
             "latitude": latitude,
             "longitude": longitude,
-            "location": point,
             **(defaults or {}),
         }
         location = self.create(**location_data)

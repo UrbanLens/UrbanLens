@@ -33,16 +33,18 @@ class PrivacySettingsForm(forms.ModelForm):
 
 
 class ContactSettingsForm(forms.Form):
-    """Contact information — saves to the Django User model."""
+    """Contact information - saves to the Django User model."""
 
     email = forms.EmailField(
         label="Email Address",
         help_text="Used for account recovery and notifications.",
-        widget=forms.EmailInput(attrs={
-            "class": "settings-input",
-            "autocomplete": "email",
-            "placeholder": "your@email.com",
-        }),
+        widget=forms.EmailInput(
+            attrs={
+                "class": "settings-input",
+                "autocomplete": "email",
+                "placeholder": "your@email.com",
+            },
+        ),
     )
 
 

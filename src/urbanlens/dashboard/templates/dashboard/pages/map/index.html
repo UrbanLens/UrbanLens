@@ -317,13 +317,13 @@
         }
 
         const popupContent = `
-            <div class="pin-popup" data-id="${pin.id}">
+            <div class="pin-popup" data-uuid="${pin.uuid}">
                 <div data-name="title">${pin.name || ''}</div>
                 <div data-name="description">${pin.description || ''}</div>
                 <div class="stars rating-${pin.rating || 0}">
                     ${[1, 2, 3, 4, 5].map(i => `
-                        <input type="radio" name="star" class="star-${i}" id="star-${i}-${pin.id}" value="${i}" ${pin.rating == i ? 'checked' : ''} />
-                        <label class="star-${i}" for="star-${i}-${pin.id}">★</label>
+                        <input type="radio" name="star" class="star-${i}" id="star-${i}-${pin.uuid}" value="${i}" ${pin.rating == i ? 'checked' : ''} />
+                        <label class="star-${i}" for="star-${i}-${pin.uuid}">★</label>
                     `).join('')}
                 </div>
                 <div data-name="status"><span class="value">${pin.status || ''}</span></div>
@@ -344,15 +344,15 @@
     // ── Two-phase pin loading ─────────────────────────────────────────────────
     // Phase 1 loads only pins within the current viewport (fast).
     // Phase 2 loads the remaining pins in the background.
-    window._loadedPinIds = new Set();
+    window._loadedPinUuids = new Set();
 
     async function _fetchAndAddPins(url) {
         const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         if (!resp.ok) throw new Error('Pin fetch failed: ' + resp.status);
         const data = await resp.json();
         (data.pins || []).forEach(pin => {
-            if (!window._loadedPinIds.has(pin.id)) {
-                window._loadedPinIds.add(pin.id);
+            if (!window._loadedPinUuids.has(pin.uuid)) {
+                window._loadedPinUuids.add(pin.uuid);
                 addMarker(pin);
             }
         });
@@ -372,7 +372,7 @@
             hideLoadingMessage();
         }
 
-        // Phase 2: remaining pins in the background — short delay lets the map settle
+        // Phase 2: remaining pins in the background - short delay lets the map settle
         setTimeout(() => {
             _fetchAndAddPins('{% url 'map.pins' %}')
                 .catch(err => console.warn('Background pin load failed:', err));

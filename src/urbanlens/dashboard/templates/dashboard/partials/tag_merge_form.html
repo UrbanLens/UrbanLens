@@ -28,7 +28,7 @@
               style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
             {% csrf_token %}
             <select name="target_tag_id" class="form-input" style="flex:1;min-width:140px;max-width:260px;" required>
-                <option value="">— Merge into… —</option>
+                <option value="">- Merge into… -</option>
                 {% for candidate in candidates %}
                 <option value="{{ candidate.id }}">
                     {{ candidate.name }}{% if not candidate.profile %} (global){% endif %}

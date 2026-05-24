@@ -1,0 +1,44 @@
+{% if edits %}
+<ul class="wiki-history-list">
+    {% for edit in edits %}
+    <li class="wiki-history-item {% if edit.reverted %}wiki-history-item--reverted{% endif %}">
+        <div class="wiki-history-meta">
+            <span class="wiki-history-editor">
+                <i class="material-icons">person</i>
+                {% if edit.editor and edit.editor.user %}{{ edit.editor.user.username }}{% else %}Unknown{% endif %}
+            </span>
+            <span class="wiki-history-date">{{ edit.created|date:"M j, Y g:i A" }}</span>
+            {% if edit.reverted %}
+            <span class="wiki-history-badge wiki-history-badge--reverted">
+                <i class="material-icons">undo</i> Reverted
+            </span>
+            {% endif %}
+        </div>
+
+        <ul class="wiki-history-changes">
+            {% for field, diff in edit.changes.items %}
+            <li class="wiki-change-row">
+                <span class="wiki-change-field">{{ field }}</span>
+                <span class="wiki-change-from">{{ diff.from|default:"-"|truncatechars:80 }}</span>
+                <i class="material-icons wiki-change-arrow">arrow_forward</i>
+                <span class="wiki-change-to">{{ diff.to|default:"-"|truncatechars:80 }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+
+        {% if not edit.reverted %}
+        <button type="button"
+                class="wiki-revert-btn"
+                hx-post="{% url 'dashboard:location.wiki.revert' location.uuid edit.id %}"
+                hx-target="closest .wiki-history-item"
+                hx-swap="outerHTML"
+                hx-confirm="Revert this edit? The location will be restored to the values shown on the left.">
+            <i class="material-icons">undo</i> Revert
+        </button>
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="wiki-history-empty">No edits have been recorded yet. Be the first to improve this location!</p>
+{% endif %}

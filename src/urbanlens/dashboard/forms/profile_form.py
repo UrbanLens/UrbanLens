@@ -39,7 +39,7 @@ def validate_started_exploring(value: date | None) -> str | None:
 
 
 class ProfileForm(forms.ModelForm):
-    """Bio, location, and dates — social links are managed separately."""
+    """Bio, location, and dates - social links are managed separately."""
 
     class Meta:
         model = Profile
@@ -48,7 +48,9 @@ class ProfileForm(forms.ModelForm):
             "bio": forms.Textarea(attrs={"rows": 4, "class": "edit-textarea", "data-autosave": "bio"}),
             "area": forms.TextInput(attrs={"class": "edit-input", "data-autosave": "area"}),
             "birth_date": forms.DateInput(attrs={"type": "date", "class": "edit-input", "data-autosave": "birth_date"}),
-            "started_exploring": forms.DateInput(attrs={"type": "date", "class": "edit-input", "data-autosave": "started_exploring"}),
+            "started_exploring": forms.DateInput(
+                attrs={"type": "date", "class": "edit-input", "data-autosave": "started_exploring"},
+            ),
         }
 
     def clean_birth_date(self):

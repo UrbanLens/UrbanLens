@@ -457,7 +457,7 @@ class GoogleMapsGateway(Gateway):
                     from urbanlens.dashboard.models.tags.model import Tag as TagModel
                     tag_name = _filename_stem(filename)
                     file_tag = TagModel.objects.filter(
-                        profile=user_profile, name__iexact=tag_name
+                        profile=user_profile, name__iexact=tag_name,
                     ).first() or TagModel.objects.create(profile=user_profile, name=tag_name)
                     for pin in file_pins:
                         pin.tags.add(file_tag)

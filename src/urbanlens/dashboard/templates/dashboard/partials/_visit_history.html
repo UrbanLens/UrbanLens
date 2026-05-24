@@ -5,7 +5,7 @@
         <h3>Visit History</h3>
         {% if visits %}<span class="visit-count badge">{{ visits|length }}</span>{% endif %}
         <button type="button" class="btn-icon-sm" style="margin-left:auto"
-                onclick="document.getElementById('visit-add-dialog-{{ pin.id }}').showModal()"
+                onclick="document.getElementById('visit-add-dialog-{{ pin.uuid }}').showModal()"
                 title="Log a visit">
             <i class="material-icons">add</i>
         </button>
@@ -49,25 +49,25 @@
     {% endif %}
 
     {# ── Log-a-visit dialog ──────────────────────────────────────────── #}
-    <dialog id="visit-add-dialog-{{ pin.id }}" class="visit-add-dialog">
+    <dialog id="visit-add-dialog-{{ pin.uuid }}" class="visit-add-dialog">
         <div class="dialog-header">
             <span>Log a Visit</span>
             <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
                 <i class="material-icons">close</i>
             </button>
         </div>
-        <form hx-post="{% url 'pin.visits' pin.id %}"
+        <form hx-post="{% url 'pin.visits' pin.uuid %}"
               hx-target="#visit-history-panel"
               hx-swap="outerHTML"
               class="visit-add-form">
             {% csrf_token %}
             <div class="form-row">
-                <label for="visited_at_{{ pin.id }}">Date &amp; time</label>
-                <input type="datetime-local" name="visited_at" id="visited_at_{{ pin.id }}" required>
+                <label for="visited_at_{{ pin.uuid }}">Date &amp; time</label>
+                <input type="datetime-local" name="visited_at" id="visited_at_{{ pin.uuid }}" required>
             </div>
             <div class="form-row">
-                <label for="visit_notes_{{ pin.id }}">Notes <small>(optional)</small></label>
-                <textarea name="notes" id="visit_notes_{{ pin.id }}" rows="3" placeholder="What did you see?"></textarea>
+                <label for="visit_notes_{{ pin.uuid }}">Notes <small>(optional)</small></label>
+                <textarea name="notes" id="visit_notes_{{ pin.uuid }}" rows="3" placeholder="What did you see?"></textarea>
             </div>
             <div class="form-actions">
                 <button type="submit" class="submit-button">Save Visit</button>

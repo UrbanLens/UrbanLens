@@ -16,6 +16,15 @@
 
     {# ── Details ──────────────────────────────────────────────────────────── #}
     <div class="pin-details location-details card">
+        {% if pin.location %}
+        <div class="wiki-link-banner">
+            <i class="material-icons">public</i>
+            <span>This location has a community wiki shared with all users who have it pinned.</span>
+            <a href="{% url 'dashboard:location.wiki' pin.location.uuid %}" class="wiki-link-btn">
+                View community wiki <i class="material-icons">open_in_new</i>
+            </a>
+        </div>
+        {% endif %}
         <div class="details-grid">
             {% if pin.description %}
             <div class="detail-row full-width">
@@ -59,7 +68,7 @@
     </div>
 
     {# ── Visit history ────────────────────────────────────────────────────── #}
-    <div hx-get="{% url 'pin.visits' pin.id %}"
+    <div hx-get="{% url 'pin.visits' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML"
          class="visit-history card">
@@ -71,13 +80,26 @@
     </div>
 
     {# ── Tags panel ───────────────────────────────────────────────────────── #}
-    <div hx-get="{% url 'tag.membership' pin.id %}"
+    <div hx-get="{% url 'tag.membership' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML"
          class="tag-panel">
         <div class="tag-panel-header">
             <i class="material-icons">label</i>
             <span>Tags</span>
+        </div>
+        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+    </div>
+
+    {# ── Detail pins ──────────────────────────────────────────────────────── #}
+    <div hx-get="{% url 'dashboard:pin.detail_pins' pin.uuid %}"
+         hx-trigger="load, reload-detail-pins"
+         hx-swap="outerHTML"
+         id="detail-pins-panel"
+         class="detail-pins-panel card">
+        <div class="card-header">
+            <i class="material-icons">push_pin</i>
+            <span>Detail Pins</span>
         </div>
         <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
@@ -112,14 +134,14 @@
         {% else %}
         <div class="view-unavailable">
             <i class="material-icons">location_off</i>
-            <span>No linked location — campus boundaries are unavailable for this pin.</span>
+            <span>No linked location - campus boundaries are unavailable for this pin.</span>
         </div>
         {% endif %}
     </div>
 
     {# ── Satellite view ───────────────────────────────────────────────────── #}
     <div id="satellite-view-section" class="satellite-view card"
-         hx-get="{% url 'pin.satellite_view' pin.id %}"
+         hx-get="{% url 'pin.satellite_view' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML">
         <div class="card-header">
@@ -134,7 +156,7 @@
 
     {# ── Street view ──────────────────────────────────────────────────────── #}
     <div id="street-view-section" class="street-view card"
-         hx-get="{% url 'pin.street_view' pin.id %}"
+         hx-get="{% url 'pin.street_view' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML">
         <div class="card-header">
@@ -149,7 +171,7 @@
 
     {# ── Weather forecast ─────────────────────────────────────────────────── #}
     <div id="weather-forecast-section" class="weather-widget card"
-         hx-get="{% url 'pin.weather_forecast' pin.id %}"
+         hx-get="{% url 'pin.weather_forecast' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML">
         <div class="card-header">
@@ -164,7 +186,7 @@
 
     {# ── Smithsonian images ───────────────────────────────────────────────── #}
     <div id="smithsonian-section" class="smithsonian-images card"
-         hx-get="{% url 'smithsonian_images' pin.id %}"
+         hx-get="{% url 'smithsonian_images' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML">
         <div class="card-header">
@@ -179,7 +201,7 @@
 
     {# ── Web search results ───────────────────────────────────────────────── #}
     <div id="web-search-section" class="web-search card"
-         hx-get="{% url 'pin.web_search' pin.id %}"
+         hx-get="{% url 'pin.web_search' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML">
         <div class="card-header">
@@ -237,9 +259,49 @@
     L.marker([pinLat, pinLng]).addTo(map);
     setTimeout(() => map.invalidateSize(), 300);
 
+    // ── Detail pins layer ─────────────────────────────────────────────────────
+    const _detailPinColors = {
+        building: '#6b7280', entrance: '#16a34a', poi: '#d97706',
+        danger: '#dc2626', other: '#7c3aed', location: '#2563eb',
+    };
+    const _detailPinIcons = {
+        building: 'business', entrance: 'door_front', poi: 'star',
+        danger: 'warning', other: 'info', location: 'place',
+    };
+    const _detailPinLayer = L.layerGroup().addTo(map);
+    _overlays['Detail Pins'] = _detailPinLayer;
+
+    function _detailIcon(pinType) {
+        const color = _detailPinColors[pinType] || '#2563eb';
+        const icon  = _detailPinIcons[pinType]  || 'place';
+        return L.divIcon({
+            className: '',
+            html: `<span class="material-icons detail-map-icon" style="color:${color};font-size:24px;line-height:1;">${icon}</span>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 24],
+            popupAnchor: [0, -26],
+        });
+    }
+
+    function loadDetailPins() {
+        fetch("{% url 'dashboard:pin.detail_pins.json' pin.uuid %}")
+            .then(r => r.json())
+            .then(data => {
+                _detailPinLayer.clearLayers();
+                (data.detail_pins || []).forEach(dp => {
+                    if (!dp.latitude || !dp.longitude) return;
+                    L.marker([dp.latitude, dp.longitude], { icon: _detailIcon(dp.pin_type) })
+                        .bindPopup(`<strong>${dp.name || dp.pin_type}</strong>${dp.description ? '<br>' + dp.description : ''}`)
+                        .addTo(_detailPinLayer);
+                });
+            })
+            .catch(err => console.warn('Could not load detail pins:', err));
+    }
+    loadDetailPins();
+
     // ── Campus boundary editor ────────────────────────────────────────────────
     {% if pin.location %}
-    const campusApiUrl = "{% url 'campus.pin' pin.id %}";
+    const campusApiUrl = "{% url 'campus.pin' pin.uuid %}";
     const campusMap = L.map('campus-map').setView([pinLat, pinLng], 16);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(campusMap);
     L.marker([pinLat, pinLng]).addTo(campusMap);

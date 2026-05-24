@@ -5,20 +5,20 @@ from urbanlens.dashboard.models.tags.model import Tag
 
 
 class SearchForm(forms.Form):
-	"""Filter form for map pin search.
+    """Filter form for map pin search.
 
-	Fields are all optional; omitting a field means "no filter on that dimension."
-	"""
+    Fields are all optional; omitting a field means "no filter on that dimension."
+    """
 
-	name = forms.CharField(required=False)
-	min_rating = forms.IntegerField(required=False, min_value=0, max_value=5)
-	tags: forms.ModelMultipleChoiceField = forms.ModelMultipleChoiceField(
-		queryset=Tag.objects.all(),
-		widget=forms.CheckboxSelectMultiple,
-		required=False,
-	)
-	status = forms.MultipleChoiceField(
-		choices=PinStatus.choices,
-		widget=forms.CheckboxSelectMultiple,
-		required=False,
-	)
+    name = forms.CharField(required=False)
+    min_rating = forms.IntegerField(required=False, min_value=0, max_value=5)
+    tags: forms.ModelMultipleChoiceField = forms.ModelMultipleChoiceField(
+        queryset=Tag.objects.all(),
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+    )
+    status = forms.MultipleChoiceField(
+        choices=PinStatus.choices,
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+    )

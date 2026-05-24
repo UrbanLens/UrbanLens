@@ -56,7 +56,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         View the pin page
         """
-        pin = Pin.objects.get(id=kwargs["pin_id"])
+        pin = Pin.objects.get(uuid=kwargs["pin_uuid"])
 
         return render(
             request,
@@ -155,13 +155,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         return map_data
 
-    def get_smithsonian_images(self, request: HttpRequest, pin_id):
+    def get_smithsonian_images(self, request: HttpRequest, pin_uuid):
         """
         Returns the Smithsonian images for a pin.
         """
         # Get the pin
         try:
-            pin: Pin = Pin.objects.get(id=pin_id)
+            pin: Pin = Pin.objects.get(uuid=pin_uuid)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -179,13 +179,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    def web_search(self, request: HttpRequest, pin_id):
+    def web_search(self, request: HttpRequest, pin_uuid):
         """
         Returns the web search results for a pin.
         """
         # Get the pin
         try:
-            pin: Pin = Pin.objects.get(id=pin_id)
+            pin: Pin = Pin.objects.get(uuid=pin_uuid)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -237,7 +237,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         import base64
 
         try:
-            pin = Pin.objects.get(id=kwargs["pin_id"])
+            pin = Pin.objects.get(uuid=kwargs["pin_uuid"])
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -263,7 +263,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         import base64
 
         try:
-            pin = Pin.objects.get(id=kwargs["pin_id"])
+            pin = Pin.objects.get(uuid=kwargs["pin_uuid"])
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -369,13 +369,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         response["X-Accel-Buffering"] = "no"
         return response
 
-    def weather_forecast(self, request: HttpRequest, pin_id):
+    def weather_forecast(self, request: HttpRequest, pin_uuid):
         """
         Returns the weather forecast for a pin.
         """
         # Get the pin
         try:
-            pin: Pin = Pin.objects.get(id=pin_id)
+            pin: Pin = Pin.objects.get(uuid=pin_uuid)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
