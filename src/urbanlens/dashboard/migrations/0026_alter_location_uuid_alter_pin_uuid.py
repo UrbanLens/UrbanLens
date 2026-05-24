@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     dependencies = [
         (
             "dashboard",
-            "0024_rename_dashboard_loc_uuid_idx_dashboard_l_uuid_f3ca34_idx_and_more",
+            "0025_aliases",
         ),
     ]
 
