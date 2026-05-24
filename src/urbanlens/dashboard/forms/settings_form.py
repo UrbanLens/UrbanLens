@@ -2,7 +2,7 @@
 
 from django import forms
 
-from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+from urbanlens.dashboard.models.profile.model import MapViewChoice, Profile, VisibilityChoice
 
 
 class PrivacySettingsForm(forms.ModelForm):
@@ -57,7 +57,13 @@ class StyleSettingsForm(forms.ModelForm):
         label="Dark Mode",
         help_text="Use a dark color scheme across the app.",
     )
+    default_map_view = forms.ChoiceField(
+        choices=MapViewChoice.choices,
+        widget=forms.RadioSelect(attrs={"class": "settings-radio"}),
+        label="Default Map View",
+        help_text="Which map layer to use by default on location pages.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["dark_mode"]
+        fields = ["dark_mode", "default_map_view"]

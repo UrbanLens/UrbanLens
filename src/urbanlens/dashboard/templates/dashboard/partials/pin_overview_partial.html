@@ -1,21 +1,23 @@
 <div id="pin-overview">
 
-    {# ── Title row ──────────────────────────────────────────────────────── #}
-    <div class="pin-overview-title-row">
-        <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
-        <button type="button" class="trip-header-btn trip-header-btn--edit"
-                onclick="document.getElementById('pin-edit-dialog').showModal()">
-            <i class="material-icons">edit</i> Edit
-        </button>
-    </div>
+    {# ── Title ──────────────────────────────────────────────────────────── #}
+    <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
 
     {# ── Details card ───────────────────────────────────────────────────── #}
     <div class="pin-details location-details card">
-        {% if pin.location %}
-        <a href="{% url 'location.wiki' pin.location.uuid %}" class="wiki-link-btn">
-            View community wiki <i class="material-icons">open_in_new</i>
-        </a>
-        {% endif %}
+        <div class="card-header">
+            <i class="material-icons">info_outline</i>
+            <span>Details</span>
+            {% if pin.location %}
+            <a href="{% url 'location.wiki' pin.location.uuid %}" class="btn-icon-sm" title="View community wiki">
+                <i class="material-icons">open_in_new</i>
+            </a>
+            {% endif %}
+            <button type="button" class="btn-icon-sm" style="margin-left:auto" title="Edit details"
+                    onclick="document.getElementById('pin-edit-dialog').showModal()">
+                <i class="material-icons">edit</i>
+            </button>
+        </div>
         <div class="details-grid">
             {% if pin.description %}
             <div class="detail-row full-width">
@@ -27,28 +29,26 @@
                 <span class="field-label">Status</span>
                 <span class="field-value">{% if pin.status %}{{ pin.status|title }}{% else %}<em>Not set</em>{% endif %}</span>
             </div>
+            {% if pin.pin_type and pin.pin_type != "location" %}
             <div class="detail-row">
                 <span class="field-label">Type</span>
-                <span class="field-value">{% if pin.pin_type %}{{ pin.get_pin_type_display }}{% else %}<em>Not set</em>{% endif %}</span>
+                <span class="field-value">{{ pin.get_pin_type_display }}</span>
             </div>
+            {% endif %}
             <div class="detail-row">
                 <span class="field-label">Priority</span>
-                <span class="field-value">{{ pin.priority }}</span>
+                <span class="field-value">{{ pin.priority|default:"—" }}</span>
             </div>
             <div class="detail-row">
                 <span class="field-label">Rating</span>
-                <span class="field-value">{% if pin.rating %}{{ pin.rating }} / 5{% else %}<em>No rating</em>{% endif %}</span>
-            </div>
-            <div class="detail-row">
-                <span class="field-label">Last Visited</span>
-                <span class="field-value">{% if pin.last_visited %}{{ pin.last_visited|date:"N j, Y" }}{% else %}<em>Never</em>{% endif %}</span>
+                <span class="field-value">{% if pin.rating %}{{ pin.rating }} / 5{% else %}—{% endif %}</span>
             </div>
             <div class="detail-row">
                 <span class="field-label">Categories</span>
                 <span class="field-value">
                     {% if pin.categories.all %}
                     {% for cat in pin.categories.all %}{{ cat.name|title }}{% if not forloop.last %}, {% endif %}{% endfor %}
-                    {% else %}<em>None</em>{% endif %}
+                    {% else %}—{% endif %}
                 </span>
             </div>
             {% if pin.place_name %}

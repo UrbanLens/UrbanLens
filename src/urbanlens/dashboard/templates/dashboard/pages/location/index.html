@@ -59,19 +59,6 @@
         <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
 
-    {# ── Detail pins ──────────────────────────────────────────────────── #}
-    <div hx-get="{% url 'pin.detail_pins' pin.uuid %}"
-         hx-trigger="load, reload-detail-pins"
-         hx-swap="outerHTML"
-         id="detail-pins-panel"
-         class="detail-pins-panel card">
-        <div class="card-header">
-            <i class="material-icons">push_pin</i>
-            <span>Detail Pins</span>
-        </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
-    </div>
-
     {# ── Aliases ──────────────────────────────────────────────────────── #}
     <div hx-get="{% url 'pin.aliases' pin.uuid %}"
          hx-trigger="load"
@@ -85,31 +72,27 @@
         <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
 
-    {# ── Pin location map ─────────────────────────────────────────────── #}
+    {# ── Location map (includes campus boundary editor + detail pins) ─── #}
     <div class="location-map pin-map card">
         <div class="card-header">
             <i class="material-icons">place</i>
             <h3>Location</h3>
+            <div class="campus-editor-controls">
+                <button id="edit-campus-btn" class="campus-btn campus-btn--edit" onclick="startEditCampus()">
+                    <i class="material-icons">pentagon</i> Edit Boundary
+                </button>
+                <div id="campus-save-controls" style="display:none">
+                    <button class="campus-btn campus-btn--save" onclick="saveCampus()">Save</button>
+                    <button class="campus-btn campus-btn--cancel" onclick="cancelCampusEdit()">Cancel</button>
+                </div>
+            </div>
         </div>
         <div id="map"></div>
-    </div>
-
-    {# ── Campus boundary editor ───────────────────────────────────────── #}
-    <div class="campus-editor card">
-        <div class="card-header">
-            <i class="material-icons">pentagon</i>
-            <h3>Campus Boundary</h3>
-        </div>
-        <p class="campus-description">
-            Define the spatial extent of this location. The shaded region will appear as an overlay on the main map.
-        </p>
-        <div id="campus-map"></div>
-        <div class="campus-editor-controls">
-            <button id="edit-campus-btn" class="submit-button" onclick="startEditCampus()">Edit Boundary</button>
-            <div id="campus-save-controls" style="display:none">
-                <button class="submit-button" onclick="saveCampus()">Save</button>
-                <button class="submit-button campus-cancel-btn" onclick="cancelCampusEdit()">Cancel</button>
-            </div>
+        <div class="location-map-actions">
+            <button type="button" class="detail-pin-add-trigger"
+                    onclick="document.getElementById('detail-pin-add-dialog').showModal()">
+                <i class="material-icons">add_location</i> Add Detail Pin
+            </button>
         </div>
     </div>
 
@@ -247,7 +230,8 @@
             <div>
                 <label for="pe-last-visited">Last Visited</label>
                 <input type="date" name="last_visited" id="pe-last-visited"
-                       value="{{ pin.last_visited|date:'Y-m-d'|default:'' }}">
+                       value="{{ pin.last_visited|date:'Y-m-d'|default:'' }}"
+                       max="{{ today }}" min="{{ min_date }}">
             </div>
         </div>
 
@@ -346,19 +330,23 @@
 
 {% block scripts %}
 <script>
-    // ── Pin location map ──────────────────────────────────────────────────────
+    // ── Map setup ─────────────────────────────────────────────────────────────
     const pinLat = {{ pin.effective_latitude|default:"42.6525" }};
     const pinLng = {{ pin.effective_longitude|default:"-73.7579" }};
+    const _defaultMapView = '{{ default_map_view|default:"satellite" }}';
 
     const map = L.map('map').setView([pinLat, pinLng], 15);
     window.map = map;
 
-    const _stdLayer  = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    const _stdLayer  = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
     const _satLayer  = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Tiles &copy; Esri',
         maxZoom: 19,
     });
     const _topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 });
+
+    // Add user's preferred default layer
+    (_defaultMapView === 'satellite' ? _satLayer : _defaultMapView === 'topographic' ? _topoLayer : _stdLayer).addTo(map);
 
     const _baseLayers = { 'Street': _stdLayer, 'Satellite': _satLayer, 'Topographic': _topoLayer };
     const _overlays = {};
@@ -374,8 +362,6 @@
     _overlays['Clouds'] = _cloudLayer;
     {% endif %}
 
-    L.control.layers(_baseLayers, _overlays, { position: 'topright', collapsed: true }).addTo(map);
-
     const markerIcon = L.icon({
         iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
         shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
@@ -383,7 +369,10 @@
         iconAnchor: [12, 41], shadowAnchor: [12, 41], popupAnchor: [1, -34],
     });
     L.Marker.prototype.options.icon = markerIcon;
-    L.marker([pinLat, pinLng]).addTo(map);
+
+    // Main pin marker — hidden when a campus boundary exists
+    let _pinMarker = L.marker([pinLat, pinLng]).addTo(map);
+
     setTimeout(() => map.invalidateSize(), 300);
 
     // ── Detail pins layer ─────────────────────────────────────────────────────
@@ -397,6 +386,8 @@
     };
     const _detailPinLayer = L.layerGroup().addTo(map);
     _overlays['Detail Pins'] = _detailPinLayer;
+
+    L.control.layers(_baseLayers, _overlays, { position: 'topright', collapsed: true }).addTo(map);
 
     function _detailIcon(pinType, customIcon, customColor) {
         const color = customColor || _detailPinColors[pinType] || '#2563eb';
@@ -428,26 +419,31 @@
 
     // ── Campus boundary editor ────────────────────────────────────────────────
     const campusApiUrl = "{% url 'campus.pin' pin.uuid %}";
-    const campusMap = L.map('campus-map').setView([pinLat, pinLng], 16);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(campusMap);
-    L.marker([pinLat, pinLng]).addTo(campusMap);
-
-    const campusItems = new L.FeatureGroup().addTo(campusMap);
+    const campusItems = new L.FeatureGroup().addTo(map);
     const campusStyle = { color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 };
     let campusDrawControl = null;
     let _savedCampusGeoJSON = null;
 
-    setTimeout(() => campusMap.invalidateSize(), 300);
+    function _setPinMarkerVisible(visible) {
+        if (visible && !map.hasLayer(_pinMarker)) {
+            _pinMarker.addTo(map);
+        } else if (!visible && map.hasLayer(_pinMarker)) {
+            map.removeLayer(_pinMarker);
+        }
+    }
 
     function _loadSavedCampus(geojson) {
         campusItems.clearLayers();
         if (geojson) {
             L.geoJSON(geojson, { style: campusStyle }).eachLayer(l => campusItems.addLayer(l));
             if (campusItems.getLayers().length) {
-                campusMap.fitBounds(campusItems.getBounds().pad(0.25));
+                map.fitBounds(campusItems.getBounds().pad(0.25));
             }
+            _setPinMarkerVisible(false);
+        } else {
+            _setPinMarkerVisible(true);
         }
-        campusMap.invalidateSize();
+        map.invalidateSize();
     }
 
     fetch(campusApiUrl)
@@ -475,10 +471,11 @@
             },
             edit: { featureGroup: campusItems },
         });
-        campusMap.addControl(campusDrawControl);
-        campusMap.on(L.Draw.Event.CREATED, function (e) {
+        map.addControl(campusDrawControl);
+        map.on(L.Draw.Event.CREATED, function (e) {
             campusItems.clearLayers();
             campusItems.addLayer(e.layer);
+            _setPinMarkerVisible(false);
             toastr.info('New boundary drawn. Click Save to confirm or Cancel to restore the previous boundary.');
         });
         document.getElementById('edit-campus-btn').style.display = 'none';
@@ -500,8 +497,8 @@
     }
 
     function _exitCampusEdit() {
-        if (campusDrawControl) { campusMap.removeControl(campusDrawControl); campusDrawControl = null; }
-        campusMap.off(L.Draw.Event.CREATED);
+        if (campusDrawControl) { map.removeControl(campusDrawControl); campusDrawControl = null; }
+        map.off(L.Draw.Event.CREATED);
         document.getElementById('edit-campus-btn').style.display = '';
         document.getElementById('campus-save-controls').style.display = 'none';
     }
@@ -520,6 +517,17 @@
         let _pickerMap    = null;
         let _pickerMarker = null;
         let _submitting   = false;
+
+        function _currentPickerIcon() {
+            const pinType = document.getElementById('dp-type').value;
+            const icon    = document.getElementById('dp-icon').value || null;
+            const color   = document.getElementById('dp-color').value || null;
+            return _detailIcon(pinType, icon, color);
+        }
+
+        function _updatePickerMarker() {
+            if (_pickerMarker) _pickerMarker.setIcon(_currentPickerIcon());
+        }
 
         function _resetDialog() {
             form.reset();
@@ -542,6 +550,7 @@
                 document.querySelectorAll('.dp-icon-btn').forEach(b => b.classList.remove('dp-icon-btn--active'));
                 btn.classList.add('dp-icon-btn--active');
                 document.getElementById('dp-icon').value = btn.dataset.icon;
+                _updatePickerMarker();
             });
         });
         document.querySelectorAll('.dp-color-swatch').forEach(swatch => {
@@ -549,20 +558,24 @@
                 document.querySelectorAll('.dp-color-swatch').forEach(s => s.classList.remove('dp-color-swatch--active'));
                 swatch.classList.add('dp-color-swatch--active');
                 document.getElementById('dp-color').value = swatch.dataset.color;
+                _updatePickerMarker();
             });
         });
+        document.getElementById('dp-type').addEventListener('change', _updatePickerMarker);
 
         function _initPickerMap() {
             if (_pickerMap) { _pickerMap.setView([pinLat, pinLng], 17); setTimeout(() => _pickerMap.invalidateSize(), 150); return; }
             _pickerMap = L.map('detail-pin-picker-map').setView([pinLat, pinLng], 17);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(_pickerMap);
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri', maxZoom: 19,
+            }).addTo(_pickerMap);
             L.marker([pinLat, pinLng], { opacity: 0.4, title: 'Pin location' }).addTo(_pickerMap);
             _pickerMap.on('click', function (e) {
                 const { lat, lng } = e.latlng;
                 document.getElementById('dp-lat').value = lat.toFixed(6);
                 document.getElementById('dp-lon').value = lng.toFixed(6);
                 if (_pickerMarker) _pickerMap.removeLayer(_pickerMarker);
-                _pickerMarker = L.marker([lat, lng]).addTo(_pickerMap);
+                _pickerMarker = L.marker([lat, lng], { icon: _currentPickerIcon() }).addTo(_pickerMap);
                 submitBtn.disabled = false;
                 noLocMsg.style.display = 'none';
             });
@@ -597,7 +610,6 @@
                 if (resp.ok) {
                     toastr.success('Detail pin added.');
                     dlg.close();
-                    htmx.trigger('#detail-pins-panel', 'reload-detail-pins');
                     if (typeof loadDetailPins === 'function') loadDetailPins();
                 } else {
                     toastr.error(resp.error || 'Failed to add detail pin.');

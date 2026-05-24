@@ -93,13 +93,21 @@ class PinEditView(LoginRequiredMixin, View):
 
         last_visited = None
         if last_visited_raw:
-            from datetime import datetime
+            from datetime import date, datetime
             for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d"):
                 try:
                     last_visited = datetime.strptime(last_visited_raw, fmt)
                     break
                 except ValueError:
                     continue
+            if last_visited:
+                today = date.today()
+                min_date = date(today.year - 100, today.month, today.day)
+                lv_date = last_visited.date()
+                if lv_date > today:
+                    return HttpResponse("Last visited date must be in the past.", status=400)
+                if lv_date < min_date:
+                    return HttpResponse("Last visited date must be within the last 100 years.", status=400)
 
         # Validate choices
         valid_statuses = {v for v, _ in PinStatus.choices}

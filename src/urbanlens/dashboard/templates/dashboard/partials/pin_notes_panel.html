@@ -3,6 +3,10 @@
         <i class="material-icons">sticky_note_2</i>
         <span>My Notes</span>
         {% if notes %}<span class="badge">{{ notes|length }}</span>{% endif %}
+        <button type="button" class="btn-icon-sm" style="margin-left:auto" title="Add note"
+                onclick="this.closest('.pin-notes-panel').querySelector('.pin-note-input').focus()">
+            <i class="material-icons">add</i>
+        </button>
     </div>
 
     {% if notes %}
@@ -14,14 +18,14 @@
                 <span class="pin-note-date">{{ note.created|date:"M j, Y g:i A" }}</span>
             </div>
             <button type="button"
-                    class="detail-pin-action-btn"
+                    class="pin-note-delete-btn"
                     title="Delete note"
                     hx-delete="{% url 'pin.note.delete' pin.uuid note.id %}"
                     hx-target="#pin-note-{{ note.id }}"
                     hx-swap="outerHTML"
                     hx-confirm="Delete this note?"
                     hx-on::before-request="this.closest('li').classList.add('is-deleting')">
-                <i class="material-icons">delete</i>
+                <i class="material-icons">delete_outline</i>
             </button>
         </li>
         {% endfor %}

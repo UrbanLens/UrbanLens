@@ -40,6 +40,12 @@ class VisibilityChoice(TextChoices):
     EVERYONE = "everyone", "Everyone"
 
 
+class MapViewChoice(TextChoices):
+    STREET = "street", "Street"
+    SATELLITE = "satellite", "Satellite"
+    TOPOGRAPHIC = "topographic", "Topographic"
+
+
 class Profile(abstract.Model):
     avatar = ImageField(upload_to="avatars/", null=True, blank=True)
     bio = TextField(null=True, blank=True)
@@ -62,6 +68,11 @@ class Profile(abstract.Model):
 
     # Style preferences
     dark_mode = BooleanField(default=False)
+    default_map_view = CharField(
+        max_length=20,
+        choices=MapViewChoice.choices,
+        default=MapViewChoice.SATELLITE,
+    )
 
     user = OneToOneField(
         User,

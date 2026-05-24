@@ -56,7 +56,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         View the pin page
         """
+        from datetime import date
+        from urbanlens.dashboard.models.categories.model import Category
         from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import PinStatus, PinType
+        from urbanlens.dashboard.models.tags.model import COLOR_CHOICES
 
         pin = Pin.objects.select_related("location").get(uuid=kwargs["pin_uuid"])
 
@@ -73,9 +77,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             pin.location = location
             pin.save(update_fields=["location"])
 
-        from urbanlens.dashboard.models.categories.model import Category
-        from urbanlens.dashboard.models.pin.model import PinStatus, PinType
-        from urbanlens.dashboard.models.tags.model import COLOR_CHOICES
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        today = date.today()
+        min_date = date(today.year - 100, today.month, today.day)
 
         detail_pin_icon_choices = [
             ("place", "Place"), ("business", "Building"), ("door_front", "Entrance"),
@@ -99,6 +104,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "detail_pin_icon_choices": detail_pin_icon_choices,
                 "color_choices": COLOR_CHOICES,
                 "all_categories": Category.objects.order_by("name"),
+                "default_map_view": profile.default_map_view,
+                "today": today.isoformat(),
+                "min_date": min_date.isoformat(),
             },
         )
 

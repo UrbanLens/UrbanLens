@@ -1132,11 +1132,11 @@ body.page-location-details div.section {
     grid-template-columns: 1fr 1fr 1fr;
     gap: 1rem;
     grid-template-areas:
-        "title title title"
-        "details details details"
+        "overview overview overview"
+        "notes notes notes"
         "visits visits tags"
+        "aliases aliases aliases"
         "map map map"
-        "campus campus campus"
         "satellite aerial street"
         "smithsonian smithsonian smithsonian"
         "weather weather weather"
@@ -1144,15 +1144,16 @@ body.page-location-details div.section {
     justify-items: stretch;
     align-items: start;
 
+    #pin-overview { grid-area: overview; }
+    .pin-notes-panel { grid-area: notes; }
+    .aliases-panel { grid-area: aliases; }
+
     .location-title {
-        grid-area: title;
         text-align: center;
         margin: .5rem 0;
     }
 
     .location-details {
-        grid-area: details;
-
         .details-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -1194,10 +1195,50 @@ body.page-location-details div.section {
     .location-map {
         grid-area: map;
 
+        .card-header {
+            flex-wrap: wrap;
+            gap: .5rem;
+        }
+
         #map {
             height: 28rem;
             width: 100%;
         }
+
+        .location-map-actions {
+            padding: .6rem 1rem;
+            border-top: 1px solid var(--border-color, #e5e7eb);
+            display: flex;
+            gap: .5rem;
+        }
+
+        .detail-pin-add-trigger {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            background: none;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: .35rem .75rem;
+            font-size: .82rem;
+            color: #3b82f6;
+            cursor: pointer;
+            transition: background .15s, border-color .15s;
+
+            .material-icons { font-size: 1rem; }
+
+            &:hover {
+                background: #eff6ff;
+                border-color: #93c5fd;
+            }
+        }
+    }
+
+    .campus-editor-controls {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        margin-left: auto;
     }
 
     .satellite-view {
@@ -1279,46 +1320,6 @@ body.page-location-details div.section {
             font-size: .82rem;
             color: #555;
             margin: .2rem 0 0;
-        }
-    }
-
-    .campus-editor {
-        grid-area: campus;
-
-        .campus-description {
-            color: $text-secondary;
-            font-size: 0.9rem;
-            margin: 0.25rem 0 0.75rem;
-        }
-
-        #campus-map {
-            height: 28rem;
-            width: 100%;
-            border-radius: $radius-sm;
-            margin-bottom: 0.75rem;
-        }
-
-        .campus-editor-controls {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-
-            #campus-save-controls {
-                display: flex;
-                gap: 0.5rem;
-            }
-
-            .campus-cancel-btn {
-                background-color: transparent;
-                border-color: $border-color;
-                color: $text-secondary;
-
-                &:hover {
-                    background-color: rgba(0, 0, 0, 0.05);
-                    border-color: darken($border-color, 10%);
-                }
-            }
         }
     }
 
@@ -1443,6 +1444,7 @@ body.page-location-details div.section {
     background: transparent;
     cursor: pointer;
     color: #666;
+    outline: none;
     transition: background .15s, color .15s;
     flex-shrink: 0;
 
@@ -1450,9 +1452,10 @@ body.page-location-details div.section {
         font-size: 1.1rem;
     }
 
-    &:hover {
+    &:hover, &:focus {
         background: rgba(0, 0, 0, .07);
         color: #222;
+        outline: none;
     }
 }
 
@@ -1724,10 +1727,12 @@ body.page-location-details div.section {
         color: #ccc;
         padding: 2px;
         border-radius: 4px;
+        outline: none;
 
-        &:hover {
-            color: #e55;
-            background: rgba(220, 50, 50, .07);
+        &:hover, &:focus {
+            color: #dc2626;
+            background: #fee2e2;
+            outline: none;
         }
 
         .material-icons {
@@ -3212,20 +3217,47 @@ textarea.edit-textarea {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    outline: none;
     transition: background 0.12s, color 0.12s;
 
-    &:hover {
+    &:hover, &:focus {
         background: #f0f0f0;
         color: $text-primary;
+        outline: none;
     }
 
-    &.btn-icon--danger:hover {
-        background: #fdecea;
-        color: #c62828;
+    &.btn-icon--danger {
+        &:hover, &:focus {
+            background: #fee2e2;
+            color: #dc2626;
+            outline: none;
+        }
     }
 
     i {
         font-size: 1.15rem;
+    }
+}
+
+.detail-pin-wiki-delete {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #94a3b8;
+    padding: .2rem;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+    transition: background .12s, color .12s;
+
+    .material-icons { font-size: 1rem; }
+
+    &:hover, &:focus {
+        background: #fee2e2;
+        color: #dc2626;
+        outline: none;
     }
 }
 
@@ -5070,28 +5102,54 @@ textarea.form-input {
         gap: .5rem;
     }
 
-    .detail-pin-add-btn {
-        margin-left: auto;
-        display: flex;
-        align-items: center;
-        gap: .25rem;
-        padding: .3rem .75rem;
-        border: none;
-        border-radius: 6px;
-        background: #2563eb;
-        color: #fff;
-        font-size: .8rem;
-        cursor: pointer;
-
-        &:hover {
-            background: #1d4ed8;
-        }
-    }
-
     .detail-pin-empty {
         padding: 1rem 1.25rem;
         color: #888;
         font-size: .85rem;
+    }
+}
+
+// Shared "Add" button used in card headers across trips, detail pins, etc.
+.detail-pin-add-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .3rem .75rem;
+    border: none;
+    border-radius: 6px;
+    background: #2563eb;
+    color: #fff;
+    font-size: .8rem;
+    cursor: pointer;
+    outline: none;
+
+    &:hover, &:focus {
+        background: #1d4ed8;
+        outline: none;
+    }
+}
+
+// Shared destructive icon button — used in detail pins, trip panels, etc.
+.detail-pin-action-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #94a3b8;
+    padding: .2rem;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+    transition: background .12s, color .12s;
+
+    .material-icons { font-size: 1.1rem; }
+
+    &:hover, &:focus {
+        background: #fee2e2;
+        color: #dc2626;
+        outline: none;
     }
 }
 
@@ -5147,21 +5205,7 @@ textarea.form-input {
         flex-shrink: 0;
     }
 
-    .detail-pin-action-btn {
-        border: none;
-        background: transparent;
-        cursor: pointer;
-        color: #888;
-        padding: .2rem;
-        border-radius: 4px;
-        display: flex;
-        align-items: center;
-
-        &:hover {
-            background: rgba(220, 38, 38, .1);
-            color: #dc2626;
-        }
-    }
+    // see global .detail-pin-action-btn below
 
     &.detail-pin-type--building .detail-pin-type-icon {
         color: #6b7280;
@@ -5228,7 +5272,7 @@ textarea.form-input {
     }
 
     #detail-pin-picker-map {
-        height: 200px;
+        height: 320px;
         margin: .75rem 1.25rem;
         border-radius: 8px;
         overflow: hidden;
@@ -5448,6 +5492,7 @@ textarea.form-input {
         cursor: pointer;
         padding: 0;
         color: #666;
+        outline: none;
         transition: background .12s, color .12s;
 
         .material-icons {
@@ -5455,9 +5500,10 @@ textarea.form-input {
             line-height: 1;
         }
 
-        &:hover {
+        &:hover, &:focus {
             background: rgba(200, 0, 0, .18);
             color: #c00;
+            outline: none;
         }
     }
 }
@@ -5764,6 +5810,7 @@ textarea.form-input {
     font-weight: 600;
     border-radius: 8px;
     cursor: pointer;
+    outline: none;
     transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
     letter-spacing: .01em;
 
@@ -5774,9 +5821,10 @@ textarea.form-input {
         background: transparent;
         color: #0891b2;
 
-        &:hover {
+        &:hover, &:focus {
             background: #0891b2;
             color: #fff;
+            outline: none;
             box-shadow: 0 2px 8px rgba(8, 145, 178, .25);
         }
     }
@@ -5786,10 +5834,11 @@ textarea.form-input {
         background: transparent;
         color: #dc2626;
 
-        &:hover {
+        &:hover, &:focus {
             background: #dc2626;
             border-color: #dc2626;
             color: #fff;
+            outline: none;
             box-shadow: 0 2px 8px rgba(220, 38, 38, .2);
         }
     }
@@ -6299,4 +6348,113 @@ textarea.form-input {
     }
 
     .form-actions { margin-top: .5rem; }
+}
+
+// ── Pin note delete button ────────────────────────────────────────────────
+
+.pin-note-delete-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #94a3b8;
+    outline: none;
+    transition: color .15s, background .15s;
+
+    .material-icons { font-size: 1.1rem; }
+
+    &:hover, &:focus {
+        color: #dc2626;
+        background: #fee2e2;
+        outline: none;
+    }
+}
+
+// ── Campus boundary buttons (inside location map card header) ─────────────
+
+.campus-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .3rem .7rem;
+    border-radius: 6px;
+    font-size: .8rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background .15s, border-color .15s;
+
+    .material-icons { font-size: .95rem; }
+
+    &--edit {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+        color: #475569;
+        &:hover { background: #e2e8f0; }
+    }
+
+    &--save {
+        background: #3b82f6;
+        color: #fff;
+        &:hover { background: #2563eb; }
+    }
+
+    &--cancel {
+        background: transparent;
+        border-color: #cbd5e1;
+        color: #64748b;
+        &:hover { background: #f1f5f9; }
+    }
+}
+
+#campus-save-controls {
+    display: flex;
+    gap: .4rem;
+}
+
+// ── Settings map view chooser ─────────────────────────────────────────────
+
+.settings-map-view-row {
+    display: flex;
+    gap: .75rem;
+    flex-wrap: wrap;
+    margin-top: .5rem;
+}
+
+.settings-map-view-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .3rem;
+    padding: .75rem 1.25rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: .85rem;
+    color: #475569;
+    transition: border-color .15s, background .15s;
+    min-width: 80px;
+
+    input[type="radio"] { display: none; }
+
+    .material-icons { font-size: 1.6rem; color: #94a3b8; transition: color .15s; }
+
+    &.active, &:has(input:checked) {
+        border-color: #3b82f6;
+        background: #eff6ff;
+        color: #1e40af;
+
+        .material-icons { color: #3b82f6; }
+    }
+
+    &:hover:not(.active) {
+        border-color: #93c5fd;
+        background: #f8fafc;
+    }
 }

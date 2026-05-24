@@ -108,6 +108,25 @@
             <input type="hidden" name="section" value="style">
 
             <div class="settings-field">
+                <label class="settings-label">Default Map View</label>
+                <p class="settings-help">{{ style_form.default_map_view.help_text }}</p>
+                <div class="settings-map-view-row">
+                    {% for radio in style_form.default_map_view %}
+                    <label class="settings-map-view-option {% if radio.data.value == style_form.initial.default_map_view or radio.data.value == style_form.instance.default_map_view %}active{% endif %}">
+                        {{ radio.tag }}
+                        {% if radio.data.value == "satellite" %}<i class="material-icons">satellite_alt</i>
+                        {% elif radio.data.value == "topographic" %}<i class="material-icons">terrain</i>
+                        {% else %}<i class="material-icons">map</i>{% endif %}
+                        <span>{{ radio.choice_label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% if style_form.default_map_view.errors %}
+                <p class="settings-error">{{ style_form.default_map_view.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
                 <label class="settings-label">Color Theme</label>
                 <p class="settings-help">Choose how the app looks.</p>
                 <div class="settings-theme-row">
