@@ -1,0 +1,55 @@
+<div id="trip-activities-panel" class="trip-panel card">
+    <div class="card-header">
+        <i class="material-icons">map</i>
+        <span>Activities</span>
+        {% if activities %}<span class="badge">{{ activities|length }}</span>{% endif %}
+        <button type="button" class="detail-pin-add-btn"
+                onclick="document.getElementById('add-activity-dialog').showModal()">
+            <i class="material-icons">add</i> Add
+        </button>
+    </div>
+
+    {% if activities %}
+    <ul class="trip-activity-list">
+        {% for act in activities %}
+        <li class="trip-activity-item" id="trip-activity-{{ act.id }}">
+            <div class="trip-activity-icon">
+                <i class="material-icons">
+                    {% if act.location %}place{% else %}radio_button_unchecked{% endif %}
+                </i>
+            </div>
+            <div class="trip-activity-body">
+                <span class="trip-activity-name">
+                    {{ act.title|default:act.location.name|default:"Unnamed activity" }}
+                </span>
+                {% if act.scheduled_at %}
+                <span class="trip-activity-time">
+                    <i class="material-icons">schedule</i>
+                    {{ act.scheduled_at|date:"M j, Y" }} at {{ act.scheduled_at|time:"g:i A" }}
+                </span>
+                {% endif %}
+                {% if act.notes %}
+                <span class="trip-activity-notes">{{ act.notes }}</span>
+                {% endif %}
+                {% if act.added_by %}
+                <span class="trip-activity-attr">
+                    Added by {{ act.added_by.user.username }}
+                </span>
+                {% endif %}
+            </div>
+            <button type="button" class="detail-pin-action-btn"
+                    title="Remove activity"
+                    hx-delete="{% url 'trips.activity.delete' trip.uuid act.id %}"
+                    hx-target="#trip-activity-{{ act.id }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Remove this activity?"
+                    hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                <i class="material-icons">delete</i>
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="trip-panel-empty">No activities yet. Add stops, check-in points, or locations for your trip.</p>
+    {% endif %}
+</div>

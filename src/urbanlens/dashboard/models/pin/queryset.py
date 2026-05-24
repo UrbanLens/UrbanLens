@@ -55,12 +55,16 @@ class PinQuerySet(abstract.QuerySet):
     """
 
     def root_pins(self) -> Self:
-        """Return only top-level pins (not detail pins)."""
-        return self.filter(parent_pin__isnull=True)
+        """Return only top-level pins (excludes both personal and community detail pins)."""
+        return self.filter(parent_pin__isnull=True, parent_location__isnull=True)
 
     def detail_pins(self) -> Self:
-        """Return only detail pins (sub-markers within a parent pin's area)."""
+        """Return only personal detail pins (sub-markers owned by a user's pin)."""
         return self.filter(parent_pin__isnull=False)
+
+    def location_detail_pins(self) -> Self:
+        """Return only community detail pins (attached directly to a Location for the wiki)."""
+        return self.filter(parent_location__isnull=False, parent_pin__isnull=True)
 
     def never_visited(self):
         return self.filter(last_visited__isnull=True)

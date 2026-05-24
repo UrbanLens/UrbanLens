@@ -112,13 +112,25 @@ class Pin(abstract.Model):
         default=list,
         related_name="pins",
     )
-    # Self-referential FK for detail pins. None = this is a root pin.
+    # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
+    # when the user explicitly picks a color in the dialog.
+    color = CharField(max_length=20, null=True, blank=True)
+
+    # Self-referential FK for personal detail pins (private to pin owner).
     parent_pin = ForeignKey(
         "self",
         on_delete=CASCADE,
         null=True,
         blank=True,
         related_name="detail_pins",
+    )
+    # Community detail pin - attached directly to a Location (wiki-level, shared).
+    parent_location = ForeignKey(
+        "dashboard.Location",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="location_detail_pins",
     )
 
     if TYPE_CHECKING:
@@ -366,8 +378,8 @@ class Pin(abstract.Model):
             "pin_type": self.pin_type,
             "latitude": self.effective_latitude,
             "longitude": self.effective_longitude,
-            "icon": self.effective_icon,
-            "color": self.effective_color,
+            "icon": self.icon or self.effective_icon,
+            "color": self.color or self.effective_color,
         }
 
     def save(self, *args, **kwargs) -> None:
@@ -387,11 +399,12 @@ class Pin(abstract.Model):
             Index(fields=["profile", "last_visited"]),
             Index(fields=["latitude", "longitude"]),
             Index(fields=["parent_pin"]),
+            Index(fields=["parent_location"], name="dashboard_pin_parent_loc_idx"),
         ]
         constraints = [
             UniqueConstraint(
                 fields=["latitude", "longitude", "profile"],
-                condition=Q(parent_pin__isnull=True),
+                condition=Q(parent_pin__isnull=True, parent_location__isnull=True),
                 name="dashboard_pin_unique_location_per_profile",
             ),
         ]

@@ -36,7 +36,7 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import aliases, campus, detail_pins, friendship, location_wiki, maps, pin, settings, tags, userprofile, visits
+from urbanlens.dashboard.controllers import aliases, campus, detail_pins, friendship, location_wiki, maps, pin, settings, tags, trip, userprofile, visits
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -318,6 +318,16 @@ urlpatterns = [
                     name="location.wiki.detail_pins.json",
                 ),
                 path(
+                    "<uuid:location_uuid>/wiki/detail-pins/panel/",
+                    detail_pins.LocationWikiDetailPinView.as_view(),
+                    name="location.wiki.detail_pins.panel",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/detail-pins/<uuid:detail_pin_uuid>/delete/",
+                    detail_pins.LocationWikiDetailPinDeleteView.as_view(),
+                    name="location.wiki.detail_pin.delete",
+                ),
+                path(
                     "<uuid:location_uuid>/wiki/aliases/",
                     aliases.LocationAliasView.as_view(),
                     name="location.wiki.aliases",
@@ -327,6 +337,25 @@ urlpatterns = [
                     aliases.LocationAliasDeleteView.as_view(),
                     name="location.wiki.alias.delete",
                 ),
+            ],
+        ),
+    ),
+    path(
+        "trips/",
+        include(
+            [
+                path("", trip.TripListView.as_view(), name="trips.list"),
+                path("create/", trip.TripCreateView.as_view(), name="trips.create"),
+                path("location-search/", trip.TripLocationSearchView.as_view(), name="trips.location_search"),
+                path("<uuid:trip_uuid>/", trip.TripDetailView.as_view(), name="trips.detail"),
+                path("<uuid:trip_uuid>/edit/", trip.TripEditView.as_view(), name="trips.edit"),
+                path("<uuid:trip_uuid>/delete/", trip.TripDeleteView.as_view(), name="trips.delete"),
+                path("<uuid:trip_uuid>/activities/", trip.TripActivitiesView.as_view(), name="trips.activities"),
+                path("<uuid:trip_uuid>/activities/<int:activity_id>/delete/", trip.TripActivityDeleteView.as_view(), name="trips.activity.delete"),
+                path("<uuid:trip_uuid>/comments/", trip.TripCommentsView.as_view(), name="trips.comments"),
+                path("<uuid:trip_uuid>/comments/<int:comment_id>/delete/", trip.TripCommentDeleteView.as_view(), name="trips.comment.delete"),
+                path("<uuid:trip_uuid>/members/", trip.TripMembersView.as_view(), name="trips.members"),
+                path("<uuid:trip_uuid>/members/<int:profile_id>/remove/", trip.TripMemberRemoveView.as_view(), name="trips.member.remove"),
             ],
         ),
     ),

@@ -129,18 +129,17 @@
             </div>
         </div>
 
-        {# ── Detail pins (shared sub-markers) ──────────────────────────────── #}
-        <div class="wiki-card wiki-detail-pins">
+        {# ── Detail pins (community sub-markers) ────────────────────────────── #}
+        <div hx-get="{% url 'location.wiki.detail_pins.panel' location.uuid %}"
+             hx-trigger="load"
+             hx-swap="outerHTML"
+             id="location-detail-pins-panel"
+             class="wiki-card wiki-detail-pins">
             <div class="wiki-card-header">
                 <i class="material-icons">push_pin</i>
                 <h2>Detail Pins</h2>
             </div>
-            <p class="wiki-card-desc">
-                Sub-markers placed by users within this location - buildings, entrances, points of interest, and hazards.
-            </p>
-            <div id="detail-pins-wiki-list" class="detail-pin-wiki-list">
-                <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
-            </div>
+            <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
         </div>
 
         {# ── Aliases ─────────────────────────────────────────────────────── #}
@@ -216,6 +215,78 @@
     </dialog>
 
 </div>
+
+{# ── Add community detail-pin dialog — outside wiki-body ─────────────────── #}
+<dialog id="wiki-detail-pin-dialog" class="detail-pin-add-dialog">
+    <div class="dialog-header">
+        <span>Add Community Detail Pin</span>
+        <button type="button" class="dialog-close" id="wiki-dp-dialog-close">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <p class="detail-pin-add-hint">
+        <i class="material-icons">public</i>
+        This pin will be visible to everyone who views this location's wiki.
+        Click the map to place it, then fill in the details.
+    </p>
+    <div id="wiki-detail-pin-picker-map"></div>
+    <p id="wiki-dp-no-location" class="detail-pin-no-location">
+        No location selected yet — click the map above.
+    </p>
+    <form id="wiki-detail-pin-form" class="detail-pin-add-form" novalidate>
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="wdp-type">Type</label>
+            <select id="wdp-type" name="pin_type">
+                {% for value, label in pin_type_choices %}
+                {% if value != "location" %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-row">
+            <label>Icon <span class="form-optional">(optional)</span></label>
+            <div class="dp-icon-picker" id="wdp-icon-picker">
+                {% for icon_val, icon_label in detail_pin_icon_choices %}
+                <button type="button" class="dp-icon-btn" data-icon="{{ icon_val }}" title="{{ icon_label }}">
+                    <i class="material-icons">{{ icon_val }}</i>
+                </button>
+                {% endfor %}
+            </div>
+            <input type="hidden" id="wdp-icon" name="icon" value="">
+        </div>
+        <div class="form-row">
+            <label>Color <span class="form-optional">(optional)</span></label>
+            <div class="dp-color-picker" id="wdp-color-picker">
+                {% for color_hex, color_name in color_choices %}
+                <button type="button" class="dp-color-swatch" data-color="{{ color_hex }}"
+                        style="background:{{ color_hex }}" title="{{ color_name }}"></button>
+                {% endfor %}
+            </div>
+            <input type="hidden" id="wdp-color" name="color" value="">
+        </div>
+        <div class="form-row">
+            <label for="wdp-name">Name <span class="form-optional">(optional)</span></label>
+            <input type="text" id="wdp-name" name="name" placeholder="e.g. Main Entrance">
+        </div>
+        <div class="form-row">
+            <label for="wdp-description">Notes <span class="form-optional">(optional)</span></label>
+            <textarea id="wdp-description" name="description" rows="2"
+                      placeholder="Any useful details…"></textarea>
+        </div>
+        <input type="hidden" id="wdp-lat" name="latitude">
+        <input type="hidden" id="wdp-lon" name="longitude">
+        <div class="form-actions">
+            <button type="submit" id="wiki-dp-submit-btn" class="submit-button" disabled>
+                Add Pin
+            </button>
+            <button type="button" class="submit-button cancel-btn" id="wiki-dp-cancel-btn">
+                Cancel
+            </button>
+        </div>
+    </form>
+</dialog>
 {% endblock %}
 
 {% block scripts %}
@@ -347,7 +418,7 @@
         event.detail.headers['X-CSRFToken'] = csrfToken;
     });
 
-    // ── Detail pins ─────────────────────────────────────────────────────────
+    // ── Community detail pins (bbox map overlay) ────────────────────────────
     const _dpColors = {
         building: '#6b7280', entrance: '#16a34a', poi: '#d97706',
         danger: '#dc2626', other: '#7c3aed', location: '#2563eb',
@@ -358,9 +429,9 @@
     };
     const _dpLayer = L.layerGroup().addTo(bboxMap);
 
-    function _dpMarkerIcon(pinType) {
-        const color = _dpColors[pinType] || '#2563eb';
-        const icon  = _dpIconNames[pinType] || 'place';
+    function _dpMarkerIcon(pinType, customIcon, customColor) {
+        const color = customColor || _dpColors[pinType] || '#2563eb';
+        const icon  = customIcon  || _dpIconNames[pinType] || 'place';
         return L.divIcon({
             className: '',
             html: `<span class="material-icons detail-map-icon" style="color:${color};font-size:22px;line-height:1;">${icon}</span>`,
@@ -368,37 +439,135 @@
         });
     }
 
-    function _renderDetailPinsList(detailPins) {
-        const container = document.getElementById('detail-pins-wiki-list');
-        if (!detailPins.length) {
-            container.innerHTML = '<p class="detail-pin-wiki-empty">No detail pins have been added for this location yet.</p>';
-            return;
-        }
-        const rows = detailPins.map(dp => `
-            <div class="detail-pin-wiki-item detail-pin-type--${dp.pin_type}">
-                <span class="material-icons detail-pin-type-icon">${_dpIconNames[dp.pin_type] || 'place'}</span>
-                <div class="detail-pin-info">
-                    <span class="detail-pin-name">${dp.name || dp.pin_type}</span>
-                    ${dp.description ? `<span class="detail-pin-desc">${dp.description}</span>` : ''}
-                    <span class="detail-pin-coords">${dp.latitude?.toFixed(5)}, ${dp.longitude?.toFixed(5)}</span>
-                </div>
-                <span class="detail-pin-wiki-attr">by ${dp.added_by}</span>
-            </div>`).join('');
-        container.innerHTML = rows;
+    function loadWikiDetailPinsOnMap() {
+        fetch("{% url 'location.wiki.detail_pins.json' location.uuid %}")
+            .then(r => r.json())
+            .then(data => {
+                _dpLayer.clearLayers();
+                (data.detail_pins || []).forEach(dp => {
+                    if (!dp.latitude || !dp.longitude) return;
+                    L.marker([dp.latitude, dp.longitude], { icon: _dpMarkerIcon(dp.pin_type, dp.icon, dp.color) })
+                        .bindPopup(`<strong>${dp.name || dp.pin_type}</strong> <em>(by ${dp.added_by || '?'})</em>${dp.description ? '<br>' + dp.description : ''}`)
+                        .addTo(_dpLayer);
+                });
+            })
+            .catch(err => console.warn('Could not load community detail pins:', err));
     }
+    loadWikiDetailPinsOnMap();
 
-    fetch("{% url 'location.wiki.detail_pins.json' location.uuid %}")
-        .then(r => r.json())
-        .then(data => {
-            const dps = data.detail_pins || [];
-            _renderDetailPinsList(dps);
-            dps.forEach(dp => {
-                if (!dp.latitude || !dp.longitude) return;
-                L.marker([dp.latitude, dp.longitude], { icon: _dpMarkerIcon(dp.pin_type) })
-                    .bindPopup(`<strong>${dp.name || dp.pin_type}</strong> <em>(by ${dp.added_by})</em>${dp.description ? '<br>' + dp.description : ''}`)
-                    .addTo(_dpLayer);
+    // ── Wiki detail-pin add dialog ───────────────────────────────────────────
+    (function () {
+        const dlg       = document.getElementById('wiki-detail-pin-dialog');
+        const form      = document.getElementById('wiki-detail-pin-form');
+        const submitBtn = document.getElementById('wiki-dp-submit-btn');
+        const noLocMsg  = document.getElementById('wiki-dp-no-location');
+        let _pickerMap    = null;
+        let _pickerMarker = null;
+        let _submitting   = false;
+
+        function _resetDialog() {
+            form.reset();
+            document.getElementById('wdp-lat').value = '';
+            document.getElementById('wdp-lon').value = '';
+            document.getElementById('wdp-icon').value = '';
+            document.getElementById('wdp-color').value = '';
+            dlg.querySelectorAll('.dp-icon-btn').forEach(b => b.classList.remove('dp-icon-btn--active'));
+            dlg.querySelectorAll('.dp-color-swatch').forEach(s => s.classList.remove('dp-color-swatch--active'));
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Add Pin';
+            _submitting = false;
+            noLocMsg.style.display = '';
+            if (_pickerMarker && _pickerMap) {
+                _pickerMap.removeLayer(_pickerMarker);
+                _pickerMarker = null;
+            }
+            if (_pickerMap) {
+                _pickerMap.setView([locLat, locLng], 17);
+                setTimeout(() => _pickerMap.invalidateSize(), 100);
+            }
+        }
+
+        function _initPickerMap() {
+            if (_pickerMap) {
+                _pickerMap.setView([locLat, locLng], 17);
+                setTimeout(() => _pickerMap.invalidateSize(), 150);
+                return;
+            }
+            _pickerMap = L.map('wiki-detail-pin-picker-map').setView([locLat, locLng], 17);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(_pickerMap);
+            L.marker([locLat, locLng], { opacity: 0.4, title: 'Location centre' }).addTo(_pickerMap);
+            _pickerMap.on('click', function (e) {
+                const { lat, lng } = e.latlng;
+                document.getElementById('wdp-lat').value = lat.toFixed(6);
+                document.getElementById('wdp-lon').value = lng.toFixed(6);
+                if (_pickerMarker) _pickerMap.removeLayer(_pickerMarker);
+                _pickerMarker = L.marker([lat, lng]).addTo(_pickerMap);
+                submitBtn.disabled = false;
+                noLocMsg.style.display = 'none';
             });
-        })
-        .catch(err => console.warn('Could not load detail pins:', err));
+            setTimeout(() => _pickerMap.invalidateSize(), 200);
+        }
+
+        dlg.addEventListener('toggle', (e) => {
+            if (e.newState === 'open') { _resetDialog(); _initPickerMap(); }
+        });
+
+        document.getElementById('wiki-dp-dialog-close').addEventListener('click', () => dlg.close());
+        document.getElementById('wiki-dp-cancel-btn').addEventListener('click', () => dlg.close());
+
+        dlg.querySelectorAll('.dp-icon-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                dlg.querySelectorAll('.dp-icon-btn').forEach(b => b.classList.remove('dp-icon-btn--active'));
+                btn.classList.add('dp-icon-btn--active');
+                document.getElementById('wdp-icon').value = btn.dataset.icon;
+            });
+        });
+        dlg.querySelectorAll('.dp-color-swatch').forEach(swatch => {
+            swatch.addEventListener('click', () => {
+                dlg.querySelectorAll('.dp-color-swatch').forEach(s => s.classList.remove('dp-color-swatch--active'));
+                swatch.classList.add('dp-color-swatch--active');
+                document.getElementById('wdp-color').value = swatch.dataset.color;
+            });
+        });
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            if (_submitting) return;
+            const lat = document.getElementById('wdp-lat').value;
+            const lon = document.getElementById('wdp-lon').value;
+            if (!lat || !lon) {
+                toastr.warning('Click a point on the map to set the location first.');
+                return;
+            }
+            _submitting = true;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Saving…';
+            const data = {};
+            new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
+            fetch("{% url 'location.wiki.detail_pins.panel' location.uuid %}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify(data),
+            })
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.text();
+            })
+            .then(html => {
+                const panel = document.getElementById('location-detail-pins-panel');
+                if (panel) panel.outerHTML = html;
+                toastr.success('Community detail pin added.');
+                dlg.close();
+                loadWikiDetailPinsOnMap();
+                htmx.process(document.getElementById('location-detail-pins-panel'));
+            })
+            .catch(() => {
+                toastr.error('Failed to add detail pin.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Pin';
+                _submitting = false;
+            });
+        });
+    }());
 </script>
 {% endblock %}

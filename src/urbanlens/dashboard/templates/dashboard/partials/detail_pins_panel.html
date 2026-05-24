@@ -35,7 +35,8 @@
                         hx-delete="{% url 'pin.detail_pin.edit' pin.uuid dp.uuid %}"
                         hx-target="#detail-pin-{{ dp.uuid }}"
                         hx-swap="outerHTML"
-                        hx-confirm="Delete this detail pin?">
+                        hx-confirm="Delete this detail pin?"
+                        hx-on::before-request="this.closest('li').classList.add('is-deleting')">
                     <i class="material-icons">delete</i>
                 </button>
             </div>

@@ -17,13 +17,9 @@
     {# ── Details ──────────────────────────────────────────────────────────── #}
     <div class="pin-details location-details card">
         {% if pin.location %}
-        <div class="wiki-link-banner">
-            <i class="material-icons">public</i>
-            <span>This location has a community wiki shared with all users who have it pinned.</span>
-            <a href="{% url 'location.wiki' pin.location.uuid %}" class="wiki-link-btn">
-                View community wiki <i class="material-icons">open_in_new</i>
-            </a>
-        </div>
+        <a href="{% url 'location.wiki' pin.location.uuid %}" class="wiki-link-btn">
+            View community wiki <i class="material-icons">open_in_new</i>
+        </a>
         {% endif %}
         <div class="details-grid">
             {% if pin.description %}
@@ -251,6 +247,27 @@
             </select>
         </div>
         <div class="form-row">
+            <label>Icon <span class="form-optional">(optional)</span></label>
+            <div class="dp-icon-picker">
+                {% for icon_val, icon_label in detail_pin_icon_choices %}
+                <button type="button" class="dp-icon-btn" data-icon="{{ icon_val }}" title="{{ icon_label }}">
+                    <i class="material-icons">{{ icon_val }}</i>
+                </button>
+                {% endfor %}
+            </div>
+            <input type="hidden" id="dp-icon" name="icon" value="">
+        </div>
+        <div class="form-row">
+            <label>Color <span class="form-optional">(optional)</span></label>
+            <div class="dp-color-picker">
+                {% for color_hex, color_name in color_choices %}
+                <button type="button" class="dp-color-swatch" data-color="{{ color_hex }}"
+                        style="background:{{ color_hex }}" title="{{ color_name }}"></button>
+                {% endfor %}
+            </div>
+            <input type="hidden" id="dp-color" name="color" value="">
+        </div>
+        <div class="form-row">
             <label for="dp-name">Name <span class="form-optional">(optional)</span></label>
             <input type="text" id="dp-name" name="name" placeholder="e.g. Main Entrance">
         </div>
@@ -327,9 +344,9 @@
     const _detailPinLayer = L.layerGroup().addTo(map);
     _overlays['Detail Pins'] = _detailPinLayer;
 
-    function _detailIcon(pinType) {
-        const color = _detailPinColors[pinType] || '#2563eb';
-        const icon  = _detailPinIcons[pinType]  || 'place';
+    function _detailIcon(pinType, customIcon, customColor) {
+        const color = customColor || _detailPinColors[pinType] || '#2563eb';
+        const icon  = customIcon  || _detailPinIcons[pinType]  || 'place';
         return L.divIcon({
             className: '',
             html: `<span class="material-icons detail-map-icon" style="color:${color};font-size:24px;line-height:1;">${icon}</span>`,
@@ -346,7 +363,7 @@
                 _detailPinLayer.clearLayers();
                 (data.detail_pins || []).forEach(dp => {
                     if (!dp.latitude || !dp.longitude) return;
-                    L.marker([dp.latitude, dp.longitude], { icon: _detailIcon(dp.pin_type) })
+                    L.marker([dp.latitude, dp.longitude], { icon: _detailIcon(dp.pin_type, dp.icon, dp.color) })
                         .bindPopup(`<strong>${dp.name || dp.pin_type}</strong>${dp.description ? '<br>' + dp.description : ''}`)
                         .addTo(_detailPinLayer);
                 });
@@ -467,6 +484,10 @@
             form.reset();
             document.getElementById('dp-lat').value = '';
             document.getElementById('dp-lon').value = '';
+            document.getElementById('dp-icon').value = '';
+            document.getElementById('dp-color').value = '';
+            document.querySelectorAll('.dp-icon-btn').forEach(b => b.classList.remove('dp-icon-btn--active'));
+            document.querySelectorAll('.dp-color-swatch').forEach(s => s.classList.remove('dp-color-swatch--active'));
             submitBtn.disabled  = true;
             submitBtn.textContent = 'Add Pin';
             _submitting = false;
@@ -480,6 +501,22 @@
                 setTimeout(() => _pickerMap.invalidateSize(), 100);
             }
         }
+
+        // ── Icon + color picker wiring ────────────────────────────────────────
+        document.querySelectorAll('.dp-icon-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.dp-icon-btn').forEach(b => b.classList.remove('dp-icon-btn--active'));
+                btn.classList.add('dp-icon-btn--active');
+                document.getElementById('dp-icon').value = btn.dataset.icon;
+            });
+        });
+        document.querySelectorAll('.dp-color-swatch').forEach(swatch => {
+            swatch.addEventListener('click', () => {
+                document.querySelectorAll('.dp-color-swatch').forEach(s => s.classList.remove('dp-color-swatch--active'));
+                swatch.classList.add('dp-color-swatch--active');
+                document.getElementById('dp-color').value = swatch.dataset.color;
+            });
+        });
 
         function _initPickerMap() {
             if (_pickerMap) {

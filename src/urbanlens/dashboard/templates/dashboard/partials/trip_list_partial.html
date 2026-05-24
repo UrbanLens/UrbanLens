@@ -1,0 +1,42 @@
+{% if trips %}
+<ul class="trip-card-list">
+    {% for t in trips %}
+    <li class="trip-card" id="trip-card-{{ t.uuid }}">
+        <a href="{% url 'trips.detail' t.uuid %}" class="trip-card-link">
+            <div class="trip-card-icon">
+                <i class="material-icons">flight_takeoff</i>
+            </div>
+            <div class="trip-card-body">
+                <span class="trip-card-name">{{ t.name }}</span>
+                {% if t.description %}
+                <span class="trip-card-desc">{{ t.description|truncatechars:100 }}</span>
+                {% endif %}
+                <div class="trip-card-meta">
+                    {% if t.start_date %}
+                    <span class="trip-card-dates">
+                        <i class="material-icons">event</i>
+                        {{ t.start_date|date:"M j, Y" }}{% if t.end_date %} – {{ t.end_date|date:"M j, Y" }}{% endif %}
+                    </span>
+                    {% endif %}
+                    <span class="trip-card-creator">
+                        <i class="material-icons">person</i>
+                        {{ t.creator.user.username|default:"Unknown" }}
+                    </span>
+                </div>
+            </div>
+            <i class="material-icons trip-card-arrow">chevron_right</i>
+        </a>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<div class="trips-empty">
+    <i class="material-icons trips-empty-icon">flight_takeoff</i>
+    <p>No trips yet.</p>
+    <p>Create a trip to start planning your next adventure!</p>
+    <button type="button" class="btn-primary"
+            onclick="document.getElementById('create-trip-dialog').showModal()">
+        <i class="material-icons">add</i> New Trip
+    </button>
+</div>
+{% endif %}

@@ -1,0 +1,46 @@
+<div id="trip-members-panel" class="trip-panel card">
+    <div class="card-header">
+        <i class="material-icons">group</i>
+        <span>Members</span>
+        {% if members %}<span class="badge">{{ members|length }}</span>{% endif %}
+        <button type="button" class="detail-pin-add-btn"
+                onclick="document.getElementById('add-member-dialog').showModal()">
+            <i class="material-icons">person_add</i> Add
+        </button>
+    </div>
+
+    {% if members %}
+    <ul class="trip-member-list">
+        {% for member in members %}
+        <li class="trip-member-item" id="trip-member-{{ member.id }}">
+            <div class="trip-member-avatar">
+                {% if member.avatar %}
+                <img src="{{ member.avatar.url }}" alt="" class="trip-member-avatar-img">
+                {% else %}
+                <span class="trip-member-avatar-initial">{{ member.user.username|first|upper }}</span>
+                {% endif %}
+            </div>
+            <div class="trip-member-info">
+                <span class="trip-member-name">{{ member.user.get_full_name|default:member.user.username }}</span>
+                <span class="trip-member-username">@{{ member.user.username }}</span>
+            </div>
+            {% if member == trip.creator %}
+            <span class="trip-member-badge trip-member-badge--creator">creator</span>
+            {% else %}
+            <button type="button" class="detail-pin-action-btn"
+                    title="Remove member"
+                    hx-delete="{% url 'trips.member.remove' trip.uuid member.id %}"
+                    hx-target="#trip-members-panel"
+                    hx-swap="outerHTML"
+                    hx-confirm="Remove {{ member.user.username }} from this trip?"
+                    hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                <i class="material-icons">person_remove</i>
+            </button>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="trip-panel-empty">No members yet.</p>
+    {% endif %}
+</div>

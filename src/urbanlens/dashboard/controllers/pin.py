@@ -74,6 +74,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             pin.save(update_fields=["location"])
 
         from urbanlens.dashboard.models.pin.model import PinType
+        from urbanlens.dashboard.models.tags.model import COLOR_CHOICES
+
+        detail_pin_icon_choices = [
+            ("place", "Place"), ("business", "Building"), ("door_front", "Entrance"),
+            ("star", "Star"), ("warning", "Warning"), ("info", "Info"),
+            ("camera_alt", "Camera"), ("local_parking", "Parking"),
+            ("stairs", "Stairs"), ("elevator", "Elevator"),
+            ("exit_to_app", "Exit"), ("lock", "Lock"),
+            ("construction", "Construction"), ("emergency", "Emergency"),
+        ]
 
         return render(
             request,
@@ -84,6 +94,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "openweathermap_api_key": settings.openweathermap_api_key,
                 "page_name": "location-details",
                 "pin_type_choices": PinType.choices,
+                "detail_pin_icon_choices": detail_pin_icon_choices,
+                "color_choices": COLOR_CHOICES,
             },
         )
 

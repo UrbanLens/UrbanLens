@@ -1,0 +1,61 @@
+<div id="trip-comments-panel" class="trip-panel card trip-comments-panel">
+    <div class="card-header">
+        <i class="material-icons">chat</i>
+        <span>Comments</span>
+        {% if comments %}<span class="badge">{{ comments|length }}</span>{% endif %}
+    </div>
+
+    {% if comments %}
+    <ul class="trip-comment-list">
+        {% for comment in comments %}
+        <li class="trip-comment-item" id="trip-comment-{{ comment.id }}">
+            <div class="trip-comment-avatar">
+                {% if comment.author and comment.author.avatar %}
+                <img src="{{ comment.author.avatar.url }}" alt="" class="trip-member-avatar-img">
+                {% else %}
+                <span class="trip-member-avatar-initial">
+                    {{ comment.author.user.username|first|upper|default:"?" }}
+                </span>
+                {% endif %}
+            </div>
+            <div class="trip-comment-body">
+                <div class="trip-comment-meta">
+                    <span class="trip-comment-author">
+                        {{ comment.author.user.username|default:"Unknown" }}
+                    </span>
+                    <span class="trip-comment-date">{{ comment.created|date:"M j, Y g:i A" }}</span>
+                </div>
+                <p class="trip-comment-text">{{ comment.text }}</p>
+            </div>
+            {% if comment.author == profile or trip.creator == profile %}
+            <button type="button" class="detail-pin-action-btn"
+                    title="Delete comment"
+                    hx-delete="{% url 'trips.comment.delete' trip.uuid comment.id %}"
+                    hx-target="#trip-comment-{{ comment.id }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Delete this comment?"
+                    hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                <i class="material-icons">delete</i>
+            </button>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="trip-panel-empty trip-comment-empty">No comments yet. Start the conversation.</p>
+    {% endif %}
+
+    {# ── Add comment form ────────────────────────────────────────────── #}
+    <form hx-post="{% url 'trips.comments' trip.uuid %}"
+          hx-target="#trip-comments-panel"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){this.reset()}"
+          class="trip-comment-form">
+        {% csrf_token %}
+        <textarea name="text" rows="2" placeholder="Add a comment…" required
+                  class="trip-comment-input"></textarea>
+        <div class="form-actions">
+            <button type="submit" class="submit-button">Post</button>
+        </div>
+    </form>
+</div>

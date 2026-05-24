@@ -10,19 +10,21 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from urbanlens.dashboard.models.location.edit_model import LocationEdit
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
 
 class DetailPinPanelView(LoginRequiredMixin, View):
-    """HTMX partial: list of detail pins for a single user pin."""
+    """HTMX partial: list of personal detail pins for a single user pin."""
 
     def get(self, request, pin_uuid):
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
         detail_pins = (
-            pin.detail_pins.select_related("location").prefetch_related("tags").order_by("pin_type", "nickname")
+            pin.detail_pins.select_related("location").order_by("pin_type", "nickname")
         )
         return render(
             request,
@@ -35,7 +37,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         )
 
     def post(self, request, pin_uuid):
-        """Create a new detail pin under the given parent pin."""
+        """Create a new personal detail pin under the given parent pin."""
         parent = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
         try:
             body = json.loads(request.body)
@@ -53,6 +55,8 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             latitude=float(lat),
             longitude=float(lon),
             pin_type=body.get("pin_type") or PinType.POINT_OF_INTEREST,
+            icon=body.get("icon") or None,
+            color=body.get("color") or None,
             parent_pin=parent,
             profile=parent.profile,
             location=parent.location,
@@ -61,14 +65,13 @@ class DetailPinPanelView(LoginRequiredMixin, View):
 
 
 class DetailPinEditView(LoginRequiredMixin, View):
-    """Edit or delete a single detail pin."""
+    """Edit or delete a single personal detail pin."""
 
     def _get_detail_pin(self, request, pin_uuid, detail_pin_uuid):
         parent = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
         return get_object_or_404(Pin, uuid=detail_pin_uuid, parent_pin=parent)
 
     def post(self, request, pin_uuid, detail_pin_uuid):
-        """Update fields on a detail pin (used from HTMX form submit)."""
         detail_pin = self._get_detail_pin(request, pin_uuid, detail_pin_uuid)
         try:
             body = json.loads(request.body)
@@ -79,6 +82,8 @@ class DetailPinEditView(LoginRequiredMixin, View):
             "nickname": body.get("name") or None,
             "description": body.get("description") or None,
             "pin_type": body.get("pin_type") or None,
+            "icon": body.get("icon") or None,
+            "color": body.get("color") or None,
         }.items():
             if value is not None or field in body:
                 setattr(detail_pin, field, value)
@@ -92,34 +97,131 @@ class DetailPinEditView(LoginRequiredMixin, View):
     def delete(self, request, pin_uuid, detail_pin_uuid):
         detail_pin = self._get_detail_pin(request, pin_uuid, detail_pin_uuid)
         detail_pin.delete()
-        return HttpResponse(status=204)
+        return HttpResponse("", status=200)
 
 
 class DetailPinJsonView(LoginRequiredMixin, View):
-    """Return detail pins as JSON for Leaflet rendering on the pin details page."""
+    """Return personal detail pins as JSON for Leaflet rendering on the pin details page."""
 
     def get(self, request, pin_uuid):
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
         detail_pins = (
-            pin.detail_pins.select_related("location").prefetch_related("tags").order_by("pin_type", "nickname")
+            pin.detail_pins.order_by("pin_type", "nickname")
         )
         return JsonResponse({"detail_pins": [dp.to_detail_json() for dp in detail_pins]})
 
 
 class LocationDetailPinJsonView(LoginRequiredMixin, View):
-    """Return all detail pins for a location (across all users) for the wiki map."""
+    """Return community detail pins for a location (wiki map overlay)."""
 
     def get(self, request, location_uuid):
         location = get_object_or_404(Location, uuid=location_uuid)
         detail_pins = (
-            Pin.objects.filter(parent_pin__location=location)
-            .select_related("parent_pin__profile__user")
-            .prefetch_related("tags")
+            Pin.objects.filter(parent_location=location, parent_pin__isnull=True)
+            .select_related("profile__user")
             .order_by("pin_type", "nickname")
         )
         data = []
         for dp in detail_pins:
             item = dp.to_detail_json()
-            item["added_by"] = dp.parent_pin.profile.user.username if dp.parent_pin else "Unknown"
+            item["added_by"] = dp.profile.user.username if dp.profile else "Unknown"
             data.append(item)
         return JsonResponse({"detail_pins": data})
+
+
+class LocationWikiDetailPinView(LoginRequiredMixin, View):
+    """HTMX partial: community detail pins panel for a Location wiki page.
+
+    GET  → renders the panel partial.
+    POST → creates a new community detail pin, records a LocationEdit, re-renders.
+    """
+
+    def _render(self, request, location):
+        detail_pins = (
+            Pin.objects.filter(parent_location=location, parent_pin__isnull=True)
+            .select_related("profile__user")
+            .order_by("pin_type", "nickname")
+        )
+        return render(
+            request,
+            "dashboard/partials/location_detail_pins_panel.html",
+            {
+                "location": location,
+                "detail_pins": detail_pins,
+                "pin_type_choices": PinType.choices,
+            },
+        )
+
+    def get(self, request, location_uuid):
+        location = get_object_or_404(Location, uuid=location_uuid)
+        return self._render(request, location)
+
+    def post(self, request, location_uuid):
+        location = get_object_or_404(Location, uuid=location_uuid)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        try:
+            body = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            body = request.POST
+
+        lat = body.get("latitude")
+        lon = body.get("longitude")
+        if not lat or not lon:
+            return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
+
+        pin_name = body.get("name") or None
+        detail_pin = Pin.objects.create(
+            nickname=pin_name,
+            description=body.get("description") or None,
+            latitude=float(lat),
+            longitude=float(lon),
+            pin_type=body.get("pin_type") or PinType.POINT_OF_INTEREST,
+            icon=body.get("icon") or None,
+            color=body.get("color") or None,
+            parent_location=location,
+            profile=profile,
+            location=location,
+        )
+
+        LocationEdit.objects.create(
+            location=location,
+            editor=profile,
+            changes={"detail_pin_added": {"from": None, "to": detail_pin.effective_name}},
+        )
+
+        return self._render(request, location)
+
+
+class LocationWikiDetailPinDeleteView(LoginRequiredMixin, View):
+    """Delete a single community detail pin and record a LocationEdit."""
+
+    def delete(self, request, location_uuid, detail_pin_uuid):
+        location = get_object_or_404(Location, uuid=location_uuid)
+        detail_pin = get_object_or_404(Pin, uuid=detail_pin_uuid, parent_location=location)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        pin_name = detail_pin.effective_name
+
+        detail_pin.delete()
+
+        LocationEdit.objects.create(
+            location=location,
+            editor=profile,
+            changes={"detail_pin_removed": {"from": pin_name, "to": None}},
+        )
+
+        detail_pins = (
+            Pin.objects.filter(parent_location=location, parent_pin__isnull=True)
+            .select_related("profile__user")
+            .order_by("pin_type", "nickname")
+        )
+        return render(
+            request,
+            "dashboard/partials/location_detail_pins_panel.html",
+            {
+                "location": location,
+                "detail_pins": detail_pins,
+                "pin_type_choices": PinType.choices,
+            },
+        )

@@ -11,8 +11,10 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.aliases.model import LocationAlias, PinAlias
+from urbanlens.dashboard.models.location.edit_model import LocationEdit
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -75,14 +77,16 @@ class LocationAliasView(LoginRequiredMixin, View):
         name = (request.POST.get("name") or "").strip()
         if not name:
             return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
-        try:
-            profile = request.user.profile
-        except Exception:
-            profile = None
+        profile, _ = Profile.objects.get_or_create(user=request.user)
         try:
             LocationAlias.objects.create(location=location, name=name, created_by=profile)
         except IntegrityError:
             return JsonResponse({"ok": False, "error": "That alias already exists."}, status=409)
+        LocationEdit.objects.create(
+            location=location,
+            editor=profile,
+            changes={"alias_added": {"from": None, "to": name}},
+        )
         aliases = location.aliases.order_by("name")
         return render(
             request,
@@ -94,7 +98,15 @@ class LocationAliasView(LoginRequiredMixin, View):
 class LocationAliasDeleteView(LoginRequiredMixin, View):
     def delete(self, request, location_uuid, alias_id):
         location = get_object_or_404(Location, uuid=location_uuid)
-        get_object_or_404(LocationAlias, id=alias_id, location=location).delete()
+        alias = get_object_or_404(LocationAlias, id=alias_id, location=location)
+        alias_name = alias.name
+        alias.delete()
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        LocationEdit.objects.create(
+            location=location,
+            editor=profile,
+            changes={"alias_removed": {"from": alias_name, "to": None}},
+        )
         aliases = location.aliases.order_by("name")
         return render(
             request,

@@ -1,0 +1,230 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="trip-detail-page">
+
+    {# ── Trip header ───────────────────────────────────────────────────── #}
+    <div id="trip-header">
+        {% include "dashboard/partials/trip_header_partial.html" %}
+    </div>
+
+    {# ── Three-column body ─────────────────────────────────────────────── #}
+    <div class="trip-detail-body">
+
+        {# ── Left: activities ──────────────────────────────────────────── #}
+        <section class="trip-detail-section trip-detail-activities">
+            <div id="trip-activities-panel"
+                 hx-get="{% url 'trips.activities' trip.uuid %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <div class="trip-panel-loading">
+                    <i class="material-icons rotating">refresh</i>
+                    Loading activities…
+                </div>
+            </div>
+        </section>
+
+        {# ── Right: members + comments ─────────────────────────────────── #}
+        <aside class="trip-detail-aside">
+
+            <div id="trip-members-panel"
+                 hx-get="{% url 'trips.members' trip.uuid %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <div class="trip-panel-loading">
+                    <i class="material-icons rotating">refresh</i>
+                    Loading members…
+                </div>
+            </div>
+
+            <div id="trip-comments-panel"
+                 hx-get="{% url 'trips.comments' trip.uuid %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <div class="trip-panel-loading">
+                    <i class="material-icons rotating">refresh</i>
+                    Loading comments…
+                </div>
+            </div>
+
+        </aside>
+    </div>
+
+</div>
+
+{# ── Edit trip dialog ───────────────────────────────────────────────────── #}
+<dialog id="edit-trip-dialog" class="trip-create-dialog">
+    <div class="dialog-header">
+        <span>Edit Trip</span>
+        <button type="button" class="dialog-close"
+                onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <form hx-post="{% url 'trips.edit' trip.uuid %}"
+          hx-target="#trip-header"
+          hx-swap="innerHTML"
+          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}"
+          class="trip-create-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="edit-trip-name">Trip name <span class="required">*</span></label>
+            <input type="text" name="name" id="edit-trip-name" required
+                   value="{{ trip.name }}" maxlength="255">
+        </div>
+        <div class="form-row">
+            <label for="edit-trip-description">Description</label>
+            <textarea name="description" id="edit-trip-description" rows="3">{{ trip.description|default:"" }}</textarea>
+        </div>
+        <div class="form-row form-row--two-col">
+            <div>
+                <label for="edit-trip-start">Start date</label>
+                <input type="date" name="start_date" id="edit-trip-start"
+                       value="{{ trip.start_date|date:'Y-m-d'|default:'' }}">
+            </div>
+            <div>
+                <label for="edit-trip-end">End date</label>
+                <input type="date" name="end_date" id="edit-trip-end"
+                       value="{{ trip.end_date|date:'Y-m-d'|default:'' }}">
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="submit-button">Save Changes</button>
+            <button type="button" class="btn-ghost"
+                    onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+{# ── Add activity dialog ────────────────────────────────────────────────── #}
+<dialog id="add-activity-dialog" class="trip-create-dialog">
+    <div class="dialog-header">
+        <span>Add Activity</span>
+        <button type="button" class="dialog-close"
+                onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <form hx-post="{% url 'trips.activities' trip.uuid %}"
+          hx-target="#trip-activities-panel"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();document.getElementById('activity-location-display').textContent='';document.getElementById('activity-location-uuid').value=''}"
+          class="trip-create-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="activity-title">Title</label>
+            <input type="text" name="title" id="activity-title"
+                   placeholder="e.g. Rooftop access point" maxlength="255">
+        </div>
+
+        <div class="form-row">
+            <label for="activity-location-search">Location <small>(optional)</small></label>
+            <div class="activity-location-search-wrap">
+                <input type="text" id="activity-location-search"
+                       placeholder="Search by name…" autocomplete="off">
+                <input type="hidden" name="location_uuid" id="activity-location-uuid">
+                <div id="activity-location-suggestions" class="location-suggestions"></div>
+                <span id="activity-location-display" class="activity-location-display"></span>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label for="activity-datetime">Date &amp; time <small>(optional)</small></label>
+            <input type="datetime-local" name="scheduled_at" id="activity-datetime">
+        </div>
+        <div class="form-row">
+            <label for="activity-notes">Notes</label>
+            <textarea name="notes" id="activity-notes" rows="3"
+                      placeholder="Any notes about this stop…"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="submit-button">Add Activity</button>
+            <button type="button" class="btn-ghost"
+                    onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+{# ── Add member dialog ──────────────────────────────────────────────────── #}
+<dialog id="add-member-dialog" class="trip-create-dialog">
+    <div class="dialog-header">
+        <span>Add Member</span>
+        <button type="button" class="dialog-close"
+                onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <form hx-post="{% url 'trips.members' trip.uuid %}"
+          hx-target="#trip-members-panel"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset()}"
+          class="trip-create-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="member-username">Username <span class="required">*</span></label>
+            <input type="text" name="username" id="member-username" required
+                   placeholder="Enter exact username">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="submit-button">Add Member</button>
+            <button type="button" class="btn-ghost"
+                    onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+{% block scripts %}
+<script>
+(function () {
+    // Location autocomplete for add-activity dialog
+    var searchInput  = document.getElementById('activity-location-search');
+    var uuidInput    = document.getElementById('activity-location-uuid');
+    var suggestions  = document.getElementById('activity-location-suggestions');
+    var display      = document.getElementById('activity-location-display');
+
+    if (!searchInput) return;
+
+    var debounce;
+    searchInput.addEventListener('input', function () {
+        clearTimeout(debounce);
+        var q = this.value.trim();
+        if (q.length < 2) { suggestions.innerHTML = ''; suggestions.hidden = true; return; }
+        debounce = setTimeout(function () {
+            fetch('{% url "trips.location_search" %}?q=' + encodeURIComponent(q), {
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(function(r){ return r.json(); })
+            .then(function(data) {
+                suggestions.innerHTML = '';
+                if (!data.results || !data.results.length) {
+                    suggestions.hidden = true;
+                    return;
+                }
+                data.results.forEach(function(loc) {
+                    var li = document.createElement('li');
+                    li.className = 'location-suggestion-item';
+                    li.textContent = loc.name + (loc.city ? ', ' + loc.city : '') + (loc.state ? ', ' + loc.state : '');
+                    li.addEventListener('click', function() {
+                        uuidInput.value  = loc.uuid;
+                        display.textContent = loc.name;
+                        searchInput.value = '';
+                        suggestions.innerHTML = '';
+                        suggestions.hidden = true;
+                    });
+                    suggestions.appendChild(li);
+                });
+                suggestions.hidden = false;
+            });
+        }, 300);
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+            suggestions.innerHTML = '';
+            suggestions.hidden = true;
+        }
+    });
+}());
+</script>
+{% endblock %}
+{% endblock %}

@@ -30,12 +30,25 @@ class LocationWikiView(LoginRequiredMixin, View):
         location = get_object_or_404(Location, uuid=location_uuid)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        pins = location.pins.select_related("profile__user").order_by("created")
-        pin_count = pins.count()
-        first_pinned = pins.first()
+        # Only count root pins (not detail pins), and count distinct users.
+        root_pins = location.pins.filter(parent_pin__isnull=True, parent_location__isnull=True)
+        pin_count = root_pins.values("profile").distinct().count()
+        first_pinned = root_pins.select_related("profile__user").order_by("created").first()
 
         # The requesting user's own pin for this location (used for the back-link).
         user_pin = location.pins.filter(profile=profile).first()
+
+        from urbanlens.dashboard.models.pin.model import PinType
+        from urbanlens.dashboard.models.tags.model import COLOR_CHOICES
+
+        detail_pin_icon_choices = [
+            ("place", "Place"), ("business", "Building"), ("door_front", "Entrance"),
+            ("star", "Star"), ("warning", "Warning"), ("info", "Info"),
+            ("camera_alt", "Camera"), ("local_parking", "Parking"),
+            ("stairs", "Stairs"), ("elevator", "Elevator"),
+            ("exit_to_app", "Exit"), ("lock", "Lock"),
+            ("construction", "Construction"), ("emergency", "Emergency"),
+        ]
 
         return render(
             request,
@@ -46,6 +59,9 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "first_pinned": first_pinned,
                 "user_pin": user_pin,
                 "page_name": "location-wiki",
+                "pin_type_choices": PinType.choices,
+                "detail_pin_icon_choices": detail_pin_icon_choices,
+                "color_choices": COLOR_CHOICES,
             },
         )
 

@@ -1,25 +1,72 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Trip Details</title>
-</head>
-<body>
-    <h1>Trip Details</h1>
-    <p>Trip ID: {{ trip.id }}</p>
-    <p>Trip Name: {{ trip.name }}</p>
-    <p>Start Date: {{ trip.start_date }}</p>
-    <p>End Date: {{ trip.end_date }}</p>
-    <p>Locations: </p>
-    <ul>
-    {% for pin in trip.pins.all %}
-        <li>{{ pin.nickname }}</li>
-    {% endfor %}
-    </ul>
-    <p>Users: </p>
-    <ul>
-    {% for profile in trip.profiles.all %}
-        <li>{{ profile.user.username }}</li>
-    {% endfor %}
-    </ul>
-</body>
-</html>
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="trips-page">
+
+    <div class="trips-header">
+        <div class="trips-header-left">
+            <h1 class="trips-title">
+                <i class="material-icons">flight_takeoff</i>
+                Trips
+            </h1>
+            <p class="trips-subtitle">Plan and organise your urban exploration adventures.</p>
+        </div>
+        <div class="trips-header-right">
+            <button type="button" class="btn-primary"
+                    onclick="document.getElementById('create-trip-dialog').showModal()">
+                <i class="material-icons">add</i>
+                New Trip
+            </button>
+        </div>
+    </div>
+
+    {# ── Trip list ──────────────────────────────────────────────────────── #}
+    <div id="trip-list">
+        {% include "dashboard/partials/trip_list_partial.html" %}
+    </div>
+
+</div>
+
+{# ── Create trip dialog ─────────────────────────────────────────────────── #}
+<dialog id="create-trip-dialog" class="trip-create-dialog">
+    <div class="dialog-header">
+        <span>New Trip</span>
+        <button type="button" class="dialog-close"
+                onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <form hx-post="{% url 'trips.create' %}"
+          hx-target="#trip-list"
+          hx-swap="innerHTML"
+          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset()}"
+          class="trip-create-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="trip-name">Trip name <span class="required">*</span></label>
+            <input type="text" name="name" id="trip-name" required
+                   placeholder="e.g. Detroit Factory Run" maxlength="255">
+        </div>
+        <div class="form-row">
+            <label for="trip-description">Description</label>
+            <textarea name="description" id="trip-description" rows="3"
+                      placeholder="What's the plan?"></textarea>
+        </div>
+        <div class="form-row form-row--two-col">
+            <div>
+                <label for="trip-start">Start date</label>
+                <input type="date" name="start_date" id="trip-start">
+            </div>
+            <div>
+                <label for="trip-end">End date</label>
+                <input type="date" name="end_date" id="trip-end">
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="submit-button">Create Trip</button>
+            <button type="button" class="btn-ghost"
+                    onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+{% endblock %}
