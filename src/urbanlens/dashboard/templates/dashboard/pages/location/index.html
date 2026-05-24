@@ -522,8 +522,11 @@
         building: 'business', entrance: 'door_front', poi: 'star',
         danger: 'warning', other: 'info', location: 'place',
     };
-    const _detailPinLayer = L.layerGroup().addTo(map);
-    _overlays['Detail Pins'] = _detailPinLayer;
+    // Both sub-layers live inside _detailsLayer so one toggle shows/hides everything.
+    const _detailPinLayer = L.layerGroup();
+    const _markupLayer    = L.layerGroup();
+    const _detailsLayer   = L.layerGroup([_detailPinLayer, _markupLayer]).addTo(map);
+    _overlays['Details'] = _detailsLayer;
 
     L.control.layers(_baseLayers, _overlays, { position: 'topright', collapsed: true }).addTo(map);
 
@@ -703,20 +706,18 @@
     loadDetailPins();
 
     // ── Markup layer ──────────────────────────────────────────────────────────
-    const _markupLayer = L.layerGroup().addTo(map);
-    _overlays['Markup'] = _markupLayer;
-
     const _markupJsonUrl  = "{% url 'pin.markup.json' pin.uuid %}";
     const _markupPostUrl  = "{% url 'pin.markup' pin.uuid %}";
     const _markupEditBase = "{% url 'pin.markup.edit' pin.uuid '00000000-0000-0000-0000-000000000000' %}"
         .replace('00000000-0000-0000-0000-000000000000/', '');
 
     let _markupItems        = [];
-    let _markupDrawType     = null;
-    let _markupDrawHandler  = null;
-    let _markupPreviewLayer = null;
-    let _pendingLatlngs     = null;
-    let _textClickHandler   = null;
+    let _markupDrawType      = null;
+    let _markupDrawHandler   = null;
+    let _markupPreviewLayer  = null;
+    let _previewArrowhead    = null;
+    let _pendingLatlngs      = null;
+    let _textClickHandler    = null;
     let _textPlacementActive = false;
 
     const _markupPalette = ['#e53e3e', '#1d4ed8', '#16a34a', '#d97706', '#7c3aed', '#0f172a', '#f8fafc'];
@@ -735,12 +736,14 @@
                 container.querySelectorAll('.markup-color-swatch').forEach(b => b.classList.remove('markup-color-swatch--active'));
                 btn.classList.add('markup-color-swatch--active');
                 input.value = color;
+                if (typeof _updateMarkupPreview === 'function') _updateMarkupPreview();
             });
             container.appendChild(btn);
         });
     }
     _buildColorSwatches('markup-color-swatches', 'markup-form-color');
     _buildColorSwatches('text-color-swatches', 'text-form-color');
+    document.getElementById('markup-form-width').addEventListener('input', () => _updateMarkupPreview && _updateMarkupPreview());
 
     function _markupBearing(from, to) {
         return Math.atan2(to.lng - from.lng, to.lat - from.lat) * (180 / Math.PI);
@@ -765,8 +768,8 @@
                 layers.push(L.marker(latlngs[latlngs.length - 1], {
                     icon: L.divIcon({
                         className: '',
-                        html: `<span class="material-icons map-markup-arrowhead" style="color:${item.color};transform:rotate(${deg}deg)"">arrow_upward</span>`,
-                        iconSize: [20, 20], iconAnchor: [10, 10],
+                        html: _arrowheadSvg(item.color, deg),
+                        iconSize: [28, 28], iconAnchor: [14, 14],
                     }),
                 }));
             }
@@ -783,6 +786,29 @@
         }
         layers.forEach(l => l.addTo(_markupLayer));
         item._layers = layers;
+    }
+
+    function _arrowheadSvg(color, deg) {
+        return `<svg class="map-markup-arrowhead-svg" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="-14 -14 28 28" style="transform:rotate(${deg}deg)"><polygon points="0,-12 10,8 -10,8" fill="${color}" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+    }
+
+    function _updateMarkupPreview() {
+        if (!_markupPreviewLayer) return;
+        const color  = document.getElementById('markup-form-color').value;
+        const weight = parseInt(document.getElementById('markup-form-width').value, 10);
+        _markupPreviewLayer.setStyle({ color, weight });
+        if (_previewArrowhead) { map.removeLayer(_previewArrowhead); _previewArrowhead = null; }
+        if (_markupDrawType === 'arrow' && _pendingLatlngs && _pendingLatlngs.length >= 2) {
+            const ll  = _pendingLatlngs;
+            const deg = _markupBearing(ll[ll.length - 2], ll[ll.length - 1]);
+            _previewArrowhead = L.marker(ll[ll.length - 1], {
+                icon: L.divIcon({
+                    className: '',
+                    html: _arrowheadSvg(color, deg),
+                    iconSize: [28, 28], iconAnchor: [14, 14],
+                }),
+            }).addTo(map);
+        }
     }
 
     function _highlightMarkupItem(item) {
@@ -858,12 +884,14 @@
             _markupPreviewLayer = e.layer;
             map.addLayer(_markupPreviewLayer);
             document.getElementById('markup-form-panel').style.display = '';
+            _updateMarkupPreview();
         });
     }
 
     function cancelMarkupDraw() {
         if (_markupDrawHandler) { _markupDrawHandler.disable(); _markupDrawHandler = null; }
         if (_markupPreviewLayer) { map.removeLayer(_markupPreviewLayer); _markupPreviewLayer = null; }
+        if (_previewArrowhead) { map.removeLayer(_previewArrowhead); _previewArrowhead = null; }
         _pendingLatlngs = null;
         _markupDrawType = null;
         document.getElementById('markup-form-panel').style.display = 'none';
@@ -1053,9 +1081,8 @@
 
     function saveCampus() {
         const layers = campusItems.getLayers();
-        if (layers.length === 0) { toastr.warning('Draw at least one boundary polygon first.'); return; }
-        // Always save as MultiPolygon so the field type is always consistent.
-        const geometry = {
+        // null polygon = clear boundary and fall back to the default radius.
+        const geometry = layers.length === 0 ? null : {
             type: 'MultiPolygon',
             coordinates: layers.map(l => l.toGeoJSON().geometry.coordinates),
         };
@@ -1065,7 +1092,11 @@
             body: JSON.stringify({ polygon: geometry }),
         })
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(() => { _savedCampusGeoJSON = geometry; toastr.success('Campus boundary saved.'); _exitCampusEdit(); })
+        .then(() => {
+            _savedCampusGeoJSON = geometry;
+            toastr.success(geometry ? 'Campus boundary saved.' : 'Boundary cleared — default radius will be used.');
+            _exitCampusEdit();
+        })
         .catch(() => toastr.error('Failed to save campus boundary.'));
     }
 
@@ -1094,9 +1125,55 @@
         const form      = document.getElementById('detail-pin-add-form');
         const submitBtn = document.getElementById('detail-pin-submit-btn');
         const noLocMsg  = document.getElementById('detail-pin-no-location');
-        let _pickerMap    = null;
-        let _pickerMarker = null;
-        let _submitting   = false;
+        let _pickerMap          = null;
+        let _pickerMarker       = null;
+        let _pickerOverlayGroup = null;
+        let _submitting         = false;
+
+        function _refreshPickerOverlays() {
+            if (!_pickerMap) return;
+            if (_pickerOverlayGroup) { _pickerOverlayGroup.clearLayers(); } else {
+                _pickerOverlayGroup = L.layerGroup().addTo(_pickerMap);
+            }
+            // Campus boundary at low opacity
+            if (_savedCampusGeoJSON) {
+                L.geoJSON(_savedCampusGeoJSON, {
+                    style: { color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.08, weight: 1.5, opacity: 0.35 },
+                    interactive: false,
+                }).addTo(_pickerOverlayGroup);
+            }
+            // Existing detail pins
+            _detailPins.forEach(dp => {
+                if (!dp.latitude || !dp.longitude) return;
+                const color = dp.color || _detailPinColors[dp.pin_type] || '#2563eb';
+                const icon  = dp.icon  || _detailPinIcons[dp.pin_type]  || 'place';
+                L.marker([dp.latitude, dp.longitude], {
+                    icon: L.divIcon({
+                        className: '',
+                        html: `<span class="material-icons" style="color:${color};font-size:20px;opacity:.45;line-height:1;">${icon}</span>`,
+                        iconSize: [20, 20], iconAnchor: [10, 20],
+                    }),
+                    interactive: false,
+                }).addTo(_pickerOverlayGroup);
+            });
+            // Existing markup
+            _markupItems.forEach(item => {
+                if (item.markup_type === 'text') {
+                    const c = item.geometry.coordinates;
+                    L.marker([c[1], c[0]], {
+                        icon: L.divIcon({
+                            className: '',
+                            html: `<span class="map-text-label" style="color:${item.color};font-size:${item.stroke_width||16}px;opacity:.45;">${item.label}</span>`,
+                            iconAnchor: [0, 0],
+                        }),
+                        interactive: false,
+                    }).addTo(_pickerOverlayGroup);
+                } else {
+                    const latlngs = item.geometry.coordinates.map(c => L.latLng(c[1], c[0]));
+                    L.polyline(latlngs, { color: item.color, weight: item.stroke_width || 3, opacity: 0.4, interactive: false }).addTo(_pickerOverlayGroup);
+                }
+            });
+        }
 
         function _currentPickerIcon() {
             const pinType = document.getElementById('dp-type').value;
@@ -1144,7 +1221,11 @@
         document.getElementById('dp-type').addEventListener('change', _updatePickerMarker);
 
         function _initPickerMap() {
-            if (_pickerMap) { _pickerMap.setView([pinLat, pinLng], 17); setTimeout(() => _pickerMap.invalidateSize(), 150); return; }
+            if (_pickerMap) {
+                _pickerMap.setView([pinLat, pinLng], 17);
+                setTimeout(() => { _pickerMap.invalidateSize(); _refreshPickerOverlays(); }, 150);
+                return;
+            }
             _pickerMap = L.map('detail-pin-picker-map').setView([pinLat, pinLng], 17);
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri', maxZoom: 19,
@@ -1159,7 +1240,7 @@
                 submitBtn.disabled = false;
                 noLocMsg.style.display = 'none';
             });
-            setTimeout(() => _pickerMap.invalidateSize(), 200);
+            setTimeout(() => { _pickerMap.invalidateSize(); _refreshPickerOverlays(); }, 200);
         }
 
         dlg.addEventListener('toggle', (e) => {

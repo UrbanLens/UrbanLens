@@ -1,10 +1,11 @@
 {% load dashboard_tags %}
-{# Inline edit form for a single tag card (HTMX swap target) #}
+{# Edit form rendered inside #tag-edit-dialog-body (opened as a <dialog>) #}
 <form hx-post="{% url 'tag.edit' tag.id %}"
       hx-target="#tag-rows"
       hx-swap="innerHTML"
       enctype="multipart/form-data"
-      class="tag-inline-edit">
+      class="tag-inline-edit"
+      hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); toastr.success('Tag saved.'); }">
     {% csrf_token %}
 
     <div class="tag-form-grid">
@@ -32,7 +33,6 @@
                 {% endwith %}
             </div>
 
-            {# Custom icon upload (separate from the standard icon picker) #}
             <div class="icon-custom-upload-area" style="margin-top:8px;">
                 {% if tag.custom_icon %}
                 <img src="{{ tag.custom_icon.url }}" class="icon-custom-preview-thumb"
@@ -80,7 +80,11 @@
 
     <div class="form-field">
         <label class="form-label">Parent tags</label>
-        <div class="tag-parent-select">
+        <input type="text" class="form-input tag-parent-search"
+               placeholder="Search tags…"
+               oninput="filterParentOptions(this, 'parent-select-edit-{{ tag.id }}')"
+               autocomplete="off">
+        <div class="tag-parent-select" id="parent-select-edit-{{ tag.id }}">
             {% for t in available_parents %}
             <label class="tag-parent-option">
                 <input type="checkbox" name="parent_ids" value="{{ t.id }}"
@@ -102,9 +106,7 @@
     <div class="tag-form-actions">
         <button type="submit" class="btn-primary">Save</button>
         <button type="button" class="btn-ghost"
-                hx-get="{% url 'tag.index' %}"
-                hx-target="#tag-rows"
-                hx-swap="innerHTML">Cancel</button>
+                onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </form>
 
@@ -114,19 +116,8 @@ function showCustomPreview(tagId, input) {
     var preview = document.getElementById('edit-custom-preview-' + tagId);
     if (!preview) return;
     var reader = new FileReader();
-    reader.onload = function(e) {
-        preview.src = e.target.result;
-        preview.style.display = 'block';
-    };
+    reader.onload = function(e) { preview.src = e.target.result; preview.style.display = 'block'; };
     reader.readAsDataURL(input.files[0]);
 }
-
-function pickColor(pickerId, valueId, colorHex, btn) {
-    var picker = document.getElementById(pickerId);
-    picker.querySelectorAll('.color-swatch').forEach(function(b) { b.classList.remove('selected'); });
-    btn.classList.add('selected');
-    document.getElementById(valueId).value = colorHex;
-}
-
-// IconPicker is defined in tags/index.html; available globally after initial load.
+// pickColor and filterParentOptions are defined in tags/index.html and available globally.
 </script>

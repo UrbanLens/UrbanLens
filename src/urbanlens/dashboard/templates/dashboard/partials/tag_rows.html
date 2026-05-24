@@ -55,8 +55,9 @@
             <span class="tag-order-badge" title="Order">{{ forloop.counter }}</span>
             <button type="button" class="btn-icon" title="Edit"
                     hx-get="{% url 'tag.edit' tag.id %}"
-                    hx-target="#tag-card-{{ tag.id }}"
-                    hx-swap="innerHTML">
+                    hx-target="#tag-edit-dialog-body"
+                    hx-swap="innerHTML"
+                    hx-on::after-request="document.getElementById('tag-edit-dialog').showModal()">
                 <i class="material-icons">edit</i>
             </button>
             <button type="button" class="btn-icon" title="Merge into another tag"

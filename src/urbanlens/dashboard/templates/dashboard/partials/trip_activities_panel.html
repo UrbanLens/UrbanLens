@@ -20,7 +20,7 @@
             </div>
             <div class="trip-activity-body">
                 <span class="trip-activity-name">
-                    {{ act.title|default:act.location.name|default:"Unnamed activity" }}
+                    {% firstof act.title act.location.name "Unnamed activity" %}
                 </span>
                 {% if act.scheduled_at %}
                 <span class="trip-activity-time">

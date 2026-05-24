@@ -363,7 +363,7 @@
     let   pinsVisible   = true;
 
     // ── Map ───────────────────────────────────────────────────────────────────
-    const map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
+    const map = L.map('map', { maxZoom: 19 }).setView([42.65250213448323, -73.75791867436858], 13);
     window.map = map;
     window.pin = null;
 

@@ -8,11 +8,6 @@
         <div class="card-header">
             <i class="material-icons">info_outline</i>
             <span>Details</span>
-            {% if pin.location %}
-            <a href="{% url 'location.wiki' pin.location.uuid %}" class="btn-icon-sm" title="View community wiki">
-                <i class="material-icons">open_in_new</i>
-            </a>
-            {% endif %}
             <button type="button" class="btn-icon-sm" style="margin-left:auto" title="Edit details"
                     onclick="document.getElementById('pin-edit-dialog').showModal()">
                 <i class="material-icons">edit</i>
@@ -93,5 +88,13 @@
         </div>
         {% endif %}
     </div>
+
+    {% if pin.location %}
+    <a href="{% url 'location.wiki' pin.location.uuid %}" class="wiki-cta-link">
+        <i class="material-icons">public</i>
+        <span>Community Wiki</span>
+        <i class="material-icons wiki-cta-arrow">chevron_right</i>
+    </a>
+    {% endif %}
 
 </div>

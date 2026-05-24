@@ -1144,9 +1144,17 @@ body.page-location-details div.section {
     justify-items: stretch;
     align-items: start;
 
-    #pin-overview { grid-area: overview; }
-    .pin-notes-panel { grid-area: notes; }
-    .aliases-panel { grid-area: aliases; }
+    #pin-overview {
+        grid-area: overview;
+    }
+
+    .pin-notes-panel {
+        grid-area: notes;
+    }
+
+    .aliases-panel {
+        grid-area: aliases;
+    }
 
     .location-title {
         text-align: center;
@@ -1417,7 +1425,8 @@ body.page-location-details div.section {
         font-size: 1.1rem;
     }
 
-    &:hover, &:focus {
+    &:hover,
+    &:focus {
         background: rgba(0, 0, 0, .07);
         color: #222;
         outline: none;
@@ -1694,7 +1703,8 @@ body.page-location-details div.section {
         border-radius: 4px;
         outline: none;
 
-        &:hover, &:focus {
+        &:hover,
+        &:focus {
             color: #dc2626;
             background: #fee2e2;
             outline: none;
@@ -3185,14 +3195,17 @@ textarea.edit-textarea {
     outline: none;
     transition: background 0.12s, color 0.12s;
 
-    &:hover, &:focus {
+    &:hover,
+    &:focus {
         background: #f0f0f0;
         color: $text-primary;
         outline: none;
     }
 
     &.btn-icon--danger {
-        &:hover, &:focus {
+
+        &:hover,
+        &:focus {
             background: #fee2e2;
             color: #dc2626;
             outline: none;
@@ -3217,9 +3230,12 @@ textarea.edit-textarea {
     outline: none;
     transition: background .12s, color .12s;
 
-    .material-icons { font-size: 1rem; }
+    .material-icons {
+        font-size: 1rem;
+    }
 
-    &:hover, &:focus {
+    &:hover,
+    &:focus {
         background: #fee2e2;
         color: #dc2626;
         outline: none;
@@ -4155,6 +4171,13 @@ textarea.form-input {
     padding: 0.5rem;
 }
 
+.tag-parent-search {
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: .4rem;
+    font-size: .83rem;
+}
+
 .tag-parent-option {
     display: flex;
     align-items: center;
@@ -4165,16 +4188,42 @@ textarea.form-input {
     border-radius: 20px;
     border: 1px solid $border-color;
     background: #fafafa;
-    transition: background 0.1s;
+    transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
 
     &:hover {
         background: #f0f0f0;
     }
 
+    &:has(input:checked) {
+        background: #dbeafe;
+        border-color: #93c5fd;
+        color: #1d4ed8;
+        font-weight: 600;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, .15);
+    }
+
     input {
         margin: 0;
         cursor: pointer;
+        accent-color: #1d4ed8;
     }
+}
+
+// ── Tag edit dialog ────────────────────────────────────────────────────────────
+.tag-edit-dialog {
+    width: min(620px, calc(100vw - 2rem));
+    border-radius: $radius-md;
+    border: 1px solid $border-color;
+    padding: 0;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, .18);
+
+    &::backdrop { background: rgba(0, 0, 0, .4); }
+}
+
+.tag-edit-dialog-body {
+    padding: 1rem 1.25rem 1.25rem;
+    overflow-y: auto;
+    max-height: calc(90vh - 56px);
 }
 
 .tag-parent-icon-img {
@@ -5089,7 +5138,8 @@ textarea.form-input {
     cursor: pointer;
     outline: none;
 
-    &:hover, &:focus {
+    &:hover,
+    &:focus {
         background: #1d4ed8;
         outline: none;
     }
@@ -5109,9 +5159,12 @@ textarea.form-input {
     outline: none;
     transition: background .12s, color .12s;
 
-    .material-icons { font-size: 1.1rem; }
+    .material-icons {
+        font-size: 1.1rem;
+    }
 
-    &:hover, &:focus {
+    &:hover,
+    &:focus {
         background: #fee2e2;
         color: #dc2626;
         outline: none;
@@ -5474,7 +5527,8 @@ textarea.form-input {
             line-height: 1;
         }
 
-        &:hover, &:focus {
+        &:hover,
+        &:focus {
             background: rgba(200, 0, 0, .18);
             color: #c00;
             outline: none;
@@ -5788,14 +5842,17 @@ textarea.form-input {
     transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
     letter-spacing: .01em;
 
-    .material-icons { font-size: 1rem; }
+    .material-icons {
+        font-size: 1rem;
+    }
 
     &--edit {
         border: 1px solid #0891b2;
         background: transparent;
         color: #0891b2;
 
-        &:hover, &:focus {
+        &:hover,
+        &:focus {
             background: #0891b2;
             color: #fff;
             outline: none;
@@ -5808,7 +5865,8 @@ textarea.form-input {
         background: transparent;
         color: #dc2626;
 
-        &:hover, &:focus {
+        &:hover,
+        &:focus {
             background: #dc2626;
             border-color: #dc2626;
             color: #fff;
@@ -6225,7 +6283,9 @@ textarea.form-input {
     margin-bottom: .5rem;
     flex-wrap: wrap;
 
-    .pin-title { margin: 0; }
+    .pin-title {
+        margin: 0;
+    }
 }
 
 // ── Pin edit dialog ───────────────────────────────────────────────────────
@@ -6319,11 +6379,22 @@ textarea.form-input {
         list-style: none;
         user-select: none;
 
-        &::-webkit-details-marker { display: none; }
-        &::before { content: "▶"; margin-right: .4rem; font-size: .65rem; vertical-align: middle; transition: transform .15s; }
+        &::-webkit-details-marker {
+            display: none;
+        }
+
+        &::before {
+            content: "▶";
+            margin-right: .4rem;
+            font-size: .65rem;
+            vertical-align: middle;
+            transition: transform .15s;
+        }
     }
 
-    &[open] .form-section-summary::before { transform: rotate(90deg); }
+    &[open] .form-section-summary::before {
+        transform: rotate(90deg);
+    }
 }
 
 .security-edit-grid {
@@ -6351,14 +6422,53 @@ textarea.form-input {
         border-radius: 6px;
         background: #fff;
 
-        &:focus { outline: none; border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+        &:focus {
+            outline: none;
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
+        }
+    }
+}
+
+// ── Community wiki CTA link (pin overview) ────────────────────────────────
+.wiki-cta-link {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    margin-top: .6rem;
+    padding: .55rem .9rem;
+    border-radius: 8px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    text-decoration: none;
+    font-size: .83rem;
+    font-weight: 600;
+    transition: background .15s, border-color .15s, color .15s;
+
+    .material-icons {
+        font-size: 1.05rem;
+    }
+
+    .wiki-cta-arrow {
+        margin-left: auto;
+        opacity: .5;
+        font-size: .95rem;
+    }
+
+    &:hover {
+        background: #dbeafe;
+        border-color: #93c5fd;
+        color: #1e40af;
     }
 }
 
 // ── Personal pin notes ────────────────────────────────────────────────────
 
 .pin-notes-panel {
-    &.card { padding: 0; }
+    &.card {
+        padding: 0;
+    }
 
     .card-header {
         .badge {
@@ -6386,8 +6496,14 @@ textarea.form-input {
     border-bottom: 1px solid #f1f5f9;
     transition: opacity .2s;
 
-    &:last-child { border-bottom: none; }
-    &.is-deleting { opacity: .25; pointer-events: none; }
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &.is-deleting {
+        opacity: .25;
+        pointer-events: none;
+    }
 }
 
 .pin-note-body {
@@ -6430,10 +6546,16 @@ textarea.form-input {
         font-family: inherit;
         box-sizing: border-box;
 
-        &:focus { outline: none; border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+        &:focus {
+            outline: none;
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
+        }
     }
 
-    .form-actions { margin-top: .5rem; }
+    .form-actions {
+        margin-top: .5rem;
+    }
 }
 
 // ── Pin note delete button ────────────────────────────────────────────────
@@ -6453,9 +6575,12 @@ textarea.form-input {
     outline: none;
     transition: color .15s, background .15s;
 
-    .material-icons { font-size: 1.1rem; }
+    .material-icons {
+        font-size: 1.1rem;
+    }
 
-    &:hover, &:focus {
+    &:hover,
+    &:focus {
         color: #dc2626;
         background: #fee2e2;
         outline: none;
@@ -6491,18 +6616,34 @@ textarea.form-input {
     backdrop-filter: blur(4px);
     transition: background .12s, box-shadow .12s;
 
-    .material-icons { font-size: .9rem; }
+    .material-icons {
+        font-size: .9rem;
+    }
 
     &:hover {
         background: #fff;
         box-shadow: 0 2px 8px rgba(0, 0, 0, .32);
     }
 
-    &--boundary { color: #475569; }
-    &--save { color: #16a34a; }
-    &--clear { color: #dc2626; }
-    &--cancel { color: #64748b; }
-    &--add-pin { color: #2563eb; }
+    &--boundary {
+        color: #475569;
+    }
+
+    &--save {
+        color: #16a34a;
+    }
+
+    &--clear {
+        color: #dc2626;
+    }
+
+    &--cancel {
+        color: #64748b;
+    }
+
+    &--add-pin {
+        color: #2563eb;
+    }
 
     &-group {
         display: flex;
@@ -6515,7 +6656,7 @@ textarea.form-input {
 
 .detail-pin-list-panel {
     position: absolute;
-    top: 10px;
+    top: 6em;
     left: 10px;
     z-index: 1000;
     background: rgba(255, 255, 255, 0.95);
@@ -6540,16 +6681,24 @@ textarea.form-input {
     color: #374151;
     border-radius: 8px;
 
-    .material-icons { font-size: 1rem; color: #6b7280; }
+    .material-icons {
+        font-size: 1rem;
+        color: #6b7280;
+    }
 
     .detail-pin-list-chevron {
         margin-left: auto;
         transition: transform .2s;
         font-size: .85rem;
-        &.open { transform: rotate(180deg); }
+
+        &.open {
+            transform: rotate(180deg);
+        }
     }
 
-    &:hover { background: rgba(0, 0, 0, .04); }
+    &:hover {
+        background: rgba(0, 0, 0, .04);
+    }
 }
 
 .detail-pin-list-drawer {
@@ -6574,12 +6723,17 @@ textarea.form-input {
     color: #374151;
     transition: background .1s;
 
-    &:hover { background: #f3f4f6; }
+    &:hover {
+        background: #f3f4f6;
+    }
 
     &.is-highlighted {
         background: #eff6ff;
 
-        .detail-pin-list-item-name { color: #1d4ed8; font-weight: 600; }
+        .detail-pin-list-item-name {
+            color: #1d4ed8;
+            font-weight: 600;
+        }
     }
 
     .detail-pin-list-item-icon {
@@ -6606,9 +6760,12 @@ textarea.form-input {
         outline: none;
         flex-shrink: 0;
 
-        .material-icons { font-size: .85rem; }
+        .material-icons {
+            font-size: .85rem;
+        }
 
-        &:hover, &:focus {
+        &:hover,
+        &:focus {
             color: #dc2626;
             background: #fee2e2;
             outline: none;
@@ -6648,17 +6805,27 @@ textarea.form-input {
     color: #374151;
     text-align: left;
 
-    .material-icons { font-size: .95rem; color: #6b7280; }
+    .material-icons {
+        font-size: .95rem;
+        color: #6b7280;
+    }
 
-    &:hover { background: #f3f4f6; }
+    &:hover {
+        background: #f3f4f6;
+    }
 
-    & + & { border-top: 1px solid #f1f5f9; }
+    &+& {
+        border-top: 1px solid #f1f5f9;
+    }
 }
 
 .add-detail-chevron {
     font-size: .75rem !important;
     transition: transform .2s;
-    &.open { transform: rotate(180deg); }
+
+    &.open {
+        transform: rotate(180deg);
+    }
 }
 
 // ── Markup mini-form panel (line/arrow/text placement) ─────────────────────
@@ -6717,7 +6884,10 @@ textarea.form-input {
     color: #374151;
     width: 100%;
 
-    &:focus { border-color: #93c5fd; outline: none; }
+    &:focus {
+        border-color: #93c5fd;
+        outline: none;
+    }
 }
 
 .markup-color-swatches {
@@ -6735,7 +6905,8 @@ textarea.form-input {
     cursor: pointer;
     transition: transform .1s, border-color .1s;
 
-    &--active, &:hover {
+    &--active,
+    &:hover {
         transform: scale(1.2);
         border-color: #374151;
     }
@@ -6749,7 +6920,9 @@ textarea.form-input {
     color: #2563eb;
     margin: 0;
 
-    .material-icons { font-size: .95rem; }
+    .material-icons {
+        font-size: .95rem;
+    }
 }
 
 // ── Map text labels and arrow decorations ──────────────────────────────────
@@ -6758,22 +6931,21 @@ textarea.form-input {
     display: inline-block;
     font-weight: 600;
     white-space: nowrap;
-    text-shadow: 0 0 3px rgba(255, 255, 255, .9), 0 0 6px rgba(255, 255, 255, .7);
+    background: rgba(255, 255, 255, .94);
+    padding: 2px 5px;
+    border-radius: 3px;
     pointer-events: none;
 
     &--line {
         font-size: .75rem;
-        background: rgba(255, 255, 255, .75);
-        padding: 1px 4px;
-        border-radius: 3px;
     }
 }
 
-.map-markup-arrowhead {
+.map-markup-arrowhead-svg {
     display: block;
-    font-size: 20px !important;
-    filter: drop-shadow(0 0 2px rgba(255, 255, 255, .8));
     pointer-events: none;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .35));
+    overflow: visible;
 }
 
 // ── Settings map view chooser ─────────────────────────────────────────────
@@ -6799,16 +6971,25 @@ textarea.form-input {
     transition: border-color .15s, background .15s;
     min-width: 80px;
 
-    input[type="radio"] { display: none; }
+    input[type="radio"] {
+        display: none;
+    }
 
-    .material-icons { font-size: 1.6rem; color: #94a3b8; transition: color .15s; }
+    .material-icons {
+        font-size: 1.6rem;
+        color: #94a3b8;
+        transition: color .15s;
+    }
 
-    &.active, &:has(input:checked) {
+    &.active,
+    &:has(input:checked) {
         border-color: #3b82f6;
         background: #eff6ff;
         color: #1e40af;
 
-        .material-icons { color: #3b82f6; }
+        .material-icons {
+            color: #3b82f6;
+        }
     }
 
     &:hover:not(.active) {

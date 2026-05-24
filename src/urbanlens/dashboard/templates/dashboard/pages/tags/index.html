@@ -79,7 +79,11 @@
 
             <div class="form-field">
                 <label class="form-label">Parent tags (optional)</label>
-                <div class="tag-parent-select">
+                <input type="text" class="form-input tag-parent-search"
+                       placeholder="Search tags…"
+                       oninput="filterParentOptions(this, 'parent-select-new')"
+                       autocomplete="off">
+                <div class="tag-parent-select" id="parent-select-new">
                     {% for t in tags %}
                     <label class="tag-parent-option">
                         <input type="checkbox" name="parent_ids" value="{{ t.id }}">
@@ -110,11 +114,33 @@
     </div>
 
 </div>
+
+{# ── Tag edit dialog ──────────────────────────────────────────────────────── #}
+<dialog id="tag-edit-dialog" class="tag-edit-dialog">
+    <div class="dialog-header">
+        <span>Edit Tag</span>
+        <button type="button" class="dialog-close"
+                onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div id="tag-edit-dialog-body" class="tag-edit-dialog-body"></div>
+</dialog>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
 <script>
+// ── Parent tag search ──────────────────────────────────────────────────────────
+function filterParentOptions(input, containerId) {
+    const q = input.value.toLowerCase().trim();
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.querySelectorAll('.tag-parent-option').forEach(function(opt) {
+        opt.style.display = (!q || opt.textContent.toLowerCase().includes(q)) ? '' : 'none';
+    });
+}
+
 // ── Icon picker ────────────────────────────────────────────────────────────────
 const IconPicker = {
     toggle(id) {
