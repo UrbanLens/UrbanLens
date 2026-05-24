@@ -12,6 +12,7 @@ class SearchForm(forms.Form):
 
     name = forms.CharField(required=False)
     min_rating = forms.IntegerField(required=False, min_value=0, max_value=5)
+    max_rating = forms.IntegerField(required=False, min_value=0, max_value=5)
     tags: forms.ModelMultipleChoiceField = forms.ModelMultipleChoiceField(
         queryset=Tag.objects.all(),
         widget=forms.CheckboxSelectMultiple,
@@ -22,3 +23,10 @@ class SearchForm(forms.Form):
         widget=forms.CheckboxSelectMultiple,
         required=False,
     )
+    has_visits = forms.ChoiceField(
+        choices=[("", ""), ("yes", "yes"), ("no", "no")],
+        required=False,
+    )
+    min_priority = forms.IntegerField(required=False, min_value=0)
+    created_after = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+    created_before = forms.DateField(required=False, input_formats=["%Y-%m-%d"])

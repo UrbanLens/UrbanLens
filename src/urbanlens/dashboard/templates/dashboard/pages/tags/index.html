@@ -131,7 +131,7 @@
 {# ── Tag edit dialog ──────────────────────────────────────────────────────── #}
 <dialog id="tag-edit-dialog" class="tag-edit-dialog">
     <div class="dialog-header">
-        <span>Edit Tag</span>
+        <span id="tag-edit-dialog-title">Edit Tag</span>
         <button type="button" class="dialog-close"
                 onclick="this.closest('dialog').close()">
             <i class="material-icons">close</i>
@@ -368,6 +368,20 @@ document.getElementById('tag-rows').addEventListener('htmx:afterSwap', function(
     applyCurrentView();
 });
 
+// Open edit/merge dialog after its body is populated.
+// Global listener works for all views including tree-view clones.
+document.body.addEventListener('htmx:afterSwap', function(e) {
+    if (e.detail.target && e.detail.target.id === 'tag-edit-dialog-body') {
+        var body = e.detail.target;
+        var titleEl = document.getElementById('tag-edit-dialog-title');
+        if (titleEl) {
+            titleEl.textContent = body.querySelector('.tag-merge-form') ? 'Merge Tag' : 'Edit Tag';
+        }
+        var dialog = document.getElementById('tag-edit-dialog');
+        if (!dialog.open) dialog.showModal();
+    }
+});
+
 // ── View toggle ────────────────────────────────────────────────────────────────
 var _currentView = localStorage.getItem('tag_view') || 'list';
 
@@ -446,14 +460,17 @@ function renderTreeView(rows) {
     var treeRoot = document.createElement('div');
     treeRoot.className = 'tag-tree-root';
 
-    var visited = new Set();
+    // Track which IDs appear anywhere in tree (for orphan detection)
+    var appearedInTree = new Set();
 
-    function buildNode(id, depth) {
-        if (visited.has(id)) return null; // prevent cycles
-        visited.add(id);
+    // ancestorPath prevents cycles: only blocks if id is already in path from root
+    function buildNode(id, depth, ancestorPath) {
+        if (ancestorPath.has(id)) return null; // cycle in this path
 
         var card = cardMap[id];
         if (!card) return null;
+
+        appearedInTree.add(id);
 
         var item = document.createElement('div');
         item.className = 'tag-tree-item';
@@ -463,15 +480,18 @@ function renderTreeView(rows) {
         var clone = card.cloneNode(true);
         clone.style.display = '';
         // Give the clone a unique id to avoid DOM id collisions
-        clone.id = 'tree-' + clone.id;
+        clone.id = 'tree-node-' + id + '-d' + depth + '-' + Math.random().toString(36).slice(2, 6);
         item.appendChild(clone);
+
+        var newPath = new Set(ancestorPath);
+        newPath.add(id);
 
         var children = childrenMap[id] || [];
         if (children.length > 0) {
             var childrenContainer = document.createElement('div');
             childrenContainer.className = 'tag-tree-children';
             children.forEach(function(cid) {
-                var childNode = buildNode(cid, depth + 1);
+                var childNode = buildNode(cid, depth + 1, newPath);
                 if (childNode) childrenContainer.appendChild(childNode);
             });
             item.appendChild(childrenContainer);
@@ -481,19 +501,20 @@ function renderTreeView(rows) {
     }
 
     rootIds.forEach(function(id) {
-        var node = buildNode(id, 0);
+        var node = buildNode(id, 0, new Set());
         if (node) treeRoot.appendChild(node);
     });
 
-    // Tags with no card parent representation (orphaned by cycle guard) shown at end
+    // Tags with no parent in the visible set shown at end (true orphans)
     Object.keys(cardMap).forEach(function(id) {
-        if (!visited.has(id)) {
-            var node = buildNode(id, 0);
+        if (!appearedInTree.has(id)) {
+            var node = buildNode(id, 0, new Set());
             if (node) treeRoot.appendChild(node);
         }
     });
 
     rows.appendChild(treeRoot);
+    if (window.htmx) htmx.process(treeRoot);
 }
 
 document.querySelectorAll('.tag-view-btn').forEach(function(btn) {

@@ -22,6 +22,7 @@
             categories: "{{ pin.categories|default_if_none:''|escapejs }}",
             last_visited: "{{ pin.last_visited|default_if_none:'Never'|escapejs }}",
             tags: "{{ pin.tags|default_if_none:''|escapejs }}",
+            tags_data: {{ pin.tags_data_json|default:'[]'|safe }},
             viewLocationUrl: "{% url 'pin.details' pin.uuid %}"
         };
         if (p.latitude && p.longitude) {

@@ -163,6 +163,168 @@
     pointer-events: none;
 }
 
+/* ── Address jump section ─────────────────────────────────────────── */
+.fp-address-jump {
+    padding: 10px 14px 0;
+}
+.fp-address-row {
+    display: flex;
+    gap: 5px;
+    margin-top: 6px;
+}
+.fp-address-row .fp-search { flex: 1; }
+.fp-address-btn {
+    flex-shrink: 0;
+    background: rgba(70,120,255,0.2);
+    border: 1px solid rgba(70,120,255,0.4);
+    border-radius: 7px;
+    color: #9ab8ff;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.fp-address-btn:hover { background: rgba(70,120,255,0.35); border-color: rgba(70,120,255,0.6); }
+.fp-address-btn:disabled { opacity: .45; cursor: not-allowed; }
+.fp-address-btn .material-icons { font-size: .95rem; }
+
+/* ── Date filter row ──────────────────────────────────────────────── */
+.fp-date-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+.fp-date-label {
+    font-size: 0.68rem;
+    color: rgba(255,255,255,0.35);
+    width: 34px;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+.fp-date-input {
+    flex: 1;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.11);
+    border-radius: 7px;
+    color: #fff;
+    padding: 5px 8px;
+    font-size: 0.78rem;
+    outline: none;
+    color-scheme: dark;
+}
+.fp-date-input:focus { border-color: rgba(90,150,255,0.5); background: rgba(255,255,255,0.09); }
+.fp-tag-search { margin-bottom: 6px; }
+
+/* ── Pin popup ────────────────────────────────────────────────────── */
+.leaflet-popup-content-wrapper {
+    background: rgba(18,22,34,0.97);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.5);
+    color: #d8d8e0;
+    padding: 0;
+    min-width: 200px;
+}
+.leaflet-popup-content { margin: 0; }
+.leaflet-popup-tip { background: rgba(18,22,34,0.97); }
+.pin-popup {
+    padding: 12px 14px 10px;
+    font-size: .82rem;
+}
+.popup-title {
+    font-weight: 700;
+    font-size: .95rem;
+    color: #fff;
+    margin-bottom: 4px;
+    line-height: 1.2;
+}
+.popup-desc {
+    font-size: .78rem;
+    color: rgba(255,255,255,.5);
+    margin-bottom: 7px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.popup-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 7px;
+    flex-wrap: wrap;
+}
+.popup-status {
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.1);
+    color: rgba(255,255,255,.6);
+}
+.popup-status--visited { background: rgba(34,197,94,.15); color: #86efac; }
+.popup-status--not-visited { background: rgba(148,163,184,.1); color: #94a3b8; }
+.popup-status--wish-to-visit { background: rgba(99,102,241,.2); color: #a5b4fc; }
+.popup-status--demolished { background: rgba(239,68,68,.15); color: #fca5a5; }
+.popup-visited {
+    font-size: .72rem;
+    color: rgba(255,255,255,.35);
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+.popup-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+.popup-tag-chip {
+    font-size: .7rem;
+    padding: 2px 7px;
+    border-radius: 10px;
+    border: 1px solid;
+    color: rgba(255,255,255,.75);
+    white-space: nowrap;
+}
+.popup-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 6px;
+    padding-top: 7px;
+    border-top: 1px solid rgba(255,255,255,.08);
+}
+.view-full-pin {
+    font-size: .75rem;
+    color: #7eb0ff;
+    text-decoration: none;
+    font-weight: 500;
+}
+.view-full-pin:hover { text-decoration: underline; color: #a8c8ff; }
+.delete-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: rgba(255,100,100,.5);
+    padding: 2px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s, background 0.15s;
+}
+.delete-button:hover { color: #ff7070; background: rgba(255,70,70,.12); }
+.delete-button .material-icons { font-size: 1rem; }
+
 /* ── Marker clusters ──────────────────────────────────────────────── */
 .pin-cluster {
     display: flex; align-items: center; justify-content: center;
@@ -227,41 +389,58 @@
 {% block content %}
 <div id="map" hx-boost="true">
     <div class="map-buttons" id="map-buttons">
-        <button id="toggle-map-buttons" title="Collapse map controls">&#9776;</button>
+        <button id="toggle-map-buttons" class="map-btn-icon" title="Toggle controls">
+            <i class="material-icons">menu</i>
+        </button>
         <div class="map-buttons-content">
-            <div hx-get="{% url 'pin.add' %}" hx-trigger="click" hx-target="#addPinModal" hx-swap="innerHTML">
-                <button id="add-pin-button" class="map-button">Add Pin</button>
-            </div>
-            <div>
-                <button id="search-pins-button" title="Filter Pins" class="map-button" onclick="toggleFilterPanel()"></button>
-            </div>
-            <div>
-                <button id="topography-button" title="Topography View" onclick="toggleTopographyView()"></button>
-            </div>
-            <div>
-                <button id="satellite-button" title="Satellite view" onclick="toggleSatelliteView()"></button>
-            </div>
-            <div>
-                <button id="toggle-pins-button" title="Hide Pins" onclick="togglePins()"></button>
-            </div>
-            <div>
-                <button id="weather-button" title="Weather View" onclick="toggleWeatherView()"></button>
-            </div>
-            <div>
-                <button id="campus-button" title="Campus Boundaries" onclick="toggleCampusBoundaries()"></button>
-            </div>
-            <div hx-get="{% url 'pin.import.form' %}" hx-trigger="click" hx-target="#importPinsModal" hx-swap="innerHTML">
-                <button id="import-pins-button" title="Import Pins" class="map-button"></button>
-            </div>
+            <button id="add-pin-button" class="map-btn-icon" title="Add Pin"
+                    hx-get="{% url 'pin.add' %}" hx-target="#addPinModal" hx-swap="innerHTML">
+                <i class="material-icons">add_location</i>
+            </button>
+            <button id="search-pins-button" class="map-btn-icon" title="Filter / Search Pins" onclick="toggleFilterPanel()">
+                <i class="material-icons">tune</i>
+            </button>
+            <button id="topography-button" class="map-btn-icon" title="Topography View" onclick="toggleTopographyView()">
+                <i class="material-icons">terrain</i>
+            </button>
+            <button id="satellite-button" class="map-btn-icon" title="Satellite View" onclick="toggleSatelliteView()">
+                <i class="material-icons">satellite</i>
+            </button>
+            <button id="toggle-pins-button" class="map-btn-icon" title="Toggle Pins" onclick="togglePins()">
+                <i class="material-icons">push_pin</i>
+            </button>
+            <button id="weather-button" class="map-btn-icon" title="Weather View" onclick="toggleWeatherView()">
+                <i class="material-icons">cloud</i>
+            </button>
+            <button id="campus-button" class="map-btn-icon" title="Campus Boundaries" onclick="toggleCampusBoundaries()">
+                <i class="material-icons">hexagon</i>
+            </button>
+            <button id="import-pins-button" class="map-btn-icon" title="Import Pins"
+                    hx-get="{% url 'pin.import.form' %}" hx-target="#importPinsModal" hx-swap="innerHTML">
+                <i class="material-icons">upload</i>
+            </button>
         </div>
     </div>
 
     {# ── Filter panel ──────────────────────────────────────────────────── #}
     <div id="filter-panel">
         <div class="fp-header">
-            <span class="fp-title">Filter Pins</span>
+            <span class="fp-title">Search &amp; Filter</span>
             <button class="fp-close" onclick="toggleFilterPanel()" title="Close">✕</button>
         </div>
+
+        {# Address jump — geocodes and pans the map, not a pin filter #}
+        <div class="fp-address-jump">
+            <div class="fp-label">Jump to Address</div>
+            <div class="fp-address-row">
+                <input type="text" id="address-search-input" class="fp-search" placeholder="Enter address…"
+                       autocomplete="off" onkeydown="if(event.key==='Enter'){geocodeAddress();event.preventDefault();}">
+                <button type="button" class="fp-address-btn" onclick="geocodeAddress()" title="Go to address">
+                    <i class="material-icons">near_me</i>
+                </button>
+            </div>
+        </div>
+
         <form id="filter-form"
               hx-post="{% url 'map.search' %}"
               hx-trigger="change, input delay:600ms from:[name=name]"
@@ -270,8 +449,8 @@
             {% csrf_token %}
 
             <div class="fp-section">
-                <div class="fp-label">Search</div>
-                <input type="text" name="name" class="fp-search" placeholder="Search pins…" autocomplete="off">
+                <div class="fp-label">Search Pins</div>
+                <input type="text" name="name" class="fp-search" placeholder="Name or alias…" autocomplete="off">
             </div>
 
             <div class="fp-section">
@@ -302,12 +481,86 @@
                 </div>
             </div>
 
+            <div class="fp-section">
+                <div class="fp-label">Max Rating</div>
+                <div class="fp-chips">
+                    <label class="fp-chip">
+                        <input type="radio" name="max_rating" value="" checked>
+                        <span>Any</span>
+                    </label>
+                    {% for star in "12345"|make_list %}
+                    <label class="fp-chip">
+                        <input type="radio" name="max_rating" value="{{ star }}">
+                        <span>≤{{ star }}★</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="fp-section">
+                <div class="fp-label">Visit History</div>
+                <div class="fp-chips">
+                    <label class="fp-chip">
+                        <input type="radio" name="has_visits" value="" checked>
+                        <span>Any</span>
+                    </label>
+                    <label class="fp-chip">
+                        <input type="radio" name="has_visits" value="yes">
+                        <span>Has visits</span>
+                    </label>
+                    <label class="fp-chip">
+                        <input type="radio" name="has_visits" value="no">
+                        <span>Never visited</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="fp-section">
+                <div class="fp-label">Min Priority</div>
+                <div class="fp-chips">
+                    <label class="fp-chip">
+                        <input type="radio" name="min_priority" value="" checked>
+                        <span>Any</span>
+                    </label>
+                    <label class="fp-chip">
+                        <input type="radio" name="min_priority" value="1">
+                        <span>1+</span>
+                    </label>
+                    <label class="fp-chip">
+                        <input type="radio" name="min_priority" value="25">
+                        <span>25+</span>
+                    </label>
+                    <label class="fp-chip">
+                        <input type="radio" name="min_priority" value="50">
+                        <span>50+</span>
+                    </label>
+                    <label class="fp-chip">
+                        <input type="radio" name="min_priority" value="75">
+                        <span>75+</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="fp-section">
+                <div class="fp-label">Created Date</div>
+                <div class="fp-date-row">
+                    <span class="fp-date-label">After</span>
+                    <input type="date" name="created_after" class="fp-date-input">
+                </div>
+                <div class="fp-date-row">
+                    <span class="fp-date-label">Before</span>
+                    <input type="date" name="created_before" class="fp-date-input">
+                </div>
+            </div>
+
             {% if tags %}
             <div class="fp-section">
                 <div class="fp-label">Tags</div>
-                <div class="fp-tags">
+                <input type="text" class="fp-search fp-tag-search" placeholder="Search tags…"
+                       autocomplete="off" oninput="filterTagChips(this)">
+                <div class="fp-tags" id="fp-tag-chips">
                     {% for tag in tags %}
-                    <label class="fp-chip">
+                    <label class="fp-chip" data-tag-name="{{ tag.name|lower }}">
                         <input type="checkbox" name="tags" value="{{ tag.id }}">
                         {% if tag.icon %}<span>{{ tag.icon }}</span>{% endif %}
                         <span>{{ tag.name }}</span>
@@ -370,7 +623,7 @@
     // ── Cluster layer (replaces plain LayerGroup) ─────────────────────────────
     var clusterGroup = L.markerClusterGroup({
         maxClusterRadius: function(zoom) {
-            return zoom <= 10 ? 80 : zoom <= 13 ? 40 : 20;
+            return zoom <= 10 ? 60 : zoom <= 13 ? 30 : 10;
         },
         spiderfyOnMaxZoom: true,
         showCoverageOnHover: false,
@@ -490,25 +743,32 @@
             marker.setIcon(L.divIcon({ className: 'map-pin-icon-wrap', html: iconHtml, iconSize: [28,28], iconAnchor: [14,14] }));
         }
 
+        const tagChips = (pin.tags_data || []).map(t => {
+            const bg = t.color ? `${t.color}22` : 'rgba(100,120,160,0.18)';
+            const border = t.color ? `${t.color}55` : 'rgba(100,120,160,0.3)';
+            const icon = t.icon ? `${t.icon} ` : '';
+            return `<span class="popup-tag-chip" style="background:${bg};border-color:${border};">${icon}${t.name}</span>`;
+        }).join('');
+
         const popupContent = `
             <div class="pin-popup" data-uuid="${pin.uuid}" data-id="${pin.id || ''}">
-                <div data-name="title">${pin.name || ''}</div>
-                <div data-name="description">${pin.description || ''}</div>
+                <div class="popup-title">${pin.name || ''}</div>
+                ${pin.description ? `<div class="popup-desc">${pin.description}</div>` : ''}
+                <div class="popup-meta">
+                    <span class="popup-status popup-status--${(pin.status||'').replace(/\s+/g,'-').toLowerCase()}">${pin.status || ''}</span>
+                    <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${pin.last_visited || 'Never'}</span>
+                </div>
                 <div class="stars rating-${pin.rating || 0}">
                     ${[1,2,3,4,5].map(i =>
                         `<input type="radio" name="star" class="star-${i}" id="star-${i}-${pin.uuid}" value="${i}" ${pin.rating == i ? 'checked' : ''} />
                          <label class="star-${i}" for="star-${i}-${pin.uuid}">★</label>`
                     ).join('')}
                 </div>
-                <div data-name="status"><span class="value">${pin.status || ''}</span></div>
-                <div data-name="categories"><span class="value">${pin.categories || ''}</span></div>
-                <div class="last-visited" data-name="last_visited">
-                    <span class="label">Last Visited:</span>
-                    <span class="value">${pin.last_visited || 'Never'}</span>
+                ${tagChips ? `<div class="popup-tags">${tagChips}</div>` : ''}
+                <div class="popup-actions">
+                    <a href="${pin.viewLocationUrl}" class="view-full-pin">View Details</a>
+                    <button class="delete-button" onclick="deletePin(this)" title="Delete pin"><i class="material-icons">delete</i></button>
                 </div>
-                <div class="tags">${pin.tags || ''}</div>
-                <a href="${pin.viewLocationUrl}" class="view-full-pin">View Full Details</a>
-                <button class="delete-button" onclick="deletePin(this)"><i class="material-icons">delete</i></button>
             </div>`;
         marker.bindPopup(popupContent);
         return marker;
@@ -537,7 +797,20 @@
             const data  = await resp.json();
             const batch = [];
             for (const pin of (data.pins || [])) {
-                if (_pinStore.has(pin.uuid)) continue;
+                const existing = _pinStore.get(pin.uuid);
+                if (existing) {
+                    // Refresh marker when icon or color changed (e.g. after tag edits)
+                    if (existing.icon !== pin.icon || existing.color !== pin.color || existing.tags !== pin.tags) {
+                        _pinStore.set(pin.uuid, pin);
+                        if (!_filterMode && _markerMap.has(pin.uuid)) {
+                            clusterGroup.removeLayer(_markerMap.get(pin.uuid));
+                            _markerMap.delete(pin.uuid);
+                            const m = _buildMarker(pin);
+                            if (m) { _markerMap.set(pin.uuid, m); batch.push(m); }
+                        }
+                    }
+                    continue;
+                }
                 _pinStore.set(pin.uuid, pin);
                 if (!_filterMode) {
                     const m = _buildMarker(pin);
@@ -1074,23 +1347,69 @@
     function resetFilters() {
         const form = document.getElementById('filter-form');
         form.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
-        const anyRadio = form.querySelector('input[type=radio][value=""]');
-        if (anyRadio) anyRadio.checked = true;
-        form.querySelectorAll('input[type=text]').forEach(t => t.value = '');
+        // Reset all radio groups to their "Any" option
+        form.querySelectorAll('input[type=radio][value=""]').forEach(r => r.checked = true);
+        form.querySelectorAll('input[type=text], input[type=date]').forEach(t => t.value = '');
+        // Reset address search too
+        const addrInput = document.getElementById('address-search-input');
+        if (addrInput) addrInput.value = '';
+        // Show all hidden tag chips
+        document.querySelectorAll('#fp-tag-chips .fp-chip').forEach(c => c.style.display = '');
         // Restore full pin set from local store — no server round-trip
         _exitFilterMode();
         document.getElementById('search-pins-button').classList.remove('has-filters');
     }
 
+    function _hasActiveFilters() {
+        const form = document.getElementById('filter-form');
+        if (!form) return false;
+        if (form.querySelector('input[type=checkbox]:checked')) return true;
+        if ((form.querySelector('input[name=name]')?.value || '').trim()) return true;
+        if ((form.querySelector('input[type=date]')?.value || '').trim()) return true;
+        const radios = ['min_rating', 'max_rating', 'has_visits', 'min_priority'];
+        for (const name of radios) {
+            const checked = form.querySelector(`input[type=radio][name=${name}]:checked`);
+            if (checked && checked.value !== '') return true;
+        }
+        return false;
+    }
+
     // Show the active-filters dot whenever any filter is set
     document.getElementById('filter-form').addEventListener('change', function () {
-        const form = this;
-        const anyChecked = form.querySelector('input[type=checkbox]:checked') !== null;
-        const nonAnyRating = form.querySelector('input[type=radio][name=min_rating]:checked')?.value !== '';
-        const hasText = (form.querySelector('input[name=name]')?.value || '').trim() !== '';
-        const hasFilters = anyChecked || nonAnyRating || hasText;
-        document.getElementById('search-pins-button').classList.toggle('has-filters', hasFilters);
+        document.getElementById('search-pins-button').classList.toggle('has-filters', _hasActiveFilters());
     });
+    document.getElementById('filter-form').addEventListener('input', function () {
+        document.getElementById('search-pins-button').classList.toggle('has-filters', _hasActiveFilters());
+    });
+
+    // ── Address geocoding ─────────────────────────────────────────────────
+    function geocodeAddress() {
+        const input = document.getElementById('address-search-input');
+        const query = (input?.value || '').trim();
+        if (!query) return;
+        const btn = document.querySelector('.fp-address-btn');
+        if (btn) btn.disabled = true;
+        fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`, {
+            headers: { 'Accept': 'application/json', 'Accept-Language': 'en' },
+        })
+        .then(r => r.json())
+        .then(results => {
+            if (!results.length) { toastr.warning('Address not found.'); return; }
+            const r = results[0];
+            map.setView([parseFloat(r.lat), parseFloat(r.lon)], 16);
+            toastr.info('Jumped to ' + (r.display_name.split(',')[0] || query));
+        })
+        .catch(() => toastr.error('Geocoding failed — check your connection.'))
+        .finally(() => { if (btn) btn.disabled = false; });
+    }
+
+    // ── Tag chip search (client-side) ─────────────────────────────────────
+    function filterTagChips(input) {
+        const q = (input.value || '').toLowerCase().trim();
+        document.querySelectorAll('#fp-tag-chips .fp-chip').forEach(chip => {
+            chip.style.display = (!q || (chip.dataset.tagName || '').includes(q)) ? '' : 'none';
+        });
+    }
 
 </script>
 

@@ -128,7 +128,8 @@ class PinQuerySet(abstract.QuerySet):
 
         Args:
             criteria: Dict with optional keys: name, status (list), tags (QuerySet),
-                min_rating (int).
+                min_rating (int), max_rating (int), has_visits ('yes'|'no'|''),
+                min_priority (int), created_after (date), created_before (date).
 
         Returns:
             Filtered QuerySet (distinct).
@@ -136,16 +137,35 @@ class PinQuerySet(abstract.QuerySet):
         qs = self
         if name := (criteria.get("name") or "").strip():
             qs = qs.filter(
-                Q(nickname__icontains=name) | Q(location__name__icontains=name),
+                Q(nickname__icontains=name)
+                | Q(location__name__icontains=name)
+                | Q(aliases__name__icontains=name),
             )
         if statuses := criteria.get("status"):
             qs = qs.filter(status__in=statuses)
         if tags := criteria.get("tags"):
+            from urbanlens.dashboard.models.tags.model import Tag as _Tag
             for tag in tags:
-                qs = qs.filter(tags=tag)
+                tag_ids = _Tag.get_tag_and_descendants(tag.id)
+                qs = qs.filter(tags__id__in=tag_ids)
         if min_rating := criteria.get("min_rating"):
             with contextlib.suppress(ValueError, TypeError):
                 qs = qs.filter(reviews__rating__gte=int(min_rating))
+        if max_rating := criteria.get("max_rating"):
+            with contextlib.suppress(ValueError, TypeError):
+                qs = qs.filter(reviews__rating__lte=int(max_rating))
+        if has_visits := criteria.get("has_visits"):
+            if has_visits == "yes":
+                qs = qs.filter(last_visited__isnull=False)
+            elif has_visits == "no":
+                qs = qs.filter(last_visited__isnull=True)
+        if (min_priority := criteria.get("min_priority")) is not None:
+            with contextlib.suppress(ValueError, TypeError):
+                qs = qs.filter(priority__gte=int(min_priority))
+        if created_after := criteria.get("created_after"):
+            qs = qs.filter(created__date__gte=created_after)
+        if created_before := criteria.get("created_before"):
+            qs = qs.filter(created__date__lte=created_before)
         return qs.distinct()
 
     def rated(self, rating) -> Self:

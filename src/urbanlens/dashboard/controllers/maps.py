@@ -25,6 +25,7 @@
 *********************************************************************************************************************"""
 
 from datetime import datetime
+import json
 import logging
 
 from django.contrib.auth.decorators import login_required
@@ -236,15 +237,22 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if "description" in pin and pin["description"] is None:
                 pin["description"] = ""
 
-            # Turn arrays into csv
+            # Preserve tag objects for popup chips, then collapse to CSV for data.html
             if pin.get("tags"):
                 tags = pin["tags"]
                 if tags and isinstance(tags[0], dict):
+                    pin["tags_data"] = [
+                        {"name": t["name"], "color": t.get("color"), "icon": t.get("icon")}
+                        for t in tags
+                    ]
                     pin["tags"] = ", ".join(t["name"] for t in tags)
                 else:
+                    pin["tags_data"] = [{"name": t} for t in tags]
                     pin["tags"] = ", ".join(tags)
             else:
+                pin["tags_data"] = []
                 pin["tags"] = ""
+            pin["tags_data_json"] = json.dumps(pin["tags_data"])
             if pin.get("categories"):
                 pin["categories"] = ", ".join(pin["categories"])
             else:
