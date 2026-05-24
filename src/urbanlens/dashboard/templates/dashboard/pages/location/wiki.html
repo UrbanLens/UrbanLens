@@ -31,7 +31,7 @@
                 <span>Everything on this page is <strong>shared with all users</strong> who have this location pinned.</span>
             </div>
             {% if user_pin %}
-            <a href="{% url 'dashboard:pin.details' user_pin.uuid %}" class="wiki-back-link">
+            <a href="{% url 'pin.details' user_pin.uuid %}" class="wiki-back-link">
                 <i class="material-icons">arrow_back</i> Back to my pin
             </a>
             {% endif %}
@@ -147,7 +147,7 @@
         <div class="wiki-card wiki-tabs-card">
             <div class="wiki-tabs">
                 <button class="wiki-tab wiki-tab--active" data-tab="history"
-                        hx-get="{% url 'dashboard:location.wiki.history' location.uuid %}"
+                        hx-get="{% url 'location.wiki.history' location.uuid %}"
                         hx-target="#wiki-tab-content"
                         hx-swap="innerHTML"
                         hx-trigger="click, load">
@@ -209,7 +209,7 @@
 <script>
     const locLat = {{ location.latitude }};
     const locLng = {{ location.longitude }};
-    const bboxApiUrl = "{% url 'dashboard:location.wiki.bbox' location.uuid %}";
+    const bboxApiUrl = "{% url 'location.wiki.bbox' location.uuid %}";
     const csrfToken = '{{ csrf_token }}';
 
     // ── Bounding-box map ────────────────────────────────────────────────────
@@ -305,7 +305,7 @@
         e.preventDefault();
         const data = {};
         new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
-        fetch("{% url 'dashboard:location.wiki.edit' location.uuid %}", {
+        fetch("{% url 'location.wiki.edit' location.uuid %}", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
             body: JSON.stringify(data),
@@ -374,7 +374,7 @@
         container.innerHTML = rows;
     }
 
-    fetch("{% url 'dashboard:location.wiki.detail_pins.json' location.uuid %}")
+    fetch("{% url 'location.wiki.detail_pins.json' location.uuid %}")
         .then(r => r.json())
         .then(data => {
             const dps = data.detail_pins || [];

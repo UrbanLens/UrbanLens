@@ -20,7 +20,7 @@
         <div class="wiki-link-banner">
             <i class="material-icons">public</i>
             <span>This location has a community wiki shared with all users who have it pinned.</span>
-            <a href="{% url 'dashboard:location.wiki' pin.location.uuid %}" class="wiki-link-btn">
+            <a href="{% url 'location.wiki' pin.location.uuid %}" class="wiki-link-btn">
                 View community wiki <i class="material-icons">open_in_new</i>
             </a>
         </div>
@@ -92,7 +92,7 @@
     </div>
 
     {# ── Detail pins ──────────────────────────────────────────────────────── #}
-    <div hx-get="{% url 'dashboard:pin.detail_pins' pin.uuid %}"
+    <div hx-get="{% url 'pin.detail_pins' pin.uuid %}"
          hx-trigger="load, reload-detail-pins"
          hx-swap="outerHTML"
          id="detail-pins-panel"
@@ -284,7 +284,7 @@
     }
 
     function loadDetailPins() {
-        fetch("{% url 'dashboard:pin.detail_pins.json' pin.uuid %}")
+        fetch("{% url 'pin.detail_pins.json' pin.uuid %}")
             .then(r => r.json())
             .then(data => {
                 _detailPinLayer.clearLayers();
