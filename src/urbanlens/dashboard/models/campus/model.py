@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from django.contrib.gis.db.models import PolygonField
+from django.contrib.gis.db.models import MultiPolygonField
 from django.contrib.gis.geos import Point
 from django.db.models import CASCADE, ForeignKey, IntegerField, Q
 from django.db.models.constraints import UniqueConstraint
@@ -52,10 +52,10 @@ class Campus(abstract.Model):
         blank=True,
         related_name="campuses",
     )
-    # The region boundary polygon.  None means "generate a circle fallback"
-    # (see effective_polygon).  Admin can leave this null when first creating the
-    # default Campus and rely on default_radius_meters.
-    polygon = PolygonField(geography=True, srid=4326, null=True, blank=True)
+    # The region boundary.  Stored as MultiPolygon to allow campuses that span
+    # disjoint areas (e.g. two buildings separated by a road).  None means
+    # "generate a circle fallback" (see effective_polygon).
+    polygon = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
     # Radius (metres) used to generate the circle when polygon is None.
     # Irrelevant when polygon is set.
     default_radius_meters = IntegerField(default=_DEFAULT_RADIUS_METERS)

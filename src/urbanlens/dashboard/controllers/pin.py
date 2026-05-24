@@ -57,6 +57,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         View the pin page
         """
         from datetime import date
+
         from urbanlens.dashboard.models.categories.model import Category
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import PinStatus, PinType

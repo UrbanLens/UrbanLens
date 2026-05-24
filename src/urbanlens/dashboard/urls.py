@@ -36,7 +36,7 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import aliases, campus, detail_pins, friendship, location_wiki, maps, pin, pin_edit, settings, tags, trip, userprofile, visits
+from urbanlens.dashboard.controllers import aliases, campus, detail_pins, friendship, location_wiki, maps, markup, pin, pin_edit, settings, tags, trip, userprofile, visits
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -180,6 +180,21 @@ urlpatterns = [
                                 "<uuid:pin_uuid>/detail-pins/<uuid:detail_pin_uuid>/",
                                 detail_pins.DetailPinEditView.as_view(),
                                 name="pin.detail_pin.edit",
+                            ),
+                            path(
+                                "<uuid:pin_uuid>/markup/json/",
+                                markup.MarkupJsonView.as_view(),
+                                name="pin.markup.json",
+                            ),
+                            path(
+                                "<uuid:pin_uuid>/markup/",
+                                markup.MarkupView.as_view(),
+                                name="pin.markup",
+                            ),
+                            path(
+                                "<uuid:pin_uuid>/markup/<uuid:markup_uuid>/",
+                                markup.MarkupEditView.as_view(),
+                                name="pin.markup.edit",
                             ),
                             path(
                                 "<uuid:pin_uuid>/overview/",

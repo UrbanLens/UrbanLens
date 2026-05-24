@@ -79,7 +79,35 @@
                     <dd>{% for cat in location.categories.all %}{{ cat.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</dd>
                 </div>
                 {% endif %}
+                {% if location.date_abandoned %}
+                <div class="wiki-dl-row">
+                    <dt>Abandoned</dt>
+                    <dd>{{ location.date_abandoned|date:"M j, Y" }}</dd>
+                </div>
+                {% endif %}
+                {% if location.effective_date_last_active %}
+                <div class="wiki-dl-row">
+                    <dt>Last Active</dt>
+                    <dd>{{ location.effective_date_last_active|date:"M j, Y" }}</dd>
+                </div>
+                {% endif %}
             </dl>
+            {# Security indicators — only shown when at least one is non-unknown #}
+            {% if location.fences != "unknown" or location.alarms != "unknown" or location.cameras != "unknown" or location.security != "unknown" or location.signs != "unknown" or location.vps != "unknown" or location.plywood != "unknown" or location.locked != "unknown" %}
+            <div class="security-indicators">
+                <span class="security-indicators-label">Security</span>
+                <div class="security-chips">
+                    {% if location.fences != "unknown" %}<span class="security-chip security-chip--{{ location.fences }}">Fences: {{ location.get_fences_display }}</span>{% endif %}
+                    {% if location.alarms != "unknown" %}<span class="security-chip security-chip--{{ location.alarms }}">Alarms: {{ location.get_alarms_display }}</span>{% endif %}
+                    {% if location.cameras != "unknown" %}<span class="security-chip security-chip--{{ location.cameras }}">Cameras: {{ location.get_cameras_display }}</span>{% endif %}
+                    {% if location.security != "unknown" %}<span class="security-chip security-chip--{{ location.security }}">Security: {{ location.get_security_display }}</span>{% endif %}
+                    {% if location.signs != "unknown" %}<span class="security-chip security-chip--{{ location.signs }}">Signs: {{ location.get_signs_display }}</span>{% endif %}
+                    {% if location.vps != "unknown" %}<span class="security-chip security-chip--{{ location.vps }}">VPS: {{ location.get_vps_display }}</span>{% endif %}
+                    {% if location.plywood != "unknown" %}<span class="security-chip security-chip--{{ location.plywood }}">Plywood: {{ location.get_plywood_display }}</span>{% endif %}
+                    {% if location.locked != "unknown" %}<span class="security-chip security-chip--{{ location.locked }}">Locked: {{ location.get_locked_display }}</span>{% endif %}
+                </div>
+            </div>
+            {% endif %}
         </div>
 
         {# ── Community stats card ────────────────────────────────────────── #}
@@ -207,6 +235,33 @@
                 <input type="number" id="wiki-longitude" name="longitude" step="0.000001"
                        value="{{ location.longitude }}" required>
             </div>
+            <div class="form-row form-row--two-col">
+                <div>
+                    <label for="wiki-date-abandoned">Date Abandoned</label>
+                    <input type="date" id="wiki-date-abandoned" name="date_abandoned"
+                           value="{{ location.date_abandoned|date:'Y-m-d'|default:'' }}">
+                </div>
+                <div>
+                    <label for="wiki-date-last-active">Date Last Active <span class="form-optional">(defaults to day before abandoned)</span></label>
+                    <input type="date" id="wiki-date-last-active" name="date_last_active"
+                           value="{{ location.date_last_active|date:'Y-m-d'|default:'' }}">
+                </div>
+            </div>
+            <details class="form-section-details">
+                <summary class="form-section-summary">Security Indicators</summary>
+                <div class="security-edit-grid">
+                    {% for sf_key, sf_label, sf_val in location_security_values %}
+                    <div class="security-edit-row">
+                        <label for="wiki-{{ sf_key }}">{{ sf_label }}</label>
+                        <select name="{{ sf_key }}" id="wiki-{{ sf_key }}">
+                            {% for val, lbl in security_level_choices %}
+                            <option value="{{ val }}"{% if sf_val == val %} selected{% endif %}>{{ lbl }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endfor %}
+                </div>
+            </details>
             <div class="form-actions">
                 <button type="submit" class="wiki-action-btn wiki-action-btn--primary">Save changes</button>
                 <button type="button" class="wiki-action-btn" onclick="this.closest('dialog').close()">Cancel</button>

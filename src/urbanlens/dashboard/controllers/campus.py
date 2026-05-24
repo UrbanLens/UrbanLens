@@ -6,7 +6,7 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.gis.geos import GEOSGeometry
+from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
 from django.http import HttpRequest, JsonResponse
 from rest_framework.viewsets import GenericViewSet
 
@@ -98,7 +98,14 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
 
         polygon_geojson = data.get("polygon")
         campus, _ = Campus.objects.get_or_create(location=pin.location, profile=profile)
-        campus.polygon = GEOSGeometry(json.dumps(polygon_geojson)) if polygon_geojson else None
+        if polygon_geojson:
+            geom = GEOSGeometry(json.dumps(polygon_geojson))
+            # Normalize legacy single Polygon to MultiPolygon so the field type is always consistent.
+            if isinstance(geom, Polygon):
+                geom = MultiPolygon(geom, srid=geom.srid)
+            campus.polygon = geom
+        else:
+            campus.polygon = None
         campus.save()
 
         return JsonResponse({"status": "ok"})

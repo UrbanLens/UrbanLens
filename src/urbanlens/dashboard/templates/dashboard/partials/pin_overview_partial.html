@@ -63,7 +63,35 @@
                 <span class="field-value">{{ pin.address_basic }}{% if pin.city %}, {{ pin.city }}{% endif %}{% if pin.state %}, {{ pin.state }}{% endif %}</span>
             </div>
             {% endif %}
+            {% if pin.date_abandoned %}
+            <div class="detail-row">
+                <span class="field-label">Abandoned</span>
+                <span class="field-value">{{ pin.date_abandoned|date:"M j, Y" }}</span>
+            </div>
+            {% endif %}
+            {% if pin.effective_date_last_active %}
+            <div class="detail-row">
+                <span class="field-label">Last Active</span>
+                <span class="field-value">{{ pin.effective_date_last_active|date:"M j, Y" }}</span>
+            </div>
+            {% endif %}
         </div>
+        {# Security indicators — only shown when at least one is non-unknown #}
+        {% if pin.fences != "unknown" or pin.alarms != "unknown" or pin.cameras != "unknown" or pin.security != "unknown" or pin.signs != "unknown" or pin.vps != "unknown" or pin.plywood != "unknown" or pin.locked != "unknown" %}
+        <div class="security-indicators">
+            <span class="security-indicators-label">Security</span>
+            <div class="security-chips">
+                {% if pin.fences != "unknown" %}<span class="security-chip security-chip--{{ pin.fences }}">Fences: {{ pin.get_fences_display }}</span>{% endif %}
+                {% if pin.alarms != "unknown" %}<span class="security-chip security-chip--{{ pin.alarms }}">Alarms: {{ pin.get_alarms_display }}</span>{% endif %}
+                {% if pin.cameras != "unknown" %}<span class="security-chip security-chip--{{ pin.cameras }}">Cameras: {{ pin.get_cameras_display }}</span>{% endif %}
+                {% if pin.security != "unknown" %}<span class="security-chip security-chip--{{ pin.security }}">Security: {{ pin.get_security_display }}</span>{% endif %}
+                {% if pin.signs != "unknown" %}<span class="security-chip security-chip--{{ pin.signs }}">Signs: {{ pin.get_signs_display }}</span>{% endif %}
+                {% if pin.vps != "unknown" %}<span class="security-chip security-chip--{{ pin.vps }}">VPS: {{ pin.get_vps_display }}</span>{% endif %}
+                {% if pin.plywood != "unknown" %}<span class="security-chip security-chip--{{ pin.plywood }}">Plywood: {{ pin.get_plywood_display }}</span>{% endif %}
+                {% if pin.locked != "unknown" %}<span class="security-chip security-chip--{{ pin.locked }}">Locked: {{ pin.get_locked_display }}</span>{% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 
 </div>

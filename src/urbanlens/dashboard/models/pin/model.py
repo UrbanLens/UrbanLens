@@ -9,10 +9,10 @@ from uuid import uuid4
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
 from django.db.models import CASCADE, SET_NULL, ForeignKey, ImageField, Index, ManyToManyField, Q, UniqueConstraint, UUIDField
-from django.db.models.fields import CharField, DateTimeField, DecimalField, IntegerField, TextField
+from django.db.models.fields import CharField, DateField, DateTimeField, DecimalField, IntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.abstract.choices import TextChoices
+from urbanlens.dashboard.models.abstract.choices import SecurityLevel, TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager
 
 if TYPE_CHECKING:
@@ -116,6 +116,18 @@ class Pin(abstract.Model):
     # when the user explicitly picks a color in the dialog.
     color = CharField(max_length=20, null=True, blank=True)
 
+    # Security indicators: how prevalent each security feature is, per this user's observation.
+    fences = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    alarms = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    cameras = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    security = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    signs = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    vps = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    plywood = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    locked = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    date_abandoned = DateField(null=True, blank=True)
+    date_last_active = DateField(null=True, blank=True)
+
     # Self-referential FK for personal detail pins (private to pin owner).
     parent_pin = ForeignKey(
         "self",
@@ -196,6 +208,17 @@ class Pin(abstract.Model):
         if self.longitude is not None:
             return float(self.longitude)
         return float(self.location.longitude) if self.location else None
+
+    @property
+    def effective_date_last_active(self):
+        """Date the place was last active, inferred from date_abandoned if not set explicitly."""
+        from datetime import timedelta
+
+        if self.date_last_active is not None:
+            return self.date_last_active
+        if self.date_abandoned is not None:
+            return self.date_abandoned - timedelta(days=1)
+        return None
 
     # ------------------------------------------------------------------
     # Location proxies

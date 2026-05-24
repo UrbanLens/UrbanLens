@@ -755,6 +755,7 @@ ignore = [
     "B019",   # possible memleak
     "ARG001", # unused argument
     # Fix issues and turn these on
+    "DTZ011",  # datetime.date.today() used
     "D1",      # Missing docstring...
     "S321",    # FTP functions are insecure
     "S402",    # ftplib is insecure

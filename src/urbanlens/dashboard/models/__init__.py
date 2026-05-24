@@ -42,3 +42,5 @@ from urbanlens.dashboard.models.campus import Campus
 from urbanlens.dashboard.models.social_link import SocialLink
 from urbanlens.dashboard.models.visits import PinVisit, VisitSource
 from urbanlens.dashboard.models.aliases import PinAlias, LocationAlias
+from urbanlens.dashboard.models.markup import MarkupType, PinMarkup
+from urbanlens.dashboard.models.abstract.choices import SecurityLevel

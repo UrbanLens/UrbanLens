@@ -9,9 +9,10 @@ from uuid import uuid4
 from django.contrib.gis.db.models import PointField, PolygonField
 from django.contrib.gis.geos import Point
 from django.db.models import Index, ManyToManyField, UUIDField
-from django.db.models.fields import CharField, DecimalField, TextField
+from django.db.models.fields import CharField, DateField, DecimalField, TextField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.location.queryset import LocationManager
 from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 from urbanlens.UrbanLens.settings.app import settings
@@ -73,6 +74,18 @@ class Location(abstract.AddressableMixin, abstract.Model):
     # Used to de-duplicate Location rows on import and to look up Places API data.
     cid = DecimalField(max_digits=20, decimal_places=0, null=True, blank=True, unique=True)
 
+    # Security indicators: how prevalent each security feature is at this place.
+    fences = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    alarms = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    cameras = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    security = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    signs = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    vps = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    plywood = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    locked = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
+    date_abandoned = DateField(null=True, blank=True)
+    date_last_active = DateField(null=True, blank=True)
+
     # Shared taxonomy - these represent the real-world place's type, not a user's classification.
     # Users apply their own categories/tags via the Pin's M2M fields.
     categories = ManyToManyField(
@@ -89,6 +102,17 @@ class Location(abstract.AddressableMixin, abstract.Model):
     )
 
     objects = LocationManager()
+
+    @property
+    def effective_date_last_active(self):
+        """Date the place was last active, inferred from date_abandoned if not set explicitly."""
+        from datetime import timedelta
+
+        if self.date_last_active is not None:
+            return self.date_last_active
+        if self.date_abandoned is not None:
+            return self.date_abandoned - timedelta(days=1)
+        return None
 
     @property
     def place_name(self) -> str | None:

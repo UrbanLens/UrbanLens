@@ -10,6 +10,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.categories.model import Category
 from urbanlens.dashboard.models.pin.model import Pin, PinNote, PinStatus, PinType
 
@@ -44,6 +45,17 @@ def _overview_context(pin: Pin) -> dict:
         "all_categories": Category.objects.order_by("name"),
         "detail_pin_icon_choices": detail_pin_icon_choices,
         "color_choices": COLOR_CHOICES,
+        "security_level_choices": SecurityLevel.choices,
+        "pin_security_values": [
+            ("fences", "Fences", pin.fences),
+            ("alarms", "Alarms", pin.alarms),
+            ("cameras", "Cameras", pin.cameras),
+            ("security", "Security", pin.security),
+            ("signs", "Signs", pin.signs),
+            ("vps", "VPS", pin.vps),
+            ("plywood", "Plywood", pin.plywood),
+            ("locked", "Locked", pin.locked),
+        ],
     }
 
 
@@ -78,6 +90,8 @@ class PinEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
 
+        from datetime import date, datetime
+
         # Scalar fields
         nickname = (body.get("nickname") or "").strip() or None
         description = (body.get("description") or "").strip() or None
@@ -93,7 +107,6 @@ class PinEditView(LoginRequiredMixin, View):
 
         last_visited = None
         if last_visited_raw:
-            from datetime import date, datetime
             for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d"):
                 try:
                     last_visited = datetime.strptime(last_visited_raw, fmt)
@@ -108,6 +121,27 @@ class PinEditView(LoginRequiredMixin, View):
                     return HttpResponse("Last visited date must be in the past.", status=400)
                 if lv_date < min_date:
                     return HttpResponse("Last visited date must be within the last 100 years.", status=400)
+
+        # Security indicators
+        valid_security = {v for v, _ in SecurityLevel.choices}
+        security_fields = ["fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked"]
+        security_values = {}
+        for sf in security_fields:
+            raw = body.get(sf, "")
+            security_values[sf] = raw if raw in valid_security else getattr(pin, sf)
+
+        # Abandonment dates
+        def _parse_date(raw: str) -> date | None:
+            raw = (raw or "").strip()
+            if not raw:
+                return None
+            try:
+                return datetime.strptime(raw, "%Y-%m-%d").date()
+            except ValueError:
+                return None
+
+        date_abandoned = _parse_date(body.get("date_abandoned", "")) if "date_abandoned" in body else pin.date_abandoned
+        date_last_active = _parse_date(body.get("date_last_active", "")) if "date_last_active" in body else pin.date_last_active
 
         # Validate choices
         valid_statuses = {v for v, _ in PinStatus.choices}
@@ -124,7 +158,15 @@ class PinEditView(LoginRequiredMixin, View):
         pin.priority = priority
         if last_visited is not None:
             pin.last_visited = last_visited
-        pin.save(update_fields=["nickname", "description", "status", "pin_type", "priority", "last_visited", "updated"])
+        for sf, val in security_values.items():
+            setattr(pin, sf, val)
+        pin.date_abandoned = date_abandoned
+        pin.date_last_active = date_last_active
+        pin.save(update_fields=[
+            "nickname", "description", "status", "pin_type", "priority", "last_visited",
+            "fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked",
+            "date_abandoned", "date_last_active", "updated",
+        ])
 
         # Category update: comma-separated names replace all current categories
         category_raw = (body.get("categories") or "").strip()

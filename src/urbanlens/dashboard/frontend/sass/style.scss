@@ -1195,50 +1195,15 @@ body.page-location-details div.section {
     .location-map {
         grid-area: map;
 
-        .card-header {
-            flex-wrap: wrap;
-            gap: .5rem;
+        .map-wrapper {
+            position: relative;
+            width: 100%;
         }
 
         #map {
             height: 28rem;
             width: 100%;
         }
-
-        .location-map-actions {
-            padding: .6rem 1rem;
-            border-top: 1px solid var(--border-color, #e5e7eb);
-            display: flex;
-            gap: .5rem;
-        }
-
-        .detail-pin-add-trigger {
-            display: inline-flex;
-            align-items: center;
-            gap: .35rem;
-            background: none;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            padding: .35rem .75rem;
-            font-size: .82rem;
-            color: #3b82f6;
-            cursor: pointer;
-            transition: background .15s, border-color .15s;
-
-            .material-icons { font-size: 1rem; }
-
-            &:hover {
-                background: #eff6ff;
-                border-color: #93c5fd;
-            }
-        }
-    }
-
-    .campus-editor-controls {
-        display: flex;
-        align-items: center;
-        gap: .5rem;
-        margin-left: auto;
     }
 
     .satellite-view {
@@ -5250,8 +5215,9 @@ textarea.form-input {
     border-radius: 12px;
     padding: 0;
     width: min(520px, 96vw);
-    max-height: 92vh;
-    overflow-y: auto;
+    // Constrain to viewport — the inner body scrolls, not the dialog itself
+    max-height: min(92vh, 900px);
+    overflow: hidden;
 
     &[open] {
         display: flex;
@@ -5260,6 +5226,13 @@ textarea.form-input {
 
     &::backdrop {
         background: rgba(0, 0, 0, .4);
+    }
+
+    // Scrollable body — everything below the fixed header
+    .detail-pin-add-body {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0; // required for flex children to shrink below content size
     }
 
     .detail-pin-add-hint {
@@ -5272,7 +5245,8 @@ textarea.form-input {
     }
 
     #detail-pin-picker-map {
-        height: 320px;
+        // Viewport-relative height: scales with zoom, never smaller than 180px.
+        height: clamp(180px, 30vh, 340px);
         margin: .75rem 1.25rem;
         border-radius: 8px;
         overflow: hidden;
@@ -6269,6 +6243,118 @@ textarea.form-input {
     }
 }
 
+// Two-column form row used in multiple dialogs
+.form-row--two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .75rem;
+}
+
+// ── Security indicators ───────────────────────────────────────────────────
+
+.security-indicators {
+    padding: .5rem 1rem .75rem;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+.security-indicators-label {
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #64748b;
+}
+
+.security-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+}
+
+.security-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 9px;
+    border-radius: 99px;
+    font-size: .75rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+
+    &--no {
+        background: #dcfce7;
+        color: #166534;
+        border-color: #bbf7d0;
+    }
+
+    &--some {
+        background: #fef9c3;
+        color: #854d0e;
+        border-color: #fde68a;
+    }
+
+    &--everywhere {
+        background: #fee2e2;
+        color: #991b1b;
+        border-color: #fca5a5;
+    }
+}
+
+// Security field edit grid (inside <details> collapse)
+.form-section-details {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0;
+    overflow: hidden;
+
+    .form-section-summary {
+        padding: .55rem .9rem;
+        cursor: pointer;
+        font-size: .85rem;
+        font-weight: 600;
+        color: #475569;
+        background: #f8fafc;
+        list-style: none;
+        user-select: none;
+
+        &::-webkit-details-marker { display: none; }
+        &::before { content: "▶"; margin-right: .4rem; font-size: .65rem; vertical-align: middle; transition: transform .15s; }
+    }
+
+    &[open] .form-section-summary::before { transform: rotate(90deg); }
+}
+
+.security-edit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: .5rem .75rem;
+    padding: .75rem .9rem .9rem;
+}
+
+.security-edit-row {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+
+    label {
+        font-size: .78rem;
+        font-weight: 600;
+        color: #475569;
+    }
+
+    select {
+        font-size: .82rem;
+        padding: .3rem .5rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        background: #fff;
+
+        &:focus { outline: none; border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+    }
+}
+
 // ── Personal pin notes ────────────────────────────────────────────────────
 
 .pin-notes-panel {
@@ -6376,46 +6462,318 @@ textarea.form-input {
     }
 }
 
-// ── Campus boundary buttons (inside location map card header) ─────────────
+// ── Map bottom-left overlay controls ──────────────────────────────────────
 
-.campus-btn {
+.map-bottom-controls {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    z-index: 1000;
+    display: flex;
+    gap: .4rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.map-overlay-btn {
     display: inline-flex;
     align-items: center;
     gap: .3rem;
-    padding: .3rem .7rem;
+    padding: .35rem .65rem;
     border-radius: 6px;
-    font-size: .8rem;
+    font-size: .78rem;
     font-weight: 500;
     cursor: pointer;
-    border: 1px solid transparent;
-    transition: background .15s, border-color .15s;
+    border: none;
+    background: rgba(255, 255, 255, 0.93);
+    color: #374151;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, .28);
+    backdrop-filter: blur(4px);
+    transition: background .12s, box-shadow .12s;
 
-    .material-icons { font-size: .95rem; }
+    .material-icons { font-size: .9rem; }
 
-    &--edit {
-        background: #f1f5f9;
-        border-color: #cbd5e1;
-        color: #475569;
-        &:hover { background: #e2e8f0; }
+    &:hover {
+        background: #fff;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .32);
     }
 
-    &--save {
-        background: #3b82f6;
-        color: #fff;
-        &:hover { background: #2563eb; }
-    }
+    &--boundary { color: #475569; }
+    &--save { color: #16a34a; }
+    &--clear { color: #dc2626; }
+    &--cancel { color: #64748b; }
+    &--add-pin { color: #2563eb; }
 
-    &--cancel {
-        background: transparent;
-        border-color: #cbd5e1;
-        color: #64748b;
-        &:hover { background: #f1f5f9; }
+    &-group {
+        display: flex;
+        gap: .3rem;
+        align-items: center;
     }
 }
 
-#campus-save-controls {
+// ── Detail pin list panel (top-left map overlay) ───────────────────────────
+
+.detail-pin-list-panel {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+    min-width: 170px;
+    max-width: 230px;
+    backdrop-filter: blur(4px);
+}
+
+.detail-pin-list-toggle {
     display: flex;
+    align-items: center;
     gap: .4rem;
+    padding: .4rem .65rem;
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .8rem;
+    font-weight: 500;
+    color: #374151;
+    border-radius: 8px;
+
+    .material-icons { font-size: 1rem; color: #6b7280; }
+
+    .detail-pin-list-chevron {
+        margin-left: auto;
+        transition: transform .2s;
+        font-size: .85rem;
+        &.open { transform: rotate(180deg); }
+    }
+
+    &:hover { background: rgba(0, 0, 0, .04); }
+}
+
+.detail-pin-list-drawer {
+    border-top: 1px solid #e5e7eb;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.detail-pin-list-ul {
+    list-style: none;
+    margin: 0;
+    padding: .2rem 0;
+}
+
+.detail-pin-list-item {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .3rem .5rem;
+    cursor: pointer;
+    font-size: .78rem;
+    color: #374151;
+    transition: background .1s;
+
+    &:hover { background: #f3f4f6; }
+
+    &.is-highlighted {
+        background: #eff6ff;
+
+        .detail-pin-list-item-name { color: #1d4ed8; font-weight: 600; }
+    }
+
+    .detail-pin-list-item-icon {
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .detail-pin-list-item-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .detail-pin-list-item-delete {
+        border: none;
+        background: none;
+        cursor: pointer;
+        color: #94a3b8;
+        padding: .1rem;
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        outline: none;
+        flex-shrink: 0;
+
+        .material-icons { font-size: .85rem; }
+
+        &:hover, &:focus {
+            color: #dc2626;
+            background: #fee2e2;
+            outline: none;
+        }
+    }
+}
+
+// ── "Add Detail" dropdown button ──────────────────────────────────────────
+
+.map-add-detail-wrap {
+    position: relative;
+}
+
+.add-detail-menu {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    background: rgba(255, 255, 255, 0.97);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .22);
+    backdrop-filter: blur(4px);
+    min-width: 130px;
+    overflow: hidden;
+    z-index: 1100;
+}
+
+.add-detail-item {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .4rem .7rem;
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .8rem;
+    color: #374151;
+    text-align: left;
+
+    .material-icons { font-size: .95rem; color: #6b7280; }
+
+    &:hover { background: #f3f4f6; }
+
+    & + & { border-top: 1px solid #f1f5f9; }
+}
+
+.add-detail-chevron {
+    font-size: .75rem !important;
+    transition: transform .2s;
+    &.open { transform: rotate(180deg); }
+}
+
+// ── Markup mini-form panel (line/arrow/text placement) ─────────────────────
+
+.markup-form-panel {
+    position: absolute;
+    right: 10px;
+    bottom: 50px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.97);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, .2);
+    width: 220px;
+    backdrop-filter: blur(4px);
+    overflow: hidden;
+}
+
+.markup-form-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .5rem .75rem;
+    font-size: .82rem;
+    font-weight: 600;
+    color: #374151;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.markup-form-body {
+    padding: .6rem .75rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+
+    .form-actions {
+        padding-top: .25rem;
+        display: flex;
+        gap: .4rem;
+    }
+}
+
+.markup-form-label-row {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    font-size: .78rem;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.markup-form-input {
+    padding: .3rem .5rem;
+    border: 1px solid #d1d5db;
+    border-radius: 5px;
+    font-size: .8rem;
+    color: #374151;
+    width: 100%;
+
+    &:focus { border-color: #93c5fd; outline: none; }
+}
+
+.markup-color-swatches {
+    display: flex;
+    gap: .3rem;
+    flex-wrap: wrap;
+    margin-top: .1rem;
+}
+
+.markup-color-swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform .1s, border-color .1s;
+
+    &--active, &:hover {
+        transform: scale(1.2);
+        border-color: #374151;
+    }
+}
+
+.markup-place-hint {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .78rem;
+    color: #2563eb;
+    margin: 0;
+
+    .material-icons { font-size: .95rem; }
+}
+
+// ── Map text labels and arrow decorations ──────────────────────────────────
+
+.map-text-label {
+    display: inline-block;
+    font-weight: 600;
+    white-space: nowrap;
+    text-shadow: 0 0 3px rgba(255, 255, 255, .9), 0 0 6px rgba(255, 255, 255, .7);
+    pointer-events: none;
+
+    &--line {
+        font-size: .75rem;
+        background: rgba(255, 255, 255, .75);
+        padding: 1px 4px;
+        border-radius: 3px;
+    }
+}
+
+.map-markup-arrowhead {
+    display: block;
+    font-size: 20px !important;
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, .8));
+    pointer-events: none;
 }
 
 // ── Settings map view chooser ─────────────────────────────────────────────

@@ -72,3 +72,12 @@ class TextChoices(models.TextChoices):
 
         # None found
         return None
+
+
+class SecurityLevel(TextChoices):
+    """How prevalent a security feature is at a location."""
+
+    UNKNOWN = "unknown", "Unknown"
+    NO = "no", "No"
+    SOME = "some", "Some"
+    EVERYWHERE = "everywhere", "Everywhere"

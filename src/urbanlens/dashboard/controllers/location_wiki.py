@@ -10,14 +10,17 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.location.edit_model import LocationEdit
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
+_WIKI_SECURITY_FIELDS = ("fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked")
+
 # Fields a community member may edit via "Suggest edits".
-_WIKI_EDITABLE_FIELDS = ("name", "description", "latitude", "longitude")
+_WIKI_EDITABLE_FIELDS = ("name", "description", "latitude", "longitude", *_WIKI_SECURITY_FIELDS, "date_abandoned", "date_last_active")
 
 
 class LocationWikiView(LoginRequiredMixin, View):
@@ -62,6 +65,17 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "pin_type_choices": PinType.choices,
                 "detail_pin_icon_choices": detail_pin_icon_choices,
                 "color_choices": COLOR_CHOICES,
+                "security_level_choices": SecurityLevel.choices,
+                "location_security_values": [
+                    ("fences", "Fences", location.fences),
+                    ("alarms", "Alarms", location.alarms),
+                    ("cameras", "Cameras", location.cameras),
+                    ("security", "Security", location.security),
+                    ("signs", "Signs", location.signs),
+                    ("vps", "VPS", location.vps),
+                    ("plywood", "Plywood", location.plywood),
+                    ("locked", "Locked", location.locked),
+                ],
             },
         )
 
@@ -83,28 +97,48 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
 
+        from datetime import datetime
+
+        valid_security = {v for v, _ in SecurityLevel.choices}
+        # new_vals holds the actual Python values to set on the model.
+        # changes holds JSON-safe strings for the LocationEdit audit record.
+        new_vals: dict[str, object] = {}
         changes: dict[str, dict] = {}
         for field in _WIKI_EDITABLE_FIELDS:
             if field not in body:
                 continue
-            new_val = body[field]
+            raw = body[field]
             old_val = getattr(location, field, None)
-            if str(new_val) == str(old_val):
+            if str(raw) == str(old_val):
                 continue
-            # Cast numeric fields.
             if field in {"latitude", "longitude"}:
                 try:
-                    new_val = float(new_val)
+                    new_val = float(raw)
                 except (TypeError, ValueError):
                     continue
-            changes[field] = {"from": old_val, "to": new_val}
+            elif field in _WIKI_SECURITY_FIELDS:
+                if raw not in valid_security:
+                    continue
+                new_val = raw
+            elif field in {"date_abandoned", "date_last_active"}:
+                if not raw:
+                    new_val = None
+                else:
+                    try:
+                        new_val = datetime.strptime(raw, "%Y-%m-%d").date()
+                    except ValueError:
+                        continue
+            else:
+                new_val = raw
+            new_vals[field] = new_val
+            changes[field] = {"from": str(old_val), "to": str(new_val)}
 
         if not changes:
             return JsonResponse({"ok": True, "message": "No changes detected."})
 
         # Apply changes.
-        for field, diff in changes.items():
-            setattr(location, field, diff["to"])
+        for field, val in new_vals.items():
+            setattr(location, field, val)
         location.save()
 
         LocationEdit.objects.create(

@@ -77,22 +77,129 @@
         <div class="card-header">
             <i class="material-icons">place</i>
             <h3>Location</h3>
-            <div class="campus-editor-controls">
-                <button id="edit-campus-btn" class="campus-btn campus-btn--edit" onclick="startEditCampus()">
-                    <i class="material-icons">pentagon</i> Edit Boundary
+        </div>
+        <div class="map-wrapper">
+
+            {# ── Detail pin list overlay (top-left, visible when pins exist) ── #}
+            <div id="detail-pin-list-panel" class="detail-pin-list-panel" style="display:none">
+                <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle">
+                    <i class="material-icons">format_list_bulleted</i>
+                    <span id="detail-pin-count-label">0 Pins</span>
+                    <i class="material-icons detail-pin-list-chevron" id="detail-pin-list-chevron">expand_more</i>
                 </button>
-                <div id="campus-save-controls" style="display:none">
-                    <button class="campus-btn campus-btn--save" onclick="saveCampus()">Save</button>
-                    <button class="campus-btn campus-btn--cancel" onclick="cancelCampusEdit()">Cancel</button>
+                <div id="detail-pin-list-drawer" class="detail-pin-list-drawer" style="display:none">
+                    <ul id="detail-pin-list-ul" class="detail-pin-list-ul"></ul>
                 </div>
             </div>
-        </div>
-        <div id="map"></div>
-        <div class="location-map-actions">
-            <button type="button" class="detail-pin-add-trigger"
-                    onclick="document.getElementById('detail-pin-add-dialog').showModal()">
-                <i class="material-icons">add_location</i> Add Detail Pin
-            </button>
+
+            <div id="map"></div>
+
+            {# ── Bottom-left map controls ── #}
+            <div class="map-bottom-controls">
+                <button id="edit-campus-btn" class="map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()">
+                    <i class="material-icons">pentagon</i> Edit Boundary
+                </button>
+                <div id="campus-save-controls" class="map-overlay-btn-group" style="display:none">
+                    <button class="map-overlay-btn map-overlay-btn--save" onclick="saveCampus()">
+                        <i class="material-icons">save</i> Save
+                    </button>
+                    <button class="map-overlay-btn map-overlay-btn--clear" onclick="clearCampus()">
+                        <i class="material-icons">delete_outline</i> Clear
+                    </button>
+                    <button class="map-overlay-btn map-overlay-btn--cancel" onclick="cancelCampusEdit()">
+                        <i class="material-icons">close</i> Cancel
+                    </button>
+                </div>
+                {# "Add Detail" dropdown ─────────────────────────────────── #}
+                <div class="map-add-detail-wrap" id="add-detail-wrap">
+                    <div id="add-detail-menu" class="add-detail-menu" style="display:none">
+                        <button type="button" class="add-detail-item" onclick="openAddPinDialog()">
+                            <i class="material-icons">place</i> Pin
+                        </button>
+                        <button type="button" class="add-detail-item" onclick="startMarkupDraw('line')">
+                            <i class="material-icons">show_chart</i> Line
+                        </button>
+                        <button type="button" class="add-detail-item" onclick="startMarkupDraw('arrow')">
+                            <i class="material-icons">arrow_forward</i> Arrow
+                        </button>
+                        <button type="button" class="add-detail-item" onclick="startTextPlacement()">
+                            <i class="material-icons">title</i> Text
+                        </button>
+                    </div>
+                    <button type="button" class="map-overlay-btn map-overlay-btn--add-detail"
+                            id="add-detail-btn" onclick="toggleAddDetailMenu()">
+                        <i class="material-icons">add_location_alt</i> Add Detail
+                        <i class="material-icons add-detail-chevron">expand_less</i>
+                    </button>
+                </div>
+            </div>
+
+            {# ── Line / Arrow markup mini-form (shown after drawing) ── #}
+            <div id="markup-form-panel" class="markup-form-panel" style="display:none">
+                <div class="markup-form-header">
+                    <span id="markup-form-title">Add Line</span>
+                    <button type="button" class="btn-icon-sm" onclick="cancelMarkupDraw()">
+                        <i class="material-icons">close</i>
+                    </button>
+                </div>
+                <div class="markup-form-body">
+                    <label class="markup-form-label-row">
+                        Label <small>(optional)</small>
+                        <input type="text" id="markup-form-label" placeholder="e.g. Route in"
+                               class="markup-form-input">
+                    </label>
+                    <label class="markup-form-label-row">Color
+                        <div class="markup-color-swatches" id="markup-color-swatches"></div>
+                        <input type="hidden" id="markup-form-color" value="#e53e3e">
+                    </label>
+                    <label class="markup-form-label-row">
+                        Width&nbsp;<span id="markup-width-label">3</span>px
+                        <input type="range" id="markup-form-width" min="1" max="8" value="3"
+                               oninput="document.getElementById('markup-width-label').textContent=this.value">
+                    </label>
+                    <div class="form-actions">
+                        <button type="button" class="submit-button" onclick="saveLineMarkup()">Save</button>
+                        <button type="button" class="btn-ghost" onclick="cancelMarkupDraw()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+            {# ── Text placement form ── #}
+            <div id="text-place-panel" class="markup-form-panel" style="display:none">
+                <div class="markup-form-header">
+                    <span>Add Text Label</span>
+                    <button type="button" class="btn-icon-sm" onclick="cancelTextPlacement()">
+                        <i class="material-icons">close</i>
+                    </button>
+                </div>
+                <div class="markup-form-body">
+                    <label class="markup-form-label-row">
+                        Text <span class="required">*</span>
+                        <input type="text" id="text-form-label" placeholder="Label text"
+                               class="markup-form-input">
+                    </label>
+                    <label class="markup-form-label-row">Color
+                        <div class="markup-color-swatches" id="text-color-swatches"></div>
+                        <input type="hidden" id="text-form-color" value="#1d4ed8">
+                    </label>
+                    <label class="markup-form-label-row">Size
+                        <select id="text-form-size" class="markup-form-input">
+                            <option value="12">Small (12px)</option>
+                            <option value="16" selected>Medium (16px)</option>
+                            <option value="22">Large (22px)</option>
+                        </select>
+                    </label>
+                    <p id="text-place-hint" class="markup-place-hint" style="display:none">
+                        <i class="material-icons">touch_app</i> Click on the map to place
+                    </p>
+                    <div class="form-actions">
+                        <button type="button" class="submit-button" id="text-place-btn"
+                                onclick="activateTextPlacement()">Place on Map</button>
+                        <button type="button" class="btn-ghost" onclick="cancelTextPlacement()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -248,6 +355,35 @@
             </datalist>
         </div>
 
+        <div class="form-row form-row--two-col">
+            <div>
+                <label for="pe-date-abandoned">Date Abandoned</label>
+                <input type="date" name="date_abandoned" id="pe-date-abandoned"
+                       value="{{ pin.date_abandoned|date:'Y-m-d'|default:'' }}">
+            </div>
+            <div>
+                <label for="pe-date-last-active">Date Last Active <span class="form-optional">(defaults to day before abandoned)</span></label>
+                <input type="date" name="date_last_active" id="pe-date-last-active"
+                       value="{{ pin.date_last_active|date:'Y-m-d'|default:'' }}">
+            </div>
+        </div>
+
+        <details class="form-section-details">
+            <summary class="form-section-summary">Security Indicators</summary>
+            <div class="security-edit-grid">
+                {% for sf_key, sf_label, sf_val in pin_security_values %}
+                <div class="security-edit-row">
+                    <label for="pe-{{ sf_key }}">{{ sf_label }}</label>
+                    <select name="{{ sf_key }}" id="pe-{{ sf_key }}">
+                        {% for val, lbl in security_level_choices %}
+                        <option value="{{ val }}"{% if sf_val == val %} selected{% endif %}>{{ lbl }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+
         <div class="form-actions">
             <button type="submit" class="submit-button">Save Changes</button>
             <button type="button" class="btn-ghost"
@@ -264,6 +400,7 @@
             <i class="material-icons">close</i>
         </button>
     </div>
+    <div class="detail-pin-add-body">
     <p class="detail-pin-add-hint">
         <i class="material-icons">place</i>
         Click anywhere on the map to place the pin, then fill in the details.
@@ -325,6 +462,7 @@
             </button>
         </div>
     </form>
+    </div>{# /detail-pin-add-body #}
 </dialog>
 {% endblock %}
 
@@ -389,33 +527,416 @@
 
     L.control.layers(_baseLayers, _overlays, { position: 'topright', collapsed: true }).addTo(map);
 
-    function _detailIcon(pinType, customIcon, customColor) {
+    // URL base for detail pin edit/delete: strip the placeholder UUID off the end
+    const _dpEditBase = "{% url 'pin.detail_pin.edit' pin.uuid '00000000-0000-0000-0000-000000000000' %}"
+        .replace('00000000-0000-0000-0000-000000000000/', '');
+
+    let _detailPins = []; // { uuid, name, pin_type, icon, color, latitude, longitude, marker }
+    let _highlightedDpUuid = null;
+
+    function _detailIcon(pinType, customIcon, customColor, highlighted) {
         const color = customColor || _detailPinColors[pinType] || '#2563eb';
         const icon  = customIcon  || _detailPinIcons[pinType]  || 'place';
+        const size  = highlighted ? 32 : 24;
+        const ring  = highlighted
+            ? `<span style="position:absolute;inset:-5px;border:2.5px solid ${color};border-radius:50%;opacity:.55;pointer-events:none;"></span>`
+            : '';
         return L.divIcon({
             className: '',
-            html: `<span class="material-icons detail-map-icon" style="color:${color};font-size:24px;line-height:1;">${icon}</span>`,
-            iconSize: [24, 24],
-            iconAnchor: [12, 24],
-            popupAnchor: [0, -26],
+            html: `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;">${ring}<span class="material-icons detail-map-icon" style="color:${color};font-size:${size}px;line-height:1;">${icon}</span></span>`,
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size],
+            popupAnchor: [0, -size - 2],
         });
     }
+
+    function _highlightDetailPin(uuid) {
+        _clearDetailPinHighlight();
+        _highlightedDpUuid = uuid;
+        const dp = _detailPins.find(d => d.uuid === uuid);
+        if (!dp) return;
+        dp.marker.setIcon(_detailIcon(dp.pin_type, dp.icon, dp.color, true));
+        map.panTo(dp.marker.getLatLng());
+        document.querySelectorAll('.detail-pin-list-item').forEach(li => {
+            li.classList.toggle('is-highlighted', li.dataset.uuid === uuid);
+        });
+    }
+
+    function _clearDetailPinHighlight() {
+        if (_highlightedDpUuid) {
+            const dp = _detailPins.find(d => d.uuid === _highlightedDpUuid);
+            if (dp) dp.marker.setIcon(_detailIcon(dp.pin_type, dp.icon, dp.color, false));
+            _highlightedDpUuid = null;
+        }
+        document.querySelectorAll('.detail-pin-list-item').forEach(li => li.classList.remove('is-highlighted'));
+    }
+
+    function _buildDetailList() {
+        const panel      = document.getElementById('detail-pin-list-panel');
+        const ul         = document.getElementById('detail-pin-list-ul');
+        const countLabel = document.getElementById('detail-pin-count-label');
+        const total      = _detailPins.length + _markupItems.length;
+
+        if (!total) { panel.style.display = 'none'; return; }
+
+        panel.style.display = '';
+        countLabel.textContent = `${total} Detail${total === 1 ? '' : 's'}`;
+
+        ul.innerHTML = '';
+
+        // ── Pin items ──────────────────────────────────────────────────────
+        _detailPins.forEach(dp => {
+            const color = dp.color || _detailPinColors[dp.pin_type] || '#2563eb';
+            const icon  = dp.icon  || _detailPinIcons[dp.pin_type]  || 'place';
+            const li = document.createElement('li');
+            li.className = 'detail-pin-list-item';
+            li.dataset.uuid = dp.uuid;
+            li.dataset.kind = 'pin';
+            li.innerHTML = `
+                <span class="material-icons detail-pin-list-item-icon" style="color:${color}">${icon}</span>
+                <span class="detail-pin-list-item-name">${dp.name}</span>
+                <button type="button" class="detail-pin-list-item-delete" title="Delete pin">
+                    <i class="material-icons">close</i>
+                </button>`;
+            li.addEventListener('click', e => {
+                if (e.target.closest('.detail-pin-list-item-delete')) return;
+                _highlightDetailPin(dp.uuid);
+            });
+            li.querySelector('.detail-pin-list-item-delete').addEventListener('click', e => {
+                e.stopPropagation();
+                if (!confirm(`Delete "${dp.name}"?`)) return;
+                fetch(_dpEditBase + dp.uuid + '/', {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrftoken },
+                })
+                .then(r => { if (!r.ok) throw new Error(); })
+                .then(() => { toastr.success('Detail pin deleted.'); loadDetailPins(); })
+                .catch(() => toastr.error('Failed to delete detail pin.'));
+            });
+            ul.appendChild(li);
+        });
+
+        // ── Markup items ───────────────────────────────────────────────────
+        const _markupIcon = { line: 'show_chart', arrow: 'arrow_forward', text: 'title' };
+        _markupItems.forEach(item => {
+            const li = document.createElement('li');
+            li.className = 'detail-pin-list-item';
+            li.dataset.uuid = item.uuid;
+            li.dataset.kind = 'markup';
+            const displayName = item.label || (item.markup_type.charAt(0).toUpperCase() + item.markup_type.slice(1));
+            li.innerHTML = `
+                <span class="material-icons detail-pin-list-item-icon" style="color:${item.color}">${_markupIcon[item.markup_type] || 'edit'}</span>
+                <span class="detail-pin-list-item-name">${displayName}</span>
+                <button type="button" class="detail-pin-list-item-delete" title="Delete">
+                    <i class="material-icons">close</i>
+                </button>`;
+            li.addEventListener('click', e => {
+                if (e.target.closest('.detail-pin-list-item-delete')) return;
+                _highlightMarkupItem(item);
+            });
+            li.querySelector('.detail-pin-list-item-delete').addEventListener('click', e => {
+                e.stopPropagation();
+                if (!confirm(`Delete this ${item.markup_type}?`)) return;
+                fetch(_markupEditBase + item.uuid + '/', {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrftoken },
+                })
+                .then(r => { if (!r.ok) throw new Error(); })
+                .then(() => { toastr.success('Markup deleted.'); loadMarkup(); })
+                .catch(() => toastr.error('Failed to delete markup.'));
+            });
+            ul.appendChild(li);
+        });
+    }
+
+    // Detail pin list toggle
+    document.getElementById('detail-pin-list-toggle').addEventListener('click', () => {
+        const drawer  = document.getElementById('detail-pin-list-drawer');
+        const chevron = document.getElementById('detail-pin-list-chevron');
+        const open    = drawer.style.display !== 'none';
+        drawer.style.display  = open ? 'none' : '';
+        chevron.classList.toggle('open', !open);
+    });
 
     function loadDetailPins() {
         fetch("{% url 'pin.detail_pins.json' pin.uuid %}")
             .then(r => r.json())
             .then(data => {
                 _detailPinLayer.clearLayers();
+                _highlightedDpUuid = null;
+                _detailPins = [];
                 (data.detail_pins || []).forEach(dp => {
                     if (!dp.latitude || !dp.longitude) return;
-                    L.marker([dp.latitude, dp.longitude], { icon: _detailIcon(dp.pin_type, dp.icon, dp.color) })
-                        .bindPopup(`<strong>${dp.name || dp.pin_type}</strong>${dp.description ? '<br>' + dp.description : ''}`)
-                        .addTo(_detailPinLayer);
+                    const entry = {
+                        uuid: dp.uuid, name: dp.name, pin_type: dp.pin_type,
+                        icon: dp.icon, color: dp.color,
+                        latitude: dp.latitude, longitude: dp.longitude,
+                        marker: null,
+                    };
+                    const marker = L.marker([dp.latitude, dp.longitude], {
+                        icon: _detailIcon(dp.pin_type, dp.icon, dp.color),
+                        draggable: true,
+                    });
+                    marker.bindPopup(`<strong>${dp.name}</strong>${dp.description ? '<br>' + dp.description : ''}`);
+                    marker.on('dragend', function () {
+                        const pos = marker.getLatLng();
+                        fetch(_dpEditBase + dp.uuid + '/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                            body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
+                        })
+                        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+                        .then(() => { entry.latitude = pos.lat; entry.longitude = pos.lng; toastr.success('Pin moved.'); })
+                        .catch(() => {
+                            toastr.error('Failed to save new position.');
+                            marker.setLatLng([entry.latitude, entry.longitude]);
+                        });
+                    });
+                    marker.addTo(_detailPinLayer);
+                    entry.marker = marker;
+                    _detailPins.push(entry);
                 });
+                _buildDetailList();
             })
             .catch(err => console.warn('Could not load detail pins:', err));
     }
     loadDetailPins();
+
+    // ── Markup layer ──────────────────────────────────────────────────────────
+    const _markupLayer = L.layerGroup().addTo(map);
+    _overlays['Markup'] = _markupLayer;
+
+    const _markupJsonUrl  = "{% url 'pin.markup.json' pin.uuid %}";
+    const _markupPostUrl  = "{% url 'pin.markup' pin.uuid %}";
+    const _markupEditBase = "{% url 'pin.markup.edit' pin.uuid '00000000-0000-0000-0000-000000000000' %}"
+        .replace('00000000-0000-0000-0000-000000000000/', '');
+
+    let _markupItems        = [];
+    let _markupDrawType     = null;
+    let _markupDrawHandler  = null;
+    let _markupPreviewLayer = null;
+    let _pendingLatlngs     = null;
+    let _textClickHandler   = null;
+    let _textPlacementActive = false;
+
+    const _markupPalette = ['#e53e3e', '#1d4ed8', '#16a34a', '#d97706', '#7c3aed', '#0f172a', '#f8fafc'];
+
+    function _buildColorSwatches(containerId, inputId) {
+        const container = document.getElementById(containerId);
+        const input     = document.getElementById(inputId);
+        const defaultColor = input.value;
+        container.innerHTML = '';
+        _markupPalette.forEach(color => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'markup-color-swatch' + (color === defaultColor ? ' markup-color-swatch--active' : '');
+            btn.style.cssText = `background:${color};${color === '#f8fafc' ? 'border:1px solid #cbd5e1;' : ''}`;
+            btn.addEventListener('click', () => {
+                container.querySelectorAll('.markup-color-swatch').forEach(b => b.classList.remove('markup-color-swatch--active'));
+                btn.classList.add('markup-color-swatch--active');
+                input.value = color;
+            });
+            container.appendChild(btn);
+        });
+    }
+    _buildColorSwatches('markup-color-swatches', 'markup-form-color');
+    _buildColorSwatches('text-color-swatches', 'text-form-color');
+
+    function _markupBearing(from, to) {
+        return Math.atan2(to.lng - from.lng, to.lat - from.lat) * (180 / Math.PI);
+    }
+
+    function _renderMarkupItem(item) {
+        const layers = [];
+        if (item.markup_type === 'text') {
+            const c = item.geometry.coordinates;
+            layers.push(L.marker([c[1], c[0]], {
+                icon: L.divIcon({
+                    className: '',
+                    html: `<span class="map-text-label" style="color:${item.color};font-size:${item.stroke_width || 16}px">${item.label}</span>`,
+                    iconAnchor: [0, 0],
+                }),
+            }));
+        } else {
+            const latlngs = item.geometry.coordinates.map(c => L.latLng(c[1], c[0]));
+            layers.push(L.polyline(latlngs, { color: item.color, weight: item.stroke_width || 3 }));
+            if (item.markup_type === 'arrow' && latlngs.length >= 2) {
+                const deg = _markupBearing(latlngs[latlngs.length - 2], latlngs[latlngs.length - 1]);
+                layers.push(L.marker(latlngs[latlngs.length - 1], {
+                    icon: L.divIcon({
+                        className: '',
+                        html: `<span class="material-icons map-markup-arrowhead" style="color:${item.color};transform:rotate(${deg}deg)"">arrow_upward</span>`,
+                        iconSize: [20, 20], iconAnchor: [10, 10],
+                    }),
+                }));
+            }
+            if (item.label) {
+                const mid = latlngs[Math.floor(latlngs.length / 2)];
+                layers.push(L.marker(mid, {
+                    icon: L.divIcon({
+                        className: '',
+                        html: `<span class="map-text-label map-text-label--line" style="color:${item.color}">${item.label}</span>`,
+                        iconAnchor: [0, 0],
+                    }),
+                }));
+            }
+        }
+        layers.forEach(l => l.addTo(_markupLayer));
+        item._layers = layers;
+    }
+
+    function _highlightMarkupItem(item) {
+        _clearDetailPinHighlight();
+        if (!item._layers || !item._layers.length) return;
+        const first = item._layers[0];
+        if (first instanceof L.Marker) {
+            map.panTo(first.getLatLng());
+        } else if (first.getBounds) {
+            map.fitBounds(first.getBounds().pad(0.3));
+        }
+        document.querySelectorAll('.detail-pin-list-item').forEach(li => {
+            li.classList.toggle('is-highlighted',
+                li.dataset.uuid === item.uuid && li.dataset.kind === 'markup');
+        });
+    }
+
+    function loadMarkup() {
+        fetch(_markupJsonUrl)
+            .then(r => r.json())
+            .then(data => {
+                _markupLayer.clearLayers();
+                _markupItems = [];
+                (data.markup_items || []).forEach(item => {
+                    _renderMarkupItem(item);
+                    _markupItems.push(item);
+                });
+                _buildDetailList();
+            })
+            .catch(err => console.warn('Could not load markup:', err));
+    }
+    loadMarkup();
+
+    // ── "Add Detail" dropdown ─────────────────────────────────────────────────
+    let _addDetailOpen = false;
+
+    function toggleAddDetailMenu() {
+        _addDetailOpen = !_addDetailOpen;
+        document.getElementById('add-detail-menu').style.display = _addDetailOpen ? '' : 'none';
+        document.querySelector('.add-detail-chevron').classList.toggle('open', _addDetailOpen);
+    }
+    function _closeAddDetailMenu() {
+        _addDetailOpen = false;
+        document.getElementById('add-detail-menu').style.display = 'none';
+        document.querySelector('.add-detail-chevron').classList.remove('open');
+    }
+    document.addEventListener('click', e => {
+        if (_addDetailOpen && !document.getElementById('add-detail-wrap').contains(e.target)) {
+            _closeAddDetailMenu();
+        }
+    });
+    function openAddPinDialog() {
+        _closeAddDetailMenu();
+        document.getElementById('detail-pin-add-dialog').showModal();
+    }
+
+    // ── Line / Arrow drawing ──────────────────────────────────────────────────
+    function startMarkupDraw(type) {
+        _closeAddDetailMenu();
+        _markupDrawType = type;
+        document.getElementById('markup-form-title').textContent = type === 'arrow' ? 'Add Arrow' : 'Add Line';
+        _markupDrawHandler = new L.Draw.Polyline(map, {
+            shapeOptions: {
+                color: document.getElementById('markup-form-color').value,
+                weight: parseInt(document.getElementById('markup-form-width').value),
+            },
+        });
+        _markupDrawHandler.enable();
+        toastr.info('Click to add points; double-click to finish.');
+        map.once(L.Draw.Event.CREATED, e => {
+            _markupDrawHandler = null;
+            _pendingLatlngs = e.layer.getLatLngs();
+            _markupPreviewLayer = e.layer;
+            map.addLayer(_markupPreviewLayer);
+            document.getElementById('markup-form-panel').style.display = '';
+        });
+    }
+
+    function cancelMarkupDraw() {
+        if (_markupDrawHandler) { _markupDrawHandler.disable(); _markupDrawHandler = null; }
+        if (_markupPreviewLayer) { map.removeLayer(_markupPreviewLayer); _markupPreviewLayer = null; }
+        _pendingLatlngs = null;
+        _markupDrawType = null;
+        document.getElementById('markup-form-panel').style.display = 'none';
+    }
+
+    function saveLineMarkup() {
+        if (!_pendingLatlngs) return;
+        fetch(_markupPostUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({
+                markup_type: _markupDrawType,
+                geometry: { type: 'LineString', coordinates: _pendingLatlngs.map(ll => [ll.lng, ll.lat]) },
+                label: document.getElementById('markup-form-label').value.trim(),
+                color: document.getElementById('markup-form-color').value,
+                stroke_width: parseInt(document.getElementById('markup-form-width').value),
+            }),
+        })
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(() => {
+            toastr.success(`${_markupDrawType === 'arrow' ? 'Arrow' : 'Line'} saved.`);
+            cancelMarkupDraw();
+            document.getElementById('markup-form-label').value = '';
+            loadMarkup();
+        })
+        .catch(() => toastr.error('Failed to save markup.'));
+    }
+
+    // ── Text placement ────────────────────────────────────────────────────────
+    function startTextPlacement() {
+        _closeAddDetailMenu();
+        document.getElementById('text-place-panel').style.display = '';
+    }
+
+    function activateTextPlacement() {
+        const label = document.getElementById('text-form-label').value.trim();
+        if (!label) { toastr.warning('Enter text before placing.'); return; }
+        document.getElementById('text-place-btn').style.display = 'none';
+        document.getElementById('text-place-hint').style.display = '';
+        _textPlacementActive = true;
+        map._container.style.cursor = 'crosshair';
+        _textClickHandler = e => {
+            map.off('click', _textClickHandler);
+            _textClickHandler = null;
+            map._container.style.cursor = '';
+            _textPlacementActive = false;
+            fetch(_markupPostUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                body: JSON.stringify({
+                    markup_type: 'text',
+                    geometry: { type: 'Point', coordinates: [e.latlng.lng, e.latlng.lat] },
+                    label,
+                    color: document.getElementById('text-form-color').value,
+                    stroke_width: parseInt(document.getElementById('text-form-size').value),
+                }),
+            })
+            .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+            .then(() => { toastr.success('Text label placed.'); cancelTextPlacement(); loadMarkup(); })
+            .catch(() => toastr.error('Failed to save text label.'));
+        };
+        map.on('click', _textClickHandler);
+    }
+
+    function cancelTextPlacement() {
+        if (_textClickHandler) { map.off('click', _textClickHandler); _textClickHandler = null; }
+        map._container.style.cursor = '';
+        _textPlacementActive = false;
+        document.getElementById('text-place-panel').style.display = 'none';
+        document.getElementById('text-place-btn').style.display = '';
+        document.getElementById('text-place-hint').style.display = 'none';
+        document.getElementById('text-form-label').value = '';
+    }
 
     // ── Campus boundary editor ────────────────────────────────────────────────
     const campusApiUrl = "{% url 'campus.pin' pin.uuid %}";
@@ -435,7 +956,24 @@
     function _loadSavedCampus(geojson) {
         campusItems.clearLayers();
         if (geojson) {
-            L.geoJSON(geojson, { style: campusStyle }).eachLayer(l => campusItems.addLayer(l));
+            // Split MultiPolygon into individual L.Polygon layers so Leaflet.Draw
+            // can edit each sub-polygon independently.
+            const rings = geojson.type === 'MultiPolygon'
+                ? geojson.coordinates
+                : geojson.type === 'Polygon'
+                    ? [geojson.coordinates]
+                    : null;
+            if (rings) {
+                rings.forEach(ringSet => {
+                    // GeoJSON coords are [lng, lat]; Leaflet wants [lat, lng].
+                    campusItems.addLayer(
+                        L.polygon(ringSet.map(ring => ring.map(c => [c[1], c[0]])), campusStyle)
+                    );
+                });
+            } else {
+                // FeatureCollection fallback
+                L.geoJSON(geojson, { style: campusStyle }).eachLayer(l => campusItems.addLayer(l));
+            }
             if (campusItems.getLayers().length) {
                 map.fitBounds(campusItems.getBounds().pad(0.25));
             }
@@ -454,11 +992,25 @@
         })
         .catch(err => console.warn('Could not load campus:', err));
 
+    function _attachEditRightClickDelete() {
+        // Walk the edit handler's marker group and fire a click (delete) on right-click
+        setTimeout(() => {
+            campusItems.eachLayer(layer => {
+                if (layer.editing && layer.editing._markerGroup) {
+                    layer.editing._markerGroup.eachLayer(m => {
+                        m.off('contextmenu.rcdelete');
+                        m.on('contextmenu.rcdelete', e => {
+                            L.DomEvent.stopPropagation(e);
+                            m.fire('click');
+                        });
+                    });
+                }
+            });
+        }, 100);
+    }
+
     function startEditCampus() {
         if (campusDrawControl) return;
-        if (_savedCampusGeoJSON || campusItems.getLayers().length > 0) {
-            toastr.info('Drawing a new boundary will replace the existing one when saved.');
-        }
         campusDrawControl = new L.Control.Draw({
             draw: {
                 polygon: {
@@ -473,19 +1025,40 @@
         });
         map.addControl(campusDrawControl);
         map.on(L.Draw.Event.CREATED, function (e) {
-            campusItems.clearLayers();
+            // Add the new polygon to the existing set — never clear others.
             campusItems.addLayer(e.layer);
             _setPinMarkerVisible(false);
-            toastr.info('New boundary drawn. Click Save to confirm or Cancel to restore the previous boundary.');
+            const n = campusItems.getLayers().length;
+            toastr.info(n === 1
+                ? 'Boundary drawn. Click Save to confirm.'
+                : `Polygon added (${n} total). Click Save to confirm.`);
         });
+        // Re-attach right-click delete whenever edit mode is activated by toolbar click
+        map.on(L.Draw.Event.EDITSTART, _attachEditRightClickDelete);
+
+        // Auto-activate the right tool immediately after the control renders
+        setTimeout(() => {
+            if (_savedCampusGeoJSON || campusItems.getLayers().length > 0) {
+                campusDrawControl._toolbars.edit._modes.edit.handler.enable();
+                _attachEditRightClickDelete();
+                toastr.info('Drag vertices to reshape, click a vertex to delete it, or right-click to delete.');
+            } else {
+                campusDrawControl._toolbars.draw._modes.polygon.handler.enable();
+            }
+        }, 50);
+
         document.getElementById('edit-campus-btn').style.display = 'none';
         document.getElementById('campus-save-controls').style.display = '';
     }
 
     function saveCampus() {
         const layers = campusItems.getLayers();
-        if (layers.length === 0) { toastr.warning('Draw a boundary on the map first.'); return; }
-        const geometry = layers[0].toGeoJSON().geometry;
+        if (layers.length === 0) { toastr.warning('Draw at least one boundary polygon first.'); return; }
+        // Always save as MultiPolygon so the field type is always consistent.
+        const geometry = {
+            type: 'MultiPolygon',
+            coordinates: layers.map(l => l.toGeoJSON().geometry.coordinates),
+        };
         fetch(campusApiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
@@ -494,6 +1067,13 @@
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(() => { _savedCampusGeoJSON = geometry; toastr.success('Campus boundary saved.'); _exitCampusEdit(); })
         .catch(() => toastr.error('Failed to save campus boundary.'));
+    }
+
+    function clearCampus() {
+        if (!confirm('Remove all boundary polygons from the map? Click Save afterwards to confirm.')) return;
+        campusItems.clearLayers();
+        _setPinMarkerVisible(true);
+        toastr.info('All polygons removed. Click Save to save the empty boundary, or Cancel to restore.');
     }
 
     function _exitCampusEdit() {
