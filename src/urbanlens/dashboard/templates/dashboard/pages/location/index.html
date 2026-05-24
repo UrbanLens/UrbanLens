@@ -11,59 +11,31 @@
 {% block content %}
 <div class="section">
 
-    {# ── Title ────────────────────────────────────────────────────────────── #}
-    <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
-
-    {# ── Details ──────────────────────────────────────────────────────────── #}
-    <div class="pin-details location-details card">
-        {% if pin.location %}
-        <a href="{% url 'location.wiki' pin.location.uuid %}" class="wiki-link-btn">
-            View community wiki <i class="material-icons">open_in_new</i>
-        </a>
-        {% endif %}
-        <div class="details-grid">
-            {% if pin.description %}
-            <div class="detail-row full-width">
-                <span class="field-label">Description</span>
-                <span class="field-value">{{ pin.description }}</span>
-            </div>
-            {% endif %}
-            <div class="detail-row">
-                <span class="field-label">Status</span>
-                <span class="field-value">{% if pin.status %}{{ pin.status|title }}{% else %}<em>Not set</em>{% endif %}</span>
-            </div>
-            <div class="detail-row">
-                <span class="field-label">Rating</span>
-                <span class="field-value">{% if pin.rating %}{{ pin.rating }} / 5{% else %}<em>No rating</em>{% endif %}</span>
-            </div>
-            <div class="detail-row">
-                <span class="field-label">Last Visited</span>
-                <span class="field-value">{% if pin.last_visited %}{{ pin.last_visited|date:"N j, Y" }}{% else %}<em>Never</em>{% endif %}</span>
-            </div>
-            <div class="detail-row">
-                <span class="field-label">Categories</span>
-                <span class="field-value">
-                    {% if pin.categories.all %}
-                    {% for cat in pin.categories.all %}{{ cat.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
-                    {% else %}<em>None</em>{% endif %}
-                </span>
-            </div>
-            {% if pin.place_name %}
-            <div class="detail-row">
-                <span class="field-label">Place Name</span>
-                <span class="field-value">{{ pin.place_name }}</span>
-            </div>
-            {% endif %}
-            {% if pin.address_basic %}
-            <div class="detail-row">
-                <span class="field-label">Address</span>
-                <span class="field-value">{{ pin.address_basic }}{% if pin.city %}, {{ pin.city }}{% endif %}{% if pin.state %}, {{ pin.state }}{% endif %}</span>
-            </div>
-            {% endif %}
+    {# ── Title + details (swappable) ──────────────────────────────────── #}
+    <div id="pin-overview"
+         hx-get="{% url 'pin.overview' pin.uuid %}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+        <div class="pin-overview-title-row">
+            <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
         </div>
+        <div class="pin-details location-details card" style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
 
-    {# ── Visit history ────────────────────────────────────────────────────── #}
+    {# ── Personal notes ───────────────────────────────────────────────── #}
+    <div id="pin-notes-panel"
+         hx-get="{% url 'pin.notes' pin.uuid %}"
+         hx-trigger="load"
+         hx-swap="outerHTML"
+         class="pin-notes-panel card">
+        <div class="card-header">
+            <i class="material-icons">sticky_note_2</i>
+            <span>My Notes</span>
+        </div>
+        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+    </div>
+
+    {# ── Visit history ────────────────────────────────────────────────── #}
     <div hx-get="{% url 'pin.visits' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML"
@@ -75,7 +47,7 @@
         <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
 
-    {# ── Tags panel ───────────────────────────────────────────────────────── #}
+    {# ── Tags panel ───────────────────────────────────────────────────── #}
     <div hx-get="{% url 'tag.membership' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML"
@@ -87,7 +59,7 @@
         <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
 
-    {# ── Detail pins ──────────────────────────────────────────────────────── #}
+    {# ── Detail pins ──────────────────────────────────────────────────── #}
     <div hx-get="{% url 'pin.detail_pins' pin.uuid %}"
          hx-trigger="load, reload-detail-pins"
          hx-swap="outerHTML"
@@ -100,7 +72,7 @@
         <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
 
-    {# ── Aliases ──────────────────────────────────────────────────────────── #}
+    {# ── Aliases ──────────────────────────────────────────────────────── #}
     <div hx-get="{% url 'pin.aliases' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML"
@@ -113,7 +85,7 @@
         <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
 
-    {# ── Pin location map ─────────────────────────────────────────────────── #}
+    {# ── Pin location map ─────────────────────────────────────────────── #}
     <div class="location-map pin-map card">
         <div class="card-header">
             <i class="material-icons">place</i>
@@ -122,7 +94,7 @@
         <div id="map"></div>
     </div>
 
-    {# ── Campus boundary editor ───────────────────────────────────────────── #}
+    {# ── Campus boundary editor ───────────────────────────────────────── #}
     <div class="campus-editor card">
         <div class="card-header">
             <i class="material-icons">pentagon</i>
@@ -141,7 +113,7 @@
         </div>
     </div>
 
-    {# ── Satellite view ───────────────────────────────────────────────────── #}
+    {# ── Satellite view ───────────────────────────────────────────────── #}
     <div id="satellite-view-section" class="satellite-view card"
          hx-get="{% url 'pin.satellite_view' pin.uuid %}"
          hx-trigger="load"
@@ -156,7 +128,7 @@
         </div>
     </div>
 
-    {# ── Street view ──────────────────────────────────────────────────────── #}
+    {# ── Street view ──────────────────────────────────────────────────── #}
     <div id="street-view-section" class="street-view card"
          hx-get="{% url 'pin.street_view' pin.uuid %}"
          hx-trigger="load"
@@ -171,7 +143,7 @@
         </div>
     </div>
 
-    {# ── Weather forecast ─────────────────────────────────────────────────── #}
+    {# ── Weather forecast ─────────────────────────────────────────────── #}
     <div id="weather-forecast-section" class="weather-widget card"
          hx-get="{% url 'pin.weather_forecast' pin.uuid %}"
          hx-trigger="load"
@@ -186,7 +158,7 @@
         </div>
     </div>
 
-    {# ── Smithsonian images ───────────────────────────────────────────────── #}
+    {# ── Smithsonian images ───────────────────────────────────────────── #}
     <div id="smithsonian-section" class="smithsonian-images card"
          hx-get="{% url 'smithsonian_images' pin.uuid %}"
          hx-trigger="load"
@@ -201,7 +173,7 @@
         </div>
     </div>
 
-    {# ── Web search results ───────────────────────────────────────────────── #}
+    {# ── Web search results ───────────────────────────────────────────── #}
     <div id="web-search-section" class="web-search card"
          hx-get="{% url 'pin.web_search' pin.uuid %}"
          hx-trigger="load"
@@ -218,7 +190,89 @@
 
 </div>
 
-{# ── Add detail-pin dialog — lives outside the HTMX-swapped panel ────────── #}
+{# ── Pin edit dialog ────────────────────────────────────────────────────── #}
+<dialog id="pin-edit-dialog" class="pin-edit-dialog">
+    <div class="dialog-header">
+        <span>Edit Pin</span>
+        <button type="button" class="dialog-close"
+                onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <form hx-post="{% url 'pin.edit' pin.uuid %}"
+          hx-target="#pin-overview"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}"
+          class="pin-edit-form">
+        {% csrf_token %}
+
+        <div class="form-row">
+            <label for="pe-nickname">Name <span class="form-optional">(leave blank to use location name)</span></label>
+            <input type="text" name="nickname" id="pe-nickname"
+                   value="{{ pin.nickname|default:'' }}" maxlength="255"
+                   placeholder="{{ pin.effective_name }}">
+        </div>
+
+        <div class="form-row">
+            <label for="pe-description">Description / Notes</label>
+            <textarea name="description" id="pe-description" rows="4"
+                      placeholder="Your personal notes about this location…">{{ pin.description|default:'' }}</textarea>
+        </div>
+
+        <div class="form-row form-row--two-col">
+            <div>
+                <label for="pe-status">Status</label>
+                <select name="status" id="pe-status">
+                    {% for value, label in pin_status_choices %}
+                    <option value="{{ value }}"{% if pin.status == value %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="pe-pin-type">Pin Type</label>
+                <select name="pin_type" id="pe-pin-type">
+                    {% for value, label in pin_type_choices %}
+                    <option value="{{ value }}"{% if pin.pin_type == value %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row form-row--two-col">
+            <div>
+                <label for="pe-priority">Priority</label>
+                <input type="number" name="priority" id="pe-priority" min="0" max="100"
+                       value="{{ pin.priority }}">
+            </div>
+            <div>
+                <label for="pe-last-visited">Last Visited</label>
+                <input type="date" name="last_visited" id="pe-last-visited"
+                       value="{{ pin.last_visited|date:'Y-m-d'|default:'' }}">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label for="pe-categories">Categories <span class="form-optional">(comma-separated)</span></label>
+            <input type="text" name="categories" id="pe-categories"
+                   value="{% for cat in pin.categories.all %}{{ cat.name }}{% if not forloop.last %}, {% endif %}{% endfor %}"
+                   placeholder="e.g. factory, hospital"
+                   list="pe-categories-list">
+            <datalist id="pe-categories-list">
+                {% for cat in all_categories %}
+                <option value="{{ cat.name }}">
+                {% endfor %}
+            </datalist>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="submit-button">Save Changes</button>
+            <button type="button" class="btn-ghost"
+                    onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+{# ── Add detail-pin dialog ──────────────────────────────────────────────── #}
 <dialog id="detail-pin-add-dialog" class="detail-pin-add-dialog">
     <div class="dialog-header">
         <span>Add Detail Pin</span>
@@ -282,7 +336,7 @@
             <button type="submit" id="detail-pin-submit-btn" class="submit-button" disabled>
                 Add Pin
             </button>
-            <button type="button" class="submit-button cancel-btn" id="detail-pin-cancel-btn">
+            <button type="button" class="btn-ghost cancel-btn" id="detail-pin-cancel-btn">
                 Cancel
             </button>
         </div>
@@ -381,7 +435,7 @@
     const campusItems = new L.FeatureGroup().addTo(campusMap);
     const campusStyle = { color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 };
     let campusDrawControl = null;
-    let _savedCampusGeoJSON = null;   // tracks last-saved state for cancel restore
+    let _savedCampusGeoJSON = null;
 
     setTimeout(() => campusMap.invalidateSize(), 300);
 
@@ -406,11 +460,9 @@
 
     function startEditCampus() {
         if (campusDrawControl) return;
-
         if (_savedCampusGeoJSON || campusItems.getLayers().length > 0) {
-            toastr.info('Drawing a new boundary will replace the existing one when saved. Click Cancel to keep the current boundary.');
+            toastr.info('Drawing a new boundary will replace the existing one when saved.');
         }
-
         campusDrawControl = new L.Control.Draw({
             draw: {
                 polygon: {
@@ -435,22 +487,15 @@
 
     function saveCampus() {
         const layers = campusItems.getLayers();
-        if (layers.length === 0) {
-            toastr.warning('Draw a boundary on the map first.');
-            return;
-        }
+        if (layers.length === 0) { toastr.warning('Draw a boundary on the map first.'); return; }
         const geometry = layers[0].toGeoJSON().geometry;
         fetch(campusApiUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
             body: JSON.stringify({ polygon: geometry }),
         })
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(() => {
-            _savedCampusGeoJSON = geometry;
-            toastr.success('Campus boundary saved.');
-            _exitCampusEdit();
-        })
+        .then(() => { _savedCampusGeoJSON = geometry; toastr.success('Campus boundary saved.'); _exitCampusEdit(); })
         .catch(() => toastr.error('Failed to save campus boundary.'));
     }
 
@@ -463,12 +508,8 @@
 
     function cancelCampusEdit() {
         _exitCampusEdit();
-        _loadSavedCampus(_savedCampusGeoJSON);  // restore last-saved state
+        _loadSavedCampus(_savedCampusGeoJSON);
     }
-
-    document.addEventListener('htmx:configRequest', (event) => {
-        event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
-    });
 
     // ── Detail-pin add dialog ─────────────────────────────────────────────────
     (function () {
@@ -488,21 +529,14 @@
             document.getElementById('dp-color').value = '';
             document.querySelectorAll('.dp-icon-btn').forEach(b => b.classList.remove('dp-icon-btn--active'));
             document.querySelectorAll('.dp-color-swatch').forEach(s => s.classList.remove('dp-color-swatch--active'));
-            submitBtn.disabled  = true;
+            submitBtn.disabled = true;
             submitBtn.textContent = 'Add Pin';
             _submitting = false;
             noLocMsg.style.display = '';
-            if (_pickerMarker && _pickerMap) {
-                _pickerMap.removeLayer(_pickerMarker);
-                _pickerMarker = null;
-            }
-            if (_pickerMap) {
-                _pickerMap.setView([pinLat, pinLng], 17);
-                setTimeout(() => _pickerMap.invalidateSize(), 100);
-            }
+            if (_pickerMarker && _pickerMap) { _pickerMap.removeLayer(_pickerMarker); _pickerMarker = null; }
+            if (_pickerMap) { _pickerMap.setView([pinLat, pinLng], 17); setTimeout(() => _pickerMap.invalidateSize(), 100); }
         }
 
-        // ── Icon + color picker wiring ────────────────────────────────────────
         document.querySelectorAll('.dp-icon-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 document.querySelectorAll('.dp-icon-btn').forEach(b => b.classList.remove('dp-icon-btn--active'));
@@ -519,11 +553,7 @@
         });
 
         function _initPickerMap() {
-            if (_pickerMap) {
-                _pickerMap.setView([pinLat, pinLng], 17);
-                setTimeout(() => _pickerMap.invalidateSize(), 150);
-                return;
-            }
+            if (_pickerMap) { _pickerMap.setView([pinLat, pinLng], 17); setTimeout(() => _pickerMap.invalidateSize(), 150); return; }
             _pickerMap = L.map('detail-pin-picker-map').setView([pinLat, pinLng], 17);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(_pickerMap);
             L.marker([pinLat, pinLng], { opacity: 0.4, title: 'Pin location' }).addTo(_pickerMap);
@@ -540,10 +570,7 @@
         }
 
         dlg.addEventListener('toggle', (e) => {
-            if (e.newState === 'open') {
-                _resetDialog();
-                _initPickerMap();
-            }
+            if (e.newState === 'open') { _resetDialog(); _initPickerMap(); }
         });
 
         document.getElementById('detail-pin-dialog-close').addEventListener('click', () => dlg.close());
@@ -554,10 +581,7 @@
             if (_submitting) return;
             const lat = document.getElementById('dp-lat').value;
             const lon = document.getElementById('dp-lon').value;
-            if (!lat || !lon) {
-                toastr.warning('Click a point on the map to set the location first.');
-                return;
-            }
+            if (!lat || !lon) { toastr.warning('Click a point on the map to set the location first.'); return; }
             _submitting = true;
             submitBtn.disabled = true;
             submitBtn.textContent = 'Saving…';
@@ -565,10 +589,7 @@
             new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
             fetch("{% url 'pin.detail_pins' pin.uuid %}", {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}',
-                },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
                 body: JSON.stringify(data),
             })
             .then(r => r.json())

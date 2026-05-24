@@ -1513,10 +1513,12 @@ body.page-location-details div.section {
     font-style: italic;
 }
 
-// ── Modal-style dialog (shared by tag-add, visit-add, detail-pin-add) ───────
+// ── Modal-style dialog (shared by tag-add, visit-add, detail-pin-add, trip) ──
 .tag-add-dialog,
 .visit-add-dialog,
-.detail-pin-add-dialog {
+.detail-pin-add-dialog,
+.trip-create-dialog,
+.pin-edit-dialog {
     border: none;
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
@@ -5752,26 +5754,44 @@ textarea.form-input {
     flex-shrink: 0;
 }
 
-.btn-danger-sm {
+// Trip header action buttons
+.trip-header-btn {
     display: inline-flex;
     align-items: center;
-    gap: .3rem;
-    padding: .4rem .8rem;
+    gap: .35rem;
+    padding: .45rem .9rem;
     font-size: .82rem;
     font-weight: 600;
-    border: 1px solid #fca5a5;
-    background: #fff;
-    color: #dc2626;
-    border-radius: 6px;
+    border-radius: 8px;
     cursor: pointer;
-    transition: background .15s, color .15s;
+    transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+    letter-spacing: .01em;
 
-    &:hover {
-        background: #fef2f2;
+    .material-icons { font-size: 1rem; }
+
+    &--edit {
+        border: 1px solid #0891b2;
+        background: transparent;
+        color: #0891b2;
+
+        &:hover {
+            background: #0891b2;
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(8, 145, 178, .25);
+        }
     }
 
-    .material-icons {
-        font-size: 1rem;
+    &--delete {
+        border: 1px solid #fca5a5;
+        background: transparent;
+        color: #dc2626;
+
+        &:hover {
+            background: #dc2626;
+            border-color: #dc2626;
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(220, 38, 38, .2);
+        }
     }
 }
 
@@ -6111,23 +6131,11 @@ textarea.form-input {
 
 // ── Create/edit trip dialog ───────────────────────────────────────────────
 
+// Override width for trip dialogs (more content than tag dialogs)
 .trip-create-dialog {
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
-    padding: 0;
     width: min(480px, 95vw);
     max-height: 90vh;
     overflow-y: auto;
-
-    &[open] {
-        display: flex;
-        flex-direction: column;
-    }
-
-    &::backdrop {
-        background: rgba(0, 0, 0, .35);
-    }
 
     .trip-create-form {
         padding: 1.25rem 1.5rem 1.5rem;
@@ -6182,4 +6190,113 @@ textarea.form-input {
     font-size: .82rem;
     color: #3b82f6;
     font-style: italic;
+}
+
+// ── Pin overview (title + details card) ──────────────────────────────────
+
+.pin-overview-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: .5rem;
+    flex-wrap: wrap;
+
+    .pin-title { margin: 0; }
+}
+
+// ── Pin edit dialog ───────────────────────────────────────────────────────
+
+.pin-edit-dialog {
+    width: min(560px, 96vw);
+    max-height: 92vh;
+    overflow-y: auto;
+
+    .pin-edit-form {
+        padding: 1.25rem 1.5rem 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: .9rem;
+    }
+}
+
+// ── Personal pin notes ────────────────────────────────────────────────────
+
+.pin-notes-panel {
+    &.card { padding: 0; }
+
+    .card-header {
+        .badge {
+            background: #e2e8f0;
+            color: #64748b;
+            border-radius: 99px;
+            font-size: .72rem;
+            font-weight: 700;
+            padding: 1px 7px;
+        }
+    }
+}
+
+.pin-note-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.pin-note-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .65rem;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid #f1f5f9;
+    transition: opacity .2s;
+
+    &:last-child { border-bottom: none; }
+    &.is-deleting { opacity: .25; pointer-events: none; }
+}
+
+.pin-note-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.pin-note-text {
+    margin: 0 0 .25rem;
+    font-size: .88rem;
+    color: #1e293b;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.pin-note-date {
+    font-size: .75rem;
+    color: #94a3b8;
+}
+
+.pin-notes-empty {
+    padding: 1.25rem 1rem;
+    color: #94a3b8;
+    font-size: .85rem;
+    font-style: italic;
+    margin: 0;
+}
+
+.pin-note-form {
+    padding: .75rem 1rem;
+    border-top: 1px solid #f1f5f9;
+
+    .pin-note-input {
+        width: 100%;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: .5rem .75rem;
+        font-size: .88rem;
+        resize: vertical;
+        font-family: inherit;
+        box-sizing: border-box;
+
+        &:focus { outline: none; border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+    }
+
+    .form-actions { margin-top: .5rem; }
 }

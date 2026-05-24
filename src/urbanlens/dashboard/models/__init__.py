@@ -31,7 +31,7 @@ from urbanlens.dashboard.models.comments import Comment
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.friendship import Friendship
 from urbanlens.dashboard.models.images import Image
-from urbanlens.dashboard.models.pin import Pin
+from urbanlens.dashboard.models.pin import Pin, PinNote
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.notifications import NotificationLog
 from urbanlens.dashboard.models.reviews import Review

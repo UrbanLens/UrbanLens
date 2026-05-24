@@ -48,6 +48,10 @@
     {% endif %}
     <script>
         var csrftoken = '{{ csrf_token }}';
+        // Include CSRF token in all HTMX requests (needed for DELETE/PUT/PATCH)
+        document.body.addEventListener('htmx:configRequest', function (evt) {
+            evt.detail.headers['X-CSRFToken'] = csrftoken;
+        });
         toastr.options = {
             positionClass: 'toast-bottom-right',
             progressBar: true,

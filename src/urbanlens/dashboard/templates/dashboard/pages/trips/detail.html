@@ -203,7 +203,7 @@
                 data.results.forEach(function(loc) {
                     var li = document.createElement('li');
                     li.className = 'location-suggestion-item';
-                    li.textContent = loc.name + (loc.city ? ', ' + loc.city : '') + (loc.state ? ', ' + loc.state : '');
+                    li.textContent = loc.name + (loc.locality ? ', ' + loc.locality : '') + (loc.administrative_area_level_1 ? ', ' + loc.administrative_area_level_1 : '');
                     li.addEventListener('click', function() {
                         uuidInput.value  = loc.uuid;
                         display.textContent = loc.name;

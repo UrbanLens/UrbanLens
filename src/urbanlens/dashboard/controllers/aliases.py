@@ -37,7 +37,7 @@ class PinAliasView(LoginRequiredMixin, View):
         if not name:
             return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
         try:
-            alias = PinAlias.objects.create(pin=pin, name=name)
+            PinAlias.objects.create(pin=pin, name=name)
         except IntegrityError:
             return JsonResponse({"ok": False, "error": "That alias already exists."}, status=409)
         aliases = pin.aliases.order_by("name")

@@ -1,0 +1,46 @@
+<div id="pin-notes-panel" class="pin-notes-panel card">
+    <div class="card-header">
+        <i class="material-icons">sticky_note_2</i>
+        <span>My Notes</span>
+        {% if notes %}<span class="badge">{{ notes|length }}</span>{% endif %}
+    </div>
+
+    {% if notes %}
+    <ul class="pin-note-list">
+        {% for note in notes %}
+        <li class="pin-note-item" id="pin-note-{{ note.id }}">
+            <div class="pin-note-body">
+                <p class="pin-note-text">{{ note.text }}</p>
+                <span class="pin-note-date">{{ note.created|date:"M j, Y g:i A" }}</span>
+            </div>
+            <button type="button"
+                    class="detail-pin-action-btn"
+                    title="Delete note"
+                    hx-delete="{% url 'pin.note.delete' pin.uuid note.id %}"
+                    hx-target="#pin-note-{{ note.id }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Delete this note?"
+                    hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                <i class="material-icons">delete</i>
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="pin-notes-empty">No notes yet. Jot down anything personal about this location.</p>
+    {% endif %}
+
+    {# ── Add note form ───────────────────────────────────────────────── #}
+    <form hx-post="{% url 'pin.notes' pin.uuid %}"
+          hx-target="#pin-notes-panel"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){this.reset()}"
+          class="pin-note-form">
+        {% csrf_token %}
+        <textarea name="text" rows="2" placeholder="Add a note…" required
+                  class="pin-note-input"></textarea>
+        <div class="form-actions">
+            <button type="submit" class="submit-button">Save Note</button>
+        </div>
+    </form>
+</div>

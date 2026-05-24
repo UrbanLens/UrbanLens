@@ -83,10 +83,9 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
             pin.location = location
             pin.save(update_fields=["location"])
 
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        data = request.data
+        if not isinstance(data, dict):
+            return JsonResponse({"error": "Invalid request body"}, status=400)
 
         if not request.user.is_authenticated:
             return JsonResponse({"error": "Authentication required."}, status=401)

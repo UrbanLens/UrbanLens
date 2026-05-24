@@ -257,7 +257,7 @@ class TripCommentDeleteView(LoginRequiredMixin, View):
         if not (trip.creator == profile or trip.profiles.filter(pk=profile.pk).exists()):
             return HttpResponse("Forbidden", status=403)
         comment = get_object_or_404(TripComment, id=comment_id, trip=trip)
-        if comment.author != profile and trip.creator != profile:
+        if profile not in {comment.author, trip.creator}:
             return HttpResponse("You can only delete your own comments.", status=403)
         comment.delete()
         return HttpResponse("", status=200)
@@ -324,7 +324,7 @@ class TripMemberRemoveView(LoginRequiredMixin, View):
         # Creator cannot be removed; only creator can remove others
         if target == trip.creator:
             return HttpResponse("The trip creator cannot be removed.", status=400)
-        if target != profile and trip.creator != profile:
+        if profile not in {target, trip.creator}:
             return HttpResponse("Only the trip creator can remove other members.", status=403)
         trip.profiles.remove(target)
 
@@ -345,6 +345,6 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.location.model import Location
         locations = (
             Location.objects.filter(name__icontains=q)
-            .values("uuid", "name", "address", "city", "state")[:10]
+            .values("uuid", "name", "locality", "administrative_area_level_1")[:10]
         )
         return JsonResponse({"results": list(locations)})
