@@ -750,6 +750,7 @@ ignore = [
     "W293",    # blank line contains whitespace
     "W391",    # blank line at end of file
     "DJ012",   # Order of model's inner classes, methods... does not follow Django style guide
+    "RUF001",  # Ambiguous heavy plus sign (emoji)
     # Ambivalent about turning these on/off
     "C901",   # function is too complex
     "B019",   # possible memleak

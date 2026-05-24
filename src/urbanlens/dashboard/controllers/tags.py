@@ -21,7 +21,7 @@ class TagIndexView(LoginRequiredMixin, View):
 
     def get(self, request, *args, **kwargs):
         profile = request.user.profile
-        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins")
+        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
         return render(request, "dashboard/pages/tags/index.html", {
             "tags": tags,
             "icon_choices": ICON_CHOICES,
@@ -59,7 +59,7 @@ class TagCreateView(LoginRequiredMixin, View):
             valid_parents = Tag.objects.filter(id__in=parent_ids).visible_to(profile)
             tag.parents.set(valid_parents)
 
-        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins")
+        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
         return render(request, "dashboard/partials/tag_rows.html", {
             "tags": tags,
             "icon_choices": ICON_CHOICES,
@@ -119,7 +119,7 @@ class TagEditView(LoginRequiredMixin, View):
         else:
             tag.parents.clear()
 
-        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins")
+        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
         return render(request, "dashboard/partials/tag_rows.html", {
             "tags": tags,
             "icon_choices": ICON_CHOICES,
@@ -139,7 +139,7 @@ class TagDeleteView(LoginRequiredMixin, View):
         profile = tag.profile
         tag.delete()
 
-        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins")
+        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
         return render(request, "dashboard/partials/tag_rows.html", {
             "tags": tags,
             "icon_choices": ICON_CHOICES,
@@ -173,7 +173,7 @@ class TagRowsView(LoginRequiredMixin, View):
 
     def get(self, request, *args, **kwargs):
         profile = request.user.profile
-        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins")
+        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
         return render(request, "dashboard/partials/tag_rows.html", {
             "tags": tags,
             "icon_choices": ICON_CHOICES,
@@ -216,7 +216,7 @@ class TagMergeView(LoginRequiredMixin, View):
         target.pins.add(*source.pins.all())
         source.delete()
 
-        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins")
+        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
         return render(request, "dashboard/partials/tag_rows.html", {
             "tags": tags,
             "icon_choices": ICON_CHOICES,

@@ -19,6 +19,18 @@ def in_list(value, collection) -> bool:
 
 
 @register.filter
+def tag_total_pins(tag) -> int:
+    """Return direct pin count plus all direct children's pin counts.
+
+    Requires prefetch_related('pins', 'children', 'children__pins') to avoid N+1.
+    """
+    total = tag.pins.count()
+    for child in tag.children.all():
+        total += child.pins.count()
+    return total
+
+
+@register.filter
 def is_material_icon(value) -> bool:
     """Return True if value is a Material Icons name (ASCII letters/underscores only).
 

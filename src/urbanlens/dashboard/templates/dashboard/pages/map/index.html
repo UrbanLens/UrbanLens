@@ -369,7 +369,9 @@
 
     // ── Cluster layer (replaces plain LayerGroup) ─────────────────────────────
     var clusterGroup = L.markerClusterGroup({
-        maxClusterRadius: 50,
+        maxClusterRadius: function(zoom) {
+            return zoom <= 10 ? 80 : zoom <= 13 ? 40 : 20;
+        },
         spiderfyOnMaxZoom: true,
         showCoverageOnHover: false,
         animate: true,

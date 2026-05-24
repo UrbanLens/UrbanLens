@@ -7,11 +7,24 @@
     <div class="tag-header">
         <div>
             <h1 class="tag-title">My Tags</h1>
-            <p class="tag-subtitle">Organize your pins with custom tags. Global tags are shared across all users.</p>
+            <p class="tag-subtitle">Organize your pins with custom tags.</p>
         </div>
-        <button class="btn-primary" id="new-tag-btn" type="button" style="flex-shrink:0;">
-            <i class="material-icons">add</i> New Tag
-        </button>
+        <div class="tag-header-right">
+            <div class="tag-view-toggle" role="group" aria-label="View mode">
+                <button type="button" class="tag-view-btn active" data-view="list" title="List view">
+                    <i class="material-icons">view_list</i>
+                </button>
+                <button type="button" class="tag-view-btn" data-view="gallery" title="Gallery view">
+                    <i class="material-icons">grid_view</i>
+                </button>
+                <button type="button" class="tag-view-btn" data-view="tree" title="Tree view">
+                    <i class="material-icons">account_tree</i>
+                </button>
+            </div>
+            <button class="btn-primary" id="new-tag-btn" type="button">
+                <i class="material-icons">add</i> New Tag
+            </button>
+        </div>
     </div>
 
     {# ── Create form (hidden by default) ─────────────────────────────────────── #}
@@ -352,6 +365,146 @@ initSortable();
 document.getElementById('tag-rows').addEventListener('htmx:afterSwap', function() {
     initSortable();
     updateOrderBadges();
+    applyCurrentView();
 });
+
+// ── View toggle ────────────────────────────────────────────────────────────────
+var _currentView = localStorage.getItem('tag_view') || 'list';
+
+function applyCurrentView() {
+    var rows = document.getElementById('tag-rows');
+    if (!rows) return;
+    rows.classList.remove('tag-view--list', 'tag-view--gallery', 'tag-view--tree');
+    rows.classList.add('tag-view--' + _currentView);
+
+    document.querySelectorAll('.tag-view-btn').forEach(function(btn) {
+        btn.classList.toggle('active', btn.dataset.view === _currentView);
+    });
+
+    if (_currentView === 'tree') {
+        renderTreeView(rows);
+    } else {
+        // Restore flat order; remove any tree scaffolding
+        var treeRoot = rows.querySelector('.tag-tree-root');
+        if (treeRoot) treeRoot.remove();
+        rows.querySelectorAll('.tag-card').forEach(function(card) {
+            card.style.display = '';
+        });
+    }
+
+    // Sortable only makes sense in list view
+    if (rows._sortable) {
+        if (_currentView === 'list') {
+            rows._sortable.option('disabled', false);
+        } else {
+            rows._sortable.option('disabled', true);
+        }
+    }
+}
+
+function renderTreeView(rows) {
+    // Remove any previous tree render
+    var old = rows.querySelector('.tag-tree-root');
+    if (old) old.remove();
+
+    // Collect all tag cards
+    var cards = Array.from(rows.querySelectorAll('.tag-card[data-tag-id]'));
+
+    // Build id→card map and id→parentIds map
+    var cardMap = {};
+    var parentMap = {}; // tagId → [parentId, ...]
+    cards.forEach(function(card) {
+        var id = card.dataset.tagId;
+        cardMap[id] = card;
+        var parents = card.dataset.tagParents || '';
+        parentMap[id] = parents ? parents.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+        // Hide original card — will be re-placed in tree
+        card.style.display = 'none';
+    });
+
+    // Build children map: parentId → [childId, ...]
+    var childrenMap = {};
+    Object.keys(parentMap).forEach(function(id) {
+        parentMap[id].forEach(function(pid) {
+            if (!childrenMap[pid]) childrenMap[pid] = [];
+            childrenMap[pid].push(id);
+        });
+    });
+
+    // Root tags: those with no parents, or parents that aren't in our card set
+    var cardIds = new Set(Object.keys(cardMap));
+    var rootIds = Object.keys(cardMap).filter(function(id) {
+        var parents = parentMap[id];
+        return parents.length === 0 || parents.every(function(pid) { return !cardIds.has(pid); });
+    });
+
+    // Sort roots by their original DOM order
+    rootIds.sort(function(a, b) {
+        return cards.indexOf(cardMap[a]) - cards.indexOf(cardMap[b]);
+    });
+
+    var treeRoot = document.createElement('div');
+    treeRoot.className = 'tag-tree-root';
+
+    var visited = new Set();
+
+    function buildNode(id, depth) {
+        if (visited.has(id)) return null; // prevent cycles
+        visited.add(id);
+
+        var card = cardMap[id];
+        if (!card) return null;
+
+        var item = document.createElement('div');
+        item.className = 'tag-tree-item';
+        item.dataset.depth = depth;
+        item.style.setProperty('--tree-depth', depth);
+
+        var clone = card.cloneNode(true);
+        clone.style.display = '';
+        // Give the clone a unique id to avoid DOM id collisions
+        clone.id = 'tree-' + clone.id;
+        item.appendChild(clone);
+
+        var children = childrenMap[id] || [];
+        if (children.length > 0) {
+            var childrenContainer = document.createElement('div');
+            childrenContainer.className = 'tag-tree-children';
+            children.forEach(function(cid) {
+                var childNode = buildNode(cid, depth + 1);
+                if (childNode) childrenContainer.appendChild(childNode);
+            });
+            item.appendChild(childrenContainer);
+        }
+
+        return item;
+    }
+
+    rootIds.forEach(function(id) {
+        var node = buildNode(id, 0);
+        if (node) treeRoot.appendChild(node);
+    });
+
+    // Tags with no card parent representation (orphaned by cycle guard) shown at end
+    Object.keys(cardMap).forEach(function(id) {
+        if (!visited.has(id)) {
+            var node = buildNode(id, 0);
+            if (node) treeRoot.appendChild(node);
+        }
+    });
+
+    rows.appendChild(treeRoot);
+}
+
+document.querySelectorAll('.tag-view-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        _currentView = btn.dataset.view;
+        localStorage.setItem('tag_view', _currentView);
+        applyCurrentView();
+    });
+});
+
+// Apply on first load
+applyCurrentView();
 </script>
 {% endblock %}
