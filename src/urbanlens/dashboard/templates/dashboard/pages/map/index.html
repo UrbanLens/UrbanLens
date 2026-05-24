@@ -4,6 +4,8 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="" />
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
 <style>
 /* ── Filter panel ─────────────────────────────────────────────────── */
 #filter-panel {
@@ -160,6 +162,63 @@
     background: #5082ff;
     pointer-events: none;
 }
+
+/* ── Marker clusters ──────────────────────────────────────────────── */
+.pin-cluster {
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    font-weight: 700;
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,.4), 0 0 0 2px rgba(255,255,255,.22);
+    transition: transform .12s, box-shadow .12s;
+    line-height: 1;
+}
+.pin-cluster:hover {
+    transform: scale(1.13);
+    box-shadow: 0 4px 18px rgba(0,0,0,.45), 0 0 0 3px rgba(255,255,255,.32);
+}
+.pin-cluster--s {
+    width: 34px; height: 34px; font-size: 12px;
+    background: linear-gradient(135deg, #3b70e8 0%, #2250c2 100%);
+}
+.pin-cluster--m {
+    width: 42px; height: 42px; font-size: 13px;
+    background: linear-gradient(135deg, #7c3aed 0%, #5418b8 100%);
+}
+.pin-cluster--l {
+    width: 50px; height: 50px; font-size: 14px;
+    background: linear-gradient(135deg, #db2777 0%, #9c124a 100%);
+}
+
+/* ── Tile-fetch progress pill ─────────────────────────────────────── */
+#tile-fetch-indicator {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(10,14,24,.82);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: rgba(255,255,255,.8);
+    font-size: .68rem;
+    letter-spacing: .02em;
+    padding: 5px 14px 5px 10px;
+    border-radius: 20px;
+    z-index: 1000;
+    pointer-events: none;
+    display: none;
+    gap: 7px;
+    align-items: center;
+    border: 1px solid rgba(255,255,255,.09);
+}
+#tile-fetch-indicator.visible { display: flex; }
+.tfi-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #5a8fff;
+    animation: tfi-pulse 1.1s ease-in-out infinite;
+    flex-shrink: 0;
+}
+@keyframes tfi-pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
 </style>
 {% endblock %}
 
@@ -262,6 +321,11 @@
         </form>
     </div>
 
+    <div id="tile-fetch-indicator" aria-hidden="true">
+        <span class="tfi-dot"></span>
+        <span>Loading pins…</span>
+    </div>
+
     <div id="loading-pins-message">
         <span>Loading...</span>
     </div>
@@ -280,51 +344,159 @@
 
 {% block scripts %}
 <script>
-    let pinsVisible = true;
+    // ── Constants ─────────────────────────────────────────────────────────────
+    const _PROFILE_ID  = {{ profile_id|default:0 }};
+    const _CACHE_KEY   = `ul_pins_v2_${_PROFILE_ID}`;
+    const _CACHE_FRESH = 3 * 60 * 1000;        // 3 min: serve from cache + bg refresh
+    const _CACHE_MAX   = 24 * 60 * 60 * 1000;  // 24 h: discard entirely
+    const _TILE_SIZE   = 0.5;   // degrees per tile edge (~55 km at mid-latitudes)
+    const _TILE_PAD    = 1.0;   // degrees of prefetch padding around the viewport
+    const _MAX_TILES   = 200;   // threshold above which we just fetch the whole world
 
+    // ── Shared state ──────────────────────────────────────────────────────────
+    const _pinStore     = new Map();   // uuid → pin data
+    const _fetchedTiles = new Set();   // tile keys already loaded from server
+    const _markerMap    = new Map();   // uuid → L.Marker
+    let   _filterMode   = false;       // true while search/filter results are shown
+    let   _viewportTid  = null;        // debounce timer for viewport changes
+    let   _cacheTid     = null;        // debounce timer for cache writes
+    let   pinsVisible   = true;
+
+    // ── Map ───────────────────────────────────────────────────────────────────
     const map = L.map('map').setView([42.65250213448323, -73.75791867436858], 13);
     window.map = map;
     window.pin = null;
 
-    function hideLoadingMessage() {
-        $('#loading-pins-message').hide();
+    // ── Cluster layer (replaces plain LayerGroup) ─────────────────────────────
+    var clusterGroup = L.markerClusterGroup({
+        maxClusterRadius: 50,
+        spiderfyOnMaxZoom: true,
+        showCoverageOnHover: false,
+        animate: true,
+        animateAddingMarkers: false,
+        chunkedLoading: true,
+        chunkSize: 400,
+        chunkInterval: 60,
+        iconCreateFunction(cluster) {
+            const n   = cluster.getChildCount();
+            const siz = n < 10 ? 's' : n < 100 ? 'm' : 'l';
+            return L.divIcon({
+                html: `<div class="pin-cluster pin-cluster--${siz}"><span>${n}</span></div>`,
+                className: '',
+                iconSize: L.point(40, 40),
+            });
+        },
+    });
+    clusterGroup.addTo(map);
+    var pinsLayerGroup = clusterGroup;   // backward-compat alias
+
+    // ── UI helpers ────────────────────────────────────────────────────────────
+    const _tfi = document.getElementById('tile-fetch-indicator');
+    let _fetching = 0;
+    function _setFetching(on) {
+        _fetching += on ? 1 : -1;
+        if (_tfi) _tfi.classList.toggle('visible', _fetching > 0);
     }
 
+    function hideLoadingMessage() { $('#loading-pins-message').hide(); }
+
     function updatePinCounter() {
-        const count = pinsVisible ? pinsLayerGroup.getLayers().length : 0;
+        const count = pinsVisible ? _markerMap.size : 0;
         document.getElementById('pin-counter-value').textContent = count;
         document.getElementById('pin-counter-label').textContent = count === 1 ? 'pin' : 'pins';
     }
     window.updatePinCounter = updatePinCounter;
 
-    var pinsLayerGroup = L.layerGroup().addTo(map);
+    // ── Tile math ─────────────────────────────────────────────────────────────
+    function _tileKey(lat, lng) {
+        return `${(Math.floor(lat / _TILE_SIZE) * _TILE_SIZE).toFixed(1)},${(Math.floor(lng / _TILE_SIZE) * _TILE_SIZE).toFixed(1)}`;
+    }
+    function _tilesInBbox(s, w, n, e) {
+        const keys = [];
+        for (let lat = Math.floor(s / _TILE_SIZE) * _TILE_SIZE; lat < n + 1e-9; lat += _TILE_SIZE) {
+            for (let lng = Math.floor(w / _TILE_SIZE) * _TILE_SIZE; lng < e + 1e-9; lng += _TILE_SIZE) {
+                keys.push(_tileKey(lat, lng));
+            }
+        }
+        return keys;
+    }
+    function _newTilesForBounds(bounds) {
+        const s = Math.max(-90,  bounds.getSouth() - _TILE_PAD);
+        const w = Math.max(-180, bounds.getWest()  - _TILE_PAD);
+        const n = Math.min(90,   bounds.getNorth() + _TILE_PAD);
+        const e = Math.min(180,  bounds.getEast()  + _TILE_PAD);
+        const lats = Math.ceil((n - s) / _TILE_SIZE);
+        const lngs = Math.ceil((e - w) / _TILE_SIZE);
+        if (lats * lngs > _MAX_TILES) {
+            // Viewport covers huge area — request everything once
+            return _fetchedTiles.has('*') ? [] : ['*'];
+        }
+        return _tilesInBbox(s, w, n, e).filter(k => !_fetchedTiles.has(k));
+    }
+    function _bboxFromKeys(keys) {
+        let s = Infinity, w = Infinity, n = -Infinity, e = -Infinity;
+        for (const key of keys) {
+            const [lat, lng] = key.split(',').map(Number);
+            if (lat < s) s = lat;
+            if (lng < w) w = lng;
+            if (lat + _TILE_SIZE > n) n = lat + _TILE_SIZE;
+            if (lng + _TILE_SIZE > e) e = lng + _TILE_SIZE;
+        }
+        return { s, w, n, e };
+    }
 
-    // ── Pin marker renderer (also used by search results in data.html) ────────
-    function addMarker(pin) {
-        if (!pin.latitude || !pin.longitude) return;
+    // ── LocalStorage cache ────────────────────────────────────────────────────
+    function _readCache() {
+        try {
+            const raw = localStorage.getItem(_CACHE_KEY);
+            if (!raw) return null;
+            const c = JSON.parse(raw);
+            if (c.v !== 2 || c.profileId !== _PROFILE_ID) return null;
+            if (Date.now() - c.ts > _CACHE_MAX) { localStorage.removeItem(_CACHE_KEY); return null; }
+            return c;
+        } catch { return null; }
+    }
+    function _writeCache() {
+        try {
+            localStorage.setItem(_CACHE_KEY, JSON.stringify({
+                v: 2, ts: Date.now(), profileId: _PROFILE_ID,
+                tiles: [..._fetchedTiles],
+                pins: Object.fromEntries(_pinStore),
+            }));
+        } catch { try { localStorage.removeItem(_CACHE_KEY); } catch {} }
+    }
+    function _scheduleCache() {
+        if (_cacheTid) clearTimeout(_cacheTid);
+        _cacheTid = setTimeout(_writeCache, 1500);
+    }
+    // Call after any pin mutation (add/delete) to force a fresh fetch next time
+    window.invalidatePinCache = function() {
+        localStorage.removeItem(_CACHE_KEY);
+    };
+
+    // ── Marker builder ────────────────────────────────────────────────────────
+    function _buildMarker(pin) {
+        if (!pin.latitude || !pin.longitude) return null;
         const coords = [parseFloat(pin.latitude), parseFloat(pin.longitude)];
-        let marker = L.marker(coords);
+        const marker = L.marker(coords);
 
         if (pin.icon && pin.icon !== 'undefined' && pin.icon !== 'null') {
             const color = (pin.color && pin.color !== 'None') ? pin.color : '#555555';
-            let iconHtml;
-            if (/^[a-z_]+$/.test(pin.icon)) {
-                iconHtml = '<i class="material-icons map-pin-icon" style="color:' + color + ';">' + pin.icon + '</i>';
-            } else {
-                iconHtml = '<span class="map-pin-emoji">' + pin.icon + '</span>';
-            }
-            marker.setIcon(L.divIcon({ className: 'map-pin-icon-wrap', html: iconHtml, iconSize: [28, 28], iconAnchor: [14, 14] }));
+            const iconHtml = /^[a-z_]+$/.test(pin.icon)
+                ? `<i class="material-icons map-pin-icon" style="color:${color};">${pin.icon}</i>`
+                : `<span class="map-pin-emoji">${pin.icon}</span>`;
+            marker.setIcon(L.divIcon({ className: 'map-pin-icon-wrap', html: iconHtml, iconSize: [28,28], iconAnchor: [14,14] }));
         }
 
         const popupContent = `
-            <div class="pin-popup" data-uuid="${pin.uuid}">
+            <div class="pin-popup" data-uuid="${pin.uuid}" data-id="${pin.id || ''}">
                 <div data-name="title">${pin.name || ''}</div>
                 <div data-name="description">${pin.description || ''}</div>
                 <div class="stars rating-${pin.rating || 0}">
-                    ${[1, 2, 3, 4, 5].map(i => `
-                        <input type="radio" name="star" class="star-${i}" id="star-${i}-${pin.uuid}" value="${i}" ${pin.rating == i ? 'checked' : ''} />
-                        <label class="star-${i}" for="star-${i}-${pin.uuid}">★</label>
-                    `).join('')}
+                    ${[1,2,3,4,5].map(i =>
+                        `<input type="radio" name="star" class="star-${i}" id="star-${i}-${pin.uuid}" value="${i}" ${pin.rating == i ? 'checked' : ''} />
+                         <label class="star-${i}" for="star-${i}-${pin.uuid}">★</label>`
+                    ).join('')}
                 </div>
                 <div data-name="status"><span class="value">${pin.status || ''}</span></div>
                 <div data-name="categories"><span class="value">${pin.categories || ''}</span></div>
@@ -335,48 +507,118 @@
                 <div class="tags">${pin.tags || ''}</div>
                 <a href="${pin.viewLocationUrl}" class="view-full-pin">View Full Details</a>
                 <button class="delete-button" onclick="deletePin(this)"><i class="material-icons">delete</i></button>
-            </div>
-        `;
-        marker.addTo(pinsLayerGroup).bindPopup(popupContent);
+            </div>`;
+        marker.bindPopup(popupContent);
+        return marker;
+    }
+
+    function addMarker(pin) {
+        if (!pin.latitude || !pin.longitude || _markerMap.has(pin.uuid)) return;
+        const m = _buildMarker(pin);
+        if (!m) return;
+        _markerMap.set(pin.uuid, m);
+        clusterGroup.addLayer(m);
     }
     window.addMarker = addMarker;
 
-    // ── Two-phase pin loading ─────────────────────────────────────────────────
-    // Phase 1 loads only pins within the current viewport (fast).
-    // Phase 2 loads the remaining pins in the background.
-    window._loadedPinUuids = new Set();
-
-    async function _fetchAndAddPins(url) {
-        const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-        if (!resp.ok) throw new Error('Pin fetch failed: ' + resp.status);
-        const data = await resp.json();
-        (data.pins || []).forEach(pin => {
-            if (!window._loadedPinUuids.has(pin.uuid)) {
-                window._loadedPinUuids.add(pin.uuid);
-                addMarker(pin);
+    // ── Fetch tiles from server ───────────────────────────────────────────────
+    async function _fetchTiles(tileKeys) {
+        if (!tileKeys.length) return 0;
+        tileKeys.forEach(k => _fetchedTiles.add(k));
+        _setFetching(true);
+        try {
+            const url = (tileKeys.length === 1 && tileKeys[0] === '*')
+                ? '{% url "map.pins" %}'
+                : `{% url "map.pins" %}?bbox=${encodeURIComponent((() => { const b = _bboxFromKeys(tileKeys); return `${b.s},${b.w},${b.n},${b.e}`; })())}`;
+            const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data  = await resp.json();
+            const batch = [];
+            for (const pin of (data.pins || [])) {
+                if (_pinStore.has(pin.uuid)) continue;
+                _pinStore.set(pin.uuid, pin);
+                if (!_filterMode) {
+                    const m = _buildMarker(pin);
+                    if (m) { _markerMap.set(pin.uuid, m); batch.push(m); }
+                }
             }
-        });
-        updatePinCounter();
-        return (data.pins || []).length;
+            if (batch.length) {
+                clusterGroup.addLayers(batch);
+                updatePinCounter();
+                _scheduleCache();
+            }
+            return batch.length;
+        } catch (err) {
+            tileKeys.forEach(k => _fetchedTiles.delete(k));
+            throw err;
+        } finally {
+            _setFetching(false);
+        }
     }
 
+    // ── Viewport-based loading ────────────────────────────────────────────────
+    async function _loadViewport() {
+        if (_filterMode) return;
+        const newTiles = _newTilesForBounds(map.getBounds());
+        if (!newTiles.length) return;
+        await _fetchTiles(newTiles);
+    }
+
+    function _onViewportChange() {
+        if (_viewportTid) clearTimeout(_viewportTid);
+        _viewportTid = setTimeout(() => {
+            _loadViewport().catch(err => console.warn('Viewport load failed:', err));
+        }, 220);
+    }
+
+    map.on('moveend', _onViewportChange);
+    map.on('zoomend', _onViewportChange);
+
+    // ── Filter mode ───────────────────────────────────────────────────────────
+    // Called when search/filter results arrive (see data.html).
+    // Called by resetFilters() to restore the full pin set from the store.
+    function _exitFilterMode() {
+        if (!_filterMode) return;
+        _filterMode = false;
+        clusterGroup.clearLayers();
+        _markerMap.clear();
+        const layers = [];
+        for (const pin of _pinStore.values()) {
+            const m = _buildMarker(pin);
+            if (m) { _markerMap.set(pin.uuid, m); layers.push(m); }
+        }
+        if (layers.length) clusterGroup.addLayers(layers);
+        updatePinCounter();
+    }
+    window._exitFilterMode = _exitFilterMode;
+
+    // ── Initialization ────────────────────────────────────────────────────────
     (async () => {
-        try {
-            // Phase 1: pins in the initial viewport
-            const b = map.getBounds();
-            const bbox = `${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}`;
-            await _fetchAndAddPins(`{% url 'map.pins' %}?bbox=${encodeURIComponent(bbox)}`);
-        } catch (err) {
-            console.warn('Phase 1 pin load failed:', err);
-        } finally {
+        const cache = _readCache();
+        if (cache?.pins && Object.keys(cache.pins).length) {
+            // Restore from cache — O(n) bulk add, no server round-trip
+            const layers = [];
+            for (const [uuid, pin] of Object.entries(cache.pins)) {
+                _pinStore.set(uuid, pin);
+                const m = _buildMarker(pin);
+                if (m) { _markerMap.set(uuid, m); layers.push(m); }
+            }
+            if (cache.tiles) cache.tiles.forEach(k => _fetchedTiles.add(k));
+            if (layers.length) clusterGroup.addLayers(layers);
+            updatePinCounter();
+            hideLoadingMessage();
+
+            // Stale cache? silently refresh the current viewport
+            if (Date.now() - cache.ts > _CACHE_FRESH) {
+                const vtiles = _newTilesForBounds(map.getBounds());
+                vtiles.forEach(k => _fetchedTiles.delete(k));
+                _loadViewport().catch(() => {});
+            }
+        } else {
+            // Cold start: fetch viewport + padding
+            try { await _loadViewport(); } catch (e) { console.warn('Initial pin load failed:', e); }
             hideLoadingMessage();
         }
-
-        // Phase 2: remaining pins in the background - short delay lets the map settle
-        setTimeout(() => {
-            _fetchAndAddPins('{% url 'map.pins' %}')
-                .catch(err => console.warn('Background pin load failed:', err));
-        }, 300);
     })();
 
     const standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -788,34 +1030,29 @@
     L.Marker.prototype.options.icon = newIcon;
 
     function deletePin(button) {
-        const pinId = button.closest('.pin-popup').dataset.id;
+        const popup = button.closest('.pin-popup');
+        const pinId = popup.dataset.id;
+        const pinUuid = popup.dataset.uuid;
         fetch(`/dashboard/rest/pins/${pinId}/`, {
             method: 'DELETE',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}',
-            },
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
         })
         .then(response => {
             if (response.ok) {
-                console.log(`Location with id ${pinId} deleted successfully`);
-                toastr.success(`Location deleted successfully`);
-                //window.location.reload();
-                // remove that pin
-                pinsLayerGroup.eachLayer(function (layer) {
-                    if (layer.options.id == pinId) {
-                        pinsLayerGroup.removeLayer(layer);
-                    }
-                });
+                toastr.success('Location deleted successfully');
+                if (pinUuid && _markerMap.has(pinUuid)) {
+                    clusterGroup.removeLayer(_markerMap.get(pinUuid));
+                    _markerMap.delete(pinUuid);
+                }
+                if (pinUuid) _pinStore.delete(pinUuid);
+                _scheduleCache();
+                map.closePopup();
                 updatePinCounter();
             } else {
-                console.error(`Failed to delete pin with id ${pinId}`);
-                toastr.error(`Failed to delete pin`);
+                toastr.error('Failed to delete pin');
             }
         })
-        .catch((error) => {
-            console.error('Error:', error);
-            toastr.error(`Failed to delete pin`);
-        });
+        .catch(() => toastr.error('Failed to delete pin'));
     }
 
     document.getElementById('toggle-map-buttons').addEventListener('click', function() {
@@ -834,16 +1071,12 @@
 
     function resetFilters() {
         const form = document.getElementById('filter-form');
-        // Uncheck all checkboxes
         form.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
-        // Reset radio to "Any" (value="")
         const anyRadio = form.querySelector('input[type=radio][value=""]');
         if (anyRadio) anyRadio.checked = true;
-        // Clear text
         form.querySelectorAll('input[type=text]').forEach(t => t.value = '');
-        // Trigger a fresh search
-        htmx.trigger(form, 'change');
-        // Remove active-filter indicator
+        // Restore full pin set from local store — no server round-trip
+        _exitFilterMode();
         document.getElementById('search-pins-button').classList.remove('has-filters');
     }
 

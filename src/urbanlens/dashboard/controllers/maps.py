@@ -62,6 +62,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "openweathermap_api_key": settings.openweathermap_api_key,
                 "tags": tags,
                 "status_choices": PinStatus.choices,
+                "profile_id": profile.id,
             },
         )
 
@@ -223,10 +224,13 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         query = query.prefetch_related("tags")
 
         if not query:
-            # Default map data
-            map_data = []  # {'latitude': 42.65250213448323, 'longitude': -73.75791867436858, 'name': 'Default Pin', 'description': 'No pins saved yet.'}]
+            map_data = []
         else:
-            map_data = [pin.to_json() for pin in query]
+            map_data = []
+            for pin in query:
+                d = pin.to_json()
+                d["id"] = pin.pk
+                map_data.append(d)
 
         for pin in map_data:
             if "description" in pin and pin["description"] is None:
