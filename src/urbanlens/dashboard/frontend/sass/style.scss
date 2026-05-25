@@ -4791,7 +4791,6 @@ textarea.form-input {
 // ── Category select checkbox ──────────────────────────────────────────────────
 
 .cat-select-wrap {
-    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4811,19 +4810,7 @@ textarea.form-input {
     }
 
     input[type="checkbox"] {
-        -webkit-appearance: none;
-        -moz-appearance: none;
-        appearance: none;
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        opacity: 0;
-        margin: 0;
-        padding: 0;
-        border: 0;
-        pointer-events: none;
+        display: none;
     }
 
     .cat-select-check {
