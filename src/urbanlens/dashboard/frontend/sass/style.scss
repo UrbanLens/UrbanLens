@@ -5168,7 +5168,7 @@ textarea.form-input {
         }
     }
 
-    [type="checkbox"]+span:not(.lever) {
+    [type="checkbox"]+span:not(.lever)::before {
         display: none;
     }
 }
