@@ -4968,6 +4968,25 @@ textarea.form-input {
     }
 }
 
+.cat-sel-edit-btn {
+    &:hover {
+        background: #f0f9ff;
+        border-color: $primary-color;
+        color: $primary-color;
+    }
+}
+
+.cat-sel-delete-btn {
+    border-color: #fca5a5;
+    color: #dc2626;
+
+    &:hover {
+        background: #fef2f2;
+        border-color: #dc2626;
+        color: #b91c1c;
+    }
+}
+
 // ── Multi-merge dialog ────────────────────────────────────────────────────────
 
 .cat-merge-dialog {
@@ -5154,6 +5173,76 @@ textarea.form-input {
     animation: cat-spin .65s linear infinite;
     vertical-align: middle;
     flex-shrink: 0;
+}
+
+// ── Bulk-edit dialog ──────────────────────────────────────────────────────────
+
+.cat-bulk-edit-dialog {
+    width: min(520px, 95vw);
+    max-height: 90vh;
+    overflow-y: auto;
+    border: none;
+    border-radius: $radius-md;
+    box-shadow: $shadow-dialog;
+    padding: 0;
+
+    &::backdrop {
+        background: rgba(0, 0, 0, .45);
+    }
+}
+
+.cat-bulk-edit-body {
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.cat-bulk-field {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.cat-bulk-field-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+}
+
+.cat-bulk-nochange-label {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .8rem;
+    color: $text-secondary;
+    cursor: pointer;
+
+    input[type="checkbox"] {
+        width: 14px;
+        height: 14px;
+        cursor: pointer;
+    }
+}
+
+.cat-bulk-parents-hint {
+    font-size: .78rem;
+    color: $text-muted;
+    margin: 0;
+}
+
+.cat-bulk-picker--disabled {
+    opacity: .4;
+    pointer-events: none;
+}
+
+.cat-bulk-edit-footer {
+    display: flex;
+    gap: .75rem;
+    align-items: center;
+    padding: 1rem 1.5rem 1.25rem;
+    border-top: 1px solid $border-color;
 }
 
 // ── Category rows: hide select wrap in gallery (checkbox positioned differently) ─

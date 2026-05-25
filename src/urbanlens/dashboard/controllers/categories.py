@@ -205,6 +205,82 @@ class CategoryRowsView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx())
 
 
+class CategoryBulkDeleteView(LoginRequiredMixin, View):
+    """Bulk-delete categories (JSON POST). Pins and locations keep their other categories."""
+
+    def post(self, request, *args, **kwargs):
+        """Delete the specified categories and return the refreshed rows partial.
+
+        Args:
+            request: The HTTP request with JSON body containing ids list.
+
+        Returns:
+            Rendered category_rows.html partial.
+        """
+        try:
+            data = json.loads(request.body)
+            ids = [int(x) for x in data.get("ids", [])]
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return JsonResponse({"error": "Invalid data"}, status=400)
+
+        if not ids:
+            return HttpResponse("No categories specified.", status=400)
+
+        Category.objects.filter(id__in=ids).delete()
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx())
+
+
+class CategoryBulkEditView(LoginRequiredMixin, View):
+    """Bulk-edit icon, color, and/or parents for multiple categories (JSON POST).
+
+    Key-absent = no change; null/empty string = clear; string value = set.
+    add_parent_ids is additive — existing parents are never removed.
+    """
+
+    def post(self, request, *args, **kwargs):
+        """Apply bulk edits and return the refreshed rows partial.
+
+        Args:
+            request: The HTTP request with JSON body.
+
+        Returns:
+            Rendered category_rows.html partial.
+        """
+        try:
+            data = json.loads(request.body)
+            ids = [int(x) for x in data.get("ids", [])]
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return JsonResponse({"error": "Invalid data"}, status=400)
+
+        if not ids:
+            return HttpResponse("No categories specified.", status=400)
+
+        has_icon = "icon" in data
+        has_color = "color" in data
+        icon = data.get("icon") or None
+        color = data.get("color") or None
+        add_parent_ids = [int(x) for x in data.get("add_parent_ids", [])]
+
+        categories = list(Category.objects.filter(id__in=ids))
+        for cat in categories:
+            update_fields = []
+            if has_icon:
+                cat.icon = icon
+                update_fields.append("icon")
+            if has_color:
+                cat.color = color
+                update_fields.append("color")
+            if update_fields:
+                cat.save(update_fields=update_fields)
+
+        if add_parent_ids:
+            valid_parents = list(Category.objects.filter(id__in=add_parent_ids))
+            for cat in categories:
+                cat.parents.add(*[p for p in valid_parents if p.id != cat.id])
+
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx())
+
+
 class CategoryMultiMergeView(LoginRequiredMixin, View):
     """Merge multiple categories into a single target (JSON POST)."""
 

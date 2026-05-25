@@ -41,6 +41,14 @@
                 <i class="material-icons">deselect</i>
                 Deselect All
             </button>
+            <button type="button" id="cat-sel-edit" class="cat-sel-btn cat-sel-edit-btn" hidden>
+                <i class="material-icons">edit</i>
+                Edit
+            </button>
+            <button type="button" id="cat-sel-delete" class="cat-sel-btn cat-sel-delete-btn" hidden>
+                <i class="material-icons">delete</i>
+                Delete
+            </button>
             <button type="button" id="cat-sel-merge" class="cat-sel-merge-btn" hidden disabled>
                 <i class="material-icons">merge</i>
                 Merge
@@ -188,6 +196,95 @@
         <button type="button" id="cat-merge-confirm-btn" class="btn-primary">
             <i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i>
             Merge
+        </button>
+        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>
+
+{# ── Bulk-edit dialog ──────────────────────────────────────────────────────────── #}
+<dialog id="cat-bulk-edit-dialog" class="cat-bulk-edit-dialog">
+    <div class="dialog-header">
+        <span id="cat-bulk-edit-title">Edit Categories</span>
+        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div class="cat-bulk-edit-body">
+
+        {# Icon #}
+        <div class="cat-bulk-field">
+            <div class="cat-bulk-field-header">
+                <label class="form-label" style="margin:0;">Icon</label>
+                <label class="cat-bulk-nochange-label">
+                    <input type="checkbox" id="cat-bulk-icon-nochange" checked>
+                    <span>No change</span>
+                </label>
+            </div>
+            <div class="icon-picker-wrap" id="cat-bulk-icon-wrap">
+                {% with picker_id="bulk-edit" current_icon="" field_name="bulk_icon" %}
+                {% include 'dashboard/partials/_icon_picker.html' %}
+                {% endwith %}
+            </div>
+        </div>
+
+        {# Color #}
+        <div class="cat-bulk-field">
+            <div class="cat-bulk-field-header">
+                <label class="form-label" style="margin:0;">Color</label>
+                <label class="cat-bulk-nochange-label">
+                    <input type="checkbox" id="cat-bulk-color-nochange" checked>
+                    <span>No change</span>
+                </label>
+            </div>
+            <div class="color-picker" id="cat-bulk-color-wrap">
+                <div id="cat-bulk-color-picker">
+                    <input type="hidden" id="cat-bulk-color-value">
+                    {% for hex, label in color_choices %}
+                    <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}"
+                            style="background:{{ hex }};"
+                            onclick="pickColor('cat-bulk-color-picker','cat-bulk-color-value','{{ hex }}',this); document.getElementById('cat-bulk-color-nochange').checked=false; _updateBulkPickerState();">
+                    </button>
+                    {% endfor %}
+                    <button type="button" class="color-swatch color-clear" title="No color"
+                            onclick="pickColor('cat-bulk-color-picker','cat-bulk-color-value','',this); document.getElementById('cat-bulk-color-nochange').checked=false; _updateBulkPickerState();">
+                        <i class="material-icons" style="font-size:1rem;">block</i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        {# Parent categories #}
+        <div class="cat-bulk-field">
+            <div class="cat-bulk-field-header">
+                <label class="form-label" style="margin:0;">Add parent categories</label>
+            </div>
+            <p class="cat-bulk-parents-hint">Checked categories will be <strong>added</strong> as parents. Existing parents are not removed.</p>
+            <input type="text" class="form-input tag-parent-search"
+                   placeholder="Search categories…"
+                   oninput="filterParentOptions(this, 'cat-bulk-parent-select')"
+                   autocomplete="off">
+            <div class="tag-parent-select" id="cat-bulk-parent-select">
+                {% for cat in categories %}
+                <label class="tag-parent-option">
+                    <input type="checkbox" class="cat-bulk-parent-cb" value="{{ cat.id }}">
+                    {% if cat.icon %}
+                        {% if cat.icon|is_material_icon %}
+                        <i class="material-icons" {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</i>
+                        {% else %}
+                        <span>{{ cat.icon }}</span>
+                        {% endif %}
+                    {% endif %}
+                    {{ cat.name }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+    <div class="cat-bulk-edit-footer">
+        <button type="button" id="cat-bulk-edit-confirm" class="btn-primary">
+            <i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i>
+            Apply Changes
         </button>
         <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
@@ -524,6 +621,8 @@ function _updateBar() {
     var bar = document.getElementById('cat-sel-bar');
     var countEl = document.getElementById('cat-sel-count');
     var deselectBtn = document.getElementById('cat-sel-deselect');
+    var editBtn = document.getElementById('cat-sel-edit');
+    var deleteBtn = document.getElementById('cat-sel-delete');
     var mergeBtn = document.getElementById('cat-sel-merge');
 
     if (n > 0) {
@@ -531,12 +630,16 @@ function _updateBar() {
         countEl.textContent = n === 1 ? '1 selected' : n + ' selected';
         countEl.hidden = false;
         deselectBtn.hidden = false;
+        editBtn.hidden = false;
+        deleteBtn.hidden = false;
         mergeBtn.hidden = false;
         mergeBtn.disabled = n < 2;
     } else {
         bar.classList.remove('cat-sel-bar--active');
         countEl.hidden = true;
         deselectBtn.hidden = true;
+        editBtn.hidden = true;
+        deleteBtn.hidden = true;
         mergeBtn.hidden = true;
     }
 }
@@ -643,6 +746,165 @@ document.getElementById('cat-merge-sources-list').addEventListener('click', func
     if (!btn) return;
     _mergeTargetId = btn.dataset.swapId;
     _renderMergeDialog();
+});
+
+// ── Bulk delete ────────────────────────────────────────────────────────────────
+document.getElementById('cat-sel-delete').addEventListener('click', function() {
+    var n = _selected.size;
+    if (n === 0) return;
+    var msg = (n === 1 ? 'Delete 1 category?' : 'Delete ' + n + ' categories?')
+            + '\nPins and locations will keep their other categories.';
+    if (!confirm(msg)) return;
+
+    var ids = Array.from(_selected).map(function(id) { return parseInt(id, 10); });
+    fetch('{% url "category.bulk_delete" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+        body: JSON.stringify({ ids: ids }),
+    })
+    .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); });
+        return r.text();
+    })
+    .then(function(html) {
+        document.getElementById('category-rows').innerHTML = html;
+        _onRowsUpdated();
+        toastr.success(n === 1 ? '1 category deleted.' : n + ' categories deleted.');
+    })
+    .catch(function(err) { toastr.error('Delete failed: ' + err.message); });
+});
+
+// ── Bulk edit dialog ───────────────────────────────────────────────────────────
+function _updateBulkPickerState() {
+    var iconNochange = document.getElementById('cat-bulk-icon-nochange');
+    var colorNochange = document.getElementById('cat-bulk-color-nochange');
+    var iconWrap = document.getElementById('cat-bulk-icon-wrap');
+    var colorWrap = document.getElementById('cat-bulk-color-wrap');
+    if (iconWrap) iconWrap.classList.toggle('cat-bulk-picker--disabled', !!iconNochange.checked);
+    if (colorWrap) colorWrap.classList.toggle('cat-bulk-picker--disabled', !!colorNochange.checked);
+}
+
+function _openBulkEditDialog() {
+    var ids = Array.from(_selected);
+    var iconSet = new Set();
+    var colorSet = new Set();
+    ids.forEach(function(id) {
+        var card = document.querySelector('[data-category-id="' + id + '"]');
+        if (!card) return;
+        iconSet.add(card.dataset.categoryIcon || '');
+        colorSet.add(card.dataset.categoryColor || '');
+    });
+
+    var sharedIcon = iconSet.size === 1 ? Array.from(iconSet)[0] : null;
+    var sharedColor = colorSet.size === 1 ? Array.from(colorSet)[0] : null;
+
+    var iconNochange = document.getElementById('cat-bulk-icon-nochange');
+    var iconValue = document.getElementById('icon-value-bulk-edit');
+    var iconCurrent = document.getElementById('icon-current-bulk-edit');
+    var iconGrid = document.getElementById('icon-grid-bulk-edit');
+    if (iconGrid) iconGrid.querySelectorAll('.icon-picker-item').forEach(function(b) { b.classList.remove('selected'); });
+
+    if (sharedIcon !== null) {
+        iconNochange.checked = false;
+        if (iconValue) iconValue.value = sharedIcon;
+        if (sharedIcon) {
+            if (iconCurrent) iconCurrent.innerHTML = /^[a-z_]+$/.test(sharedIcon)
+                ? '<i class="material-icons icon-picker-current-mi">' + sharedIcon + '</i>'
+                : '<span class="icon-picker-current-glyph">' + sharedIcon + '</span>';
+            if (iconGrid) { var mi = iconGrid.querySelector('[data-icon="' + sharedIcon + '"]'); if (mi) mi.classList.add('selected'); }
+        } else {
+            if (iconCurrent) iconCurrent.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+            var nb = iconGrid && iconGrid.querySelector('.icon-picker-none'); if (nb) nb.classList.add('selected');
+        }
+    } else {
+        iconNochange.checked = true;
+        if (iconValue) iconValue.value = '';
+        if (iconCurrent) iconCurrent.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+        var nb = iconGrid && iconGrid.querySelector('.icon-picker-none'); if (nb) nb.classList.add('selected');
+    }
+
+    var colorNochange = document.getElementById('cat-bulk-color-nochange');
+    var colorPicker = document.getElementById('cat-bulk-color-picker');
+    var colorValue = document.getElementById('cat-bulk-color-value');
+    if (colorPicker) colorPicker.querySelectorAll('.color-swatch').forEach(function(b) { b.classList.remove('selected'); });
+    if (sharedColor !== null) {
+        colorNochange.checked = false;
+        if (colorValue) colorValue.value = sharedColor;
+        if (sharedColor && colorPicker) { var sw = colorPicker.querySelector('[data-color="' + sharedColor + '"]'); if (sw) sw.classList.add('selected'); }
+    } else {
+        colorNochange.checked = true;
+        if (colorValue) colorValue.value = '';
+    }
+
+    document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb').forEach(function(cb) { cb.checked = false; });
+
+    document.getElementById('cat-bulk-edit-title').textContent =
+        'Edit ' + ids.length + ' ' + (ids.length === 1 ? 'Category' : 'Categories');
+    var confirmBtn = document.getElementById('cat-bulk-edit-confirm');
+    confirmBtn.disabled = false;
+    confirmBtn.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
+
+    _updateBulkPickerState();
+    document.getElementById('cat-bulk-edit-dialog').showModal();
+}
+
+document.getElementById('cat-sel-edit').addEventListener('click', function() {
+    if (_selected.size === 0) return;
+    _openBulkEditDialog();
+});
+
+document.getElementById('cat-bulk-icon-nochange').addEventListener('change', _updateBulkPickerState);
+document.getElementById('cat-bulk-color-nochange').addEventListener('change', _updateBulkPickerState);
+
+document.getElementById('icon-grid-bulk-edit').addEventListener('click', function(e) {
+    if (e.target.closest('.icon-picker-item')) {
+        document.getElementById('cat-bulk-icon-nochange').checked = false;
+        _updateBulkPickerState();
+    }
+});
+
+document.getElementById('cat-bulk-edit-confirm').addEventListener('click', function() {
+    var ids = Array.from(_selected).map(function(id) { return parseInt(id, 10); });
+    var body = { ids: ids };
+
+    if (!document.getElementById('cat-bulk-icon-nochange').checked) {
+        var iv = document.getElementById('icon-value-bulk-edit');
+        body.icon = iv ? iv.value : '';
+    }
+    if (!document.getElementById('cat-bulk-color-nochange').checked) {
+        var cv = document.getElementById('cat-bulk-color-value');
+        body.color = cv ? cv.value : '';
+    }
+    body.add_parent_ids = [];
+    document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb:checked').forEach(function(cb) {
+        body.add_parent_ids.push(parseInt(cb.value, 10));
+    });
+
+    var btn = this;
+    var savedHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="cat-merge-spinner"></span> Saving…';
+
+    fetch('{% url "category.bulk_edit" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+        body: JSON.stringify(body),
+    })
+    .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); });
+        return r.text();
+    })
+    .then(function(html) {
+        document.getElementById('cat-bulk-edit-dialog').close();
+        document.getElementById('category-rows').innerHTML = html;
+        _onRowsUpdated();
+        toastr.success('Categories updated.');
+    })
+    .catch(function(err) {
+        toastr.error('Edit failed: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = savedHtml;
+    });
 });
 
 document.getElementById('cat-merge-confirm-btn').addEventListener('click', function() {
