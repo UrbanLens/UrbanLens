@@ -1,34 +1,38 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    serializer.py                                                                                        *
-*        Path:    /serializer.py                                                                                       *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
+"""CategorySerializer."""
+
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.categories.model import Category
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    """Serializer for Category with pin and location counts."""
+
+    pin_count = serializers.SerializerMethodField()
+    location_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Category
-        fields = ["name", "icon"]
+        fields = ["id", "name", "description", "color", "icon", "order", "pin_count", "location_count"]
+
+    def get_pin_count(self, obj: Category) -> int:
+        """Return the number of pins with this category.
+
+        Args:
+            obj: The Category instance.
+
+        Returns:
+            Pin count.
+        """
+        return obj.pins.count()
+
+    def get_location_count(self, obj: Category) -> int:
+        """Return the number of locations with this category.
+
+        Args:
+            obj: The Category instance.
+
+        Returns:
+            Location count.
+        """
+        return obj.locations.count()

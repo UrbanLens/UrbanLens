@@ -1,0 +1,86 @@
+{% load dashboard_tags %}
+<form hx-post="{% url 'category.edit' category.id %}"
+      hx-target="#category-rows"
+      hx-swap="innerHTML"
+      class="tag-inline-edit"
+      hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); toastr.success('Category saved.'); }">
+    {% csrf_token %}
+
+    <div class="tag-form-grid">
+        <div class="form-field">
+            <label class="form-label">Name</label>
+            <input name="name" type="text" class="form-input" value="{{ category.name }}" required>
+        </div>
+        <div class="form-field">
+            <label class="form-label">Order</label>
+            <input name="order" type="number" class="form-input" value="{{ category.order }}">
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label class="form-label">Description</label>
+        <textarea name="description" class="form-input" rows="2">{{ category.description|default:'' }}</textarea>
+    </div>
+
+    <div class="tag-icon-color-row">
+        <div class="form-field">
+            <label class="form-label">Icon</label>
+            <div class="icon-picker-wrap">
+                {% with picker_id=category.id|stringformat:"d"|add:"-cat" current_icon=category.icon|default:"" field_name="icon" %}
+                {% include 'dashboard/partials/_icon_picker.html' %}
+                {% endwith %}
+            </div>
+        </div>
+
+        <div class="form-field">
+            <label class="form-label">Color</label>
+            <div class="color-picker" id="edit-cat-color-picker-{{ category.id }}">
+                <input type="hidden" name="color" id="edit-cat-color-value-{{ category.id }}" value="{{ category.color|default:'' }}">
+                {% for hex, label in color_choices %}
+                <button type="button"
+                        class="color-swatch {% if category.color == hex %}selected{% endif %}"
+                        data-color="{{ hex }}" title="{{ label }}"
+                        style="background:{{ hex }};"
+                        onclick="pickColor('edit-cat-color-picker-{{ category.id }}','edit-cat-color-value-{{ category.id }}','{{ hex }}',this)">
+                </button>
+                {% endfor %}
+                <button type="button"
+                        class="color-swatch color-clear {% if not category.color %}selected{% endif %}"
+                        title="No color"
+                        onclick="pickColor('edit-cat-color-picker-{{ category.id }}','edit-cat-color-value-{{ category.id }}','',this)">
+                    <i class="material-icons" style="font-size:1rem;">block</i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label class="form-label">Parent categories</label>
+        <input type="text" class="form-input tag-parent-search"
+               placeholder="Search categories…"
+               oninput="filterParentOptions(this, 'parent-select-edit-cat-{{ category.id }}')"
+               autocomplete="off">
+        <div class="tag-parent-select" id="parent-select-edit-cat-{{ category.id }}">
+            {% for cat in available_parents %}
+            <label class="tag-parent-option">
+                <input type="checkbox" name="parent_ids" value="{{ cat.id }}"
+                       {% if cat.id|in_list:parent_ids %}checked{% endif %}>
+                {% if cat.icon %}
+                    {% if cat.icon|is_material_icon %}
+                    <i class="material-icons" {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</i>
+                    {% else %}
+                    <span>{{ cat.icon }}</span>
+                    {% endif %}
+                {% endif %}
+                {{ cat.name }}
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="tag-form-actions">
+        <button type="submit" class="btn-primary">Save</button>
+        <button type="button" class="btn-ghost"
+                onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</form>

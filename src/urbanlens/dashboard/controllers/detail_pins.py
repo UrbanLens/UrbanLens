@@ -193,6 +193,43 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         return self._render(request, location)
 
 
+class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
+    """Move a community detail pin and record a LocationEdit."""
+
+    def post(self, request, location_uuid, detail_pin_uuid):
+        location = get_object_or_404(Location, uuid=location_uuid)
+        detail_pin = get_object_or_404(Pin, uuid=detail_pin_uuid, parent_location=location)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        try:
+            body = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            body = request.POST
+
+        lat = body.get("latitude")
+        lon = body.get("longitude")
+        if not lat or not lon:
+            return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
+
+        old_lat = detail_pin.latitude
+        old_lon = detail_pin.longitude
+        detail_pin.latitude = float(lat)
+        detail_pin.longitude = float(lon)
+        detail_pin.save()
+
+        LocationEdit.objects.create(
+            location=location,
+            editor=profile,
+            changes={"detail_pin_moved": {
+                "pin": detail_pin.effective_name,
+                "from": [str(old_lat), str(old_lon)],
+                "to": [str(detail_pin.latitude), str(detail_pin.longitude)],
+            }},
+        )
+
+        return JsonResponse({"ok": True})
+
+
 class LocationWikiDetailPinDeleteView(LoginRequiredMixin, View):
     """Delete a single community detail pin and record a LocationEdit."""
 

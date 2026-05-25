@@ -1,0 +1,97 @@
+{% load dashboard_tags %}
+<div class="tag-panel card" id="category-panel">
+    <div class="card-header">
+        <i class="material-icons">category</i>
+        <h3>Categories</h3>
+        <button type="button" class="btn-icon-sm" style="margin-left:auto"
+                onclick="document.getElementById('category-add-dialog-{{ pin.uuid }}').showModal()"
+                title="Add a category">
+            <i class="material-icons">add</i>
+        </button>
+    </div>
+
+    {# ── Active category chips ────────────────────────────────────────────── #}
+    <div class="tag-chips-row">
+        {% for cat in all_categories %}
+        {% if cat.id in member_ids %}
+        <span class="tag-chip" {% if cat.color %}style="--tag-color:{{ cat.color }}"{% endif %}>
+            {% if cat.icon %}
+            <span class="tag-chip-icon">
+                {% if cat.icon|is_material_icon %}
+                <i class="material-icons" style="font-size:13px{% if cat.color %};color:{{ cat.color }}{% endif %}">{{ cat.icon }}</i>
+                {% else %}{{ cat.icon }}{% endif %}
+            </span>
+            {% endif %}
+            <span class="tag-chip-name">{{ cat.name }}</span>
+            <form hx-post="{% url 'category.pin' pin.uuid %}" hx-target="#category-panel" hx-swap="outerHTML" style="display:inline">
+                {% csrf_token %}
+                <input type="hidden" name="category_id" value="{{ cat.id }}">
+                <input type="hidden" name="action" value="remove">
+                <button type="submit" class="tag-chip-remove" title="Remove">×</button>
+            </form>
+        </span>
+        {% endif %}
+        {% endfor %}
+        {% if not member_ids %}
+        <span class="tag-chips-empty">No categories yet. Click + to add one.</span>
+        {% endif %}
+    </div>
+
+    {# ── Add-category dialog ──────────────────────────────────────────────── #}
+    <dialog id="category-add-dialog-{{ pin.uuid }}" class="tag-add-dialog">
+        <div class="dialog-header">
+            <span>Add Categories</span>
+            <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+                <i class="material-icons">close</i>
+            </button>
+        </div>
+        <input type="search" class="dialog-search" placeholder="Search categories…" autocomplete="off"
+               oninput="(function(i){i.closest('dialog').querySelectorAll('.tag-dialog-item').forEach(function(el){el.hidden=!el.dataset.name.includes(i.value.toLowerCase());})})(this)">
+        <ul class="tag-dialog-list">
+            {% for cat in all_categories %}
+            {% if cat.id not in member_ids %}
+            <li class="tag-dialog-item" data-name="{{ cat.name|lower }}">
+                <form hx-post="{% url 'category.pin' pin.uuid %}" hx-target="#category-panel" hx-swap="outerHTML">
+                    {% csrf_token %}
+                    <input type="hidden" name="category_id" value="{{ cat.id }}">
+                    <input type="hidden" name="action" value="add">
+                    <button type="submit" class="tag-dialog-btn">
+                        <span class="tag-dialog-icon">
+                            {% if cat.icon %}
+                            {% if cat.icon|is_material_icon %}<i class="material-icons" style="font-size:16px{% if cat.color %};color:{{ cat.color }}{% endif %}">{{ cat.icon }}</i>
+                            {% else %}<span>{{ cat.icon }}</span>{% endif %}
+                            {% else %}<i class="material-icons" style="font-size:16px;opacity:.3">category</i>{% endif %}
+                        </span>
+                        <span class="tag-dialog-name">{{ cat.name }}</span>
+                    </button>
+                </form>
+            </li>
+            {% endif %}
+            {% endfor %}
+        </ul>
+        <div class="dialog-footer">
+            <a href="{% url 'category.index' %}" class="dialog-manage-link">
+                <i class="material-icons">settings</i> Manage categories
+            </a>
+        </div>
+    </dialog>
+</div>
+<script>
+(function () {
+    if (window._catDialogSetup) return;
+    window._catDialogSetup = true;
+    var _pendingCatDlgId = null;
+    document.body.addEventListener('htmx:beforeRequest', function (e) {
+        var el = e.target;
+        if (!el || !el.closest) return;
+        var dlg = el.closest('dialog.tag-add-dialog');
+        if (dlg && dlg.open) _pendingCatDlgId = dlg.id;
+    });
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+        if (!_pendingCatDlgId) return;
+        var dlg = document.getElementById(_pendingCatDlgId);
+        if (dlg) dlg.showModal();
+        _pendingCatDlgId = null;
+    });
+}());
+</script>

@@ -73,12 +73,7 @@
                     <dd>{{ location.address_extended }}</dd>
                 </div>
                 {% endif %}
-                {% if location.categories.all %}
-                <div class="wiki-dl-row">
-                    <dt>Categories</dt>
-                    <dd>{% for cat in location.categories.all %}{{ cat.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</dd>
-                </div>
-                {% endif %}
+                {# Categories shown via HTMX panel below — not repeated here #}
                 {% if location.date_abandoned %}
                 <div class="wiki-dl-row">
                     <dt>Abandoned</dt>
@@ -108,6 +103,18 @@
                 </div>
             </div>
             {% endif %}
+        </div>
+
+        {# ── Categories panel ────────────────────────────────────────────── #}
+        <div hx-get="{% url 'category.location' location.uuid %}"
+             hx-trigger="load"
+             hx-swap="outerHTML"
+             class="tag-panel">
+            <div class="tag-panel-header">
+                <i class="material-icons">category</i>
+                <span>Categories</span>
+            </div>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
         </div>
 
         {# ── Community stats card ────────────────────────────────────────── #}
@@ -483,6 +490,8 @@
         danger: 'warning', other: 'info', location: 'place',
     };
     const _dpLayer = L.layerGroup().addTo(bboxMap);
+    const _wikiDpEditBase = "{% url 'location.wiki.detail_pin.edit' location.uuid '00000000-0000-0000-0000-000000000000' %}"
+        .replace('00000000-0000-0000-0000-000000000000/', '');
 
     function _dpMarkerIcon(pinType, customIcon, customColor) {
         const color = customColor || _dpColors[pinType] || '#2563eb';
@@ -501,9 +510,27 @@
                 _dpLayer.clearLayers();
                 (data.detail_pins || []).forEach(dp => {
                     if (!dp.latitude || !dp.longitude) return;
-                    L.marker([dp.latitude, dp.longitude], { icon: _dpMarkerIcon(dp.pin_type, dp.icon, dp.color) })
-                        .bindPopup(`<strong>${dp.name || dp.pin_type}</strong> <em>(by ${dp.added_by || '?'})</em>${dp.description ? '<br>' + dp.description : ''}`)
-                        .addTo(_dpLayer);
+                    let _dpLat = dp.latitude, _dpLng = dp.longitude;
+                    const marker = L.marker([dp.latitude, dp.longitude], {
+                        icon: _dpMarkerIcon(dp.pin_type, dp.icon, dp.color),
+                        draggable: true,
+                    });
+                    marker.bindPopup(`<strong>${dp.name || dp.pin_type}</strong> <em>(by ${dp.added_by || '?'})</em>${dp.description ? '<br>' + dp.description : ''}`);
+                    marker.on('dragend', function () {
+                        const pos = marker.getLatLng();
+                        fetch(_wikiDpEditBase + dp.uuid + '/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                            body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
+                        })
+                        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+                        .then(() => { _dpLat = pos.lat; _dpLng = pos.lng; toastr.success('Community pin moved.'); })
+                        .catch(() => {
+                            toastr.error('Failed to save new position.');
+                            marker.setLatLng([_dpLat, _dpLng]);
+                        });
+                    });
+                    marker.addTo(_dpLayer);
                 });
             })
             .catch(err => console.warn('Could not load community detail pins:', err));

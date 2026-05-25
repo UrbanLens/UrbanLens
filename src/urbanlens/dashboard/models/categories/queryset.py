@@ -1,34 +1,19 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    queryset.py                                                                                          *
-*        Path:    /queryset.py                                                                                         *
-*        Project: categories                                                                                           *
-*        Version: <<projectversion>>                                                                                   *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
+"""CategoryQuerySet and CategoryManager."""
+
 from django.db.models import Manager, QuerySet
 
 
 class CategoryQuerySet(QuerySet):
-    pass
+    """Custom QuerySet for Category."""
+
+    def ordered(self) -> "CategoryQuerySet":
+        """Return categories sorted by -order then name."""
+        return self.order_by("-order", "name")
+
+    def with_icon(self) -> "CategoryQuerySet":
+        """Return only categories that have an icon set."""
+        return self.exclude(icon__isnull=True).exclude(icon="")
 
 
 class CategoryManager(Manager.from_queryset(CategoryQuerySet)):
-    pass
+    """Manager for Category using CategoryQuerySet."""

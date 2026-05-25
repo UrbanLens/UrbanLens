@@ -36,7 +36,7 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import aliases, campus, detail_pins, friendship, location_wiki, maps, markup, pin, pin_edit, settings, tags, trip, userprofile, visits
+from urbanlens.dashboard.controllers import aliases, campus, categories, detail_pins, friendship, location_wiki, maps, markup, pin, pin_edit, settings, tags, trip, userprofile, visits
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -363,6 +363,11 @@ urlpatterns = [
                     name="location.wiki.detail_pin.delete",
                 ),
                 path(
+                    "<uuid:location_uuid>/wiki/detail-pins/<uuid:detail_pin_uuid>/edit/",
+                    detail_pins.LocationWikiDetailPinEditView.as_view(),
+                    name="location.wiki.detail_pin.edit",
+                ),
+                path(
                     "<uuid:location_uuid>/wiki/aliases/",
                     aliases.LocationAliasView.as_view(),
                     name="location.wiki.aliases",
@@ -391,6 +396,22 @@ urlpatterns = [
                 path("<uuid:trip_uuid>/comments/<int:comment_id>/delete/", trip.TripCommentDeleteView.as_view(), name="trips.comment.delete"),
                 path("<uuid:trip_uuid>/members/", trip.TripMembersView.as_view(), name="trips.members"),
                 path("<uuid:trip_uuid>/members/<int:profile_id>/remove/", trip.TripMemberRemoveView.as_view(), name="trips.member.remove"),
+            ],
+        ),
+    ),
+    path(
+        "categories/",
+        include(
+            [
+                path("", categories.CategoryIndexView.as_view(), name="category.index"),
+                path("create/", categories.CategoryCreateView.as_view(), name="category.create"),
+                path("<int:cat_id>/edit/", categories.CategoryEditView.as_view(), name="category.edit"),
+                path("<int:cat_id>/delete/", categories.CategoryDeleteView.as_view(), name="category.delete"),
+                path("<int:cat_id>/merge/", categories.CategoryMergeView.as_view(), name="category.merge"),
+                path("rows/", categories.CategoryRowsView.as_view(), name="category.rows"),
+                path("reorder/", categories.CategoryReorderView.as_view(), name="category.reorder"),
+                path("pin/<uuid:pin_uuid>/", categories.CategoryPinMembershipView.as_view(), name="category.pin"),
+                path("location/<uuid:location_uuid>/", categories.CategoryLocationMembershipView.as_view(), name="category.location"),
             ],
         ),
     ),

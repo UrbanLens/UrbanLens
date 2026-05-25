@@ -36,7 +36,11 @@
             </div>
             <div class="detail-row">
                 <span class="field-label">Rating</span>
-                <span class="field-value">{% if pin.rating %}{{ pin.rating }} / 5{% else %}—{% endif %}</span>
+                <span class="field-value">
+                    {% if pin.rating %}
+                    <span class="star-rating-display">{% for i in "12345"|make_list %}{% if forloop.counter <= pin.rating %}<span class="sr-star sr-star--on">★</span>{% else %}<span class="sr-star">★</span>{% endif %}{% endfor %}</span>
+                    {% else %}—{% endif %}
+                </span>
             </div>
             <div class="detail-row">
                 <span class="field-label">Categories</span>

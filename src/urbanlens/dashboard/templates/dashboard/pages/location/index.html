@@ -59,6 +59,18 @@
         <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
 
+    {# ── Categories panel ─────────────────────────────────────────────── #}
+    <div hx-get="{% url 'category.pin' pin.uuid %}"
+         hx-trigger="load"
+         hx-swap="outerHTML"
+         class="tag-panel">
+        <div class="tag-panel-header">
+            <i class="material-icons">category</i>
+            <span>Categories</span>
+        </div>
+        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+    </div>
+
     {# ── Aliases ──────────────────────────────────────────────────────── #}
     <div hx-get="{% url 'pin.aliases' pin.uuid %}"
          hx-trigger="load"
@@ -508,8 +520,25 @@
     });
     L.Marker.prototype.options.icon = markerIcon;
 
+    const pinDbId = {{ pin.pk }};
+    let _pinMarkerLat = pinLat, _pinMarkerLng = pinLng;
+
     // Main pin marker — hidden when a campus boundary exists
-    let _pinMarker = L.marker([pinLat, pinLng]).addTo(map);
+    let _pinMarker = L.marker([pinLat, pinLng], { draggable: true }).addTo(map);
+    _pinMarker.on('dragend', function () {
+        const pos = _pinMarker.getLatLng();
+        fetch(`/dashboard/rest/pins/${pinDbId}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
+        })
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(() => { _pinMarkerLat = pos.lat; _pinMarkerLng = pos.lng; toastr.success('Pin moved.'); })
+        .catch(() => {
+            toastr.error('Failed to save new position.');
+            _pinMarker.setLatLng([_pinMarkerLat, _pinMarkerLng]);
+        });
+    });
 
     setTimeout(() => map.invalidateSize(), 300);
 

@@ -234,6 +234,8 @@
 }
 .leaflet-popup-content { margin: 0; }
 .leaflet-popup-tip { background: rgba(18,22,34,0.97); }
+.leaflet-popup-close-button { color: rgba(255,255,255,0.45) !important; font-size: 1rem !important; right: 6px !important; top: 6px !important; }
+.leaflet-popup-close-button:hover { color: #fff !important; }
 .pin-popup {
     padding: 12px 14px 10px;
     font-size: .82rem;
@@ -262,6 +264,7 @@
     flex-wrap: wrap;
 }
 .popup-status {
+    display: none;
     font-size: .68rem;
     font-weight: 600;
     letter-spacing: .04em;
@@ -282,6 +285,23 @@
     align-items: center;
     gap: 3px;
 }
+.popup-stars {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 7px;
+    cursor: pointer;
+}
+.popup-star {
+    font-size: 1.1rem;
+    color: rgba(255,255,255,0.2);
+    transition: color 0.1s, transform 0.1s;
+    line-height: 1;
+    user-select: none;
+}
+.popup-star--on { color: #fbbf24; }
+.popup-star--preview { color: #f59e0b; transform: scale(1.1); }
+.popup-star:hover { transform: scale(1.15); }
+
 .popup-tags {
     display: flex;
     flex-wrap: wrap;
@@ -733,7 +753,7 @@
     function _buildMarker(pin) {
         if (!pin.latitude || !pin.longitude) return null;
         const coords = [parseFloat(pin.latitude), parseFloat(pin.longitude)];
-        const marker = L.marker(coords);
+        const marker = L.marker(coords, { draggable: true });
 
         if (pin.icon && pin.icon !== 'undefined' && pin.icon !== 'null') {
             const color = (pin.color && pin.color !== 'None') ? pin.color : '#555555';
@@ -743,12 +763,26 @@
             marker.setIcon(L.divIcon({ className: 'map-pin-icon-wrap', html: iconHtml, iconSize: [28,28], iconAnchor: [14,14] }));
         }
 
-        const tagChips = (pin.tags_data || []).map(t => {
+        // Build tag chips: prefer full tag objects (color/icon), fall back to CSV names
+        let tagChipsData = pin.tags_data;
+        if (!tagChipsData || !tagChipsData.length) {
+            tagChipsData = (pin.tags || '').split(',').map(s => s.trim()).filter(Boolean).map(n => ({ name: n }));
+        }
+        const tagChips = tagChipsData.map(t => {
             const bg = t.color ? `${t.color}22` : 'rgba(100,120,160,0.18)';
             const border = t.color ? `${t.color}55` : 'rgba(100,120,160,0.3)';
             const icon = t.icon ? `${t.icon} ` : '';
             return `<span class="popup-tag-chip" style="background:${bg};border-color:${border};">${icon}${t.name}</span>`;
         }).join('');
+
+        const rating = parseInt(pin.rating) || 0;
+        const starDisplay = [1,2,3,4,5].map(i =>
+            `<span class="popup-star ${i <= rating ? 'popup-star--on' : ''}" data-val="${i}">★</span>`
+        ).join('');
+        // Hidden radio inputs for save-on-click (popupopen handler uses these)
+        const starInputs = [1,2,3,4,5].map(i =>
+            `<input type="radio" name="star" class="star-${i}" id="star-${i}-${pin.uuid}" value="${i}" ${rating === i ? 'checked' : ''} style="display:none">`
+        ).join('');
 
         const popupContent = `
             <div class="pin-popup" data-uuid="${pin.uuid}" data-id="${pin.id || ''}">
@@ -756,13 +790,11 @@
                 ${pin.description ? `<div class="popup-desc">${pin.description}</div>` : ''}
                 <div class="popup-meta">
                     <span class="popup-status popup-status--${(pin.status||'').replace(/\s+/g,'-').toLowerCase()}">${pin.status || ''}</span>
-                    <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${pin.last_visited || 'Never'}</span>
+                    <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${pin.last_visited || 'Not Visited'}</span>
                 </div>
-                <div class="stars rating-${pin.rating || 0}">
-                    ${[1,2,3,4,5].map(i =>
-                        `<input type="radio" name="star" class="star-${i}" id="star-${i}-${pin.uuid}" value="${i}" ${pin.rating == i ? 'checked' : ''} />
-                         <label class="star-${i}" for="star-${i}-${pin.uuid}">★</label>`
-                    ).join('')}
+                <div class="popup-stars" data-pin-id="${pin.id || ''}" data-pin-uuid="${pin.uuid}">
+                    ${starDisplay}
+                    <div class="stars rating-${rating}" style="display:none">${starInputs}</div>
                 </div>
                 ${tagChips ? `<div class="popup-tags">${tagChips}</div>` : ''}
                 <div class="popup-actions">
@@ -771,6 +803,44 @@
                 </div>
             </div>`;
         marker.bindPopup(popupContent);
+
+        if (pin.id) {
+            let _savedLat = parseFloat(pin.latitude);
+            let _savedLng = parseFloat(pin.longitude);
+            marker.on('dragstart', function () {
+                clusterGroup.removeLayer(marker);
+                marker.addTo(map);
+            });
+            marker.on('dragend', function () {
+                const pos = marker.getLatLng();
+                fetch(`/dashboard/rest/pins/${pin.id}/`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                    body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
+                })
+                .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+                .then(() => {
+                    _savedLat = pos.lat;
+                    _savedLng = pos.lng;
+                    if (_pinStore.has(pin.uuid)) {
+                        const cached = _pinStore.get(pin.uuid);
+                        cached.latitude = pos.lat.toFixed(6);
+                        cached.longitude = pos.lng.toFixed(6);
+                        _scheduleCache();
+                    }
+                    toastr.success('Pin moved.');
+                })
+                .catch(() => {
+                    toastr.error('Failed to save new position.');
+                    marker.setLatLng([_savedLat, _savedLng]);
+                })
+                .finally(() => {
+                    if (map.hasLayer(marker)) map.removeLayer(marker);
+                    clusterGroup.addLayer(marker);
+                });
+            });
+        }
+
         return marker;
     }
 
@@ -799,8 +869,9 @@
             for (const pin of (data.pins || [])) {
                 const existing = _pinStore.get(pin.uuid);
                 if (existing) {
-                    // Refresh marker when icon or color changed (e.g. after tag edits)
-                    if (existing.icon !== pin.icon || existing.color !== pin.color || existing.tags !== pin.tags) {
+                    // Refresh marker when display-relevant fields changed (tag edits, rating, etc.)
+                    if (existing.icon !== pin.icon || existing.color !== pin.color
+                            || existing.tags !== pin.tags || existing.rating !== pin.rating) {
                         _pinStore.set(pin.uuid, pin);
                         if (!_filterMode && _markerMap.has(pin.uuid)) {
                             clusterGroup.removeLayer(_markerMap.get(pin.uuid));
@@ -917,31 +988,46 @@
     });
 
     map.on('popupopen', function() {
-        document.querySelectorAll('.pin-popup .stars input').forEach(function(input) {
-            input.addEventListener('change', function() {
-                const field = this;
-                const value = field.value;
-                const pinId = field.closest('.pin-popup').dataset.id;
-                const data = {};
-                data[field.name] = value;
-                // Use the correct URL pattern for creating or updating reviews
-                fetch(`/dashboard/rest/reviews/create_or_update/${pinId}/`, {
-                    method: data[field.name] ? 'PATCH' : 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ csrf_token }}',
-                    },
-                    body: JSON.stringify({rating: value}),
-                })
-                .then(response => response.json())
-                .then(data => {
-                    this.closest('.stars').classList.remove('rating-0', 'rating-1', 'rating-2', 'rating-3', 'rating-4', 'rating-5');
-                    console.log(`${field.name} updated successfully`, data);
-                    toastr.success(`${field.name.charAt(0).toUpperCase() + field.name.slice(1)} updated successfully`);
-                })
-                .catch((error) => {
-                    console.error('Error:', error);
-                    toastr.error(`Failed to update ${field.name}`);
+        // ── Rating stars ───────────────────────────────────────────────────────
+        document.querySelectorAll('.popup-stars').forEach(function(starsEl) {
+            const stars = starsEl.querySelectorAll('.popup-star');
+
+            // Hover preview
+            stars.forEach(function(star) {
+                star.addEventListener('mouseenter', function() {
+                    const val = parseInt(this.dataset.val);
+                    stars.forEach(s => s.classList.toggle('popup-star--preview', parseInt(s.dataset.val) <= val));
+                });
+                star.addEventListener('mouseleave', function() {
+                    stars.forEach(s => s.classList.remove('popup-star--preview'));
+                });
+            });
+
+            // Click to save
+            stars.forEach(function(star) {
+                star.addEventListener('click', function() {
+                    const val = parseInt(this.dataset.val);
+                    const popup = this.closest('.pin-popup');
+                    const pinId = popup.dataset.id;
+                    const uuid = popup.dataset.uuid;
+
+                    // Update visual immediately
+                    stars.forEach(s => s.classList.toggle('popup-star--on', parseInt(s.dataset.val) <= val));
+
+                    fetch(`/dashboard/rest/reviews/create_or_update/${pinId}/`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                        body: JSON.stringify({ rating: val }),
+                    })
+                    .then(r => r.json())
+                    .then(() => {
+                        if (uuid && _pinStore.has(uuid)) {
+                            _pinStore.get(uuid).rating = val;
+                            _scheduleCache();
+                        }
+                        toastr.success('Rating saved.');
+                    })
+                    .catch(() => toastr.error('Failed to save rating.'));
                 });
             });
         });

@@ -4761,6 +4761,25 @@ textarea.form-input {
     }
 }
 
+// Visual star rating display (pin details page, etc.)
+.star-rating-display {
+    display: inline-flex;
+    gap: 1px;
+}
+.sr-star {
+    font-size: 1.15rem;
+    color: rgba(0, 0, 0, 0.15);
+    line-height: 1;
+
+    @at-root [data-theme="dark"] &,
+    .dark-mode & {
+        color: rgba(255, 255, 255, 0.15);
+    }
+}
+.sr-star--on {
+    color: #f59e0b;
+}
+
 // Emoji icon display (tag cards, map pins)
 .tag-icon-emoji {
     font-size: 1.4rem;
