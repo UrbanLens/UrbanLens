@@ -4338,7 +4338,9 @@ textarea.form-input {
         transition: background .15s, color .15s;
         margin-left: auto;
 
-        .material-icons { font-size: 1.1rem; }
+        .material-icons {
+            font-size: 1.1rem;
+        }
 
         &:hover {
             background: rgba(0, 0, 0, .07);
@@ -4394,7 +4396,9 @@ textarea.form-input {
     color: $text-secondary;
     margin-bottom: .75rem;
 
-    i { color: $primary-color; }
+    i {
+        color: $primary-color;
+    }
 }
 
 .tag-merge-warning {
@@ -4838,7 +4842,7 @@ textarea.form-input {
         }
     }
 
-    input[type="checkbox"]:checked ~ .cat-select-check {
+    input[type="checkbox"]:checked~.cat-select-check {
         background: $primary-color;
         border-color: $primary-color;
 
@@ -5129,7 +5133,9 @@ textarea.form-input {
 }
 
 @keyframes cat-spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .cat-merge-spinner {
@@ -5145,18 +5151,25 @@ textarea.form-input {
 }
 
 // ── Category rows: hide select wrap in gallery (checkbox positioned differently) ─
-#category-rows.tag-view--gallery {
-    .cat-select-wrap {
-        position: absolute;
-        top: .4rem;
-        left: .4rem;
-        z-index: 1;
-        background: rgba(255, 255, 255, .9);
-        border-radius: 4px;
+#category-rows {
+
+    &.tag-view--gallery {
+        .cat-select-wrap {
+            position: absolute;
+            top: .4rem;
+            left: .4rem;
+            z-index: 1;
+            background: rgba(255, 255, 255, .9);
+            border-radius: 4px;
+        }
+
+        .tag-card {
+            position: relative;
+        }
     }
 
-    .tag-card {
-        position: relative;
+    [type="checkbox"]+span:not(.lever) {
+        display: none;
     }
 }
 
@@ -5165,6 +5178,7 @@ textarea.form-input {
     display: inline-flex;
     gap: 1px;
 }
+
 .sr-star {
     font-size: 1.15rem;
     color: rgba(0, 0, 0, 0.15);
@@ -5175,6 +5189,7 @@ textarea.form-input {
         color: rgba(255, 255, 255, 0.15);
     }
 }
+
 .sr-star--on {
     color: #f59e0b;
 }
