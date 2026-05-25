@@ -43,10 +43,6 @@
                     <i class="material-icons">push_pin</i>
                     {{ category.pins.count }}
                 </span>
-                <span class="tag-stat" title="Locations with this category">
-                    <i class="material-icons">public</i>
-                    {{ category.locations.count }}
-                </span>
                 {% with child_count=category.children.count %}
                 {% if child_count %}
                 <span class="tag-stat tag-stat--children" title="{{ child_count }} child categor{{ child_count|pluralize:'y,ies' }}">

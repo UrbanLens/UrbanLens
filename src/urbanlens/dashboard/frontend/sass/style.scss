@@ -4300,6 +4300,44 @@ textarea.form-input {
     }
 }
 
+// ── Global dialog header / close (applies to all <dialog> elements) ───────────
+
+.dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid $border-color;
+    font-weight: 600;
+    font-size: .95rem;
+    flex-shrink: 0;
+}
+
+.dialog-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #888;
+    transition: background .15s, color .15s;
+    flex-shrink: 0;
+
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: rgba(0, 0, 0, .07);
+        color: #333;
+    }
+}
+
 // ── Tag edit dialog ────────────────────────────────────────────────────────────
 .tag-edit-dialog {
     width: min(620px, calc(100vw - 2rem));
@@ -4926,16 +4964,21 @@ textarea.form-input {
     font-weight: 500;
     color: #475569;
     cursor: pointer;
-    transition: background .12s, border-color .12s, color .12s;
+    transition: background .12s, border-color .12s, color .12s, opacity .12s;
 
     i {
         font-size: .95rem;
     }
 
-    &:hover {
+    &:hover:not(:disabled) {
         background: #f1f5f9;
         border-color: #94a3b8;
         color: #1e293b;
+    }
+
+    &:disabled {
+        opacity: .38;
+        cursor: not-allowed;
     }
 }
 
@@ -4969,7 +5012,7 @@ textarea.form-input {
 }
 
 .cat-sel-edit-btn {
-    &:hover {
+    &:hover:not(:disabled) {
         background: #f0f9ff;
         border-color: $primary-color;
         color: $primary-color;
@@ -4980,7 +5023,7 @@ textarea.form-input {
     border-color: #fca5a5;
     color: #dc2626;
 
-    &:hover {
+    &:hover:not(:disabled) {
         background: #fef2f2;
         border-color: #dc2626;
         color: #b91c1c;
@@ -5179,12 +5222,17 @@ textarea.form-input {
 
 .cat-bulk-edit-dialog {
     width: min(520px, 95vw);
-    max-height: 90vh;
-    overflow-y: auto;
+    max-height: 85vh;
     border: none;
     border-radius: $radius-md;
     box-shadow: $shadow-dialog;
     padding: 0;
+    overflow: hidden;
+
+    &[open] {
+        display: flex;
+        flex-direction: column;
+    }
 
     &::backdrop {
         background: rgba(0, 0, 0, .45);
@@ -5196,6 +5244,8 @@ textarea.form-input {
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
+    overflow-y: auto;
+    flex: 1;
 }
 
 .cat-bulk-field {
@@ -5234,7 +5284,6 @@ textarea.form-input {
 
 .cat-bulk-picker--disabled {
     opacity: .4;
-    pointer-events: none;
 }
 
 .cat-bulk-edit-footer {
@@ -5243,6 +5292,7 @@ textarea.form-input {
     align-items: center;
     padding: 1rem 1.5rem 1.25rem;
     border-top: 1px solid $border-color;
+    flex-shrink: 0;
 }
 
 // ── Category rows: hide select wrap in gallery (checkbox positioned differently) ─
