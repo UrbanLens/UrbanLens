@@ -4691,7 +4691,8 @@ textarea.form-input {
 }
 
 // ── Gallery view ──────────────────────────────────────────────────────────────
-#tag-rows.tag-view--gallery {
+#tag-rows.tag-view--gallery,
+#category-rows.tag-view--gallery {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: .75rem;
@@ -4784,7 +4785,8 @@ textarea.form-input {
     background: $border-color;
 }
 
-#tag-rows.tag-view--tree {
+#tag-rows.tag-view--tree,
+#category-rows.tag-view--tree {
 
     .tag-drag-handle,
     .tag-order-badge {

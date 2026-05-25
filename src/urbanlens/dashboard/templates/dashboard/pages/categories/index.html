@@ -460,9 +460,6 @@ function renderTreeView(rows) {
         var clone = card.cloneNode(true);
         clone.style.display = '';
         clone.id = 'cat-tree-node-' + id + '-d' + depth + '-' + Math.random().toString(36).slice(2, 6);
-        // Sync checkbox state on clone
-        var cloneCb = clone.querySelector('.cat-select-cb');
-        if (cloneCb) cloneCb.checked = _selected.has(id);
         item.appendChild(clone);
         var newPath = new Set(ancestorPath);
         newPath.add(id);
