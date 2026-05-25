@@ -1,0 +1,496 @@
+@use 'variables' as *;
+
+// ── Detail Pins ────────────────────────────────────────────────────────────────
+.detail-pins-panel {
+    .card-header {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+    }
+
+    .detail-pin-empty {
+        padding: 1rem 1.25rem;
+        color: #888;
+        font-size: .85rem;
+    }
+}
+
+// Shared "Add" button used in card headers across trips, detail pins, etc.
+.detail-pin-add-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .3rem .75rem;
+    border: none;
+    border-radius: 6px;
+    background: #2563eb;
+    color: #fff;
+    font-size: .8rem;
+    cursor: pointer;
+    outline: none;
+
+    &:hover,
+    &:focus {
+        background: #1d4ed8;
+        outline: none;
+    }
+}
+
+// Shared destructive icon button — used in detail pins, trip panels, etc.
+.detail-pin-action-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #94a3b8;
+    padding: .2rem;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+    transition: background .12s, color .12s;
+
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &:hover,
+    &:focus {
+        background: #fee2e2;
+        color: #dc2626;
+        outline: none;
+    }
+}
+
+.detail-pin-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.detail-pin-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    padding: .75rem 1.25rem;
+    border-bottom: 1px solid rgba(128, 128, 128, .15);
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    .detail-pin-type-icon {
+        font-size: 1.35rem;
+        flex-shrink: 0;
+        margin-top: .1rem;
+    }
+
+    .detail-pin-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: .15rem;
+
+        .detail-pin-name {
+            font-weight: 600;
+            font-size: .9rem;
+        }
+
+        .detail-pin-desc {
+            font-size: .8rem;
+            color: #888;
+        }
+
+        .detail-pin-coords {
+            font-size: .75rem;
+            color: #aaa;
+            font-family: monospace;
+        }
+    }
+
+    .detail-pin-actions {
+        display: flex;
+        gap: .25rem;
+        flex-shrink: 0;
+    }
+
+    // see global .detail-pin-action-btn below
+
+    &.detail-pin-type--building .detail-pin-type-icon {
+        color: #6b7280;
+    }
+
+    &.detail-pin-type--entrance .detail-pin-type-icon {
+        color: #16a34a;
+    }
+
+    &.detail-pin-type--poi .detail-pin-type-icon {
+        color: #d97706;
+    }
+
+    &.detail-pin-type--danger .detail-pin-type-icon {
+        color: #dc2626;
+    }
+
+    &.detail-pin-type--other .detail-pin-type-icon {
+        color: #7c3aed;
+    }
+
+    &.detail-pin-type--location .detail-pin-type-icon {
+        color: #2563eb;
+    }
+}
+
+.detail-pin-no-location {
+    margin: 0 1.25rem .5rem;
+    font-size: .8rem;
+    color: #9ca3af;
+    font-style: italic;
+}
+
+.form-optional {
+    font-weight: 400;
+    color: #9ca3af;
+    font-size: .8em;
+}
+
+.detail-pin-add-dialog {
+    border: none;
+    border-radius: 12px;
+    padding: 0;
+    width: min(520px, 96vw);
+    // Constrain to viewport — the inner body scrolls, not the dialog itself
+    max-height: min(92vh, 900px);
+    overflow: hidden;
+
+    &[open] {
+        display: flex;
+        flex-direction: column;
+    }
+
+    &::backdrop {
+        background: rgba(0, 0, 0, .4);
+    }
+
+    // Scrollable body — everything below the fixed header
+    .detail-pin-add-body {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0; // required for flex children to shrink below content size
+    }
+
+    .detail-pin-add-hint {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        margin: .5rem 1.25rem 0;
+        font-size: .82rem;
+        color: #6b7280;
+    }
+
+    #detail-pin-picker-map {
+        // Viewport-relative height: scales with zoom, never smaller than 180px.
+        height: clamp(180px, 30vh, 340px);
+        margin: .75rem 1.25rem;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .detail-pin-add-form {
+        padding: 0 1.25rem 1.25rem;
+
+        .form-row {
+            display: flex;
+            flex-direction: column;
+            gap: .3rem;
+            margin-bottom: .8rem;
+
+            label {
+                font-size: .82rem;
+                font-weight: 600;
+                color: #555;
+            }
+
+            input,
+            select,
+            textarea {
+                width: 100%;
+                box-sizing: border-box;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                padding: .45rem .6rem;
+                font-size: .9rem;
+
+                &:focus {
+                    outline: 2px solid #2563eb;
+                    border-color: transparent;
+                }
+            }
+
+            &.form-row--coords {
+                flex-direction: row;
+                gap: .75rem;
+
+                >div {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    gap: .3rem;
+                }
+            }
+        }
+    }
+}
+
+.detail-map-icon {
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+    display: block;
+}
+
+// ── Detail-pin icon + color pickers (shared by both dialogs) ────────────────
+.dp-icon-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+    padding: .25rem 0;
+}
+
+.dp-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    cursor: pointer;
+    transition: border-color .12s, background .12s;
+
+    .material-icons {
+        font-size: 18px;
+        color: #555;
+    }
+
+    &:hover {
+        background: #eff6ff;
+        border-color: #93c5fd;
+    }
+
+    &.dp-icon-btn--active {
+        background: #dbeafe;
+        border-color: #2563eb;
+
+        .material-icons {
+            color: #2563eb;
+        }
+    }
+}
+
+.dp-color-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+    padding: .25rem 0;
+}
+
+.dp-color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: border-color .12s, transform .1s;
+
+    &:hover {
+        transform: scale(1.15);
+    }
+
+    &.dp-color-swatch--active {
+        border-color: #1e293b;
+        box-shadow: 0 0 0 2px #fff inset;
+    }
+}
+
+// ── Detail-pin delete animation ──────────────────────────────────────────────
+.detail-pin-item.is-deleting,
+.detail-pin-wiki-item.is-deleting {
+    opacity: 0.25;
+    pointer-events: none;
+    transition: opacity 0.15s;
+}
+
+.detail-pin-wiki-list {
+    padding: .5rem 0;
+}
+
+.detail-pin-wiki-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    padding: .6rem 1.25rem;
+    border-bottom: 1px solid rgba(128, 128, 128, .12);
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    .detail-pin-wiki-attr {
+        margin-left: auto;
+        font-size: .75rem;
+        color: #94a3b8;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+}
+
+.detail-pin-wiki-empty {
+    padding: 1rem 1.25rem;
+    color: #888;
+    font-size: .85rem;
+}
+
+// ── Aliases panel ────────────────────────────────────────────────────────────
+.aliases-panel {
+    .aliases-description {
+        padding: .5rem 1rem 0;
+        font-size: .83rem;
+        color: #888;
+        margin: 0;
+    }
+}
+
+.alias-chips-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    padding: .75rem 1rem;
+    min-height: 2.5rem;
+    align-items: center;
+}
+
+.alias-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .25rem .35rem .25rem .65rem;
+    border-radius: 20px;
+    background: color-mix(in srgb, #6366f1 12%, transparent);
+    border: 1px solid color-mix(in srgb, #6366f1 25%, transparent);
+    font-size: .8rem;
+    font-weight: 500;
+    color: #333;
+    line-height: 1.3;
+
+    .alias-chip-name {
+        flex: 1;
+    }
+
+    .alias-chip-author {
+        font-size: .72rem;
+        color: #777;
+        font-style: italic;
+        padding: 0 .2rem;
+
+        &::before {
+            content: '— ';
+        }
+    }
+
+    .alias-chip-remove {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: .15rem;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(0, 0, 0, .1);
+        cursor: pointer;
+        padding: 0;
+        color: #666;
+        outline: none;
+        transition: background .12s, color .12s;
+
+        .material-icons {
+            font-size: 12px;
+            line-height: 1;
+        }
+
+        &:hover,
+        &:focus {
+            background: rgba(200, 0, 0, .18);
+            color: #c00;
+            outline: none;
+        }
+    }
+}
+
+.aliases-empty {
+    padding: .5rem 1rem .75rem;
+    font-size: .83rem;
+    color: #aaa;
+    font-style: italic;
+    margin: 0;
+}
+
+.alias-add-form {
+    display: flex;
+    gap: .5rem;
+    padding: 0 1rem 1rem;
+    align-items: center;
+
+    .alias-add-input {
+        flex: 1;
+        padding: .35rem .6rem;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: .85rem;
+        outline: none;
+
+        &:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, .15);
+        }
+    }
+
+    .alias-add-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: .35rem .6rem;
+        background: #6366f1;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background .15s;
+
+        .material-icons {
+            font-size: 18px;
+        }
+
+        &:hover {
+            background: #4f46e5;
+        }
+    }
+}
+
+// Shared wiki dialog uses the same base as tag/visit dialogs.
+.wiki-edit-dialog {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
+    padding: 0;
+    width: min(480px, 95vw);
+    max-height: 90vh;
+    overflow-y: auto;
+
+    &[open] {
+        display: flex;
+        flex-direction: column;
+    }
+}
+

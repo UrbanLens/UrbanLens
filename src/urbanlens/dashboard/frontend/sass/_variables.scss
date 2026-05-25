@@ -1,0 +1,107 @@
+@use "sass:color";
+// Core palette
+$primary-color: #2196F3;
+$secondary-color: #FFC107;
+$dark-neutral-color: #424242;
+$light-neutral-color: #FAFAFA;
+$inactive-button-color: #424242;
+$highlight-color: #FFC107;
+$selected-color: #2196F3;
+
+// Design tokens
+$text-primary: #1a1a1a;
+$text-secondary: #5f6368;
+$text-muted: #9aa0a6;
+$border-color: #e0e0e0;
+$radius-sm: 8px;
+$radius-md: 12px;
+$shadow-dialog: 0 8px 40px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .08);
+$text-color: $text-primary;
+
+// Prevent scrollbar-induced layout shift on all pages
+html {
+    scrollbar-gutter: stable;
+}
+
+// ── Additional shared tokens ─────────────────────────────────────────────────
+$shadow-sm:      0 1px 3px rgba(0,0,0,.08);
+$shadow-md:      0 4px 16px rgba(0,0,0,.12);
+$radius-xs:      4px;
+$radius-lg:      12px;
+$radius-full:    9999px;
+$danger-color:   #c0392b;
+$danger-bg:      #fdf0ee;
+$danger-border:  #e8c2be;
+$success-color:  #1e7e34;
+$success-bg:     #eaf6ed;
+$warning-color:  #856404;
+$warning-bg:     #fff3cd;
+$teal-color:     #0d6e6e;
+$teal-bg:        #e6f7f7;
+
+// ── Shared mixins ─────────────────────────────────────────────────────────────
+@mixin dialog-base {
+    border: none;
+    border-radius: $radius-lg;
+    box-shadow: 0 8px 32px rgba(0,0,0,.18);
+    padding: 0;
+    max-width: 90vw;
+    background: #fff;
+    &::backdrop { background: rgba(0,0,0,.45); }
+    &[open] { display: flex; flex-direction: column; overflow: hidden; }
+}
+
+@mixin panel-base {
+    background: #fff;
+    border: 1px solid $border-color;
+    border-radius: $radius-lg;
+    overflow: hidden;
+}
+
+@mixin panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid $border-color;
+    font-weight: 600;
+    font-size: .95rem;
+    flex-shrink: 0;
+}
+
+@mixin panel-item {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .5rem .75rem;
+    border-bottom: 1px solid $border-color;
+    &:last-child { border-bottom: none; }
+}
+
+@mixin empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    padding: 2rem;
+    color: #999;
+    text-align: center;
+    .material-icons { font-size: 2.5rem; opacity: .4; }
+}
+
+@mixin input-focus {
+    outline: none;
+    border-color: $primary-color;
+    box-shadow: 0 0 0 3px rgba($primary-color, .15);
+}
+
+@mixin add-form-row {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+    padding: .75rem 1rem;
+    border-top: 1px solid $border-color;
+    background: #fafafa;
+}

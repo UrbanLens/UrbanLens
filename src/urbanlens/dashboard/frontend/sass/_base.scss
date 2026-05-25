@@ -1,0 +1,226 @@
+@use 'sass:color';
+@use 'variables' as *;
+
+@keyframes dialog-appear {
+    from {
+        opacity: 0;
+        transform: translate(-50%, calc(-50% + 10px));
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+.dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(1px);
+    -webkit-backdrop-filter: blur(1px);
+    z-index: 999;
+}
+
+.dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #fff;
+    border-radius: $radius-md;
+    box-shadow: $shadow-dialog;
+    width: calc(100% - 2rem);
+    max-width: 480px;
+    padding: 24px;
+    z-index: 1001;
+    animation: dialog-appear 0.16s ease;
+
+    h2 {
+        margin-top: 0;
+        margin-bottom: 20px;
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: $text-primary;
+        padding-right: 36px;
+        line-height: 1.3;
+    }
+
+    form {
+        label {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: $text-secondary;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            margin-bottom: 5px;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="search"],
+        input[type="url"],
+        input[type="number"],
+        select,
+        textarea {
+            display: block;
+            width: 100%;
+            padding: 9px 12px;
+            font-size: 0.9rem;
+            border: 1.5px solid $border-color !important;
+            border-radius: $radius-sm !important;
+            border-bottom: 1.5px solid $border-color !important;
+            background: #fff;
+            color: $text-primary;
+            outline: none;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            box-sizing: border-box;
+            margin-bottom: 0;
+            height: auto !important;
+            box-shadow: none !important;
+
+            &:focus {
+                border-color: $primary-color !important;
+                box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1) !important;
+            }
+        }
+
+        input[type="file"] {
+            display: block;
+            width: 100%;
+            padding: 6px 0;
+            font-size: 0.875rem;
+            color: $text-secondary;
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+        }
+
+        p {
+            margin-bottom: 14px;
+        }
+    }
+}
+
+.btn-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: $text-muted;
+    font-size: 1.15rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+    flex-shrink: 0;
+
+    &:hover {
+        background: #f0f0f0;
+        color: $text-primary;
+    }
+
+    &:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+    }
+}
+
+.file-button,
+.submit-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 20px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: none;
+    border-radius: $radius-sm;
+    cursor: pointer;
+    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+    color: #fff;
+    background: $primary-color;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+
+    &:hover {
+        background: color.adjust($primary-color, $lightness: -7%);
+        box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
+    }
+
+    &:active {
+        transform: translateY(1px);
+        background: color.adjust($primary-color, $lightness: -12%);
+        box-shadow: none;
+    }
+
+    &:disabled,
+    &[disabled] {
+        opacity: 0.45;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+}
+
+input[type="submit"] {
+    @extend .submit-button;
+}
+
+/* Styles for custom icon dropdown */
+.icon-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+    gap: 10px;
+
+    i {
+        cursor: pointer;
+        font-size: 24px;
+        text-align: center;
+
+        &:hover {
+            color: $highlight-color;
+        }
+
+        &.selected {
+            color: $selected-color;
+        }
+    }
+}
+
+.dialog {
+
+    .submit-button,
+    input[type="submit"] {
+        float: right;
+        margin-top: 6px;
+    }
+}
+
+// Map pin icon (Material Icons rendered via Leaflet divIcon)
+.map-pin-icon-wrap {
+    background: none !important;
+    border: none !important;
+}
+
+.map-pin-icon {
+    font-size: 24px !important;
+    display: block !important;
+    line-height: 1 !important;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+    transition: filter 0.15s;
+
+    &:hover {
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7)) brightness(1.15);
+    }
+}
+

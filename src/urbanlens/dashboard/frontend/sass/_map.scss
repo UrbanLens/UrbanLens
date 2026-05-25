@@ -1,0 +1,412 @@
+@use 'variables' as *;
+
+// ── Map bottom-left overlay controls ──────────────────────────────────────
+
+.map-bottom-controls {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    z-index: 1000;
+    display: flex;
+    gap: .4rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.map-overlay-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .35rem .65rem;
+    border-radius: 6px;
+    font-size: .78rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    background: rgba(255, 255, 255, 0.93);
+    color: #374151;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, .28);
+    backdrop-filter: blur(4px);
+    transition: background .12s, box-shadow .12s;
+
+    .material-icons {
+        font-size: .9rem;
+    }
+
+    &:hover {
+        background: #fff;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .32);
+    }
+
+    &--boundary {
+        color: #475569;
+    }
+
+    &--save {
+        color: #16a34a;
+    }
+
+    &--clear {
+        color: #dc2626;
+    }
+
+    &--cancel {
+        color: #64748b;
+    }
+
+    &--add-pin {
+        color: #2563eb;
+    }
+
+    &-group {
+        display: flex;
+        gap: .3rem;
+        align-items: center;
+    }
+}
+
+// ── Detail pin list panel (top-left map overlay) ───────────────────────────
+
+.detail-pin-list-panel {
+    position: absolute;
+    top: 6em;
+    left: 10px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+    min-width: 170px;
+    max-width: 230px;
+    backdrop-filter: blur(4px);
+}
+
+.detail-pin-list-toggle {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .4rem .65rem;
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .8rem;
+    font-weight: 500;
+    color: #374151;
+    border-radius: 8px;
+
+    .material-icons {
+        font-size: 1rem;
+        color: #6b7280;
+    }
+
+    .detail-pin-list-chevron {
+        margin-left: auto;
+        transition: transform .2s;
+        font-size: .85rem;
+
+        &.open {
+            transform: rotate(180deg);
+        }
+    }
+
+    &:hover {
+        background: rgba(0, 0, 0, .04);
+    }
+}
+
+.detail-pin-list-drawer {
+    border-top: 1px solid #e5e7eb;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.detail-pin-list-ul {
+    list-style: none;
+    margin: 0;
+    padding: .2rem 0;
+}
+
+.detail-pin-list-item {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .3rem .5rem;
+    cursor: pointer;
+    font-size: .78rem;
+    color: #374151;
+    transition: background .1s;
+
+    &:hover {
+        background: #f3f4f6;
+    }
+
+    &.is-highlighted {
+        background: #eff6ff;
+
+        .detail-pin-list-item-name {
+            color: #1d4ed8;
+            font-weight: 600;
+        }
+    }
+
+    .detail-pin-list-item-icon {
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .detail-pin-list-item-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .detail-pin-list-item-delete {
+        border: none;
+        background: none;
+        cursor: pointer;
+        color: #94a3b8;
+        padding: .1rem;
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        outline: none;
+        flex-shrink: 0;
+
+        .material-icons {
+            font-size: .85rem;
+        }
+
+        &:hover,
+        &:focus {
+            color: #dc2626;
+            background: #fee2e2;
+            outline: none;
+        }
+    }
+}
+
+// ── "Add Detail" dropdown button ──────────────────────────────────────────
+
+.map-add-detail-wrap {
+    position: relative;
+}
+
+.add-detail-menu {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    background: rgba(255, 255, 255, 0.97);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .22);
+    backdrop-filter: blur(4px);
+    min-width: 130px;
+    overflow: hidden;
+    z-index: 1100;
+}
+
+.add-detail-item {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .4rem .7rem;
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .8rem;
+    color: #374151;
+    text-align: left;
+
+    .material-icons {
+        font-size: .95rem;
+        color: #6b7280;
+    }
+
+    &:hover {
+        background: #f3f4f6;
+    }
+
+    &+& {
+        border-top: 1px solid #f1f5f9;
+    }
+}
+
+.add-detail-chevron {
+    font-size: .75rem !important;
+    transition: transform .2s;
+
+    &.open {
+        transform: rotate(180deg);
+    }
+}
+
+// ── Markup mini-form panel (line/arrow/text placement) ─────────────────────
+
+.markup-form-panel {
+    position: absolute;
+    right: 10px;
+    bottom: 50px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.97);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, .2);
+    width: 220px;
+    backdrop-filter: blur(4px);
+    overflow: hidden;
+}
+
+.markup-form-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .5rem .75rem;
+    font-size: .82rem;
+    font-weight: 600;
+    color: #374151;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.markup-form-body {
+    padding: .6rem .75rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+
+    .form-actions {
+        padding-top: .25rem;
+        display: flex;
+        gap: .4rem;
+    }
+}
+
+.markup-form-label-row {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    font-size: .78rem;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.markup-form-input {
+    padding: .3rem .5rem;
+    border: 1px solid #d1d5db;
+    border-radius: 5px;
+    font-size: .8rem;
+    color: #374151;
+    width: 100%;
+
+    &:focus {
+        border-color: #93c5fd;
+        outline: none;
+    }
+}
+
+.markup-color-swatches {
+    display: flex;
+    gap: .3rem;
+    flex-wrap: wrap;
+    margin-top: .1rem;
+}
+
+.markup-color-swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform .1s, border-color .1s;
+
+    &--active,
+    &:hover {
+        transform: scale(1.2);
+        border-color: #374151;
+    }
+}
+
+.markup-place-hint {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .78rem;
+    color: #2563eb;
+    margin: 0;
+
+    .material-icons {
+        font-size: .95rem;
+    }
+}
+
+// ── Map text labels and arrow decorations ──────────────────────────────────
+
+.map-text-label {
+    display: inline-block;
+    font-weight: 600;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, .94);
+    padding: 2px 5px;
+    border-radius: 3px;
+    pointer-events: none;
+
+    &--line {
+        font-size: .75rem;
+    }
+}
+
+.map-markup-arrowhead-svg {
+    display: block;
+    pointer-events: none;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .35));
+    overflow: visible;
+}
+
+// ── Settings map view chooser ─────────────────────────────────────────────
+
+.settings-map-view-row {
+    display: flex;
+    gap: .75rem;
+    flex-wrap: wrap;
+    margin-top: .5rem;
+}
+
+.settings-map-view-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .3rem;
+    padding: .75rem 1.25rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: .85rem;
+    color: #475569;
+    transition: border-color .15s, background .15s;
+    min-width: 80px;
+
+    input[type="radio"] {
+        display: none;
+    }
+
+    .material-icons {
+        font-size: 1.6rem;
+        color: #94a3b8;
+        transition: color .15s;
+    }
+
+    &.active,
+    &:has(input:checked) {
+        border-color: #3b82f6;
+        background: #eff6ff;
+        color: #1e40af;
+
+        .material-icons {
+            color: #3b82f6;
+        }
+    }
+
+    &:hover:not(.active) {
+        border-color: #93c5fd;
+        background: #f8fafc;
+    }
+}

@@ -1,0 +1,594 @@
+@use 'variables' as *;
+
+// ── Location community wiki ────────────────────────────────────────────────────
+// Visually distinct from the pin details page (indigo/slate palette).
+// Wiki uses a teal/sky palette and a different structural layout.
+
+.wiki-page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 3rem;
+
+    // ── Banner ────────────────────────────────────────────────────────────
+    .wiki-banner {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1.5rem;
+        background: linear-gradient(135deg, #0e7490 0%, #0891b2 50%, #06b6d4 100%);
+        border-radius: 16px;
+        padding: 1.75rem 2rem;
+        color: #fff;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .wiki-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        background: rgba(255, 255, 255, .18);
+        border: 1px solid rgba(255, 255, 255, .35);
+        border-radius: 999px;
+        padding: .25rem .75rem;
+        font-size: .78rem;
+        font-weight: 600;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        margin-bottom: .5rem;
+
+        .material-icons {
+            font-size: .9rem;
+        }
+    }
+
+    .wiki-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        margin: 0 0 .4rem;
+        line-height: 1.2;
+    }
+
+    .wiki-address {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .88rem;
+        opacity: .85;
+        margin: 0;
+
+        .material-icons {
+            font-size: 1rem;
+        }
+    }
+
+    .wiki-notice {
+        display: flex;
+        align-items: flex-start;
+        gap: .5rem;
+        background: rgba(255, 255, 255, .15);
+        border-radius: 10px;
+        padding: .65rem 1rem;
+        font-size: .83rem;
+        max-width: 320px;
+        line-height: 1.45;
+
+        .material-icons {
+            font-size: 1rem;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        strong {
+            opacity: 1;
+        }
+    }
+
+    .wiki-back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        margin-top: .75rem;
+        background: rgba(255, 255, 255, .2);
+        border: 1px solid rgba(255, 255, 255, .4);
+        border-radius: 8px;
+        padding: .45rem .9rem;
+        font-size: .85rem;
+        font-weight: 500;
+        color: #fff;
+        text-decoration: none;
+        transition: background .15s;
+
+        .material-icons {
+            font-size: 1rem;
+        }
+
+        &:hover {
+            background: rgba(255, 255, 255, .3);
+        }
+    }
+
+    // ── Body grid ─────────────────────────────────────────────────────────
+    .wiki-body {
+        display: grid;
+        grid-template-columns: 1fr 280px;
+        grid-template-rows: auto;
+        gap: 1rem;
+        align-items: start;
+
+        .wiki-details {
+            grid-column: 1;
+        }
+
+        .wiki-stats {
+            grid-column: 2;
+        }
+
+        .wiki-bbox {
+            grid-column: 1 / -1;
+        }
+
+        .wiki-tabs-card {
+            grid-column: 1 / -1;
+        }
+
+        @media (max-width: 700px) {
+            grid-template-columns: 1fr;
+
+            .wiki-details,
+            .wiki-stats,
+            .wiki-bbox,
+            .wiki-tabs-card {
+                grid-column: 1;
+            }
+        }
+    }
+
+    // ── Card base ─────────────────────────────────────────────────────────
+    .wiki-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
+    }
+
+    .wiki-card-header {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        padding: .85rem 1.1rem;
+        border-bottom: 1px solid #e2e8f0;
+        background: #f8fafc;
+
+        .material-icons {
+            font-size: 1.1rem;
+            color: #0891b2;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: .95rem;
+            font-weight: 600;
+            flex: 1;
+            color: #0f172a;
+        }
+    }
+
+    .wiki-edit-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        margin-left: auto;
+        padding: .35rem .75rem;
+        border: 1px solid #0891b2;
+        border-radius: 8px;
+        background: transparent;
+        color: #0891b2;
+        font-size: .8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background .15s, color .15s;
+
+        .material-icons {
+            font-size: .95rem;
+        }
+
+        &:hover {
+            background: #0891b2;
+            color: #fff;
+        }
+    }
+
+    .wiki-card-desc {
+        padding: .75rem 1.1rem;
+        font-size: .83rem;
+        color: #64748b;
+        margin: 0;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    // ── Details dl ────────────────────────────────────────────────────────
+    .wiki-dl {
+        margin: 0;
+        padding: .5rem 0;
+    }
+
+    .wiki-dl-row {
+        display: grid;
+        grid-template-columns: 130px 1fr;
+        gap: .25rem 1rem;
+        padding: .5rem 1.1rem;
+
+        &:not(:last-child) {
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        &.full {
+            grid-template-columns: 1fr;
+        }
+
+        dt {
+            font-size: .78rem;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        dd {
+            font-size: .9rem;
+            color: #1e293b;
+            margin: 0;
+        }
+    }
+
+    // ── Stats ─────────────────────────────────────────────────────────────
+    .wiki-stats-grid {
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: .75rem;
+    }
+
+    .wiki-stat {
+        display: flex;
+        flex-direction: column;
+        gap: .1rem;
+    }
+
+    .wiki-stat-value {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: #0891b2;
+        line-height: 1;
+    }
+
+    .wiki-stat-label {
+        font-size: .8rem;
+        color: #64748b;
+    }
+
+    // ── Bounding box map ──────────────────────────────────────────────────
+    #bbox-map {
+        width: 100%;
+        height: 320px;
+    }
+
+    .wiki-bbox-controls {
+        padding: .75rem 1rem;
+        display: flex;
+        gap: .5rem;
+        background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+        flex-wrap: wrap;
+    }
+
+    // ── Action buttons ────────────────────────────────────────────────────
+    .wiki-action-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .45rem .9rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        background: #fff;
+        color: #475569;
+        font-size: .85rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background .15s, border-color .15s, color .15s;
+
+        .material-icons {
+            font-size: 1rem;
+        }
+
+        &:hover {
+            background: #f1f5f9;
+            border-color: #94a3b8;
+        }
+
+        &--primary {
+            background: #0891b2;
+            border-color: #0891b2;
+            color: #fff;
+
+            &:hover {
+                background: #0e7490;
+                border-color: #0e7490;
+            }
+        }
+    }
+
+    // ── Tabs ──────────────────────────────────────────────────────────────
+    .wiki-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid #e2e8f0;
+        padding: 0 1rem;
+        background: #f8fafc;
+    }
+
+    .wiki-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .65rem .9rem;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        background: transparent;
+        font-size: .88rem;
+        font-weight: 500;
+        color: #64748b;
+        cursor: pointer;
+        transition: color .15s, border-color .15s;
+
+        .material-icons {
+            font-size: 1rem;
+        }
+
+        &--active,
+        &:hover {
+            color: #0891b2;
+            border-bottom-color: #0891b2;
+        }
+    }
+
+    .wiki-tab-content {
+        padding: 1rem;
+        min-height: 120px;
+    }
+
+    .wiki-loading {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        color: #94a3b8;
+        font-size: .88rem;
+
+        .material-icons {
+            font-size: 1.1rem;
+        }
+    }
+
+    // ── Edit history ──────────────────────────────────────────────────────
+    .wiki-history-empty {
+        font-size: .85rem;
+        color: #94a3b8;
+        font-style: italic;
+        margin: 0;
+    }
+
+    .wiki-history-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: .75rem;
+    }
+
+    .wiki-history-item {
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: .75rem 1rem;
+        background: #fff;
+        position: relative;
+
+        &--reverted {
+            opacity: .55;
+            background: #f8fafc;
+        }
+    }
+
+    .wiki-history-meta {
+        display: flex;
+        align-items: center;
+        gap: .65rem;
+        margin-bottom: .5rem;
+        flex-wrap: wrap;
+    }
+
+    .wiki-history-editor {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        font-size: .83rem;
+        font-weight: 600;
+        color: #1e293b;
+
+        .material-icons {
+            font-size: .9rem;
+            color: #94a3b8;
+        }
+    }
+
+    .wiki-history-date {
+        font-size: .78rem;
+        color: #94a3b8;
+        margin-left: auto;
+    }
+
+    .wiki-history-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .2rem;
+        font-size: .72rem;
+        padding: .15rem .55rem;
+        border-radius: 999px;
+        font-weight: 600;
+
+        .material-icons {
+            font-size: .8rem;
+        }
+
+        &--reverted {
+            background: #fef3c7;
+            color: #92400e;
+        }
+    }
+
+    .wiki-history-changes {
+        list-style: none;
+        margin: 0 0 .6rem;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: .3rem;
+    }
+
+    .wiki-change-row {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        font-size: .82rem;
+        flex-wrap: wrap;
+    }
+
+    .wiki-change-field {
+        font-weight: 600;
+        color: #475569;
+        min-width: 80px;
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    .wiki-change-from {
+        color: #b91c1c;
+        background: #fef2f2;
+        border-radius: 4px;
+        padding: .1rem .35rem;
+        font-size: .82rem;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .wiki-change-arrow {
+        font-size: .85rem;
+        color: #94a3b8;
+    }
+
+    .wiki-change-to {
+        color: #15803d;
+        background: #f0fdf4;
+        border-radius: 4px;
+        padding: .1rem .35rem;
+        font-size: .82rem;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .wiki-revert-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        padding: .3rem .7rem;
+        border: 1px solid #fca5a5;
+        border-radius: 6px;
+        background: #fff;
+        color: #dc2626;
+        font-size: .78rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background .15s, border-color .15s;
+
+        .material-icons {
+            font-size: .85rem;
+        }
+
+        &:hover {
+            background: #fef2f2;
+            border-color: #dc2626;
+        }
+    }
+
+    // ── Suggest-edits dialog ──────────────────────────────────────────────
+    .wiki-edit-notice {
+        display: flex;
+        align-items: flex-start;
+        gap: .5rem;
+        margin: .5rem 1rem .75rem;
+        padding: .55rem .75rem;
+        background: #eff6ff;
+        border-radius: 8px;
+        font-size: .82rem;
+        color: #1d4ed8;
+
+        .material-icons {
+            font-size: .95rem;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+    }
+
+    .wiki-edit-form {
+        padding: .25rem 1rem .75rem;
+        display: flex;
+        flex-direction: column;
+        gap: .75rem;
+
+        .form-row {
+            display: flex;
+            flex-direction: column;
+            gap: .3rem;
+
+            label {
+                font-size: .82rem;
+                font-weight: 600;
+                color: #555;
+            }
+
+            input,
+            textarea {
+                padding: .45rem .65rem;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                font-size: .88rem;
+                outline: none;
+                width: 100%;
+                box-sizing: border-box;
+
+                &:focus {
+                    border-color: #0891b2;
+                    box-shadow: 0 0 0 3px rgba(8, 145, 178, .12);
+                }
+            }
+
+            textarea {
+                resize: vertical;
+            }
+        }
+
+        .form-actions {
+            display: flex;
+            gap: .5rem;
+            padding-top: .25rem;
+        }
+    }
+}

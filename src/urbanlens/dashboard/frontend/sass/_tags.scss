@@ -1,0 +1,1544 @@
+@use 'variables' as *;
+
+// ── Pin list membership panel (on pin detail page) ───────────────────────────
+
+.pinlist-panel {
+    background: #fff;
+    border: 1px solid $border-color;
+    border-radius: $radius-md;
+    overflow: hidden;
+}
+
+.pinlist-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0.75rem 1rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid $border-color;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: $text-primary;
+
+    i {
+        font-size: 1.1rem;
+        color: $primary-color;
+    }
+}
+
+.pinlist-panel-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.pinlist-panel-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.1s;
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &:hover {
+        background: #f8f9fa;
+    }
+
+    &.is-member {
+        background: #f0f7ff;
+    }
+}
+
+.pinlist-panel-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #f0f4ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+
+    i {
+        font-size: 1rem;
+        color: $primary-color;
+    }
+
+    .pinlist-panel-icon-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+}
+
+.pinlist-panel-name {
+    flex: 1;
+    font-size: 0.9rem;
+    color: $text-primary;
+}
+
+.pinlist-toggle-form {
+    display: inline;
+}
+
+.pinlist-toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    color: $text-muted;
+    border-radius: 50%;
+    transition: background 0.12s, color 0.12s;
+
+    i {
+        font-size: 1.25rem;
+    }
+
+    &:hover {
+        background: #e3f2fd;
+        color: $primary-color;
+    }
+
+    &.is-active {
+        color: $primary-color;
+    }
+}
+
+.pinlist-panel-empty {
+    padding: 1rem;
+    font-size: 0.85rem;
+    color: $text-secondary;
+    text-align: center;
+
+    a {
+        color: $primary-color;
+    }
+}
+
+.pinlist-panel-manage {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+    color: $text-secondary;
+    text-decoration: none;
+    border-top: 1px solid $border-color;
+    background: #fafafa;
+    transition: color 0.12s;
+
+    i {
+        font-size: 1rem;
+    }
+
+    &:hover {
+        color: $primary-color;
+    }
+}
+
+// ── Tags (replaces pin lists) ─────────────────────────────────────────────────
+
+.tag-page {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.tag-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.75rem;
+    min-width: 50rem;
+    max-width: 40vw;
+    width: 50em;
+
+    .tag-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: $text-primary;
+        margin: 0 0 0.25rem;
+    }
+
+    .tag-subtitle {
+        font-size: 0.9rem;
+        color: $text-secondary;
+        margin: 0;
+    }
+}
+
+// Create card
+.tag-create-card {
+    background: #fff;
+    border: 1px solid $border-color;
+    border-radius: $radius-md;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+// Tag cards
+.tag-card {
+    background: #fff;
+    border: 1px solid $border-color;
+    border-radius: $radius-md;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+}
+
+.tag-card-view {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.9rem 1rem;
+}
+
+.tag-card-icon {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 2px solid $border-color;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+
+    .tag-icon-std {
+        color: $primary-color;
+        font-size: 1.4rem;
+    }
+
+    .tag-icon-empty {
+        color: $text-muted;
+    }
+
+    .tag-icon-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+}
+
+.tag-card-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.tag-card-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: $text-primary;
+    margin-bottom: 0.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.tag-card-desc {
+    font-size: 0.85rem;
+    color: $text-secondary;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tag-card-meta {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.3rem;
+    font-size: 0.8rem;
+    color: $text-muted;
+    align-items: center;
+}
+
+.tag-pin-count {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+
+    i {
+        font-size: 0.95rem;
+    }
+}
+
+// New stat pills (pin count / children count / total)
+.tag-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: $text-secondary;
+    background: #f3f4f6;
+    border-radius: 999px;
+    padding: 2px 7px 2px 5px;
+    border: 1px solid $border-color;
+
+    i {
+        font-size: 0.82rem;
+        opacity: 0.7;
+    }
+
+    &.tag-stat--children {
+        color: $primary-color;
+        background: #eff6ff;
+        border-color: #bfdbfe;
+
+        i {
+            opacity: 1;
+        }
+    }
+
+    &.tag-stat--total {
+        color: #6b7280;
+        background: #f9fafb;
+        border-color: #e5e7eb;
+        font-style: italic;
+    }
+}
+
+.tag-color-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    border: 1px solid rgba(0, 0, 0, .15);
+}
+
+.tag-parents-summary {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 0.78rem;
+    color: $text-muted;
+}
+
+// Global and readonly badges
+.tag-global-badge {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: $text-muted;
+    background: #f0f0f0;
+    border-radius: 4px;
+    padding: 1px 5px;
+}
+
+.tag-readonly-badge {
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+}
+
+.tag-card-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+    align-items: center;
+}
+
+.tag-order-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: $border-color;
+    color: $text-secondary;
+    font-size: 0.7rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-right: 2px;
+}
+
+// Inline edit form (replaces card content via HTMX)
+.tag-inline-edit {
+    padding: 1.25rem;
+}
+
+// Shared form layout for tag forms
+.tag-form-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.tag-icon-color-row {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    align-items: flex-start;
+}
+
+.tag-form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 1rem;
+}
+
+// Empty state
+.tag-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: $text-muted;
+
+    i {
+        font-size: 3rem;
+        display: block;
+        margin-bottom: 0.75rem;
+    }
+}
+
+// Color picker
+.color-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 0.5rem;
+}
+
+.color-swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.1s, border-color 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+
+    &:hover {
+        transform: scale(1.15);
+    }
+
+    &.selected {
+        border-color: $text-primary;
+        transform: scale(1.1);
+    }
+}
+
+.color-clear {
+    background: #f5f5f5 !important;
+    color: $text-muted;
+
+    i {
+        color: $text-muted;
+    }
+}
+
+// Parent tag selector
+.tag-parent-select {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
+    max-height: 140px;
+    overflow-y: auto;
+    border: 1px solid $border-color;
+    border-radius: $radius-sm;
+    padding: 0.5rem;
+}
+
+.tag-parent-search {
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: .4rem;
+    font-size: .83rem;
+}
+
+.tag-parent-option {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 20px;
+    border: 1px solid $border-color;
+    background: #fafafa;
+    transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
+
+    &:hover {
+        background: #f0f0f0;
+    }
+
+    &:has(input:checked) {
+        background: #dbeafe;
+        border-color: #93c5fd;
+        color: #1d4ed8;
+        font-weight: 600;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, .15);
+    }
+
+    input {
+        margin: 0;
+        cursor: pointer;
+        accent-color: #1d4ed8;
+    }
+}
+
+// ── Global dialog header / close (applies to all <dialog> elements) ───────────
+
+.dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid $border-color;
+    font-weight: 600;
+    font-size: .95rem;
+    flex-shrink: 0;
+}
+
+.dialog-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #888;
+    transition: background .15s, color .15s;
+    flex-shrink: 0;
+
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: rgba(0, 0, 0, .07);
+        color: #333;
+    }
+}
+
+// ── Tag edit dialog ────────────────────────────────────────────────────────────
+.tag-edit-dialog {
+    width: min(620px, calc(100vw - 2rem));
+    max-height: 90vh;
+    border-radius: $radius-md;
+    border: 1px solid $border-color;
+    padding: 0;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, .18);
+    overflow: hidden; // prevent dialog-level scrollbar
+
+    // Flex column so header stays fixed and body scrolls
+    &[open] {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .dialog-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: .75rem 1rem;
+        border-bottom: 1px solid $border-color;
+        font-weight: 600;
+        font-size: .95rem;
+        flex-shrink: 0;
+    }
+
+    .dialog-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        color: #888;
+        transition: background .15s, color .15s;
+        margin-left: auto;
+
+        .material-icons {
+            font-size: 1.1rem;
+        }
+
+        &:hover {
+            background: rgba(0, 0, 0, .07);
+            color: #333;
+        }
+    }
+
+    &::backdrop {
+        background: rgba(0, 0, 0, .4);
+    }
+}
+
+.tag-edit-dialog-body {
+    padding: 1rem 1.25rem 1.25rem;
+    overflow-y: auto;
+    flex: 1; // fills remaining height within the flex dialog
+}
+
+// ── Tag merge dialog form ─────────────────────────────────────────────────────
+.tag-merge-form {
+    padding: 1.25rem;
+}
+
+.tag-merge-source {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    background: #f9fafb;
+    border: 1px solid $border-color;
+    border-radius: $radius-sm;
+    padding: .75rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.tag-merge-source-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: $text-primary;
+}
+
+.tag-merge-source-meta {
+    font-size: .82rem;
+    color: $text-muted;
+    margin-top: 2px;
+}
+
+.tag-merge-arrow {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .85rem;
+    font-weight: 600;
+    color: $text-secondary;
+    margin-bottom: .75rem;
+
+    i {
+        color: $primary-color;
+    }
+}
+
+.tag-merge-warning {
+    font-size: .82rem;
+    color: #b45309;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: $radius-sm;
+    padding: .5rem .75rem;
+    margin-top: .5rem;
+    margin-bottom: 0;
+}
+
+.tag-parent-icon-img {
+    width: 16px;
+    height: 16px;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+// ── Tag membership panel (on pin detail page) ─────────────────────────────────
+
+.tag-panel {
+    background: #fff;
+    border: 1px solid $border-color;
+    border-radius: $radius-md;
+    overflow: hidden;
+}
+
+.tag-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    border-bottom: 1px solid $border-color;
+    background: #fafafa;
+
+    i {
+        color: $primary-color;
+    }
+}
+
+.tag-panel-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.tag-panel-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid $border-color;
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &.is-member {
+        background: rgba($primary-color, 0.04);
+    }
+}
+
+.tag-panel-icon {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+
+    i {
+        font-size: 1rem;
+        color: $primary-color;
+    }
+
+    .tag-panel-icon-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+}
+
+.tag-panel-name {
+    flex: 1;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tag-toggle-form {
+    display: inline;
+}
+
+.tag-toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    color: $text-muted;
+    line-height: 1;
+    transition: color 0.12s;
+
+    i {
+        font-size: 1.25rem;
+        vertical-align: middle;
+    }
+
+    &.is-active {
+        color: $primary-color;
+    }
+
+    &:hover {
+        color: $primary-color;
+    }
+}
+
+.tag-panel-empty {
+    padding: 1rem;
+    font-size: 0.85rem;
+    color: $text-secondary;
+
+    a {
+        color: $primary-color;
+    }
+}
+
+.tag-panel-manage {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+    color: $text-secondary;
+    text-decoration: none;
+    border-top: 1px solid $border-color;
+    background: #fafafa;
+    transition: color 0.12s;
+
+    i {
+        font-size: 1rem;
+    }
+
+    &:hover {
+        color: $primary-color;
+    }
+}
+
+// ── Import dialog tag picker ──────────────────────────────────────────────────
+
+.import-tag-section {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid $border-color;
+}
+
+.import-tag-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.import-tag-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 2px solid $border-color;
+    background: #fafafa;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+    user-select: none;
+
+    .import-tag-checkbox {
+        display: none;
+    }
+
+    .import-tag-icon {
+        font-size: 0.95rem;
+        color: var(--tag-color, #{$primary-color});
+    }
+
+    .import-tag-icon-img {
+        width: 16px;
+        height: 16px;
+        object-fit: cover;
+        border-radius: 50%;
+    }
+
+    &:hover {
+        border-color: var(--tag-color, #{$primary-color});
+        background: #f0f0f0;
+    }
+
+    &:has(.import-tag-checkbox:checked) {
+        border-color: var(--tag-color, #{$primary-color});
+        background: color-mix(in srgb, var(--tag-color, #{$primary-color}) 12%, white);
+        font-weight: 600;
+    }
+}
+
+.icon-custom-thumb {
+    width: 24px;
+    height: 24px;
+    object-fit: cover;
+    border-radius: 3px;
+}
+
+// Drag handle for tag reordering
+.tag-drag-handle {
+    cursor: grab;
+    color: $text-muted;
+    flex-shrink: 0;
+    padding: 0 2px;
+    display: flex;
+    align-items: center;
+
+    i {
+        font-size: 1.2rem;
+    }
+
+    &:hover {
+        color: $text-secondary;
+    }
+
+    &:active {
+        cursor: grabbing;
+    }
+}
+
+// SortableJS ghost state
+.tag-card--ghost {
+    opacity: 0.4;
+    background: #f0f7ff;
+    border-color: $primary-color;
+}
+
+// ── Tag header right-side controls ────────────────────────────────────────────
+.tag-header-right {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-shrink: 0;
+}
+
+.tag-view-toggle {
+    display: flex;
+    border: 1px solid $border-color;
+    border-radius: $radius-sm;
+    overflow: hidden;
+}
+
+.tag-view-btn {
+    background: #fff;
+    border: none;
+    padding: 5px 9px;
+    cursor: pointer;
+    color: $text-muted;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .12s, color .12s;
+    border-right: 1px solid $border-color;
+
+    &:last-child {
+        border-right: none;
+    }
+
+    i {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: #f5f5f5;
+        color: $text-primary;
+    }
+
+    &.active {
+        background: $primary-color;
+        color: #fff;
+    }
+}
+
+// ── Gallery view ──────────────────────────────────────────────────────────────
+#tag-rows.tag-view--gallery,
+#category-rows.tag-view--gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: .75rem;
+    width: 90vw;
+    margin-left: calc((100% - 90vw) / 2);
+
+    .tag-card {
+        margin-bottom: 0;
+    }
+
+    .tag-card-view {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 1rem .75rem .75rem;
+        gap: .5rem;
+    }
+
+    .tag-card-icon {
+        width: 52px;
+        height: 52px;
+    }
+
+    .tag-card-body {
+        width: 100%;
+    }
+
+    .tag-card-name {
+        justify-content: center;
+        font-size: .9rem;
+        margin-bottom: .15rem;
+    }
+
+    .tag-card-desc {
+        font-size: .78rem;
+    }
+
+    .tag-card-meta {
+        justify-content: center;
+        gap: .5rem;
+        font-size: .75rem;
+    }
+
+    .tag-card-actions {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 3px;
+    }
+
+    .tag-drag-handle,
+    .tag-order-badge {
+        display: none;
+    }
+}
+
+// ── Tree view ─────────────────────────────────────────────────────────────────
+.tag-tree-root {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.tag-tree-item {
+    position: relative;
+
+    // Indent children based on depth (CSS custom property set in JS)
+    >.tag-tree-children {
+        margin-left: 1.5rem;
+        padding-left: 1rem;
+        border-left: 2px solid $border-color;
+        margin-top: 0;
+
+        >.tag-tree-item {
+            margin-top: .35rem;
+        }
+    }
+
+    >.tag-card {
+        margin-bottom: .35rem;
+    }
+}
+
+// Connector dot on tree branch items
+.tag-tree-children>.tag-tree-item::before {
+    content: '';
+    position: absolute;
+    left: -1.15rem;
+    top: 1.25rem;
+    width: .65rem;
+    height: 2px;
+    background: $border-color;
+}
+
+#tag-rows.tag-view--tree,
+#category-rows.tag-view--tree {
+
+    .tag-drag-handle,
+    .tag-order-badge {
+        display: none;
+    }
+}
+
+// ── Category select checkbox ──────────────────────────────────────────────────
+
+.cat-select-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background .1s;
+
+    &:hover {
+        background: #f1f5f9;
+
+        .cat-select-check {
+            border-color: $primary-color;
+        }
+    }
+
+    input[type="checkbox"] {
+        display: none;
+    }
+
+    .cat-select-check {
+        width: 18px;
+        height: 18px;
+        border: 2px solid #cbd5e1;
+        border-radius: 4px;
+        background: #fff;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: border-color .12s, background .12s;
+
+        &::after {
+            content: '';
+            display: block;
+            width: 10px;
+            height: 6px;
+            border-left: 2px solid #fff;
+            border-bottom: 2px solid #fff;
+            transform: rotate(-45deg) translate(1px, -1px);
+            opacity: 0;
+            transition: opacity .1s;
+        }
+    }
+
+    input[type="checkbox"]:checked~.cat-select-check {
+        background: $primary-color;
+        border-color: $primary-color;
+
+        &::after {
+            opacity: 1;
+        }
+    }
+}
+
+.tag-card--selected {
+    border-color: $primary-color !important;
+    background: #eff6ff !important;
+
+    .cat-select-check {
+        background: $primary-color;
+        border-color: $primary-color;
+
+        &::after {
+            opacity: 1;
+        }
+    }
+}
+
+// ── Selection action bar ──────────────────────────────────────────────────────
+
+.cat-sel-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .55rem .75rem;
+    border-radius: $radius-md;
+    border: 1px solid transparent;
+    margin-bottom: 1rem;
+    background: #f8fafc;
+    border-color: $border-color;
+    transition: background .18s, border-color .18s;
+
+    &.cat-sel-bar--active {
+        background: #eff6ff;
+        border-color: #bfdbfe;
+    }
+}
+
+.cat-sel-bar-left {
+    display: flex;
+    align-items: center;
+    min-width: 80px;
+}
+
+.cat-sel-count {
+    font-size: .875rem;
+    font-weight: 600;
+    color: $primary-color;
+    background: #dbeafe;
+    padding: 2px 10px;
+    border-radius: 20px;
+}
+
+.cat-sel-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.cat-sel-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .4rem .8rem;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: $radius-sm;
+    font-size: .825rem;
+    font-weight: 500;
+    color: #475569;
+    cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s, opacity .12s;
+
+    i {
+        font-size: .95rem;
+    }
+
+    &:hover:not(:disabled) {
+        background: #f1f5f9;
+        border-color: #94a3b8;
+        color: #1e293b;
+    }
+
+    &:disabled {
+        opacity: .38;
+        cursor: not-allowed;
+    }
+}
+
+.cat-sel-merge-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .4rem .9rem;
+    background: $primary-color;
+    color: #fff;
+    border: none;
+    border-radius: $radius-sm;
+    font-size: .875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s, opacity .15s;
+
+    i {
+        font-size: .95rem;
+    }
+
+    &:hover:not(:disabled) {
+        background: darken($primary-color, 8%);
+    }
+
+    &:disabled {
+        background: #94a3b8;
+        cursor: not-allowed;
+        opacity: .6;
+    }
+}
+
+.cat-sel-edit-btn {
+    &:hover:not(:disabled) {
+        background: #f0f9ff;
+        border-color: $primary-color;
+        color: $primary-color;
+    }
+}
+
+.cat-sel-delete-btn {
+    border-color: #fca5a5;
+    color: #dc2626;
+
+    &:hover:not(:disabled) {
+        background: #fef2f2;
+        border-color: #dc2626;
+        color: #b91c1c;
+    }
+}
+
+// ── Multi-merge dialog ────────────────────────────────────────────────────────
+
+.cat-merge-dialog {
+    width: min(520px, 95vw);
+    max-height: 90vh;
+    overflow-y: auto;
+    border: none;
+    border-radius: $radius-md;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, .2);
+    padding: 0;
+
+    &::backdrop {
+        background: rgba(0, 0, 0, .45);
+    }
+}
+
+.cat-merge-dialog-body {
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.cat-merge-section {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.cat-merge-section-label {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: $text-secondary;
+
+    i {
+        font-size: 1rem;
+    }
+
+    .cat-merge-hint {
+        font-weight: 400;
+        text-transform: none;
+        letter-spacing: 0;
+        color: $text-muted;
+    }
+}
+
+.cat-merge-divider {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .82rem;
+    color: $text-muted;
+
+    &::before,
+    &::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: $border-color;
+    }
+
+    i {
+        color: $primary-color;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+}
+
+.cat-merge-sources-list {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+.cat-merge-mini-card {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .6rem .75rem;
+    background: #fff;
+    border: 1px solid $border-color;
+    border-radius: $radius-sm;
+    transition: border-color .12s;
+
+    &.cat-merge-mini-card--target {
+        border-color: #86efac;
+        background: #f0fdf4;
+        border-width: 2px;
+    }
+}
+
+.cat-merge-mini-icon {
+    width: 36px !important;
+    height: 36px !important;
+    flex-shrink: 0;
+}
+
+.cat-merge-mini-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.cat-merge-mini-name {
+    font-weight: 600;
+    font-size: .9rem;
+    color: $text-primary;
+}
+
+.cat-merge-mini-meta {
+    font-size: .78rem;
+    color: $text-muted;
+    margin-top: 1px;
+}
+
+.cat-merge-swap-btn {
+    background: none;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 4px 6px;
+    cursor: pointer;
+    color: $text-secondary;
+    display: flex;
+    align-items: center;
+    transition: background .12s, border-color .12s, color .12s;
+    flex-shrink: 0;
+
+    i {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: #eff6ff;
+        border-color: $primary-color;
+        color: $primary-color;
+    }
+}
+
+.cat-merge-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: .4rem;
+    font-size: .82rem;
+    color: #92400e;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: $radius-sm;
+    padding: .6rem .75rem;
+    margin: 0;
+
+    i {
+        font-size: 1rem;
+        color: #d97706;
+        flex-shrink: 0;
+        margin-top: 1px;
+    }
+}
+
+.cat-merge-dialog-footer {
+    display: flex;
+    gap: .75rem;
+    align-items: center;
+    padding: 1rem 1.5rem 1.25rem;
+    border-top: 1px solid $border-color;
+}
+
+@keyframes cat-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.cat-merge-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, .35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: cat-spin .65s linear infinite;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+// ── Bulk-edit dialog ──────────────────────────────────────────────────────────
+
+.cat-bulk-edit-dialog {
+    width: min(520px, 95vw);
+    max-height: 85vh;
+    border: none;
+    border-radius: $radius-md;
+    box-shadow: $shadow-dialog;
+    padding: 0;
+    overflow: hidden;
+
+    &[open] {
+        display: flex;
+        flex-direction: column;
+    }
+
+    &::backdrop {
+        background: rgba(0, 0, 0, .45);
+    }
+}
+
+.cat-bulk-edit-body {
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.cat-bulk-field {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.cat-bulk-field-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+}
+
+.cat-bulk-nochange-label {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .8rem;
+    color: $text-secondary;
+    cursor: pointer;
+
+    input[type="checkbox"] {
+        width: 14px;
+        height: 14px;
+        cursor: pointer;
+    }
+}
+
+.cat-bulk-parents-hint {
+    font-size: .78rem;
+    color: $text-muted;
+    margin: 0;
+}
+
+.cat-bulk-picker--disabled {
+    opacity: .4;
+}
+
+.cat-bulk-edit-footer {
+    display: flex;
+    gap: .75rem;
+    align-items: center;
+    padding: 1rem 1.5rem 1.25rem;
+    border-top: 1px solid $border-color;
+    flex-shrink: 0;
+}
+
+// ── Category rows: hide select wrap in gallery (checkbox positioned differently) ─
+#category-rows {
+
+    &.tag-view--gallery {
+        .cat-select-wrap {
+            //position: absolute;
+            top: .4rem;
+            left: .4rem;
+            z-index: 1;
+            background: rgba(255, 255, 255, .9);
+            border-radius: 4px;
+        }
+
+        .tag-card {
+            position: relative;
+        }
+    }
+
+    [type="checkbox"]+span:not(.lever)::before {
+        display: none;
+    }
+}
+
+// Visual star rating display (pin details page, etc.)
+.star-rating-display {
+    display: inline-flex;
+    gap: 1px;
+}
+
+.sr-star {
+    font-size: 1.15rem;
+    color: rgba(0, 0, 0, 0.15);
+    line-height: 1;
+
+    @at-root [data-theme="dark"] &,
+    .dark-mode & {
+        color: rgba(255, 255, 255, 0.15);
+    }
+}
+
+.sr-star--on {
+    color: #f59e0b;
+}
+
+// Emoji icon display (tag cards, map pins)
+.tag-icon-emoji {
+    font-size: 1.4rem;
+    line-height: 1;
+}
+
+.map-pin-emoji {
+    font-size: 1.4rem;
+    line-height: 1;
+    display: block;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+

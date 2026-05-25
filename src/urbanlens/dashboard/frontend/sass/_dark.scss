@@ -1,0 +1,342 @@
+@use 'variables' as *;
+
+// ── Dark mode ────────────────────────────────────────────────────────────────
+
+[data-theme="dark"] {
+    background: #121212;
+    color: #e0e0e0;
+
+    body {
+        background: #121212;
+        color: #e0e0e0;
+    }
+
+    .app-nav {
+        background: #1a1a1a;
+    }
+
+    .app-nav-dropdown {
+        background: #222;
+        border-color: #333;
+    }
+
+    .app-nav-link {
+        color: rgba(255, 255, 255, .75);
+    }
+
+    .app-nav-link:hover,
+    .app-nav-link.active {
+        color: #fff;
+    }
+
+    .container {
+        background: transparent;
+    }
+
+    // Cards / panels
+    .settings-section,
+    .tag-card,
+    .tag-create-card,
+    .tag-inline-edit,
+    .tag-panel,
+    .dialog {
+        background: #1e1e1e;
+        border-color: #333;
+    }
+
+    .tag-stat {
+        background: #2a2a2a;
+        border-color: #444;
+        color: #9e9e9e;
+
+        &.tag-stat--children {
+            background: #1a2a3a;
+            border-color: #2a4a6a;
+            color: lighten($primary-color, 20%);
+        }
+
+        &.tag-stat--total {
+            background: #242424;
+            border-color: #3a3a3a;
+            color: #7a7a7a;
+        }
+    }
+
+    .tag-view-toggle {
+        border-color: #444;
+    }
+
+    .tag-view-btn {
+        background: #1e1e1e;
+        color: #aaa;
+        border-right-color: #444;
+
+        &:hover {
+            background: #2a2a2a;
+            color: #e0e0e0;
+        }
+
+        &.active {
+            background: $primary-color;
+            color: #fff;
+        }
+    }
+
+    .tag-tree-children {
+        border-left-color: #444;
+    }
+
+    .tag-tree-children>.tag-tree-item::before {
+        background: #444;
+    }
+
+    .settings-section-header,
+    .tag-panel-header {
+        border-color: #333;
+        background: #252525;
+    }
+
+    .settings-section-title,
+    .settings-label,
+    .settings-toggle-label,
+    .tag-card-name,
+    .tag-title {
+        color: #e0e0e0;
+    }
+
+    .settings-section-desc,
+    .settings-subtitle,
+    .settings-help,
+    .tag-card-desc,
+    .tag-subtitle {
+        color: #9e9e9e;
+    }
+
+    // Inputs / selects
+    .settings-select,
+    .settings-input,
+    .form-input,
+    textarea.form-input {
+        background: #2a2a2a;
+        color: #e0e0e0;
+        border-color: #444;
+    }
+
+    .settings-select:focus,
+    .settings-input:focus,
+    .form-input:focus {
+        border-color: $primary-color;
+    }
+
+    // Theme toggle
+    .settings-theme-option {
+        background: #2a2a2a;
+        border-color: #444;
+
+        span {
+            color: #bbb;
+        }
+
+        i {
+            color: #888;
+        }
+
+        &:hover:not(.active) {
+            background: #333;
+            border-color: #666;
+        }
+
+        &.active {
+            background: rgba($primary-color, 0.12);
+            border-color: $primary-color;
+        }
+    }
+
+    // Tag page
+    .tag-global-badge {
+        background: #333;
+        color: #aaa;
+    }
+
+    .tag-parent-select,
+    .tag-parent-option {
+        background: #252525;
+        border-color: #444;
+    }
+
+    .tag-parent-option:hover {
+        background: #333;
+    }
+
+    // Misc
+    .icon-option {
+        color: #ccc;
+        border-color: #444;
+        background: #2a2a2a;
+    }
+
+    .icon-option:hover {
+        background: #383838;
+    }
+
+    .icon-option.selected {
+        background: rgba($primary-color, 0.18);
+        border-color: $primary-color;
+    }
+
+    .color-clear {
+        background: #2a2a2a !important;
+    }
+
+    .tag-order-badge {
+        background: #333;
+        color: #aaa;
+    }
+
+    // Emoji picker
+    .icon-picker-trigger {
+        background: #2a2a2a;
+        border-color: #444;
+        color: #e0e0e0;
+    }
+
+    .icon-picker-panel {
+        background: #1e1e1e;
+        border-color: #333;
+    }
+
+    .icon-picker-search-row {
+        border-color: #333;
+    }
+
+    .icon-picker-search-input {
+        color: #e0e0e0;
+        background: transparent;
+    }
+
+    .icon-picker-tabs {
+        border-color: #333;
+    }
+
+    .icon-tab {
+        color: #888;
+
+        &:hover {
+            color: #ccc;
+        }
+
+        &.active {
+            color: $primary-color;
+        }
+    }
+
+    .icon-picker-item {
+        &:hover {
+            background: #2a2a2a;
+        }
+
+        &.selected {
+            background: rgba($primary-color, 0.18);
+        }
+    }
+
+    .icon-picker-item-label {
+        color: #777;
+    }
+
+    .icon-picker-mi {
+        color: #aaa;
+    }
+
+    .icon-custom-upload-btn {
+        border-color: #444;
+        color: #888;
+    }
+
+    // Dialogs / import
+    .dialog-overlay {
+        background: rgba(0, 0, 0, .7);
+    }
+
+    // Header / footer
+    footer {
+        background: #1a1a1a;
+        border-color: #333;
+        color: #888;
+    }
+
+    // Edit profile page
+    .edit-card {
+        background: #1e1e1e;
+        border-color: #333;
+    }
+
+    .edit-card-title {
+        border-color: #333;
+    }
+
+    .edit-input,
+    input.edit-input,
+    textarea.edit-textarea {
+        background: #2a2a2a;
+        color: #e0e0e0;
+        border-color: #444;
+    }
+
+    .edit-avatar-placeholder {
+        background: #2a2a2a;
+        border-color: #444;
+    }
+
+    .edit-avatar-preview {
+        border-color: #444;
+    }
+
+    .edit-avatar-upload-btn {
+        background: #1a2a3a;
+        border-color: lighten($primary-color, 10%);
+    }
+
+    .edit-link-row {
+        background: #252525;
+        border-color: #333;
+    }
+
+    .edit-add-link-input {
+        background: #2a2a2a;
+        color: #e0e0e0;
+        border-color: #444;
+    }
+
+    .edit-discord-details {
+        border-color: #333;
+    }
+
+    .edit-discord-summary {
+        background: #252525;
+    }
+
+    .field-status--saved {
+        color: #66bb6a;
+    }
+}
+
+// ── Date-validation error dialog ─────────────────────────────────────────────
+
+.date-error-list {
+    margin: 0 0 0.75rem;
+    padding-left: 1.25rem;
+    color: #d32f2f;
+    font-size: 0.9rem;
+
+    li {
+        margin-bottom: 0.25rem;
+    }
+}
+
+.date-error-hint {
+    font-size: 0.85rem;
+    color: $text-secondary;
+    margin: 0;
+}
+
