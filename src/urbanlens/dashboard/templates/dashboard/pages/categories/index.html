@@ -652,7 +652,9 @@ document.getElementById('cat-merge-confirm-btn').addEventListener('click', funct
     var ids = Array.from(_selected);
     var sourceIds = ids.filter(function(id) { return id !== _mergeTargetId; });
     var btn = this;
+    var savedHtml = btn.innerHTML;
     btn.disabled = true;
+    btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging…';
 
     fetch('{% url "category.multi_merge" %}', {
         method: 'POST',
@@ -679,6 +681,7 @@ document.getElementById('cat-merge-confirm-btn').addEventListener('click', funct
     .catch(function(err) {
         toastr.error('Merge failed: ' + err.message);
         btn.disabled = false;
+        btn.innerHTML = savedHtml;
     });
 });
 </script>
