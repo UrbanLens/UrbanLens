@@ -6595,6 +6595,45 @@ textarea.form-input {
     font-style: italic;
 }
 
+// ── Trip activity map ─────────────────────────────────────────────────────
+
+.trip-map-wrap {
+    margin: 0 0 1.5rem;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+
+    #trip-map {
+        height: 340px;
+        width: 100%;
+    }
+
+    .trip-map-empty {
+        padding: 1.25rem;
+        text-align: center;
+        color: #64748b;
+        font-size: .88rem;
+        margin: 0;
+    }
+}
+
+.trip-map-marker {
+    background: #3b82f6;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .trip-map-marker-num {
+        font-size: 11px;
+        font-weight: 700;
+        color: #fff;
+        line-height: 1;
+    }
+}
+
 // ── Pin overview (title + details card) ──────────────────────────────────
 
 .pin-overview-title-row {

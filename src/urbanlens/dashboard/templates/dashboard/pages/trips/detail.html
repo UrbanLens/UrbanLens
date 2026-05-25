@@ -1,11 +1,23 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="trip-detail-page">
 
     {# ── Trip header ───────────────────────────────────────────────────── #}
     <div id="trip-header">
         {% include "dashboard/partials/trip_header_partial.html" %}
+    </div>
+
+    {# ── Activity map ──────────────────────────────────────────────────── #}
+    <div class="trip-map-wrap" id="trip-map-wrap">
+        <div id="trip-map"></div>
+        <p class="trip-map-empty" id="trip-map-empty" hidden>No activities with locations to display.</p>
     </div>
 
     {# ── Three-column body ─────────────────────────────────────────────── #}
@@ -176,6 +188,62 @@
 
 {% block scripts %}
 <script>
+(function () {
+    // ── Trip activity map ────────────────────────────────────────────────
+    var mapEl = document.getElementById('trip-map');
+    var emptyEl = document.getElementById('trip-map-empty');
+    var wrapEl = document.getElementById('trip-map-wrap');
+
+    if (mapEl) {
+        fetch('{% url "trips.map_data" trip.uuid %}', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            var points = data.points || [];
+            if (!points.length) {
+                mapEl.hidden = true;
+                if (emptyEl) emptyEl.hidden = false;
+                return;
+            }
+
+            var map = L.map('trip-map');
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19,
+            }).addTo(map);
+
+            var bounds = [];
+            points.forEach(function (pt) {
+                var icon = L.divIcon({
+                    className: 'trip-map-marker',
+                    html: '<span class="trip-map-marker-num">' + pt.index + '</span>',
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14],
+                    popupAnchor: [0, -16],
+                });
+                var popup = '<strong>' + pt.label + '</strong>';
+                if (pt.scheduled_at) {
+                    popup += '<br><small>' + new Date(pt.scheduled_at).toLocaleString() + '</small>';
+                }
+                L.marker([pt.lat, pt.lng], { icon: icon })
+                    .bindPopup(popup)
+                    .addTo(map);
+                bounds.push([pt.lat, pt.lng]);
+            });
+
+            if (bounds.length === 1) {
+                map.setView(bounds[0], 14);
+            } else {
+                map.fitBounds(bounds, { padding: [32, 32] });
+            }
+        })
+        .catch(function () {
+            if (wrapEl) wrapEl.hidden = true;
+        });
+    }
+}());
+
 (function () {
     // Location autocomplete for add-activity dialog
     var searchInput  = document.getElementById('activity-location-search');

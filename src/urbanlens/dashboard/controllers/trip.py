@@ -348,3 +348,58 @@ class TripLocationSearchView(LoginRequiredMixin, View):
             .values("uuid", "name", "locality", "administrative_area_level_1")[:10]
         )
         return JsonResponse({"results": list(locations)})
+
+
+class TripMapDataView(LoginRequiredMixin, View):
+    """Return GeoJSON-style activity data for the trip map.
+
+    GET /trips/<uuid>/map-data/
+    """
+
+    def get(self, request, trip_uuid):
+        """Return activity locations with coordinates as JSON.
+
+        Args:
+            request: The HTTP request.
+            trip_uuid: The trip UUID.
+
+        Returns:
+            JsonResponse with a list of activity points.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(trip_uuid, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+
+        activities = (
+            trip.activities
+            .select_related("location", "pin")
+            .order_by("scheduled_at", "order", "created")
+        )
+
+        points = []
+        index = 1
+        for act in activities:
+            lat = lng = None
+            if act.pin:
+                lat = act.pin.effective_latitude
+                lng = act.pin.effective_longitude
+            elif act.location:
+                lat = act.location.latitude
+                lng = act.location.longitude
+
+            if lat is None or lng is None:
+                continue
+
+            label = act.title or (act.location.name if act.location else None) or f"Activity {index}"
+            points.append({
+                "index": index,
+                "label": label,
+                "lat": float(lat),
+                "lng": float(lng),
+                "scheduled_at": act.scheduled_at.isoformat() if act.scheduled_at else None,
+            })
+            index += 1
+
+        return JsonResponse({"points": points})
