@@ -4697,6 +4697,7 @@ textarea.form-input {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: .75rem;
     width: 90vw;
+    margin-left: calc((100% - 90vw) / 2);
 
     .tag-card {
         margin-bottom: 0;
