@@ -7,9 +7,16 @@
      data-category-icon="{{ category.icon|default:'' }}"
      data-category-desc="{{ category.description|default:'' }}"
      data-category-pin-count="{{ category.pins.count }}"
+     data-category-location-count="{{ category.locations.count }}"
      data-category-parents="{% for p in category.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
 
     <div class="tag-card-view" id="cat-view-{{ category.id }}">
+
+        <label class="cat-select-wrap" title="Select">
+            <input type="checkbox" class="cat-select-cb" data-cat-id="{{ category.id }}">
+            <span class="cat-select-check"></span>
+        </label>
+
         <div class="tag-drag-handle" title="Drag to reorder">
             <i class="material-icons">drag_indicator</i>
         </div>
@@ -67,12 +74,6 @@
                     hx-target="#category-edit-dialog-body"
                     hx-swap="innerHTML">
                 <i class="material-icons">edit</i>
-            </button>
-            <button type="button" class="btn-icon" title="Merge into another category"
-                    hx-get="{% url 'category.merge' category.id %}"
-                    hx-target="#category-edit-dialog-body"
-                    hx-swap="innerHTML">
-                <i class="material-icons">merge</i>
             </button>
             <form hx-post="{% url 'category.delete' category.id %}"
                   hx-target="#category-rows"

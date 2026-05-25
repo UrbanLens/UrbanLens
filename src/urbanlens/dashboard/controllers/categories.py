@@ -205,6 +205,43 @@ class CategoryRowsView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx())
 
 
+class CategoryMultiMergeView(LoginRequiredMixin, View):
+    """Merge multiple categories into a single target (JSON POST)."""
+
+    def post(self, request, *args, **kwargs):
+        """Merge source categories into the target, then delete sources.
+
+        Args:
+            request: The HTTP request with JSON body containing target_id and source_ids.
+
+        Returns:
+            Rendered category_rows.html partial on success, or an error response.
+        """
+        try:
+            data = json.loads(request.body)
+            target_id = int(data.get("target_id", 0))
+            source_ids = [int(x) for x in data.get("source_ids", [])]
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return JsonResponse({"error": "Invalid data"}, status=400)
+
+        if not target_id:
+            return HttpResponse("target_id is required.", status=400)
+        if not source_ids:
+            return HttpResponse("At least one source_id is required.", status=400)
+
+        target = get_object_or_404(Category, id=target_id)
+        sources = Category.objects.filter(id__in=source_ids).exclude(id=target_id)
+        if not sources.exists():
+            return HttpResponse("No valid source categories.", status=400)
+
+        for source in sources:
+            target.pins.add(*source.pins.all())
+            target.locations.add(*source.locations.all())
+            source.delete()
+
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx())
+
+
 class CategoryMergeView(LoginRequiredMixin, View):
     """Merge one category into another, transferring all pins and locations."""
 

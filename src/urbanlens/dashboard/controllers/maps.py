@@ -64,6 +64,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "tags": tags,
                 "status_choices": PinStatus.choices,
                 "profile_id": profile.id,
+                "cluster_radius": profile.cluster_radius,
             },
         )
 

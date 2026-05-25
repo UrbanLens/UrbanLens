@@ -26,7 +26,7 @@
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from django.db.models import CASCADE, BooleanField, CharField, DateField, ImageField, Index, OneToOneField, TextChoices, TextField
+from django.db.models import CASCADE, BooleanField, CharField, DateField, ImageField, Index, IntegerField, OneToOneField, TextChoices, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.profile.queryset import Manager
@@ -73,6 +73,8 @@ class Profile(abstract.Model):
         choices=MapViewChoice.choices,
         default=MapViewChoice.SATELLITE,
     )
+    # Marker cluster radius in pixels. Null = use the default zoom-based function.
+    cluster_radius = IntegerField(null=True, blank=True)
 
     user = OneToOneField(
         User,

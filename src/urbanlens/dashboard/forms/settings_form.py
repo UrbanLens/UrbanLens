@@ -63,7 +63,15 @@ class StyleSettingsForm(forms.ModelForm):
         label="Default Map View",
         help_text="Which map layer to use by default on location pages.",
     )
+    cluster_radius = forms.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=500,
+        widget=forms.NumberInput(attrs={"class": "settings-input", "placeholder": "Auto (zoom-based)"}),
+        label="Cluster Radius",
+        help_text="Pixels within which nearby pins are grouped into a cluster. Leave blank to use the automatic zoom-based value.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["dark_mode", "default_map_view"]
+        fields = ["dark_mode", "default_map_view", "cluster_radius"]

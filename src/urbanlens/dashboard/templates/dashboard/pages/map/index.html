@@ -641,10 +641,11 @@
     window.pin = null;
 
     // ── Cluster layer (replaces plain LayerGroup) ─────────────────────────────
+    var _userClusterRadius = {% if cluster_radius %}{{ cluster_radius }}{% else %}null{% endif %};
     var clusterGroup = L.markerClusterGroup({
-        maxClusterRadius: function(zoom) {
-            return zoom <= 10 ? 60 : zoom <= 13 ? 30 : 10;
-        },
+        maxClusterRadius: _userClusterRadius !== null
+            ? _userClusterRadius
+            : function(zoom) { return zoom <= 10 ? 60 : zoom <= 13 ? 30 : 10; },
         spiderfyOnMaxZoom: true,
         showCoverageOnHover: false,
         animate: true,

@@ -27,6 +27,27 @@
         </div>
     </div>
 
+    {# ── Selection action bar ─────────────────────────────────────────────────── #}
+    <div id="cat-sel-bar" class="cat-sel-bar">
+        <div class="cat-sel-bar-left">
+            <span id="cat-sel-count" class="cat-sel-count" hidden></span>
+        </div>
+        <div class="cat-sel-bar-actions">
+            <button type="button" id="cat-sel-all" class="cat-sel-btn">
+                <i class="material-icons">select_all</i>
+                Select All
+            </button>
+            <button type="button" id="cat-sel-deselect" class="cat-sel-btn" hidden>
+                <i class="material-icons">deselect</i>
+                Deselect All
+            </button>
+            <button type="button" id="cat-sel-merge" class="cat-sel-merge-btn" hidden disabled>
+                <i class="material-icons">merge</i>
+                Merge
+            </button>
+        </div>
+    </div>
+
     {# ── Create form (hidden by default) ─────────────────────────────────────── #}
     <div class="tag-create-card" id="new-category-form" style="display:none;">
         <form hx-post="{% url 'category.create' %}"
@@ -126,12 +147,58 @@
     </div>
     <div id="category-edit-dialog-body" class="tag-edit-dialog-body"></div>
 </dialog>
+
+{# ── Multi-merge dialog ────────────────────────────────────────────────────────── #}
+<dialog id="cat-merge-dialog" class="cat-merge-dialog">
+    <div class="dialog-header">
+        <span id="cat-merge-dialog-title">Merge Categories</span>
+        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div class="cat-merge-dialog-body">
+        <div class="cat-merge-section">
+            <div class="cat-merge-section-label">
+                <i class="material-icons">check_circle</i>
+                Surviving category
+            </div>
+            <div id="cat-merge-target-card" class="cat-merge-target-card"></div>
+        </div>
+
+        <div class="cat-merge-divider">
+            <i class="material-icons">merge</i>
+            <span>Merge these into it</span>
+        </div>
+
+        <div class="cat-merge-section">
+            <div class="cat-merge-section-label">
+                <i class="material-icons">delete_sweep</i>
+                Will be deleted after merge
+                <span class="cat-merge-hint">— click <i class="material-icons" style="font-size:.85rem;vertical-align:middle">swap_vert</i> to swap</span>
+            </div>
+            <div id="cat-merge-sources-list" class="cat-merge-sources-list"></div>
+        </div>
+
+        <p class="cat-merge-warning">
+            <i class="material-icons">warning</i>
+            All pins and locations will be transferred to the surviving category. This cannot be undone.
+        </p>
+    </div>
+    <div class="cat-merge-dialog-footer">
+        <button type="button" id="cat-merge-confirm-btn" class="btn-primary">
+            <i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i>
+            Merge
+        </button>
+        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>
+
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
 <script>
-// ── Parent category search ──────────────────────────────────────────────────────────
+// ── Parent category search ─────────────────────────────────────────────────────
 function filterParentOptions(input, containerId) {
     const q = input.value.toLowerCase().trim();
     const container = document.getElementById(containerId);
@@ -141,7 +208,7 @@ function filterParentOptions(input, containerId) {
     });
 }
 
-// ── Icon picker (reuses shared IconPicker from base) ────────────────────────────────
+// ── Icon picker ────────────────────────────────────────────────────────────────
 const IconPicker = {
     toggle(id) {
         const panel = document.getElementById('icon-panel-' + id);
@@ -297,13 +364,18 @@ function initSortable() {
     });
 }
 
-initSortable();
-
-document.getElementById('category-rows').addEventListener('htmx:afterSwap', function() {
+function _onRowsUpdated() {
+    _selected.clear();
+    _updateBar();
+    _syncCheckboxes();
     initSortable();
     updateOrderBadges();
     applyCurrentView();
-});
+}
+
+initSortable();
+
+document.getElementById('category-rows').addEventListener('htmx:afterSwap', _onRowsUpdated);
 
 document.body.addEventListener('htmx:afterSwap', function(e) {
     if (e.detail.target && e.detail.target.id === 'category-edit-dialog-body') {
@@ -388,6 +460,9 @@ function renderTreeView(rows) {
         var clone = card.cloneNode(true);
         clone.style.display = '';
         clone.id = 'cat-tree-node-' + id + '-d' + depth + '-' + Math.random().toString(36).slice(2, 6);
+        // Sync checkbox state on clone
+        var cloneCb = clone.querySelector('.cat-select-cb');
+        if (cloneCb) cloneCb.checked = _selected.has(id);
         item.appendChild(clone);
         var newPath = new Set(ancestorPath);
         newPath.add(id);
@@ -426,5 +501,185 @@ document.querySelectorAll('.tag-view-btn').forEach(function(btn) {
 });
 
 applyCurrentView();
+
+// ── Multi-select ───────────────────────────────────────────────────────────────
+var _selected = new Set();
+
+function _getAllCatIds() {
+    var seen = new Set();
+    document.querySelectorAll('#category-rows > .tag-card[data-category-id]').forEach(function(c) {
+        seen.add(c.dataset.categoryId);
+    });
+    return Array.from(seen);
+}
+
+function _syncCheckboxes() {
+    document.querySelectorAll('.cat-select-cb').forEach(function(cb) {
+        cb.checked = _selected.has(cb.dataset.catId);
+    });
+    document.querySelectorAll('.tag-card[data-category-id]').forEach(function(card) {
+        card.classList.toggle('tag-card--selected', _selected.has(card.dataset.categoryId));
+    });
+}
+
+function _updateBar() {
+    var n = _selected.size;
+    var bar = document.getElementById('cat-sel-bar');
+    var countEl = document.getElementById('cat-sel-count');
+    var deselectBtn = document.getElementById('cat-sel-deselect');
+    var mergeBtn = document.getElementById('cat-sel-merge');
+
+    if (n > 0) {
+        bar.classList.add('cat-sel-bar--active');
+        countEl.textContent = n === 1 ? '1 selected' : n + ' selected';
+        countEl.hidden = false;
+        deselectBtn.hidden = false;
+        mergeBtn.hidden = false;
+        mergeBtn.disabled = n < 2;
+    } else {
+        bar.classList.remove('cat-sel-bar--active');
+        countEl.hidden = true;
+        deselectBtn.hidden = true;
+        mergeBtn.hidden = true;
+    }
+}
+
+// Event delegation — works for both original cards and tree-view clones
+document.getElementById('category-rows').addEventListener('change', function(e) {
+    var cb = e.target;
+    if (!cb.classList.contains('cat-select-cb')) return;
+    var id = cb.dataset.catId;
+    if (cb.checked) _selected.add(id);
+    else _selected.delete(id);
+    _syncCheckboxes();
+    _updateBar();
+});
+
+document.getElementById('cat-sel-all').addEventListener('click', function() {
+    _getAllCatIds().forEach(function(id) { _selected.add(id); });
+    _syncCheckboxes();
+    _updateBar();
+});
+
+document.getElementById('cat-sel-deselect').addEventListener('click', function() {
+    _selected.clear();
+    _syncCheckboxes();
+    _updateBar();
+});
+
+document.getElementById('cat-sel-merge').addEventListener('click', function() {
+    if (_selected.size < 2) return;
+    _mergeTargetId = Array.from(_selected)[0];
+    _renderMergeDialog();
+    document.getElementById('cat-merge-dialog').showModal();
+});
+
+// ── Multi-merge dialog ─────────────────────────────────────────────────────────
+var _mergeTargetId = null;
+
+function _escHtml(s) {
+    return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function _getCardData(id) {
+    var card = document.querySelector('[data-category-id="' + id + '"]');
+    if (!card) return { id: id, name: '?', color: '', icon: '', pinCount: '0', locationCount: '0' };
+    return {
+        id: id,
+        name: card.dataset.categoryName || '',
+        color: card.dataset.categoryColor || '',
+        icon: card.dataset.categoryIcon || '',
+        pinCount: card.dataset.categoryPinCount || '0',
+        locationCount: card.dataset.categoryLocationCount || '0',
+    };
+}
+
+function _miniCardHtml(data, isTarget) {
+    var colorStyle = data.color
+        ? 'background:' + data.color + '22;border-color:' + data.color + '44;'
+        : '';
+    var iconColorStyle = data.color ? 'color:' + data.color : '';
+    var iconHtml = data.icon
+        ? (/^[a-z_]+$/.test(data.icon)
+            ? '<i class="material-icons" style="' + iconColorStyle + '">' + _escHtml(data.icon) + '</i>'
+            : '<span class="tag-icon-emoji">' + _escHtml(data.icon) + '</span>')
+        : '<i class="material-icons tag-icon-empty">category</i>';
+
+    var swapBtn = isTarget ? '' :
+        '<button type="button" class="cat-merge-swap-btn" data-swap-id="' + data.id + '" title="Make this the surviving category">'
+        + '<i class="material-icons">swap_vert</i>'
+        + '</button>';
+
+    return '<div class="cat-merge-mini-card' + (isTarget ? ' cat-merge-mini-card--target' : '') + '" data-merge-id="' + data.id + '">'
+        + '<div class="tag-card-icon cat-merge-mini-icon" style="' + colorStyle + '">' + iconHtml + '</div>'
+        + '<div class="cat-merge-mini-info">'
+            + '<div class="cat-merge-mini-name">' + _escHtml(data.name) + '</div>'
+            + '<div class="cat-merge-mini-meta">' + data.pinCount + ' pins &middot; ' + data.locationCount + ' locations</div>'
+        + '</div>'
+        + swapBtn
+        + '</div>';
+}
+
+function _renderMergeDialog() {
+    var ids = Array.from(_selected);
+    if (!_mergeTargetId || !_selected.has(_mergeTargetId)) {
+        _mergeTargetId = ids[0];
+    }
+    var sourceIds = ids.filter(function(id) { return id !== _mergeTargetId; });
+    var targetData = _getCardData(_mergeTargetId);
+
+    document.getElementById('cat-merge-dialog-title').textContent = 'Merge ' + ids.length + ' Categories';
+    document.getElementById('cat-merge-target-card').innerHTML = _miniCardHtml(targetData, true);
+    document.getElementById('cat-merge-sources-list').innerHTML = sourceIds.map(function(id) {
+        return _miniCardHtml(_getCardData(id), false);
+    }).join('');
+
+    var confirmBtn = document.getElementById('cat-merge-confirm-btn');
+    confirmBtn.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge into ' + _escHtml(targetData.name);
+    confirmBtn.disabled = false;
+}
+
+document.getElementById('cat-merge-sources-list').addEventListener('click', function(e) {
+    var btn = e.target.closest('.cat-merge-swap-btn');
+    if (!btn) return;
+    _mergeTargetId = btn.dataset.swapId;
+    _renderMergeDialog();
+});
+
+document.getElementById('cat-merge-confirm-btn').addEventListener('click', function() {
+    var ids = Array.from(_selected);
+    var sourceIds = ids.filter(function(id) { return id !== _mergeTargetId; });
+    var btn = this;
+    btn.disabled = true;
+
+    fetch('{% url "category.multi_merge" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken,
+        },
+        body: JSON.stringify({
+            target_id: parseInt(_mergeTargetId, 10),
+            source_ids: sourceIds.map(function(id) { return parseInt(id, 10); }),
+        }),
+    })
+    .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); });
+        return r.text();
+    })
+    .then(function(html) {
+        document.getElementById('cat-merge-dialog').close();
+        document.getElementById('category-rows').innerHTML = html;
+        _mergeTargetId = null;
+        _onRowsUpdated();
+        toastr.success('Categories merged successfully.');
+    })
+    .catch(function(err) {
+        toastr.error('Merge failed: ' + err.message);
+        btn.disabled = false;
+    });
+});
 </script>
 {% endblock %}

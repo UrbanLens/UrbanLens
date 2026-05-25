@@ -65,7 +65,7 @@ urlpatterns = [
     path("dashboard/", include(dashboard_urls), name="dashboard"),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),
     path("", IndexController.as_view(), name="index"),
-    # 404
-    re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),
     *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
+    # 404 catch-all — must be last so it doesn't swallow valid routes
+    re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),
 ]

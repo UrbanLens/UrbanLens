@@ -409,6 +409,7 @@ urlpatterns = [
                 path("<int:cat_id>/edit/", categories.CategoryEditView.as_view(), name="category.edit"),
                 path("<int:cat_id>/delete/", categories.CategoryDeleteView.as_view(), name="category.delete"),
                 path("<int:cat_id>/merge/", categories.CategoryMergeView.as_view(), name="category.merge"),
+                path("merge/", categories.CategoryMultiMergeView.as_view(), name="category.multi_merge"),
                 path("rows/", categories.CategoryRowsView.as_view(), name="category.rows"),
                 path("reorder/", categories.CategoryReorderView.as_view(), name="category.reorder"),
                 path("pin/<uuid:pin_uuid>/", categories.CategoryPinMembershipView.as_view(), name="category.pin"),

@@ -149,6 +149,23 @@
                 <input type="hidden" name="dark_mode" id="dark-mode-hidden" value="{% if style_form.dark_mode.value %}on{% endif %}">
             </div>
 
+            <div class="settings-field">
+                <label class="settings-label" for="{{ style_form.cluster_radius.id_for_label }}">
+                    {{ style_form.cluster_radius.label }}
+                </label>
+                <p class="settings-help">{{ style_form.cluster_radius.help_text }}</p>
+                <div class="settings-cluster-row">
+                    {{ style_form.cluster_radius }}
+                    <button type="button" class="settings-reset-btn"
+                            onclick="document.getElementById('{{ style_form.cluster_radius.id_for_label }}').value = ''">
+                        Reset to auto
+                    </button>
+                </div>
+                {% if style_form.cluster_radius.errors %}
+                <p class="settings-error">{{ style_form.cluster_radius.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
             <div class="settings-actions">
                 <button type="submit" class="settings-save-btn">Save Style Settings</button>
             </div>
