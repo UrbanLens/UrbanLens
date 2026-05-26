@@ -1486,7 +1486,8 @@
 }
 
 // ── Category rows: hide select wrap in gallery (checkbox positioned differently) ─
-#category-rows {
+#category-rows,
+#tag-rows {
 
     &.tag-view--gallery {
         .cat-select-wrap {
@@ -1605,11 +1606,8 @@
 }
 
 .organize-panel {
-    display: none;
-
-    &.active {
-        display: block;
-    }
+    // Visibility is managed by the HTML `hidden` attribute (set/removed by JS tab switching).
+    // No CSS display override needed here.
 }
 
 // ── Priority list ─────────────────────────────────────────────────────────────
@@ -1741,4 +1739,3 @@
     justify-content: flex-end;
     margin-top: 1.25rem;
 }
-
