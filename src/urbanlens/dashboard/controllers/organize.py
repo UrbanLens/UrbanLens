@@ -93,7 +93,7 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
 
         profile = request.user.profile
         visible_ids = set(
-            Tag.objects.visible_to(profile).filter(id__in=item_ids).values_list("id", flat=True)
+            Tag.objects.visible_to(profile).filter(id__in=item_ids).values_list("id", flat=True),
         )
         total = len(item_ids)
         for i, item_id in enumerate(item_ids):

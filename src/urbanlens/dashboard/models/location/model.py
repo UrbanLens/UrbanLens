@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from django.contrib.gis.db.models import PointField, PolygonField
-from django.contrib.gis.geos import Point
+from django.contrib.gis.geos import Point, Polygon
 from django.db.models import Index, ManyToManyField, UUIDField
 from django.db.models.fields import CharField, DateField, DecimalField, TextField
 
@@ -223,9 +223,10 @@ class Location(abstract.AddressableMixin, abstract.Model):
         if self.latitude is not None and self.longitude is not None:
             self.point = Point(float(self.longitude), float(self.latitude), srid=4326)
             if self.bounding_box is None:
-                self.bounding_box = self.point.buffer(_DEFAULT_BBOX_DEGREES)
-                if self.bounding_box is not None:
-                    self.bounding_box.srid = 4326
+                bbox = self.point.buffer(_DEFAULT_BBOX_DEGREES)
+                if isinstance(bbox, Polygon):
+                    bbox.srid = 4326
+                    self.bounding_box = bbox
                 else:
                     logger.warning(
                         "Failed to create bounding box for location %s (%s, %s)",

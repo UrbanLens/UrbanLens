@@ -3,17 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
 from django.db.models import CASCADE, SET_NULL, ForeignKey, Index, UniqueConstraint
 from django.db.models.fields import CharField
 
 from urbanlens.dashboard.models import abstract
-
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +29,7 @@ class PinAlias(_AliasBase):
     The unique constraint prevents duplicate alias names on the same pin.
     """
 
-    pin: Pin = ForeignKey(
+    pin = ForeignKey(
         "dashboard.Pin",
         on_delete=CASCADE,
         related_name="aliases",
@@ -61,12 +55,12 @@ class LocationAlias(_AliasBase):
     cascade-delete the alias.
     """
 
-    location: Location = ForeignKey(
+    location = ForeignKey(
         "dashboard.Location",
         on_delete=CASCADE,
         related_name="aliases",
     )
-    created_by: Profile | None = ForeignKey(
+    created_by = ForeignKey(
         "dashboard.Profile",
         on_delete=SET_NULL,
         null=True,

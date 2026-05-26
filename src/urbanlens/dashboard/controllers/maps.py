@@ -27,6 +27,7 @@
 from datetime import datetime
 import json
 import logging
+from typing import Any
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -224,14 +225,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         query = query.prefetch_related("tags")
 
-        if not query:
-            map_data = []
-        else:
-            map_data = []
-            for pin in query:
-                d = pin.to_json()
-                d["id"] = pin.pk
-                map_data.append(d)
+        map_data: list[dict[str, Any]] = []
+        for pin in query:
+            d = pin.to_json()
+            d["id"] = pin.pk
+            map_data.append(d)
 
         for pin in map_data:
             if "description" in pin and pin["description"] is None:

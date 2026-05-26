@@ -3,15 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
 from django.db.models import CASCADE, SET_NULL, BooleanField, ForeignKey, Index, JSONField
 
 from urbanlens.dashboard.models import abstract
-
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +25,12 @@ class LocationEdit(abstract.Model):
     Bounding-box changes are stored as WKT strings under the key "bounding_box".
     """
 
-    location: Location = ForeignKey(
+    location = ForeignKey(
         "dashboard.Location",
         on_delete=CASCADE,
         related_name="edits",
     )
-    editor: Profile | None = ForeignKey(
+    editor = ForeignKey(
         "dashboard.Profile",
         on_delete=SET_NULL,
         null=True,
@@ -47,7 +42,7 @@ class LocationEdit(abstract.Model):
     # True when this edit has been superseded by a revert.
     reverted = BooleanField(default=False)
     # The edit that reverted this one (filled in on the *target* edit when someone reverts it).
-    reverted_by: LocationEdit | None = ForeignKey(
+    reverted_by = ForeignKey(
         "self",
         on_delete=SET_NULL,
         null=True,

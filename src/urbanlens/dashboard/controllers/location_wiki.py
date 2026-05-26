@@ -242,9 +242,11 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
             revert_changes[field] = {"from": current_val, "to": old_val}
             if field == "bounding_box":
                 if old_val:
-                    from django.contrib.gis.geos import GEOSGeometry
+                    from django.contrib.gis.geos import GEOSGeometry, Polygon
 
-                    location.bounding_box = GEOSGeometry(old_val, srid=4326)
+                    restored = GEOSGeometry(old_val, srid=4326)
+                    if isinstance(restored, Polygon):
+                        location.bounding_box = restored
                 else:
                     location.bounding_box = None
             else:

@@ -3,18 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from django.db.models import CASCADE, SET_NULL, ForeignKey, Index, IntegerField, ManyToManyField, UUIDField
 from django.db.models.fields import CharField, DateField, DateTimeField, TextField
 
 from urbanlens.dashboard.models import abstract
-
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +26,7 @@ class Trip(abstract.Model):
     start_date = DateField(null=True, blank=True)
     end_date = DateField(null=True, blank=True)
 
-    creator: Profile | None = ForeignKey(
+    creator = ForeignKey(
         "dashboard.Profile",
         on_delete=SET_NULL,
         null=True,
@@ -67,12 +61,12 @@ class TripActivity(abstract.Model):
     a trip so the user can re-sequence them.
     """
 
-    trip: Trip = ForeignKey(
+    trip = ForeignKey(
         Trip,
         on_delete=CASCADE,
         related_name="activities",
     )
-    location: Location | None = ForeignKey(
+    location = ForeignKey(
         "dashboard.Location",
         on_delete=SET_NULL,
         null=True,
@@ -80,14 +74,14 @@ class TripActivity(abstract.Model):
         related_name="trip_activities",
     )
     # Optional link to the adding user's personal Pin (for icon/status context).
-    pin: Pin | None = ForeignKey(
+    pin = ForeignKey(
         "dashboard.Pin",
         on_delete=SET_NULL,
         null=True,
         blank=True,
         related_name="trip_activities",
     )
-    added_by: Profile | None = ForeignKey(
+    added_by = ForeignKey(
         "dashboard.Profile",
         on_delete=SET_NULL,
         null=True,
@@ -115,12 +109,12 @@ class TripActivity(abstract.Model):
 class TripComment(abstract.Model):
     """A comment left on a trip by one of its members."""
 
-    trip: Trip = ForeignKey(
+    trip = ForeignKey(
         Trip,
         on_delete=CASCADE,
         related_name="comments",
     )
-    author: Profile | None = ForeignKey(
+    author = ForeignKey(
         "dashboard.Profile",
         on_delete=SET_NULL,
         null=True,

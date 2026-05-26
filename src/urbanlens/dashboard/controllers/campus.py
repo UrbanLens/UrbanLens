@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
@@ -13,6 +14,9 @@ from rest_framework.viewsets import GenericViewSet
 from urbanlens.dashboard.models.campus.model import Campus
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+
+if TYPE_CHECKING:
+    from rest_framework.request import Request
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +62,7 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    def save_campus(self, request: HttpRequest, pin_uuid):
+    def save_campus(self, request: Request, pin_uuid):
         """Create or update the current user's campus boundary for a pin's location."""
         from urbanlens.dashboard.models.location.model import Location
 
