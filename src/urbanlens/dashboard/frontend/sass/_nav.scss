@@ -95,13 +95,14 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     align-items: center;
     justify-content: center;
     background: #9aa0a6;
+}
 
-    .nav-avatar-img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        border-radius: 50%;
-    }
+// Top-level so it works inside .nav-avatar, .nav-dropdown-avatar, and any other circular container
+.nav-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
 .nav-avatar-initial {

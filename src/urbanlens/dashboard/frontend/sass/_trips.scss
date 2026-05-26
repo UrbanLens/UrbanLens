@@ -525,26 +525,48 @@
     list-style: none;
     padding: 0;
     margin: 0;
-    max-height: 320px;
+    max-height: 360px;
     overflow-y: auto;
 }
 
 .trip-comment-item {
     display: flex;
     align-items: flex-start;
-    gap: .65rem;
-    padding: .75rem 1rem;
+    gap: .75rem;
+    padding: .875rem 1rem;
     border-bottom: 1px solid #f1f5f9;
-    transition: opacity .2s;
+    transition: opacity .2s, background .15s;
 
     &:last-child {
         border-bottom: none;
+    }
+
+    &:hover {
+        background: #fafcff;
+
+        .detail-pin-action-btn {
+            opacity: 1;
+        }
     }
 
     &.is-deleting {
         opacity: .25;
         pointer-events: none;
     }
+
+    // Fade in delete button only on hover
+    .detail-pin-action-btn {
+        opacity: 0;
+        transition: opacity .15s;
+        align-self: flex-start;
+        margin-top: .1rem;
+    }
+}
+
+// Comment avatar — slightly larger than member list avatar
+.trip-member-avatar.trip-comment-avatar {
+    width: 36px;
+    height: 36px;
 }
 
 .trip-comment-body {
@@ -556,25 +578,28 @@
     display: flex;
     align-items: baseline;
     gap: .5rem;
-    margin-bottom: .2rem;
+    margin-bottom: .25rem;
 }
 
 .trip-comment-author {
     font-weight: 600;
-    font-size: .85rem;
+    font-size: .875rem;
     color: #1e293b;
 }
 
 .trip-comment-date {
     font-size: .75rem;
     color: #94a3b8;
+    letter-spacing: .01em;
 }
 
 .trip-comment-text {
     margin: 0;
-    font-size: .88rem;
-    color: #475569;
+    font-size: .875rem;
+    color: #334155;
+    line-height: 1.55;
     white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .trip-comment-empty {
@@ -582,30 +607,56 @@
 }
 
 .trip-comment-form {
-    padding: .75rem 1rem;
-    border-top: 1px solid #f1f5f9;
+    padding: .875rem 1rem;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    border-radius: 0 0 $radius-md $radius-md;
+}
 
-    .trip-comment-input {
-        width: 100%;
-        border: 1px solid #e2e8f0;
-        border-radius: 6px;
-        padding: .5rem .75rem;
-        font-size: .88rem;
-        resize: vertical;
-        font-family: inherit;
-        box-sizing: border-box;
+.trip-comment-compose {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+}
 
-        &:focus {
-            outline: none;
-            border-color: #93c5fd;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
-        }
+.trip-comment-compose-avatar {
+    margin-top: .15rem;
+    flex-shrink: 0;
+}
+
+.trip-comment-compose-field {
+    flex: 1;
+    min-width: 0;
+}
+
+.trip-comment-input {
+    width: 100%;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: .55rem .75rem;
+    font-size: .875rem;
+    resize: vertical;
+    font-family: inherit;
+    box-sizing: border-box;
+    background: #fff;
+    color: #1e293b;
+    transition: border-color .15s, box-shadow .15s;
+
+    &:focus {
+        outline: none;
+        border-color: #93c5fd;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, .12);
     }
 
-    .form-actions {
-        margin-top: .5rem;
-        justify-content: flex-end;
+    &::placeholder {
+        color: #94a3b8;
     }
+}
+
+.trip-comment-compose-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: .5rem;
 }
 
 // ── Create/edit trip dialog ───────────────────────────────────────────────
