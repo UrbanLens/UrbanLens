@@ -1,0 +1,1362 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load dashboard_tags %}
+
+{% block content %}
+<div class="organize-page">
+
+    <div class="organize-page-header">
+        <h1 class="organize-page-title">Organize</h1>
+        <p class="organize-page-subtitle">Manage tags, categories, and display priority.</p>
+    </div>
+
+    {# ── Tab bar ──────────────────────────────────────────────────────────────── #}
+    <div class="organize-tab-bar" role="tablist">
+        <button type="button" class="organize-tab{% if active_tab == 'tags' %} active{% endif %}"
+                role="tab" data-tab="tags" aria-controls="panel-tags">
+            <i class="material-icons">label</i> Tags
+        </button>
+        <button type="button" class="organize-tab{% if active_tab == 'categories' %} active{% endif %}"
+                role="tab" data-tab="categories" aria-controls="panel-categories">
+            <i class="material-icons">category</i> Categories
+        </button>
+        <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
+                role="tab" data-tab="priority" aria-controls="panel-priority">
+            <i class="material-icons">low_priority</i> Priority
+        </button>
+    </div>
+
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    {# TAGS PANEL                                                                #}
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    <div class="organize-panel tag-page" id="panel-tags" role="tabpanel"
+         {% if active_tab != 'tags' %}hidden{% endif %}>
+
+        <div class="tag-header">
+            <div>
+                <h2 class="tag-title">My Tags</h2>
+                <p class="tag-subtitle">Organize your pins with custom tags.</p>
+            </div>
+            <div class="tag-header-right">
+                <div class="tag-view-toggle" role="group" aria-label="Tag view mode">
+                    <button type="button" class="tag-view-btn tag-view-btn--tags active" data-view="list" title="List view">
+                        <i class="material-icons">view_list</i>
+                    </button>
+                    <button type="button" class="tag-view-btn tag-view-btn--tags" data-view="gallery" title="Gallery view">
+                        <i class="material-icons">grid_view</i>
+                    </button>
+                    <button type="button" class="tag-view-btn tag-view-btn--tags" data-view="tree" title="Tree view">
+                        <i class="material-icons">account_tree</i>
+                    </button>
+                </div>
+                <button class="btn-primary" id="new-tag-btn" type="button">
+                    <i class="material-icons">add</i> New Tag
+                </button>
+            </div>
+        </div>
+
+        <div id="tag-sel-bar" class="cat-sel-bar">
+            <div class="cat-sel-bar-left">
+                <span id="tag-sel-count" class="cat-sel-count" hidden></span>
+            </div>
+            <div class="cat-sel-bar-actions">
+                <button type="button" id="tag-sel-all" class="cat-sel-btn"><i class="material-icons">select_all</i> Select All</button>
+                <button type="button" id="tag-sel-deselect" class="cat-sel-btn" disabled><i class="material-icons">deselect</i> Deselect All</button>
+                <button type="button" id="tag-sel-edit" class="cat-sel-btn cat-sel-edit-btn" disabled><i class="material-icons">edit</i> Edit</button>
+                <button type="button" id="tag-sel-delete" class="cat-sel-btn cat-sel-delete-btn" disabled><i class="material-icons">delete</i> Delete</button>
+                <button type="button" id="tag-sel-merge" class="cat-sel-merge-btn" disabled><i class="material-icons">merge</i> Merge</button>
+            </div>
+        </div>
+
+        <div class="tag-create-card" id="new-tag-form" style="display:none;">
+            <form hx-post="{% url 'tag.create' %}" hx-target="#tag-rows" hx-swap="innerHTML"
+                  enctype="multipart/form-data" class="tag-form"
+                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-tag-form').style.display='none'; toastr.success('Tag created.'); }">
+                {% csrf_token %}
+                <div class="tag-form-grid">
+                    <div class="form-field">
+                        <label class="form-label" for="new-tag-name">Tag name</label>
+                        <input id="new-tag-name" name="name" type="text" class="form-input" placeholder="e.g. Road trip" required>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="new-tag-order">Order (higher = higher priority)</label>
+                        <input id="new-tag-order" name="order" type="number" class="form-input" value="0">
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="new-tag-desc">Description (optional)</label>
+                    <textarea id="new-tag-desc" name="description" class="form-input" rows="2" placeholder="What is this tag for?"></textarea>
+                </div>
+                <div class="tag-icon-color-row">
+                    <div class="form-field">
+                        <label class="form-label">Icon</label>
+                        <div class="icon-picker-wrap">
+                            {% with picker_id="new-tag" current_icon="" field_name="icon" %}
+                            {% include 'dashboard/partials/_icon_picker.html' %}
+                            {% endwith %}
+                        </div>
+                        <div class="icon-custom-upload-area" style="margin-top:8px;">
+                            <img id="new-tag-custom-preview" class="icon-custom-preview-thumb" style="display:none" alt="">
+                            <label class="icon-custom-upload-btn" title="Upload a custom image icon">
+                                <i class="material-icons">upload</i> Upload custom
+                                <input type="file" name="custom_icon" id="new-tag-custom-input" accept="image/*" style="display:none"
+                                       onchange="showTagCustomPreview(this)">
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label">Color</label>
+                        <div class="color-picker" id="new-tag-color-picker">
+                            <input type="hidden" name="color" id="new-tag-color-value">
+                            {% for hex, label in color_choices %}
+                            <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
+                                    onclick="pickColor('new-tag-color-picker','new-tag-color-value','{{ hex }}',this)"></button>
+                            {% endfor %}
+                            <button type="button" class="color-swatch color-clear" title="No color"
+                                    onclick="pickColor('new-tag-color-picker','new-tag-color-value','',this)">
+                                <i class="material-icons" style="font-size:1rem;">block</i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Parent tags (optional)</label>
+                    <input type="text" class="form-input tag-parent-search" placeholder="Search tags…"
+                           oninput="filterParentOptions(this,'parent-select-new-tag')" autocomplete="off">
+                    <div class="tag-parent-select" id="parent-select-new-tag">
+                        {% for t in tags %}
+                        <label class="tag-parent-option">
+                            <input type="checkbox" name="parent_ids" value="{{ t.id }}">
+                            {% if t.custom_icon %}<img src="{{ t.custom_icon.url }}" class="tag-parent-icon-img" alt="">
+                            {% elif t.icon %}{% if t.icon|is_material_icon %}<i class="material-icons" {% if t.color %}style="color:{{ t.color }}"{% endif %}>{{ t.icon }}</i>{% else %}<span>{{ t.icon }}</span>{% endif %}{% endif %}
+                            {{ t.name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="tag-form-actions">
+                    <button type="submit" class="btn-primary">Create</button>
+                    <button type="button" class="btn-ghost" onclick="document.getElementById('new-tag-form').style.display='none'">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="tag-rows">
+            {% include 'dashboard/partials/tag_rows.html' %}
+        </div>
+    </div>{# end #panel-tags #}
+
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    {# CATEGORIES PANEL                                                          #}
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    <div class="organize-panel tag-page" id="panel-categories" role="tabpanel"
+         {% if active_tab != 'categories' %}hidden{% endif %}>
+
+        <div class="tag-header">
+            <div>
+                <h2 class="tag-title">Categories</h2>
+                <p class="tag-subtitle">Global labels shared by all users — organize pins and locations by type.</p>
+            </div>
+            <div class="tag-header-right">
+                <div class="tag-view-toggle" role="group" aria-label="Category view mode">
+                    <button type="button" class="tag-view-btn tag-view-btn--cats active" data-view="list" title="List view">
+                        <i class="material-icons">view_list</i>
+                    </button>
+                    <button type="button" class="tag-view-btn tag-view-btn--cats" data-view="gallery" title="Gallery view">
+                        <i class="material-icons">grid_view</i>
+                    </button>
+                    <button type="button" class="tag-view-btn tag-view-btn--cats" data-view="tree" title="Tree view">
+                        <i class="material-icons">account_tree</i>
+                    </button>
+                </div>
+                <button class="btn-primary" id="new-category-btn" type="button">
+                    <i class="material-icons">add</i> New Category
+                </button>
+            </div>
+        </div>
+
+        <div id="cat-sel-bar" class="cat-sel-bar">
+            <div class="cat-sel-bar-left">
+                <span id="cat-sel-count" class="cat-sel-count" hidden></span>
+            </div>
+            <div class="cat-sel-bar-actions">
+                <button type="button" id="cat-sel-all" class="cat-sel-btn"><i class="material-icons">select_all</i> Select All</button>
+                <button type="button" id="cat-sel-deselect" class="cat-sel-btn" disabled><i class="material-icons">deselect</i> Deselect All</button>
+                <button type="button" id="cat-sel-edit" class="cat-sel-btn cat-sel-edit-btn" disabled><i class="material-icons">edit</i> Edit</button>
+                <button type="button" id="cat-sel-delete" class="cat-sel-btn cat-sel-delete-btn" disabled><i class="material-icons">delete</i> Delete</button>
+                <button type="button" id="cat-sel-merge" class="cat-sel-merge-btn" disabled><i class="material-icons">merge</i> Merge</button>
+            </div>
+        </div>
+
+        <div class="tag-create-card" id="new-category-form" style="display:none;">
+            <form hx-post="{% url 'category.create' %}" hx-target="#category-rows" hx-swap="innerHTML"
+                  class="tag-form"
+                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-category-form').style.display='none'; toastr.success('Category created.'); }">
+                {% csrf_token %}
+                <div class="tag-form-grid">
+                    <div class="form-field">
+                        <label class="form-label" for="new-cat-name">Category name</label>
+                        <input id="new-cat-name" name="name" type="text" class="form-input" placeholder="e.g. Hospital" required>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="new-cat-order">Order (higher = higher priority)</label>
+                        <input id="new-cat-order" name="order" type="number" class="form-input" value="0">
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="new-cat-desc">Description (optional)</label>
+                    <textarea id="new-cat-desc" name="description" class="form-input" rows="2" placeholder="What type of place is this?"></textarea>
+                </div>
+                <div class="tag-icon-color-row">
+                    <div class="form-field">
+                        <label class="form-label">Icon</label>
+                        <div class="icon-picker-wrap">
+                            {% with picker_id="new-cat" current_icon="" field_name="icon" %}
+                            {% include 'dashboard/partials/_icon_picker.html' %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label">Color</label>
+                        <div class="color-picker" id="new-cat-color-picker">
+                            <input type="hidden" name="color" id="new-cat-color-value">
+                            {% for hex, label in color_choices %}
+                            <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
+                                    onclick="pickColor('new-cat-color-picker','new-cat-color-value','{{ hex }}',this)"></button>
+                            {% endfor %}
+                            <button type="button" class="color-swatch color-clear" title="No color"
+                                    onclick="pickColor('new-cat-color-picker','new-cat-color-value','',this)">
+                                <i class="material-icons" style="font-size:1rem;">block</i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Parent categories (optional)</label>
+                    <input type="text" class="form-input tag-parent-search" placeholder="Search categories…"
+                           oninput="filterParentOptions(this,'parent-select-new-cat')" autocomplete="off">
+                    <div class="tag-parent-select" id="parent-select-new-cat">
+                        {% for cat in categories %}
+                        <label class="tag-parent-option">
+                            <input type="checkbox" name="parent_ids" value="{{ cat.id }}">
+                            {% if cat.icon %}{% if cat.icon|is_material_icon %}<i class="material-icons" {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</i>{% else %}<span>{{ cat.icon }}</span>{% endif %}{% endif %}
+                            {{ cat.name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="tag-form-actions">
+                    <button type="submit" class="btn-primary">Create</button>
+                    <button type="button" class="btn-ghost" onclick="document.getElementById('new-category-form').style.display='none'">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="category-rows">
+            {% include 'dashboard/partials/category_rows.html' %}
+        </div>
+    </div>{# end #panel-categories #}
+
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    {# PRIORITY PANEL                                                            #}
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    <div class="organize-panel" id="panel-priority" role="tabpanel"
+         {% if active_tab != 'priority' %}hidden{% endif %}>
+
+        <div class="tag-header">
+            <div>
+                <h2 class="tag-title">Priority Order</h2>
+                <p class="tag-subtitle">Drag to set the order in which icons appear on your map. Higher items take precedence.</p>
+            </div>
+        </div>
+
+        <div id="priority-list" class="priority-list">
+            {% for item in priority_items %}
+            <div class="priority-item" data-id="{{ item.id }}" data-kind="{{ item.kind }}">
+                <div class="priority-drag-handle" title="Drag to reorder">
+                    <i class="material-icons">drag_indicator</i>
+                </div>
+                <div class="priority-item-icon" {% if item.color %}style="background:{{ item.color }}22;border-color:{{ item.color }}44;"{% endif %}>
+                    {% if item.custom_icon %}
+                        <img src="{{ item.custom_icon.url }}" alt="" class="tag-icon-img">
+                    {% elif item.icon %}
+                        {% if item.icon|is_material_icon %}
+                            <i class="material-icons" {% if item.color %}style="color:{{ item.color }}"{% endif %}>{{ item.icon }}</i>
+                        {% else %}
+                            <span class="tag-icon-emoji">{{ item.icon }}</span>
+                        {% endif %}
+                    {% else %}
+                        <i class="material-icons tag-icon-empty">{% if item.kind == 'category' %}category{% else %}label{% endif %}</i>
+                    {% endif %}
+                </div>
+                <div class="priority-item-info">
+                    <span class="priority-item-name">{{ item.name }}</span>
+                    <span class="priority-kind-badge priority-kind-badge--{{ item.kind }}">{{ item.kind }}</span>
+                    {% if not item.profile %}<span class="tag-global-badge">global</span>{% endif %}
+                </div>
+                <span class="priority-order-badge">{{ forloop.counter }}</span>
+            </div>
+            {% empty %}
+            <div class="tag-empty">
+                <i class="material-icons">label_off</i>
+                <p>No tags or categories yet.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>{# end #panel-priority #}
+
+</div>{# end .organize-page #}
+
+{# ── Tag edit dialog ──────────────────────────────────────────────────────── #}
+<dialog id="tag-edit-dialog" class="tag-edit-dialog">
+    <div class="dialog-header">
+        <span id="tag-edit-dialog-title">Edit Tag</span>
+        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div id="tag-edit-dialog-body" class="tag-edit-dialog-body"></div>
+</dialog>
+
+{# ── Tag multi-merge dialog ────────────────────────────────────────────────── #}
+<dialog id="tag-merge-dialog" class="cat-merge-dialog">
+    <div class="dialog-header">
+        <span id="tag-merge-dialog-title">Merge Tags</span>
+        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div class="cat-merge-dialog-body">
+        <div class="cat-merge-section">
+            <div class="cat-merge-section-label"><i class="material-icons">check_circle</i> Surviving tag</div>
+            <div id="tag-merge-target-card" class="cat-merge-target-card"></div>
+        </div>
+        <div class="cat-merge-divider"><i class="material-icons">merge</i><span>Merge these into it</span></div>
+        <div class="cat-merge-section">
+            <div class="cat-merge-section-label"><i class="material-icons">delete_sweep</i> Will be deleted after merge
+                <span class="cat-merge-hint">— click <i class="material-icons" style="font-size:.85rem;vertical-align:middle">swap_vert</i> to swap</span>
+            </div>
+            <div id="tag-merge-sources-list" class="cat-merge-sources-list"></div>
+        </div>
+        <p class="cat-merge-warning"><i class="material-icons">warning</i> All pins will be transferred to the surviving tag. This cannot be undone.</p>
+    </div>
+    <div class="cat-merge-dialog-footer">
+        <button type="button" id="tag-merge-confirm-btn" class="btn-primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
+        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>
+
+{# ── Tag bulk-edit dialog ──────────────────────────────────────────────────── #}
+<dialog id="tag-bulk-edit-dialog" class="cat-bulk-edit-dialog">
+    <div class="dialog-header">
+        <span id="tag-bulk-edit-title">Edit Tags</span>
+        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div class="cat-bulk-edit-body">
+        <div class="cat-bulk-field">
+            <label class="form-label">Icon</label>
+            <div class="icon-picker-wrap" id="tag-bulk-icon-wrap">
+                {% with picker_id="tag-bulk-edit" current_icon="" field_name="bulk_icon" %}
+                {% include 'dashboard/partials/_icon_picker.html' %}
+                {% endwith %}
+            </div>
+            <label class="cat-bulk-nochange-label">
+                <input type="checkbox" id="tag-bulk-icon-nochange" checked>
+                <span>No change — leave icon unchanged</span>
+            </label>
+        </div>
+        <div class="cat-bulk-field">
+            <label class="form-label">Color</label>
+            <div class="color-picker" id="tag-bulk-color-picker">
+                <input type="hidden" id="tag-bulk-color-value">
+                {% for hex, label in color_choices %}
+                <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
+                        onclick="pickColor('tag-bulk-color-picker','tag-bulk-color-value','{{ hex }}',this); document.getElementById('tag-bulk-color-nochange').checked=false; _updateTagBulkState();"></button>
+                {% endfor %}
+                <button type="button" class="color-swatch color-clear" title="No color"
+                        onclick="pickColor('tag-bulk-color-picker','tag-bulk-color-value','',this); document.getElementById('tag-bulk-color-nochange').checked=false; _updateTagBulkState();">
+                    <i class="material-icons" style="font-size:1rem;">block</i>
+                </button>
+            </div>
+            <label class="cat-bulk-nochange-label">
+                <input type="checkbox" id="tag-bulk-color-nochange" checked>
+                <span>No change — leave color unchanged</span>
+            </label>
+        </div>
+        <div class="cat-bulk-field">
+            <label class="form-label">Add parent tags</label>
+            <p class="cat-bulk-parents-hint">Checked tags will be <strong>added</strong> as parents. Existing parents are not removed.</p>
+            <input type="text" class="form-input tag-parent-search" placeholder="Search tags…"
+                   oninput="filterParentOptions(this,'tag-bulk-parent-select')" autocomplete="off">
+            <div class="tag-parent-select" id="tag-bulk-parent-select">
+                {% for t in tags %}
+                <label class="tag-parent-option">
+                    <input type="checkbox" class="tag-bulk-parent-cb" value="{{ t.id }}">
+                    {% if t.custom_icon %}<img src="{{ t.custom_icon.url }}" class="tag-parent-icon-img" alt="">
+                    {% elif t.icon %}{% if t.icon|is_material_icon %}<i class="material-icons" {% if t.color %}style="color:{{ t.color }}"{% endif %}>{{ t.icon }}</i>{% else %}<span>{{ t.icon }}</span>{% endif %}{% endif %}
+                    {{ t.name }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="cat-bulk-edit-footer">
+        <button type="button" id="tag-bulk-edit-confirm" class="btn-primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
+        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>
+
+{# ── Category edit dialog ──────────────────────────────────────────────────── #}
+<dialog id="category-edit-dialog" class="tag-edit-dialog">
+    <div class="dialog-header">
+        <span id="category-edit-dialog-title">Edit Category</span>
+        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div id="category-edit-dialog-body" class="tag-edit-dialog-body"></div>
+</dialog>
+
+{# ── Category multi-merge dialog ───────────────────────────────────────────── #}
+<dialog id="cat-merge-dialog" class="cat-merge-dialog">
+    <div class="dialog-header">
+        <span id="cat-merge-dialog-title">Merge Categories</span>
+        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div class="cat-merge-dialog-body">
+        <div class="cat-merge-section">
+            <div class="cat-merge-section-label"><i class="material-icons">check_circle</i> Surviving category</div>
+            <div id="cat-merge-target-card" class="cat-merge-target-card"></div>
+        </div>
+        <div class="cat-merge-divider"><i class="material-icons">merge</i><span>Merge these into it</span></div>
+        <div class="cat-merge-section">
+            <div class="cat-merge-section-label"><i class="material-icons">delete_sweep</i> Will be deleted after merge
+                <span class="cat-merge-hint">— click <i class="material-icons" style="font-size:.85rem;vertical-align:middle">swap_vert</i> to swap</span>
+            </div>
+            <div id="cat-merge-sources-list" class="cat-merge-sources-list"></div>
+        </div>
+        <p class="cat-merge-warning"><i class="material-icons">warning</i> All pins and locations will be transferred to the surviving category. This cannot be undone.</p>
+    </div>
+    <div class="cat-merge-dialog-footer">
+        <button type="button" id="cat-merge-confirm-btn" class="btn-primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
+        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>
+
+{# ── Category bulk-edit dialog ─────────────────────────────────────────────── #}
+<dialog id="cat-bulk-edit-dialog" class="cat-bulk-edit-dialog">
+    <div class="dialog-header">
+        <span id="cat-bulk-edit-title">Edit Categories</span>
+        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div class="cat-bulk-edit-body">
+        <div class="cat-bulk-field">
+            <label class="form-label">Icon</label>
+            <div class="icon-picker-wrap" id="cat-bulk-icon-wrap">
+                {% with picker_id="cat-bulk-edit" current_icon="" field_name="bulk_icon" %}
+                {% include 'dashboard/partials/_icon_picker.html' %}
+                {% endwith %}
+            </div>
+            <label class="cat-bulk-nochange-label">
+                <input type="checkbox" id="cat-bulk-icon-nochange" checked>
+                <span>No change — leave icon unchanged</span>
+            </label>
+        </div>
+        <div class="cat-bulk-field">
+            <label class="form-label">Color</label>
+            <div class="color-picker" id="cat-bulk-color-picker">
+                <input type="hidden" id="cat-bulk-color-value">
+                {% for hex, label in color_choices %}
+                <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
+                        onclick="pickColor('cat-bulk-color-picker','cat-bulk-color-value','{{ hex }}',this); document.getElementById('cat-bulk-color-nochange').checked=false; _updateCatBulkState();"></button>
+                {% endfor %}
+                <button type="button" class="color-swatch color-clear" title="No color"
+                        onclick="pickColor('cat-bulk-color-picker','cat-bulk-color-value','',this); document.getElementById('cat-bulk-color-nochange').checked=false; _updateCatBulkState();">
+                    <i class="material-icons" style="font-size:1rem;">block</i>
+                </button>
+            </div>
+            <label class="cat-bulk-nochange-label">
+                <input type="checkbox" id="cat-bulk-color-nochange" checked>
+                <span>No change — leave color unchanged</span>
+            </label>
+        </div>
+        <div class="cat-bulk-field">
+            <label class="form-label">Add parent categories</label>
+            <p class="cat-bulk-parents-hint">Checked categories will be <strong>added</strong> as parents. Existing parents are not removed.</p>
+            <input type="text" class="form-input tag-parent-search" placeholder="Search categories…"
+                   oninput="filterParentOptions(this,'cat-bulk-parent-select')" autocomplete="off">
+            <div class="tag-parent-select" id="cat-bulk-parent-select">
+                {% for cat in categories %}
+                <label class="tag-parent-option">
+                    <input type="checkbox" class="cat-bulk-parent-cb" value="{{ cat.id }}">
+                    {% if cat.icon %}{% if cat.icon|is_material_icon %}<i class="material-icons" {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</i>{% else %}<span>{{ cat.icon }}</span>{% endif %}{% endif %}
+                    {{ cat.name }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="cat-bulk-edit-footer">
+        <button type="button" id="cat-bulk-edit-confirm" class="btn-primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
+        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// SHARED UTILITIES  (called from inline onclick handlers — must be global)
+// ══════════════════════════════════════════════════════════════════════════════
+function filterParentOptions(input, containerId) {
+    var q = input.value.toLowerCase().trim();
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    container.querySelectorAll('.tag-parent-option').forEach(function(opt) {
+        opt.style.display = (!q || opt.textContent.toLowerCase().includes(q)) ? '' : 'none';
+    });
+}
+
+var IconPicker = {
+    toggle: function(id) {
+        var panel = document.getElementById('icon-panel-' + id);
+        if (!panel) return;
+        var isHidden = panel.hasAttribute('hidden');
+        document.querySelectorAll('.icon-picker-panel').forEach(function(p) { p.setAttribute('hidden', ''); });
+        if (isHidden) {
+            panel.removeAttribute('hidden');
+            var search = panel.querySelector('.icon-picker-search-input');
+            if (search) { search.value = ''; search.focus(); }
+            IconPicker.setTabSilent(id, '');
+        }
+    },
+    setTabSilent: function(id, cat) {
+        var panel = document.getElementById('icon-panel-' + id);
+        if (!panel) return;
+        panel.querySelectorAll('.icon-tab').forEach(function(b) { b.classList.toggle('active', b.dataset.cat === cat); });
+        var grid = document.getElementById('icon-grid-' + id);
+        if (!grid) return;
+        grid.querySelectorAll('.icon-picker-item').forEach(function(item) {
+            item.style.display = (!cat || item.dataset.cat === cat || !item.dataset.cat) ? '' : 'none';
+        });
+    },
+    setTab: function(id, cat, btn) {
+        var panel = document.getElementById('icon-panel-' + id);
+        if (!panel) return;
+        panel.querySelectorAll('.icon-tab').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        var search = panel.querySelector('.icon-picker-search-input');
+        if (search) search.value = '';
+        var grid = document.getElementById('icon-grid-' + id);
+        if (!grid) return;
+        grid.querySelectorAll('.icon-picker-item').forEach(function(item) {
+            item.style.display = (!cat || item.dataset.cat === cat || !item.dataset.cat) ? '' : 'none';
+        });
+    },
+    search: function(id, query) {
+        var q = query.toLowerCase().trim();
+        var panel = document.getElementById('icon-panel-' + id);
+        if (!panel) return;
+        panel.querySelectorAll('.icon-tab').forEach(function(b) { b.classList.toggle('active', b.dataset.cat === ''); });
+        var grid = document.getElementById('icon-grid-' + id);
+        if (!grid) return;
+        grid.querySelectorAll('.icon-picker-item').forEach(function(item) {
+            if (!q) { item.style.display = ''; }
+            else {
+                var label = item.dataset.label || '', icon = item.dataset.icon || '';
+                item.style.display = (label.includes(q) || icon === q) ? '' : 'none';
+            }
+        });
+    },
+    pick: function(id, icon, btn) {
+        var input = document.getElementById('icon-value-' + id);
+        if (input) input.value = icon;
+        var current = document.getElementById('icon-current-' + id);
+        if (current) {
+            if (icon) {
+                current.innerHTML = /^[a-z_]+$/.test(icon)
+                    ? '<i class="material-icons icon-picker-current-mi">' + icon + '</i>'
+                    : '<span class="icon-picker-current-glyph">' + icon + '</span>';
+            } else {
+                current.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+            }
+        }
+        var grid = document.getElementById('icon-grid-' + id);
+        if (grid) { grid.querySelectorAll('.icon-picker-item').forEach(function(b) { b.classList.remove('selected'); }); btn.classList.add('selected'); }
+        var panel = document.getElementById('icon-panel-' + id);
+        if (panel) panel.setAttribute('hidden', '');
+    },
+};
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.icon-picker-dropdown')) {
+        document.querySelectorAll('.icon-picker-panel').forEach(function(p) { p.setAttribute('hidden', ''); });
+    }
+});
+
+function pickColor(pickerId, valueId, colorHex, btn) {
+    var picker = document.getElementById(pickerId);
+    if (picker) picker.querySelectorAll('.color-swatch').forEach(function(b) { b.classList.remove('selected'); });
+    btn.classList.add('selected');
+    document.getElementById(valueId).value = colorHex;
+}
+
+function showTagCustomPreview(input) {
+    if (!input.files || !input.files[0]) return;
+    var preview = document.getElementById('new-tag-custom-preview');
+    if (!preview) return;
+    var reader = new FileReader();
+    reader.onload = function(e) { preview.src = e.target.result; preview.style.display = 'block'; };
+    reader.readAsDataURL(input.files[0]);
+}
+</script>
+
+{# ── Tab switching ─────────────────────────────────────────────────────────── #}
+<script>
+(function() {
+    var tabs = document.querySelectorAll('.organize-tab');
+    var panels = document.querySelectorAll('.organize-panel');
+    tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            var target = tab.dataset.tab;
+            tabs.forEach(function(t) { t.classList.remove('active'); });
+            tab.classList.add('active');
+            panels.forEach(function(p) { p.hidden = true; });
+            var panel = document.getElementById('panel-' + target);
+            if (panel) panel.hidden = false;
+            localStorage.setItem('organize_tab', target);
+            if (target === 'priority') {
+                if (window._initPrioritySortable) _initPrioritySortable();
+            }
+        });
+    });
+})();
+</script>
+
+{# ── Tags tab JS ───────────────────────────────────────────────────────────── #}
+<script>
+(function() {
+    var _tagSelected = new Set();
+    var _tagMergeTargetId = null;
+    var _tagCurrentView = localStorage.getItem('tag_view') || 'list';
+
+    function _escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function _getAllTagIds() {
+        var seen = new Set();
+        document.querySelectorAll('#tag-rows .tag-card[data-tag-id]').forEach(function(c) {
+            if (c.querySelector('.tag-select-cb')) seen.add(c.dataset.tagId);
+        });
+        return Array.from(seen);
+    }
+
+    function _syncTagCheckboxes() {
+        document.querySelectorAll('.tag-select-cb').forEach(function(cb) {
+            cb.checked = _tagSelected.has(cb.dataset.tagId);
+        });
+        document.querySelectorAll('#tag-rows .tag-card[data-tag-id]').forEach(function(card) {
+            card.classList.toggle('tag-card--selected', _tagSelected.has(card.dataset.tagId));
+        });
+    }
+
+    function _updateTagBar() {
+        var n = _tagSelected.size;
+        var bar = document.getElementById('tag-sel-bar');
+        var countEl = document.getElementById('tag-sel-count');
+        var deselectBtn = document.getElementById('tag-sel-deselect');
+        var editBtn = document.getElementById('tag-sel-edit');
+        var deleteBtn = document.getElementById('tag-sel-delete');
+        var mergeBtn = document.getElementById('tag-sel-merge');
+        if (n > 0) {
+            bar.classList.add('cat-sel-bar--active');
+            countEl.textContent = n === 1 ? '1 selected' : n + ' selected';
+            countEl.hidden = false;
+            deselectBtn.disabled = false;
+            editBtn.disabled = false;
+            deleteBtn.disabled = false;
+            mergeBtn.disabled = n < 2;
+        } else {
+            bar.classList.remove('cat-sel-bar--active');
+            countEl.hidden = true;
+            deselectBtn.disabled = true;
+            editBtn.disabled = true;
+            deleteBtn.disabled = true;
+            mergeBtn.disabled = true;
+        }
+    }
+
+    function updateTagOrderBadges() {
+        document.querySelectorAll('#tag-rows .tag-card[data-tag-id]').forEach(function(card, i) {
+            var badge = card.querySelector('.tag-order-badge');
+            if (badge) badge.textContent = i + 1;
+        });
+    }
+
+    function initTagSortable() {
+        var rows = document.getElementById('tag-rows');
+        if (!rows) return;
+        if (rows._sortable) rows._sortable.destroy();
+        rows._sortable = new Sortable(rows, {
+            handle: '.tag-drag-handle',
+            animation: 150,
+            ghostClass: 'tag-card--ghost',
+            onEnd: function() {
+                var ids = Array.from(rows.querySelectorAll('.tag-card[data-tag-id]')).map(function(el) {
+                    return parseInt(el.dataset.tagId, 10);
+                });
+                fetch('{% url "tag.reorder" %}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                    body: JSON.stringify({ tag_ids: ids }),
+                }).then(function() { updateTagOrderBadges(); })
+                  .catch(function(err) { toastr.error('Reorder failed: ' + err.message); });
+            },
+        });
+    }
+
+    function applyTagView() {
+        var rows = document.getElementById('tag-rows');
+        if (!rows) return;
+        rows.classList.remove('tag-view--list', 'tag-view--gallery', 'tag-view--tree');
+        rows.classList.add('tag-view--' + _tagCurrentView);
+        document.querySelectorAll('.tag-view-btn--tags').forEach(function(btn) {
+            btn.classList.toggle('active', btn.dataset.view === _tagCurrentView);
+        });
+        if (_tagCurrentView === 'tree') {
+            renderTagTree(rows);
+        } else {
+            var tr = rows.querySelector('.tag-tree-root'); if (tr) tr.remove();
+            rows.querySelectorAll('.tag-card').forEach(function(c) { c.style.display = ''; });
+        }
+        if (rows._sortable) rows._sortable.option('disabled', _tagCurrentView !== 'list');
+    }
+
+    function renderTagTree(rows) {
+        var old = rows.querySelector('.tag-tree-root'); if (old) old.remove();
+        var cards = Array.from(rows.querySelectorAll('.tag-card[data-tag-id]'));
+        var cardMap = {}, parentMap = {};
+        cards.forEach(function(c) {
+            var id = c.dataset.tagId;
+            cardMap[id] = c;
+            var p = c.dataset.tagParents || '';
+            parentMap[id] = p ? p.split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
+            c.style.display = 'none';
+        });
+        var childrenMap = {};
+        Object.keys(parentMap).forEach(function(id) {
+            parentMap[id].forEach(function(pid) {
+                if (!childrenMap[pid]) childrenMap[pid] = [];
+                childrenMap[pid].push(id);
+            });
+        });
+        var cardIds = new Set(Object.keys(cardMap));
+        var rootIds = Object.keys(cardMap).filter(function(id) {
+            return (parentMap[id] || []).length === 0 || (parentMap[id] || []).every(function(pid) { return !cardIds.has(pid); });
+        });
+        rootIds.sort(function(a, b) { return cards.indexOf(cardMap[a]) - cards.indexOf(cardMap[b]); });
+        var treeRoot = document.createElement('div'); treeRoot.className = 'tag-tree-root';
+        var appeared = new Set();
+        function buildNode(id, depth, path) {
+            if (path.has(id)) return null;
+            var card = cardMap[id]; if (!card) return null;
+            appeared.add(id);
+            var item = document.createElement('div'); item.className = 'tag-tree-item';
+            item.dataset.depth = depth; item.style.setProperty('--tree-depth', depth);
+            var clone = card.cloneNode(true); clone.style.display = '';
+            clone.id = 'ttree-' + id + '-' + depth + '-' + Math.random().toString(36).slice(2,6);
+            item.appendChild(clone);
+            var newPath = new Set(path); newPath.add(id);
+            var children = childrenMap[id] || [];
+            if (children.length) {
+                var cc = document.createElement('div'); cc.className = 'tag-tree-children';
+                children.forEach(function(cid) { var n = buildNode(cid, depth+1, newPath); if (n) cc.appendChild(n); });
+                item.appendChild(cc);
+            }
+            return item;
+        }
+        rootIds.forEach(function(id) { var n = buildNode(id,0,new Set()); if (n) treeRoot.appendChild(n); });
+        Object.keys(cardMap).forEach(function(id) {
+            if (!appeared.has(id)) { var n = buildNode(id,0,new Set()); if (n) treeRoot.appendChild(n); }
+        });
+        rows.appendChild(treeRoot);
+        if (window.htmx) htmx.process(treeRoot);
+    }
+
+    function _onTagRowsUpdated() {
+        _tagSelected.clear(); _updateTagBar(); _syncTagCheckboxes();
+        initTagSortable(); updateTagOrderBadges(); applyTagView();
+    }
+
+    // ── New tag form ──────────────────────────────────────────────────────────
+    function resetNewTagForm() {
+        var c = document.getElementById('new-tag-form'); if (!c) return;
+        c.querySelector('form').reset();
+        var iv = document.getElementById('icon-value-new-tag'); if (iv) iv.value = '';
+        var ic = document.getElementById('icon-current-new-tag');
+        if (ic) ic.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+        var ig = document.getElementById('icon-grid-new-tag');
+        if (ig) { ig.querySelectorAll('.icon-picker-item').forEach(function(b){b.classList.remove('selected');}); var nb = ig.querySelector('.icon-picker-none'); if (nb) nb.classList.add('selected'); }
+        var prev = document.getElementById('new-tag-custom-preview');
+        if (prev) { prev.src = ''; prev.style.display = 'none'; }
+        var cp = document.getElementById('new-tag-color-picker');
+        if (cp) cp.querySelectorAll('.color-swatch').forEach(function(b){b.classList.remove('selected');});
+        var cv = document.getElementById('new-tag-color-value'); if (cv) cv.value = '';
+    }
+    document.getElementById('new-tag-btn').addEventListener('click', function() {
+        var f = document.getElementById('new-tag-form');
+        if (f.style.display === 'none') { resetNewTagForm(); f.style.display = 'block'; } else { f.style.display = 'none'; }
+    });
+
+    // ── View toggle ───────────────────────────────────────────────────────────
+    document.querySelectorAll('.tag-view-btn--tags').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            _tagCurrentView = btn.dataset.view;
+            localStorage.setItem('tag_view', _tagCurrentView);
+            applyTagView();
+        });
+    });
+
+    // ── Selection ─────────────────────────────────────────────────────────────
+    document.getElementById('tag-rows').addEventListener('change', function(e) {
+        var cb = e.target; if (!cb.classList.contains('tag-select-cb')) return;
+        var id = cb.dataset.tagId;
+        if (cb.checked) _tagSelected.add(id); else _tagSelected.delete(id);
+        _syncTagCheckboxes(); _updateTagBar();
+    });
+    document.getElementById('tag-sel-all').addEventListener('click', function() {
+        _getAllTagIds().forEach(function(id) { _tagSelected.add(id); });
+        _syncTagCheckboxes(); _updateTagBar();
+    });
+    document.getElementById('tag-sel-deselect').addEventListener('click', function() {
+        _tagSelected.clear(); _syncTagCheckboxes(); _updateTagBar();
+    });
+    document.getElementById('tag-sel-merge').addEventListener('click', function() {
+        if (_tagSelected.size < 2) return;
+        _tagMergeTargetId = Array.from(_tagSelected)[0];
+        _renderTagMergeDialog();
+        document.getElementById('tag-merge-dialog').showModal();
+    });
+
+    // ── Multi-merge dialog ────────────────────────────────────────────────────
+    function _getTagCardData(id) {
+        var c = document.querySelector('[data-tag-id="' + id + '"]');
+        if (!c) return { id:id, name:'?', color:'', icon:'', pinCount:'0', customIcon:'' };
+        return { id:id, name:c.dataset.tagName||'', color:c.dataset.tagColor||'', icon:c.dataset.tagIcon||'', pinCount:c.dataset.tagPinCount||'0', customIcon:c.dataset.tagCustomIcon||'' };
+    }
+    function _tagMiniCardHtml(d, isTarget) {
+        var cs = d.color ? 'background:'+d.color+'22;border-color:'+d.color+'44;' : '';
+        var ics = d.color ? 'color:'+d.color : '';
+        var ih = d.customIcon
+            ? '<img src="'+_escHtml(d.customIcon)+'" style="width:24px;height:24px;object-fit:cover;border-radius:4px;" alt="">'
+            : (d.icon ? (/^[a-z_]+$/.test(d.icon) ? '<i class="material-icons" style="'+ics+'">'+_escHtml(d.icon)+'</i>' : '<span class="tag-icon-emoji">'+_escHtml(d.icon)+'</span>') : '<i class="material-icons tag-icon-empty">label</i>');
+        var sb = isTarget ? '' : '<button type="button" class="cat-merge-swap-btn" data-swap-id="'+d.id+'" title="Make this the surviving tag"><i class="material-icons">swap_vert</i></button>';
+        return '<div class="cat-merge-mini-card'+(isTarget?' cat-merge-mini-card--target':'')+'" data-merge-id="'+d.id+'">'
+            +'<div class="tag-card-icon cat-merge-mini-icon" style="'+cs+'">'+ih+'</div>'
+            +'<div class="cat-merge-mini-info"><div class="cat-merge-mini-name">'+_escHtml(d.name)+'</div>'
+            +'<div class="cat-merge-mini-meta">'+d.pinCount+' pins</div></div>'+sb+'</div>';
+    }
+    function _renderTagMergeDialog() {
+        var ids = Array.from(_tagSelected);
+        if (!_tagMergeTargetId || !_tagSelected.has(_tagMergeTargetId)) _tagMergeTargetId = ids[0];
+        var src = ids.filter(function(id){return id!==_tagMergeTargetId;});
+        document.getElementById('tag-merge-dialog-title').textContent = 'Merge '+ids.length+' Tags';
+        document.getElementById('tag-merge-target-card').innerHTML = _tagMiniCardHtml(_getTagCardData(_tagMergeTargetId), true);
+        document.getElementById('tag-merge-sources-list').innerHTML = src.map(function(id){return _tagMiniCardHtml(_getTagCardData(id),false);}).join('');
+        var cb = document.getElementById('tag-merge-confirm-btn');
+        cb.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge into '+_escHtml(_getTagCardData(_tagMergeTargetId).name);
+        cb.disabled = false;
+    }
+    document.getElementById('tag-merge-sources-list').addEventListener('click', function(e) {
+        var btn = e.target.closest('.cat-merge-swap-btn'); if (!btn) return;
+        _tagMergeTargetId = btn.dataset.swapId; _renderTagMergeDialog();
+    });
+    document.getElementById('tag-merge-confirm-btn').addEventListener('click', function() {
+        var ids = Array.from(_tagSelected);
+        var src = ids.filter(function(id){return id!==_tagMergeTargetId;});
+        var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging…';
+        fetch('{% url "tag.multi_merge" %}', {
+            method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
+            body:JSON.stringify({target_id:parseInt(_tagMergeTargetId,10),source_ids:src.map(function(id){return parseInt(id,10);})}),
+        }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
+        .then(function(html){
+            document.getElementById('tag-merge-dialog').close();
+            document.getElementById('tag-rows').innerHTML=html;
+            _tagMergeTargetId=null; _onTagRowsUpdated(); toastr.success('Tags merged successfully.');
+        }).catch(function(err){toastr.error('Merge failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
+    });
+
+    // ── Bulk delete ───────────────────────────────────────────────────────────
+    document.getElementById('tag-sel-delete').addEventListener('click', function() {
+        var n = _tagSelected.size; if (!n) return;
+        if (!confirm((n===1?'Delete 1 tag?':'Delete '+n+' tags?')+'\nPins will keep their other tags.')) return;
+        var ids = Array.from(_tagSelected).map(function(id){return parseInt(id,10);});
+        fetch('{% url "tag.bulk_delete" %}', {
+            method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
+            body:JSON.stringify({ids:ids}),
+        }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
+        .then(function(html){
+            document.getElementById('tag-rows').innerHTML=html; _onTagRowsUpdated();
+            toastr.success(n===1?'1 tag deleted.':n+' tags deleted.');
+        }).catch(function(err){toastr.error('Delete failed: '+err.message);});
+    });
+
+    // ── Bulk edit dialog ──────────────────────────────────────────────────────
+    function _updateTagBulkState() {
+        var iw = document.getElementById('tag-bulk-icon-wrap');
+        var cp = document.getElementById('tag-bulk-color-picker');
+        if (iw) iw.classList.toggle('cat-bulk-picker--disabled', !!document.getElementById('tag-bulk-icon-nochange').checked);
+        if (cp) cp.classList.toggle('cat-bulk-picker--disabled', !!document.getElementById('tag-bulk-color-nochange').checked);
+    }
+    window._updateTagBulkState = _updateTagBulkState;
+
+    function _openTagBulkEditDialog() {
+        var ids = Array.from(_tagSelected);
+        var iSet = new Set(), cSet = new Set();
+        ids.forEach(function(id) {
+            var c = document.querySelector('[data-tag-id="'+id+'"]'); if (!c) return;
+            iSet.add(c.dataset.tagIcon||''); cSet.add(c.dataset.tagColor||'');
+        });
+        var si = iSet.size===1?Array.from(iSet)[0]:null;
+        var sc = cSet.size===1?Array.from(cSet)[0]:null;
+        var inn = document.getElementById('tag-bulk-icon-nochange');
+        var iv = document.getElementById('icon-value-tag-bulk-edit');
+        var ic = document.getElementById('icon-current-tag-bulk-edit');
+        var ig = document.getElementById('icon-grid-tag-bulk-edit');
+        if (ig) ig.querySelectorAll('.icon-picker-item').forEach(function(b){b.classList.remove('selected');});
+        if (si!==null) {
+            inn.checked=false; if(iv) iv.value=si;
+            if (si) {
+                if (ic) ic.innerHTML=/^[a-z_]+$/.test(si)?'<i class="material-icons icon-picker-current-mi">'+si+'</i>':'<span class="icon-picker-current-glyph">'+si+'</span>';
+                if (ig) { var m=ig.querySelector('[data-icon="'+si+'"]'); if(m) m.classList.add('selected'); }
+            } else {
+                if (ic) ic.innerHTML='<span class="icon-picker-none-label">No icon</span>';
+                var nb=ig&&ig.querySelector('.icon-picker-none'); if(nb) nb.classList.add('selected');
+            }
+        } else { inn.checked=true; if(iv) iv.value=''; if(ic) ic.innerHTML='<span class="icon-picker-none-label">No icon</span>'; }
+        var cnn = document.getElementById('tag-bulk-color-nochange');
+        var cp2 = document.getElementById('tag-bulk-color-picker');
+        var cv = document.getElementById('tag-bulk-color-value');
+        if (cp2) cp2.querySelectorAll('.color-swatch').forEach(function(b){b.classList.remove('selected');});
+        if (sc!==null) {
+            cnn.checked=false; if(cv) cv.value=sc;
+            if (sc&&cp2) { var sw=cp2.querySelector('[data-color="'+sc+'"]'); if(sw) sw.classList.add('selected'); }
+        } else { cnn.checked=true; if(cv) cv.value=''; }
+        document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb').forEach(function(cb){cb.checked=false;});
+        document.getElementById('tag-bulk-edit-title').textContent='Edit '+ids.length+' '+(ids.length===1?'Tag':'Tags');
+        var cbtn=document.getElementById('tag-bulk-edit-confirm'); cbtn.disabled=false;
+        cbtn.innerHTML='<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
+        _updateTagBulkState();
+        document.getElementById('tag-bulk-edit-dialog').showModal();
+    }
+    document.getElementById('tag-sel-edit').addEventListener('click', function() { if (_tagSelected.size) _openTagBulkEditDialog(); });
+    document.getElementById('tag-bulk-icon-nochange').addEventListener('change', function() {
+        if (this.checked) {
+            var iv=document.getElementById('icon-value-tag-bulk-edit');
+            var ic=document.getElementById('icon-current-tag-bulk-edit');
+            var ig=document.getElementById('icon-grid-tag-bulk-edit');
+            if(iv) iv.value=''; if(ic) ic.innerHTML='<span class="icon-picker-none-label">No icon</span>';
+            if(ig){ig.querySelectorAll('.icon-picker-item').forEach(function(b){b.classList.remove('selected');}); var nb=ig.querySelector('.icon-picker-none'); if(nb) nb.classList.add('selected');}
+        }
+        _updateTagBulkState();
+    });
+    document.getElementById('tag-bulk-color-nochange').addEventListener('change', function() {
+        if (this.checked) { var cp=document.getElementById('tag-bulk-color-picker'); var cv=document.getElementById('tag-bulk-color-value'); if(cp) cp.querySelectorAll('.color-swatch').forEach(function(b){b.classList.remove('selected');}); if(cv) cv.value=''; }
+        _updateTagBulkState();
+    });
+    document.getElementById('icon-grid-tag-bulk-edit').addEventListener('click', function(e) {
+        if (e.target.closest('.icon-picker-item')) { document.getElementById('tag-bulk-icon-nochange').checked=false; _updateTagBulkState(); }
+    });
+    document.getElementById('tag-bulk-edit-confirm').addEventListener('click', function() {
+        var ids = Array.from(_tagSelected).map(function(id){return parseInt(id,10);});
+        var body = {ids:ids};
+        if (!document.getElementById('tag-bulk-icon-nochange').checked) { var iv=document.getElementById('icon-value-tag-bulk-edit'); body.icon=iv?iv.value:''; }
+        if (!document.getElementById('tag-bulk-color-nochange').checked) { var cv=document.getElementById('tag-bulk-color-value'); body.color=cv?cv.value:''; }
+        body.add_parent_ids=[];
+        document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb:checked').forEach(function(cb){body.add_parent_ids.push(parseInt(cb.value,10));});
+        var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> Saving…';
+        fetch('{% url "tag.bulk_edit" %}', {
+            method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
+            body:JSON.stringify(body),
+        }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
+        .then(function(html){
+            document.getElementById('tag-bulk-edit-dialog').close();
+            document.getElementById('tag-rows').innerHTML=html; _onTagRowsUpdated(); toastr.success('Tags updated.');
+        }).catch(function(err){toastr.error('Edit failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
+    });
+
+    // ── HTMX hooks ────────────────────────────────────────────────────────────
+    document.getElementById('tag-rows').addEventListener('htmx:afterSwap', _onTagRowsUpdated);
+    document.body.addEventListener('htmx:afterSwap', function(e) {
+        if (e.detail.target && e.detail.target.id === 'tag-edit-dialog-body') {
+            var titleEl = document.getElementById('tag-edit-dialog-title');
+            if (titleEl) titleEl.textContent = e.detail.target.querySelector('.tag-merge-form') ? 'Merge Tag' : 'Edit Tag';
+            var dlg = document.getElementById('tag-edit-dialog'); if (!dlg.open) dlg.showModal();
+        }
+    });
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    initTagSortable();
+    applyTagView();
+})();
+</script>
+
+{# ── Categories tab JS ─────────────────────────────────────────────────────── #}
+<script>
+(function() {
+    var _catSelected = new Set();
+    var _catMergeTargetId = null;
+    var _catCurrentView = localStorage.getItem('category_view') || 'list';
+
+    function _escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function _getAllCatIds() {
+        var seen = new Set();
+        document.querySelectorAll('#category-rows .tag-card[data-category-id]').forEach(function(c) {
+            if (c.querySelector('.cat-select-cb')) seen.add(c.dataset.categoryId);
+        });
+        return Array.from(seen);
+    }
+
+    function _syncCatCheckboxes() {
+        document.querySelectorAll('.cat-select-cb').forEach(function(cb) {
+            cb.checked = _catSelected.has(cb.dataset.catId);
+        });
+        document.querySelectorAll('#category-rows .tag-card[data-category-id]').forEach(function(card) {
+            card.classList.toggle('tag-card--selected', _catSelected.has(card.dataset.categoryId));
+        });
+    }
+
+    function _updateCatBar() {
+        var n = _catSelected.size;
+        var bar = document.getElementById('cat-sel-bar');
+        var countEl = document.getElementById('cat-sel-count');
+        var deselectBtn = document.getElementById('cat-sel-deselect');
+        var editBtn = document.getElementById('cat-sel-edit');
+        var deleteBtn = document.getElementById('cat-sel-delete');
+        var mergeBtn = document.getElementById('cat-sel-merge');
+        if (n > 0) {
+            bar.classList.add('cat-sel-bar--active');
+            countEl.textContent = n===1?'1 selected':n+' selected';
+            countEl.hidden=false; deselectBtn.disabled=false; editBtn.disabled=false; deleteBtn.disabled=false; mergeBtn.disabled=n<2;
+        } else {
+            bar.classList.remove('cat-sel-bar--active');
+            countEl.hidden=true; deselectBtn.disabled=true; editBtn.disabled=true; deleteBtn.disabled=true; mergeBtn.disabled=true;
+        }
+    }
+
+    function updateCatOrderBadges() {
+        document.querySelectorAll('#category-rows .tag-card[data-category-id]').forEach(function(card,i) {
+            var badge = card.querySelector('.tag-order-badge'); if (badge) badge.textContent = i+1;
+        });
+    }
+
+    function initCatSortable() {
+        var rows = document.getElementById('category-rows'); if (!rows) return;
+        if (rows._sortable) rows._sortable.destroy();
+        rows._sortable = new Sortable(rows, {
+            handle: '.tag-drag-handle', animation: 150, ghostClass: 'tag-card--ghost',
+            onEnd: function() {
+                var ids = Array.from(rows.querySelectorAll('.tag-card[data-category-id]')).map(function(el){return parseInt(el.dataset.categoryId,10);});
+                fetch('{% url "category.reorder" %}', {
+                    method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
+                    body:JSON.stringify({category_ids:ids}),
+                }).then(function(){updateCatOrderBadges();}).catch(function(err){toastr.error('Reorder failed: '+err.message);});
+            },
+        });
+    }
+
+    function applyCatView() {
+        var rows = document.getElementById('category-rows'); if (!rows) return;
+        rows.classList.remove('tag-view--list','tag-view--gallery','tag-view--tree');
+        rows.classList.add('tag-view--' + _catCurrentView);
+        document.querySelectorAll('.tag-view-btn--cats').forEach(function(btn) {
+            btn.classList.toggle('active', btn.dataset.view === _catCurrentView);
+        });
+        if (_catCurrentView==='tree') {
+            renderCatTree(rows);
+        } else {
+            var tr=rows.querySelector('.tag-tree-root'); if(tr) tr.remove();
+            rows.querySelectorAll('.tag-card').forEach(function(c){c.style.display='';});
+        }
+        if (rows._sortable) rows._sortable.option('disabled', _catCurrentView!=='list');
+    }
+
+    function renderCatTree(rows) {
+        var old=rows.querySelector('.tag-tree-root'); if(old) old.remove();
+        var cards=Array.from(rows.querySelectorAll('.tag-card[data-category-id]'));
+        var cardMap={}, parentMap={};
+        cards.forEach(function(c){
+            var id=c.dataset.categoryId; cardMap[id]=c;
+            var p=c.dataset.categoryParents||'';
+            parentMap[id]=p?p.split(',').map(function(s){return s.trim();}).filter(Boolean):[];
+            c.style.display='none';
+        });
+        var childrenMap={};
+        Object.keys(parentMap).forEach(function(id){
+            (parentMap[id]||[]).forEach(function(pid){if(!childrenMap[pid])childrenMap[pid]=[]; childrenMap[pid].push(id);});
+        });
+        var cardIds=new Set(Object.keys(cardMap));
+        var rootIds=Object.keys(cardMap).filter(function(id){return (parentMap[id]||[]).length===0||(parentMap[id]||[]).every(function(pid){return !cardIds.has(pid);});});
+        rootIds.sort(function(a,b){return cards.indexOf(cardMap[a])-cards.indexOf(cardMap[b]);});
+        var treeRoot=document.createElement('div'); treeRoot.className='tag-tree-root';
+        var appeared=new Set();
+        function buildNode(id,depth,path){
+            if(path.has(id))return null; var card=cardMap[id]; if(!card)return null;
+            appeared.add(id);
+            var item=document.createElement('div'); item.className='tag-tree-item';
+            item.dataset.depth=depth; item.style.setProperty('--tree-depth',depth);
+            var clone=card.cloneNode(true); clone.style.display='';
+            clone.id='ctree-'+id+'-'+depth+'-'+Math.random().toString(36).slice(2,6);
+            item.appendChild(clone);
+            var np=new Set(path); np.add(id);
+            var ch=childrenMap[id]||[];
+            if(ch.length){var cc=document.createElement('div'); cc.className='tag-tree-children'; ch.forEach(function(cid){var n=buildNode(cid,depth+1,np); if(n)cc.appendChild(n);}); item.appendChild(cc);}
+            return item;
+        }
+        rootIds.forEach(function(id){var n=buildNode(id,0,new Set()); if(n)treeRoot.appendChild(n);});
+        Object.keys(cardMap).forEach(function(id){if(!appeared.has(id)){var n=buildNode(id,0,new Set()); if(n)treeRoot.appendChild(n);}});
+        rows.appendChild(treeRoot);
+        if(window.htmx) htmx.process(treeRoot);
+    }
+
+    function _onCatRowsUpdated() {
+        _catSelected.clear(); _updateCatBar(); _syncCatCheckboxes();
+        initCatSortable(); updateCatOrderBadges(); applyCatView();
+    }
+
+    // ── New category form ─────────────────────────────────────────────────────
+    function resetNewCatForm() {
+        var c=document.getElementById('new-category-form'); if(!c)return;
+        c.querySelector('form').reset();
+        var iv=document.getElementById('icon-value-new-cat'); if(iv)iv.value='';
+        var ic=document.getElementById('icon-current-new-cat'); if(ic)ic.innerHTML='<span class="icon-picker-none-label">No icon</span>';
+        var ig=document.getElementById('icon-grid-new-cat');
+        if(ig){ig.querySelectorAll('.icon-picker-item').forEach(function(b){b.classList.remove('selected');}); var nb=ig.querySelector('.icon-picker-none'); if(nb) nb.classList.add('selected');}
+        var cp=document.getElementById('new-cat-color-picker'); if(cp)cp.querySelectorAll('.color-swatch').forEach(function(b){b.classList.remove('selected');});
+        var cv=document.getElementById('new-cat-color-value'); if(cv)cv.value='';
+    }
+    document.getElementById('new-category-btn').addEventListener('click', function() {
+        var f=document.getElementById('new-category-form');
+        if(f.style.display==='none'){resetNewCatForm(); f.style.display='block';} else {f.style.display='none';}
+    });
+
+    // ── View toggle ───────────────────────────────────────────────────────────
+    document.querySelectorAll('.tag-view-btn--cats').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            _catCurrentView=btn.dataset.view; localStorage.setItem('category_view',_catCurrentView); applyCatView();
+        });
+    });
+
+    // ── Selection ─────────────────────────────────────────────────────────────
+    document.getElementById('category-rows').addEventListener('change', function(e) {
+        var cb=e.target; if(!cb.classList.contains('cat-select-cb'))return;
+        var id=cb.dataset.catId;
+        if(cb.checked)_catSelected.add(id); else _catSelected.delete(id);
+        _syncCatCheckboxes(); _updateCatBar();
+    });
+    document.getElementById('cat-sel-all').addEventListener('click', function(){
+        _getAllCatIds().forEach(function(id){_catSelected.add(id);}); _syncCatCheckboxes(); _updateCatBar();
+    });
+    document.getElementById('cat-sel-deselect').addEventListener('click', function(){
+        _catSelected.clear(); _syncCatCheckboxes(); _updateCatBar();
+    });
+    document.getElementById('cat-sel-merge').addEventListener('click', function(){
+        if(_catSelected.size<2)return;
+        _catMergeTargetId=Array.from(_catSelected)[0]; _renderCatMergeDialog();
+        document.getElementById('cat-merge-dialog').showModal();
+    });
+
+    // ── Multi-merge dialog ────────────────────────────────────────────────────
+    function _getCatCardData(id){
+        var c=document.querySelector('[data-category-id="'+id+'"]');
+        if(!c)return{id:id,name:'?',color:'',icon:'',pinCount:'0',locationCount:'0'};
+        return{id:id,name:c.dataset.categoryName||'',color:c.dataset.categoryColor||'',icon:c.dataset.categoryIcon||'',pinCount:c.dataset.categoryPinCount||'0',locationCount:c.dataset.categoryLocationCount||'0'};
+    }
+    function _catMiniCardHtml(d,isTarget){
+        var cs=d.color?'background:'+d.color+'22;border-color:'+d.color+'44;':'';
+        var ics=d.color?'color:'+d.color:'';
+        var ih=d.icon?(/^[a-z_]+$/.test(d.icon)?'<i class="material-icons" style="'+ics+'">'+_escHtml(d.icon)+'</i>':'<span class="tag-icon-emoji">'+_escHtml(d.icon)+'</span>'):'<i class="material-icons tag-icon-empty">category</i>';
+        var sb=isTarget?'':'<button type="button" class="cat-merge-swap-btn" data-swap-id="'+d.id+'" title="Make this the surviving category"><i class="material-icons">swap_vert</i></button>';
+        return '<div class="cat-merge-mini-card'+(isTarget?' cat-merge-mini-card--target':'')+'" data-merge-id="'+d.id+'">'
+            +'<div class="tag-card-icon cat-merge-mini-icon" style="'+cs+'">'+ih+'</div>'
+            +'<div class="cat-merge-mini-info"><div class="cat-merge-mini-name">'+_escHtml(d.name)+'</div>'
+            +'<div class="cat-merge-mini-meta">'+d.pinCount+' pins &middot; '+d.locationCount+' locations</div></div>'+sb+'</div>';
+    }
+    function _renderCatMergeDialog(){
+        var ids=Array.from(_catSelected);
+        if(!_catMergeTargetId||!_catSelected.has(_catMergeTargetId))_catMergeTargetId=ids[0];
+        var src=ids.filter(function(id){return id!==_catMergeTargetId;});
+        document.getElementById('cat-merge-dialog-title').textContent='Merge '+ids.length+' Categories';
+        document.getElementById('cat-merge-target-card').innerHTML=_catMiniCardHtml(_getCatCardData(_catMergeTargetId),true);
+        document.getElementById('cat-merge-sources-list').innerHTML=src.map(function(id){return _catMiniCardHtml(_getCatCardData(id),false);}).join('');
+        var cb=document.getElementById('cat-merge-confirm-btn');
+        cb.innerHTML='<i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge into '+_escHtml(_getCatCardData(_catMergeTargetId).name);
+        cb.disabled=false;
+    }
+    document.getElementById('cat-merge-sources-list').addEventListener('click', function(e){
+        var btn=e.target.closest('.cat-merge-swap-btn'); if(!btn)return;
+        _catMergeTargetId=btn.dataset.swapId; _renderCatMergeDialog();
+    });
+    document.getElementById('cat-merge-confirm-btn').addEventListener('click', function(){
+        var ids=Array.from(_catSelected);
+        var src=ids.filter(function(id){return id!==_catMergeTargetId;});
+        var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> Merging…';
+        fetch('{% url "category.multi_merge" %}', {
+            method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
+            body:JSON.stringify({target_id:parseInt(_catMergeTargetId,10),source_ids:src.map(function(id){return parseInt(id,10);})}),
+        }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
+        .then(function(html){
+            document.getElementById('cat-merge-dialog').close();
+            document.getElementById('category-rows').innerHTML=html;
+            _catMergeTargetId=null; _onCatRowsUpdated(); toastr.success('Categories merged successfully.');
+        }).catch(function(err){toastr.error('Merge failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
+    });
+
+    // ── Bulk delete ───────────────────────────────────────────────────────────
+    document.getElementById('cat-sel-delete').addEventListener('click', function(){
+        var n=_catSelected.size; if(!n)return;
+        if(!confirm((n===1?'Delete 1 category?':'Delete '+n+' categories?')+'\nPins and locations will keep their other categories.'))return;
+        var ids=Array.from(_catSelected).map(function(id){return parseInt(id,10);});
+        fetch('{% url "category.bulk_delete" %}', {
+            method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
+            body:JSON.stringify({ids:ids}),
+        }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
+        .then(function(html){
+            document.getElementById('category-rows').innerHTML=html; _onCatRowsUpdated();
+            toastr.success(n===1?'1 category deleted.':n+' categories deleted.');
+        }).catch(function(err){toastr.error('Delete failed: '+err.message);});
+    });
+
+    // ── Bulk edit dialog ──────────────────────────────────────────────────────
+    function _updateCatBulkState(){
+        var iw=document.getElementById('cat-bulk-icon-wrap');
+        var cp=document.getElementById('cat-bulk-color-picker');
+        if(iw)iw.classList.toggle('cat-bulk-picker--disabled',!!document.getElementById('cat-bulk-icon-nochange').checked);
+        if(cp)cp.classList.toggle('cat-bulk-picker--disabled',!!document.getElementById('cat-bulk-color-nochange').checked);
+    }
+    window._updateCatBulkState = _updateCatBulkState;
+
+    function _openCatBulkEditDialog(){
+        var ids=Array.from(_catSelected);
+        var iSet=new Set(), cSet=new Set();
+        ids.forEach(function(id){var c=document.querySelector('[data-category-id="'+id+'"]'); if(!c)return; iSet.add(c.dataset.categoryIcon||''); cSet.add(c.dataset.categoryColor||'');});
+        var si=iSet.size===1?Array.from(iSet)[0]:null;
+        var sc=cSet.size===1?Array.from(cSet)[0]:null;
+        var inn=document.getElementById('cat-bulk-icon-nochange');
+        var iv=document.getElementById('icon-value-cat-bulk-edit');
+        var ic=document.getElementById('icon-current-cat-bulk-edit');
+        var ig=document.getElementById('icon-grid-cat-bulk-edit');
+        if(ig)ig.querySelectorAll('.icon-picker-item').forEach(function(b){b.classList.remove('selected');});
+        if(si!==null){
+            inn.checked=false; if(iv)iv.value=si;
+            if(si){if(ic)ic.innerHTML=/^[a-z_]+$/.test(si)?'<i class="material-icons icon-picker-current-mi">'+si+'</i>':'<span class="icon-picker-current-glyph">'+si+'</span>'; if(ig){var m=ig.querySelector('[data-icon="'+si+'"]'); if(m)m.classList.add('selected');}}
+            else{if(ic)ic.innerHTML='<span class="icon-picker-none-label">No icon</span>'; var nb=ig&&ig.querySelector('.icon-picker-none'); if(nb)nb.classList.add('selected');}
+        }else{inn.checked=true; if(iv)iv.value=''; if(ic)ic.innerHTML='<span class="icon-picker-none-label">No icon</span>';}
+        var cnn=document.getElementById('cat-bulk-color-nochange');
+        var cp2=document.getElementById('cat-bulk-color-picker');
+        var cv=document.getElementById('cat-bulk-color-value');
+        if(cp2)cp2.querySelectorAll('.color-swatch').forEach(function(b){b.classList.remove('selected');});
+        if(sc!==null){cnn.checked=false; if(cv)cv.value=sc; if(sc&&cp2){var sw=cp2.querySelector('[data-color="'+sc+'"]'); if(sw)sw.classList.add('selected');}}
+        else{cnn.checked=true; if(cv)cv.value='';}
+        document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb').forEach(function(cb){cb.checked=false;});
+        document.getElementById('cat-bulk-edit-title').textContent='Edit '+ids.length+' '+(ids.length===1?'Category':'Categories');
+        var cbtn=document.getElementById('cat-bulk-edit-confirm'); cbtn.disabled=false;
+        cbtn.innerHTML='<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
+        _updateCatBulkState();
+        document.getElementById('cat-bulk-edit-dialog').showModal();
+    }
+    document.getElementById('cat-sel-edit').addEventListener('click', function(){if(_catSelected.size)_openCatBulkEditDialog();});
+    document.getElementById('cat-bulk-icon-nochange').addEventListener('change', function(){
+        if(this.checked){var iv=document.getElementById('icon-value-cat-bulk-edit'); var ic=document.getElementById('icon-current-cat-bulk-edit'); var ig=document.getElementById('icon-grid-cat-bulk-edit'); if(iv)iv.value=''; if(ic)ic.innerHTML='<span class="icon-picker-none-label">No icon</span>'; if(ig){ig.querySelectorAll('.icon-picker-item').forEach(function(b){b.classList.remove('selected');}); var nb=ig.querySelector('.icon-picker-none'); if(nb)nb.classList.add('selected');}}
+        _updateCatBulkState();
+    });
+    document.getElementById('cat-bulk-color-nochange').addEventListener('change', function(){
+        if(this.checked){var cp=document.getElementById('cat-bulk-color-picker'); var cv=document.getElementById('cat-bulk-color-value'); if(cp)cp.querySelectorAll('.color-swatch').forEach(function(b){b.classList.remove('selected');}); if(cv)cv.value='';}
+        _updateCatBulkState();
+    });
+    document.getElementById('icon-grid-cat-bulk-edit').addEventListener('click', function(e){
+        if(e.target.closest('.icon-picker-item')){document.getElementById('cat-bulk-icon-nochange').checked=false; _updateCatBulkState();}
+    });
+    document.getElementById('cat-bulk-edit-confirm').addEventListener('click', function(){
+        var ids=Array.from(_catSelected).map(function(id){return parseInt(id,10);});
+        var body={ids:ids};
+        if(!document.getElementById('cat-bulk-icon-nochange').checked){var iv=document.getElementById('icon-value-cat-bulk-edit'); body.icon=iv?iv.value:'';}
+        if(!document.getElementById('cat-bulk-color-nochange').checked){var cv=document.getElementById('cat-bulk-color-value'); body.color=cv?cv.value:'';}
+        body.add_parent_ids=[];
+        document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb:checked').forEach(function(cb){body.add_parent_ids.push(parseInt(cb.value,10));});
+        var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> Saving…';
+        fetch('{% url "category.bulk_edit" %}', {
+            method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
+            body:JSON.stringify(body),
+        }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
+        .then(function(html){
+            document.getElementById('cat-bulk-edit-dialog').close();
+            document.getElementById('category-rows').innerHTML=html; _onCatRowsUpdated(); toastr.success('Categories updated.');
+        }).catch(function(err){toastr.error('Edit failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
+    });
+
+    // ── HTMX hooks ────────────────────────────────────────────────────────────
+    document.getElementById('category-rows').addEventListener('htmx:afterSwap', _onCatRowsUpdated);
+    document.body.addEventListener('htmx:afterSwap', function(e){
+        if(e.detail.target&&e.detail.target.id==='category-edit-dialog-body'){
+            var titleEl=document.getElementById('category-edit-dialog-title');
+            if(titleEl)titleEl.textContent=e.detail.target.querySelector('.category-merge-form')?'Merge Category':'Edit Category';
+            var dlg=document.getElementById('category-edit-dialog'); if(!dlg.open)dlg.showModal();
+        }
+    });
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    initCatSortable();
+    applyCatView();
+})();
+</script>
+
+{# ── Priority tab JS ───────────────────────────────────────────────────────── #}
+<script>
+(function() {
+    var _prioritySortable = null;
+
+    function _initPrioritySortable() {
+        var list = document.getElementById('priority-list');
+        if (!list) return;
+        if (_prioritySortable) { _prioritySortable.destroy(); _prioritySortable = null; }
+        _prioritySortable = new Sortable(list, {
+            handle: '.priority-drag-handle',
+            animation: 150,
+            ghostClass: 'priority-item--ghost',
+            onEnd: function() {
+                var items = Array.from(list.querySelectorAll('.priority-item[data-id]')).map(function(el, i) {
+                    el.querySelector('.priority-order-badge').textContent = i + 1;
+                    return { id: parseInt(el.dataset.id, 10) };
+                });
+                fetch('{% url "organize.priority.save" %}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                    body: JSON.stringify({ items: items }),
+                }).then(function(r) {
+                    if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); });
+                    toastr.success('Priority order saved.');
+                }).catch(function(err) { toastr.error('Save failed: ' + err.message); });
+            },
+        });
+    }
+
+    window._initPrioritySortable = _initPrioritySortable;
+
+    {% if active_tab == 'priority' %}
+    _initPrioritySortable();
+    {% endif %}
+})();
+</script>
+{% endblock %}

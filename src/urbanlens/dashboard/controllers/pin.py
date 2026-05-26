@@ -58,10 +58,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         from datetime import date
 
-        from urbanlens.dashboard.models.categories.model import Category
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import PinStatus, PinType
-        from urbanlens.dashboard.models.tags.model import COLOR_CHOICES
+        from urbanlens.dashboard.models.tags.model import COLOR_CHOICES, Tag
 
         pin = Pin.objects.select_related("location").get(uuid=kwargs["pin_uuid"])
 
@@ -104,7 +103,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "pin_type_choices": PinType.choices,
                 "detail_pin_icon_choices": detail_pin_icon_choices,
                 "color_choices": COLOR_CHOICES,
-                "all_categories": Category.objects.order_by("name"),
+                "all_categories": Tag.objects.categories().ordered(),
                 "default_map_view": profile.default_map_view,
                 "today": today.isoformat(),
                 "min_date": min_date.isoformat(),

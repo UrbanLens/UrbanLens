@@ -1,4 +1,7 @@
-"""Category controller - CRUD, hierarchy management, and pin/location membership."""
+"""Category controller - CRUD, hierarchy management, and pin/location membership.
+
+Categories are now stored as Tag rows with kind='category'.
+"""
 
 from __future__ import annotations
 
@@ -10,10 +13,9 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
-from urbanlens.dashboard.models.categories.model import Category
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.tags.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES
+from urbanlens.dashboard.models.tags.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Tag
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +27,12 @@ _CTX_BASE = {
 
 
 def _all_categories():
-    """Return all categories ordered for display with common prefetches."""
-    return Category.objects.ordered().prefetch_related("pins", "locations", "children", "children__pins")
+    """Return all category-kind tags ordered for display with common prefetches."""
+    return (
+        Tag.objects.categories()
+        .ordered()
+        .prefetch_related("categorized_pins", "categorized_locations", "children", "children__categorized_pins")
+    )
 
 
 def _rows_ctx(extra: dict | None = None) -> dict:
@@ -73,7 +79,9 @@ class CategoryCreateView(LoginRequiredMixin, View):
         order = int(request.POST.get("order", 0))
         parent_ids = request.POST.getlist("parent_ids")
 
-        category = Category.objects.create(
+        category = Tag.objects.create(
+            kind="category",
+            profile=None,
             name=name,
             description=description,
             icon=icon,
@@ -81,7 +89,7 @@ class CategoryCreateView(LoginRequiredMixin, View):
             order=order,
         )
         if parent_ids:
-            valid_parents = Category.objects.filter(id__in=parent_ids)
+            valid_parents = Tag.objects.categories().filter(id__in=parent_ids)
             category.parents.set(valid_parents)
 
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx({"new_category_id": category.id}))
@@ -100,8 +108,8 @@ class CategoryEditView(LoginRequiredMixin, View):
         Returns:
             Rendered category_edit_form.html partial.
         """
-        category = get_object_or_404(Category, id=cat_id)
-        available_parents = Category.objects.ordered().exclude(id=cat_id)
+        category = get_object_or_404(Tag, id=cat_id, kind="category")
+        available_parents = Tag.objects.categories().ordered().exclude(id=cat_id)
         parent_ids = set(category.parents.values_list("id", flat=True))
         return render(
             request,
@@ -124,7 +132,7 @@ class CategoryEditView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial.
         """
-        category = get_object_or_404(Category, id=cat_id)
+        category = get_object_or_404(Tag, id=cat_id, kind="category")
 
         name = request.POST.get("name", "").strip()
         if not name:
@@ -139,7 +147,7 @@ class CategoryEditView(LoginRequiredMixin, View):
 
         parent_ids = request.POST.getlist("parent_ids")
         if parent_ids:
-            valid_parents = Category.objects.filter(id__in=parent_ids).exclude(id=cat_id)
+            valid_parents = Tag.objects.categories().filter(id__in=parent_ids).exclude(id=cat_id)
             category.parents.set(valid_parents)
         else:
             category.parents.clear()
@@ -160,7 +168,7 @@ class CategoryDeleteView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial.
         """
-        category = get_object_or_404(Category, id=cat_id)
+        category = get_object_or_404(Tag, id=cat_id, kind="category")
         category.delete()
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx())
 
@@ -185,7 +193,7 @@ class CategoryReorderView(LoginRequiredMixin, View):
 
         total = len(cat_ids)
         for i, cat_id in enumerate(cat_ids):
-            Category.objects.filter(id=cat_id).update(order=total - i)
+            Tag.objects.filter(id=cat_id, kind="category").update(order=total - i)
 
         return JsonResponse({"ok": True})
 
@@ -226,7 +234,7 @@ class CategoryBulkDeleteView(LoginRequiredMixin, View):
         if not ids:
             return HttpResponse("No categories specified.", status=400)
 
-        Category.objects.filter(id__in=ids).delete()
+        Tag.objects.filter(id__in=ids, kind="category").delete()
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx())
 
 
@@ -261,7 +269,7 @@ class CategoryBulkEditView(LoginRequiredMixin, View):
         color = data.get("color") or None
         add_parent_ids = [int(x) for x in data.get("add_parent_ids", [])]
 
-        categories = list(Category.objects.filter(id__in=ids))
+        categories = list(Tag.objects.filter(id__in=ids, kind="category"))
         for cat in categories:
             update_fields = []
             if has_icon:
@@ -274,7 +282,7 @@ class CategoryBulkEditView(LoginRequiredMixin, View):
                 cat.save(update_fields=update_fields)
 
         if add_parent_ids:
-            valid_parents = list(Category.objects.filter(id__in=add_parent_ids))
+            valid_parents = list(Tag.objects.categories().filter(id__in=add_parent_ids))
             for cat in categories:
                 cat.parents.add(*[p for p in valid_parents if p.id != cat.id])
 
@@ -305,14 +313,14 @@ class CategoryMultiMergeView(LoginRequiredMixin, View):
         if not source_ids:
             return HttpResponse("At least one source_id is required.", status=400)
 
-        target = get_object_or_404(Category, id=target_id)
-        sources = Category.objects.filter(id__in=source_ids).exclude(id=target_id)
+        target = get_object_or_404(Tag, id=target_id, kind="category")
+        sources = Tag.objects.filter(id__in=source_ids, kind="category").exclude(id=target_id)
         if not sources.exists():
             return HttpResponse("No valid source categories.", status=400)
 
         for source in sources:
-            target.pins.add(*source.pins.all())
-            target.locations.add(*source.locations.all())
+            target.categorized_pins.add(*source.categorized_pins.all())
+            target.categorized_locations.add(*source.categorized_locations.all())
             source.delete()
 
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx())
@@ -331,8 +339,8 @@ class CategoryMergeView(LoginRequiredMixin, View):
         Returns:
             Rendered category_merge_form.html partial.
         """
-        category = get_object_or_404(Category, id=cat_id)
-        candidates = Category.objects.ordered().exclude(id=cat_id)
+        category = get_object_or_404(Tag, id=cat_id, kind="category")
+        candidates = Tag.objects.categories().ordered().exclude(id=cat_id)
         return render(
             request,
             "dashboard/partials/category_merge_form.html",
@@ -352,18 +360,18 @@ class CategoryMergeView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial.
         """
-        source = get_object_or_404(Category, id=cat_id)
+        source = get_object_or_404(Tag, id=cat_id, kind="category")
 
         target_id = request.POST.get("target_category_id", "").strip()
         if not target_id:
             return HttpResponse("Target category is required.", status=400)
 
-        target = get_object_or_404(Category, id=target_id)
+        target = get_object_or_404(Tag, id=target_id, kind="category")
         if target.id == source.id:
             return HttpResponse("Cannot merge a category into itself.", status=400)
 
-        target.pins.add(*source.pins.all())
-        target.locations.add(*source.locations.all())
+        target.categorized_pins.add(*source.categorized_pins.all())
+        target.categorized_locations.add(*source.categorized_locations.all())
         source.delete()
 
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx())
@@ -383,7 +391,7 @@ class CategoryPinMembershipView(LoginRequiredMixin, View):
             Rendered category_panel.html partial.
         """
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
-        all_categories = Category.objects.ordered()
+        all_categories = Tag.objects.categories().ordered()
         member_ids = set(pin.categories.values_list("id", flat=True))
         return render(
             request,
@@ -409,13 +417,13 @@ class CategoryPinMembershipView(LoginRequiredMixin, View):
         cat_id = request.POST.get("category_id")
         action = request.POST.get("action")
 
-        category = get_object_or_404(Category, id=cat_id)
+        category = get_object_or_404(Tag, id=cat_id, kind="category")
         if action == "add":
             pin.categories.add(category)
         elif action == "remove":
             pin.categories.remove(category)
 
-        all_categories = Category.objects.ordered()
+        all_categories = Tag.objects.categories().ordered()
         member_ids = set(pin.categories.values_list("id", flat=True))
         return render(
             request,
@@ -442,7 +450,7 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
             Rendered category_location_panel.html partial.
         """
         location = get_object_or_404(Location, uuid=location_uuid)
-        all_categories = Category.objects.ordered()
+        all_categories = Tag.objects.categories().ordered()
         member_ids = set(location.categories.values_list("id", flat=True))
         return render(
             request,
@@ -468,13 +476,13 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
         cat_id = request.POST.get("category_id")
         action = request.POST.get("action")
 
-        category = get_object_or_404(Category, id=cat_id)
+        category = get_object_or_404(Tag, id=cat_id, kind="category")
         if action == "add":
             location.categories.add(category)
         elif action == "remove":
             location.categories.remove(category)
 
-        all_categories = Category.objects.ordered()
+        all_categories = Tag.objects.categories().ordered()
         member_ids = set(location.categories.values_list("id", flat=True))
         return render(
             request,

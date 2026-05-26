@@ -9,8 +9,14 @@ from django.db.models import CASCADE, CharField, ForeignKey, ImageField, Index, 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.tags.queryset import TagManager
 
+KIND_TAG = "tag"
+KIND_CATEGORY = "category"
+KIND_CHOICES = [
+    (KIND_TAG, "Tag"),
+    (KIND_CATEGORY, "Category"),
+]
+
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.categories.model import Category
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -1392,6 +1398,8 @@ class Tag(abstract.Model):
     color = CharField(max_length=50, null=True, blank=True, choices=COLOR_CHOICES)
     icon = CharField(max_length=50, null=True, blank=True)  # emoji char or Material Icons name
     custom_icon = ImageField(upload_to="tag_icons/", null=True, blank=True)
+    # Discriminates tags from categories (and any future kinds).
+    kind = CharField(max_length=20, choices=KIND_CHOICES, default=KIND_TAG, db_index=True)
     # Higher order = checked first in the icon priority chain.
     order = IntegerField(default=0)
     # Hierarchical parents - symmetrical=False so parent→child is one direction.
@@ -1407,7 +1415,6 @@ class Tag(abstract.Model):
     if TYPE_CHECKING:
         profile_id: int | None
         pins: ManyToManyField[Pin, Pin]
-        categories: ManyToManyField[Category, Category]
 
     @classmethod
     def get_tag_and_descendants(cls, tag_id: int) -> set[int]:

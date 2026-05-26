@@ -16,8 +16,8 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel, TextChoic
 from urbanlens.dashboard.models.pin.queryset import PinManager
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.categories.model import Category
     from urbanlens.dashboard.models.reviews import Manager as ReviewManager
+    from urbanlens.dashboard.models.tags.model import Tag
 
 logger = logging.getLogger(__name__)
 
@@ -101,16 +101,16 @@ class Pin(abstract.Model):
         related_name="pins",
     )
     categories = ManyToManyField(
-        "dashboard.Category",
+        "dashboard.Tag",
         blank=True,
-        default=list,
-        related_name="pins",
+        related_name="categorized_pins",
+        limit_choices_to={"kind": "category"},
     )
     tags = ManyToManyField(
         "dashboard.Tag",
         blank=True,
-        default=list,
         related_name="pins",
+        limit_choices_to={"kind": "tag"},
     )
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
     # when the user explicitly picks a color in the dialog.
@@ -288,9 +288,9 @@ class Pin(abstract.Model):
     # ------------------------------------------------------------------
 
     def change_category(self, category_id: int) -> None:
-        from urbanlens.dashboard.models.categories.model import Category
+        from urbanlens.dashboard.models.tags.model import Tag
 
-        category = Category.objects.get(id=category_id)
+        category = Tag.objects.get(id=category_id, kind="category")
         self.categories.clear()
         self.categories.add(category)
         self.save()
@@ -341,12 +341,12 @@ class Pin(abstract.Model):
             self.add_category(category_name, save=False)
         return category_name
 
-    def add_category(self, category_name: str, save: bool = True) -> Category | None:
-        from urbanlens.dashboard.models.categories.model import Category
+    def add_category(self, category_name: str, save: bool = True) -> Tag | None:
+        from urbanlens.dashboard.models.tags.model import Tag
 
         category_name = category_name.lower()
         try:
-            category, _ = Category.objects.get_or_create(name=category_name)
+            category, _ = Tag.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
             if category:
                 self.categories.add(category)
                 if save:

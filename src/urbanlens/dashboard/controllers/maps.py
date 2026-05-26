@@ -39,7 +39,6 @@ from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.advanced_search import AdvancedSearchForm
 from urbanlens.dashboard.forms.search import SearchForm
-from urbanlens.dashboard.models.categories.model import Category
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
@@ -88,7 +87,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def get_edit_pin(self, request, pin_uuid, *args, **kwargs):
         pin = Pin.objects.get(uuid=pin_uuid)
         # Render the edit form
-        categories = Category.objects.all()
+        categories = Tag.objects.categories().ordered()
         return render(request, "dashboard/pages/map/edit_location.html", {"pin": pin, "categories": categories})
 
     def add_pin(self, request, *args, **kwargs):

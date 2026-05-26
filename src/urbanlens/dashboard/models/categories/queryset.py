@@ -1,19 +1,10 @@
-"""CategoryQuerySet and CategoryManager."""
+"""CategoryQuerySet and CategoryManager are now backed by TagQuerySet."""
 
-from django.db.models import Manager, QuerySet
+from __future__ import annotations
 
+from urbanlens.dashboard.models.tags.queryset import TagManager, TagQuerySet
 
-class CategoryQuerySet(QuerySet):
-    """Custom QuerySet for Category."""
+CategoryQuerySet = TagQuerySet
+CategoryManager = TagManager
 
-    def ordered(self) -> "CategoryQuerySet":
-        """Return categories sorted by -order then name."""
-        return self.order_by("-order", "name")
-
-    def with_icon(self) -> "CategoryQuerySet":
-        """Return only categories that have an icon set."""
-        return self.exclude(icon__isnull=True).exclude(icon="")
-
-
-class CategoryManager(Manager.from_queryset(CategoryQuerySet)):
-    """Manager for Category using CategoryQuerySet."""
+__all__ = ["CategoryManager", "CategoryQuerySet"]

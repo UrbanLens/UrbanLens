@@ -11,8 +11,8 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
-from urbanlens.dashboard.models.categories.model import Category
 from urbanlens.dashboard.models.pin.model import Pin, PinNote, PinStatus, PinType
+from urbanlens.dashboard.models.tags.model import Tag
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def _overview_context(pin: Pin) -> dict:
         "pin": pin,
         "pin_status_choices": PinStatus.choices,
         "pin_type_choices": PinType.choices,
-        "all_categories": Category.objects.order_by("name"),
+        "all_categories": Tag.objects.categories().ordered(),
         "detail_pin_icon_choices": detail_pin_icon_choices,
         "color_choices": COLOR_CHOICES,
         "security_level_choices": SecurityLevel.choices,
@@ -174,7 +174,7 @@ class PinEditView(LoginRequiredMixin, View):
             names = [n.strip().lower() for n in category_raw.split(",") if n.strip()]
             pin.categories.clear()
             for name in names:
-                cat, _ = Category.objects.get_or_create(name=name)
+                cat, _ = Tag.objects.get_or_create(name=name, kind="category", defaults={"profile": None})
                 pin.categories.add(cat)
 
         # Reload from DB so all properties reflect saved state

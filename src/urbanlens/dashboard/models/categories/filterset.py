@@ -1,37 +1,15 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    filterset.py                                                                                         *
-*        Path:    /filterset.py                                                                                        *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
+"""CategoryFilter - backed by Tag with kind='category'."""
 
 from __future__ import annotations
 
 import django_filters
 
-from urbanlens.dashboard.models.categories.model import Category
+from urbanlens.dashboard.models.tags.model import Tag
 
 
 class CategoryFilter(django_filters.FilterSet):
+    """FilterSet for Tag rows that represent categories."""
+
     class Meta:
-        model = Category
+        model = Tag
         fields = ["name"]

@@ -35,6 +35,14 @@ class TagQuerySet(abstract.QuerySet):
         """Tags that have at least one icon set (standard or custom)."""
         return self.filter(Q(custom_icon__gt="") | Q(icon__gt=""))
 
+    def tags(self) -> Self:
+        """Return only items with kind='tag'."""
+        return self.filter(kind="tag")
+
+    def categories(self) -> Self:
+        """Return only items with kind='category'."""
+        return self.filter(kind="category")
+
     def ordered(self) -> Self:
         return self.order_by("-order", "name")
 

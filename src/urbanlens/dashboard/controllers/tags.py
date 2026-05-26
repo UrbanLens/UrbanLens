@@ -15,6 +15,20 @@ from urbanlens.dashboard.models.tags.model import COLOR_CHOICES, ICON_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
+_BASE_CTX = {
+    "icon_choices": ICON_CHOICES,
+    "icon_categories": ICON_CATEGORIES,
+    "color_choices": COLOR_CHOICES,
+}
+
+
+def _rows_ctx(profile, extra: dict | None = None) -> dict:
+    tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
+    ctx = {**_BASE_CTX, "tags": tags}
+    if extra:
+        ctx.update(extra)
+    return ctx
+
 
 class TagIndexView(LoginRequiredMixin, View):
     """Show all tags visible to the current user (global + their own)."""
@@ -259,3 +273,118 @@ class TagMembershipView(LoginRequiredMixin, View):
             "all_tags": all_tags,
             "member_ids": member_ids,
         })
+
+
+class TagBulkDeleteView(LoginRequiredMixin, View):
+    """Bulk-delete user-owned tags (JSON POST). Pins keep their other tags."""
+
+    def post(self, request, *args, **kwargs):
+        """Delete the specified tags and return the refreshed rows partial.
+
+        Args:
+            request: The HTTP request with JSON body containing ids list.
+
+        Returns:
+            Rendered tag_rows.html partial.
+        """
+        try:
+            data = json.loads(request.body)
+            ids = [int(x) for x in data.get("ids", [])]
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return JsonResponse({"error": "Invalid data"}, status=400)
+
+        if not ids:
+            return HttpResponse("No tags specified.", status=400)
+
+        profile = request.user.profile
+        Tag.objects.filter(id__in=ids, profile=profile).delete()
+        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile))
+
+
+class TagBulkEditView(LoginRequiredMixin, View):
+    """Bulk-edit icon, color, and/or parents for multiple user-owned tags (JSON POST).
+
+    Key-absent = no change; null/empty string = clear; string value = set.
+    add_parent_ids is additive — existing parents are never removed.
+    """
+
+    def post(self, request, *args, **kwargs):
+        """Apply bulk edits and return the refreshed rows partial.
+
+        Args:
+            request: The HTTP request with JSON body.
+
+        Returns:
+            Rendered tag_rows.html partial.
+        """
+        try:
+            data = json.loads(request.body)
+            ids = [int(x) for x in data.get("ids", [])]
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return JsonResponse({"error": "Invalid data"}, status=400)
+
+        if not ids:
+            return HttpResponse("No tags specified.", status=400)
+
+        profile = request.user.profile
+        has_icon = "icon" in data
+        has_color = "color" in data
+        icon = data.get("icon") or None
+        color = data.get("color") or None
+        add_parent_ids = [int(x) for x in data.get("add_parent_ids", [])]
+
+        tags = list(Tag.objects.filter(id__in=ids, profile=profile))
+        for tag in tags:
+            update_fields = []
+            if has_icon:
+                tag.icon = icon
+                update_fields.append("icon")
+            if has_color:
+                tag.color = color
+                update_fields.append("color")
+            if update_fields:
+                tag.save(update_fields=update_fields)
+
+        if add_parent_ids:
+            valid_parents = list(Tag.objects.filter(id__in=add_parent_ids).visible_to(profile))
+            for tag in tags:
+                tag.parents.add(*[p for p in valid_parents if p.id != tag.id])
+
+        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile))
+
+
+class TagMultiMergeView(LoginRequiredMixin, View):
+    """Merge multiple tags into a single target (JSON POST)."""
+
+    def post(self, request, *args, **kwargs):
+        """Merge source tags into the target, then delete sources.
+
+        Args:
+            request: The HTTP request with JSON body containing target_id and source_ids.
+
+        Returns:
+            Rendered tag_rows.html partial on success, or an error response.
+        """
+        try:
+            data = json.loads(request.body)
+            target_id = int(data.get("target_id", 0))
+            source_ids = [int(x) for x in data.get("source_ids", [])]
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return JsonResponse({"error": "Invalid data"}, status=400)
+
+        if not target_id:
+            return HttpResponse("target_id is required.", status=400)
+        if not source_ids:
+            return HttpResponse("At least one source_id is required.", status=400)
+
+        profile = request.user.profile
+        target = get_object_or_404(Tag.objects.visible_to(profile), id=target_id)
+        sources = Tag.objects.filter(id__in=source_ids, profile=profile).exclude(id=target_id)
+        if not sources.exists():
+            return HttpResponse("No valid source tags.", status=400)
+
+        for source in sources:
+            target.pins.add(*source.pins.all())
+            source.delete()
+
+        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile))

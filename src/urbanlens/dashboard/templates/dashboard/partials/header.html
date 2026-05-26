@@ -11,9 +11,8 @@
         <ul class="app-nav-links">
             <li><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
             {% if user.is_authenticated %}
-            <li><a href="{% url 'tag.index' %}" class="app-nav-link">Tags</a></li>
-            <li><a href="{% url 'category.index' %}" class="app-nav-link">Categories</a></li>
-            <li><a href="{% url 'trips.list' %}" class="app-nav-link">Trips</a></li>
+            <li><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
+            <li><a href="{% url 'trips.list' %}" class="app-nav-link">Plan</a></li>
             {% endif %}
         </ul>
 

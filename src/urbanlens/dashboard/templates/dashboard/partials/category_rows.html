@@ -6,8 +6,8 @@
      data-category-color="{{ category.color|default:'' }}"
      data-category-icon="{{ category.icon|default:'' }}"
      data-category-desc="{{ category.description|default:'' }}"
-     data-category-pin-count="{{ category.pins.count }}"
-     data-category-location-count="{{ category.locations.count }}"
+     data-category-pin-count="{{ category.categorized_pins.count }}"
+     data-category-location-count="{{ category.categorized_locations.count }}"
      data-category-parents="{% for p in category.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
 
     <div class="tag-card-view" id="cat-view-{{ category.id }}">
@@ -41,7 +41,7 @@
             <div class="tag-card-meta">
                 <span class="tag-stat" title="Pins with this category">
                     <i class="material-icons">push_pin</i>
-                    {{ category.pins.count }}
+                    {{ category.categorized_pins.count }}
                 </span>
                 {% with child_count=category.children.count %}
                 {% if child_count %}

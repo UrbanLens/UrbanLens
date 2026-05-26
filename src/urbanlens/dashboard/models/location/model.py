@@ -18,7 +18,8 @@ from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.categories.model import Category
+    from urbanlens.dashboard.models.tags.model import Tag
+
 
 # ~50 m radius expressed in degrees (at mid-latitudes). Used as the default
 # bounding box when a new Location is created without an explicit boundary.
@@ -89,16 +90,16 @@ class Location(abstract.AddressableMixin, abstract.Model):
     # Shared taxonomy - these represent the real-world place's type, not a user's classification.
     # Users apply their own categories/tags via the Pin's M2M fields.
     categories = ManyToManyField(
-        "dashboard.Category",
+        "dashboard.Tag",
         blank=True,
-        default=list,
-        related_name="locations",
+        related_name="categorized_locations",
+        limit_choices_to={"kind": "category"},
     )
     tags = ManyToManyField(
         "dashboard.Tag",
         blank=True,
-        default=list,
         related_name="locations",
+        limit_choices_to={"kind": "tag"},
     )
 
     objects = LocationManager()
@@ -137,9 +138,9 @@ class Location(abstract.AddressableMixin, abstract.Model):
         return bool(self.place_name) and self.place_name != "No Information Available"
 
     def change_category(self, category_id: int) -> None:
-        from urbanlens.dashboard.models.categories.model import Category
+        from urbanlens.dashboard.models.tags.model import Tag
 
-        category = Category.objects.get(id=category_id)
+        category = Tag.objects.get(id=category_id, kind="category")
         self.categories.clear()
         self.categories.add(category)
         self.save()
@@ -179,12 +180,12 @@ class Location(abstract.AddressableMixin, abstract.Model):
             self.add_category(category_name, save=False)
         return category_name
 
-    def add_category(self, category_name: str, save: bool = True) -> Category | None:
-        from urbanlens.dashboard.models.categories.model import Category
+    def add_category(self, category_name: str, save: bool = True) -> Tag | None:
+        from urbanlens.dashboard.models.tags.model import Tag
 
         category_name = category_name.lower()
         try:
-            category, _created = Category.objects.get_or_create(name=category_name)
+            category, _created = Tag.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
             if category:
                 self.categories.add(category)
                 if save:

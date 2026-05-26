@@ -36,7 +36,7 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import aliases, campus, categories, detail_pins, friendship, location_wiki, maps, markup, pin, pin_edit, settings, tags, trip, userprofile, visits
+from urbanlens.dashboard.controllers import aliases, campus, categories, detail_pins, friendship, location_wiki, maps, markup, organize, pin, pin_edit, settings, tags, trip, userprofile, visits
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -272,6 +272,9 @@ urlpatterns = [
                 path("<int:tag_id>/merge/", tags.TagMergeView.as_view(), name="tag.merge"),
                 path("rows/", tags.TagRowsView.as_view(), name="tag.rows"),
                 path("reorder/", tags.TagReorderView.as_view(), name="tag.reorder"),
+                path("bulk-delete/", tags.TagBulkDeleteView.as_view(), name="tag.bulk_delete"),
+                path("bulk-edit/", tags.TagBulkEditView.as_view(), name="tag.bulk_edit"),
+                path("multi-merge/", tags.TagMultiMergeView.as_view(), name="tag.multi_merge"),
                 path("pin/<uuid:pin_uuid>/", tags.TagMembershipView.as_view(), name="tag.membership"),
             ],
         ),
@@ -416,6 +419,15 @@ urlpatterns = [
                 path("reorder/", categories.CategoryReorderView.as_view(), name="category.reorder"),
                 path("pin/<uuid:pin_uuid>/", categories.CategoryPinMembershipView.as_view(), name="category.pin"),
                 path("location/<uuid:location_uuid>/", categories.CategoryLocationMembershipView.as_view(), name="category.location"),
+            ],
+        ),
+    ),
+    path(
+        "organize/",
+        include(
+            [
+                path("", organize.OrganizeIndexView.as_view(), name="organize.index"),
+                path("priority/save/", organize.OrganizePrioritySaveView.as_view(), name="organize.priority.save"),
             ],
         ),
     ),

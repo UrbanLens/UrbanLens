@@ -13,6 +13,10 @@
     {# ── View mode ────────────────────────────────────────────────────── #}
     <div class="tag-card-view" id="tag-view-{{ tag.id }}">
         {% if tag.profile %}
+        <label class="cat-select-wrap" title="Select">
+            <input type="checkbox" class="tag-select-cb" data-tag-id="{{ tag.id }}">
+            <span class="cat-select-check"></span>
+        </label>
         <div class="tag-drag-handle" title="Drag to reorder">
             <i class="material-icons">drag_indicator</i>
         </div>

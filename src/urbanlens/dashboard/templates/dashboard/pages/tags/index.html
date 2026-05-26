@@ -27,6 +27,35 @@
         </div>
     </div>
 
+    {# ── Selection action bar ─────────────────────────────────────────────────── #}
+    <div id="tag-sel-bar" class="cat-sel-bar">
+        <div class="cat-sel-bar-left">
+            <span id="tag-sel-count" class="cat-sel-count" hidden></span>
+        </div>
+        <div class="cat-sel-bar-actions">
+            <button type="button" id="tag-sel-all" class="cat-sel-btn">
+                <i class="material-icons">select_all</i>
+                Select All
+            </button>
+            <button type="button" id="tag-sel-deselect" class="cat-sel-btn" disabled>
+                <i class="material-icons">deselect</i>
+                Deselect All
+            </button>
+            <button type="button" id="tag-sel-edit" class="cat-sel-btn cat-sel-edit-btn" disabled>
+                <i class="material-icons">edit</i>
+                Edit
+            </button>
+            <button type="button" id="tag-sel-delete" class="cat-sel-btn cat-sel-delete-btn" disabled>
+                <i class="material-icons">delete</i>
+                Delete
+            </button>
+            <button type="button" id="tag-sel-merge" class="cat-sel-merge-btn" disabled>
+                <i class="material-icons">merge</i>
+                Merge
+            </button>
+        </div>
+    </div>
+
     {# ── Create form (hidden by default) ─────────────────────────────────────── #}
     <div class="tag-create-card" id="new-tag-form" style="display:none;">
         <form hx-post="{% url 'tag.create' %}"
@@ -139,6 +168,134 @@
     </div>
     <div id="tag-edit-dialog-body" class="tag-edit-dialog-body"></div>
 </dialog>
+
+{# ── Multi-merge dialog ────────────────────────────────────────────────────── #}
+<dialog id="tag-merge-dialog" class="cat-merge-dialog">
+    <div class="dialog-header">
+        <span id="tag-merge-dialog-title">Merge Tags</span>
+        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div class="cat-merge-dialog-body">
+        <div class="cat-merge-section">
+            <div class="cat-merge-section-label">
+                <i class="material-icons">check_circle</i>
+                Surviving tag
+            </div>
+            <div id="tag-merge-target-card" class="cat-merge-target-card"></div>
+        </div>
+
+        <div class="cat-merge-divider">
+            <i class="material-icons">merge</i>
+            <span>Merge these into it</span>
+        </div>
+
+        <div class="cat-merge-section">
+            <div class="cat-merge-section-label">
+                <i class="material-icons">delete_sweep</i>
+                Will be deleted after merge
+                <span class="cat-merge-hint">— click <i class="material-icons" style="font-size:.85rem;vertical-align:middle">swap_vert</i> to swap</span>
+            </div>
+            <div id="tag-merge-sources-list" class="cat-merge-sources-list"></div>
+        </div>
+
+        <p class="cat-merge-warning">
+            <i class="material-icons">warning</i>
+            All pins will be transferred to the surviving tag. This cannot be undone.
+        </p>
+    </div>
+    <div class="cat-merge-dialog-footer">
+        <button type="button" id="tag-merge-confirm-btn" class="btn-primary">
+            <i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i>
+            Merge
+        </button>
+        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>
+
+{# ── Bulk-edit dialog ──────────────────────────────────────────────────────── #}
+<dialog id="tag-bulk-edit-dialog" class="cat-bulk-edit-dialog">
+    <div class="dialog-header">
+        <span id="tag-bulk-edit-title">Edit Tags</span>
+        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div class="cat-bulk-edit-body">
+
+        {# Icon #}
+        <div class="cat-bulk-field">
+            <label class="form-label">Icon</label>
+            <div class="icon-picker-wrap" id="tag-bulk-icon-wrap">
+                {% with picker_id="tag-bulk-edit" current_icon="" field_name="bulk_icon" %}
+                {% include 'dashboard/partials/_icon_picker.html' %}
+                {% endwith %}
+            </div>
+            <label class="cat-bulk-nochange-label">
+                <input type="checkbox" id="tag-bulk-icon-nochange" checked>
+                <span>No change — leave icon unchanged</span>
+            </label>
+        </div>
+
+        {# Color #}
+        <div class="cat-bulk-field">
+            <label class="form-label">Color</label>
+            <div class="color-picker" id="tag-bulk-color-picker">
+                <input type="hidden" id="tag-bulk-color-value">
+                {% for hex, label in color_choices %}
+                <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}"
+                        style="background:{{ hex }};"
+                        onclick="pickColor('tag-bulk-color-picker','tag-bulk-color-value','{{ hex }}',this); document.getElementById('tag-bulk-color-nochange').checked=false; _updateTagBulkPickerState();">
+                </button>
+                {% endfor %}
+                <button type="button" class="color-swatch color-clear" title="No color"
+                        onclick="pickColor('tag-bulk-color-picker','tag-bulk-color-value','',this); document.getElementById('tag-bulk-color-nochange').checked=false; _updateTagBulkPickerState();">
+                    <i class="material-icons" style="font-size:1rem;">block</i>
+                </button>
+            </div>
+            <label class="cat-bulk-nochange-label">
+                <input type="checkbox" id="tag-bulk-color-nochange" checked>
+                <span>No change — leave color unchanged</span>
+            </label>
+        </div>
+
+        {# Parent tags — additive only #}
+        <div class="cat-bulk-field">
+            <label class="form-label">Add parent tags</label>
+            <p class="cat-bulk-parents-hint">Checked tags will be <strong>added</strong> as parents. Existing parents are not removed.</p>
+            <input type="text" class="form-input tag-parent-search"
+                   placeholder="Search tags…"
+                   oninput="filterParentOptions(this, 'tag-bulk-parent-select')"
+                   autocomplete="off">
+            <div class="tag-parent-select" id="tag-bulk-parent-select">
+                {% for t in tags %}
+                <label class="tag-parent-option">
+                    <input type="checkbox" class="tag-bulk-parent-cb" value="{{ t.id }}">
+                    {% if t.custom_icon %}<img src="{{ t.custom_icon.url }}" class="tag-parent-icon-img" alt="">
+                    {% elif t.icon %}
+                        {% if t.icon|is_material_icon %}
+                        <i class="material-icons" {% if t.color %}style="color:{{ t.color }}"{% endif %}>{{ t.icon }}</i>
+                        {% else %}
+                        <span>{{ t.icon }}</span>
+                        {% endif %}
+                    {% endif %}
+                    {{ t.name }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+    <div class="cat-bulk-edit-footer">
+        <button type="button" id="tag-bulk-edit-confirm" class="btn-primary">
+            <i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i>
+            Apply Changes
+        </button>
+        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>
+
 {% endblock %}
 
 {% block scripts %}
@@ -349,7 +506,7 @@ function initSortable() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)[1] || '',
+                    'X-CSRFToken': csrftoken,
                 },
                 body: JSON.stringify({ tag_ids: ids }),
             })
@@ -361,12 +518,17 @@ function initSortable() {
 
 initSortable();
 
-// Re-init after HTMX swaps tag-rows content
-document.getElementById('tag-rows').addEventListener('htmx:afterSwap', function() {
+function _onTagRowsUpdated() {
+    _tagSelected.clear();
+    _updateTagBar();
+    _syncTagCheckboxes();
     initSortable();
     updateOrderBadges();
     applyCurrentView();
-});
+}
+
+// Re-init after HTMX swaps tag-rows content
+document.getElementById('tag-rows').addEventListener('htmx:afterSwap', _onTagRowsUpdated);
 
 // Open edit/merge dialog after its body is populated.
 // Global listener works for all views including tree-view clones.
@@ -527,5 +689,352 @@ document.querySelectorAll('.tag-view-btn').forEach(function(btn) {
 
 // Apply on first load
 applyCurrentView();
+
+// ── Multi-select ───────────────────────────────────────────────────────────────
+var _tagSelected = new Set();
+
+function _getAllTagIds() {
+    var seen = new Set();
+    document.querySelectorAll('#tag-rows .tag-card[data-tag-id]').forEach(function(c) {
+        if (c.querySelector('.tag-select-cb')) seen.add(c.dataset.tagId);
+    });
+    return Array.from(seen);
+}
+
+function _syncTagCheckboxes() {
+    document.querySelectorAll('.tag-select-cb').forEach(function(cb) {
+        cb.checked = _tagSelected.has(cb.dataset.tagId);
+    });
+    document.querySelectorAll('.tag-card[data-tag-id]').forEach(function(card) {
+        card.classList.toggle('tag-card--selected', _tagSelected.has(card.dataset.tagId));
+    });
+}
+
+function _updateTagBar() {
+    var n = _tagSelected.size;
+    var bar = document.getElementById('tag-sel-bar');
+    var countEl = document.getElementById('tag-sel-count');
+    var deselectBtn = document.getElementById('tag-sel-deselect');
+    var editBtn = document.getElementById('tag-sel-edit');
+    var deleteBtn = document.getElementById('tag-sel-delete');
+    var mergeBtn = document.getElementById('tag-sel-merge');
+    if (n > 0) {
+        bar.classList.add('cat-sel-bar--active');
+        countEl.textContent = n === 1 ? '1 selected' : n + ' selected';
+        countEl.hidden = false;
+        deselectBtn.disabled = false;
+        editBtn.disabled = false;
+        deleteBtn.disabled = false;
+        mergeBtn.disabled = n < 2;
+    } else {
+        bar.classList.remove('cat-sel-bar--active');
+        countEl.hidden = true;
+        deselectBtn.disabled = true;
+        editBtn.disabled = true;
+        deleteBtn.disabled = true;
+        mergeBtn.disabled = true;
+    }
+}
+
+// Checkbox change delegation — works for original cards and tree-view clones
+document.getElementById('tag-rows').addEventListener('change', function(e) {
+    var cb = e.target;
+    if (!cb.classList.contains('tag-select-cb')) return;
+    var id = cb.dataset.tagId;
+    if (cb.checked) _tagSelected.add(id);
+    else _tagSelected.delete(id);
+    _syncTagCheckboxes();
+    _updateTagBar();
+});
+
+document.getElementById('tag-sel-all').addEventListener('click', function() {
+    _getAllTagIds().forEach(function(id) { _tagSelected.add(id); });
+    _syncTagCheckboxes();
+    _updateTagBar();
+});
+
+document.getElementById('tag-sel-deselect').addEventListener('click', function() {
+    _tagSelected.clear();
+    _syncTagCheckboxes();
+    _updateTagBar();
+});
+
+document.getElementById('tag-sel-merge').addEventListener('click', function() {
+    if (_tagSelected.size < 2) return;
+    _tagMergeTargetId = Array.from(_tagSelected)[0];
+    _renderTagMergeDialog();
+    document.getElementById('tag-merge-dialog').showModal();
+});
+
+// ── Multi-merge dialog ─────────────────────────────────────────────────────────
+var _tagMergeTargetId = null;
+
+function _escHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function _getTagCardData(id) {
+    var card = document.querySelector('[data-tag-id="' + id + '"]');
+    if (!card) return { id: id, name: '?', color: '', icon: '', pinCount: '0', customIcon: '' };
+    return {
+        id: id,
+        name: card.dataset.tagName || '',
+        color: card.dataset.tagColor || '',
+        icon: card.dataset.tagIcon || '',
+        pinCount: card.dataset.tagPinCount || '0',
+        customIcon: card.dataset.tagCustomIcon || '',
+    };
+}
+
+function _tagMiniCardHtml(data, isTarget) {
+    var colorStyle = data.color ? 'background:' + data.color + '22;border-color:' + data.color + '44;' : '';
+    var iconColorStyle = data.color ? 'color:' + data.color : '';
+    var iconHtml;
+    if (data.customIcon) {
+        iconHtml = '<img src="' + _escHtml(data.customIcon) + '" style="width:24px;height:24px;object-fit:cover;border-radius:4px;" alt="">';
+    } else if (data.icon) {
+        iconHtml = /^[a-z_]+$/.test(data.icon)
+            ? '<i class="material-icons" style="' + iconColorStyle + '">' + _escHtml(data.icon) + '</i>'
+            : '<span class="tag-icon-emoji">' + _escHtml(data.icon) + '</span>';
+    } else {
+        iconHtml = '<i class="material-icons tag-icon-empty">label</i>';
+    }
+    var swapBtn = isTarget ? '' :
+        '<button type="button" class="cat-merge-swap-btn" data-swap-id="' + data.id + '" title="Make this the surviving tag">'
+        + '<i class="material-icons">swap_vert</i></button>';
+    return '<div class="cat-merge-mini-card' + (isTarget ? ' cat-merge-mini-card--target' : '') + '" data-merge-id="' + data.id + '">'
+        + '<div class="tag-card-icon cat-merge-mini-icon" style="' + colorStyle + '">' + iconHtml + '</div>'
+        + '<div class="cat-merge-mini-info">'
+        + '<div class="cat-merge-mini-name">' + _escHtml(data.name) + '</div>'
+        + '<div class="cat-merge-mini-meta">' + data.pinCount + ' pins</div>'
+        + '</div>' + swapBtn + '</div>';
+}
+
+function _renderTagMergeDialog() {
+    var ids = Array.from(_tagSelected);
+    if (!_tagMergeTargetId || !_tagSelected.has(_tagMergeTargetId)) _tagMergeTargetId = ids[0];
+    var sourceIds = ids.filter(function(id) { return id !== _tagMergeTargetId; });
+    var targetData = _getTagCardData(_tagMergeTargetId);
+    document.getElementById('tag-merge-dialog-title').textContent = 'Merge ' + ids.length + ' Tags';
+    document.getElementById('tag-merge-target-card').innerHTML = _tagMiniCardHtml(targetData, true);
+    document.getElementById('tag-merge-sources-list').innerHTML = sourceIds.map(function(id) {
+        return _tagMiniCardHtml(_getTagCardData(id), false);
+    }).join('');
+    var confirmBtn = document.getElementById('tag-merge-confirm-btn');
+    confirmBtn.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge into ' + _escHtml(targetData.name);
+    confirmBtn.disabled = false;
+}
+
+document.getElementById('tag-merge-sources-list').addEventListener('click', function(e) {
+    var btn = e.target.closest('.cat-merge-swap-btn');
+    if (!btn) return;
+    _tagMergeTargetId = btn.dataset.swapId;
+    _renderTagMergeDialog();
+});
+
+document.getElementById('tag-merge-confirm-btn').addEventListener('click', function() {
+    var ids = Array.from(_tagSelected);
+    var sourceIds = ids.filter(function(id) { return id !== _tagMergeTargetId; });
+    var btn = this;
+    var savedHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging…';
+    fetch('{% url "tag.multi_merge" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+        body: JSON.stringify({
+            target_id: parseInt(_tagMergeTargetId, 10),
+            source_ids: sourceIds.map(function(id) { return parseInt(id, 10); }),
+        }),
+    })
+    .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); });
+        return r.text();
+    })
+    .then(function(html) {
+        document.getElementById('tag-merge-dialog').close();
+        document.getElementById('tag-rows').innerHTML = html;
+        _tagMergeTargetId = null;
+        _onTagRowsUpdated();
+        toastr.success('Tags merged successfully.');
+    })
+    .catch(function(err) {
+        toastr.error('Merge failed: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = savedHtml;
+    });
+});
+
+// ── Bulk delete ────────────────────────────────────────────────────────────────
+document.getElementById('tag-sel-delete').addEventListener('click', function() {
+    var n = _tagSelected.size;
+    if (n === 0) return;
+    var msg = (n === 1 ? 'Delete 1 tag?' : 'Delete ' + n + ' tags?') + '\nPins will keep their other tags.';
+    if (!confirm(msg)) return;
+    var ids = Array.from(_tagSelected).map(function(id) { return parseInt(id, 10); });
+    fetch('{% url "tag.bulk_delete" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+        body: JSON.stringify({ ids: ids }),
+    })
+    .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); });
+        return r.text();
+    })
+    .then(function(html) {
+        document.getElementById('tag-rows').innerHTML = html;
+        _onTagRowsUpdated();
+        toastr.success(n === 1 ? '1 tag deleted.' : n + ' tags deleted.');
+    })
+    .catch(function(err) { toastr.error('Delete failed: ' + err.message); });
+});
+
+// ── Bulk edit dialog ───────────────────────────────────────────────────────────
+function _updateTagBulkPickerState() {
+    var iconNochange = document.getElementById('tag-bulk-icon-nochange');
+    var colorNochange = document.getElementById('tag-bulk-color-nochange');
+    var iconWrap = document.getElementById('tag-bulk-icon-wrap');
+    var colorPicker = document.getElementById('tag-bulk-color-picker');
+    if (iconWrap) iconWrap.classList.toggle('cat-bulk-picker--disabled', !!iconNochange.checked);
+    if (colorPicker) colorPicker.classList.toggle('cat-bulk-picker--disabled', !!colorNochange.checked);
+}
+
+function _openTagBulkEditDialog() {
+    var ids = Array.from(_tagSelected);
+    var iconSet = new Set();
+    var colorSet = new Set();
+    ids.forEach(function(id) {
+        var card = document.querySelector('[data-tag-id="' + id + '"]');
+        if (!card) return;
+        iconSet.add(card.dataset.tagIcon || '');
+        colorSet.add(card.dataset.tagColor || '');
+    });
+    var sharedIcon = iconSet.size === 1 ? Array.from(iconSet)[0] : null;
+    var sharedColor = colorSet.size === 1 ? Array.from(colorSet)[0] : null;
+
+    var iconNochange = document.getElementById('tag-bulk-icon-nochange');
+    var iconValue = document.getElementById('icon-value-tag-bulk-edit');
+    var iconCurrent = document.getElementById('icon-current-tag-bulk-edit');
+    var iconGrid = document.getElementById('icon-grid-tag-bulk-edit');
+    if (iconGrid) iconGrid.querySelectorAll('.icon-picker-item').forEach(function(b) { b.classList.remove('selected'); });
+
+    if (sharedIcon !== null) {
+        iconNochange.checked = false;
+        if (iconValue) iconValue.value = sharedIcon;
+        if (sharedIcon) {
+            if (iconCurrent) iconCurrent.innerHTML = /^[a-z_]+$/.test(sharedIcon)
+                ? '<i class="material-icons icon-picker-current-mi">' + sharedIcon + '</i>'
+                : '<span class="icon-picker-current-glyph">' + sharedIcon + '</span>';
+            if (iconGrid) { var mi = iconGrid.querySelector('[data-icon="' + sharedIcon + '"]'); if (mi) mi.classList.add('selected'); }
+        } else {
+            if (iconCurrent) iconCurrent.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+            var nb = iconGrid && iconGrid.querySelector('.icon-picker-none'); if (nb) nb.classList.add('selected');
+        }
+    } else {
+        iconNochange.checked = true;
+        if (iconValue) iconValue.value = '';
+        if (iconCurrent) iconCurrent.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+        var nb2 = iconGrid && iconGrid.querySelector('.icon-picker-none'); if (nb2) nb2.classList.add('selected');
+    }
+
+    var colorNochange = document.getElementById('tag-bulk-color-nochange');
+    var colorPicker = document.getElementById('tag-bulk-color-picker');
+    var colorValue = document.getElementById('tag-bulk-color-value');
+    if (colorPicker) colorPicker.querySelectorAll('.color-swatch').forEach(function(b) { b.classList.remove('selected'); });
+    if (sharedColor !== null) {
+        colorNochange.checked = false;
+        if (colorValue) colorValue.value = sharedColor;
+        if (sharedColor && colorPicker) { var sw = colorPicker.querySelector('[data-color="' + sharedColor + '"]'); if (sw) sw.classList.add('selected'); }
+    } else {
+        colorNochange.checked = true;
+        if (colorValue) colorValue.value = '';
+    }
+
+    document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb').forEach(function(cb) { cb.checked = false; });
+    document.getElementById('tag-bulk-edit-title').textContent = 'Edit ' + ids.length + ' ' + (ids.length === 1 ? 'Tag' : 'Tags');
+    var confirmBtn = document.getElementById('tag-bulk-edit-confirm');
+    confirmBtn.disabled = false;
+    confirmBtn.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
+    _updateTagBulkPickerState();
+    document.getElementById('tag-bulk-edit-dialog').showModal();
+}
+
+document.getElementById('tag-sel-edit').addEventListener('click', function() {
+    if (_tagSelected.size === 0) return;
+    _openTagBulkEditDialog();
+});
+
+document.getElementById('tag-bulk-icon-nochange').addEventListener('change', function() {
+    if (this.checked) {
+        var iconValue = document.getElementById('icon-value-tag-bulk-edit');
+        var iconCurrent = document.getElementById('icon-current-tag-bulk-edit');
+        var iconGrid = document.getElementById('icon-grid-tag-bulk-edit');
+        if (iconValue) iconValue.value = '';
+        if (iconCurrent) iconCurrent.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+        if (iconGrid) {
+            iconGrid.querySelectorAll('.icon-picker-item').forEach(function(b) { b.classList.remove('selected'); });
+            var nb = iconGrid.querySelector('.icon-picker-none'); if (nb) nb.classList.add('selected');
+        }
+    }
+    _updateTagBulkPickerState();
+});
+
+document.getElementById('tag-bulk-color-nochange').addEventListener('change', function() {
+    if (this.checked) {
+        var cp = document.getElementById('tag-bulk-color-picker');
+        var cv = document.getElementById('tag-bulk-color-value');
+        if (cp) cp.querySelectorAll('.color-swatch').forEach(function(b) { b.classList.remove('selected'); });
+        if (cv) cv.value = '';
+    }
+    _updateTagBulkPickerState();
+});
+
+document.getElementById('icon-grid-tag-bulk-edit').addEventListener('click', function(e) {
+    if (e.target.closest('.icon-picker-item')) {
+        document.getElementById('tag-bulk-icon-nochange').checked = false;
+        _updateTagBulkPickerState();
+    }
+});
+
+document.getElementById('tag-bulk-edit-confirm').addEventListener('click', function() {
+    var ids = Array.from(_tagSelected).map(function(id) { return parseInt(id, 10); });
+    var body = { ids: ids };
+    if (!document.getElementById('tag-bulk-icon-nochange').checked) {
+        var iv = document.getElementById('icon-value-tag-bulk-edit');
+        body.icon = iv ? iv.value : '';
+    }
+    if (!document.getElementById('tag-bulk-color-nochange').checked) {
+        var cv = document.getElementById('tag-bulk-color-value');
+        body.color = cv ? cv.value : '';
+    }
+    body.add_parent_ids = [];
+    document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb:checked').forEach(function(cb) {
+        body.add_parent_ids.push(parseInt(cb.value, 10));
+    });
+    var btn = this;
+    var savedHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="cat-merge-spinner"></span> Saving…';
+    fetch('{% url "tag.bulk_edit" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+        body: JSON.stringify(body),
+    })
+    .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); });
+        return r.text();
+    })
+    .then(function(html) {
+        document.getElementById('tag-bulk-edit-dialog').close();
+        document.getElementById('tag-rows').innerHTML = html;
+        _onTagRowsUpdated();
+        toastr.success('Tags updated.');
+    })
+    .catch(function(err) {
+        toastr.error('Edit failed: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = savedHtml;
+    });
+});
 </script>
 {% endblock %}
