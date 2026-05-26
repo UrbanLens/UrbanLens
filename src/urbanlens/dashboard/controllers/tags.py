@@ -8,6 +8,7 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.pin.model import Pin
@@ -111,6 +112,9 @@ class TagEditView(LoginRequiredMixin, View):
         if not name:
             return HttpResponse("Name is required.", status=400)
 
+        new_kind = request.POST.get("kind", "tag")
+        kind_changed = new_kind != tag.kind
+
         tag.name = name
         tag.description = request.POST.get("description", "").strip() or None
         tag.icon = request.POST.get("icon") or None
@@ -123,15 +127,38 @@ class TagEditView(LoginRequiredMixin, View):
         elif request.POST.get("clear_custom_icon"):
             tag.custom_icon = None
 
+        if kind_changed and new_kind == "category":
+            # Migrate tag → category: move pin.tags → pin.categories and
+            # location.tags → location.categories, then make it a global category.
+            from urbanlens.dashboard.models.location.model import Location
+            from urbanlens.dashboard.models.pin.model import Pin
+            for pin in Pin.objects.filter(tags=tag):
+                pin.categories.add(tag)
+                pin.tags.remove(tag)
+            for loc in Location.objects.filter(tags=tag):
+                loc.categories.add(tag)
+                loc.tags.remove(tag)
+            tag.kind = "category"
+            tag.profile = None
+
         tag.save()
 
-        parent_ids = request.POST.getlist("parent_ids")
         profile = request.user.profile
-        if parent_ids:
-            valid_parents = Tag.objects.filter(id__in=parent_ids).visible_to(profile).exclude(id=tag_id)
-            tag.parents.set(valid_parents)
-        else:
+        if kind_changed:
+            # Parent IDs from the form belong to the old kind — clear and let the user re-set them.
             tag.parents.clear()
+        else:
+            parent_ids = request.POST.getlist("parent_ids")
+            if parent_ids:
+                valid_parents = Tag.objects.filter(id__in=parent_ids).visible_to(profile).exclude(id=tag_id)
+                tag.parents.set(valid_parents)
+            else:
+                tag.parents.clear()
+
+        if kind_changed and new_kind == "category":
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = reverse("organize.index") + "?tab=categories"
+            return response
 
         tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
         return render(request, "dashboard/partials/tag_rows.html", {

@@ -11,6 +11,7 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.location.model import Location
@@ -130,7 +131,7 @@ class CategoryEditView(LoginRequiredMixin, View):
             cat_id: The category PK.
 
         Returns:
-            Rendered category_rows.html partial.
+            Rendered category_rows.html partial, or an HX-Redirect on kind conversion.
         """
         category = get_object_or_404(Tag, id=cat_id, kind="category")
 
@@ -138,19 +139,45 @@ class CategoryEditView(LoginRequiredMixin, View):
         if not name:
             return HttpResponse("Name is required.", status=400)
 
+        new_kind = request.POST.get("kind", "category")
+        kind_changed = new_kind != category.kind
+
         category.name = name
         category.description = request.POST.get("description", "").strip() or None
         category.icon = request.POST.get("icon") or None
         category.color = request.POST.get("color") or None
         category.order = int(request.POST.get("order", category.order))
+
+        if kind_changed and new_kind == "tag":
+            # Migrate category → tag: move pin.categories → pin.tags and
+            # location.categories → location.tags.
+            profile = request.user.profile
+            for pin in Pin.objects.filter(categories=category):
+                pin.tags.add(category)
+                pin.categories.remove(category)
+            for loc in Location.objects.filter(categories=category):
+                loc.tags.add(category)
+                loc.categories.remove(category)
+            category.kind = "tag"
+            category.profile = profile
+
         category.save()
 
-        parent_ids = request.POST.getlist("parent_ids")
-        if parent_ids:
-            valid_parents = Tag.objects.categories().filter(id__in=parent_ids).exclude(id=cat_id)
-            category.parents.set(valid_parents)
-        else:
+        if kind_changed:
+            # Parent IDs from the form belong to the old kind — clear and let the user re-set them.
             category.parents.clear()
+        else:
+            parent_ids = request.POST.getlist("parent_ids")
+            if parent_ids:
+                valid_parents = Tag.objects.categories().filter(id__in=parent_ids).exclude(id=cat_id)
+                category.parents.set(valid_parents)
+            else:
+                category.parents.clear()
+
+        if kind_changed and new_kind == "tag":
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = reverse("organize.index") + "?tab=tags"
+            return response
 
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx())
 

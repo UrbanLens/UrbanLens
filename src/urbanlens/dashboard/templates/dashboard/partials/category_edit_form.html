@@ -6,6 +6,21 @@
       hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); toastr.success('Category saved.'); }">
     {% csrf_token %}
 
+    <div class="form-field" style="margin-bottom:1rem;">
+        <label class="form-label">Type</label>
+        <div class="kind-toggle">
+            <label class="kind-toggle-option">
+                <input type="radio" name="kind" value="tag" {% if category.kind == 'tag' %}checked{% endif %}>
+                <span><i class="material-icons">label</i> Tag</span>
+            </label>
+            <label class="kind-toggle-option">
+                <input type="radio" name="kind" value="category" {% if category.kind == 'category' %}checked{% endif %}>
+                <span><i class="material-icons">category</i> Category</span>
+            </label>
+        </div>
+        <p class="form-hint">Changing the type will convert this item and migrate its memberships. Location memberships will be lost if converting to a tag.</p>
+    </div>
+
     <div class="tag-form-grid">
         <div class="form-field">
             <label class="form-label">Name</label>

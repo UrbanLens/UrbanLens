@@ -1739,3 +1739,57 @@
     justify-content: flex-end;
     margin-top: 1.25rem;
 }
+
+// ── Kind toggle (tag ↔ category conversion) ───────────────────────────────────
+
+.kind-toggle {
+    display: flex;
+    gap: .5rem;
+    margin-top: .35rem;
+}
+
+.kind-toggle-option {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+
+    input[type="radio"] {
+        display: none;
+    }
+
+    span {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .45rem 1rem;
+        border: 2px solid $border-color;
+        border-radius: $radius-sm;
+        font-size: .875rem;
+        font-weight: 500;
+        color: $text-secondary;
+        background: #fafafa;
+        transition: border-color .13s, background .13s, color .13s;
+
+        i {
+            font-size: 1rem;
+        }
+    }
+
+    input[type="radio"]:checked + span {
+        border-color: $primary-color;
+        background: color-mix(in srgb, $primary-color 10%, white);
+        color: $primary-color;
+        font-weight: 600;
+    }
+
+    &:hover span {
+        border-color: darken($border-color, 10%);
+        background: #f0f0f0;
+    }
+}
+
+.form-hint {
+    font-size: .8rem;
+    color: $text-muted;
+    margin: .35rem 0 0;
+}
