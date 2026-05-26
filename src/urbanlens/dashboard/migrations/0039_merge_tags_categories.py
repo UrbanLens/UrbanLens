@@ -63,6 +63,13 @@ def copy_categories_to_tags(apps, schema_editor):
         if new_ids:
             loc.categories_new.set(Tag.objects.filter(id__in=new_ids))
 
+    # The M2M inserts above leave pending deferred FK trigger events on
+    # dashboard_tags. PostgreSQL refuses to CREATE INDEX on a table with
+    # pending triggers, so we flush them now before the schema editor's
+    # deferred CREATE INDEX runs at the end of the migration transaction.
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+
 
 def noop_reverse(apps, schema_editor):
     """Reverting this migration is not supported (data is merged)."""
