@@ -52,6 +52,7 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
     * Add missing icons (some themes aren't represented)
     * Allow user to reorder pin details sections
     * Change default pin details sections order
+    * Better looking confirmation dialogs (delete, etc)
     * Pin detail page: 
       * Rating should be in stars
       * Place name - is this required to show?
@@ -67,6 +68,10 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
       * Map search needs overhaul
       * Sections need stronger borders or colors
       * Users can reorder sections
+      * When adding tags: 
+        * the search bar needs padding.
+        * Clicking outside the dialog should close it.
+      * Main detail section: Category is now out of date. Combine with description??
     * Trip Details Page:
       * Map needs layers, etc.
       * Activities should be editable.
@@ -80,10 +85,18 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
       * Main Trip page: use the whitespace. Calendar? etc?
       * Allow archiving old events.
       * Notify other users when changes.
+      * Allow users to drag/drop events to different dates.
+      * Ensure users can see pins other users have added even if they don't have them ("Accept pins confirm"?)
+    * Badges Page:
+      * Custom Icons must be clamped to size (do this during upload?)
+    * Map Page:
+      * Icons are sometimes not showing up (caching? Cat icon for example.)
   * Development:
     * Unit Tests
     * CI/CD 
     * Code Coverage Report
+  * Optimize:
+    * Local storage in browser for faster loading and offline use
   * APIs
     * Use Aliases with Smithsonian, etc
     * Sunrise / Sunset for weather

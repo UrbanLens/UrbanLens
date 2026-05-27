@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import QuerySet
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -22,6 +24,90 @@ def _trip_or_403(trip_uuid, profile: Profile) -> Trip | HttpResponse:
     if trip.creator == profile or trip.profiles.filter(pk=profile.pk).exists():
         return trip
     return HttpResponse("Forbidden", status=403)
+
+
+def _activity_qs(trip: Trip) -> QuerySet:
+    """Return the standard activities queryset for a trip with all needed relations."""
+    return (
+        trip.activities
+        .select_related("location", "pin", "pin__location", "added_by__user")
+        .order_by("scheduled_at", "order", "created")
+    )
+
+
+def _compute_activity_index_map(activities) -> dict[int, int]:
+    """Return {activity_id: map_index} for activities that have resolvable coordinates."""
+    index_map: dict[int, int] = {}
+    idx = 1
+    for act in activities:
+        has_coords = False
+        if (act.pin and act.pin.effective_latitude is not None and act.pin.effective_longitude is not None) or (act.location and act.location.latitude is not None and act.location.longitude is not None):
+            has_coords = True
+        if has_coords:
+            index_map[act.id] = idx
+            idx += 1
+    return index_map
+
+
+def _parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.datetime | None:
+    """Combine separate date and time strings into a datetime.
+
+    If only a date is provided, midnight (00:00) is used as the time so the
+    caller can distinguish "date only" from "date + time" by inspecting the
+    time component.  Returns None when no date is given.
+    """
+    if not date_str:
+        return None
+    try:
+        d = datetime.date.fromisoformat(date_str)
+    except ValueError:
+        return None
+    if time_str:
+        try:
+            t = datetime.time.fromisoformat(time_str)
+        except ValueError:
+            t = datetime.time(0, 0)
+    else:
+        t = datetime.time(0, 0)
+    return datetime.datetime.combine(d, t)
+
+
+def _resolve_location(body: dict):
+    """Resolve a location from POST body fields.
+
+    Priority: location_uuid → geocoded lat/lng → None.
+    Creates a new Location row when geocoded coordinates are supplied.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+
+    location_uuid = (body.get("location_uuid") or "").strip()
+    if location_uuid:
+        return Location.objects.filter(uuid=location_uuid).first()
+
+    geocoded_lat = (body.get("geocoded_lat") or "").strip()
+    geocoded_lng = (body.get("geocoded_lng") or "").strip()
+    if geocoded_lat and geocoded_lng:
+        try:
+            lat = float(geocoded_lat)
+            lng = float(geocoded_lng)
+            name = (body.get("geocoded_name") or body.get("title") or "Activity Location").strip() or "Activity Location"
+            return Location.objects.create(name=name, latitude=lat, longitude=lng)
+        except (ValueError, TypeError):
+            pass
+
+    return None
+
+
+def _render_activities_panel(request, trip: Trip, profile: Profile) -> HttpResponse:
+    """Re-render the activities panel partial with computed index map."""
+    activities = list(_activity_qs(trip))
+    index_map = _compute_activity_index_map(activities)
+    activities_with_index = [(act, index_map.get(act.id)) for act in activities]
+    return render(
+        request,
+        "dashboard/partials/trip_activities_panel.html",
+        {"trip": trip, "activities_with_index": activities_with_index, "profile": profile},
+    )
 
 
 class TripListView(LoginRequiredMixin, View):
@@ -151,9 +237,7 @@ class TripActivitiesView(LoginRequiredMixin, View):
         result = _trip_or_403(trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
-        trip = result
-        activities = trip.activities.select_related("location", "pin", "added_by__user").order_by("scheduled_at", "order", "created")
-        return render(request, "dashboard/partials/trip_activities_panel.html", {"trip": trip, "activities": activities, "profile": profile})
+        return _render_activities_panel(request, result, profile)
 
     def post(self, request, trip_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -169,13 +253,8 @@ class TripActivitiesView(LoginRequiredMixin, View):
 
         title = (body.get("title") or "").strip() or None
         notes = (body.get("notes") or "").strip() or None
-        scheduled_at = body.get("scheduled_at") or None
-
-        location = None
-        location_uuid = body.get("location_uuid")
-        if location_uuid:
-            from urbanlens.dashboard.models.location.model import Location
-            location = Location.objects.filter(uuid=location_uuid).first()
+        scheduled_at = _parse_scheduled_at(body.get("scheduled_date"), body.get("scheduled_time"))
+        location = _resolve_location(body)
 
         TripActivity.objects.create(
             trip=trip,
@@ -187,12 +266,39 @@ class TripActivitiesView(LoginRequiredMixin, View):
             order=trip.activities.count(),
         )
 
-        activities = trip.activities.select_related("location", "pin", "added_by__user").order_by("scheduled_at", "order", "created")
-        return render(request, "dashboard/partials/trip_activities_panel.html", {"trip": trip, "activities": activities, "profile": profile})
+        return _render_activities_panel(request, trip, profile)
+
+
+class TripActivityEditView(LoginRequiredMixin, View):
+    """Edit a trip activity.
+
+    POST /trips/<uuid>/activities/<int:activity_id>/edit/  → re-render panel
+    """
+
+    def post(self, request, trip_uuid, activity_id):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(trip_uuid, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+        activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
+
+        try:
+            body = json.loads(request.body) if request.body else {}
+        except (json.JSONDecodeError, ValueError):
+            body = request.POST.dict()
+
+        activity.title = (body.get("title") or "").strip() or None
+        activity.notes = (body.get("notes") or "").strip() or None
+        activity.scheduled_at = _parse_scheduled_at(body.get("scheduled_date"), body.get("scheduled_time"))
+        activity.location = _resolve_location(body)
+        activity.save()
+
+        return _render_activities_panel(request, trip, profile)
 
 
 class TripActivityDeleteView(LoginRequiredMixin, View):
-    """Delete a single activity.
+    """Delete a single activity and re-render the activities panel.
 
     DELETE /trips/<uuid>/activities/<int:activity_id>/delete/
     """
@@ -202,9 +308,10 @@ class TripActivityDeleteView(LoginRequiredMixin, View):
         result = _trip_or_403(trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
-        activity = get_object_or_404(TripActivity, id=activity_id, trip=result)
+        trip = result
+        activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
         activity.delete()
-        return HttpResponse("", status=200)
+        return _render_activities_panel(request, trip, profile)
 
 
 class TripCommentsView(LoginRequiredMixin, View):
@@ -321,7 +428,6 @@ class TripMemberRemoveView(LoginRequiredMixin, View):
         if not (trip.creator == profile or trip.profiles.filter(pk=profile.pk).exists()):
             return HttpResponse("Forbidden", status=403)
         target = get_object_or_404(Profile, pk=profile_id)
-        # Creator cannot be removed; only creator can remove others
         if target == trip.creator:
             return HttpResponse("The trip creator cannot be removed.", status=400)
         if profile not in {target, trip.creator}:
@@ -335,6 +441,9 @@ class TripMemberRemoveView(LoginRequiredMixin, View):
 class TripLocationSearchView(LoginRequiredMixin, View):
     """JSON search for locations to add as activities.
 
+    Searches existing Location records by name, then falls back to Nominatim
+    geocoding so the user can enter arbitrary addresses.
+
     GET /trips/location-search/?q=<query>
     """
 
@@ -342,12 +451,41 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         q = (request.GET.get("q") or "").strip()
         if len(q) < 2:
             return JsonResponse({"results": []})
+
         from urbanlens.dashboard.models.location.model import Location
-        locations = (
+
+        db_rows = list(
             Location.objects.filter(name__icontains=q)
-            .values("uuid", "name", "locality", "administrative_area_level_1")[:10]
+            .values("uuid", "name", "locality", "administrative_area_level_1")[:5],
         )
-        return JsonResponse({"results": list(locations)})
+        db_results = [
+            {
+                "uuid": str(row["uuid"]),
+                "name": row["name"],
+                "locality": row["locality"],
+                "administrative_area_level_1": row["administrative_area_level_1"],
+                "type": "db",
+            }
+            for row in db_rows
+        ]
+
+        geocoded_results: list[dict] = []
+        try:
+            from geopy.geocoders import Nominatim
+            geolocator = Nominatim(user_agent="UrbanLens/1.0", timeout=3)
+            geo_hits = geolocator.geocode(q, exactly_one=False, limit=4)
+            if geo_hits:
+                for hit in geo_hits:
+                    geocoded_results.append({
+                        "name": hit.address,
+                        "lat": hit.latitude,
+                        "lng": hit.longitude,
+                        "type": "geocoded",
+                    })
+        except Exception as exc:
+            logger.debug("Nominatim geocoding failed for %r: %s", q, exc)
+
+        return JsonResponse({"results": db_results + geocoded_results})
 
 
 class TripMapDataView(LoginRequiredMixin, View):
@@ -372,11 +510,7 @@ class TripMapDataView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        activities = (
-            trip.activities
-            .select_related("location", "pin")
-            .order_by("scheduled_at", "order", "created")
-        )
+        activities = list(_activity_qs(trip))
 
         points = []
         index = 1
@@ -395,6 +529,7 @@ class TripMapDataView(LoginRequiredMixin, View):
             label = act.title or (act.location.name if act.location else None) or f"Activity {index}"
             points.append({
                 "index": index,
+                "activity_id": act.id,
                 "label": label,
                 "lat": float(lat),
                 "lng": float(lng),

@@ -39,9 +39,8 @@ bun run build
 ### Linting & Type Checking
 
 ```bash
-python -m ruff check src/urbanlens      # lint
-python -m ruff format src/urbanlens     # format
-python -m mypy src/urbanlens            # type check
+python -m ruff check --fix src/urbanlens  # lint
+python -m mypy src/urbanlens              # type check
 ```
 
 When examining mypy output, never use cast or similar solutions. Remember that the purpose of mypy is to find real errors and improve code quality, not to silence warnings. This will sometimes require going back to the origin of the call and adjusting types, rather than trying to paper over it at the point of failure. If the code at the origin is making a false assumption, fix the bug. Doing things like implementing generics is needed to address some types of mypy warnings. If you're unsure, mark it as a TODO instead of doing things to silence the warning.
@@ -49,8 +48,7 @@ When examining mypy output, never use cast or similar solutions. Remember that t
 ### Testing
 
 ```bash
-pytest src/urbanlens/
-pytest src/urbanlens/dashboard/tests/test_models.py::PinTestCase::test_pin_creation  # single test
+python src/urbanlens/manage.py test 
 coverage run --source='.' manage.py test && coverage report
 ```
 

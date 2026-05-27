@@ -223,7 +223,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     flex-direction: column;
     min-width: 0;
 
-    &+span {
+    span {
         line-height: 1em;
     }
 }
@@ -269,6 +269,10 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     text-align: left;
     transition: background 0.12s;
     box-sizing: border-box;
+
+    span {
+        line-height: 1em;
+    }
 
     i.material-icons {
         font-size: 1.05rem;

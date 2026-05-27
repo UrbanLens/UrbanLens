@@ -117,10 +117,11 @@
             <i class="material-icons">close</i>
         </button>
     </div>
-    <form hx-post="{% url 'trips.activities' trip.uuid %}"
+    <form id="add-activity-form"
+          hx-post="{% url 'trips.activities' trip.uuid %}"
           hx-target="#trip-activities-panel"
           hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();document.getElementById('activity-location-display').textContent='';document.getElementById('activity-location-uuid').value=''}"
+          hx-on::after-request="if(event.detail.successful)_onAddActivitySuccess()"
           class="trip-create-form">
         {% csrf_token %}
         <div class="form-row">
@@ -130,20 +131,30 @@
         </div>
 
         <div class="form-row">
-            <label for="activity-location-search">Location <small>(optional)</small></label>
+            <label>Location <small>(optional — search existing or enter an address)</small></label>
             <div class="activity-location-search-wrap">
                 <input type="text" id="activity-location-search"
-                       placeholder="Search by name…" autocomplete="off">
+                       placeholder="Search by name or address…" autocomplete="off">
                 <input type="hidden" name="location_uuid" id="activity-location-uuid">
-                <div id="activity-location-suggestions" class="location-suggestions"></div>
+                <input type="hidden" name="geocoded_lat" id="activity-geocoded-lat">
+                <input type="hidden" name="geocoded_lng" id="activity-geocoded-lng">
+                <input type="hidden" name="geocoded_name" id="activity-geocoded-name">
+                <div id="activity-location-suggestions" class="location-suggestions" hidden></div>
                 <span id="activity-location-display" class="activity-location-display"></span>
             </div>
         </div>
 
-        <div class="form-row">
-            <label for="activity-datetime">Date &amp; time <small>(optional)</small></label>
-            <input type="datetime-local" name="scheduled_at" id="activity-datetime">
+        <div class="form-row form-row--two-col">
+            <div>
+                <label for="activity-date">Date <small>(optional)</small></label>
+                <input type="date" name="scheduled_date" id="activity-date">
+            </div>
+            <div>
+                <label for="activity-time">Time <small>(optional)</small></label>
+                <input type="time" name="scheduled_time" id="activity-time">
+            </div>
         </div>
+
         <div class="form-row">
             <label for="activity-notes">Notes</label>
             <textarea name="notes" id="activity-notes" rows="3"
@@ -151,6 +162,70 @@
         </div>
         <div class="form-actions">
             <button type="submit" class="submit-button">Add Activity</button>
+            <button type="button" class="btn-ghost"
+                    onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+{# ── Edit activity dialog ───────────────────────────────────────────────── #}
+<dialog id="edit-activity-dialog" class="trip-create-dialog">
+    <div class="dialog-header">
+        <span>Edit Activity</span>
+        <button type="button" class="dialog-close"
+                onclick="this.closest('dialog').close()">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <form id="edit-activity-form"
+          hx-post=""
+          hx-target="#trip-activities-panel"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();if(window.refreshTripMap)window.refreshTripMap();}"
+          class="trip-create-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="edit-activity-title">Title</label>
+            <input type="text" name="title" id="edit-activity-title"
+                   placeholder="e.g. Rooftop access point" maxlength="255">
+        </div>
+
+        <div class="form-row">
+            <label>Location <small>(optional)</small></label>
+            <div class="activity-location-search-wrap">
+                <input type="text" id="edit-activity-location-search"
+                       placeholder="Search by name or address…" autocomplete="off">
+                <input type="hidden" name="location_uuid" id="edit-activity-location-uuid">
+                <input type="hidden" name="geocoded_lat" id="edit-activity-geocoded-lat">
+                <input type="hidden" name="geocoded_lng" id="edit-activity-geocoded-lng">
+                <input type="hidden" name="geocoded_name" id="edit-activity-geocoded-name">
+                <div id="edit-activity-location-suggestions" class="location-suggestions" hidden></div>
+                <span id="edit-activity-location-display" class="activity-location-display"></span>
+            </div>
+            <button type="button" class="btn-ghost"
+                    onclick="_clearEditLocation()" style="margin-top:.35rem;font-size:.8rem;padding:.25rem .6rem">
+                <i class="material-icons" style="font-size:1rem;vertical-align:middle">clear</i> Clear location
+            </button>
+        </div>
+
+        <div class="form-row form-row--two-col">
+            <div>
+                <label for="edit-activity-date">Date <small>(optional)</small></label>
+                <input type="date" name="scheduled_date" id="edit-activity-date">
+            </div>
+            <div>
+                <label for="edit-activity-time">Time <small>(optional)</small></label>
+                <input type="time" name="scheduled_time" id="edit-activity-time">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label for="edit-activity-notes">Notes</label>
+            <textarea name="notes" id="edit-activity-notes" rows="3"
+                      placeholder="Any notes about this stop…"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="submit-button">Save Changes</button>
             <button type="button" class="btn-ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
         </div>
@@ -192,28 +267,72 @@
 <script>
 (function () {
     // ── Trip activity map ────────────────────────────────────────────────
-    var mapEl = document.getElementById('trip-map');
+    var mapEl  = document.getElementById('trip-map');
     var emptyEl = document.getElementById('trip-map-empty');
     var wrapEl = document.getElementById('trip-map-wrap');
 
-    if (mapEl) {
+    if (!mapEl) return;
+
+    var _map = null;
+    var _markersGroup = null;
+    var _markers = {};   // activity_id → L.Marker
+
+    function _initMap() {
+        var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19,
+        });
+        var satellite = L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+            maxZoom: 18,
+        });
+        var topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
+            maxZoom: 17,
+        });
+
+        _map = L.map('trip-map');
+        osm.addTo(_map);
+        L.control.layers({'Street': osm, 'Satellite': satellite, 'Topographic': topo}).addTo(_map);
+        _markersGroup = L.layerGroup().addTo(_map);
+
+        window.tripHighlightActivity = function (actId, on) {
+            var el = document.getElementById('trip-activity-' + actId);
+            if (el) el.classList.toggle('trip-activity--highlighted', on);
+        };
+        window.tripHighlightMarker = function (actId, on) {
+            var m = _markers[actId];
+            if (m) {
+                var el = m.getElement();
+                if (el) el.classList.toggle('trip-map-marker--highlighted', on);
+            }
+        };
+    }
+
+    function _loadPoints() {
         fetch('{% url "trips.map_data" trip.uuid %}', {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {
             var points = data.points || [];
+
             if (!points.length) {
-                mapEl.hidden = true;
-                if (emptyEl) emptyEl.hidden = false;
+                if (!_map) {
+                    mapEl.hidden = true;
+                    if (emptyEl) emptyEl.hidden = false;
+                }
                 return;
             }
 
-            var map = L.map('trip-map');
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                maxZoom: 19,
-            }).addTo(map);
+            mapEl.hidden = false;
+            if (emptyEl) emptyEl.hidden = true;
+
+            if (!_map) _initMap();
+
+            _markersGroup.clearLayers();
+            _markers = {};
 
             var bounds = [];
             points.forEach(function (pt) {
@@ -228,73 +347,195 @@
                 if (pt.scheduled_at) {
                     popup += '<br><small>' + new Date(pt.scheduled_at).toLocaleString() + '</small>';
                 }
-                L.marker([pt.lat, pt.lng], { icon: icon })
-                    .bindPopup(popup)
-                    .addTo(map);
+                var marker = L.marker([pt.lat, pt.lng], {icon: icon}).bindPopup(popup);
+                if (pt.activity_id) {
+                    var actId = pt.activity_id;
+                    marker.on('mouseover', function () { window.tripHighlightActivity(actId, true); });
+                    marker.on('mouseout',  function () { window.tripHighlightActivity(actId, false); });
+                    _markers[actId] = marker;
+                }
+                marker.addTo(_markersGroup);
                 bounds.push([pt.lat, pt.lng]);
             });
 
             if (bounds.length === 1) {
-                map.setView(bounds[0], 14);
+                _map.setView(bounds[0], 14);
             } else {
-                map.fitBounds(bounds, { padding: [32, 32] });
+                _map.fitBounds(bounds, {padding: [32, 32]});
             }
         })
         .catch(function () {
             if (wrapEl) wrapEl.hidden = true;
         });
     }
+
+    _loadPoints();
+    window.refreshTripMap = _loadPoints;
 }());
 
+// ── Location search (shared between add + edit dialogs) ──────────────────
 (function () {
-    // Location autocomplete for add-activity dialog
-    var searchInput  = document.getElementById('activity-location-search');
-    var uuidInput    = document.getElementById('activity-location-uuid');
-    var suggestions  = document.getElementById('activity-location-suggestions');
-    var display      = document.getElementById('activity-location-display');
+    function _initLocationSearch(cfg) {
+        var searchInput = document.getElementById(cfg.searchId);
+        var uuidInput   = document.getElementById(cfg.uuidId);
+        var suggestions = document.getElementById(cfg.suggestionsId);
+        var display     = document.getElementById(cfg.displayId);
+        var latInput    = document.getElementById(cfg.latId);
+        var lngInput    = document.getElementById(cfg.lngId);
+        var nameInput   = document.getElementById(cfg.nameId);
 
-    if (!searchInput) return;
+        if (!searchInput) return;
 
-    var debounce;
-    searchInput.addEventListener('input', function () {
-        clearTimeout(debounce);
-        var q = this.value.trim();
-        if (q.length < 2) { suggestions.innerHTML = ''; suggestions.hidden = true; return; }
-        debounce = setTimeout(function () {
-            fetch('{% url "trips.location_search" %}?q=' + encodeURIComponent(q), {
-                headers: {'X-Requested-With': 'XMLHttpRequest'}
-            })
-            .then(function(r){ return r.json(); })
-            .then(function(data) {
+        var debounce;
+        searchInput.addEventListener('input', function () {
+            clearTimeout(debounce);
+            var q = this.value.trim();
+            if (q.length < 2) {
                 suggestions.innerHTML = '';
-                if (!data.results || !data.results.length) {
-                    suggestions.hidden = true;
-                    return;
-                }
-                data.results.forEach(function(loc) {
-                    var li = document.createElement('li');
-                    li.className = 'location-suggestion-item';
-                    li.textContent = loc.name + (loc.locality ? ', ' + loc.locality : '') + (loc.administrative_area_level_1 ? ', ' + loc.administrative_area_level_1 : '');
-                    li.addEventListener('click', function() {
-                        uuidInput.value  = loc.uuid;
-                        display.textContent = loc.name;
-                        searchInput.value = '';
-                        suggestions.innerHTML = '';
-                        suggestions.hidden = true;
+                suggestions.hidden = true;
+                return;
+            }
+            debounce = setTimeout(function () {
+                fetch('{% url "trips.location_search" %}?q=' + encodeURIComponent(q), {
+                    headers: {'X-Requested-With': 'XMLHttpRequest'}
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    suggestions.innerHTML = '';
+                    var results = data.results || [];
+
+                    if (!results.length) {
+                        var empty = document.createElement('li');
+                        empty.className = 'location-suggestion-item location-suggestion-empty';
+                        empty.textContent = 'No locations found';
+                        suggestions.appendChild(empty);
+                        suggestions.hidden = false;
+                        return;
+                    }
+
+                    var hasDb = results.some(function (r) { return r.type === 'db'; });
+                    var hasGeo = results.some(function (r) { return r.type === 'geocoded'; });
+
+                    if (hasDb && hasGeo) {
+                        var dbHeader = document.createElement('li');
+                        dbHeader.className = 'location-suggestion-header';
+                        dbHeader.textContent = 'My locations';
+                        suggestions.appendChild(dbHeader);
+                    }
+
+                    results.forEach(function (loc) {
+                        if (hasDb && hasGeo && loc.type === 'geocoded' &&
+                            suggestions.querySelector('.location-suggestion-header[data-geo]') === null) {
+                            var geoHeader = document.createElement('li');
+                            geoHeader.className = 'location-suggestion-header';
+                            geoHeader.dataset.geo = '1';
+                            geoHeader.textContent = 'Addresses';
+                            suggestions.appendChild(geoHeader);
+                        }
+
+                        var li = document.createElement('li');
+                        li.className = 'location-suggestion-item' +
+                            (loc.type === 'geocoded' ? ' location-suggestion-geocoded' : '');
+
+                        if (loc.type === 'geocoded') {
+                            li.textContent = loc.name;
+                        } else {
+                            li.textContent = loc.name +
+                                (loc.locality ? ', ' + loc.locality : '') +
+                                (loc.administrative_area_level_1 ? ', ' + loc.administrative_area_level_1 : '');
+                        }
+
+                        li.addEventListener('click', function () {
+                            if (loc.type === 'geocoded') {
+                                uuidInput.value = '';
+                                if (latInput)  latInput.value  = loc.lat;
+                                if (lngInput)  lngInput.value  = loc.lng;
+                                if (nameInput) nameInput.value = loc.name;
+                            } else {
+                                uuidInput.value = loc.uuid;
+                                if (latInput)  latInput.value  = '';
+                                if (lngInput)  lngInput.value  = '';
+                                if (nameInput) nameInput.value = '';
+                            }
+                            display.textContent = loc.name;
+                            searchInput.value = '';
+                            suggestions.innerHTML = '';
+                            suggestions.hidden = true;
+                        });
+                        suggestions.appendChild(li);
                     });
-                    suggestions.appendChild(li);
+                    suggestions.hidden = false;
                 });
-                suggestions.hidden = false;
-            });
-        }, 300);
+            }, 300);
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.innerHTML = '';
+                suggestions.hidden = true;
+            }
+        });
+    }
+
+    _initLocationSearch({
+        searchId: 'activity-location-search',
+        uuidId:   'activity-location-uuid',
+        suggestionsId: 'activity-location-suggestions',
+        displayId: 'activity-location-display',
+        latId:    'activity-geocoded-lat',
+        lngId:    'activity-geocoded-lng',
+        nameId:   'activity-geocoded-name',
     });
 
-    document.addEventListener('click', function(e) {
-        if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
-            suggestions.innerHTML = '';
-            suggestions.hidden = true;
-        }
+    _initLocationSearch({
+        searchId: 'edit-activity-location-search',
+        uuidId:   'edit-activity-location-uuid',
+        suggestionsId: 'edit-activity-location-suggestions',
+        displayId: 'edit-activity-location-display',
+        latId:    'edit-activity-geocoded-lat',
+        lngId:    'edit-activity-geocoded-lng',
+        nameId:   'edit-activity-geocoded-name',
     });
 }());
+
+// ── Add activity success callback ────────────────────────────────────────
+function _onAddActivitySuccess() {
+    document.getElementById('add-activity-dialog').close();
+    document.getElementById('add-activity-form').reset();
+    document.getElementById('activity-location-display').textContent = '';
+    document.getElementById('activity-location-uuid').value = '';
+    document.getElementById('activity-geocoded-lat').value  = '';
+    document.getElementById('activity-geocoded-lng').value  = '';
+    document.getElementById('activity-geocoded-name').value = '';
+    if (window.refreshTripMap) window.refreshTripMap();
+}
+
+// ── Edit activity dialog ─────────────────────────────────────────────────
+function tripOpenEditDialog(li) {
+    var form = document.getElementById('edit-activity-form');
+    form.setAttribute('hx-post', li.dataset.editUrl);
+    htmx.process(form);
+
+    document.getElementById('edit-activity-title').value        = li.dataset.actTitle  || '';
+    document.getElementById('edit-activity-notes').value        = li.dataset.actNotes  || '';
+    document.getElementById('edit-activity-date').value         = li.dataset.actDate   || '';
+    document.getElementById('edit-activity-time').value         = li.dataset.actTime   || '';
+    document.getElementById('edit-activity-location-uuid').value = li.dataset.actLocationUuid  || '';
+    document.getElementById('edit-activity-geocoded-lat').value  = '';
+    document.getElementById('edit-activity-geocoded-lng').value  = '';
+    document.getElementById('edit-activity-geocoded-name').value = '';
+    document.getElementById('edit-activity-location-display').textContent = li.dataset.actLocationName || '';
+    document.getElementById('edit-activity-location-search').value = '';
+
+    document.getElementById('edit-activity-dialog').showModal();
+}
+
+function _clearEditLocation() {
+    document.getElementById('edit-activity-location-uuid').value  = '';
+    document.getElementById('edit-activity-geocoded-lat').value   = '';
+    document.getElementById('edit-activity-geocoded-lng').value   = '';
+    document.getElementById('edit-activity-geocoded-name').value  = '';
+    document.getElementById('edit-activity-location-display').textContent = '';
+}
 </script>
 {% endblock %}

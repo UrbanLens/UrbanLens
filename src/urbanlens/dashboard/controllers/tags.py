@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 
@@ -15,6 +16,43 @@ from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORI
 from urbanlens.dashboard.models.pin.model import Pin
 
 logger = logging.getLogger(__name__)
+
+_ICON_MAX_PX = 256
+
+
+def _resize_custom_icon(uploaded_file):
+    """Resize an uploaded icon to at most _ICON_MAX_PX × _ICON_MAX_PX pixels.
+
+    Returns the original file unchanged if it is already within bounds or if
+    Pillow cannot open it. Always rewinds the file before returning.
+    """
+    try:
+        from django.core.files.uploadedfile import InMemoryUploadedFile
+        from PIL import Image
+
+        img = Image.open(uploaded_file)
+        if max(img.width, img.height) <= _ICON_MAX_PX:
+            uploaded_file.seek(0)
+            return uploaded_file
+
+        img = img.convert("RGBA") if img.mode in {"RGBA", "P", "PA"} else img.convert("RGB")
+        img.thumbnail((_ICON_MAX_PX, _ICON_MAX_PX), Image.LANCZOS)
+        fmt = "PNG" if img.mode == "RGBA" else "JPEG"
+        out = io.BytesIO()
+        img.save(out, format=fmt, quality=88, optimize=True)
+        out.seek(0)
+        name = uploaded_file.name or "icon"
+        ext = ".png" if fmt == "PNG" else ".jpg"
+        if not name.lower().endswith(ext):
+            name = name.rsplit(".", 1)[0] + ext
+        return InMemoryUploadedFile(out, "ImageField", name, f"image/{fmt.lower()}", out.getbuffer().nbytes, None)
+    except Exception:
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
+        return uploaded_file
+
 
 _BASE_CTX = {
     "icon_choices": ICON_CHOICES,
@@ -61,6 +99,8 @@ class TagCreateView(LoginRequiredMixin, View):
         icon = request.POST.get("icon") or None
         color = request.POST.get("color") or None
         custom_icon = request.FILES.get("custom_icon") or None
+        if custom_icon:
+            custom_icon = _resize_custom_icon(custom_icon)
         order = int(request.POST.get("order", 0))
         parent_ids = request.POST.getlist("parent_ids")
 
@@ -127,7 +167,7 @@ class TagEditView(LoginRequiredMixin, View):
 
         custom_icon = request.FILES.get("custom_icon")
         if custom_icon:
-            tag.custom_icon = custom_icon
+            tag.custom_icon = _resize_custom_icon(custom_icon)
         elif request.POST.get("clear_custom_icon"):
             tag.custom_icon = None
 
