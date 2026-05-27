@@ -89,6 +89,7 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
       * Ensure users can see pins other users have added even if they don't have them ("Accept pins confirm"?)
       * Users can leave the trip.
       * Trip variations (confirmed/unconfirmed pins, map markup, etc)
+      * RSVP per activity
     * Badges Page:
       * Custom Icons must be clamped to size (do this during upload?)
     * Map Page:
