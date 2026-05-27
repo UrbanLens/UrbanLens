@@ -9,8 +9,8 @@ from django.db.models import CASCADE, CharField, ForeignKey, UniqueConstraint
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.profile.model import Profile
 
 
 class BadgeCustomization(abstract.Model):

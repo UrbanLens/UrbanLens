@@ -10,7 +10,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views import View
 
-from urbanlens.dashboard.models.badges.model import Badge, COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES
+from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Badge
 
 logger = logging.getLogger(__name__)
 

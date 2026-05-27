@@ -1,7 +1,7 @@
 from django import forms
 
-from urbanlens.dashboard.models.pin.model import PinStatus
 from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.pin.model import PinStatus
 
 
 class SearchForm(forms.Form):

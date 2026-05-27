@@ -17,9 +17,9 @@ KIND_CHOICES = [
 ]
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.badges.customization import BadgeCustomization
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.badges.customization import BadgeCustomization
 
 
 ICON_CHOICES = [

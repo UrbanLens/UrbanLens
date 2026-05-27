@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from rest_framework import viewsets
 
-from urbanlens.dashboard.models.categories.serializer import CategorySerializer
 from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.categories.serializer import CategorySerializer
 
 
 class CategoryViewSet(viewsets.ModelViewSet):

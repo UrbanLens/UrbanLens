@@ -37,9 +37,9 @@ class DashboardConfig(AppConfig):
     def ready(self):
         from django.db.models.signals import post_save
 
+        from urbanlens.dashboard.models.badges.signals import create_default_tags
         import urbanlens.dashboard.models.location.signals
         import urbanlens.dashboard.models.pin.signals
         from urbanlens.dashboard.models.profile.model import Profile
         import urbanlens.dashboard.models.profile.signals
-        from urbanlens.dashboard.models.badges.signals import create_default_tags
         post_save.connect(create_default_tags, sender=Profile)

@@ -11,8 +11,8 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
-from urbanlens.dashboard.models.pin.model import Pin, PinNote, PinStatus, PinType
 from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.pin.model import Pin, PinNote, PinStatus, PinType
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +26,8 @@ def _pin_for_user(pin_uuid, request) -> Pin | HttpResponse:
 
 
 def _overview_context(pin: Pin) -> dict:
-    from urbanlens.dashboard.models.pin.model import PinType
     from urbanlens.dashboard.models.badges.model import COLOR_CHOICES
+    from urbanlens.dashboard.models.pin.model import PinType
 
     detail_pin_icon_choices = [
         ("place", "Place"), ("business", "Building"), ("door_front", "Entrance"),

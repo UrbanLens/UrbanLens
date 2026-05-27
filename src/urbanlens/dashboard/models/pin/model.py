@@ -16,8 +16,8 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel, TextChoic
 from urbanlens.dashboard.models.pin.queryset import PinManager
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.reviews import Manager as ReviewManager
     from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.reviews import Manager as ReviewManager
 
 logger = logging.getLogger(__name__)
 

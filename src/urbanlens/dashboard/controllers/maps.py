@@ -40,11 +40,11 @@ from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.advanced_search import AdvancedSearchForm
 from urbanlens.dashboard.forms.search import SearchForm
+from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)

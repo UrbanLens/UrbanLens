@@ -58,9 +58,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         from datetime import date
 
+        from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, Badge
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import PinStatus, PinType
-        from urbanlens.dashboard.models.badges.model import Badge, COLOR_CHOICES
 
         pin = Pin.objects.select_related("location").get(uuid=kwargs["pin_uuid"])
 

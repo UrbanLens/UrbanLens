@@ -41,8 +41,8 @@ class LocationWikiView(LoginRequiredMixin, View):
         # The requesting user's own pin for this location (used for the back-link).
         user_pin = location.pins.filter(profile=profile).first()
 
-        from urbanlens.dashboard.models.pin.model import PinType
         from urbanlens.dashboard.models.badges.model import COLOR_CHOICES
+        from urbanlens.dashboard.models.pin.model import PinType
 
         detail_pin_icon_choices = [
             ("place", "Place"), ("business", "Building"), ("door_front", "Entrance"),

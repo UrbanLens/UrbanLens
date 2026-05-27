@@ -11,7 +11,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
-from urbanlens.dashboard.models.badges.model import Badge, COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES
+from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Badge
 from urbanlens.dashboard.models.pin.model import Pin
 
 logger = logging.getLogger(__name__)
