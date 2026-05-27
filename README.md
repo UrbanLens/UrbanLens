@@ -73,20 +73,22 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
         * Clicking outside the dialog should close it.
       * Main detail section: Category is now out of date. Combine with description??
     * Trip Details Page:
-      * Map needs layers, etc.
-      * Activities should be editable.
+      * <s>Map needs layers, etc.</s>
+      * <s>Activities should be editable.</s>
       * Calendar view?
-      * After adding pins, map should auto update
+      * <s>After adding pins, map should auto update</s>
       * Pin icons (1, 2, ...) should better communicate the idea, rather than looking like grouping blobs from other maps. Also should still use custom icons.
-      * Activity view must show date proposal.
-      * Add activity should allow adding an arbitrary address
-      * Improve UI when pin search has no results.
+      * <s>Activity view must show date proposal.</s>
+      * <s>Add activity should allow adding an arbitrary address</s>
+      * <s>Improve UI when pin search has no results.</s>
       * Delete should probably not delete for everyone?
       * Main Trip page: use the whitespace. Calendar? etc?
       * Allow archiving old events.
       * Notify other users when changes.
       * Allow users to drag/drop events to different dates.
       * Ensure users can see pins other users have added even if they don't have them ("Accept pins confirm"?)
+      * Users can leave the trip.
+      * Trip variations (confirmed/unconfirmed pins, map markup, etc)
     * Badges Page:
       * Custom Icons must be clamped to size (do this during upload?)
     * Map Page:

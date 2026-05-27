@@ -33,11 +33,12 @@ class Trip(abstract.Model):
         blank=True,
         related_name="created_trips",
     )
-    # All participants including the creator.
+    # All participants including the creator — through TripMembership for RSVP tracking.
     profiles = ManyToManyField(
         "dashboard.Profile",
         blank=True,
         related_name="trips",
+        through="TripMembership",
     )
 
     def __str__(self) -> str:
@@ -88,10 +89,18 @@ class TripActivity(abstract.Model):
         blank=True,
         related_name="trip_activities_added",
     )
+    STATUS_PROPOSED = "proposed"
+    STATUS_CONFIRMED = "confirmed"
+    STATUS_CHOICES = [
+        ("proposed", "Proposed"),
+        ("confirmed", "Confirmed"),
+    ]
+
     title = CharField(max_length=255, null=True, blank=True)
     notes = TextField(null=True, blank=True)
     scheduled_at = DateTimeField(null=True, blank=True)
     order = IntegerField(default=0)
+    status = CharField(max_length=20, choices=STATUS_CHOICES, default="proposed")
 
     def __str__(self) -> str:
         loc = self.location.name if self.location else (self.title or "Activity")
@@ -103,6 +112,41 @@ class TripActivity(abstract.Model):
         indexes = [
             Index(fields=["trip"], name="dashboard_ta_trip_idx"),
             Index(fields=["trip", "scheduled_at"], name="dashboard_ta_trip_dt_idx"),
+        ]
+
+
+class TripMembership(abstract.Model):
+    """RSVP through-model linking a Profile to a Trip.
+
+    Replaces the implicit M2M join table so each membership can carry an RSVP
+    status independently of whether the person is in or out of the trip.
+    """
+
+    RSVP_YES = "yes"
+    RSVP_NO = "no"
+    RSVP_MAYBE = "maybe"
+    RSVP_CHOICES = [
+        ("yes", "Yes"),
+        ("no", "No"),
+        ("maybe", "Maybe"),
+    ]
+
+    trip = ForeignKey(Trip, on_delete=CASCADE, related_name="memberships")
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=CASCADE,
+        related_name="trip_memberships",
+    )
+    rsvp = CharField(max_length=20, choices=RSVP_CHOICES, null=True, blank=True)
+
+    def __str__(self) -> str:
+        return f"{self.profile} in {self.trip} ({self.rsvp or 'no response'})"
+
+    class Meta(abstract.Model.Meta):
+        db_table = "dashboard_trip_memberships"
+        unique_together = [("trip", "profile")]
+        indexes = [
+            Index(fields=["trip"], name="dashboard_tm_trip_idx"),
         ]
 
 
@@ -133,3 +177,29 @@ class TripComment(abstract.Model):
         indexes = [
             Index(fields=["trip"], name="dashboard_tc_trip_idx"),
         ]
+
+
+class SiteSettings(abstract.Model):
+    """Singleton model for site-wide configurable settings.
+
+    Always access via ``SiteSettings.get_current()``; never instantiate directly.
+    """
+
+    max_trip_members = IntegerField(
+        default=10,
+        help_text="Maximum number of members allowed per trip.",
+    )
+
+    def __str__(self) -> str:
+        return "Site Settings"
+
+    @classmethod
+    def get_current(cls) -> SiteSettings:
+        """Return (and create if missing) the singleton settings record."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    class Meta(abstract.Model.Meta):
+        db_table = "dashboard_site_settings"
+        verbose_name = "Site Settings"
+        verbose_name_plural = "Site Settings"

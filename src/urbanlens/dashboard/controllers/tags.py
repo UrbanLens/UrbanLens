@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import logging
@@ -21,7 +22,7 @@ _ICON_MAX_PX = 256
 
 
 def _resize_custom_icon(uploaded_file):
-    """Resize an uploaded icon to at most _ICON_MAX_PX × _ICON_MAX_PX pixels.
+    """Resize an uploaded icon to at most _ICON_MAX_PX * _ICON_MAX_PX pixels.
 
     Returns the original file unchanged if it is already within bounds or if
     Pillow cannot open it. Always rewinds the file before returning.
@@ -47,10 +48,8 @@ def _resize_custom_icon(uploaded_file):
             name = name.rsplit(".", 1)[0] + ext
         return InMemoryUploadedFile(out, "ImageField", name, f"image/{fmt.lower()}", out.getbuffer().nbytes, None)
     except Exception:
-        try:
+        with contextlib.suppress(Exception):
             uploaded_file.seek(0)
-        except Exception:
-            pass
         return uploaded_file
 
 
@@ -118,7 +117,11 @@ class TagCreateView(LoginRequiredMixin, View):
             valid_parents = Badge.objects.tags().filter(id__in=parent_ids).visible_to(profile)
             tag.parents.set(valid_parents)
 
-        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM), {"new_tag_id": tag.id}))
+        return render(
+            request,
+            "dashboard/partials/tag_rows.html",
+            _rows_ctx(profile, request.user.has_perm(_PERM), {"new_tag_id": tag.id}),
+        )
 
 
 class TagEditView(LoginRequiredMixin, View):
@@ -134,15 +137,19 @@ class TagEditView(LoginRequiredMixin, View):
         profile = request.user.profile
         available_parents = Badge.objects.tags().visible_to(profile).ordered().exclude(id=tag_id)
         parent_ids = set(tag.parents.values_list("id", flat=True))
-        return render(request, "dashboard/partials/tag_edit_form.html", {
-            "tag": tag,
-            "icon_choices": ICON_CHOICES,
-            "icon_categories": ICON_CATEGORIES,
-            "color_choices": COLOR_CHOICES,
-            "available_parents": available_parents,
-            "parent_ids": parent_ids,
-            "is_global": tag.profile is None,
-        })
+        return render(
+            request,
+            "dashboard/partials/tag_edit_form.html",
+            {
+                "tag": tag,
+                "icon_choices": ICON_CHOICES,
+                "icon_categories": ICON_CATEGORIES,
+                "color_choices": COLOR_CHOICES,
+                "available_parents": available_parents,
+                "parent_ids": parent_ids,
+                "is_global": tag.profile is None,
+            },
+        )
 
     def post(self, request, tag_id, *args, **kwargs):
         tag = get_object_or_404(Badge, id=tag_id, kind="tag")
@@ -176,6 +183,7 @@ class TagEditView(LoginRequiredMixin, View):
             # location.tags → location.categories, then make it a global category.
             from urbanlens.dashboard.models.location.model import Location
             from urbanlens.dashboard.models.pin.model import Pin
+
             for pin in Pin.objects.filter(tags=tag):
                 pin.categories.add(tag)
                 pin.tags.remove(tag)
@@ -249,12 +257,16 @@ class TagRowsView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         profile = request.user.profile
         tags = Badge.objects.tags().visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
-        return render(request, "dashboard/partials/tag_rows.html", {
-            "tags": tags,
-            "icon_choices": ICON_CHOICES,
-            "icon_categories": ICON_CATEGORIES,
-            "color_choices": COLOR_CHOICES,
-        })
+        return render(
+            request,
+            "dashboard/partials/tag_rows.html",
+            {
+                "tags": tags,
+                "icon_choices": ICON_CHOICES,
+                "icon_categories": ICON_CATEGORIES,
+                "color_choices": COLOR_CHOICES,
+            },
+        )
 
 
 class TagMergeView(LoginRequiredMixin, View):
@@ -267,10 +279,14 @@ class TagMergeView(LoginRequiredMixin, View):
             return HttpResponseForbidden()
         profile = request.user.profile
         candidates = Badge.objects.tags().visible_to(profile).ordered().exclude(id=tag_id)
-        return render(request, "dashboard/partials/tag_merge_form.html", {
-            "tag": tag,
-            "candidates": candidates,
-        })
+        return render(
+            request,
+            "dashboard/partials/tag_merge_form.html",
+            {
+                "tag": tag,
+                "candidates": candidates,
+            },
+        )
 
     def post(self, request, tag_id, *args, **kwargs):
         """Perform the merge: move all pins to the target tag, then delete source."""
@@ -292,12 +308,16 @@ class TagMergeView(LoginRequiredMixin, View):
         source.delete()
 
         tags = Badge.objects.tags().visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
-        return render(request, "dashboard/partials/tag_rows.html", {
-            "tags": tags,
-            "icon_choices": ICON_CHOICES,
-            "icon_categories": ICON_CATEGORIES,
-            "color_choices": COLOR_CHOICES,
-        })
+        return render(
+            request,
+            "dashboard/partials/tag_rows.html",
+            {
+                "tags": tags,
+                "icon_choices": ICON_CHOICES,
+                "icon_categories": ICON_CATEGORIES,
+                "color_choices": COLOR_CHOICES,
+            },
+        )
 
 
 class TagMembershipView(LoginRequiredMixin, View):
@@ -308,11 +328,15 @@ class TagMembershipView(LoginRequiredMixin, View):
         profile = request.user.profile
         all_tags = Badge.objects.tags().visible_to(profile).ordered()
         member_ids = set(pin.tags.values_list("id", flat=True))
-        return render(request, "dashboard/partials/tag_panel.html", {
-            "pin": pin,
-            "all_tags": all_tags,
-            "member_ids": member_ids,
-        })
+        return render(
+            request,
+            "dashboard/partials/tag_panel.html",
+            {
+                "pin": pin,
+                "all_tags": all_tags,
+                "member_ids": member_ids,
+            },
+        )
 
     def post(self, request, pin_uuid, *args, **kwargs):
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
@@ -329,11 +353,15 @@ class TagMembershipView(LoginRequiredMixin, View):
 
         all_tags = Badge.objects.tags().visible_to(profile).ordered()
         member_ids = set(pin.tags.values_list("id", flat=True))
-        return render(request, "dashboard/partials/tag_panel.html", {
-            "pin": pin,
-            "all_tags": all_tags,
-            "member_ids": member_ids,
-        })
+        return render(
+            request,
+            "dashboard/partials/tag_panel.html",
+            {
+                "pin": pin,
+                "all_tags": all_tags,
+                "member_ids": member_ids,
+            },
+        )
 
 
 class TagBulkDeleteView(LoginRequiredMixin, View):
@@ -509,12 +537,17 @@ class TagCustomizeView(LoginRequiredMixin, View):
         tag = get_object_or_404(Badge, id=tag_id, kind="tag")
         profile = request.user.profile
         from urbanlens.dashboard.models.badges.customization import BadgeCustomization
+
         customization = BadgeCustomization.objects.filter(profile=profile, badge=tag).first()
-        return render(request, "dashboard/partials/tag_customize_form.html", {
-            **_BASE_CTX,
-            "tag": tag,
-            "customization": customization,
-        })
+        return render(
+            request,
+            "dashboard/partials/tag_customize_form.html",
+            {
+                **_BASE_CTX,
+                "tag": tag,
+                "customization": customization,
+            },
+        )
 
     def post(self, request, tag_id, *args, **kwargs):
         """Save or clear the customization and return the refreshed rows partial.

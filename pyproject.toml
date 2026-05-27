@@ -756,6 +756,8 @@ ignore = [
     "B019",   # possible memleak
     "ARG001", # unused argument
     # Fix issues and turn these on
+    "PERF401", # Use list comprehension
+    "PLR0916", # too-many-boolean-expressions
     "D417",    # Missing argument descriptions in docstring for args, kwargs
     "DTZ011",  # datetime.date.today() used
     "D1",      # Missing docstring...

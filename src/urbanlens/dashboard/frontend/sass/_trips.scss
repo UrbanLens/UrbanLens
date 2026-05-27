@@ -320,11 +320,209 @@
             font-weight: 700;
             padding: 1px 7px;
         }
+    }
+}
 
-        .detail-pin-add-btn {
-            margin-left: auto;
+.card-header-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+// ── Activities view toggle ─────────────────────────────────────────────────
+
+.view-toggle-group {
+    display: flex;
+    gap: 1px;
+    background: #f1f5f9;
+    border-radius: 7px;
+    padding: 2px;
+}
+
+.view-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+
+    .material-icons {
+        font-size: 1.05rem;
+    }
+
+    &:hover {
+        background: #e2e8f0;
+        color: #475569;
+    }
+
+    &.view-toggle-btn--active {
+        background: #fff;
+        color: #3b82f6;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
+    }
+}
+
+// ── Calendar mode layout ──────────────────────────────────────────────────
+
+.trip-detail-body.calendar-mode {
+    grid-template-columns: 1fr;
+
+    .trip-detail-aside {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+
+        @media (max-width: 600px) {
+            grid-template-columns: 1fr;
         }
     }
+}
+
+// ── Calendar view ─────────────────────────────────────────────────────────
+
+.activity-view {
+    // Nothing needed — views are shown/hidden via `hidden` attribute
+}
+
+.activity-view--calendar {
+    padding: .75rem 1rem 1rem;
+}
+
+.cal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .65rem;
+}
+
+.cal-month-label {
+    font-weight: 600;
+    font-size: .95rem;
+    color: #1e293b;
+}
+
+.cal-nav-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    transition: background .15s, color .15s;
+
+    .material-icons {
+        font-size: 1.2rem;
+    }
+
+    &:hover {
+        background: #f1f5f9;
+        color: #1e293b;
+    }
+}
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+.cal-cell {
+    min-height: 54px;
+    border-radius: 5px;
+    padding: .25rem .3rem;
+
+    &--header {
+        min-height: 0;
+        font-size: .7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: #94a3b8;
+        text-align: center;
+        padding: .2rem 0 .35rem;
+    }
+
+    &--empty {
+        background: #f8fafc;
+        opacity: .4;
+    }
+
+    &--has-events {
+        background: #f0f9ff;
+    }
+
+    &--today {
+        background: #eff6ff;
+
+        .cal-day-num {
+            background: #3b82f6;
+            color: #fff;
+        }
+    }
+}
+
+.cal-day-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: .75rem;
+    font-weight: 500;
+    color: #334155;
+    margin-bottom: .15rem;
+}
+
+.cal-events {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cal-event {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: .66rem;
+    background: #3b82f6;
+    color: #fff;
+    border-radius: 3px;
+    padding: 1px 4px;
+    cursor: pointer;
+    overflow: hidden;
+    transition: background .1s;
+
+    &:hover {
+        background: #2563eb;
+    }
+}
+
+.cal-event-num {
+    background: rgba(255, 255, 255, .25);
+    border-radius: 2px;
+    padding: 0 2px;
+    font-weight: 700;
+    flex-shrink: 0;
+    font-size: .65rem;
+}
+
+.cal-event-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
 
 .trip-panel-empty {
@@ -777,6 +975,279 @@
         color: #64748b;
         font-size: .88rem;
         margin: 0;
+    }
+}
+
+// ── Activity status (proposed = amber, confirmed = blue) ──────────────────
+
+.trip-activity-num--proposed {
+    background: #f59e0b !important;
+    box-shadow: 0 1px 4px rgba(245, 158, 11, .4) !important;
+}
+
+.trip-map-marker--proposed {
+    background: #f59e0b !important;
+    box-shadow: 0 2px 6px rgba(245, 158, 11, .5) !important;
+}
+
+.trip-status-btn {
+    opacity: 0;
+    transition: opacity .15s;
+
+    &--proposed {
+        color: #94a3b8;
+    }
+
+    &--confirmed {
+        color: #3b82f6;
+    }
+}
+
+.trip-activity-item:hover .trip-status-btn {
+    opacity: 1;
+}
+
+// ── Activity tabs ─────────────────────────────────────────────────────────
+
+.activity-tabs {
+    display: flex;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0 .5rem;
+    gap: .15rem;
+}
+
+.activity-tab {
+    padding: .45rem .85rem;
+    font-size: .8rem;
+    font-weight: 600;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+    margin-bottom: -1px;
+
+    &:hover {
+        color: #475569;
+    }
+
+    &--active {
+        color: #3b82f6;
+        border-bottom-color: #3b82f6;
+    }
+}
+
+// ── Calendar event status ─────────────────────────────────────────────────
+
+.cal-event--proposed {
+    background: #f59e0b;
+
+    &:hover {
+        background: #d97706;
+    }
+}
+
+.cal-event--dragging {
+    opacity: .45;
+    cursor: grabbing;
+}
+
+.cal-cell--drag-over {
+    background: #dbeafe !important;
+    outline: 2px dashed #3b82f6;
+}
+
+// ── Member RSVP ───────────────────────────────────────────────────────────
+
+.trip-member-rsvp {
+    font-size: .7rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 99px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+
+    &--yes {
+        background: #dcfce7;
+        color: #16a34a;
+        border: 1px solid #bbf7d0;
+    }
+
+    &--no {
+        background: #fee2e2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+    }
+
+    &--maybe {
+        background: #fef3c7;
+        color: #d97706;
+        border: 1px solid #fde68a;
+    }
+
+    &--none {
+        background: #f1f5f9;
+        color: #94a3b8;
+        border: 1px solid #e2e8f0;
+    }
+}
+
+.trip-member-actions {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+}
+
+.rsvp-select-wrap {
+    position: relative;
+}
+
+.rsvp-select {
+    font-size: .78rem;
+    padding: .2rem .5rem;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 6px;
+    background: #fff;
+    color: #334155;
+    cursor: pointer;
+    outline: none;
+    transition: border-color .15s;
+
+    &:focus, &:hover {
+        border-color: #3b82f6;
+    }
+}
+
+.trip-leave-btn {
+    color: #ef4444;
+
+    &:hover {
+        color: #dc2626;
+        background: #fee2e2;
+    }
+}
+
+// ── Status toggle (radio group) ───────────────────────────────────────────
+
+.status-toggle-group {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.status-toggle-opt {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .875rem;
+    color: #475569;
+    cursor: pointer;
+
+    input[type="radio"] {
+        accent-color: #3b82f6;
+        cursor: pointer;
+    }
+}
+
+// ── Site admin page ───────────────────────────────────────────────────────
+
+.site-admin-page {
+    max-width: 680px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+.site-admin-header {
+    margin-bottom: 1.5rem;
+}
+
+.site-admin-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    color: #1e293b;
+    margin: 0 0 .25rem;
+
+    .material-icons {
+        font-size: 1.6rem;
+        color: #3b82f6;
+    }
+}
+
+.site-admin-subtitle {
+    color: #64748b;
+    font-size: .9rem;
+    margin: 0;
+}
+
+.site-admin-notice {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .7rem 1rem;
+    border-radius: 8px;
+    font-size: .875rem;
+    font-weight: 500;
+    margin-bottom: 1rem;
+
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &--success {
+        background: #dcfce7;
+        color: #16a34a;
+        border: 1px solid #bbf7d0;
+    }
+}
+
+.site-admin-card {
+    margin-bottom: 1.5rem;
+}
+
+.site-admin-form {
+    padding: 1.25rem 1rem;
+
+    .form-row {
+        margin-bottom: 1.25rem;
+    }
+
+    label {
+        display: block;
+        font-size: .8rem;
+        font-weight: 600;
+        color: #475569;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        margin-bottom: .35rem;
+    }
+
+    .form-help {
+        font-size: .82rem;
+        color: #94a3b8;
+        margin: 0 0 .45rem;
+    }
+
+    input[type="number"] {
+        width: 120px;
+        padding: .5rem .75rem;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: .9rem;
+        color: #1e293b;
+        outline: none;
+        transition: border-color .15s;
+
+        &:focus {
+            border-color: #3b82f6;
+        }
+    }
+
+    .form-actions {
+        padding-top: .5rem;
     }
 }
 

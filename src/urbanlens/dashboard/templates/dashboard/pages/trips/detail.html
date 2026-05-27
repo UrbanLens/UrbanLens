@@ -160,6 +160,17 @@
             <textarea name="notes" id="activity-notes" rows="3"
                       placeholder="Any notes about this stop…"></textarea>
         </div>
+        <div class="form-row">
+            <label for="activity-status">Status</label>
+            <div class="status-toggle-group">
+                <label class="status-toggle-opt">
+                    <input type="radio" name="status" value="proposed" checked> Proposed
+                </label>
+                <label class="status-toggle-opt">
+                    <input type="radio" name="status" value="confirmed"> Confirmed
+                </label>
+            </div>
+        </div>
         <div class="form-actions">
             <button type="submit" class="submit-button">Add Activity</button>
             <button type="button" class="btn-ghost"
@@ -223,6 +234,17 @@
             <label for="edit-activity-notes">Notes</label>
             <textarea name="notes" id="edit-activity-notes" rows="3"
                       placeholder="Any notes about this stop…"></textarea>
+        </div>
+        <div class="form-row">
+            <label>Status</label>
+            <div class="status-toggle-group">
+                <label class="status-toggle-opt">
+                    <input type="radio" name="status" id="edit-activity-status-proposed" value="proposed"> Proposed
+                </label>
+                <label class="status-toggle-opt">
+                    <input type="radio" name="status" id="edit-activity-status-confirmed" value="confirmed"> Confirmed
+                </label>
+            </div>
         </div>
         <div class="form-actions">
             <button type="submit" class="submit-button">Save Changes</button>
@@ -336,8 +358,9 @@
 
             var bounds = [];
             points.forEach(function (pt) {
+                var markerClass = 'trip-map-marker' + (pt.status === 'proposed' ? ' trip-map-marker--proposed' : '');
                 var icon = L.divIcon({
-                    className: 'trip-map-marker',
+                    className: markerClass,
                     html: '<span class="trip-map-marker-num">' + pt.index + '</span>',
                     iconSize: [28, 28],
                     iconAnchor: [14, 14],
@@ -507,7 +530,189 @@ function _onAddActivitySuccess() {
     document.getElementById('activity-geocoded-lat').value  = '';
     document.getElementById('activity-geocoded-lng').value  = '';
     document.getElementById('activity-geocoded-name').value = '';
-    if (window.refreshTripMap) window.refreshTripMap();
+    // map + view restore are handled by the activities section listener below
+}
+
+// ── Activities section: auto-refresh map + restore view on any panel swap ─
+(function () {
+    var sec = document.querySelector('.trip-detail-activities');
+    if (!sec) return;
+    sec.addEventListener('htmx:afterSwap', function () {
+        if (window.refreshTripMap) window.refreshTripMap();
+        if (window._tripCurrentView && window._tripCurrentView !== 'list') {
+            tripSetView(window._tripCurrentView);
+        }
+    });
+}());
+
+// ── Calendar / view toggle ───────────────────────────────────────────────
+window._tripCurrentView = 'list';
+var _tripCalYear  = new Date().getFullYear();
+var _tripCalMonth = new Date().getMonth();  // 0-based
+var _calMonthInit = false;
+
+window.tripSetView = function (view) {
+    window._tripCurrentView = view;
+    var panel = document.getElementById('trip-activities-panel');
+    if (!panel) return;
+
+    panel.querySelectorAll('.activity-view').forEach(function (el) {
+        el.hidden = (el.dataset.view !== view);
+    });
+    panel.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
+        btn.classList.toggle('view-toggle-btn--active', btn.dataset.view === view);
+    });
+
+    var body = document.querySelector('.trip-detail-body');
+    if (body) body.classList.toggle('calendar-mode', view === 'calendar');
+
+    if (view === 'calendar') _renderTripCalendar();
+};
+
+window.tripCalNav = function (delta) {
+    _tripCalMonth += delta;
+    if (_tripCalMonth > 11) { _tripCalMonth = 0; _tripCalYear++; }
+    if (_tripCalMonth < 0)  { _tripCalMonth = 11; _tripCalYear--; }
+    _renderTripCalendar();
+};
+
+function _getActivityDataFromPanel() {
+    var panel = document.getElementById('trip-activities-panel');
+    if (!panel) return [];
+    var acts = [];
+    panel.querySelectorAll('.trip-activity-item').forEach(function (li) {
+        if (li.dataset.actDate) {
+            var numEl = li.querySelector('.trip-activity-num');
+            acts.push({
+                id:     li.dataset.actId,
+                date:   li.dataset.actDate,
+                title:  li.dataset.actTitle || (li.querySelector('.trip-activity-name') ? li.querySelector('.trip-activity-name').textContent.trim() : 'Activity'),
+                index:  numEl ? numEl.textContent.trim() : null,
+                status: li.dataset.actStatus || 'proposed',
+                moveUrl: '{% url "trips.activity.move" trip.uuid 0 %}'.replace('/0/', '/' + li.dataset.actId + '/'),
+            });
+        }
+    });
+    return acts;
+}
+
+function _renderTripCalendar() {
+    var panel = document.getElementById('trip-activities-panel');
+    var calEl = panel ? panel.querySelector('.activity-calendar-grid') : null;
+    if (!calEl) return;
+
+    // Init month from first activity's month the first time we have data
+    if (!_calMonthInit) {
+        var first = _getActivityDataFromPanel().find(function (a) { return a.date; });
+        if (first) {
+            var p = first.date.split('-');
+            _tripCalYear  = parseInt(p[0], 10);
+            _tripCalMonth = parseInt(p[1], 10) - 1;
+            _calMonthInit = true;
+        }
+        // If no dated activity found yet, leave _calMonthInit=false so we retry next render
+    }
+
+    var activities = _getActivityDataFromPanel();
+    var byDate = {};
+    activities.forEach(function (a) {
+        (byDate[a.date] = byDate[a.date] || []).push(a);
+    });
+
+    var y = _tripCalYear, m = _tripCalMonth;
+    var firstDay = new Date(y, m, 1);
+    var daysInMonth = new Date(y, m + 1, 0).getDate();
+    var today = new Date();
+    var todayStr = today.getFullYear() + '-' +
+        String(today.getMonth() + 1).padStart(2, '0') + '-' +
+        String(today.getDate()).padStart(2, '0');
+
+    var monthLabel = firstDay.toLocaleString('default', {month: 'long', year: 'numeric'});
+    var html = '<div class="cal-header">' +
+        '<button type="button" class="cal-nav-btn" onclick="tripCalNav(-1)" aria-label="Previous month">' +
+            '<i class="material-icons">chevron_left</i></button>' +
+        '<span class="cal-month-label">' + monthLabel + '</span>' +
+        '<button type="button" class="cal-nav-btn" onclick="tripCalNav(1)" aria-label="Next month">' +
+            '<i class="material-icons">chevron_right</i></button>' +
+    '</div><div class="cal-grid">';
+
+    ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function (d) {
+        html += '<div class="cal-cell cal-cell--header">' + d + '</div>';
+    });
+
+    var startDow = firstDay.getDay();
+    for (var i = 0; i < startDow; i++) {
+        html += '<div class="cal-cell cal-cell--empty"></div>';
+    }
+
+    for (var d = 1; d <= daysInMonth; d++) {
+        var ds = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+        var dayActs = byDate[ds] || [];
+        var cls = 'cal-cell' +
+            (ds === todayStr ? ' cal-cell--today' : '') +
+            (dayActs.length  ? ' cal-cell--has-events' : '');
+        html += '<div class="' + cls + '" data-date="' + ds + '">';
+        html += '<span class="cal-day-num">' + d + '</span>';
+        if (dayActs.length) {
+            html += '<div class="cal-events">';
+            dayActs.forEach(function (a) {
+                var safeTitle = (a.title || 'Activity').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                var eventCls = 'cal-event' + (a.status === 'proposed' ? ' cal-event--proposed' : '');
+                html += '<div class="' + eventCls + '" title="' + safeTitle + '" ' +
+                    'draggable="true" data-act-id="' + a.id + '" data-move-url="' + (a.moveUrl || '') + '" ' +
+                    'onclick="var el=document.getElementById(\'trip-activity-\'+' + JSON.stringify(a.id) + ');' +
+                    'if(el){tripSetView(\'list\');el.scrollIntoView({behavior:\'smooth\'});}">';
+                if (a.index) html += '<span class="cal-event-num">' + a.index + '</span>';
+                html += '<span class="cal-event-title">' + safeTitle + '</span></div>';
+            });
+            html += '</div>';
+        }
+        html += '</div>';
+    }
+    html += '</div>';
+    calEl.innerHTML = html;
+    _initCalDragDrop(calEl);
+}
+
+function _initCalDragDrop(calEl) {
+    var dragActId = null;
+    var dragMoveUrl = null;
+
+    calEl.querySelectorAll('.cal-event[draggable]').forEach(function (el) {
+        el.addEventListener('dragstart', function (e) {
+            dragActId   = el.dataset.actId;
+            dragMoveUrl = el.dataset.moveUrl;
+            e.dataTransfer.effectAllowed = 'move';
+            el.classList.add('cal-event--dragging');
+        });
+        el.addEventListener('dragend', function () {
+            el.classList.remove('cal-event--dragging');
+        });
+    });
+
+    calEl.querySelectorAll('.cal-cell[data-date]').forEach(function (cell) {
+        cell.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            cell.classList.add('cal-cell--drag-over');
+        });
+        cell.addEventListener('dragleave', function () {
+            cell.classList.remove('cal-cell--drag-over');
+        });
+        cell.addEventListener('drop', function (e) {
+            e.preventDefault();
+            cell.classList.remove('cal-cell--drag-over');
+            var newDate = cell.dataset.date;
+            if (!dragActId || !dragMoveUrl) return;
+            htmx.ajax('POST', dragMoveUrl, {
+                target: '#trip-activities-panel',
+                swap: 'outerHTML',
+                values: {date: newDate},
+            });
+            dragActId = null;
+            dragMoveUrl = null;
+        });
+    });
 }
 
 // ── Edit activity dialog ─────────────────────────────────────────────────
@@ -527,6 +732,12 @@ function tripOpenEditDialog(li) {
     document.getElementById('edit-activity-location-display').textContent = li.dataset.actLocationName || '';
     document.getElementById('edit-activity-location-search').value = '';
 
+    var status = li.dataset.actStatus || 'proposed';
+    var proposedRadio = document.getElementById('edit-activity-status-proposed');
+    var confirmedRadio = document.getElementById('edit-activity-status-confirmed');
+    if (proposedRadio)  proposedRadio.checked  = (status === 'proposed');
+    if (confirmedRadio) confirmedRadio.checked = (status === 'confirmed');
+
     document.getElementById('edit-activity-dialog').showModal();
 }
 
@@ -537,5 +748,50 @@ function _clearEditLocation() {
     document.getElementById('edit-activity-geocoded-name').value  = '';
     document.getElementById('edit-activity-location-display').textContent = '';
 }
+
+// ── Activity tabs (All / Proposed / Confirmed) ───────────────────────────
+window._tripCurrentTab = 'all';
+
+window.tripSetTab = function (tab) {
+    window._tripCurrentTab = tab;
+    var panel = document.getElementById('trip-activities-panel');
+    if (!panel) return;
+
+    panel.querySelectorAll('.activity-tab').forEach(function (btn) {
+        btn.classList.toggle('activity-tab--active', btn.dataset.tab === tab);
+    });
+
+    panel.querySelectorAll('.trip-activity-item').forEach(function (li) {
+        var status = li.dataset.actStatus || 'proposed';
+        var visible = (tab === 'all') || (tab === status);
+        li.style.display = visible ? '' : 'none';
+    });
+
+    // Update "no activities" message visibility
+    var list = panel.querySelector('.trip-activity-list');
+    if (list) {
+        var anyVisible = Array.from(list.querySelectorAll('.trip-activity-item')).some(function (li) {
+            return li.style.display !== 'none';
+        });
+        var empty = panel.querySelector('.trip-panel-empty');
+        if (empty) empty.hidden = anyVisible;
+    }
+};
+
+// Restore tab after panel swap
+(function () {
+    var sec = document.querySelector('.trip-detail-activities');
+    if (!sec) return;
+    var _orig = sec.addEventListener.bind(sec);
+    // Piggyback on the existing htmx:afterSwap listener — run tab restore after it fires
+    document.body.addEventListener('htmx:afterSettle', function (e) {
+        if (e.target === document.getElementById('trip-activities-panel') ||
+            sec.contains(e.target)) {
+            if (window._tripCurrentTab && window._tripCurrentTab !== 'all') {
+                tripSetTab(window._tripCurrentTab);
+            }
+        }
+    });
+}());
 </script>
 {% endblock %}

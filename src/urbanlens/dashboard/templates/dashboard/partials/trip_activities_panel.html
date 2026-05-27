@@ -3,75 +3,116 @@
         <i class="material-icons">map</i>
         <span>Activities</span>
         {% if activities_with_index %}<span class="badge">{{ activities_with_index|length }}</span>{% endif %}
-        <button type="button" class="detail-pin-add-btn"
-                onclick="document.getElementById('add-activity-dialog').showModal()">
-            <i class="material-icons">add</i> Add
-        </button>
+        <div class="card-header-actions">
+            <div class="view-toggle-group" role="group" aria-label="Activities view">
+                <button type="button" class="view-toggle-btn view-toggle-btn--active"
+                        data-view="list" title="List view"
+                        onclick="tripSetView('list')">
+                    <i class="material-icons">view_list</i>
+                </button>
+                <button type="button" class="view-toggle-btn"
+                        data-view="calendar" title="Calendar view"
+                        onclick="tripSetView('calendar')">
+                    <i class="material-icons">date_range</i>
+                </button>
+            </div>
+            <button type="button" class="detail-pin-add-btn"
+                    onclick="document.getElementById('add-activity-dialog').showModal()">
+                <i class="material-icons">add</i> Add
+            </button>
+        </div>
     </div>
 
-    {% if activities_with_index %}
-    <ul class="trip-activity-list">
-        {% for act, act_index in activities_with_index %}
-        <li class="trip-activity-item"
-            id="trip-activity-{{ act.id }}"
-            data-act-id="{{ act.id }}"
-            data-act-title="{{ act.title|default:'' }}"
-            data-act-notes="{{ act.notes|default:'' }}"
-            data-act-date="{% if act.scheduled_at %}{{ act.scheduled_at|date:'Y-m-d' }}{% endif %}"
-            data-act-time="{% if act.scheduled_at %}{% with t=act.scheduled_at|time:'H:i' %}{% if t != '00:00' %}{{ t }}{% endif %}{% endwith %}{% endif %}"
-            data-act-location-uuid="{{ act.location.uuid|default:'' }}"
-            data-act-location-name="{{ act.location.name|default:'' }}"
-            data-edit-url="{% url 'trips.activity.edit' trip.uuid act.id %}"
-            {% if act_index %}onmouseenter="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},true)"
-            onmouseleave="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},false)"{% endif %}>
+    {# ── Tabs ───────────────────────────────────────────────────────────── #}
+    <div class="activity-tabs">
+        <button type="button" class="activity-tab activity-tab--active" data-tab="all"
+                onclick="tripSetTab('all')">All</button>
+        <button type="button" class="activity-tab" data-tab="proposed"
+                onclick="tripSetTab('proposed')">Proposed</button>
+        <button type="button" class="activity-tab" data-tab="confirmed"
+                onclick="tripSetTab('confirmed')">Confirmed</button>
+    </div>
 
-            {% if act_index %}
-            <div class="trip-activity-num">{{ act_index }}</div>
-            {% else %}
-            <div class="trip-activity-icon">
-                <i class="material-icons">{% if act.location %}place{% else %}radio_button_unchecked{% endif %}</i>
-            </div>
-            {% endif %}
+    {# ── List view ──────────────────────────────────────────────────────── #}
+    <div class="activity-view activity-view--list" data-view="list">
+        {% if activities_with_index %}
+        <ul class="trip-activity-list">
+            {% for act, act_index in activities_with_index %}
+            <li class="trip-activity-item"
+                id="trip-activity-{{ act.id }}"
+                data-act-id="{{ act.id }}"
+                data-act-title="{{ act.title|default:'' }}"
+                data-act-notes="{{ act.notes|default:'' }}"
+                data-act-date="{% if act.scheduled_at %}{{ act.scheduled_at|date:'Y-m-d' }}{% endif %}"
+                data-act-time="{% if act.scheduled_at %}{% with t=act.scheduled_at|time:'H:i' %}{% if t != '00:00' %}{{ t }}{% endif %}{% endwith %}{% endif %}"
+                data-act-location-uuid="{{ act.location.uuid|default:'' }}"
+                data-act-location-name="{{ act.location.name|default:'' }}"
+                data-act-status="{{ act.status }}"
+                data-edit-url="{% url 'trips.activity.edit' trip.uuid act.id %}"
+                data-status-url="{% url 'trips.activity.status' trip.uuid act.id %}"
+                {% if act_index %}onmouseenter="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},true)"
+                onmouseleave="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},false)"{% endif %}>
 
-            <div class="trip-activity-body">
-                <span class="trip-activity-name">{% firstof act.title act.location.name "Unnamed activity" %}</span>
-                {% if act.scheduled_at %}
-                <span class="trip-activity-time">
-                    <i class="material-icons">schedule</i>
-                    {% with t=act.scheduled_at|time:"H:i" %}
-                    {{ act.scheduled_at|date:"M j, Y" }}{% if t != "00:00" %} at {{ act.scheduled_at|time:"g:i A" }}{% endif %}
-                    {% endwith %}
-                </span>
+                {% if act_index %}
+                <div class="trip-activity-num {% if act.status == 'proposed' %}trip-activity-num--proposed{% endif %}">{{ act_index }}</div>
+                {% else %}
+                <div class="trip-activity-icon">
+                    <i class="material-icons">{% if act.location %}place{% else %}radio_button_unchecked{% endif %}</i>
+                </div>
                 {% endif %}
-                {% if act.notes %}
-                <span class="trip-activity-notes">{{ act.notes }}</span>
-                {% endif %}
-                {% if act.added_by %}
-                <span class="trip-activity-attr">Added by {{ act.added_by.user.username }}</span>
-                {% endif %}
-            </div>
 
-            <div class="trip-activity-actions">
-                <button type="button" class="detail-pin-action-btn"
-                        title="Edit activity"
-                        onclick="tripOpenEditDialog(this.closest('li'))">
-                    <i class="material-icons">edit</i>
-                </button>
-                <button type="button" class="detail-pin-action-btn"
-                        title="Remove activity"
-                        hx-delete="{% url 'trips.activity.delete' trip.uuid act.id %}"
-                        hx-target="#trip-activities-panel"
-                        hx-swap="outerHTML"
-                        hx-confirm="Remove this activity?"
-                        hx-on::before-request="this.closest('li').classList.add('is-deleting')"
-                        hx-on::after-request="if(event.detail.successful&&window.refreshTripMap)window.refreshTripMap()">
-                    <i class="material-icons">delete</i>
-                </button>
-            </div>
-        </li>
-        {% endfor %}
-    </ul>
-    {% else %}
-    <p class="trip-panel-empty">No activities yet. Add stops, check-in points, or locations for your trip.</p>
-    {% endif %}
+                <div class="trip-activity-body">
+                    <span class="trip-activity-name">{% firstof act.title act.location.name "Unnamed activity" %}</span>
+                    {% if act.scheduled_at %}
+                    <span class="trip-activity-time">
+                        <i class="material-icons">schedule</i>
+                        {% with t=act.scheduled_at|time:"H:i" %}
+                        {{ act.scheduled_at|date:"M j, Y" }}{% if t != "00:00" %} at {{ act.scheduled_at|time:"g:i A" }}{% endif %}
+                        {% endwith %}
+                    </span>
+                    {% endif %}
+                    {% if act.notes %}
+                    <span class="trip-activity-notes">{{ act.notes }}</span>
+                    {% endif %}
+                    {% if act.added_by %}
+                    <span class="trip-activity-attr">Added by {{ act.added_by.user.username }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="trip-activity-actions">
+                    <button type="button"
+                            class="detail-pin-action-btn trip-status-btn {% if act.status == 'confirmed' %}trip-status-btn--confirmed{% else %}trip-status-btn--proposed{% endif %}"
+                            title="{% if act.status == 'confirmed' %}Mark as proposed{% else %}Mark as confirmed{% endif %}"
+                            hx-post="{% url 'trips.activity.status' trip.uuid act.id %}"
+                            hx-target="#trip-activities-panel"
+                            hx-swap="outerHTML">
+                        <i class="material-icons">{% if act.status == 'confirmed' %}check_circle{% else %}radio_button_unchecked{% endif %}</i>
+                    </button>
+                    <button type="button" class="detail-pin-action-btn"
+                            title="Edit activity"
+                            onclick="tripOpenEditDialog(this.closest('li'))">
+                        <i class="material-icons">edit</i>
+                    </button>
+                    <button type="button" class="detail-pin-action-btn"
+                            title="Remove activity"
+                            hx-delete="{% url 'trips.activity.delete' trip.uuid act.id %}"
+                            hx-target="#trip-activities-panel"
+                            hx-swap="outerHTML"
+                            hx-confirm="Remove this activity?"
+                            hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                        <i class="material-icons">delete</i>
+                    </button>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="trip-panel-empty">No activities yet. Add stops, check-in points, or locations for your trip.</p>
+        {% endif %}
+    </div>
+
+    {# ── Calendar view ──────────────────────────────────────────────────── #}
+    <div class="activity-view activity-view--calendar" data-view="calendar" hidden>
+        <div class="activity-calendar-grid"></div>
+    </div>
 </div>

@@ -170,6 +170,32 @@
         transform: none;
         box-shadow: none;
     }
+
+    &.is-loading {
+        opacity: .78;
+        pointer-events: none;
+        cursor: not-allowed;
+
+        &::after {
+            content: '';
+            display: inline-block;
+            width: 13px;
+            height: 13px;
+            border: 2px solid rgba(255, 255, 255, .4);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: _btn-spin .65s linear infinite;
+            margin-left: .4rem;
+            vertical-align: middle;
+            flex-shrink: 0;
+        }
+    }
+}
+
+@keyframes _btn-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 input[type="submit"] {

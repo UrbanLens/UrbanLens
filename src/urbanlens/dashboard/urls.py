@@ -36,7 +36,7 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import aliases, campus, categories, detail_pins, friendship, location_wiki, maps, markup, organize, pin, pin_edit, settings, tags, trip, userprofile, visits
+from urbanlens.dashboard.controllers import aliases, campus, categories, detail_pins, friendship, location_wiki, maps, markup, organize, pin, pin_edit, settings, site_admin, tags, trip, userprofile, visits
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -398,10 +398,14 @@ urlpatterns = [
                 path("<uuid:trip_uuid>/activities/", trip.TripActivitiesView.as_view(), name="trips.activities"),
                 path("<uuid:trip_uuid>/activities/<int:activity_id>/delete/", trip.TripActivityDeleteView.as_view(), name="trips.activity.delete"),
                 path("<uuid:trip_uuid>/activities/<int:activity_id>/edit/", trip.TripActivityEditView.as_view(), name="trips.activity.edit"),
+                path("<uuid:trip_uuid>/activities/<int:activity_id>/status/", trip.TripActivityStatusView.as_view(), name="trips.activity.status"),
+                path("<uuid:trip_uuid>/activities/<int:activity_id>/move/", trip.TripActivityMoveView.as_view(), name="trips.activity.move"),
                 path("<uuid:trip_uuid>/comments/", trip.TripCommentsView.as_view(), name="trips.comments"),
                 path("<uuid:trip_uuid>/comments/<int:comment_id>/delete/", trip.TripCommentDeleteView.as_view(), name="trips.comment.delete"),
                 path("<uuid:trip_uuid>/members/", trip.TripMembersView.as_view(), name="trips.members"),
                 path("<uuid:trip_uuid>/members/<int:profile_id>/remove/", trip.TripMemberRemoveView.as_view(), name="trips.member.remove"),
+                path("<uuid:trip_uuid>/rsvp/", trip.TripMemberRSVPView.as_view(), name="trips.rsvp"),
+                path("<uuid:trip_uuid>/leave/", trip.TripLeaveView.as_view(), name="trips.leave"),
                 path("<uuid:trip_uuid>/map-data/", trip.TripMapDataView.as_view(), name="trips.map_data"),
             ],
         ),
@@ -436,6 +440,7 @@ urlpatterns = [
             ],
         ),
     ),
+    path("site-admin/", site_admin.SiteAdminView.as_view(), name="site_admin"),
     path("test_ai/", pin.PinController.as_view({"get": "test_ai"}), name="test_ai"),
     path("", include("social_django.urls", namespace="social")),
     re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),

@@ -62,6 +62,12 @@
                         <i class="material-icons">settings</i>
                         <span>Settings</span>
                     </a>
+                    {% if user.is_superuser or user.has_perm('dashboard.view_site_admin') %}
+                    <a href="{% url 'site_admin' %}" class="nav-dropdown-item" role="menuitem">
+                        <i class="material-icons">admin_panel_settings</i>
+                        <span>Site Admin</span>
+                    </a>
+                    {% endif %}
 
                     <div class="nav-dropdown-sep" role="separator"></div>
 

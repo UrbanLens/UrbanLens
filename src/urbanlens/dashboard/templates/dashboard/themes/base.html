@@ -58,6 +58,27 @@
             tapToDismiss: true,
             newestOnTop: true,
         };
+
+        // Global: disable submit buttons during HTMX form requests to prevent double-submit
+        (function () {
+            function _submitBtns(el) {
+                if (!el) return [];
+                var form = el.tagName === 'FORM' ? el : (el.closest ? el.closest('form') : null);
+                return form ? Array.from(form.querySelectorAll('button[type="submit"].submit-button, input[type="submit"]')) : [];
+            }
+            document.body.addEventListener('htmx:beforeRequest', function (e) {
+                _submitBtns(e.target).forEach(function (btn) {
+                    btn.classList.add('is-loading');
+                    btn.disabled = true;
+                });
+            });
+            document.body.addEventListener('htmx:afterRequest', function (e) {
+                _submitBtns(e.target).forEach(function (btn) {
+                    btn.classList.remove('is-loading');
+                    btn.disabled = false;
+                });
+            });
+        }());
     </script>
     {% block scripts %}{% endblock %}
 

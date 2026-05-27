@@ -1,0 +1,39 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="site-admin-page">
+    <div class="site-admin-header">
+        <h1 class="site-admin-title">
+            <i class="material-icons">admin_panel_settings</i>
+            Site Administration
+        </h1>
+        <p class="site-admin-subtitle">Configure site-wide settings.</p>
+    </div>
+
+    {% if saved %}
+    <div class="site-admin-notice site-admin-notice--success">
+        <i class="material-icons">check_circle</i>
+        Settings saved.
+    </div>
+    {% endif %}
+
+    <div class="site-admin-card card">
+        <div class="card-header">
+            <i class="material-icons">group</i>
+            <span>Trip Settings</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="max-trip-members">Maximum members per trip</label>
+                <p class="form-help">Users cannot add more than this many members to a single trip.</p>
+                <input type="number" name="max_trip_members" id="max-trip-members"
+                       value="{{ settings.max_trip_members }}" min="1" max="500">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="submit-button">Save Settings</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
