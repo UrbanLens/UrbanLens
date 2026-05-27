@@ -36,6 +36,7 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
     * <s>Google maps import</s>
     * Collect pin information during import
     * Export
+    * Remove (or better integrate) pin status (visited vs "visited" tag vs visit history)
 * Planning:
     * <s>Trip page</s>
 * Community:
@@ -49,7 +50,29 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
     * Mobile responsiveness
     * Trim icon options (currently too many)
     * Add missing icons (some themes aren't represented)
+    * Allow user to reorder pin details sections
+    * Change default pin details sections order
+    * Pin detail page: 
+      * Rating should be in stars
+      * Place name - is this required to show?
+      * Remove categories
+      * Better show priority somehow
+      * Scrolling the page shouldn't scroll the map (delay on map hover) 
+      * Map sometimes double scrolls (latency?)
+      * Fix Sat view (street may also be broken?)
+      * Fix web results
+        * Web results filtering through ai?
+      * Fix boundary markup
+      * Fix security indicators
+      * Map search needs overhaul
+      * Sections need stronger borders or colors
+      * Users can reorder sections
   * Development:
     * Unit Tests
     * CI/CD 
     * Code Coverage Report
+  * APIs
+    * Use Aliases with Smithsonian, etc
+    * Sunrise / Sunset for weather
+    * Remove weather from pin details (should be only for trip details)
+    * Address often incorrect Smithsonian results (AI filtering? Only names >= certain length?)

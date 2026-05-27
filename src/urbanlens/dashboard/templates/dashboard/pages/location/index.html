@@ -245,21 +245,6 @@
         </div>
     </div>
 
-    {# ── Weather forecast ─────────────────────────────────────────────── #}
-    <div id="weather-forecast-section" class="weather-widget card"
-         hx-get="{% url 'pin.weather_forecast' pin.uuid %}"
-         hx-trigger="load"
-         hx-swap="outerHTML">
-        <div class="card-header">
-            <i class="material-icons">wb_sunny</i>
-            <h3>Weather Forecast</h3>
-        </div>
-        <div class="view-loading">
-            <i class="material-icons spin">autorenew</i>
-            Loading…
-        </div>
-    </div>
-
     {# ── Smithsonian images ───────────────────────────────────────────── #}
     <div id="smithsonian-section" class="smithsonian-images card"
          hx-get="{% url 'smithsonian_images' pin.uuid %}"
