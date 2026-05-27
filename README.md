@@ -49,3 +49,7 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
     * Mobile responsiveness
     * Trim icon options (currently too many)
     * Add missing icons (some themes aren't represented)
+  * Development:
+    * Unit Tests
+    * CI/CD 
+    * Code Coverage Report

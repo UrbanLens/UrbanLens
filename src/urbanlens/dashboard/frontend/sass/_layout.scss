@@ -409,6 +409,7 @@ body.page-location-details div.section {
         "overview overview overview"
         "notes notes notes"
         "visits visits tags"
+        "visits visits categories"
         "aliases aliases aliases"
         "map map map"
         "satellite aerial street"
@@ -470,8 +471,12 @@ body.page-location-details div.section {
         grid-area: visits;
     }
 
-    .tag-panel {
+    #tag-panel {
         grid-area: tags;
+    }
+
+    #category-panel {
+        grid-area: categories;
     }
 
     .location-map {
