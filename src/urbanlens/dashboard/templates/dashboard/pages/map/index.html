@@ -414,17 +414,17 @@
         </button>
         <div class="map-buttons-content">
             <button id="add-pin-button" class="map-btn-icon" title="Add Pin"
-                    hx-get="{% url 'pin.add' %}" hx-target="#addPinModal" hx-swap="innerHTML">
+                    onclick="openAddPinDialog()">
                 <i class="material-icons">add_location</i>
             </button>
             <button id="search-pins-button" class="map-btn-icon" title="Filter / Search Pins" onclick="toggleFilterPanel()">
-                <i class="material-icons">tune</i>
+                <i class="material-icons">search</i>
             </button>
             <button id="topography-button" class="map-btn-icon" title="Topography View" onclick="toggleTopographyView()">
                 <i class="material-icons">terrain</i>
             </button>
             <button id="satellite-button" class="map-btn-icon" title="Satellite View" onclick="toggleSatelliteView()">
-                <i class="material-icons">satellite</i>
+                <i class="material-icons">satellite_alt</i>
             </button>
             <button id="toggle-pins-button" class="map-btn-icon" title="Toggle Pins" onclick="togglePins()">
                 <i class="material-icons">push_pin</i>
@@ -610,7 +610,113 @@
     <div id="map-body"></div>
 
 </div>
-<div id="addPinModal"></div>
+<dialog id="add-pin-dialog" class="add-pin-dialog">
+    <div class="apdlg-header">
+        <h2><i class="material-icons" style="font-size:1.1rem;vertical-align:-.15em;margin-right:.35rem;">add_location</i>Add Pin</h2>
+        <button class="btn-close" onclick="closeAddPinDialog()" aria-label="Close">×</button>
+    </div>
+    <div class="apdlg-body">
+
+        {# Address / coordinates search #}
+        <div class="form-field">
+            <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Address or coordinates</label>
+            <div class="apdlg-addr-wrap" id="apdlg-addr-wrap">
+                <input type="text" id="apdlg-addr" class="form-input" autocomplete="off"
+                       placeholder="e.g. 123 Main St, Albany NY  or  42.65, -73.75">
+                <div id="apdlg-addr-suggestions" class="apdlg-addr-suggestions" hidden></div>
+            </div>
+        </div>
+
+        {# Lat / Lng read-only display + click-map hint #}
+        <div class="apdlg-latlon-row">
+            <div class="form-field">
+                <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Latitude</label>
+                <input type="text" id="apdlg-lat" class="form-input" readonly placeholder="—">
+            </div>
+            <div class="form-field">
+                <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Longitude</label>
+                <input type="text" id="apdlg-lng" class="form-input" readonly placeholder="—">
+            </div>
+        </div>
+        <p class="apdlg-click-hint"><i class="material-icons">ads_click</i> Click the map to place the pin</p>
+
+        {# Name #}
+        <div class="form-field">
+            <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Name</label>
+            <input type="text" id="apdlg-name" class="form-input" placeholder="Location name">
+        </div>
+
+        {# Icon grid #}
+        <div class="form-field">
+            <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Icon</label>
+            <div id="apdlg-icon-grid" class="icon-grid apdlg-icon-grid">
+                <i class="pin bank" data-value="bank" title="Bank"></i>
+                <i class="pin car" data-value="car" title="Car"></i>
+                <i class="pin church" data-value="church" title="Church"></i>
+                <i class="pin firehouse" data-value="firehouse" title="Firehouse"></i>
+                <i class="pin hospital" data-value="hospital" title="Hospital"></i>
+                <i class="pin military" data-value="military" title="Military"></i>
+                <i class="pin plane" data-value="plane" title="Airport/Plane"></i>
+                <i class="pin school" data-value="school" title="School"></i>
+                <i class="pin tunnel" data-value="tunnel" title="Tunnel"></i>
+                <i class="pin boat" data-value="boat" title="Boat/Dock"></i>
+                <i class="pin castle" data-value="castle" title="Castle"></i>
+                <i class="pin dam" data-value="dam" title="Dam"></i>
+                <i class="pin graffiti" data-value="graffiti" title="Graffiti"></i>
+                <i class="pin house" data-value="house" title="House"></i>
+                <i class="pin museum" data-value="museum" title="Museum"></i>
+                <i class="pin powerplant" data-value="powerplant" title="Power Plant"></i>
+                <i class="pin statue" data-value="statue" title="Statue"></i>
+                <i class="pin bridge" data-value="bridge" title="Bridge"></i>
+                <i class="pin cave" data-value="cave" title="Cave"></i>
+                <i class="pin factory" data-value="factory" title="Factory"></i>
+                <i class="pin graveyard" data-value="graveyard" title="Graveyard"></i>
+                <i class="pin library" data-value="library" title="Library"></i>
+                <i class="pin park" data-value="park" title="Park"></i>
+                <i class="pin prison" data-value="prison" title="Prison"></i>
+                <i class="pin train" data-value="train" title="Train Station"></i>
+            </div>
+            <input type="hidden" id="apdlg-icon">
+        </div>
+
+        {# Tags #}
+        {% if tags %}
+        <div class="form-field">
+            <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Tags</label>
+            <div class="apdlg-chips">
+                {% for tag in tags %}
+                <label class="apdlg-chip">
+                    <input type="checkbox" name="tag_id" value="{{ tag.id }}">
+                    {% if tag.icon %}<span style="{% if tag.color %}color:{{ tag.color }}{% endif %}">{{ tag.icon }}</span>{% endif %}
+                    <span>{{ tag.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# Categories #}
+        {% if categories %}
+        <div class="form-field">
+            <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Categories</label>
+            <div class="apdlg-chips">
+                {% for cat in categories %}
+                <label class="apdlg-chip">
+                    <input type="checkbox" name="category_id" value="{{ cat.id }}">
+                    {% if cat.icon %}<span {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</span>{% endif %}
+                    <span>{{ cat.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+    <div class="apdlg-footer">
+        <button type="button" class="btn-ghost" onclick="closeAddPinDialog()">Cancel</button>
+        <button type="button" class="btn-primary" id="apdlg-submit">Add Pin</button>
+    </div>
+</dialog>
 <div id="importPinsModal"></div>
 {% endblock %}
 
@@ -1497,6 +1603,166 @@
             chip.style.display = (!q || (chip.dataset.tagName || '').includes(q)) ? '' : 'none';
         });
     }
+
+    // ── Add-Pin dialog ────────────────────────────────────────────────────
+    let _addPinClickMode = false;
+    let _addPinMarker = null;
+
+    function openAddPinDialog() {
+        // Reset all fields
+        document.getElementById('apdlg-addr').value = '';
+        document.getElementById('apdlg-lat').value = '';
+        document.getElementById('apdlg-lng').value = '';
+        document.getElementById('apdlg-name').value = '';
+        document.getElementById('apdlg-icon').value = '';
+        document.querySelectorAll('#apdlg-icon-grid i').forEach(i => i.classList.remove('selected'));
+        document.querySelectorAll('#add-pin-dialog input[name="tag_id"]').forEach(cb => cb.checked = false);
+        document.querySelectorAll('#add-pin-dialog input[name="category_id"]').forEach(cb => cb.checked = false);
+        document.getElementById('apdlg-addr-suggestions').hidden = true;
+        const btn = document.getElementById('apdlg-submit');
+        btn.disabled = false;
+        btn.textContent = 'Add Pin';
+        // Remove any previous preview marker
+        if (_addPinMarker) { map.removeLayer(_addPinMarker); _addPinMarker = null; }
+        _addPinClickMode = true;
+        document.getElementById('add-pin-dialog').showModal();
+    }
+
+    function closeAddPinDialog() {
+        _addPinClickMode = false;
+        if (_addPinMarker) { map.removeLayer(_addPinMarker); _addPinMarker = null; }
+        document.getElementById('add-pin-dialog').close();
+    }
+
+    // Close dialog on backdrop click
+    document.getElementById('add-pin-dialog').addEventListener('click', function(e) {
+        if (e.target === this) closeAddPinDialog();
+    });
+
+    // Map click: place pin while dialog is open
+    map.on('click', function(e) {
+        if (!_addPinClickMode) return;
+        const lat = e.latlng.lat.toFixed(6);
+        const lng = e.latlng.lng.toFixed(6);
+        document.getElementById('apdlg-lat').value = lat;
+        document.getElementById('apdlg-lng').value = lng;
+        if (_addPinMarker) {
+            _addPinMarker.setLatLng(e.latlng);
+        } else {
+            _addPinMarker = L.marker(e.latlng).addTo(map);
+        }
+    });
+
+    // Address autocomplete (Nominatim)
+    let _addrTimer = null;
+    document.getElementById('apdlg-addr').addEventListener('input', function() {
+        clearTimeout(_addrTimer);
+        const q = this.value.trim();
+        if (!q) { document.getElementById('apdlg-addr-suggestions').hidden = true; return; }
+        // Accept raw lat,lng input
+        const coordRe = /^(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/;
+        const m = q.match(coordRe);
+        if (m) {
+            const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+            if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                _setAddPinLocation(lat, lng);
+                document.getElementById('apdlg-addr-suggestions').hidden = true;
+            }
+            return;
+        }
+        _addrTimer = setTimeout(() => _fetchAddrSuggestions(q), 380);
+    });
+
+    function _fetchAddrSuggestions(query) {
+        fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5`, {
+            headers: { Accept: 'application/json', 'Accept-Language': 'en' },
+        })
+        .then(r => r.json())
+        .then(results => {
+            const box = document.getElementById('apdlg-addr-suggestions');
+            box.innerHTML = '';
+            if (!results.length) { box.hidden = true; return; }
+            results.forEach(r => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'apdlg-suggestion';
+                btn.textContent = r.display_name;
+                btn.addEventListener('mousedown', e => {
+                    e.preventDefault();  // prevent input blur firing first
+                    document.getElementById('apdlg-addr').value = r.display_name;
+                    _setAddPinLocation(parseFloat(r.lat), parseFloat(r.lon));
+                    box.hidden = true;
+                });
+                box.appendChild(btn);
+            });
+            box.hidden = false;
+        })
+        .catch(() => {});
+    }
+
+    function _setAddPinLocation(lat, lng) {
+        document.getElementById('apdlg-lat').value = lat.toFixed(6);
+        document.getElementById('apdlg-lng').value = lng.toFixed(6);
+        const latlng = L.latLng(lat, lng);
+        map.setView(latlng, Math.max(map.getZoom(), 15));
+        if (_addPinMarker) {
+            _addPinMarker.setLatLng(latlng);
+        } else {
+            _addPinMarker = L.marker(latlng).addTo(map);
+        }
+    }
+
+    // Hide suggestions when input loses focus
+    document.getElementById('apdlg-addr').addEventListener('blur', function() {
+        setTimeout(() => { document.getElementById('apdlg-addr-suggestions').hidden = true; }, 150);
+    });
+
+    // Icon grid selection
+    document.getElementById('apdlg-icon-grid').addEventListener('click', function(e) {
+        if (e.target.tagName !== 'I') return;
+        document.querySelectorAll('#apdlg-icon-grid i').forEach(i => i.classList.remove('selected'));
+        e.target.classList.add('selected');
+        const iconVal = e.target.dataset.value;
+        document.getElementById('apdlg-icon').value = iconVal;
+        if (_addPinMarker) {
+            _addPinMarker.setIcon(L.divIcon({
+                className: iconVal,
+                html: `<i class="pin ${iconVal}"></i>`,
+                iconSize: [30, 42],
+                iconAnchor: [15, 42],
+            }));
+        }
+    });
+
+    // Form submit
+    document.getElementById('apdlg-submit').addEventListener('click', function() {
+        const lat = document.getElementById('apdlg-lat').value.trim();
+        const lng = document.getElementById('apdlg-lng').value.trim();
+        if (!lat || !lng) {
+            toastr.warning('Set a location first — click the map or enter an address.');
+            return;
+        }
+        const formData = new FormData();
+        formData.append('name', document.getElementById('apdlg-name').value.trim() || 'Unnamed Location');
+        formData.append('latitude', lat);
+        formData.append('longitude', lng);
+        const icon = document.getElementById('apdlg-icon').value;
+        if (icon) formData.append('icon', icon);
+        document.querySelectorAll('#add-pin-dialog input[name="tag_id"]:checked').forEach(cb => formData.append('tag_ids', cb.value));
+        document.querySelectorAll('#add-pin-dialog input[name="category_id"]:checked').forEach(cb => formData.append('category_ids', cb.value));
+
+        this.disabled = true;
+        this.textContent = 'Saving…';
+        fetch("{% url 'pin.add' %}", {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+        })
+        .then(r => r.ok ? r : r.text().then(t => Promise.reject(t || r.statusText)))
+        .then(() => { toastr.success('Pin added!'); closeAddPinDialog(); })
+        .catch(err => toastr.error('Failed to add pin: ' + err))
+        .finally(() => { this.disabled = false; this.textContent = 'Add Pin'; });
+    });
 
 </script>
 

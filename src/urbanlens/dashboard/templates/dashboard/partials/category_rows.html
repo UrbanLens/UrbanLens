@@ -21,12 +21,12 @@
             <i class="material-icons">drag_indicator</i>
         </div>
 
-        <div class="tag-card-icon" {% if category.color %}style="background:{{ category.color }}22; border-color:{{ category.color }}44;"{% endif %}>
-            {% if category.icon %}
-                {% if category.icon|is_material_icon %}
-                <i class="material-icons tag-icon-std" {% if category.color %}style="color:{{ category.color }}"{% endif %}>{{ category.icon }}</i>
+        <div class="tag-card-icon" {% if category.effective_color %}style="background:{{ category.effective_color }}22; border-color:{{ category.effective_color }}44;"{% endif %}>
+            {% if category.effective_icon %}
+                {% if category.effective_icon|is_material_icon %}
+                <i class="material-icons tag-icon-std" {% if category.effective_color %}style="color:{{ category.effective_color }}"{% endif %}>{{ category.effective_icon }}</i>
                 {% else %}
-                <span class="tag-icon-emoji">{{ category.icon }}</span>
+                <span class="tag-icon-emoji">{{ category.effective_icon }}</span>
                 {% endif %}
             {% else %}
             <i class="material-icons tag-icon-std tag-icon-empty">category</i>
@@ -34,7 +34,10 @@
         </div>
 
         <div class="tag-card-body">
-            <div class="tag-card-name">{{ category.name }}</div>
+            <div class="tag-card-name">
+                {{ category.effective_name }}
+                {% if category.is_customized %}<span class="tag-customized-badge" title="You have customized this category's display">custom</span>{% endif %}
+            </div>
             {% if category.description %}
             <div class="tag-card-desc">{{ category.description }}</div>
             {% endif %}
@@ -51,8 +54,8 @@
                 </span>
                 {% endif %}
                 {% endwith %}
-                {% if category.color %}
-                <span class="tag-color-dot" style="background:{{ category.color }};" title="{{ category.color }}"></span>
+                {% if category.effective_color %}
+                <span class="tag-color-dot" style="background:{{ category.effective_color }};" title="{{ category.effective_color }}"></span>
                 {% endif %}
                 {% if category.parents.exists %}
                 <span class="tag-parents-summary">
@@ -65,7 +68,15 @@
 
         <div class="tag-card-actions">
             <span class="tag-order-badge" title="Order">{{ forloop.counter }}</span>
-            <button type="button" class="btn-icon" title="Edit"
+            <button type="button" class="btn-icon{% if category.is_customized %} btn-icon--active{% endif %}"
+                    title="Customize your display of this category"
+                    hx-get="{% url 'category.customize' category.id %}"
+                    hx-target="#category-edit-dialog-body"
+                    hx-swap="innerHTML">
+                <i class="material-icons">tune</i>
+            </button>
+            {% if can_edit_global %}
+            <button type="button" class="btn-icon btn-icon--global-edit" title="Edit global category"
                     hx-get="{% url 'category.edit' category.id %}"
                     hx-target="#category-edit-dialog-body"
                     hx-swap="innerHTML">
@@ -81,6 +92,7 @@
                     <i class="material-icons">delete</i>
                 </button>
             </form>
+            {% endif %}
         </div>
     </div>
 

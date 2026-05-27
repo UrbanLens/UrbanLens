@@ -18,7 +18,7 @@ from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.tags.model import Tag
+    from urbanlens.dashboard.models.badges.model import Badge
 
 
 # ~50 m radius expressed in degrees (at mid-latitudes). Used as the default
@@ -90,13 +90,13 @@ class Location(abstract.AddressableMixin, abstract.Model):
     # Shared taxonomy - these represent the real-world place's type, not a user's classification.
     # Users apply their own categories/tags via the Pin's M2M fields.
     categories = ManyToManyField(
-        "dashboard.Tag",
+        "dashboard.Badge",
         blank=True,
         related_name="categorized_locations",
         limit_choices_to={"kind": "category"},
     )
     tags = ManyToManyField(
-        "dashboard.Tag",
+        "dashboard.Badge",
         blank=True,
         related_name="locations",
         limit_choices_to={"kind": "tag"},
@@ -138,9 +138,9 @@ class Location(abstract.AddressableMixin, abstract.Model):
         return bool(self.place_name) and self.place_name != "No Information Available"
 
     def change_category(self, category_id: int) -> None:
-        from urbanlens.dashboard.models.tags.model import Tag
+        from urbanlens.dashboard.models.badges.model import Badge
 
-        category = Tag.objects.get(id=category_id, kind="category")
+        category = Badge.objects.get(id=category_id, kind="category")
         self.categories.clear()
         self.categories.add(category)
         self.save()
@@ -180,12 +180,12 @@ class Location(abstract.AddressableMixin, abstract.Model):
             self.add_category(category_name, save=False)
         return category_name
 
-    def add_category(self, category_name: str, save: bool = True) -> Tag | None:
-        from urbanlens.dashboard.models.tags.model import Tag
+    def add_category(self, category_name: str, save: bool = True) -> Badge | None:
+        from urbanlens.dashboard.models.badges.model import Badge
 
         category_name = category_name.lower()
         try:
-            category, _created = Tag.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
+            category, _created = Badge.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
             if category:
                 self.categories.add(category)
                 if save:

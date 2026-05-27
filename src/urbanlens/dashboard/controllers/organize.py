@@ -10,7 +10,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views import View
 
-from urbanlens.dashboard.models.tags.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Tag
+from urbanlens.dashboard.models.badges.model import Badge, COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES
 
 logger = logging.getLogger(__name__)
 
@@ -37,23 +37,26 @@ class OrganizeIndexView(LoginRequiredMixin, View):
         tab = request.GET.get("tab", "tags")
 
         tags = (
-            Tag.objects.tags()
+            Badge.objects.tags()
             .visible_to(profile)
             .ordered()
+            .with_customizations_for(profile)
             .prefetch_related("pins", "children", "children__pins")
         )
         categories = (
-            Tag.objects.categories()
+            Badge.objects.categories()
             .ordered()
+            .with_customizations_for(profile)
             .prefetch_related("categorized_pins", "categorized_locations", "children", "children__categorized_pins")
         )
         # Priority list: all tags visible to the user + all categories, sorted by order desc then name.
         priority_items = (
-            Tag.objects.visible_to(profile)
+            Badge.objects.visible_to(profile)
             .ordered()
             .prefetch_related("pins", "categorized_pins")
         )
 
+        can_edit_global = request.user.has_perm("dashboard.edit_global_badge")
         return render(
             request,
             "dashboard/pages/organize/index.html",
@@ -63,6 +66,7 @@ class OrganizeIndexView(LoginRequiredMixin, View):
                 "categories": categories,
                 "priority_items": priority_items,
                 "active_tab": tab,
+                "can_edit_global": can_edit_global,
             },
         )
 
@@ -93,12 +97,12 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
 
         profile = request.user.profile
         visible_ids = set(
-            Tag.objects.visible_to(profile).filter(id__in=item_ids).values_list("id", flat=True),
+            Badge.objects.visible_to(profile).filter(id__in=item_ids).values_list("id", flat=True),
         )
         total = len(item_ids)
         for i, item_id in enumerate(item_ids):
             if item_id not in visible_ids:
                 continue
-            Tag.objects.filter(id=item_id).update(order=total - i)
+            Badge.objects.filter(id=item_id).update(order=total - i)
 
         return JsonResponse({"ok": True})

@@ -332,6 +332,15 @@
     padding: 1px 5px;
 }
 
+.tag-customized-badge {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: #fff;
+    background: #7c63d4;
+    border-radius: 4px;
+    padding: 1px 5px;
+}
+
 .tag-readonly-badge {
     display: flex;
     align-items: center;
@@ -530,7 +539,7 @@
 
 // ── Tag edit dialog ────────────────────────────────────────────────────────────
 .tag-edit-dialog {
-    width: min(620px, calc(100vw - 2rem));
+    width: min(52em, calc(100vw - 2rem));
     max-height: 90vh;
     border-radius: $radius-md;
     border: 1px solid $border-color;
@@ -1605,11 +1614,6 @@
     }
 }
 
-.organize-panel {
-    // Visibility is managed by the HTML `hidden` attribute (set/removed by JS tab switching).
-    // No CSS display override needed here.
-}
-
 // ── Priority list ─────────────────────────────────────────────────────────────
 
 .priority-list {
@@ -1675,7 +1679,7 @@
     flex: 1;
     min-width: 0;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: .1rem;
 }
 
@@ -1746,45 +1750,51 @@
     display: flex;
     gap: .5rem;
     margin-top: .35rem;
-}
 
-.kind-toggle-option {
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-
-    input[type="radio"] {
-        display: none;
-    }
-
-    span {
-        display: inline-flex;
+    .kind-toggle-option {
+        display: flex;
         align-items: center;
-        gap: .35rem;
-        padding: .45rem 1rem;
-        border: 2px solid $border-color;
-        border-radius: $radius-sm;
-        font-size: .875rem;
-        font-weight: 500;
-        color: $text-secondary;
-        background: #fafafa;
-        transition: border-color .13s, background .13s, color .13s;
+        cursor: pointer;
 
-        i {
-            font-size: 1rem;
+        span {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            padding: .45rem 1rem;
+            border: 2px solid $border-color;
+            border-radius: $radius-sm;
+            font-size: .875rem;
+            font-weight: 500;
+            color: $text-secondary;
+            background: #fafafa;
+            transition: border-color .13s, background .13s, color .13s;
+            height: 2.5em;
+
+            i {
+                font-size: 1rem;
+            }
+
+            &::before {
+                top: 0.4em;
+                left: 0.3em;
+            }
         }
-    }
 
-    input[type="radio"]:checked + span {
-        border-color: $primary-color;
-        background: color-mix(in srgb, $primary-color 10%, white);
-        color: $primary-color;
-        font-weight: 600;
-    }
+        input[type="radio"] {
+            display: none;
 
-    &:hover span {
-        border-color: darken($border-color, 10%);
-        background: #f0f0f0;
+            &:checked+span {
+                border-color: $primary-color;
+                background: color-mix(in srgb, $primary-color 10%, white);
+                color: $primary-color;
+                font-weight: 600;
+            }
+        }
+
+        &:hover span {
+            border-color: darken($border-color, 10%);
+            background: #f0f0f0;
+        }
     }
 }
 

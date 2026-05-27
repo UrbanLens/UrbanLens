@@ -44,7 +44,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.tags.model import Tag
+from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -55,13 +55,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.pin.model import PinStatus
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        tags = Tag.objects.filter(profile=profile).order_by("order", "name")
+        tags = Badge.objects.tags().visible_to(profile).ordered()
+        categories = Badge.objects.categories().ordered()
         return render(
             request,
             "dashboard/pages/map/index.html",
             {
                 "openweathermap_api_key": settings.openweathermap_api_key,
                 "tags": tags,
+                "categories": categories,
                 "status_choices": PinStatus.choices,
                 "profile_id": profile.id,
                 "cluster_radius": profile.cluster_radius,
@@ -77,7 +79,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         pin.longitude = request.POST.get("longitude")
         tags = request.POST.get("tags").split(",")
         for tag_name in tags:
-            tag, _created = Tag.objects.get_or_create(name=tag_name)
+            tag, _created = Badge.objects.get_or_create(name=tag_name)
             pin.tags.add(tag)
         icon = request.FILES.get("icon", None)
         if icon:
@@ -88,7 +90,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def get_edit_pin(self, request, pin_uuid, *args, **kwargs):
         pin = Pin.objects.get(uuid=pin_uuid)
         # Render the edit form
-        categories = Tag.objects.categories().ordered()
+        categories = Badge.objects.categories().ordered()
         return render(request, "dashboard/pages/map/edit_location.html", {"pin": pin, "categories": categories})
 
     def add_pin(self, request, *args, **kwargs):
@@ -101,9 +103,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             latitude = request.POST.get("latitude")
             longitude = request.POST.get("longitude")
             address = request.POST.get("address", None)
-            tags = request.POST.get("tags")
-            tags = tags.split(",") if tags else []
             icon = request.POST.get("icon", None)
+            tag_ids = request.POST.getlist("tag_ids")
+            category_ids = request.POST.getlist("category_ids")
 
             if not latitude or not longitude:
                 if not address:
@@ -128,17 +130,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             pin = Pin.objects.create(
                 nickname=name,
                 location=location,
-                # Only store coordinate override when it differs from the location.
-                # For a brand-new location the pin is the source of truth, so clear overrides.
                 latitude=None,
                 longitude=None,
                 icon=icon,
                 profile=request.user.profile,
             )
-            for tag_name in tags:
-                if tag_name.strip():
-                    tag, _ = Tag.objects.get_or_create(name=tag_name.strip())
-                    pin.tags.add(tag)
+            if tag_ids:
+                pin.tags.set(Badge.objects.tags().filter(id__in=tag_ids))
+            if category_ids:
+                pin.categories.set(Badge.objects.categories().filter(id__in=category_ids))
             pin.save()
             return HttpResponse(status=200)
         except Exception as e:

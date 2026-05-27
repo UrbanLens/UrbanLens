@@ -58,7 +58,7 @@
     border: 1px solid $border-color;
     border-radius: $radius-md;
     box-shadow: $shadow-dialog;
-    width: 380px;
+    width: 42em;
     max-width: calc(100vw - 24px);
 
     &[hidden] {
@@ -350,4 +350,3 @@
         margin: 0;
     }
 }
-

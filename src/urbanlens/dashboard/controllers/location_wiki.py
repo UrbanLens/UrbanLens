@@ -42,7 +42,7 @@ class LocationWikiView(LoginRequiredMixin, View):
         user_pin = location.pins.filter(profile=profile).first()
 
         from urbanlens.dashboard.models.pin.model import PinType
-        from urbanlens.dashboard.models.tags.model import COLOR_CHOICES
+        from urbanlens.dashboard.models.badges.model import COLOR_CHOICES
 
         detail_pin_icon_choices = [
             ("place", "Place"), ("business", "Building"), ("door_front", "Entrance"),

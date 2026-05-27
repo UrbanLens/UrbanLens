@@ -60,7 +60,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import PinStatus, PinType
-        from urbanlens.dashboard.models.tags.model import COLOR_CHOICES, Tag
+        from urbanlens.dashboard.models.badges.model import Badge, COLOR_CHOICES
 
         pin = Pin.objects.select_related("location").get(uuid=kwargs["pin_uuid"])
 
@@ -103,7 +103,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "pin_type_choices": PinType.choices,
                 "detail_pin_icon_choices": detail_pin_icon_choices,
                 "color_choices": COLOR_CHOICES,
-                "all_categories": Tag.objects.categories().ordered(),
+                "all_categories": Badge.objects.categories().ordered(),
                 "default_map_view": profile.default_map_view,
                 "today": today.isoformat(),
                 "min_date": min_date.isoformat(),
@@ -328,10 +328,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         View the import pins form
         """
-        from urbanlens.dashboard.models.tags.model import Tag
+        from urbanlens.dashboard.models.badges.model import Badge
 
         profile = Profile.objects.get(user=request.user)
-        tags = Tag.objects.visible_to(profile).ordered()
+        tags = Badge.objects.visible_to(profile).ordered()
         return render(
             request,
             "dashboard/pages/location/import/csv.html",
@@ -394,10 +394,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        from urbanlens.dashboard.models.tags.model import Tag
+        from urbanlens.dashboard.models.badges.model import Badge
 
         tag_ids = request.POST.getlist("tag_ids")
-        import_tags = list(Tag.objects.visible_to(profile).filter(id__in=tag_ids)) if tag_ids else []
+        import_tags = list(Badge.objects.visible_to(profile).filter(id__in=tag_ids)) if tag_ids else []
         tag_by_filename = request.POST.get("tag_by_filename") == "1"
 
         google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")

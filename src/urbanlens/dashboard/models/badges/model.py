@@ -1,4 +1,4 @@
-"""Tag model - a named label applied to pins, with optional user ownership and hierarchy."""
+"""Badge model - a named label applied to pins, with optional user ownership and hierarchy."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from django.db.models import CASCADE, CharField, ForeignKey, ImageField, Index, IntegerField, ManyToManyField, TextField
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.tags.queryset import TagManager
+from urbanlens.dashboard.models.badges.queryset import BadgeManager
 
 KIND_TAG = "tag"
 KIND_CATEGORY = "category"
@@ -19,6 +19,7 @@ KIND_CHOICES = [
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.badges.customization import BadgeCustomization
 
 
 ICON_CHOICES = [
@@ -1370,18 +1371,19 @@ COLOR_CHOICES = [
 ]
 
 
-class Tag(abstract.Model):
+class Badge(abstract.Model):
     """A named label that can be applied to pins.
 
-    Tags are either global (profile=None, visible to all users) or user-specific
-    (profile set, only visible to that user and alongside global tags).
+    Badges are either global (profile=None, visible to all users) or user-specific
+    (profile set, only visible to that user and alongside global badges).
 
-    Tags form an arbitrary-depth hierarchy via the parents M2M. Filtering by a tag
-    also matches any descendant tags (use get_tag_and_descendants for the full set).
+    Badges form an arbitrary-depth hierarchy via the parents M2M. Filtering by a badge
+    also matches any descendant badges (use get_badge_and_descendants for the full set).
 
-    Tags absorb the functionality of the former PinList model: they carry an icon,
-    custom icon, color, description, and ordering weight that feeds into
-    Pin.effective_icon's priority chain.
+    The `kind` field distinguishes between tag-type badges (personal labels) and
+    category-type badges (global shared classification). Badges absorb the functionality
+    of the former PinList model: they carry an icon, custom icon, color, description,
+    and ordering weight that feeds into Pin.effective_icon's priority chain.
     """
 
     # NULL = global tag visible to all users; non-null = owned by one user.
@@ -1410,21 +1412,60 @@ class Tag(abstract.Model):
         related_name="children",
     )
 
-    objects = TagManager()
+    objects = BadgeManager()
 
     if TYPE_CHECKING:
         profile_id: int | None
         pins: ManyToManyField[Pin, Pin]
 
-    @classmethod
-    def get_tag_and_descendants(cls, tag_id: int) -> set[int]:
-        """Return tag_id plus all descendant tag IDs (BFS, cycle-safe).
+    def _get_customization(self) -> BadgeCustomization | None:
+        """Return this user's customization, if the queryset was prefetched."""
+        cached: list[BadgeCustomization] = getattr(self, "_user_customizations", [])
+        return cached[0] if cached else None
 
-        Used so that filtering pins by a parent tag also surfaces pins carrying
-        any of its descendant tags.
+    @property
+    def effective_name(self) -> str:
+        """Return the user's override name, or fall back to the global name."""
+        c = self._get_customization()
+        return (c.name if c and c.name else None) or self.name
+
+    @property
+    def effective_icon(self) -> str | None:
+        """Return the user's override icon, or fall back to the global icon."""
+        c = self._get_customization()
+        if c and c.icon is not None:
+            return c.icon
+        return self.icon
+
+    @property
+    def effective_color(self) -> str | None:
+        """Return the user's override color, or fall back to the global color."""
+        c = self._get_customization()
+        if c and c.color is not None:
+            return c.color
+        return self.color
+
+    @property
+    def is_customized(self) -> bool:
+        """True if this user has any active override for this tag."""
+        c = self._get_customization()
+        return c is not None and any([c.name, c.icon is not None, c.color is not None])
+
+    @property
+    def icon_is_overridden(self) -> bool:
+        """True if this user has explicitly set an icon override (bypasses custom_icon)."""
+        c = self._get_customization()
+        return c is not None and c.icon is not None
+
+    @classmethod
+    def get_badge_and_descendants(cls, badge_id: int) -> set[int]:
+        """Return badge_id plus all descendant badge IDs (BFS, cycle-safe).
+
+        Used so that filtering pins by a parent badge also surfaces pins carrying
+        any of its descendant badges.
         """
         visited: set[int] = set()
-        queue: list[int] = [tag_id]
+        queue: list[int] = [badge_id]
         while queue:
             current = queue.pop(0)
             if current in visited:
@@ -1443,6 +1484,7 @@ class Tag(abstract.Model):
         db_table = "dashboard_tags"
         ordering = ["-order", "name"]
         get_latest_by = "updated"
+        permissions = [("edit_global_badge", "Can edit global badges")]
         indexes = [
             Index(fields=["profile"]),
             Index(fields=["profile", "order"]),

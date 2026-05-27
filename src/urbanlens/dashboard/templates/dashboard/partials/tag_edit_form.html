@@ -4,7 +4,7 @@
       hx-target="#tag-rows"
       hx-swap="innerHTML"
       enctype="multipart/form-data"
-      class="tag-inline-edit"
+      class="tag-inline-edit{% if is_global %} tag-global-edit-form{% endif %}"
       hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); toastr.success('Tag saved.'); }">
     {% csrf_token %}
 

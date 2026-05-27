@@ -1,15 +1,15 @@
-"""CategoryViewSet - backed by Tag.objects.categories()."""
+"""CategoryViewSet - backed by Badge.objects.categories()."""
 
 from __future__ import annotations
 
 from rest_framework import viewsets
 
 from urbanlens.dashboard.models.categories.serializer import CategorySerializer
-from urbanlens.dashboard.models.tags.model import Tag
+from urbanlens.dashboard.models.badges.model import Badge
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
-    """ViewSet for Tag rows with kind='category'."""
+    """ViewSet for Badge rows with kind='category'."""
 
-    queryset = Tag.objects.categories().all()
+    queryset = Badge.objects.categories().all()
     serializer_class = CategorySerializer

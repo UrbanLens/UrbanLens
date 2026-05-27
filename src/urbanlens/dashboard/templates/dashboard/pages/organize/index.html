@@ -168,12 +168,15 @@
                         <i class="material-icons">account_tree</i>
                     </button>
                 </div>
+                {% if can_edit_global %}
                 <button class="btn-primary" id="new-category-btn" type="button">
                     <i class="material-icons">add</i> New Category
                 </button>
+                {% endif %}
             </div>
         </div>
 
+        {% if can_edit_global %}
         <div id="cat-sel-bar" class="cat-sel-bar">
             <div class="cat-sel-bar-left">
                 <span id="cat-sel-count" class="cat-sel-count" hidden></span>
@@ -186,7 +189,9 @@
                 <button type="button" id="cat-sel-merge" class="cat-sel-merge-btn" disabled><i class="material-icons">merge</i> Merge</button>
             </div>
         </div>
+        {% endif %}{# can_edit_global #}
 
+        {% if can_edit_global %}
         <div class="tag-create-card" id="new-category-form" style="display:none;">
             <form hx-post="{% url 'category.create' %}" hx-target="#category-rows" hx-swap="innerHTML"
                   class="tag-form"
@@ -250,6 +255,7 @@
                 </div>
             </form>
         </div>
+        {% endif %}{# can_edit_global #}
 
         <div id="category-rows">
             {% include 'dashboard/partials/category_rows.html' %}
@@ -355,6 +361,15 @@
     </div>
     <div class="cat-bulk-edit-body">
         <div class="cat-bulk-field">
+            <label class="form-label">Convert type</label>
+            <label class="cat-bulk-nochange-label" style="margin-top:.35rem;">
+                <input type="checkbox" id="tag-bulk-convert-cb">
+                <span>Convert selected tags to <strong>categories</strong></span>
+            </label>
+            <p class="form-hint" id="tag-bulk-convert-hint" hidden>All pin and location memberships will be migrated. Parent links will be cleared. You will be redirected to the categories tab.</p>
+        </div>
+        <div id="tag-bulk-main-fields">
+        <div class="cat-bulk-field">
             <label class="form-label">Icon</label>
             <div class="icon-picker-wrap" id="tag-bulk-icon-wrap">
                 {% with picker_id="tag-bulk-edit" current_icon="" field_name="bulk_icon" %}
@@ -400,6 +415,7 @@
                 {% endfor %}
             </div>
         </div>
+        </div>{# end tag-bulk-main-fields #}
     </div>
     <div class="cat-bulk-edit-footer">
         <button type="button" id="tag-bulk-edit-confirm" class="btn-primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
@@ -456,6 +472,15 @@
     </div>
     <div class="cat-bulk-edit-body">
         <div class="cat-bulk-field">
+            <label class="form-label">Convert type</label>
+            <label class="cat-bulk-nochange-label" style="margin-top:.35rem;">
+                <input type="checkbox" id="cat-bulk-convert-cb">
+                <span>Convert selected categories to <strong>tags</strong></span>
+            </label>
+            <p class="form-hint" id="cat-bulk-convert-hint" hidden>All pin and location memberships will be migrated. Parent links will be cleared. You will be redirected to the tags tab.</p>
+        </div>
+        <div id="cat-bulk-main-fields">
+        <div class="cat-bulk-field">
             <label class="form-label">Icon</label>
             <div class="icon-picker-wrap" id="cat-bulk-icon-wrap">
                 {% with picker_id="cat-bulk-edit" current_icon="" field_name="bulk_icon" %}
@@ -500,6 +525,7 @@
                 {% endfor %}
             </div>
         </div>
+        </div>{# end cat-bulk-main-fields #}
     </div>
     <div class="cat-bulk-edit-footer">
         <button type="button" id="cat-bulk-edit-confirm" class="btn-primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
@@ -911,10 +937,21 @@ function showTagCustomPreview(input) {
 
     // ── Bulk edit dialog ──────────────────────────────────────────────────────
     function _updateTagBulkState() {
+        var converting = !!document.getElementById('tag-bulk-convert-cb').checked;
+        var hint = document.getElementById('tag-bulk-convert-hint');
+        if (hint) hint.hidden = !converting;
+        var mainFields = document.getElementById('tag-bulk-main-fields');
+        if (mainFields) { mainFields.style.opacity = converting ? '0.4' : ''; mainFields.style.pointerEvents = converting ? 'none' : ''; }
+        var btn = document.getElementById('tag-bulk-edit-confirm');
+        if (btn && !btn.disabled) btn.innerHTML = converting
+            ? '<i class="material-icons" style="font-size:1rem;vertical-align:middle">swap_horiz</i> Convert to Categories'
+            : '<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
         var iw = document.getElementById('tag-bulk-icon-wrap');
         var cp = document.getElementById('tag-bulk-color-picker');
-        if (iw) iw.classList.toggle('cat-bulk-picker--disabled', !!document.getElementById('tag-bulk-icon-nochange').checked);
-        if (cp) cp.classList.toggle('cat-bulk-picker--disabled', !!document.getElementById('tag-bulk-color-nochange').checked);
+        if (!converting) {
+            if (iw) iw.classList.toggle('cat-bulk-picker--disabled', !!document.getElementById('tag-bulk-icon-nochange').checked);
+            if (cp) cp.classList.toggle('cat-bulk-picker--disabled', !!document.getElementById('tag-bulk-color-nochange').checked);
+        }
     }
     window._updateTagBulkState = _updateTagBulkState;
 
@@ -951,6 +988,7 @@ function showTagCustomPreview(input) {
             if (sc&&cp2) { var sw=cp2.querySelector('[data-color="'+sc+'"]'); if(sw) sw.classList.add('selected'); }
         } else { cnn.checked=true; if(cv) cv.value=''; }
         document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb').forEach(function(cb){cb.checked=false;});
+        document.getElementById('tag-bulk-convert-cb').checked = false;
         document.getElementById('tag-bulk-edit-title').textContent='Edit '+ids.length+' '+(ids.length===1?'Tag':'Tags');
         var cbtn=document.getElementById('tag-bulk-edit-confirm'); cbtn.disabled=false;
         cbtn.innerHTML='<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
@@ -975,22 +1013,34 @@ function showTagCustomPreview(input) {
     document.getElementById('icon-grid-tag-bulk-edit').addEventListener('click', function(e) {
         if (e.target.closest('.icon-picker-item')) { document.getElementById('tag-bulk-icon-nochange').checked=false; _updateTagBulkState(); }
     });
+    document.getElementById('tag-bulk-convert-cb').addEventListener('change', function() { _updateTagBulkState(); });
     document.getElementById('tag-bulk-edit-confirm').addEventListener('click', function() {
         var ids = Array.from(_tagSelected).map(function(id){return parseInt(id,10);});
-        var body = {ids:ids};
-        if (!document.getElementById('tag-bulk-icon-nochange').checked) { var iv=document.getElementById('icon-value-tag-bulk-edit'); body.icon=iv?iv.value:''; }
-        if (!document.getElementById('tag-bulk-color-nochange').checked) { var cv=document.getElementById('tag-bulk-color-value'); body.color=cv?cv.value:''; }
-        body.add_parent_ids=[];
-        document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb:checked').forEach(function(cb){body.add_parent_ids.push(parseInt(cb.value,10));});
-        var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> Saving…';
-        fetch('{% url "tag.bulk_edit" %}', {
-            method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
-            body:JSON.stringify(body),
-        }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
-        .then(function(html){
-            document.getElementById('tag-bulk-edit-dialog').close();
-            document.getElementById('tag-rows').innerHTML=html; _onTagRowsUpdated(); toastr.success('Tags updated.');
-        }).catch(function(err){toastr.error('Edit failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
+        var converting = !!document.getElementById('tag-bulk-convert-cb').checked;
+        var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> '+(converting?'Converting…':'Saving…');
+        if (converting) {
+            fetch('{% url "tag.bulk_convert" %}', {
+                method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
+                body:JSON.stringify({ids:ids}),
+            }).then(function(r){
+                if(r.status===204){var redir=r.headers.get('HX-Redirect'); if(redir){document.getElementById('tag-bulk-edit-dialog').close(); window.location.href=redir; return;}}
+                if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);});
+            }).catch(function(err){toastr.error('Convert failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
+        } else {
+            var body = {ids:ids};
+            if (!document.getElementById('tag-bulk-icon-nochange').checked) { var iv=document.getElementById('icon-value-tag-bulk-edit'); body.icon=iv?iv.value:''; }
+            if (!document.getElementById('tag-bulk-color-nochange').checked) { var cv=document.getElementById('tag-bulk-color-value'); body.color=cv?cv.value:''; }
+            body.add_parent_ids=[];
+            document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb:checked').forEach(function(cb){body.add_parent_ids.push(parseInt(cb.value,10));});
+            fetch('{% url "tag.bulk_edit" %}', {
+                method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
+                body:JSON.stringify(body),
+            }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
+            .then(function(html){
+                document.getElementById('tag-bulk-edit-dialog').close();
+                document.getElementById('tag-rows').innerHTML=html; _onTagRowsUpdated(); toastr.success('Tags updated.');
+            }).catch(function(err){toastr.error('Edit failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
+        }
     });
 
     // ── HTMX hooks ────────────────────────────────────────────────────────────
@@ -998,7 +1048,13 @@ function showTagCustomPreview(input) {
     document.body.addEventListener('htmx:afterSwap', function(e) {
         if (e.detail.target && e.detail.target.id === 'tag-edit-dialog-body') {
             var titleEl = document.getElementById('tag-edit-dialog-title');
-            if (titleEl) titleEl.textContent = e.detail.target.querySelector('.tag-merge-form') ? 'Merge Tag' : 'Edit Tag';
+            if (titleEl) {
+                var body = e.detail.target;
+                if (body.querySelector('.tag-merge-form')) titleEl.textContent = 'Merge Tag';
+                else if (body.querySelector('.tag-customize-form')) titleEl.textContent = 'Customize Display';
+                else if (body.querySelector('.tag-global-edit-form')) titleEl.textContent = 'Edit Global Tag';
+                else titleEl.textContent = 'Edit Tag';
+            }
             var dlg = document.getElementById('tag-edit-dialog'); if (!dlg.open) dlg.showModal();
         }
     });
@@ -1240,10 +1296,21 @@ function showTagCustomPreview(input) {
 
     // ── Bulk edit dialog ──────────────────────────────────────────────────────
     function _updateCatBulkState(){
+        var converting=!!document.getElementById('cat-bulk-convert-cb').checked;
+        var hint=document.getElementById('cat-bulk-convert-hint');
+        if(hint)hint.hidden=!converting;
+        var mainFields=document.getElementById('cat-bulk-main-fields');
+        if(mainFields){mainFields.style.opacity=converting?'0.4':''; mainFields.style.pointerEvents=converting?'none':'';}
+        var btn=document.getElementById('cat-bulk-edit-confirm');
+        if(btn&&!btn.disabled)btn.innerHTML=converting
+            ?'<i class="material-icons" style="font-size:1rem;vertical-align:middle">swap_horiz</i> Convert to Tags'
+            :'<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
         var iw=document.getElementById('cat-bulk-icon-wrap');
         var cp=document.getElementById('cat-bulk-color-picker');
-        if(iw)iw.classList.toggle('cat-bulk-picker--disabled',!!document.getElementById('cat-bulk-icon-nochange').checked);
-        if(cp)cp.classList.toggle('cat-bulk-picker--disabled',!!document.getElementById('cat-bulk-color-nochange').checked);
+        if(!converting){
+            if(iw)iw.classList.toggle('cat-bulk-picker--disabled',!!document.getElementById('cat-bulk-icon-nochange').checked);
+            if(cp)cp.classList.toggle('cat-bulk-picker--disabled',!!document.getElementById('cat-bulk-color-nochange').checked);
+        }
     }
     window._updateCatBulkState = _updateCatBulkState;
 
@@ -1270,6 +1337,7 @@ function showTagCustomPreview(input) {
         if(sc!==null){cnn.checked=false; if(cv)cv.value=sc; if(sc&&cp2){var sw=cp2.querySelector('[data-color="'+sc+'"]'); if(sw)sw.classList.add('selected');}}
         else{cnn.checked=true; if(cv)cv.value='';}
         document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb').forEach(function(cb){cb.checked=false;});
+        document.getElementById('cat-bulk-convert-cb').checked=false;
         document.getElementById('cat-bulk-edit-title').textContent='Edit '+ids.length+' '+(ids.length===1?'Category':'Categories');
         var cbtn=document.getElementById('cat-bulk-edit-confirm'); cbtn.disabled=false;
         cbtn.innerHTML='<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
@@ -1288,22 +1356,34 @@ function showTagCustomPreview(input) {
     document.getElementById('icon-grid-cat-bulk-edit').addEventListener('click', function(e){
         if(e.target.closest('.icon-picker-item')){document.getElementById('cat-bulk-icon-nochange').checked=false; _updateCatBulkState();}
     });
+    document.getElementById('cat-bulk-convert-cb').addEventListener('change', function(){_updateCatBulkState();});
     document.getElementById('cat-bulk-edit-confirm').addEventListener('click', function(){
         var ids=Array.from(_catSelected).map(function(id){return parseInt(id,10);});
-        var body={ids:ids};
-        if(!document.getElementById('cat-bulk-icon-nochange').checked){var iv=document.getElementById('icon-value-cat-bulk-edit'); body.icon=iv?iv.value:'';}
-        if(!document.getElementById('cat-bulk-color-nochange').checked){var cv=document.getElementById('cat-bulk-color-value'); body.color=cv?cv.value:'';}
-        body.add_parent_ids=[];
-        document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb:checked').forEach(function(cb){body.add_parent_ids.push(parseInt(cb.value,10));});
-        var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> Saving…';
-        fetch('{% url "category.bulk_edit" %}', {
-            method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
-            body:JSON.stringify(body),
-        }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
-        .then(function(html){
-            document.getElementById('cat-bulk-edit-dialog').close();
-            document.getElementById('category-rows').innerHTML=html; _onCatRowsUpdated(); toastr.success('Categories updated.');
-        }).catch(function(err){toastr.error('Edit failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
+        var converting=!!document.getElementById('cat-bulk-convert-cb').checked;
+        var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> '+(converting?'Converting…':'Saving…');
+        if(converting){
+            fetch('{% url "category.bulk_convert" %}', {
+                method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
+                body:JSON.stringify({ids:ids}),
+            }).then(function(r){
+                if(r.status===204){var redir=r.headers.get('HX-Redirect'); if(redir){document.getElementById('cat-bulk-edit-dialog').close(); window.location.href=redir; return;}}
+                if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);});
+            }).catch(function(err){toastr.error('Convert failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
+        } else {
+            var body={ids:ids};
+            if(!document.getElementById('cat-bulk-icon-nochange').checked){var iv=document.getElementById('icon-value-cat-bulk-edit'); body.icon=iv?iv.value:'';}
+            if(!document.getElementById('cat-bulk-color-nochange').checked){var cv=document.getElementById('cat-bulk-color-value'); body.color=cv?cv.value:'';}
+            body.add_parent_ids=[];
+            document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb:checked').forEach(function(cb){body.add_parent_ids.push(parseInt(cb.value,10));});
+            fetch('{% url "category.bulk_edit" %}', {
+                method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
+                body:JSON.stringify(body),
+            }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
+            .then(function(html){
+                document.getElementById('cat-bulk-edit-dialog').close();
+                document.getElementById('category-rows').innerHTML=html; _onCatRowsUpdated(); toastr.success('Categories updated.');
+            }).catch(function(err){toastr.error('Edit failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
+        }
     });
 
     // ── HTMX hooks ────────────────────────────────────────────────────────────
@@ -1311,7 +1391,13 @@ function showTagCustomPreview(input) {
     document.body.addEventListener('htmx:afterSwap', function(e){
         if(e.detail.target&&e.detail.target.id==='category-edit-dialog-body'){
             var titleEl=document.getElementById('category-edit-dialog-title');
-            if(titleEl)titleEl.textContent=e.detail.target.querySelector('.category-merge-form')?'Merge Category':'Edit Category';
+            if(titleEl){
+                var body=e.detail.target;
+                if(body.querySelector('.category-merge-form'))titleEl.textContent='Merge Category';
+                else if(body.querySelector('.category-customize-form'))titleEl.textContent='Customize Display';
+                else if(body.querySelector('.category-global-edit-form'))titleEl.textContent='Edit Global Category';
+                else titleEl.textContent='Edit Category';
+            }
             var dlg=document.getElementById('category-edit-dialog'); if(!dlg.open)dlg.showModal();
         }
     });

@@ -1128,6 +1128,28 @@ textarea.edit-textarea {
         }
     }
 
+    &.btn-icon--active {
+        color: #7c63d4;
+
+        &:hover,
+        &:focus {
+            background: #ede9ff;
+            color: #5b45b0;
+            outline: none;
+        }
+    }
+
+    &.btn-icon--global-edit {
+        color: #d97706;
+
+        &:hover,
+        &:focus {
+            background: #fef3c7;
+            color: #b45309;
+            outline: none;
+        }
+    }
+
     i {
         font-size: 1.15rem;
     }

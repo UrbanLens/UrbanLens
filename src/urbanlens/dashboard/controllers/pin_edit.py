@@ -12,7 +12,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin.model import Pin, PinNote, PinStatus, PinType
-from urbanlens.dashboard.models.tags.model import Tag
+from urbanlens.dashboard.models.badges.model import Badge
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def _pin_for_user(pin_uuid, request) -> Pin | HttpResponse:
 
 def _overview_context(pin: Pin) -> dict:
     from urbanlens.dashboard.models.pin.model import PinType
-    from urbanlens.dashboard.models.tags.model import COLOR_CHOICES
+    from urbanlens.dashboard.models.badges.model import COLOR_CHOICES
 
     detail_pin_icon_choices = [
         ("place", "Place"), ("business", "Building"), ("door_front", "Entrance"),
@@ -42,7 +42,7 @@ def _overview_context(pin: Pin) -> dict:
         "pin": pin,
         "pin_status_choices": PinStatus.choices,
         "pin_type_choices": PinType.choices,
-        "all_categories": Tag.objects.categories().ordered(),
+        "all_categories": Badge.objects.categories().ordered(),
         "detail_pin_icon_choices": detail_pin_icon_choices,
         "color_choices": COLOR_CHOICES,
         "security_level_choices": SecurityLevel.choices,
@@ -174,7 +174,7 @@ class PinEditView(LoginRequiredMixin, View):
             names = [n.strip().lower() for n in category_raw.split(",") if n.strip()]
             pin.categories.clear()
             for name in names:
-                cat, _ = Tag.objects.get_or_create(name=name, kind="category", defaults={"profile": None})
+                cat, _ = Badge.objects.get_or_create(name=name, kind="category", defaults={"profile": None})
                 pin.categories.add(cat)
 
         # Reload from DB so all properties reflect saved state

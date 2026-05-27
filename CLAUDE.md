@@ -77,7 +77,7 @@ src/urbanlens/
 │   │   ├── images/              # Image attachments
 │   │   ├── categories/          # Pin categories
 │   │   ├── location/            # Location data
-│   │   ├── tags/                # Tags
+│   │   ├── badges/              # Badges (tags, categories, ...)
 │   │   ├── trips/               # Trip planning
 │   │   └── cache/               # Geocoding cache
 │   ├── services/                # Business logic (AI, search, weather, geocoding, APIs)

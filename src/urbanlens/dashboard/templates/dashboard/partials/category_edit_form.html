@@ -2,7 +2,7 @@
 <form hx-post="{% url 'category.edit' category.id %}"
       hx-target="#category-rows"
       hx-swap="innerHTML"
-      class="tag-inline-edit"
+      class="tag-inline-edit category-global-edit-form"
       hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); toastr.success('Category saved.'); }">
     {% csrf_token %}
 

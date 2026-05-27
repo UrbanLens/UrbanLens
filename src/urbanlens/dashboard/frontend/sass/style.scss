@@ -1,6 +1,7 @@
 // UrbanLens — SCSS entry point
 // All rules live in partials; this file only forwards them in order.
 
+@use 'third_party/_materialize';
 @use 'variables';
 @use 'base';
 @use 'nav';

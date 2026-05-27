@@ -11,8 +11,8 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.models.badges.model import Badge, COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.tags.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Tag
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +23,18 @@ _BASE_CTX = {
 }
 
 
-def _rows_ctx(profile, extra: dict | None = None) -> dict:
-    tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
-    ctx = {**_BASE_CTX, "tags": tags}
+_PERM = "dashboard.edit_global_badge"
+
+
+def _rows_ctx(profile, can_edit_global: bool = False, extra: dict | None = None) -> dict:
+    tags = (
+        Badge.objects.tags()
+        .visible_to(profile)
+        .ordered()
+        .with_customizations_for(profile)
+        .prefetch_related("pins", "children", "children__pins")
+    )
+    ctx = {**_BASE_CTX, "tags": tags, "can_edit_global": can_edit_global}
     if extra:
         ctx.update(extra)
     return ctx
@@ -36,13 +45,7 @@ class TagIndexView(LoginRequiredMixin, View):
 
     def get(self, request, *args, **kwargs):
         profile = request.user.profile
-        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
-        return render(request, "dashboard/pages/tags/index.html", {
-            "tags": tags,
-            "icon_choices": ICON_CHOICES,
-            "icon_categories": ICON_CATEGORIES,
-            "color_choices": COLOR_CHOICES,
-        })
+        return render(request, "dashboard/pages/tags/index.html", _rows_ctx(profile, request.user.has_perm(_PERM)))
 
 
 class TagCreateView(LoginRequiredMixin, View):
@@ -61,7 +64,8 @@ class TagCreateView(LoginRequiredMixin, View):
         order = int(request.POST.get("order", 0))
         parent_ids = request.POST.getlist("parent_ids")
 
-        tag = Tag.objects.create(
+        tag = Badge.objects.create(
+            kind="tag",
             profile=profile,
             name=name,
             description=description,
@@ -71,28 +75,24 @@ class TagCreateView(LoginRequiredMixin, View):
             order=order,
         )
         if parent_ids:
-            valid_parents = Tag.objects.filter(id__in=parent_ids).visible_to(profile)
+            valid_parents = Badge.objects.tags().filter(id__in=parent_ids).visible_to(profile)
             tag.parents.set(valid_parents)
 
-        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
-        return render(request, "dashboard/partials/tag_rows.html", {
-            "tags": tags,
-            "icon_choices": ICON_CHOICES,
-            "icon_categories": ICON_CATEGORIES,
-            "color_choices": COLOR_CHOICES,
-            "new_tag_id": tag.id,
-        })
+        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM), {"new_tag_id": tag.id}))
 
 
 class TagEditView(LoginRequiredMixin, View):
     """Edit an existing tag (HTMX)."""
 
     def get(self, request, tag_id, *args, **kwargs):
-        tag = get_object_or_404(Tag, id=tag_id)
-        if tag.profile is not None and tag.profile.user != request.user:
+        tag = get_object_or_404(Badge, id=tag_id, kind="tag")
+        if tag.profile is None:
+            if not request.user.has_perm(_PERM):
+                return HttpResponseForbidden()
+        elif tag.profile.user != request.user:
             return HttpResponseForbidden()
         profile = request.user.profile
-        available_parents = Tag.objects.visible_to(profile).ordered().exclude(id=tag_id)
+        available_parents = Badge.objects.tags().visible_to(profile).ordered().exclude(id=tag_id)
         parent_ids = set(tag.parents.values_list("id", flat=True))
         return render(request, "dashboard/partials/tag_edit_form.html", {
             "tag": tag,
@@ -101,11 +101,15 @@ class TagEditView(LoginRequiredMixin, View):
             "color_choices": COLOR_CHOICES,
             "available_parents": available_parents,
             "parent_ids": parent_ids,
+            "is_global": tag.profile is None,
         })
 
     def post(self, request, tag_id, *args, **kwargs):
-        tag = get_object_or_404(Tag, id=tag_id)
-        if tag.profile is not None and tag.profile.user != request.user:
+        tag = get_object_or_404(Badge, id=tag_id, kind="tag")
+        if tag.profile is None:
+            if not request.user.has_perm(_PERM):
+                return HttpResponseForbidden()
+        elif tag.profile.user != request.user:
             return HttpResponseForbidden()
 
         name = request.POST.get("name", "").strip()
@@ -150,7 +154,7 @@ class TagEditView(LoginRequiredMixin, View):
         else:
             parent_ids = request.POST.getlist("parent_ids")
             if parent_ids:
-                valid_parents = Tag.objects.filter(id__in=parent_ids).visible_to(profile).exclude(id=tag_id)
+                valid_parents = Badge.objects.tags().filter(id__in=parent_ids).visible_to(profile).exclude(id=tag_id)
                 tag.parents.set(valid_parents)
             else:
                 tag.parents.clear()
@@ -160,33 +164,23 @@ class TagEditView(LoginRequiredMixin, View):
             response["HX-Redirect"] = reverse("organize.index") + "?tab=categories"
             return response
 
-        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
-        return render(request, "dashboard/partials/tag_rows.html", {
-            "tags": tags,
-            "icon_choices": ICON_CHOICES,
-            "icon_categories": ICON_CATEGORIES,
-            "color_choices": COLOR_CHOICES,
-        })
+        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM)))
 
 
 class TagDeleteView(LoginRequiredMixin, View):
-    """Delete a user-owned tag (HTMX). Pins keep their other tags."""
+    """Delete a tag (HTMX). Pins keep their other tags."""
 
     def post(self, request, tag_id, *args, **kwargs):
-        tag = get_object_or_404(Tag, id=tag_id)
-        if tag.profile is None or tag.profile.user != request.user:
+        tag = get_object_or_404(Badge, id=tag_id, kind="tag")
+        if tag.profile is None:
+            if not request.user.has_perm(_PERM):
+                return HttpResponseForbidden()
+        elif tag.profile.user != request.user:
             return HttpResponseForbidden()
 
-        profile = tag.profile
         tag.delete()
-
-        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
-        return render(request, "dashboard/partials/tag_rows.html", {
-            "tags": tags,
-            "icon_choices": ICON_CHOICES,
-            "icon_categories": ICON_CATEGORIES,
-            "color_choices": COLOR_CHOICES,
-        })
+        profile = request.user.profile
+        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM)))
 
 
 class TagReorderView(LoginRequiredMixin, View):
@@ -204,7 +198,7 @@ class TagReorderView(LoginRequiredMixin, View):
         for i, tag_id in enumerate(tag_ids):
             # Assign descending values so top item gets the highest order,
             # matching the ordered() queryset which sorts by -order.
-            Tag.objects.filter(id=tag_id, profile=profile).update(order=total - i)
+            Badge.objects.filter(id=tag_id, profile=profile, kind="tag").update(order=total - i)
 
         return JsonResponse({"ok": True})
 
@@ -214,7 +208,7 @@ class TagRowsView(LoginRequiredMixin, View):
 
     def get(self, request, *args, **kwargs):
         profile = request.user.profile
-        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
+        tags = Badge.objects.tags().visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
         return render(request, "dashboard/partials/tag_rows.html", {
             "tags": tags,
             "icon_choices": ICON_CHOICES,
@@ -228,11 +222,11 @@ class TagMergeView(LoginRequiredMixin, View):
 
     def get(self, request, tag_id, *args, **kwargs):
         """Return the merge-confirmation form for the given tag."""
-        tag = get_object_or_404(Tag, id=tag_id)
+        tag = get_object_or_404(Badge, id=tag_id, kind="tag")
         if tag.profile is None or tag.profile.user != request.user:
             return HttpResponseForbidden()
         profile = request.user.profile
-        candidates = Tag.objects.visible_to(profile).ordered().exclude(id=tag_id)
+        candidates = Badge.objects.tags().visible_to(profile).ordered().exclude(id=tag_id)
         return render(request, "dashboard/partials/tag_merge_form.html", {
             "tag": tag,
             "candidates": candidates,
@@ -240,7 +234,7 @@ class TagMergeView(LoginRequiredMixin, View):
 
     def post(self, request, tag_id, *args, **kwargs):
         """Perform the merge: move all pins to the target tag, then delete source."""
-        source = get_object_or_404(Tag, id=tag_id)
+        source = get_object_or_404(Badge, id=tag_id, kind="tag")
         if source.profile is None or source.profile.user != request.user:
             return HttpResponseForbidden()
 
@@ -249,7 +243,7 @@ class TagMergeView(LoginRequiredMixin, View):
             return HttpResponse("Target tag is required.", status=400)
 
         profile = request.user.profile
-        target = get_object_or_404(Tag.objects.visible_to(profile), id=target_id)
+        target = get_object_or_404(Badge.objects.tags().visible_to(profile), id=target_id)
         if target.id == source.id:
             return HttpResponse("Cannot merge a tag into itself.", status=400)
 
@@ -257,7 +251,7 @@ class TagMergeView(LoginRequiredMixin, View):
         target.pins.add(*source.pins.all())
         source.delete()
 
-        tags = Tag.objects.visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
+        tags = Badge.objects.tags().visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
         return render(request, "dashboard/partials/tag_rows.html", {
             "tags": tags,
             "icon_choices": ICON_CHOICES,
@@ -272,7 +266,7 @@ class TagMembershipView(LoginRequiredMixin, View):
     def get(self, request, pin_uuid, *args, **kwargs):
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
         profile = request.user.profile
-        all_tags = Tag.objects.visible_to(profile).ordered()
+        all_tags = Badge.objects.tags().visible_to(profile).ordered()
         member_ids = set(pin.tags.values_list("id", flat=True))
         return render(request, "dashboard/partials/tag_panel.html", {
             "pin": pin,
@@ -286,14 +280,14 @@ class TagMembershipView(LoginRequiredMixin, View):
         action = request.POST.get("action")  # "add" or "remove"
 
         profile = request.user.profile
-        tag = get_object_or_404(Tag.objects.visible_to(profile), id=tag_id)
+        tag = get_object_or_404(Badge.objects.tags().visible_to(profile), id=tag_id)
 
         if action == "add":
             pin.tags.add(tag)
         elif action == "remove":
             pin.tags.remove(tag)
 
-        all_tags = Tag.objects.visible_to(profile).ordered()
+        all_tags = Badge.objects.tags().visible_to(profile).ordered()
         member_ids = set(pin.tags.values_list("id", flat=True))
         return render(request, "dashboard/partials/tag_panel.html", {
             "pin": pin,
@@ -324,8 +318,8 @@ class TagBulkDeleteView(LoginRequiredMixin, View):
             return HttpResponse("No tags specified.", status=400)
 
         profile = request.user.profile
-        Tag.objects.filter(id__in=ids, profile=profile).delete()
-        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile))
+        Badge.objects.filter(id__in=ids, profile=profile, kind="tag").delete()
+        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM)))
 
 
 class TagBulkEditView(LoginRequiredMixin, View):
@@ -360,7 +354,7 @@ class TagBulkEditView(LoginRequiredMixin, View):
         color = data.get("color") or None
         add_parent_ids = [int(x) for x in data.get("add_parent_ids", [])]
 
-        tags = list(Tag.objects.filter(id__in=ids, profile=profile))
+        tags = list(Badge.objects.filter(id__in=ids, profile=profile, kind="tag"))
         for tag in tags:
             update_fields = []
             if has_icon:
@@ -373,11 +367,53 @@ class TagBulkEditView(LoginRequiredMixin, View):
                 tag.save(update_fields=update_fields)
 
         if add_parent_ids:
-            valid_parents = list(Tag.objects.filter(id__in=add_parent_ids).visible_to(profile))
+            valid_parents = list(Badge.objects.tags().filter(id__in=add_parent_ids).visible_to(profile))
             for tag in tags:
                 tag.parents.add(*[p for p in valid_parents if p.id != tag.id])
 
-        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile))
+        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM)))
+
+
+class TagBulkConvertView(LoginRequiredMixin, View):
+    """Convert multiple user-owned tags to global categories (JSON POST)."""
+
+    def post(self, request, *args, **kwargs):
+        """Convert tags to categories, migrating all pin and location memberships.
+
+        Args:
+            request: The HTTP request with JSON body containing ids list.
+
+        Returns:
+            204 with HX-Redirect header pointing to the categories tab.
+        """
+        try:
+            data = json.loads(request.body)
+            ids = [int(x) for x in data.get("ids", [])]
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return JsonResponse({"error": "Invalid data"}, status=400)
+
+        if not ids:
+            return HttpResponse("No tags specified.", status=400)
+
+        from urbanlens.dashboard.models.location.model import Location
+
+        profile = request.user.profile
+        tags_to_convert = list(Badge.objects.filter(id__in=ids, profile=profile, kind="tag"))
+        for tag in tags_to_convert:
+            for pin in Pin.objects.filter(tags=tag):
+                pin.categories.add(tag)
+                pin.tags.remove(tag)
+            for loc in Location.objects.filter(tags=tag):
+                loc.categories.add(tag)
+                loc.tags.remove(tag)
+            tag.kind = "category"
+            tag.profile = None
+            tag.parents.clear()
+            tag.save()
+
+        response = HttpResponse(status=204)
+        response["HX-Redirect"] = reverse("organize.index") + "?tab=categories"
+        return response
 
 
 class TagMultiMergeView(LoginRequiredMixin, View):
@@ -405,8 +441,8 @@ class TagMultiMergeView(LoginRequiredMixin, View):
             return HttpResponse("At least one source_id is required.", status=400)
 
         profile = request.user.profile
-        target = get_object_or_404(Tag.objects.visible_to(profile), id=target_id)
-        sources = Tag.objects.filter(id__in=source_ids, profile=profile).exclude(id=target_id)
+        target = get_object_or_404(Badge.objects.tags().visible_to(profile), id=target_id)
+        sources = Badge.objects.filter(id__in=source_ids, profile=profile, kind="tag").exclude(id=target_id)
         if not sources.exists():
             return HttpResponse("No valid source tags.", status=400)
 
@@ -414,4 +450,60 @@ class TagMultiMergeView(LoginRequiredMixin, View):
             target.pins.add(*source.pins.all())
             source.delete()
 
-        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile))
+        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM)))
+
+
+class TagCustomizeView(LoginRequiredMixin, View):
+    """Show and save per-user display overrides for a global tag."""
+
+    def get(self, request, tag_id, *args, **kwargs):
+        """Render the customization form partial.
+
+        Args:
+            request: The HTTP request.
+            tag_id: The tag PK.
+
+        Returns:
+            Rendered tag_customize_form.html partial.
+        """
+        tag = get_object_or_404(Badge, id=tag_id, kind="tag")
+        profile = request.user.profile
+        from urbanlens.dashboard.models.badges.customization import BadgeCustomization
+        customization = BadgeCustomization.objects.filter(profile=profile, badge=tag).first()
+        return render(request, "dashboard/partials/tag_customize_form.html", {
+            **_BASE_CTX,
+            "tag": tag,
+            "customization": customization,
+        })
+
+    def post(self, request, tag_id, *args, **kwargs):
+        """Save or clear the customization and return the refreshed rows partial.
+
+        Args:
+            request: The HTTP request with POST data.
+            tag_id: The tag PK.
+
+        Returns:
+            Rendered tag_rows.html partial.
+        """
+        tag = get_object_or_404(Badge, id=tag_id)
+        profile = request.user.profile
+
+        from urbanlens.dashboard.models.badges.customization import BadgeCustomization
+
+        if request.POST.get("action") == "clear":
+            BadgeCustomization.objects.filter(profile=profile, badge=tag).delete()
+        else:
+            name = request.POST.get("name", "").strip() or None
+            icon = request.POST.get("icon") or None
+            color = request.POST.get("color") or None
+            if name is None and icon is None and color is None:
+                BadgeCustomization.objects.filter(profile=profile, badge=tag).delete()
+            else:
+                BadgeCustomization.objects.update_or_create(
+                    profile=profile,
+                    badge=tag,
+                    defaults={"name": name, "icon": icon, "color": color},
+                )
+
+        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM)))

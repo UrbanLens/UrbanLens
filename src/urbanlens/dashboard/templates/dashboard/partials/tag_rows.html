@@ -22,14 +22,14 @@
         </div>
         {% endif %}
 
-        <div class="tag-card-icon" {% if tag.color %}style="background:{{ tag.color }}22; border-color:{{ tag.color }}44;"{% endif %}>
-            {% if tag.custom_icon %}
+        <div class="tag-card-icon" {% if tag.effective_color %}style="background:{{ tag.effective_color }}22; border-color:{{ tag.effective_color }}44;"{% endif %}>
+            {% if tag.custom_icon and not tag.icon_is_overridden %}
             <img src="{{ tag.custom_icon.url }}" alt="" class="tag-icon-img">
-            {% elif tag.icon %}
-                {% if tag.icon|is_material_icon %}
-                <i class="material-icons tag-icon-std" {% if tag.color %}style="color:{{ tag.color }}"{% endif %}>{{ tag.icon }}</i>
+            {% elif tag.effective_icon %}
+                {% if tag.effective_icon|is_material_icon %}
+                <i class="material-icons tag-icon-std" {% if tag.effective_color %}style="color:{{ tag.effective_color }}"{% endif %}>{{ tag.effective_icon }}</i>
                 {% else %}
-                <span class="tag-icon-emoji">{{ tag.icon }}</span>
+                <span class="tag-icon-emoji">{{ tag.effective_icon }}</span>
                 {% endif %}
             {% else %}
             <i class="material-icons tag-icon-std tag-icon-empty">label</i>
@@ -38,8 +38,9 @@
 
         <div class="tag-card-body">
             <div class="tag-card-name">
-                {{ tag.name }}
+                {{ tag.effective_name }}
                 {% if not tag.profile %}<span class="tag-global-badge">global</span>{% endif %}
+                {% if tag.is_customized %}<span class="tag-customized-badge" title="You have customized this tag's display">custom</span>{% endif %}
             </div>
             {% if tag.description %}
             <div class="tag-card-desc">{{ tag.description }}</div>
@@ -61,8 +62,8 @@
                 </span>
                 {% endif %}
                 {% endwith %}
-                {% if tag.color %}
-                <span class="tag-color-dot" style="background:{{ tag.color }};" title="{{ tag.color }}"></span>
+                {% if tag.effective_color %}
+                <span class="tag-color-dot" style="background:{{ tag.effective_color }};" title="{{ tag.effective_color }}"></span>
                 {% endif %}
                 {% if tag.parents.exists %}
                 <span class="tag-parents-summary">
@@ -101,9 +102,31 @@
         </div>
         {% else %}
         <div class="tag-card-actions">
-            <span class="tag-readonly-badge" title="Global tags cannot be deleted">
-                <i class="material-icons" style="font-size:1rem;opacity:.5;">lock</i>
-            </span>
+            <button type="button" class="btn-icon{% if tag.is_customized %} btn-icon--active{% endif %}"
+                    title="Customize your display of this global tag"
+                    hx-get="{% url 'tag.customize' tag.id %}"
+                    hx-target="#tag-edit-dialog-body"
+                    hx-swap="innerHTML">
+                <i class="material-icons">tune</i>
+            </button>
+            {% if can_edit_global %}
+            <button type="button" class="btn-icon btn-icon--global-edit" title="Edit global tag"
+                    hx-get="{% url 'tag.edit' tag.id %}"
+                    hx-target="#tag-edit-dialog-body"
+                    hx-swap="innerHTML">
+                <i class="material-icons">edit</i>
+            </button>
+            <form hx-post="{% url 'tag.delete' tag.id %}"
+                  hx-target="#tag-rows"
+                  hx-swap="innerHTML"
+                  hx-confirm="Delete '{{ tag.name }}'? Pins will keep their other tags."
+                  style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn-icon btn-icon--danger" title="Delete">
+                    <i class="material-icons">delete</i>
+                </button>
+            </form>
+            {% endif %}
         </div>
         {% endif %}
     </div>

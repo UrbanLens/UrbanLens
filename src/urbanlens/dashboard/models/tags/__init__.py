@@ -1,28 +1,5 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    __init__.py                                                                                          *
-*        Path:    /__init__.py                                                                                         *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-from urbanlens.dashboard.models.tags.queryset import TagQuerySet, TagManager
-from urbanlens.dashboard.models.tags.model import Tag, ICON_CHOICES, COLOR_CHOICES
-from urbanlens.dashboard.models.tags.serializer import TagSerializer
+"""Backward-compatibility shim — import from models.badges instead."""
+from urbanlens.dashboard.models.badges.queryset import BadgeQuerySet as TagQuerySet, BadgeManager as TagManager
+from urbanlens.dashboard.models.badges.model import Badge as Tag, ICON_CHOICES, COLOR_CHOICES
+from urbanlens.dashboard.models.badges.customization import BadgeCustomization as TagCustomization
+from urbanlens.dashboard.models.badges.serializer import BadgeSerializer as TagSerializer

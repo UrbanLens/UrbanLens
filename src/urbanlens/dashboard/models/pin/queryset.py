@@ -118,9 +118,9 @@ class PinQuerySet(abstract.QuerySet):
 
     def by_tag(self, tag_id: int) -> Self:
         """Filter pins that have this tag or any of its descendant tags."""
-        from urbanlens.dashboard.models.tags.model import Tag
+        from urbanlens.dashboard.models.badges.model import Badge
 
-        tag_ids = Tag.get_tag_and_descendants(tag_id)
+        tag_ids = Badge.get_badge_and_descendants(tag_id)
         return self.filter(tags__id__in=tag_ids).distinct()
 
     def filter_by_criteria(self, criteria) -> Self:
@@ -144,9 +144,9 @@ class PinQuerySet(abstract.QuerySet):
         if statuses := criteria.get("status"):
             qs = qs.filter(status__in=statuses)
         if tags := criteria.get("tags"):
-            from urbanlens.dashboard.models.tags.model import Tag as _Tag
+            from urbanlens.dashboard.models.badges.model import Badge as _Badge
             for tag in tags:
-                tag_ids = _Tag.get_tag_and_descendants(tag.id)
+                tag_ids = _Badge.get_badge_and_descendants(tag.id)
                 qs = qs.filter(tags__id__in=tag_ids)
         if min_rating := criteria.get("min_rating"):
             with contextlib.suppress(ValueError, TypeError):

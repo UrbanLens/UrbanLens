@@ -17,7 +17,7 @@ from urbanlens.dashboard.models.pin.queryset import PinManager
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.reviews import Manager as ReviewManager
-    from urbanlens.dashboard.models.tags.model import Tag
+    from urbanlens.dashboard.models.badges.model import Badge
 
 logger = logging.getLogger(__name__)
 
@@ -101,13 +101,13 @@ class Pin(abstract.Model):
         related_name="pins",
     )
     categories = ManyToManyField(
-        "dashboard.Tag",
+        "dashboard.Badge",
         blank=True,
         related_name="categorized_pins",
         limit_choices_to={"kind": "category"},
     )
     tags = ManyToManyField(
-        "dashboard.Tag",
+        "dashboard.Badge",
         blank=True,
         related_name="pins",
         limit_choices_to={"kind": "tag"},
@@ -288,9 +288,9 @@ class Pin(abstract.Model):
     # ------------------------------------------------------------------
 
     def change_category(self, category_id: int) -> None:
-        from urbanlens.dashboard.models.tags.model import Tag
+        from urbanlens.dashboard.models.badges.model import Badge
 
-        category = Tag.objects.get(id=category_id, kind="category")
+        category = Badge.objects.get(id=category_id, kind="category")
         self.categories.clear()
         self.categories.add(category)
         self.save()
@@ -341,12 +341,12 @@ class Pin(abstract.Model):
             self.add_category(category_name, save=False)
         return category_name
 
-    def add_category(self, category_name: str, save: bool = True) -> Tag | None:
-        from urbanlens.dashboard.models.tags.model import Tag
+    def add_category(self, category_name: str, save: bool = True) -> Badge | None:
+        from urbanlens.dashboard.models.badges.model import Badge
 
         category_name = category_name.lower()
         try:
-            category, _ = Tag.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
+            category, _ = Badge.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
             if category:
                 self.categories.add(category)
                 if save:
