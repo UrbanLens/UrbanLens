@@ -365,8 +365,8 @@
             </div>
         </div>
 
-        <details class="form-section-details">
-            <summary class="form-section-summary">Security Indicators</summary>
+        <div class="form-section-details">
+            <span class="form-section-summary">Security Indicators</span>
             <div class="security-edit-grid">
                 {% for sf_key, sf_label, sf_val in pin_security_values %}
                 <div class="security-edit-row">
@@ -379,7 +379,7 @@
                 </div>
                 {% endfor %}
             </div>
-        </details>
+        </div>
 
         <div class="form-actions">
             <button type="submit" class="submit-button">Save Changes</button>
@@ -470,8 +470,20 @@
     const pinLng = {{ pin.effective_longitude|default:"-73.7579" }};
     const _defaultMapView = '{{ default_map_view|default:"satellite" }}';
 
-    const map = L.map('map').setView([pinLat, pinLng], 15);
+    const map = L.map('map', { scrollWheelZoom: false }).setView([pinLat, pinLng], 15);
     window.map = map;
+
+    // Enable scroll-wheel zoom only after the user has hovered over the map
+    // for a moment, so normal page scrolling is not hijacked.
+    let _scrollEnableTimer = null;
+    const _mapEl = document.getElementById('map');
+    _mapEl.addEventListener('mouseenter', () => {
+        _scrollEnableTimer = setTimeout(() => map.scrollWheelZoom.enable(), 750);
+    });
+    _mapEl.addEventListener('mouseleave', () => {
+        clearTimeout(_scrollEnableTimer);
+        map.scrollWheelZoom.disable();
+    });
 
     const _stdLayer  = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
     const _satLayer  = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {

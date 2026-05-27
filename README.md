@@ -67,6 +67,19 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
       * Map search needs overhaul
       * Sections need stronger borders or colors
       * Users can reorder sections
+    * Trip Details Page:
+      * Map needs layers, etc.
+      * Activities should be editable.
+      * Calendar view?
+      * After adding pins, map should auto update
+      * Pin icons (1, 2, ...) should better communicate the idea, rather than looking like grouping blobs from other maps. Also should still use custom icons.
+      * Activity view must show date proposal.
+      * Add activity should allow adding an arbitrary address
+      * Improve UI when pin search has no results.
+      * Delete should probably not delete for everyone?
+      * Main Trip page: use the whitespace. Calendar? etc?
+      * Allow archiving old events.
+      * Notify other users when changes.
   * Development:
     * Unit Tests
     * CI/CD 

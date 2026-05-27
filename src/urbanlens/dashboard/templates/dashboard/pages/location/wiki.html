@@ -254,8 +254,8 @@
                            value="{{ location.date_last_active|date:'Y-m-d'|default:'' }}">
                 </div>
             </div>
-            <details class="form-section-details">
-                <summary class="form-section-summary">Security Indicators</summary>
+            <div class="form-section-details">
+                <span class="form-section-summary">Security Indicators</span>
                 <div class="security-edit-grid">
                     {% for sf_key, sf_label, sf_val in location_security_values %}
                     <div class="security-edit-row">
@@ -268,7 +268,7 @@
                     </div>
                     {% endfor %}
                 </div>
-            </details>
+            </div>
             <div class="form-actions">
                 <button type="submit" class="wiki-action-btn wiki-action-btn--primary">Save changes</button>
                 <button type="button" class="wiki-action-btn" onclick="this.closest('dialog').close()">Cancel</button>

@@ -37,6 +37,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
+from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
@@ -107,6 +108,17 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "default_map_view": profile.default_map_view,
                 "today": today.isoformat(),
                 "min_date": min_date.isoformat(),
+                "security_level_choices": SecurityLevel.choices,
+                "pin_security_values": [
+                    ("fences", "Fences", pin.fences),
+                    ("alarms", "Alarms", pin.alarms),
+                    ("cameras", "Cameras", pin.cameras),
+                    ("security", "Security", pin.security),
+                    ("signs", "Signs", pin.signs),
+                    ("vps", "VPS", pin.vps),
+                    ("plywood", "Plywood", pin.plywood),
+                    ("locked", "Locked", pin.locked),
+                ],
             },
         )
 
