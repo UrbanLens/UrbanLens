@@ -28,20 +28,24 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
     * <s>Weather</s>
     * <s>Satelite View</s>
     * <s>Street View</s>
-    * Aerial view
     * <s>Historic photos</s>
     * <s>Web Search</s>
-    * Comments
 * Integrations:
-    * Discord
     * <s>Google SSO</s>
 * Data:
     * <s>Google maps import</s>
     * Collect pin information during import
     * Export
 * Planning:
-    * Trip page
+    * <s>Trip page</s>
 * Community:
     * Messages between users
-    * Friends
+    * <s>Friends</s>
     * Sharing
+    * Comments
+    * User List (with privacy settings)
+  * UI:
+    * Dark mode
+    * Mobile responsiveness
+    * Trim icon options (currently too many)
+    * Add missing icons (some themes aren't represented)
