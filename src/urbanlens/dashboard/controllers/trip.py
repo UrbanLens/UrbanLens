@@ -21,20 +21,37 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _trip_or_403(trip_uuid, profile: Profile) -> Trip | HttpResponse:
-    """Return the Trip if the profile is creator or member, else a 403 response."""
-    trip = get_object_or_404(Trip, uuid=trip_uuid)
+def _trip_or_403(request, trip_uuid, profile: Profile) -> Trip | HttpResponse:
+    """Return the Trip if the profile is creator or member.
+
+    Renders the same styled "not found" page for both missing trips and
+    unauthorised access so users cannot enumerate private trip UUIDs.
+    """
+    trip = Trip.objects.filter(uuid=trip_uuid).first()
+    if trip is None:
+        return render(request, "dashboard/pages/trips/not_found.html", status=404)
     if trip.creator == profile or TripMembership.objects.filter(trip=trip, profile=profile).exists():
         return trip
-    return HttpResponse("Forbidden", status=403)
+    return render(request, "dashboard/pages/trips/not_found.html", status=403)
+
+
+def _expand_trip_dates(trip: Trip, activity_date: datetime.date) -> None:
+    """Expand trip date range to include activity_date if it falls outside."""
+    changed = False
+    if trip.start_date is None or activity_date < trip.start_date:
+        trip.start_date = activity_date
+        changed = True
+    if trip.end_date is None or activity_date > trip.end_date:
+        trip.end_date = activity_date
+        changed = True
+    if changed:
+        trip.save(update_fields=["start_date", "end_date", "updated"])
 
 
 def _activity_qs(trip: Trip) -> QuerySet:
     """Return the standard activities queryset for a trip with all needed relations."""
-    return (
-        trip.activities
-        .select_related("location", "pin", "pin__location", "added_by__user")
-        .order_by("scheduled_at", "order", "created")
+    return trip.activities.select_related("location", "pin", "pin__location", "added_by__user").order_by(
+        "scheduled_at", "order", "created",
     )
 
 
@@ -44,7 +61,9 @@ def _compute_activity_index_map(activities) -> dict[int, int]:
     idx = 1
     for act in activities:
         has_coords = False
-        if (act.pin and act.pin.effective_latitude is not None and act.pin.effective_longitude is not None) or (act.location and act.location.latitude is not None and act.location.longitude is not None):
+        if (act.pin and act.pin.effective_latitude is not None and act.pin.effective_longitude is not None) or (
+            act.location and act.location.latitude is not None and act.location.longitude is not None
+        ):
             has_coords = True
         if has_coords:
             index_map[act.id] = idx
@@ -93,7 +112,9 @@ def _resolve_location(body: dict):
         try:
             lat = float(geocoded_lat)
             lng = float(geocoded_lng)
-            name = (body.get("geocoded_name") or body.get("title") or "Activity Location").strip() or "Activity Location"
+            name = (
+                body.get("geocoded_name") or body.get("title") or "Activity Location"
+            ).strip() or "Activity Location"
             return Location.objects.create(name=name, latitude=lat, longitude=lng)
         except (ValueError, TypeError):
             pass
@@ -132,11 +153,7 @@ class TripListView(LoginRequiredMixin, View):
 
     def get(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trips = (
-            Trip.objects.filter(profiles=profile)
-            .select_related("creator__user")
-            .order_by("-created")
-        )
+        trips = Trip.objects.filter(profiles=profile).select_related("creator__user").order_by("-created")
         return render(request, "dashboard/pages/trips/index.html", {"trips": trips, "page_name": "trips"})
 
 
@@ -167,11 +184,7 @@ class TripCreateView(LoginRequiredMixin, View):
         )
         TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes"})
 
-        trips = (
-            Trip.objects.filter(profiles=profile)
-            .select_related("creator__user")
-            .order_by("-created")
-        )
+        trips = Trip.objects.filter(profiles=profile).select_related("creator__user").order_by("-created")
         return render(request, "dashboard/partials/trip_list_partial.html", {"trips": trips})
 
 
@@ -183,7 +196,7 @@ class TripDetailView(LoginRequiredMixin, View):
 
     def get(self, request, trip_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -202,7 +215,7 @@ class TripEditView(LoginRequiredMixin, View):
 
     def post(self, request, trip_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -247,14 +260,14 @@ class TripActivitiesView(LoginRequiredMixin, View):
 
     def get(self, request, trip_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         return _render_activities_panel(request, result, profile)
 
     def post(self, request, trip_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -295,7 +308,7 @@ class TripActivityEditView(LoginRequiredMixin, View):
 
     def post(self, request, trip_uuid, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -315,6 +328,9 @@ class TripActivityEditView(LoginRequiredMixin, View):
             activity.status = new_status
         activity.save()
 
+        if activity.status == "confirmed" and activity.scheduled_at:
+            _expand_trip_dates(trip, activity.scheduled_at.date())
+
         return _render_activities_panel(request, trip, profile)
 
 
@@ -326,7 +342,7 @@ class TripActivityDeleteView(LoginRequiredMixin, View):
 
     def delete(self, request, trip_uuid, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -344,16 +360,20 @@ class TripCommentsView(LoginRequiredMixin, View):
 
     def get(self, request, trip_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
         comments = trip.comments.select_related("author__user").order_by("created")
-        return render(request, "dashboard/partials/trip_comments_panel.html", {"trip": trip, "comments": comments, "profile": profile})
+        return render(
+            request,
+            "dashboard/partials/trip_comments_panel.html",
+            {"trip": trip, "comments": comments, "profile": profile},
+        )
 
     def post(self, request, trip_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -370,7 +390,11 @@ class TripCommentsView(LoginRequiredMixin, View):
         TripComment.objects.create(trip=trip, author=profile, text=text)
 
         comments = trip.comments.select_related("author__user").order_by("created")
-        return render(request, "dashboard/partials/trip_comments_panel.html", {"trip": trip, "comments": comments, "profile": profile})
+        return render(
+            request,
+            "dashboard/partials/trip_comments_panel.html",
+            {"trip": trip, "comments": comments, "profile": profile},
+        )
 
 
 class TripCommentDeleteView(LoginRequiredMixin, View):
@@ -400,14 +424,14 @@ class TripMembersView(LoginRequiredMixin, View):
 
     def get(self, request, trip_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         return _render_members_panel(request, result, profile)
 
     def post(self, request, trip_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -422,6 +446,7 @@ class TripMembersView(LoginRequiredMixin, View):
             return HttpResponse("Username is required.", status=400)
 
         from django.contrib.auth.models import User
+
         try:
             user = User.objects.get(username__iexact=username)
         except User.DoesNotExist:
@@ -431,7 +456,8 @@ class TripMembersView(LoginRequiredMixin, View):
         current_count = trip.profiles.count()
         if current_count >= max_members:
             return HttpResponse(
-                f"This trip is full ({max_members} members maximum).", status=400,
+                f"This trip is full ({max_members} members maximum).",
+                status=400,
             )
 
         new_profile, _ = Profile.objects.get_or_create(user=user)
@@ -479,8 +505,9 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.location.model import Location
 
         db_rows = list(
-            Location.objects.filter(name__icontains=q)
-            .values("uuid", "name", "locality", "administrative_area_level_1")[:5],
+            Location.objects.filter(name__icontains=q).values(
+                "uuid", "name", "locality", "administrative_area_level_1",
+            )[:5],
         )
         db_results = [
             {
@@ -496,16 +523,19 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         geocoded_results: list[dict] = []
         try:
             from geopy.geocoders import Nominatim
+
             geolocator = Nominatim(user_agent="UrbanLens/1.0", timeout=3)
             geo_hits = geolocator.geocode(q, exactly_one=False, limit=4)
             if geo_hits:
                 for hit in geo_hits:
-                    geocoded_results.append({
-                        "name": hit.address,
-                        "lat": hit.latitude,
-                        "lng": hit.longitude,
-                        "type": "geocoded",
-                    })
+                    geocoded_results.append(
+                        {
+                            "name": hit.address,
+                            "lat": hit.latitude,
+                            "lng": hit.longitude,
+                            "type": "geocoded",
+                        },
+                    )
         except Exception as exc:
             logger.debug("Nominatim geocoding failed for %r: %s", q, exc)
 
@@ -529,7 +559,7 @@ class TripMapDataView(LoginRequiredMixin, View):
             JsonResponse with a list of activity points.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -551,15 +581,17 @@ class TripMapDataView(LoginRequiredMixin, View):
                 continue
 
             label = act.title or (act.location.name if act.location else None) or f"Activity {index}"
-            points.append({
-                "index": index,
-                "activity_id": act.id,
-                "label": label,
-                "lat": float(lat),
-                "lng": float(lng),
-                "status": act.status,
-                "scheduled_at": act.scheduled_at.isoformat() if act.scheduled_at else None,
-            })
+            points.append(
+                {
+                    "index": index,
+                    "activity_id": act.id,
+                    "label": label,
+                    "lat": float(lat),
+                    "lng": float(lng),
+                    "status": act.status,
+                    "scheduled_at": act.scheduled_at.isoformat() if act.scheduled_at else None,
+                },
+            )
             index += 1
 
         return JsonResponse({"points": points})
@@ -574,7 +606,7 @@ class TripActivityStatusView(LoginRequiredMixin, View):
 
     def post(self, request, trip_uuid, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -593,6 +625,9 @@ class TripActivityStatusView(LoginRequiredMixin, View):
         activity.status = new_status
         activity.save(update_fields=["status", "updated"])
 
+        if new_status == "confirmed" and activity.scheduled_at:
+            _expand_trip_dates(trip, activity.scheduled_at.date())
+
         return _render_activities_panel(request, trip, profile)
 
 
@@ -605,7 +640,7 @@ class TripActivityMoveView(LoginRequiredMixin, View):
 
     def post(self, request, trip_uuid, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -645,7 +680,7 @@ class TripMemberRSVPView(LoginRequiredMixin, View):
 
     def post(self, request, trip_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -674,7 +709,7 @@ class TripLeaveView(LoginRequiredMixin, View):
 
     def delete(self, request, trip_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(trip_uuid, profile)
+        result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -685,6 +720,7 @@ class TripLeaveView(LoginRequiredMixin, View):
         TripMembership.objects.filter(trip=trip, profile=profile).delete()
 
         from django.urls import reverse as _reverse
+
         response = HttpResponse("", status=200)
         response["HX-Redirect"] = _reverse("dashboard:trips.list")
         return response

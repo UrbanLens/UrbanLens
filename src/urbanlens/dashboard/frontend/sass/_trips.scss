@@ -226,50 +226,45 @@
     flex-shrink: 0;
 }
 
-// Trip header action buttons
+// Trip header action buttons — icon-only, unobtrusive
 .trip-header-btn {
     display: inline-flex;
     align-items: center;
-    gap: .35rem;
-    padding: .45rem .9rem;
-    font-size: .82rem;
-    font-weight: 600;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
     border-radius: 8px;
     cursor: pointer;
-    outline: none;
-    transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
-    letter-spacing: .01em;
+    border: 1px solid transparent;
+    background: transparent;
+    padding: 0;
+    transition: background .15s, color .15s, border-color .15s;
 
     .material-icons {
-        font-size: 1rem;
+        font-size: 1.15rem;
     }
 
     &--edit {
-        border: 1px solid #0891b2;
-        background: transparent;
-        color: #0891b2;
+        color: #94a3b8;
 
         &:hover,
         &:focus {
-            background: #0891b2;
-            color: #fff;
+            background: #f1f5f9;
+            color: #3b82f6;
+            border-color: #e2e8f0;
             outline: none;
-            box-shadow: 0 2px 8px rgba(8, 145, 178, .25);
         }
     }
 
     &--delete {
-        border: 1px solid #fca5a5;
-        background: transparent;
-        color: #dc2626;
+        color: #cbd5e1;
 
         &:hover,
         &:focus {
-            background: #dc2626;
-            border-color: #dc2626;
-            color: #fff;
+            background: #fee2e2;
+            color: #dc2626;
+            border-color: #fca5a5;
             outline: none;
-            box-shadow: 0 2px 8px rgba(220, 38, 38, .2);
         }
     }
 }
@@ -978,16 +973,16 @@
     }
 }
 
-// ── Activity status (proposed = amber, confirmed = blue) ──────────────────
+// ── Activity status (proposed = grey, confirmed = blue) ───────────────────
 
 .trip-activity-num--proposed {
-    background: #f59e0b !important;
-    box-shadow: 0 1px 4px rgba(245, 158, 11, .4) !important;
+    background: #94a3b8 !important;
+    box-shadow: 0 1px 4px rgba(148, 163, 184, .4) !important;
 }
 
 .trip-map-marker--proposed {
-    background: #f59e0b !important;
-    box-shadow: 0 2px 6px rgba(245, 158, 11, .5) !important;
+    background: #94a3b8 !important;
+    box-shadow: 0 2px 6px rgba(148, 163, 184, .5) !important;
 }
 
 .trip-status-btn {
@@ -1041,10 +1036,10 @@
 // ── Calendar event status ─────────────────────────────────────────────────
 
 .cal-event--proposed {
-    background: #f59e0b;
+    background: #94a3b8;
 
     &:hover {
-        background: #d97706;
+        background: #64748b;
     }
 }
 
@@ -1128,26 +1123,117 @@
     }
 }
 
-// ── Status toggle (radio group) ───────────────────────────────────────────
+// ── Status pill toggle (replaces radio group) ─────────────────────────────
 
-.status-toggle-group {
-    display: flex;
-    gap: 1rem;
-    align-items: center;
+.status-pill-toggle {
+    display: inline-flex;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f8fafc;
 }
 
-.status-toggle-opt {
-    display: inline-flex;
-    align-items: center;
-    gap: .35rem;
-    font-size: .875rem;
-    color: #475569;
+.status-pill-btn {
+    padding: .38rem .8rem;
+    font-size: .8rem;
+    font-weight: 600;
+    background: transparent;
+    border: none;
     cursor: pointer;
+    color: #94a3b8;
+    transition: background .15s, color .15s;
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    white-space: nowrap;
 
-    input[type="radio"] {
-        accent-color: #3b82f6;
-        cursor: pointer;
+    .material-icons {
+        font-size: .95rem;
     }
+
+    & + & {
+        border-left: 1.5px solid #e2e8f0;
+    }
+
+    &:hover {
+        color: #475569;
+        background: #f1f5f9;
+    }
+
+    &.is-active[data-value="proposed"] {
+        background: #f1f5f9;
+        color: #64748b;
+    }
+
+    &.is-active[data-value="confirmed"] {
+        background: #eff6ff;
+        color: #3b82f6;
+    }
+}
+
+// ── Your RSVP banner ──────────────────────────────────────────────────────
+
+.trip-your-rsvp {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .55rem 1rem;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    flex-wrap: wrap;
+}
+
+.trip-your-rsvp-label {
+    font-size: .8rem;
+    font-weight: 600;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+// ── Trip not-found / error page ───────────────────────────────────────────
+
+.trip-error-page {
+    max-width: 540px;
+    margin: 5rem auto;
+    padding: 0 1.5rem;
+    text-align: center;
+}
+
+.trip-error-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.5rem;
+
+    .material-icons {
+        font-size: 2.2rem;
+        color: #94a3b8;
+    }
+}
+
+.trip-error-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 .6rem;
+}
+
+.trip-error-body {
+    color: #64748b;
+    line-height: 1.6;
+    margin: 0 0 2rem;
+    font-size: .95rem;
+}
+
+.trip-error-actions {
+    display: flex;
+    gap: .75rem;
+    justify-content: center;
+    flex-wrap: wrap;
 }
 
 // ── Site admin page ───────────────────────────────────────────────────────

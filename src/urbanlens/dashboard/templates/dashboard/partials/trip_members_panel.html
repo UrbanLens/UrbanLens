@@ -11,6 +11,35 @@
         {% endif %}
     </div>
 
+    {# Prominent RSVP control for the current user #}
+    {% for membership in members %}
+    {% if membership.profile == profile %}
+    <div class="trip-your-rsvp">
+        <span class="trip-your-rsvp-label">Your RSVP</span>
+        <select class="rsvp-select"
+                hx-post="{% url 'trips.rsvp' trip.uuid %}"
+                hx-target="#trip-members-panel"
+                hx-swap="outerHTML"
+                hx-trigger="change"
+                name="rsvp">
+            <option value="" {% if not membership.rsvp %}selected{% endif %}>No Response</option>
+            <option value="yes" {% if membership.rsvp == 'yes' %}selected{% endif %}>Yes</option>
+            <option value="no" {% if membership.rsvp == 'no' %}selected{% endif %}>No</option>
+            <option value="maybe" {% if membership.rsvp == 'maybe' %}selected{% endif %}>Maybe</option>
+        </select>
+        {% if membership.profile != trip.creator %}
+        <button type="button" class="detail-pin-action-btn trip-leave-btn"
+                title="Leave trip"
+                style="opacity:1"
+                hx-delete="{% url 'trips.leave' trip.uuid %}"
+                hx-confirm="Leave this trip? You can be re-added by the creator.">
+            <i class="material-icons">exit_to_app</i>
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% endfor %}
+
     {% if members %}
     <ul class="trip-member-list">
         {% for membership in members %}
@@ -28,7 +57,7 @@
                 <span class="trip-member-username">@{{ member.user.username }}</span>
             </div>
 
-            {# RSVP badge #}
+            {# Badges #}
             {% if member == trip.creator %}
             <span class="trip-member-badge trip-member-badge--creator">creator</span>
             {% endif %}
@@ -36,37 +65,12 @@
                 {% if membership.rsvp == 'yes' %}Yes
                 {% elif membership.rsvp == 'no' %}No
                 {% elif membership.rsvp == 'maybe' %}Maybe
-                {% else %}No Response{% endif %}
+                {% else %}–{% endif %}
             </span>
 
-            {# Actions #}
+            {# Creator can remove other members #}
             <div class="trip-member-actions">
-                {% if member == profile %}
-                {# RSVP dropdown for the current user #}
-                <div class="rsvp-select-wrap">
-                    <select class="rsvp-select"
-                            hx-post="{% url 'trips.rsvp' trip.uuid %}"
-                            hx-target="#trip-members-panel"
-                            hx-swap="outerHTML"
-                            hx-trigger="change"
-                            name="rsvp">
-                        <option value="" {% if not membership.rsvp %}selected{% endif %}>No Response</option>
-                        <option value="yes" {% if membership.rsvp == 'yes' %}selected{% endif %}>Yes</option>
-                        <option value="no" {% if membership.rsvp == 'no' %}selected{% endif %}>No</option>
-                        <option value="maybe" {% if membership.rsvp == 'maybe' %}selected{% endif %}>Maybe</option>
-                    </select>
-                </div>
-                {% if member != trip.creator %}
-                {# Leave trip button for non-creator viewing their own row #}
-                <button type="button" class="detail-pin-action-btn trip-leave-btn"
-                        title="Leave trip"
-                        hx-delete="{% url 'trips.leave' trip.uuid %}"
-                        hx-confirm="Leave this trip? You can be re-added by the creator.">
-                    <i class="material-icons">exit_to_app</i>
-                </button>
-                {% endif %}
-                {% elif profile == trip.creator and member != trip.creator %}
-                {# Creator can remove other members #}
+                {% if profile == trip.creator and member != trip.creator %}
                 <button type="button" class="detail-pin-action-btn"
                         title="Remove member"
                         hx-delete="{% url 'trips.member.remove' trip.uuid member.id %}"
@@ -76,6 +80,8 @@
                         hx-on::before-request="this.closest('li').classList.add('is-deleting')">
                     <i class="material-icons">person_remove</i>
                 </button>
+                {% elif member == profile and member != trip.creator %}
+                {# Non-creator can remove themselves via the RSVP row; keep remove button for extra access #}
                 {% endif %}
             </div>
         </li>

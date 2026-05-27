@@ -1405,7 +1405,7 @@ class Badge(abstract.Model):
     # Higher order = checked first in the icon priority chain.
     order = IntegerField(default=0)
     # Hierarchical parents - symmetrical=False so parent→child is one direction.
-    parents = ManyToManyField(
+    parents: ManyToManyField[Badge] = ManyToManyField(
         "self",
         symmetrical=False,
         blank=True,

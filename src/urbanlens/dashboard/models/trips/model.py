@@ -148,6 +148,9 @@ class TripMembership(abstract.Model):
         indexes = [
             Index(fields=["trip"], name="dashboard_tm_trip_idx"),
         ]
+        permissions = [
+            ("remove_trip_members", "Can remove members from trips"),
+        ]
 
 
 class TripComment(abstract.Model):

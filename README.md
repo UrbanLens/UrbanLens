@@ -46,13 +46,16 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
     * Comments
     * User List (with privacy settings)
   * UI:
-    * Dark mode
+    * <s>Dark mode</s>
     * Mobile responsiveness
     * Trim icon options (currently too many)
     * Add missing icons (some themes aren't represented)
     * Allow user to reorder pin details sections
     * Change default pin details sections order
     * Better looking confirmation dialogs (delete, etc)
+    * Beautify registration / login pages
+      * Standardize SSO registration buttons
+      * After login, we are redirected to accounts/profile, which is a 404, instead of dashboard/profile.
     * Pin detail page: 
       * Rating should be in stars
       * Place name - is this required to show?

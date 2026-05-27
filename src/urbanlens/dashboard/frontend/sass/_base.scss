@@ -1,6 +1,11 @@
 @use 'sass:color';
 @use 'variables' as *;
 
+// Prevent layout shift when scrollbar appears/disappears (e.g. list↔calendar toggle)
+html {
+    scrollbar-gutter: stable;
+}
+
 @keyframes dialog-appear {
     from {
         opacity: 0;

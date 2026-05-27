@@ -1,0 +1,21 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="trip-error-page">
+    <div class="trip-error-icon">
+        <i class="material-icons">explore_off</i>
+    </div>
+    <h1 class="trip-error-title">Trip Not Found</h1>
+    <p class="trip-error-body">
+        This trip doesn't exist, or you don't have access to it.<br>
+        If you believe this is a mistake, ask the trip creator to check your membership.
+    </p>
+    <div class="trip-error-actions">
+        <a href="{% url 'trips.list' %}" class="submit-button">
+            <i class="material-icons" style="font-size:1rem;vertical-align:middle">arrow_back</i>
+            Back to My Trips
+        </a>
+        <a href="{% url 'home' %}" class="btn-ghost">Home</a>
+    </div>
+</div>
+{% endblock %}

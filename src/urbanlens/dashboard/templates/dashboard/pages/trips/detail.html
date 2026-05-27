@@ -124,10 +124,21 @@
           hx-on::after-request="if(event.detail.successful)_onAddActivitySuccess()"
           class="trip-create-form">
         {% csrf_token %}
-        <div class="form-row">
-            <label for="activity-title">Title</label>
-            <input type="text" name="title" id="activity-title"
-                   placeholder="e.g. Rooftop access point" maxlength="255">
+
+        {# Name hidden by default — reveal with toggle #}
+        <div id="add-activity-name-wrap" hidden>
+            <div class="form-row">
+                <label for="activity-title">Custom Name <small>(optional)</small></label>
+                <input type="text" name="title" id="activity-title"
+                       placeholder="e.g. Rooftop access point" maxlength="255">
+            </div>
+        </div>
+        <div class="form-row" style="margin-bottom:.1rem">
+            <button type="button" class="btn-ghost" id="add-activity-name-toggle"
+                    style="font-size:.8rem;padding:.25rem .5rem"
+                    onclick="_toggleAddActivityName()">
+                <i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name
+            </button>
         </div>
 
         <div class="form-row">
@@ -147,7 +158,8 @@
         <div class="form-row form-row--two-col">
             <div>
                 <label for="activity-date">Date <small>(optional)</small></label>
-                <input type="date" name="scheduled_date" id="activity-date">
+                <input type="date" name="scheduled_date" id="activity-date"
+                       value="{{ trip.start_date|date:'Y-m-d'|default:'' }}">
             </div>
             <div>
                 <label for="activity-time">Time <small>(optional)</small></label>
@@ -161,14 +173,17 @@
                       placeholder="Any notes about this stop…"></textarea>
         </div>
         <div class="form-row">
-            <label for="activity-status">Status</label>
-            <div class="status-toggle-group">
-                <label class="status-toggle-opt">
-                    <input type="radio" name="status" value="proposed" checked> Proposed
-                </label>
-                <label class="status-toggle-opt">
-                    <input type="radio" name="status" value="confirmed"> Confirmed
-                </label>
+            <label>Status</label>
+            <input type="hidden" name="status" id="add-activity-status-input" value="proposed">
+            <div class="status-pill-toggle" role="group" aria-label="Activity status">
+                <button type="button" class="status-pill-btn is-active" data-value="proposed"
+                        onclick="_setStatusPill('add', 'proposed')">
+                    <i class="material-icons">schedule</i> Proposed
+                </button>
+                <button type="button" class="status-pill-btn" data-value="confirmed"
+                        onclick="_setStatusPill('add', 'confirmed')">
+                    <i class="material-icons">check_circle</i> Confirmed
+                </button>
             </div>
         </div>
         <div class="form-actions">
@@ -219,15 +234,21 @@
             </button>
         </div>
 
-        <div class="form-row form-row--two-col">
-            <div>
-                <label for="edit-activity-date">Date <small>(optional)</small></label>
+        <div class="form-row">
+            <label>Date <small>(optional)</small></label>
+            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
                 <input type="date" name="scheduled_date" id="edit-activity-date">
+                <button type="button" class="btn-ghost"
+                        style="font-size:.78rem;padding:.2rem .5rem;white-space:nowrap"
+                        onclick="document.getElementById('edit-activity-date').value='';document.getElementById('edit-activity-time').value=''">
+                    <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i> Clear
+                </button>
             </div>
-            <div>
-                <label for="edit-activity-time">Time <small>(optional)</small></label>
-                <input type="time" name="scheduled_time" id="edit-activity-time">
-            </div>
+        </div>
+
+        <div class="form-row">
+            <label for="edit-activity-time">Time <small>(optional)</small></label>
+            <input type="time" name="scheduled_time" id="edit-activity-time">
         </div>
 
         <div class="form-row">
@@ -237,13 +258,16 @@
         </div>
         <div class="form-row">
             <label>Status</label>
-            <div class="status-toggle-group">
-                <label class="status-toggle-opt">
-                    <input type="radio" name="status" id="edit-activity-status-proposed" value="proposed"> Proposed
-                </label>
-                <label class="status-toggle-opt">
-                    <input type="radio" name="status" id="edit-activity-status-confirmed" value="confirmed"> Confirmed
-                </label>
+            <input type="hidden" name="status" id="edit-activity-status-input" value="proposed">
+            <div class="status-pill-toggle" role="group" aria-label="Activity status">
+                <button type="button" class="status-pill-btn is-active" data-value="proposed"
+                        onclick="_setStatusPill('edit', 'proposed')">
+                    <i class="material-icons">schedule</i> Proposed
+                </button>
+                <button type="button" class="status-pill-btn" data-value="confirmed"
+                        onclick="_setStatusPill('edit', 'confirmed')">
+                    <i class="material-icons">check_circle</i> Confirmed
+                </button>
             </div>
         </div>
         <div class="form-actions">
@@ -530,6 +554,12 @@ function _onAddActivitySuccess() {
     document.getElementById('activity-geocoded-lat').value  = '';
     document.getElementById('activity-geocoded-lng').value  = '';
     document.getElementById('activity-geocoded-name').value = '';
+    // Reset status pill to "proposed" and hide custom name field
+    _setStatusPill('add', 'proposed');
+    var nameWrap = document.getElementById('add-activity-name-wrap');
+    if (nameWrap) nameWrap.setAttribute('hidden', '');
+    var nameToggle = document.getElementById('add-activity-name-toggle');
+    if (nameToggle) nameToggle.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name';
     // map + view restore are handled by the activities section listener below
 }
 
@@ -659,9 +689,7 @@ function _renderTripCalendar() {
                 var safeTitle = (a.title || 'Activity').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
                 var eventCls = 'cal-event' + (a.status === 'proposed' ? ' cal-event--proposed' : '');
                 html += '<div class="' + eventCls + '" title="' + safeTitle + '" ' +
-                    'draggable="true" data-act-id="' + a.id + '" data-move-url="' + (a.moveUrl || '') + '" ' +
-                    'onclick="var el=document.getElementById(\'trip-activity-\'+' + JSON.stringify(a.id) + ');' +
-                    'if(el){tripSetView(\'list\');el.scrollIntoView({behavior:\'smooth\'});}">';
+                    'draggable="true" data-act-id="' + a.id + '" data-move-url="' + (a.moveUrl || '') + '">';
                 if (a.index) html += '<span class="cal-event-num">' + a.index + '</span>';
                 html += '<span class="cal-event-title">' + safeTitle + '</span></div>';
             });
@@ -677,16 +705,25 @@ function _renderTripCalendar() {
 function _initCalDragDrop(calEl) {
     var dragActId = null;
     var dragMoveUrl = null;
+    var _wasDragging = false;
 
     calEl.querySelectorAll('.cal-event[draggable]').forEach(function (el) {
         el.addEventListener('dragstart', function (e) {
-            dragActId   = el.dataset.actId;
-            dragMoveUrl = el.dataset.moveUrl;
+            dragActId     = el.dataset.actId;
+            dragMoveUrl   = el.dataset.moveUrl;
+            _wasDragging  = true;
             e.dataTransfer.effectAllowed = 'move';
             el.classList.add('cal-event--dragging');
         });
         el.addEventListener('dragend', function () {
             el.classList.remove('cal-event--dragging');
+            // Keep _wasDragging true briefly to suppress the subsequent click event
+            setTimeout(function () { _wasDragging = false; }, 150);
+        });
+        el.addEventListener('click', function () {
+            if (_wasDragging) return;
+            var li = document.getElementById('trip-activity-' + el.dataset.actId);
+            if (li) tripOpenEditDialog(li);
         });
     });
 
@@ -715,6 +752,31 @@ function _initCalDragDrop(calEl) {
     });
 }
 
+// ── Status pill toggle helper ────────────────────────────────────────────
+function _setStatusPill(prefix, value) {
+    var inputId  = (prefix === 'add') ? 'add-activity-status-input' : 'edit-activity-status-input';
+    var groupSel = (prefix === 'add') ? '#add-activity-dialog .status-pill-toggle' : '#edit-activity-dialog .status-pill-toggle';
+    document.getElementById(inputId).value = value;
+    document.querySelectorAll(groupSel + ' .status-pill-btn').forEach(function (btn) {
+        btn.classList.toggle('is-active', btn.dataset.value === value);
+    });
+}
+
+// ── Add activity name toggle ─────────────────────────────────────────────
+function _toggleAddActivityName() {
+    var wrap = document.getElementById('add-activity-name-wrap');
+    var btn  = document.getElementById('add-activity-name-toggle');
+    var hidden = wrap.hasAttribute('hidden');
+    if (hidden) {
+        wrap.removeAttribute('hidden');
+        btn.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">remove</i> Hide name';
+    } else {
+        wrap.setAttribute('hidden', '');
+        btn.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name';
+        document.getElementById('activity-title').value = '';
+    }
+}
+
 // ── Edit activity dialog ─────────────────────────────────────────────────
 function tripOpenEditDialog(li) {
     var form = document.getElementById('edit-activity-form');
@@ -732,11 +794,7 @@ function tripOpenEditDialog(li) {
     document.getElementById('edit-activity-location-display').textContent = li.dataset.actLocationName || '';
     document.getElementById('edit-activity-location-search').value = '';
 
-    var status = li.dataset.actStatus || 'proposed';
-    var proposedRadio = document.getElementById('edit-activity-status-proposed');
-    var confirmedRadio = document.getElementById('edit-activity-status-confirmed');
-    if (proposedRadio)  proposedRadio.checked  = (status === 'proposed');
-    if (confirmedRadio) confirmedRadio.checked = (status === 'confirmed');
+    _setStatusPill('edit', li.dataset.actStatus || 'proposed');
 
     document.getElementById('edit-activity-dialog').showModal();
 }
