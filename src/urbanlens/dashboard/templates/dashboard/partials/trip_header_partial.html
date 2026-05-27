@@ -15,6 +15,13 @@
         {% endif %}
     </div>
     <div class="trip-detail-header-right">
+        {% if trip.creator == profile %}
+        <button type="button" class="trip-header-btn trip-header-btn--settings"
+                title="Trip settings"
+                onclick="document.getElementById('trip-settings-dialog').showModal()">
+            <i class="material-icons">settings</i>
+        </button>
+        {% endif %}
         <button type="button" class="trip-header-btn trip-header-btn--edit"
                 title="Edit trip"
                 onclick="document.getElementById('edit-trip-dialog').showModal()">

@@ -16,17 +16,36 @@
     {% if membership.profile == profile %}
     <div class="trip-your-rsvp">
         <span class="trip-your-rsvp-label">Your RSVP</span>
-        <select class="rsvp-select"
-                hx-post="{% url 'trips.rsvp' trip.uuid %}"
-                hx-target="#trip-members-panel"
-                hx-swap="outerHTML"
-                hx-trigger="change"
-                name="rsvp">
-            <option value="" {% if not membership.rsvp %}selected{% endif %}>No Response</option>
-            <option value="yes" {% if membership.rsvp == 'yes' %}selected{% endif %}>Yes</option>
-            <option value="no" {% if membership.rsvp == 'no' %}selected{% endif %}>No</option>
-            <option value="maybe" {% if membership.rsvp == 'maybe' %}selected{% endif %}>Maybe</option>
-        </select>
+        <div class="rsvp-pill-group">
+            <button type="button"
+                    class="rsvp-pill-btn {% if membership.rsvp == 'yes' %}is-active{% endif %}"
+                    data-rsvp="yes"
+                    hx-post="{% url 'trips.rsvp' trip.uuid %}"
+                    hx-target="#trip-members-panel"
+                    hx-swap="outerHTML"
+                    hx-vals='{"rsvp": "yes"}'>Yes</button>
+            <button type="button"
+                    class="rsvp-pill-btn {% if membership.rsvp == 'no' %}is-active{% endif %}"
+                    data-rsvp="no"
+                    hx-post="{% url 'trips.rsvp' trip.uuid %}"
+                    hx-target="#trip-members-panel"
+                    hx-swap="outerHTML"
+                    hx-vals='{"rsvp": "no"}'>No</button>
+            <button type="button"
+                    class="rsvp-pill-btn {% if membership.rsvp == 'maybe' %}is-active{% endif %}"
+                    data-rsvp="maybe"
+                    hx-post="{% url 'trips.rsvp' trip.uuid %}"
+                    hx-target="#trip-members-panel"
+                    hx-swap="outerHTML"
+                    hx-vals='{"rsvp": "maybe"}'>Maybe</button>
+            <button type="button"
+                    class="rsvp-pill-btn {% if not membership.rsvp %}is-active{% endif %}"
+                    data-rsvp=""
+                    hx-post="{% url 'trips.rsvp' trip.uuid %}"
+                    hx-target="#trip-members-panel"
+                    hx-swap="outerHTML"
+                    hx-vals='{"rsvp": ""}'>No Response</button>
+        </div>
         {% if membership.profile != trip.creator %}
         <button type="button" class="detail-pin-action-btn trip-leave-btn"
                 title="Leave trip"

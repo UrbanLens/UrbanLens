@@ -93,6 +93,7 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
       * Users can leave the trip.
       * Trip variations (confirmed/unconfirmed pins, map markup, etc)
       * RSVP per activity
+      * Leaving a trip should take you back to the trip list.
     * Badges Page:
       * Custom Icons must be clamped to size (do this during upload?)
     * Map Page:

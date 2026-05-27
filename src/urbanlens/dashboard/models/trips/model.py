@@ -6,7 +6,7 @@ import logging
 from uuid import uuid4
 
 from django.db.models import CASCADE, SET_NULL, ForeignKey, Index, IntegerField, ManyToManyField, UUIDField
-from django.db.models.fields import CharField, DateField, DateTimeField, TextField
+from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, TextField
 
 from urbanlens.dashboard.models import abstract
 
@@ -40,6 +40,11 @@ class Trip(abstract.Model):
         related_name="trips",
         through="TripMembership",
     )
+
+    allow_add_members = BooleanField(default=False, help_text="Non-creator members can add new members.")
+    allow_add_activities = BooleanField(default=True, help_text="Non-creator members can add activities.")
+    allow_edit_activities = BooleanField(default=False, help_text="Non-creator members can edit or delete activities.")
+    allow_comments = BooleanField(default=True, help_text="Comments are enabled for this trip.")
 
     def __str__(self) -> str:
         return self.name or f"Trip #{self.id}"

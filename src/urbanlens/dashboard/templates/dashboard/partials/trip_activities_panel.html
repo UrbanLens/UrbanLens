@@ -1,4 +1,6 @@
-<div id="trip-activities-panel" class="trip-panel card">
+<div id="trip-activities-panel" class="trip-panel card"
+     data-trip-start="{{ trip.start_date|date:'Y-m-d'|default:'' }}"
+     data-trip-end="{{ trip.end_date|date:'Y-m-d'|default:'' }}">
     <div class="card-header">
         <i class="material-icons">map</i>
         <span>Activities</span>

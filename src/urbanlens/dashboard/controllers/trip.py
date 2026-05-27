@@ -272,6 +272,9 @@ class TripActivitiesView(LoginRequiredMixin, View):
             return result
         trip = result
 
+        if trip.creator != profile and not trip.allow_add_activities:
+            return HttpResponse("The trip creator has not allowed others to add activities.", status=403)
+
         try:
             body = json.loads(request.body) if request.body else {}
         except (json.JSONDecodeError, ValueError):
@@ -312,6 +315,10 @@ class TripActivityEditView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         trip = result
+
+        if trip.creator != profile and not trip.allow_edit_activities:
+            return HttpResponse("The trip creator has not allowed others to edit activities.", status=403)
+
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
 
         try:
@@ -346,6 +353,10 @@ class TripActivityDeleteView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         trip = result
+
+        if trip.creator != profile and not trip.allow_edit_activities:
+            return HttpResponse("The trip creator has not allowed others to delete activities.", status=403)
+
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
         activity.delete()
         return _render_activities_panel(request, trip, profile)
@@ -377,6 +388,9 @@ class TripCommentsView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         trip = result
+
+        if not trip.allow_comments:
+            return HttpResponse("Comments are disabled for this trip.", status=403)
 
         try:
             body = json.loads(request.body) if request.body else {}
@@ -435,6 +449,9 @@ class TripMembersView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         trip = result
+
+        if trip.creator != profile and not trip.allow_add_members:
+            return HttpResponse("The trip creator has not allowed others to add members.", status=403)
 
         try:
             body = json.loads(request.body) if request.body else {}
@@ -724,3 +741,37 @@ class TripLeaveView(LoginRequiredMixin, View):
         response = HttpResponse("", status=200)
         response["HX-Redirect"] = _reverse("dashboard:trips.list")
         return response
+
+
+class TripSettingsView(LoginRequiredMixin, View):
+    """Save trip settings (creator only).
+
+    POST /trips/<uuid>/settings/
+    """
+
+    def post(self, request, trip_uuid):
+        """Handle POST to update trip permission settings.
+
+        Args:
+            request: The HTTP request.
+            trip_uuid: The trip UUID.
+
+        Returns:
+            Rendered settings partial on success, or an error HttpResponse.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(request, trip_uuid, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+
+        if trip.creator != profile:
+            return HttpResponse("Only the trip creator can change settings.", status=403)
+
+        trip.allow_add_members = request.POST.get("allow_add_members") in {"on", "true", "1"}
+        trip.allow_add_activities = request.POST.get("allow_add_activities") in {"on", "true", "1"}
+        trip.allow_edit_activities = request.POST.get("allow_edit_activities") in {"on", "true", "1"}
+        trip.allow_comments = request.POST.get("allow_comments") in {"on", "true", "1"}
+        trip.save(update_fields=["allow_add_members", "allow_add_activities", "allow_edit_activities", "allow_comments", "updated"])
+
+        return render(request, "dashboard/partials/trip_settings_partial.html", {"trip": trip, "profile": profile, "saved": True})

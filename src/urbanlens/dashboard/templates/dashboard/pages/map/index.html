@@ -864,9 +864,14 @@
 
         if (pin.icon && pin.icon !== 'undefined' && pin.icon !== 'null') {
             const color = (pin.color && pin.color !== 'None') ? pin.color : '#555555';
-            const iconHtml = /^[a-z_]+$/.test(pin.icon)
-                ? `<i class="material-icons map-pin-icon" style="color:${color};">${pin.icon}</i>`
-                : `<span class="map-pin-emoji">${pin.icon}</span>`;
+            let iconHtml;
+            if (/^[a-z_]+$/.test(pin.icon)) {
+                iconHtml = `<i class="material-icons map-pin-icon" style="color:${color};">${pin.icon}</i>`;
+            } else if (/^(https?:\/\/|\/)/.test(pin.icon)) {
+                iconHtml = `<img src="${pin.icon}" class="map-pin-custom-img" alt="">`;
+            } else {
+                iconHtml = `<span class="map-pin-emoji">${pin.icon}</span>`;
+            }
             marker.setIcon(L.divIcon({ className: 'map-pin-icon-wrap', html: iconHtml, iconSize: [28,28], iconAnchor: [14,14] }));
         }
 

@@ -224,6 +224,11 @@
     align-items: center;
     gap: .5rem;
     flex-shrink: 0;
+    opacity: 0.75;
+
+    &:hover {
+        opacity: 1;
+    }
 }
 
 // Trip header action buttons — icon-only, unobtrusive
@@ -256,6 +261,18 @@
         }
     }
 
+    &--settings {
+        color: #94a3b8;
+
+        &:hover,
+        &:focus {
+            background: #f1f5f9;
+            color: #3b82f6;
+            border-color: #e2e8f0;
+            outline: none;
+        }
+    }
+
     &--delete {
         color: #cbd5e1;
 
@@ -271,13 +288,9 @@
 
 .trip-detail-body {
     display: grid;
-    grid-template-columns: 1fr 340px;
+    grid-template-columns: 1fr;
     gap: 1.5rem;
     align-items: start;
-
-    @media (max-width: 760px) {
-        grid-template-columns: 1fr;
-    }
 }
 
 .trip-detail-section {
@@ -285,10 +298,14 @@
 }
 
 .trip-detail-aside {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 1.25rem;
     min-width: 0;
+
+    @media (max-width: 600px) {
+        grid-template-columns: 1fr;
+    }
 }
 
 // ── Trip panels (shared) ──────────────────────────────────────────────────
@@ -361,22 +378,6 @@
         background: #fff;
         color: #3b82f6;
         box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
-    }
-}
-
-// ── Calendar mode layout ──────────────────────────────────────────────────
-
-.trip-detail-body.calendar-mode {
-    grid-template-columns: 1fr;
-
-    .trip-detail-aside {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1.5rem;
-
-        @media (max-width: 600px) {
-            grid-template-columns: 1fr;
-        }
     }
 }
 
@@ -980,9 +981,10 @@
     box-shadow: 0 1px 4px rgba(148, 163, 184, .4) !important;
 }
 
-.trip-map-marker--proposed {
-    background: #94a3b8 !important;
-    box-shadow: 0 2px 6px rgba(148, 163, 184, .5) !important;
+.trip-map-marker--proposed:not(.trip-map-marker--highlighted) {
+    background: #94a3b8;
+    box-shadow: 0 2px 6px rgba(148, 163, 184, .5);
+    opacity: 0.75;
 }
 
 .trip-status-btn {
@@ -1085,6 +1087,7 @@
         background: #f1f5f9;
         color: #94a3b8;
         border: 1px solid #e2e8f0;
+        display: none;
     }
 }
 
@@ -1092,6 +1095,11 @@
     display: flex;
     align-items: center;
     gap: .35rem;
+    opacity: 0.75;
+
+    &:hover {
+        opacity: 1;
+    }
 }
 
 .rsvp-select-wrap {
@@ -1109,7 +1117,8 @@
     outline: none;
     transition: border-color .15s;
 
-    &:focus, &:hover {
+    &:focus,
+    &:hover {
         border-color: #3b82f6;
     }
 }
@@ -1151,7 +1160,7 @@
         font-size: .95rem;
     }
 
-    & + & {
+    &+& {
         border-left: 1.5px solid #e2e8f0;
     }
 
@@ -1161,13 +1170,13 @@
     }
 
     &.is-active[data-value="proposed"] {
-        background: #f1f5f9;
-        color: #64748b;
+        background: #64748b;
+        color: #fff;
     }
 
     &.is-active[data-value="confirmed"] {
-        background: #eff6ff;
-        color: #3b82f6;
+        background: #3b82f6;
+        color: #fff;
     }
 }
 
@@ -1398,3 +1407,88 @@
     }
 }
 
+// ── RSVP pill buttons ─────────────────────────────────────────────────────
+
+.rsvp-pill-group {
+    display: flex;
+    gap: .3rem;
+    flex-wrap: wrap;
+}
+
+.rsvp-pill-btn {
+    padding: .28rem .7rem;
+    border-radius: 999px;
+    font-size: .8rem;
+    font-weight: 600;
+    border: 1.5px solid #e2e8f0;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
+
+    &:hover {
+        border-color: #94a3b8;
+        background: #f8fafc;
+    }
+
+    &.is-active {
+        &[data-rsvp="yes"]   { background: #22c55e; border-color: #22c55e; color: #fff; }
+        &[data-rsvp="no"]    { background: #ef4444; border-color: #ef4444; color: #fff; }
+        &[data-rsvp="maybe"] { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+        &[data-rsvp=""]      { background: #94a3b8; border-color: #94a3b8; color: #fff; }
+    }
+}
+
+// ── Trip settings form ────────────────────────────────────────────────────
+
+.trip-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    cursor: pointer;
+    padding: .45rem 0;
+}
+
+.trip-setting-label {
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+    flex: 1;
+
+    strong {
+        font-size: .875rem;
+    }
+}
+
+.trip-setting-desc {
+    font-size: .78rem;
+    color: #94a3b8;
+    font-weight: 400;
+}
+
+.trip-setting-check {
+    width: 17px;
+    height: 17px;
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: #3b82f6;
+}
+
+// ── Multi-month calendar ──────────────────────────────────────────────────
+
+.cal-month-section-label {
+    font-size: .78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #94a3b8;
+    text-align: center;
+    padding: .9rem 0 .3rem;
+}
+
+.cal-month-section-sep {
+    height: 1px;
+    background: #e2e8f0;
+    margin: .75rem 0 .25rem;
+}
