@@ -3,16 +3,11 @@
 Physical DB tables (dashboard_tags, dashboard_tag_customizations) and the
 tag_id FK column are unchanged.  Only Django's migration state, ContentType
 rows, and the custom permission codename are updated.
-
-Also syncs several state discrepancies on BadgeCustomization that accumulated
-between migration 0041 (which used explicit AutoField and the old related_name)
-and the current model code.  All are state-only — the DB already matches.
 """
 
 from __future__ import annotations
 
-import django.db.models.deletion
-from django.db import migrations, models
+from django.db import migrations
 
 
 def _update_contenttypes(apps, schema_editor):
@@ -60,11 +55,9 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # ------------------------------------------------------------------ #
-        # Part 1: State-only rename Tag → Badge, TagCustomization →          #
-        # BadgeCustomization, and the 'tag' FK field → 'badge'.              #
-        # DB tables already carry explicit db_table values; nothing changes. #
-        # ------------------------------------------------------------------ #
+        # State-only rename: Tag → Badge, TagCustomization → BadgeCustomization,
+        # and the 'tag' FK field on BadgeCustomization → 'badge'.
+        # DB tables already carry explicit db_table values so nothing changes on disk.
         migrations.SeparateDatabaseAndState(
             state_operations=[
                 migrations.RenameModel("Tag", "Badge"),
@@ -74,48 +67,10 @@ class Migration(migrations.Migration):
                     old_name="tag",
                     new_name="badge",
                 ),
-                # Sync the 'badge' FK to include db_column="tag_id" so Django's
-                # state knows the physical column is tag_id, not badge_id.
-                # Without this Django would generate a RENAME COLUMN migration.
-                migrations.AlterField(
-                    model_name="badgecustomization",
-                    name="badge",
-                    field=models.ForeignKey(
-                        db_column="tag_id",
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="customizations",
-                        to="dashboard.badge",
-                    ),
-                ),
-                # Sync related_name on the profile FK (model uses badge_customizations).
-                migrations.AlterField(
-                    model_name="badgecustomization",
-                    name="profile",
-                    field=models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="badge_customizations",
-                        to="dashboard.profile",
-                    ),
-                ),
-                # Sync the id pk type to BigAutoField to match DEFAULT_AUTO_FIELD.
-                # Migration 0041 used AutoField explicitly; DB column is already
-                # integer and works fine — this is purely a state sync.
-                migrations.AlterField(
-                    model_name="badgecustomization",
-                    name="id",
-                    field=models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
             ],
             database_operations=[],
         ),
-        # ------------------------------------------------------------------ #
-        # Part 2: Update the custom permission declaration on Badge.         #
-        # ------------------------------------------------------------------ #
+        # Update the custom permission declaration on the Badge model options.
         migrations.AlterModelOptions(
             name="badge",
             options={
@@ -124,9 +79,7 @@ class Migration(migrations.Migration):
                 "permissions": [("edit_global_badge", "Can edit global badges")],
             },
         ),
-        # ------------------------------------------------------------------ #
-        # Part 3: Update django_content_type rows, then auth_permission.     #
-        # ------------------------------------------------------------------ #
+        # Update the django_content_type rows first, then update auth_permission.
         migrations.RunPython(_update_contenttypes, _reverse_contenttypes),
         migrations.RunPython(_update_permissions, _reverse_permissions),
     ]

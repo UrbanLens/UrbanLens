@@ -19,10 +19,10 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
 * Map:
     * <s>Map layers</s>
     * <s>Change pin icons</s>
-    * Allow using emojis as pin icons from a standard emoji pack
-    * Allow uploading custom images for pin icons
+    * <s>Allow using emojis as pin icons from a standard emoji pack</s>
+    * <s>Allow uploading custom images for pin icons</s>
 * Search:
-    * Search functionality
+    * <s>Search functionality</s>
 * Research:
     * <s>Location view page</s>
     * <s>Weather</s>
