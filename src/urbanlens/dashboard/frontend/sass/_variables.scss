@@ -17,6 +17,7 @@ $radius-sm: 8px;
 $radius-md: 12px;
 $shadow-dialog: 0 8px 40px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .08);
 $text-color: $text-primary;
+$surface-hover: color.scale($primary-color, $lightness: +5%);
 
 // Prevent scrollbar-induced layout shift on all pages
 html {
@@ -24,31 +25,39 @@ html {
 }
 
 // ── Additional shared tokens ─────────────────────────────────────────────────
-$shadow-sm:      0 1px 3px rgba(0,0,0,.08);
-$shadow-md:      0 4px 16px rgba(0,0,0,.12);
-$radius-xs:      4px;
-$radius-lg:      12px;
-$radius-full:    9999px;
-$danger-color:   #c0392b;
-$danger-bg:      #fdf0ee;
-$danger-border:  #e8c2be;
-$success-color:  #1e7e34;
-$success-bg:     #eaf6ed;
-$warning-color:  #856404;
-$warning-bg:     #fff3cd;
-$teal-color:     #0d6e6e;
-$teal-bg:        #e6f7f7;
+$shadow-sm: 0 1px 3px rgba(0, 0, 0, .08);
+$shadow-md: 0 4px 16px rgba(0, 0, 0, .12);
+$radius-xs: 4px;
+$radius-lg: 12px;
+$radius-full: 9999px;
+$danger-color: #c0392b;
+$danger-bg: #fdf0ee;
+$danger-border: #e8c2be;
+$success-color: #1e7e34;
+$success-bg: #eaf6ed;
+$warning-color: #856404;
+$warning-bg: #fff3cd;
+$teal-color: #0d6e6e;
+$teal-bg: #e6f7f7;
 
 // ── Shared mixins ─────────────────────────────────────────────────────────────
 @mixin dialog-base {
     border: none;
     border-radius: $radius-lg;
-    box-shadow: 0 8px 32px rgba(0,0,0,.18);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
     padding: 0;
     max-width: 90vw;
     background: #fff;
-    &::backdrop { background: rgba(0,0,0,.45); }
-    &[open] { display: flex; flex-direction: column; overflow: hidden; }
+
+    &::backdrop {
+        background: rgba(0, 0, 0, .45);
+    }
+
+    &[open] {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
 }
 
 @mixin panel-base {
@@ -76,7 +85,10 @@ $teal-bg:        #e6f7f7;
     gap: .5rem;
     padding: .5rem .75rem;
     border-bottom: 1px solid $border-color;
-    &:last-child { border-bottom: none; }
+
+    &:last-child {
+        border-bottom: none;
+    }
 }
 
 @mixin empty-state {
@@ -88,7 +100,11 @@ $teal-bg:        #e6f7f7;
     padding: 2rem;
     color: #999;
     text-align: center;
-    .material-icons { font-size: 2.5rem; opacity: .4; }
+
+    .material-icons {
+        font-size: 2.5rem;
+        opacity: .4;
+    }
 }
 
 @mixin input-focus {

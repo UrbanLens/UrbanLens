@@ -43,7 +43,7 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
     * Messages between users
     * <s>Friends</s>
     * Sharing
-    * Comments
+    * <s>Comments</s>
       * Ability to @ friends, etc
     * User List (with privacy settings)
     * Ability to view other user profiles by clicking on comments, etc
