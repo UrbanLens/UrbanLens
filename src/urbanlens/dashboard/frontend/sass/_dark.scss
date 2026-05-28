@@ -327,13 +327,15 @@
     .trip-map-ctx-menu {
         background: #1e2130;
         border-color: #2d3348;
-        box-shadow: 0 4px 16px rgba(0,0,0,.4);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
     }
 
     .trip-map-ctx-item {
         color: #e2e8f0;
 
-        &:hover { background: rgba(255,255,255,.06); }
+        &:hover {
+            background: rgba(255, 255, 255, .06);
+        }
     }
 
     .btn-danger {
@@ -355,7 +357,9 @@
         background: #1e2130;
         border-color: #2d3348;
 
-        .trip-weather-header .trip-weather-title { color: #e2e8f0; }
+        .trip-weather-header .trip-weather-title {
+            color: #e2e8f0;
+        }
     }
 
     .trip-weather-card {
@@ -368,27 +372,36 @@
         }
     }
 
-    .trip-weather-slot--night { background: rgba(0,0,0,.15); }
+    .trip-weather-slot--night {
+        background: rgba(0, 0, 0, .15);
+    }
 
-    .trip-weather-slot-temp { color: #e2e8f0; }
+    .trip-weather-slot-temp {
+        color: #e2e8f0;
+    }
+
     .trip-weather-slot-desc,
-    .trip-weather-slot-feels { color: #94a3b8; }
+    .trip-weather-slot-feels {
+        color: #94a3b8;
+    }
 
-    .trip-weather-summary-item:hover { background: rgba(255,255,255,.05); }
+    .trip-weather-summary-item:hover {
+        background: rgba(255, 255, 255, .05);
+    }
 
-    .trip-weather-summary { border-bottom-color: #2d3348; }
+    .trip-weather-summary {
+        border-bottom-color: #2d3348;
+    }
 }
 
 // ── Pin detail page dark mode ─────────────────────────────────────────────
 
 [data-theme="dark"] {
-    body.page-location-details,
-    &body.page-location-details {
+    body.page-location-details {
         background: #0d0d0d;
     }
 
-    body.page-location-details .card,
-    &body.page-location-details .card {
+    body.page-location-details .card {
         box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
     }
 }
@@ -411,4 +424,3 @@
     color: $text-secondary;
     margin: 0;
 }
-

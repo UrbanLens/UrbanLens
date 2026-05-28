@@ -45,26 +45,20 @@ from urbanlens.dashboard.models.profile.queryset import Manager
 
 
 class VisibilityChoice(TextChoices):
-    """Who can see a particular piece of profile data."""
+    """Who can see a particular piece of profile data, or who can perform an action."""
 
-    ONLY_ME = "only_me", "Only Me"
+    ANYONE = "anyone", "Anyone"
     FRIENDS = "friends", "Friends Only"
-    COMMON_LOCATIONS = "common_locations", "People with Common Locations"
-    EVERYONE = "everyone", "Everyone"
+    COMMON_PIN = "common_pin", "Users with a pin in common"
+    COMMON_FRIEND = "common_friend", "Users with a friend in common"
+    COMMON_TRIP = "common_trip", "Users with a trip in common"
+    NO_ONE = "no_one", "No one"
 
 
 class MapViewChoice(TextChoices):
     STREET = "street", "Street"
     SATELLITE = "satellite", "Satellite"
     TOPOGRAPHIC = "topographic", "Topographic"
-
-
-class FriendRequestVisibility(TextChoices):
-    ANYONE = "anyone", "Anyone"
-    COMMON_PIN = "common_pin", "Users with a pin in common"
-    COMMON_FRIEND = "common_friend", "Users with a friend in common"
-    COMMON_TRIP = "common_trip", "Users with a trip in common"
-    NO_ONE = "no_one", "No one"
 
 
 class Profile(abstract.Model):
@@ -78,17 +72,17 @@ class Profile(abstract.Model):
     profile_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
-        default=VisibilityChoice.EVERYONE,
+        default=VisibilityChoice.ANYONE,
     )
     comment_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
-        default=VisibilityChoice.EVERYONE,
+        default=VisibilityChoice.ANYONE,
     )
     friend_request_visibility = CharField(
         max_length=20,
-        choices=FriendRequestVisibility.choices,
-        default=FriendRequestVisibility.ANYONE,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.ANYONE,
     )
 
     # Style preferences

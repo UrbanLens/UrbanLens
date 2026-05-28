@@ -59,13 +59,13 @@ class ViewProfileView(LoginRequiredMixin, View):
 
         visibility = profile.profile_visibility
 
-        if visibility == VisibilityChoice.EVERYONE:
+        if visibility == VisibilityChoice.ANYONE:
             return True
 
         if not request.user.is_authenticated:
             return False
 
-        if visibility == VisibilityChoice.ONLY_ME:
+        if visibility == VisibilityChoice.NO_ONE:
             return False
 
         try:
@@ -82,7 +82,7 @@ class ViewProfileView(LoginRequiredMixin, View):
             except Exception:
                 return False
 
-        if visibility == VisibilityChoice.COMMON_LOCATIONS:
+        if visibility == VisibilityChoice.COMMON_PIN:
             my_loc_ids = set(
                 Pin.objects.filter(profile=my_profile, location__isnull=False).values_list("location_id", flat=True),
             )
@@ -90,6 +90,28 @@ class ViewProfileView(LoginRequiredMixin, View):
                 Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True),
             )
             return bool(my_loc_ids & their_loc_ids)
+
+        if visibility == VisibilityChoice.COMMON_FRIEND:
+            from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus as FS
+
+            my_friends = set(
+                Friendship.objects.filter(from_profile=my_profile, status=FS.ACCEPTED).values_list("to_profile_id", flat=True)
+            ) | set(
+                Friendship.objects.filter(to_profile=my_profile, status=FS.ACCEPTED).values_list("from_profile_id", flat=True)
+            )
+            their_friends = set(
+                Friendship.objects.filter(from_profile=profile, status=FS.ACCEPTED).values_list("to_profile_id", flat=True)
+            ) | set(
+                Friendship.objects.filter(to_profile=profile, status=FS.ACCEPTED).values_list("from_profile_id", flat=True)
+            )
+            return bool(my_friends & their_friends)
+
+        if visibility == VisibilityChoice.COMMON_TRIP:
+            from urbanlens.dashboard.models.trips.model import TripMembership
+
+            my_trips = set(TripMembership.objects.filter(profile=my_profile).values_list("trip_id", flat=True))
+            their_trips = set(TripMembership.objects.filter(profile=profile).values_list("trip_id", flat=True))
+            return bool(my_trips & their_trips)
 
         return False
 

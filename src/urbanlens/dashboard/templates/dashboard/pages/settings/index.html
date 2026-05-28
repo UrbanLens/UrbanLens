@@ -44,16 +44,11 @@
             </div>
 
             <div class="settings-field">
-                <label class="settings-label">{{ privacy_form.friend_request_visibility.label }}</label>
+                <label class="settings-label" for="{{ privacy_form.friend_request_visibility.id_for_label }}">
+                    {{ privacy_form.friend_request_visibility.label }}
+                </label>
                 <p class="settings-help">{{ privacy_form.friend_request_visibility.help_text }}</p>
-                <div class="settings-friend-request-row">
-                    {% for radio in privacy_form.friend_request_visibility %}
-                    <label class="settings-friend-request-option{% if radio.data.value == privacy_form.instance.friend_request_visibility %} active{% endif %}">
-                        {{ radio.tag }}
-                        <span>{{ radio.choice_label }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
+                {{ privacy_form.friend_request_visibility }}
                 {% if privacy_form.friend_request_visibility.errors %}
                 <p class="settings-error">{{ privacy_form.friend_request_visibility.errors|join:", " }}</p>
                 {% endif %}
