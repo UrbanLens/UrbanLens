@@ -1,3 +1,4 @@
+@use "sass:color";
 @use 'variables' as *;
 
 // ── Trip planning ─────────────────────────────────────────────────────────
@@ -1507,7 +1508,9 @@
     transition: background .1s, border-color .1s, color .1s;
     white-space: nowrap;
 
-    input[type="radio"] { display: none; }
+    input[type="radio"] {
+        display: none;
+    }
 
     &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
         background: #f1f5f9;
@@ -1559,7 +1562,10 @@
         gap: .5rem;
         margin-bottom: 1rem;
 
-        .material-icons { color: $primary-color; font-size: 1.3rem; }
+        .material-icons {
+            color: $primary-color;
+            font-size: 1.3rem;
+        }
 
         .trip-weather-title {
             font-size: 1rem;
@@ -1575,7 +1581,10 @@
         gap: .4rem;
         color: $text-muted;
         font-size: .9rem;
-        .material-icons { font-size: 1.1rem; }
+
+        .material-icons {
+            font-size: 1.1rem;
+        }
     }
 }
 
@@ -1590,7 +1599,9 @@
     margin-bottom: 1rem;
     border-bottom: 1px solid $border-color;
 
-    &::-webkit-scrollbar { display: none; }
+    &::-webkit-scrollbar {
+        display: none;
+    }
 }
 
 .trip-weather-summary-item {
@@ -1604,7 +1615,9 @@
     cursor: default;
     transition: background .15s;
 
-    &:hover { background: #f0f4ff; }
+    &:hover {
+        background: #f0f4ff;
+    }
 
     .trip-weather-summary-dow {
         font-size: .72rem;
@@ -1653,6 +1666,7 @@
             font-size: .85rem;
             color: $primary-color;
         }
+
         .trip-weather-card-mday {
             font-size: .78rem;
             color: $text-secondary;
@@ -1671,7 +1685,7 @@
     padding: .65rem .75rem;
     flex: 1;
 
-    & + & {
+    &+& {
         border-top: 1px solid $border-color;
     }
 
@@ -1690,7 +1704,9 @@
         color: $text-muted;
         margin-bottom: .4rem;
 
-        .material-icons { font-size: .9rem; }
+        .material-icons {
+            font-size: .9rem;
+        }
     }
 
     .trip-weather-slot-main {
@@ -1744,7 +1760,9 @@
             gap: .15rem;
         }
 
-        .material-icons { font-size: .85rem; }
+        .material-icons {
+            font-size: .85rem;
+        }
     }
 }
 
@@ -1822,7 +1840,9 @@
     cursor: pointer;
     transition: background .15s, color .15s;
 
-    .material-icons { font-size: 1rem; }
+    .material-icons {
+        font-size: 1rem;
+    }
 
     &:hover {
         background: #ef5350;
@@ -1838,7 +1858,7 @@
     background: #fff;
     border: 1px solid $border-color;
     border-radius: $radius-sm;
-    box-shadow: 0 4px 16px rgba(0,0,0,.12);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
     padding: .25rem 0;
     min-width: 180px;
     pointer-events: all;
@@ -1858,7 +1878,10 @@
     text-align: left;
     transition: background .1s;
 
-    .material-icons { font-size: 1.1rem; color: $primary-color; }
+    .material-icons {
+        font-size: 1.1rem;
+        color: $primary-color;
+    }
 
     &:hover {
         background: $surface-hover;
@@ -1870,7 +1893,7 @@
 .trip-map-marker--child-trip {
     opacity: .65;
     border: 2px dashed #64b5f6 !important;
-    background: rgba(33,150,243,.12) !important;
+    background: rgba(33, 150, 243, .12) !important;
 
     .trip-map-marker-num {
         color: #1565c0;
@@ -1920,17 +1943,17 @@
         background: #f8fbff;
     }
 
-// Dark mode
-[data-theme="dark"] & {
-    background: #1e2130;
-    border-color: #3a3f55;
-    color: #e2e8f0;
+    // Dark mode
+    [data-theme="dark"] & {
+        background: #1e2130;
+        border-color: #3a3f55;
+        color: #e2e8f0;
 
-    &:has(input:checked),
-    &.active {
-        background: rgba(33, 150, 243, .15);
-        border-color: $primary-color;
-        color: #90caf9;
+        &:has(input:checked),
+        &.active {
+            background: rgba(33, 150, 243, .15);
+            border-color: $primary-color;
+            color: #90caf9;
+        }
     }
-}
 }
