@@ -35,9 +35,66 @@ from django.shortcuts import render
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
-from urbanlens.dashboard.models.profile.model import FriendRequestVisibility, Profile
+from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
+from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.profile.model import FriendRequestVisibility, Profile, VisibilityChoice
 
 logger = logging.getLogger(__name__)
+
+
+def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
+    """Build context dict for friend list partials and pages.
+
+    Determines:
+    - friends: accepted friendship records for this profile
+    - incoming_requests: pending requests TO this profile (only if viewer == profile)
+    - viewer_friendship_status: status of the friendship between viewer and this profile
+    - viewer_can_request: whether the viewer can send a friend request to this profile
+    """
+    friendships = (
+        Friendship.objects.all()
+        .profile(profile.pk)
+        .is_friend()
+        .select_related("from_profile__user", "to_profile__user")
+    )
+
+    friend_profiles: list[Profile] = []
+    for f in friendships:
+        friend_profiles.append(f.to_profile if f.from_profile_id == profile.pk else f.from_profile)
+
+    incoming_requests: list[Friendship] = []
+    viewer_friendship: Friendship | None = None
+    viewer_can_request = False
+
+    if viewer:
+        # Incoming requests only shown to the profile owner
+        if viewer.pk == profile.pk:
+            incoming_requests = list(
+                Friendship.objects.filter(
+                    to_profile=profile,
+                    status=FriendshipStatus.REQUESTED,
+                ).select_related("from_profile__user"),
+            )
+
+        # Determine viewer's relationship with this profile
+        if viewer.pk != profile.pk:
+            try:
+                viewer_friendship = Friendship.objects.all().between(viewer, profile)
+            except Friendship.DoesNotExist:
+                viewer_friendship = None
+
+            status = viewer_friendship.status if viewer_friendship else None
+            viewer_can_request = status is None or FriendshipStatus.can_request(status)
+
+    return {
+        "friends": friend_profiles,
+        "incoming_requests": incoming_requests,
+        "viewer_friendship": viewer_friendship,
+        "viewer_can_request": viewer_can_request,
+        "is_own_profile": viewer is not None and viewer.pk == profile.pk,
+        "viewer": viewer,
+        "friend_list_profile": profile,
+    }
 
 
 class FriendController(LoginRequiredMixin, GenericViewSet):
@@ -81,69 +138,156 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if not friendship:
             return HttpResponse("Could not request friend.", status=400)
 
-        return HttpResponse("Friend request sent.")
+        return render(
+            request,
+            "dashboard/partials/friend_list_partial.html",
+            _friend_list_ctx(requesting, to_profile),
+        )
 
     def accept_friend(self, request: HttpRequest, profile_id: int):
         if not isinstance(request.user, User):
             return HttpResponse("Authentication required.", status=401)
-        friendship = Friendship.objects.all().between(profile_id, request.user.profile)
+        try:
+            friendship = Friendship.objects.all().between(profile_id, request.user.profile)
+        except Friendship.DoesNotExist:
+            return HttpResponse("Friend request not found.", status=404)
         if not friendship:
             return HttpResponse("Friend request not found.", status=404)
 
         friendship.accept()
-        return HttpResponse("Friend request accepted.")
+
+        # Notify the original requester that their request was accepted.
+        requester = friendship.from_profile if friendship.to_profile == request.user.profile else friendship.to_profile
+        from django.urls import reverse
+        NotificationLog.objects.create(
+            profile=requester,
+            status=Status.UNREAD,
+            importance=Importance.MEDIUM,
+            notification_type=NotificationType.FRIEND_ACCEPTED,
+            title="Friend request accepted",
+            message=f"{request.user.profile.username} accepted your friend request.",
+            url=reverse("profile.view_user", kwargs={"profile_id": request.user.profile.pk}),
+        )
+
+        to_profile = Profile.objects.filter(pk=profile_id).first()
+        return render(
+            request,
+            "dashboard/partials/friend_list_partial.html",
+            _friend_list_ctx(request.user.profile, to_profile),
+        )
 
     def reject_friend(self, request: HttpRequest, profile_id: int):
         if not isinstance(request.user, User):
             return HttpResponse("Authentication required.", status=401)
-        friendship = Friendship.objects.all().between(profile_id, request.user.profile)
+        try:
+            friendship = Friendship.objects.all().between(profile_id, request.user.profile)
+        except Friendship.DoesNotExist:
+            return HttpResponse("Friend request not found.", status=404)
         if not friendship:
             return HttpResponse("Friend request not found.", status=404)
 
-        friendship.reject()
-        return HttpResponse("Friend request rejected.")
+        friendship.decline()
+        to_profile = Profile.objects.filter(pk=profile_id).first()
+        return render(
+            request,
+            "dashboard/partials/friend_list_partial.html",
+            _friend_list_ctx(request.user.profile, to_profile),
+        )
+
+    def ignore_friend(self, request: HttpRequest, profile_id: int):
+        """Ignore a friend request — no notification sent, button stays unavailable."""
+        if not isinstance(request.user, User):
+            return HttpResponse("Authentication required.", status=401)
+        try:
+            friendship = Friendship.objects.all().between(profile_id, request.user.profile)
+        except Friendship.DoesNotExist:
+            return HttpResponse("Friend request not found.", status=404)
+        if not friendship:
+            return HttpResponse("Friend request not found.", status=404)
+
+        friendship.ignore()
+        to_profile = Profile.objects.filter(pk=profile_id).first()
+        return render(
+            request,
+            "dashboard/partials/friend_list_partial.html",
+            _friend_list_ctx(request.user.profile, to_profile),
+        )
 
     def block_friend(self, request: HttpRequest, profile_id: int):
         if not isinstance(request.user, User):
             return HttpResponse("Authentication required.", status=401)
-        # If a friendship already exists
-        friendship = Friendship.objects.all().between(profile_id, request.user.profile)
-        if friendship:
-            friendship.block_friend()
-            return HttpResponse("Relationship changed to blocked.")
+        try:
+            friendship = Friendship.objects.all().between(profile_id, request.user.profile)
+        except Friendship.DoesNotExist:
+            friendship = None
 
-        # If a friendship does not exist, create one with a status of blocked
-        profile = Profile.objects.get(pk=profile_id)
-        if not profile:
-            return HttpResponse("Profile not found.", status=404)
-        friendship = Friendship.objects.create(
-            from_profile=request.user.profile,
-            to_profile=profile,
-            status=FriendshipStatus.BLOCKED,
-        )
-        friendship.save()
+        if friendship:
+            friendship.status = FriendshipStatus.BLOCKED
+            friendship.save()
+        else:
+            other = Profile.objects.filter(pk=profile_id).first()
+            if not other:
+                return HttpResponse("Profile not found.", status=404)
+            Friendship.objects.create(
+                from_profile=request.user.profile,
+                to_profile=other,
+                status=FriendshipStatus.BLOCKED,
+            )
         return HttpResponse("Profile blocked.")
 
     def mute_friend(self, request: HttpRequest, profile_id: int):
         if not isinstance(request.user, User):
             return HttpResponse("Authentication required.", status=401)
-        friendship = Friendship.objects.all().between(profile_id, request.user.profile)
+        try:
+            friendship = Friendship.objects.all().between(profile_id, request.user.profile)
+        except Friendship.DoesNotExist:
+            return HttpResponse("Friend request not found.", status=404)
         if not friendship:
             return HttpResponse("Friend request not found.", status=404)
 
-        friendship.mute()
-        return HttpResponse("Friend request muted.")
+        friendship.status = FriendshipStatus.MUTED
+        friendship.save()
+        return HttpResponse("Muted.")
 
     def remove_friend(self, request: HttpRequest, profile_id: int):
         if not isinstance(request.user, User):
             return HttpResponse("Authentication required.", status=401)
-        friendship = Friendship.objects.all().between(profile_id, request.user.profile)
+        try:
+            friendship = Friendship.objects.all().between(profile_id, request.user.profile)
+        except Friendship.DoesNotExist:
+            return HttpResponse("Friend request not found.", status=404)
         if not friendship:
             return HttpResponse("Friend request not found.", status=404)
 
         friendship.remove()
-        return HttpResponse("Friend request removed.")
+        to_profile = Profile.objects.filter(pk=profile_id).first()
+        return render(
+            request,
+            "dashboard/partials/friend_list_partial.html",
+            _friend_list_ctx(request.user.profile, to_profile),
+        )
 
     def friend_list(self, request: HttpRequest, profile_id: int):
-        friends = Friendship.objects.all().profile(profile_id)
-        return render(request, "dashboard/pages/profile/view_friends.html", {"friends": friends})
+        """HTMX partial: friend list shown on the profile page."""
+        profile = Profile.objects.filter(pk=profile_id).first()
+        if not profile:
+            return HttpResponse("")
+        viewer = request.user.profile if request.user.is_authenticated else None
+        return render(
+            request,
+            "dashboard/partials/friend_list_partial.html",
+            _friend_list_ctx(viewer, profile),
+        )
+
+    def friends_page(self, request: HttpRequest, profile_id: int):
+        """Full friends list page for a given profile."""
+        profile = Profile.objects.filter(pk=profile_id).first()
+        if not profile:
+            from django.http import Http404
+            raise Http404
+        viewer = request.user.profile if request.user.is_authenticated else None
+        return render(
+            request,
+            "dashboard/pages/profile/friends.html",
+            {**_friend_list_ctx(viewer, profile), "profile": profile},
+        )

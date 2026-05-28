@@ -41,19 +41,19 @@ class OrganizeIndexView(LoginRequiredMixin, View):
             .visible_to(profile)
             .ordered()
             .with_customizations_for(profile)
-            .prefetch_related("pins", "children", "children__pins")
+            .with_pin_counts()
         )
         categories = (
             Badge.objects.categories()
             .ordered()
             .with_customizations_for(profile)
-            .prefetch_related("categorized_pins", "categorized_locations", "children", "children__categorized_pins")
+            .with_pin_counts()
         )
         # Priority list: all tags visible to the user + all categories, sorted by order desc then name.
         priority_items = (
             Badge.objects.visible_to(profile)
             .ordered()
-            .prefetch_related("pins", "categorized_pins")
+            .with_pin_counts()
         )
 
         can_edit_global = request.user.has_perm("dashboard.edit_global_badge")

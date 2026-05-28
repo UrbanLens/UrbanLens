@@ -69,7 +69,7 @@ def _rows_ctx(profile, can_edit_global: bool = False, extra: dict | None = None)
         .visible_to(profile)
         .ordered()
         .with_customizations_for(profile)
-        .prefetch_related("pins", "children", "children__pins")
+        .with_pin_counts()
     )
     ctx = {**_BASE_CTX, "tags": tags, "can_edit_global": can_edit_global}
     if extra:
@@ -256,7 +256,7 @@ class TagRowsView(LoginRequiredMixin, View):
 
     def get(self, request, *args, **kwargs):
         profile = request.user.profile
-        tags = Badge.objects.tags().visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
+        tags = Badge.objects.tags().visible_to(profile).ordered().with_pin_counts()
         return render(
             request,
             "dashboard/partials/tag_rows.html",
@@ -307,7 +307,7 @@ class TagMergeView(LoginRequiredMixin, View):
         target.pins.add(*source.pins.all())
         source.delete()
 
-        tags = Badge.objects.tags().visible_to(profile).ordered().prefetch_related("pins", "children", "children__pins")
+        tags = Badge.objects.tags().visible_to(profile).ordered().with_pin_counts()
         return render(
             request,
             "dashboard/partials/tag_rows.html",

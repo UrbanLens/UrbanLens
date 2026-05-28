@@ -23,10 +23,22 @@
 *        2023-12-24     By Jess Mann                                                                                   *
 *                                                                                                                      *
 *********************************************************************************************************************"""
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from django.db.models import CASCADE, BooleanField, CharField, DateField, ImageField, Index, IntegerField, OneToOneField, TextChoices, TextField
+from django.db.models import (
+    CASCADE,
+    BooleanField,
+    CharField,
+    DateField,
+    ImageField,
+    Index,
+    IntegerField,
+    OneToOneField,
+    TextChoices,
+    TextField,
+)
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.profile.queryset import Manager
@@ -34,6 +46,7 @@ from urbanlens.dashboard.models.profile.queryset import Manager
 
 class VisibilityChoice(TextChoices):
     """Who can see a particular piece of profile data."""
+
     ONLY_ME = "only_me", "Only Me"
     FRIENDS = "friends", "Friends Only"
     COMMON_LOCATIONS = "common_locations", "People with Common Locations"
@@ -47,10 +60,10 @@ class MapViewChoice(TextChoices):
 
 
 class FriendRequestVisibility(TextChoices):
-    ANYONE = "anyone", "From anyone"
-    COMMON_PIN = "common_pin", "From users with a pin in common"
-    COMMON_FRIEND = "common_friend", "From users with a friend in common"
-    COMMON_TRIP = "common_trip", "From users with a trip in common"
+    ANYONE = "anyone", "Anyone"
+    COMMON_PIN = "common_pin", "Users with a pin in common"
+    COMMON_FRIEND = "common_friend", "Users with a friend in common"
+    COMMON_TRIP = "common_trip", "Users with a trip in common"
     NO_ONE = "no_one", "No one"
 
 

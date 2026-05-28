@@ -73,6 +73,10 @@
             <span class="stat-value">{{ profile.pins.count }}</span>
             <span class="stat-label">Pins</span>
         </div>
+        <a href="{% url 'friend.page' profile.id %}" class="profile-stat profile-stat--link">
+            <span class="stat-value"><i class="material-icons" style="font-size:1.4rem;vertical-align:middle;">people</i></span>
+            <span class="stat-label">Friends</span>
+        </a>
         {% if profile.started_exploring %}
         <div class="profile-stat">
             <span class="stat-value">{{ profile.started_exploring|date:"Y" }}</span>
@@ -135,7 +139,9 @@
          hx-trigger="load"
          hx-swap="outerHTML"
          class="profile-section profile-friends-loading">
-        <h3 class="profile-section-title">Friends</h3>
+        <div class="profile-section-header">
+            <h3 class="profile-section-title">Friends</h3>
+        </div>
         <p class="loading-text">Loading friends…</p>
     </div>
 

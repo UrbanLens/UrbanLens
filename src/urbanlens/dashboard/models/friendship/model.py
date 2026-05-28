@@ -98,17 +98,18 @@ class Friendship(Model):
         return friendship
 
     def accept(self):
-        """
-        Accept a friendship request.
-        """
+        """Accept a friendship request."""
         self.status = FriendshipStatus.ACCEPTED
         self.save()
 
     def decline(self):
-        """
-        Decline a friendship request.
-        """
+        """Decline a friendship request (requester can re-send later)."""
         self.status = FriendshipStatus.DECLINED
+        self.save()
+
+    def ignore(self):
+        """Ignore a friendship request (requester cannot re-send; no notification sent)."""
+        self.status = FriendshipStatus.IGNORED
         self.save()
 
     def remove(self):

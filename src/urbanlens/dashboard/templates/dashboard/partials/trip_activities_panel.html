@@ -92,7 +92,7 @@
                     <span class="trip-activity-notes">{{ act.notes }}</span>
                     {% endif %}
                     {% if act.added_by %}
-                    <span class="trip-activity-attr">Added by {{ act.added_by.user.username }}</span>
+                    <span class="trip-activity-attr">Added by <a href="{% url 'profile.view_user' act.added_by.id %}" class="trip-attr-link">{{ act.added_by.user.username }}</a></span>
                     {% endif %}
                 </div>
 

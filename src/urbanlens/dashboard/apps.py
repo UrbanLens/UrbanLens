@@ -42,4 +42,4 @@ class DashboardConfig(AppConfig):
         import urbanlens.dashboard.models.pin.signals
         from urbanlens.dashboard.models.profile.model import Profile
         import urbanlens.dashboard.models.profile.signals
-        post_save.connect(create_default_tags, sender=Profile)
+        post_save.connect(create_default_tags, sender=Profile, dispatch_uid="badge_create_default_tags")

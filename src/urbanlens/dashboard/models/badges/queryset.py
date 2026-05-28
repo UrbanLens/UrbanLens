@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
-from django.db.models import Prefetch, Q
+from django.db.models import Count, Prefetch, Q
 
 from urbanlens.dashboard.models import abstract
 
@@ -54,6 +54,22 @@ class BadgeQuerySet(abstract.QuerySet):
                 queryset=BadgeCustomization.objects.filter(profile_id=profile_id),
                 to_attr="_user_customizations",
             ),
+        )
+
+    def with_pin_counts(self) -> Self:
+        """Annotate pin_count / location_count and prefetch children (with their own pin_count) and parents.
+
+        Replaces heavy prefetch_related('pins', 'categorized_pins', ...) with lightweight COUNT annotations.
+        """
+        return self.annotate(
+            pin_count=Count("pins", distinct=True),
+            location_count=Count("categorized_locations", distinct=True),
+        ).prefetch_related(
+            Prefetch(
+                "children",
+                queryset=self.model.objects.annotate(pin_count=Count("pins", distinct=True)),
+            ),
+            Prefetch("parents", queryset=self.model.objects.only("id", "name")),
         )
 
     def ordered(self) -> Self:

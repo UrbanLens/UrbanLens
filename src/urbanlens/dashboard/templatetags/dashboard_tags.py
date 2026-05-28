@@ -22,11 +22,15 @@ def in_list(value, collection) -> bool:
 def tag_total_pins(tag) -> int:
     """Return direct pin count plus all direct children's pin counts.
 
-    Requires prefetch_related('pins', 'children', 'children__pins') to avoid N+1.
+    Uses annotated pin_count when available (set by BadgeQuerySet.with_pin_counts()).
+    Falls back to DB queries only when annotations are absent.
     """
-    total = tag.pins.count()
+    total = getattr(tag, "pin_count", None)
+    if total is None:
+        total = tag.pins.count()
     for child in tag.children.all():
-        total += child.pins.count()
+        child_count = getattr(child, "pin_count", None)
+        total += child_count if child_count is not None else child.pins.count()
     return total
 
 

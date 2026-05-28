@@ -301,6 +301,11 @@ urlpatterns = [
                     name="friend.list",
                 ),
                 path(
+                    "friends/<int:profile_id>/",
+                    friendship.FriendController.as_view({"get": "friends_page"}),
+                    name="friend.page",
+                ),
+                path(
                     "request/<int:profile_id>",
                     friendship.FriendController.as_view({"post": "request_friend"}),
                     name="friend.request",
@@ -314,6 +319,11 @@ urlpatterns = [
                     "reject/<int:profile_id>",
                     friendship.FriendController.as_view({"post": "reject_friend"}),
                     name="friend.reject",
+                ),
+                path(
+                    "ignore/<int:profile_id>",
+                    friendship.FriendController.as_view({"post": "ignore_friend"}),
+                    name="friend.ignore",
                 ),
                 path(
                     "remove/<int:profile_id>",

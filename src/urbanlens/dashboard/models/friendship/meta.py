@@ -10,6 +10,7 @@ class FriendshipStatus(TextChoices):
     REMOVED = "Removed", "Removed"
     MUTED = "Muted", "Muted"
     BLOCKED = "Blocked", "Blocked"
+    IGNORED = "Ignored", "Ignored"
 
     @classmethod
     def is_friend(cls, status: str) -> bool:
@@ -17,10 +18,11 @@ class FriendshipStatus(TextChoices):
 
     @classmethod
     def rejected(cls, status: str) -> bool:
-        return status in {cls.DECLINED, cls.REMOVED, cls.BLOCKED, cls.MUTED}
+        return status in {cls.DECLINED, cls.REMOVED, cls.BLOCKED, cls.MUTED, cls.IGNORED}
 
     @classmethod
     def can_request(cls, status: str) -> bool:
+        # IGNORED intentionally excluded: the button stays unavailable
         return status in {cls.DECLINED, cls.REMOVED}
 
 

@@ -99,6 +99,16 @@
     font-size: .82rem;
     font-weight: 600;
     color: #111827;
+
+    &--link {
+        text-decoration: none;
+        color: inherit;
+
+        &:hover {
+            text-decoration: underline;
+            color: #4f46e5;
+        }
+    }
 }
 
 .comment-date {

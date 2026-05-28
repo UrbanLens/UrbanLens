@@ -28,12 +28,8 @@ _CTX_BASE = {
 
 
 def _all_categories(profile=None):
-    """Return all category-kind tags ordered for display with common prefetches."""
-    qs = (
-        Badge.objects.categories()
-        .ordered()
-        .prefetch_related("categorized_pins", "categorized_locations", "children", "children__categorized_pins")
-    )
+    """Return all category-kind tags ordered for display with count annotations."""
+    qs = Badge.objects.categories().ordered().with_pin_counts()
     if profile is not None:
         qs = qs.with_customizations_for(profile)
     return qs

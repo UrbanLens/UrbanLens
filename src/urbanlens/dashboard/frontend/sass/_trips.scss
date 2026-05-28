@@ -668,6 +668,16 @@
     color: #94a3b8;
 }
 
+.trip-attr-link {
+    color: inherit;
+    text-decoration: none;
+
+    &:hover {
+        text-decoration: underline;
+        color: #4f46e5;
+    }
+}
+
 // ── Members ───────────────────────────────────────────────────────────────
 
 .trip-member-list {
@@ -729,6 +739,16 @@
     font-weight: 600;
     font-size: .88rem;
     color: #1e293b;
+
+    &--link {
+        text-decoration: none;
+        color: inherit;
+
+        &:hover {
+            text-decoration: underline;
+            color: #4f46e5;
+        }
+    }
 }
 
 .trip-member-username {

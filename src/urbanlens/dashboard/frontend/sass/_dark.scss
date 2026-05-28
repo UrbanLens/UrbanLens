@@ -379,6 +379,20 @@
     .trip-weather-summary { border-bottom-color: #2d3348; }
 }
 
+// ── Pin detail page dark mode ─────────────────────────────────────────────
+
+[data-theme="dark"] {
+    body.page-location-details,
+    &body.page-location-details {
+        background: #0d0d0d;
+    }
+
+    body.page-location-details .card,
+    &body.page-location-details .card {
+        box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
+    }
+}
+
 // ── Date-validation error dialog ─────────────────────────────────────────────
 
 .date-error-list {

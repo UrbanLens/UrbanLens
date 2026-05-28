@@ -407,6 +407,10 @@
     animation: spin 1.2s linear infinite;
 }
 
+body.page-location-details {
+    background: #f0f2f5;
+}
+
 body.page-location-details div.section {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;

@@ -30,7 +30,7 @@ from django.dispatch import receiver
 from urbanlens.dashboard.models.pin import Pin
 
 
-@receiver(post_save, sender=Pin)
+@receiver(post_save, sender=Pin, dispatch_uid="pin_suggest_categories")
 def suggest_and_add_categories(sender, instance: Pin, created, **kwargs):
     """
     Suggests categories for a newly created Pin instance and adds them.
@@ -43,6 +43,7 @@ def suggest_and_add_categories(sender, instance: Pin, created, **kwargs):
 
     """
     if created:
-        # Perform the category suggestion and addition only for new instances
+        # Perform the category suggestion and addition only for new instances.
+        # M2M changes from add_category(save=False) are committed by .add() directly;
+        # no save() needed here.
         instance.suggest_category(append_suggestion=True)
-        instance.save()

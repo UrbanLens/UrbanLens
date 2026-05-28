@@ -131,11 +131,14 @@ class Location(abstract.AddressableMixin, abstract.Model):
             result = "No Information Available"
         if not self.cached_place_name:
             self.cached_place_name = result
-            self.save()
+            if self.pk:
+                # Use update() to persist without triggering post_save signals
+                Location.objects.filter(pk=self.pk).update(cached_place_name=result)
         return result
 
     def has_place_name(self) -> bool:
-        return bool(self.place_name) and self.place_name != "No Information Available"
+        name = self.place_name
+        return bool(name) and name != "No Information Available"
 
     def change_category(self, category_id: int) -> None:
         from urbanlens.dashboard.models.badges.model import Badge
@@ -196,11 +199,7 @@ class Location(abstract.AddressableMixin, abstract.Model):
         return None
 
     def __str__(self):
-        return f"""
-            Name: {self.name}
-            Description: {self.description or ''}
-            Google Place Name: {self.place_name}
-        """
+        return self.name or f"Location({self.pk})"
 
     def to_json(self) -> dict:
         """

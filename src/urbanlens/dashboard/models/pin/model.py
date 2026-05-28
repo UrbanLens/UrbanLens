@@ -364,7 +364,6 @@ class Pin(abstract.Model):
         return (
             f"Name: {self.effective_name}\n"
             f"Description: {self.description or ''}\n"
-            f"Google Place Name: {self.place_name}\n"
             f"Priority: {self.priority}\n"
             f"Last Visited: {self.last_visited}\n"
             f"Status: {PinStatus(self.status).label}"

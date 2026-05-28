@@ -7,7 +7,7 @@
      data-tag-icon="{{ tag.icon|default:'' }}"
      data-tag-custom-icon="{% if tag.custom_icon %}{{ tag.custom_icon.url }}{% endif %}"
      data-tag-desc="{{ tag.description|default:'' }}"
-     data-tag-pin-count="{{ tag.pins.count }}"
+     data-tag-pin-count="{{ tag.pin_count }}"
      data-tag-parents="{% for p in tag.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
 
     {# ── View mode ────────────────────────────────────────────────────── #}
@@ -48,7 +48,7 @@
             <div class="tag-card-meta">
                 <span class="tag-stat" title="Pins directly on this tag">
                     <i class="material-icons">push_pin</i>
-                    {{ tag.pins.count }}
+                    {{ tag.pin_count }}
                 </span>
                 {% with child_count=tag.children.count %}
                 {% if child_count %}
