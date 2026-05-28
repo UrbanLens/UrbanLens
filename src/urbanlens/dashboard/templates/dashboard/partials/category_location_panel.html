@@ -37,12 +37,7 @@
     </div>
 
     <dialog id="category-loc-dialog-{{ location.uuid }}" class="tag-add-dialog">
-        <div class="dialog-header">
-            <span>Add Categories</span>
-            <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
-                <i class="material-icons">close</i>
-            </button>
-        </div>
+        {% include "dashboard/partials/_dialog_header.html" with title="Add Categories" %}
         <input type="search" class="dialog-search" placeholder="Search categories…" autocomplete="off"
                oninput="(function(i){i.closest('dialog').querySelectorAll('.tag-dialog-item').forEach(function(el){el.hidden=!el.dataset.name.includes(i.value.toLowerCase());})})(this)">
         <ul class="tag-dialog-list">

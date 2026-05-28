@@ -1,0 +1,110 @@
+<div id="trip-weather-panel" class="trip-weather-panel">
+
+    <div class="trip-weather-header">
+        <i class="material-icons">wb_cloudy</i>
+        <h3 class="trip-weather-title">Weather{% if location_name %} near {{ location_name }}{% endif %}</h3>
+    </div>
+
+    {% if error %}
+    <p class="trip-weather-empty">
+        <i class="material-icons">info_outline</i>
+        {{ error }}
+    </p>
+
+    {% elif not forecast_days %}
+    <p class="trip-weather-empty">
+        <i class="material-icons">cloud_off</i>
+        No forecast available.
+    </p>
+
+    {% else %}
+
+    {# ── Summary strip ──────────────────────────────────────────────────────── #}
+    <div class="trip-weather-summary">
+        {% for date, periods in forecast_days %}
+        {% with day=periods.day night=periods.night slot=periods.day|default:periods.night %}
+        {% if slot %}
+        <div class="trip-weather-summary-item">
+            <span class="trip-weather-summary-dow">{{ date|date:"D" }}</span>
+            <img class="trip-weather-summary-icon"
+                 src="https://openweathermap.org/img/wn/{{ slot.weather.0.icon }}.png"
+                 alt="{{ slot.weather.0.description }}"
+                 loading="lazy">
+            <span class="trip-weather-summary-temp">{{ slot.main.temp|floatformat:0 }}°</span>
+        </div>
+        {% endif %}
+        {% endwith %}
+        {% endfor %}
+    </div>
+
+    {# ── Day-by-day cards ───────────────────────────────────────────────────── #}
+    <div class="trip-weather-cards">
+        {% for date, periods in forecast_days %}
+        <div class="trip-weather-card">
+            <div class="trip-weather-card-date">
+                <span class="trip-weather-card-dow">{{ date|date:"l" }}</span>
+                <span class="trip-weather-card-mday">{{ date|date:"M j" }}</span>
+            </div>
+
+            <div class="trip-weather-card-slots">
+
+                {% if periods.day %}
+                {% with s=periods.day %}
+                <div class="trip-weather-slot trip-weather-slot--day">
+                    <div class="trip-weather-slot-label">
+                        <i class="material-icons">light_mode</i> Day
+                    </div>
+                    <div class="trip-weather-slot-main">
+                        <img class="trip-weather-slot-icon"
+                             src="https://openweathermap.org/img/wn/{{ s.weather.0.icon }}@2x.png"
+                             alt="{{ s.weather.0.description }}"
+                             loading="lazy">
+                        <div class="trip-weather-slot-temps">
+                            <span class="trip-weather-slot-temp">{{ s.main.temp|floatformat:0 }}°F</span>
+                            <span class="trip-weather-slot-feels">Feels {{ s.main.feels_like|floatformat:0 }}°</span>
+                        </div>
+                    </div>
+                    <p class="trip-weather-slot-desc">{{ s.weather.0.description|capfirst }}</p>
+                    <div class="trip-weather-slot-meta">
+                        <span title="Humidity"><i class="material-icons">water_drop</i> {{ s.main.humidity }}%</span>
+                        <span title="Wind"><i class="material-icons">air</i> {{ s.wind.speed|floatformat:0 }} mph</span>
+                        {% if s.pop %}<span title="Precipitation probability"><i class="material-icons">umbrella</i> {% widthratio s.pop 1 100 %}%</span>{% endif %}
+                    </div>
+                </div>
+                {% endwith %}
+                {% endif %}
+
+                {% if periods.night %}
+                {% with s=periods.night %}
+                <div class="trip-weather-slot trip-weather-slot--night">
+                    <div class="trip-weather-slot-label">
+                        <i class="material-icons">dark_mode</i> Night
+                    </div>
+                    <div class="trip-weather-slot-main">
+                        <img class="trip-weather-slot-icon"
+                             src="https://openweathermap.org/img/wn/{{ s.weather.0.icon }}@2x.png"
+                             alt="{{ s.weather.0.description }}"
+                             loading="lazy">
+                        <div class="trip-weather-slot-temps">
+                            <span class="trip-weather-slot-temp">{{ s.main.temp|floatformat:0 }}°F</span>
+                            <span class="trip-weather-slot-feels">Feels {{ s.main.feels_like|floatformat:0 }}°</span>
+                        </div>
+                    </div>
+                    <p class="trip-weather-slot-desc">{{ s.weather.0.description|capfirst }}</p>
+                    <div class="trip-weather-slot-meta">
+                        <span title="Humidity"><i class="material-icons">water_drop</i> {{ s.main.humidity }}%</span>
+                        <span title="Wind"><i class="material-icons">air</i> {{ s.wind.speed|floatformat:0 }} mph</span>
+                        {% if s.pop %}<span title="Precipitation probability"><i class="material-icons">umbrella</i> {% widthratio s.pop 1 100 %}%</span>{% endif %}
+                    </div>
+                </div>
+                {% endwith %}
+                {% endif %}
+
+            </div>{# end slots #}
+        </div>{# end card #}
+        {% endfor %}
+    </div>{# end cards #}
+
+    {% endif %}
+
+</div>

@@ -314,23 +314,13 @@
 
 {# ── Tag edit dialog ──────────────────────────────────────────────────────── #}
 <dialog id="tag-edit-dialog" class="tag-edit-dialog">
-    <div class="dialog-header">
-        <span id="tag-edit-dialog-title">Edit Tag</span>
-        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Edit Tag" title_id="tag-edit-dialog-title" %}
     <div id="tag-edit-dialog-body" class="tag-edit-dialog-body"></div>
 </dialog>
 
 {# ── Tag multi-merge dialog ────────────────────────────────────────────────── #}
 <dialog id="tag-merge-dialog" class="cat-merge-dialog">
-    <div class="dialog-header">
-        <span id="tag-merge-dialog-title">Merge Tags</span>
-        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Merge Tags" title_id="tag-merge-dialog-title" %}
     <div class="cat-merge-dialog-body">
         <div class="cat-merge-section">
             <div class="cat-merge-section-label"><i class="material-icons">check_circle</i> Surviving tag</div>
@@ -353,12 +343,7 @@
 
 {# ── Tag bulk-edit dialog ──────────────────────────────────────────────────── #}
 <dialog id="tag-bulk-edit-dialog" class="cat-bulk-edit-dialog">
-    <div class="dialog-header">
-        <span id="tag-bulk-edit-title">Edit Tags</span>
-        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Edit Tags" title_id="tag-bulk-edit-title" %}
     <div class="cat-bulk-edit-body">
         <div class="cat-bulk-field">
             <label class="form-label">Convert type</label>
@@ -425,23 +410,13 @@
 
 {# ── Category edit dialog ──────────────────────────────────────────────────── #}
 <dialog id="category-edit-dialog" class="tag-edit-dialog">
-    <div class="dialog-header">
-        <span id="category-edit-dialog-title">Edit Category</span>
-        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Edit Category" title_id="category-edit-dialog-title" %}
     <div id="category-edit-dialog-body" class="tag-edit-dialog-body"></div>
 </dialog>
 
 {# ── Category multi-merge dialog ───────────────────────────────────────────── #}
 <dialog id="cat-merge-dialog" class="cat-merge-dialog">
-    <div class="dialog-header">
-        <span id="cat-merge-dialog-title">Merge Categories</span>
-        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Merge Categories" title_id="cat-merge-dialog-title" %}
     <div class="cat-merge-dialog-body">
         <div class="cat-merge-section">
             <div class="cat-merge-section-label"><i class="material-icons">check_circle</i> Surviving category</div>
@@ -464,12 +439,7 @@
 
 {# ── Category bulk-edit dialog ─────────────────────────────────────────────── #}
 <dialog id="cat-bulk-edit-dialog" class="cat-bulk-edit-dialog">
-    <div class="dialog-header">
-        <span id="cat-bulk-edit-title">Edit Categories</span>
-        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Edit Categories" title_id="cat-bulk-edit-title" %}
     <div class="cat-bulk-edit-body">
         <div class="cat-bulk-field">
             <label class="form-label">Convert type</label>
@@ -672,6 +642,7 @@ function showTagCustomPreview(input) {
     var _tagSelected = new Set();
     var _tagMergeTargetId = null;
     var _tagCurrentView = localStorage.getItem('tag_view') || 'list';
+    var _lastTagClickIdx = -1;
 
     function _escHtml(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -852,6 +823,23 @@ function showTagCustomPreview(input) {
     });
 
     // ── Selection ─────────────────────────────────────────────────────────────
+    document.getElementById('tag-rows').addEventListener('click', function(e) {
+        var cb = e.target; if (!cb.classList.contains('tag-select-cb')) return;
+        var allCbs = Array.from(document.querySelectorAll('#tag-rows .tag-select-cb'));
+        var idx = allCbs.indexOf(cb);
+        if (e.shiftKey && _lastTagClickIdx >= 0 && idx >= 0) {
+            e.preventDefault();
+            var newChecked = !cb.checked;
+            var lo = Math.min(idx, _lastTagClickIdx), hi = Math.max(idx, _lastTagClickIdx);
+            for (var i = lo; i <= hi; i++) {
+                allCbs[i].checked = newChecked;
+                if (newChecked) _tagSelected.add(allCbs[i].dataset.tagId);
+                else _tagSelected.delete(allCbs[i].dataset.tagId);
+            }
+            _syncTagCheckboxes(); _updateTagBar();
+        }
+        if (idx >= 0) _lastTagClickIdx = idx;
+    });
     document.getElementById('tag-rows').addEventListener('change', function(e) {
         var cb = e.target; if (!cb.classList.contains('tag-select-cb')) return;
         var id = cb.dataset.tagId;
@@ -1071,6 +1059,7 @@ function showTagCustomPreview(input) {
     var _catSelected = new Set();
     var _catMergeTargetId = null;
     var _catCurrentView = localStorage.getItem('category_view') || 'list';
+    var _lastCatClickIdx = -1;
 
     function _escHtml(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1215,6 +1204,23 @@ function showTagCustomPreview(input) {
     });
 
     // ── Selection ─────────────────────────────────────────────────────────────
+    document.getElementById('category-rows').addEventListener('click', function(e) {
+        var cb=e.target; if(!cb.classList.contains('cat-select-cb'))return;
+        var allCbs=Array.from(document.querySelectorAll('#category-rows .cat-select-cb'));
+        var idx=allCbs.indexOf(cb);
+        if(e.shiftKey && _lastCatClickIdx>=0 && idx>=0){
+            e.preventDefault();
+            var newChecked=!cb.checked;
+            var lo=Math.min(idx,_lastCatClickIdx), hi=Math.max(idx,_lastCatClickIdx);
+            for(var i=lo;i<=hi;i++){
+                allCbs[i].checked=newChecked;
+                if(newChecked)_catSelected.add(allCbs[i].dataset.catId);
+                else _catSelected.delete(allCbs[i].dataset.catId);
+            }
+            _syncCatCheckboxes(); _updateCatBar();
+        }
+        if(idx>=0)_lastCatClickIdx=idx;
+    });
     document.getElementById('category-rows').addEventListener('change', function(e) {
         var cb=e.target; if(!cb.classList.contains('cat-select-cb'))return;
         var id=cb.dataset.catId;

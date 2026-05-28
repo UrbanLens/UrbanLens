@@ -159,24 +159,13 @@
 
 {# ── Tag edit dialog ──────────────────────────────────────────────────────── #}
 <dialog id="tag-edit-dialog" class="tag-edit-dialog">
-    <div class="dialog-header">
-        <span id="tag-edit-dialog-title">Edit Tag</span>
-        <button type="button" class="dialog-close"
-                onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Edit Tag" title_id="tag-edit-dialog-title" %}
     <div id="tag-edit-dialog-body" class="tag-edit-dialog-body"></div>
 </dialog>
 
 {# ── Multi-merge dialog ────────────────────────────────────────────────────── #}
 <dialog id="tag-merge-dialog" class="cat-merge-dialog">
-    <div class="dialog-header">
-        <span id="tag-merge-dialog-title">Merge Tags</span>
-        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Merge Tags" title_id="tag-merge-dialog-title" %}
     <div class="cat-merge-dialog-body">
         <div class="cat-merge-section">
             <div class="cat-merge-section-label">
@@ -216,12 +205,7 @@
 
 {# ── Bulk-edit dialog ──────────────────────────────────────────────────────── #}
 <dialog id="tag-bulk-edit-dialog" class="cat-bulk-edit-dialog">
-    <div class="dialog-header">
-        <span id="tag-bulk-edit-title">Edit Tags</span>
-        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Edit Tags" title_id="tag-bulk-edit-title" %}
     <div class="cat-bulk-edit-body">
 
         {# Icon #}
@@ -692,6 +676,7 @@ applyCurrentView();
 
 // ── Multi-select ───────────────────────────────────────────────────────────────
 var _tagSelected = new Set();
+var _lastTagClickIdx = -1;
 
 function _getAllTagIds() {
     var seen = new Set();
@@ -736,7 +721,25 @@ function _updateTagBar() {
     }
 }
 
-// Checkbox change delegation — works for original cards and tree-view clones
+// Checkbox selection — change for normal clicks, click for shift-range
+document.getElementById('tag-rows').addEventListener('click', function(e) {
+    var cb = e.target;
+    if (!cb.classList.contains('tag-select-cb')) return;
+    var allCbs = Array.from(document.querySelectorAll('#tag-rows .tag-select-cb'));
+    var idx = allCbs.indexOf(cb);
+    if (e.shiftKey && _lastTagClickIdx >= 0 && idx >= 0) {
+        e.preventDefault();
+        var newChecked = !cb.checked;
+        var lo = Math.min(idx, _lastTagClickIdx), hi = Math.max(idx, _lastTagClickIdx);
+        for (var i = lo; i <= hi; i++) {
+            allCbs[i].checked = newChecked;
+            if (newChecked) _tagSelected.add(allCbs[i].dataset.tagId);
+            else _tagSelected.delete(allCbs[i].dataset.tagId);
+        }
+        _syncTagCheckboxes(); _updateTagBar();
+    }
+    if (idx >= 0) _lastTagClickIdx = idx;
+});
 document.getElementById('tag-rows').addEventListener('change', function(e) {
     var cb = e.target;
     if (!cb.classList.contains('tag-select-cb')) return;

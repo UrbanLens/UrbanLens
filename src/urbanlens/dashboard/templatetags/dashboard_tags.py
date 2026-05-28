@@ -40,6 +40,23 @@ def get_attr(obj, attr: str):
 
 
 @register.filter
+def human_timesince(value) -> str:
+    """Return a human-friendly relative time string.
+
+    Returns 'just now' for times less than 1 minute ago instead of '0 minutes ago'.
+
+    Usage: {{ comment.created|human_timesince }}
+    """
+    from django.utils.timesince import timesince
+
+    result = timesince(value)
+    # timesince returns e.g. "0\xa0minutes" for < 1 min (non-breaking space between number and unit)
+    if result.startswith("0"):
+        return "just now"
+    return f"{result} ago"
+
+
+@register.filter
 def is_material_icon(value) -> bool:
     """Return True if value is a Material Icons name (ASCII letters/underscores only).
 

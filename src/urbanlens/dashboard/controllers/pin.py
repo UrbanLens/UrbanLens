@@ -285,10 +285,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     def satellite_view_google_image(self, request: HttpRequest, **kwargs):
         """
-        Returns an HTML fragment containing the satellite view image for a pin.
+        Returns an HTML fragment with an Esri satellite map for a pin.
         """
-        import base64
-
         try:
             pin = Pin.objects.get(uuid=kwargs["pin_uuid"])
         except Pin.DoesNotExist:
@@ -299,15 +297,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if lat is None or lng is None:
             return render(request, "dashboard/pages/location/satellite_view.html", {"error": "No coordinates available."})
 
-        try:
-            google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
-            image_bytes = google_maps_gateway.get_satellite_view(lat, lng)
-            image_b64 = base64.b64encode(image_bytes).decode("ascii")
-        except Exception as exc:
-            logger.warning("Satellite view unavailable for pin %s: %s", kwargs.get("pin_uuid"), exc)
-            return render(request, "dashboard/pages/location/satellite_view.html", {"error": "Satellite image unavailable."})
-
-        return render(request, "dashboard/pages/location/satellite_view.html", {"image_b64": image_b64, "pin": pin})
+        return render(request, "dashboard/pages/location/satellite_view.html", {"lat": lat, "lng": lng, "pin": pin})
 
     def street_view(self, request: HttpRequest, **kwargs):
         """

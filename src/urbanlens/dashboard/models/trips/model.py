@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, ForeignKey, ImageField, Index, IntegerField, ManyToManyField, UUIDField
+from django.db.models import CASCADE, SET_NULL, FloatField, ForeignKey, ImageField, Index, IntegerField, ManyToManyField, UUIDField
 from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, TextField
 
 from urbanlens.dashboard.models import abstract
@@ -101,11 +101,25 @@ class TripActivity(abstract.Model):
         ("confirmed", "Confirmed"),
     ]
 
+    # Optional link to a child trip (its activities appear on the parent map).
+    child_trip = ForeignKey(
+        Trip,
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="parent_activities",
+    )
+
     title = CharField(max_length=255, null=True, blank=True)
     notes = TextField(null=True, blank=True)
     scheduled_at = DateTimeField(null=True, blank=True)
+    scheduled_end = DateTimeField(null=True, blank=True)
     order = IntegerField(default=0)
     status = CharField(max_length=20, choices=STATUS_CHOICES, default="proposed")
+
+    # Map position override — set when user drags the marker; does NOT modify the underlying Pin/Location.
+    lat_override = FloatField(null=True, blank=True)
+    lng_override = FloatField(null=True, blank=True)
 
     def __str__(self) -> str:
         loc = self.location.name if self.location else (self.title or "Activity")

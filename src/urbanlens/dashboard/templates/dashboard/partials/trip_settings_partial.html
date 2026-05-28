@@ -9,46 +9,87 @@
 	      hx-swap="innerHTML"
 	      class="trip-create-form">
 		{% csrf_token %}
+
 		<div class="form-row">
-			<label class="trip-setting-row">
-				<span class="trip-setting-label">
+			<div class="trip-setting-row">
+				<div class="trip-setting-label">
 					<strong>Allow members to add people</strong>
 					<span class="trip-setting-desc">Members can invite other users to join this trip.</span>
-				</span>
-				<input type="checkbox" name="allow_add_members" value="on" class="trip-setting-check"
-				       {% if trip.allow_add_members %}checked{% endif %}>
-			</label>
+				</div>
+				<div class="trip-setting-pills" role="group">
+					<label class="trip-setting-pill{% if not trip.allow_add_members %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_add_members" value="none" {% if not trip.allow_add_members %}checked{% endif %}>No one
+					</label>
+					<label class="trip-setting-pill trip-setting-pill--disabled" title="Coming soon">
+						<input type="radio" name="allow_add_members" value="organizers" disabled>Organizers
+					</label>
+					<label class="trip-setting-pill{% if trip.allow_add_members %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_add_members" value="everyone" {% if trip.allow_add_members %}checked{% endif %}>Everyone
+					</label>
+				</div>
+			</div>
 		</div>
+
 		<div class="form-row">
-			<label class="trip-setting-row">
-				<span class="trip-setting-label">
+			<div class="trip-setting-row">
+				<div class="trip-setting-label">
 					<strong>Allow members to add activities</strong>
 					<span class="trip-setting-desc">Members can add new activities to this trip.</span>
-				</span>
-				<input type="checkbox" name="allow_add_activities" value="on" class="trip-setting-check"
-				       {% if trip.allow_add_activities %}checked{% endif %}>
-			</label>
+				</div>
+				<div class="trip-setting-pills" role="group">
+					<label class="trip-setting-pill{% if not trip.allow_add_activities %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_add_activities" value="none" {% if not trip.allow_add_activities %}checked{% endif %}>No one
+					</label>
+					<label class="trip-setting-pill trip-setting-pill--disabled" title="Coming soon">
+						<input type="radio" name="allow_add_activities" value="organizers" disabled>Organizers
+					</label>
+					<label class="trip-setting-pill{% if trip.allow_add_activities %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_add_activities" value="everyone" {% if trip.allow_add_activities %}checked{% endif %}>Everyone
+					</label>
+				</div>
+			</div>
 		</div>
+
 		<div class="form-row">
-			<label class="trip-setting-row">
-				<span class="trip-setting-label">
+			<div class="trip-setting-row">
+				<div class="trip-setting-label">
 					<strong>Allow members to edit activities</strong>
 					<span class="trip-setting-desc">Members can edit and delete activities.</span>
-				</span>
-				<input type="checkbox" name="allow_edit_activities" value="on" class="trip-setting-check"
-				       {% if trip.allow_edit_activities %}checked{% endif %}>
-			</label>
+				</div>
+				<div class="trip-setting-pills" role="group">
+					<label class="trip-setting-pill{% if not trip.allow_edit_activities %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_edit_activities" value="none" {% if not trip.allow_edit_activities %}checked{% endif %}>No one
+					</label>
+					<label class="trip-setting-pill trip-setting-pill--disabled" title="Coming soon">
+						<input type="radio" name="allow_edit_activities" value="organizers" disabled>Organizers
+					</label>
+					<label class="trip-setting-pill{% if trip.allow_edit_activities %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_edit_activities" value="everyone" {% if trip.allow_edit_activities %}checked{% endif %}>Everyone
+					</label>
+				</div>
+			</div>
 		</div>
+
 		<div class="form-row">
-			<label class="trip-setting-row">
-				<span class="trip-setting-label">
+			<div class="trip-setting-row">
+				<div class="trip-setting-label">
 					<strong>Enable comments</strong>
 					<span class="trip-setting-desc">Allow members to leave comments on this trip.</span>
-				</span>
-				<input type="checkbox" name="allow_comments" value="on" class="trip-setting-check"
-				       {% if trip.allow_comments %}checked{% endif %}>
-			</label>
+				</div>
+				<div class="trip-setting-pills" role="group">
+					<label class="trip-setting-pill{% if not trip.allow_comments %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_comments" value="none" {% if not trip.allow_comments %}checked{% endif %}>No one
+					</label>
+					<label class="trip-setting-pill trip-setting-pill--disabled" title="Coming soon">
+						<input type="radio" name="allow_comments" value="organizers" disabled>Organizers
+					</label>
+					<label class="trip-setting-pill{% if trip.allow_comments %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_comments" value="everyone" {% if trip.allow_comments %}checked{% endif %}>Everyone
+					</label>
+				</div>
+			</div>
 		</div>
+
 		<div class="form-actions">
 			<button type="submit" class="submit-button">Save Settings</button>
 		</div>

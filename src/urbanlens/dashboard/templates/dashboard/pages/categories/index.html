@@ -146,24 +146,13 @@
 
 {# ── Category edit dialog ──────────────────────────────────────────────────────── #}
 <dialog id="category-edit-dialog" class="tag-edit-dialog">
-    <div class="dialog-header">
-        <span id="category-edit-dialog-title">Edit Category</span>
-        <button type="button" class="dialog-close"
-                onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Edit Category" title_id="category-edit-dialog-title" %}
     <div id="category-edit-dialog-body" class="tag-edit-dialog-body"></div>
 </dialog>
 
 {# ── Multi-merge dialog ────────────────────────────────────────────────────────── #}
 <dialog id="cat-merge-dialog" class="cat-merge-dialog">
-    <div class="dialog-header">
-        <span id="cat-merge-dialog-title">Merge Categories</span>
-        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Merge Categories" title_id="cat-merge-dialog-title" %}
     <div class="cat-merge-dialog-body">
         <div class="cat-merge-section">
             <div class="cat-merge-section-label">
@@ -203,12 +192,7 @@
 
 {# ── Bulk-edit dialog ──────────────────────────────────────────────────────────── #}
 <dialog id="cat-bulk-edit-dialog" class="cat-bulk-edit-dialog">
-    <div class="dialog-header">
-        <span id="cat-bulk-edit-title">Edit Categories</span>
-        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Edit Categories" title_id="cat-bulk-edit-title" %}
     <div class="cat-bulk-edit-body">
 
         {# Icon #}
@@ -590,6 +574,7 @@ applyCurrentView();
 
 // ── Multi-select ───────────────────────────────────────────────────────────────
 var _selected = new Set();
+var _lastSelectedIdx = -1;
 
 function _getAllCatIds() {
     var seen = new Set();
@@ -635,7 +620,25 @@ function _updateBar() {
     }
 }
 
-// Event delegation — works for both original cards and tree-view clones
+// Checkbox selection — change for normal clicks, click for shift-range
+document.getElementById('category-rows').addEventListener('click', function(e) {
+    var cb = e.target;
+    if (!cb.classList.contains('cat-select-cb')) return;
+    var allCbs = Array.from(document.querySelectorAll('#category-rows .cat-select-cb'));
+    var idx = allCbs.indexOf(cb);
+    if (e.shiftKey && _lastSelectedIdx >= 0 && idx >= 0) {
+        e.preventDefault();
+        var newChecked = !cb.checked;
+        var lo = Math.min(idx, _lastSelectedIdx), hi = Math.max(idx, _lastSelectedIdx);
+        for (var i = lo; i <= hi; i++) {
+            allCbs[i].checked = newChecked;
+            if (newChecked) _selected.add(allCbs[i].dataset.catId);
+            else _selected.delete(allCbs[i].dataset.catId);
+        }
+        _syncCheckboxes(); _updateBar();
+    }
+    if (idx >= 0) _lastSelectedIdx = idx;
+});
 document.getElementById('category-rows').addEventListener('change', function(e) {
     var cb = e.target;
     if (!cb.classList.contains('cat-select-cb')) return;

@@ -50,12 +50,7 @@
 
     {# ── Log-a-visit dialog ──────────────────────────────────────────── #}
     <dialog id="visit-add-dialog-{{ pin.uuid }}" class="visit-add-dialog">
-        <div class="dialog-header">
-            <span>Log a Visit</span>
-            <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
-                <i class="material-icons">close</i>
-            </button>
-        </div>
+        {% include "dashboard/partials/_dialog_header.html" with title="Log a Visit" %}
         <form hx-post="{% url 'pin.visits' pin.uuid %}"
               hx-target="#visit-history-panel"
               hx-swap="outerHTML"

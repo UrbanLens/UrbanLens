@@ -1,4 +1,5 @@
 """Comment and Reaction controllers for Pin and Location (wiki) pages."""
+
 from __future__ import annotations
 
 import logging
@@ -6,9 +7,12 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.comments.model import Comment
+from urbanlens.dashboard.models.notifications.meta import NotificationType
+from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
 from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
@@ -48,17 +52,21 @@ def _build_context(comments_qs, profile: Profile, **extra) -> dict:
             r_html = render_comment_text(r.text, pinned)
             if r_html is None:
                 continue
-            replies_rendered.append({
-                "comment": r,
-                "rendered_text": r_html,
-                "reactions": _aggregate_reactions(r.reactions.all()),
-            })
-        rendered.append({
-            "comment": c,
-            "rendered_text": html,
-            "reactions": _aggregate_reactions(c.reactions.all()),
-            "replies": replies_rendered,
-        })
+            replies_rendered.append(
+                {
+                    "comment": r,
+                    "rendered_text": r_html,
+                    "reactions": _aggregate_reactions(r.reactions.all()),
+                },
+            )
+        rendered.append(
+            {
+                "comment": c,
+                "rendered_text": html,
+                "reactions": _aggregate_reactions(c.reactions.all()),
+                "replies": replies_rendered,
+            },
+        )
     return {
         "rendered_comments": rendered,
         "profile": profile,
@@ -69,11 +77,13 @@ def _build_context(comments_qs, profile: Profile, **extra) -> dict:
 
 # ── Pin comments ──────────────────────────────────────────────────────────────
 
+
 class PinCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a Pin."""
 
     def get(self, request, pin_uuid):
         from urbanlens.dashboard.models.pin.model import Pin
+
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
         profile = _profile(request)
         ctx = _build_context(pin.comments.all(), profile, pin=pin, context_type="pin")
@@ -81,6 +91,7 @@ class PinCommentsView(LoginRequiredMixin, View):
 
     def post(self, request, pin_uuid):
         from urbanlens.dashboard.models.pin.model import Pin
+
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
         profile = _profile(request)
         text = request.POST.get("text", "").strip()
@@ -94,9 +105,8 @@ class PinCommentsView(LoginRequiredMixin, View):
         if comment.image or request.FILES.get("image"):
             comment.image = request.FILES.get("image")
             comment.save(update_fields=["image"])
-        # Notification: if replying, notify the parent author
         if parent and parent.profile != profile:
-            _notify_reply(profile, parent)
+            _notify_reply(profile, parent, reply=comment)
         ctx = _build_context(pin.comments.all(), profile, pin=pin, context_type="pin")
         return _render_comments(request, ctx)
 
@@ -106,6 +116,7 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 
     def delete(self, request, pin_uuid, comment_id):
         from urbanlens.dashboard.models.pin.model import Pin
+
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
         profile = _profile(request)
         comment = get_object_or_404(Comment, id=comment_id, pin=pin)
@@ -117,12 +128,14 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 
 # ── Wiki (Location) comments ──────────────────────────────────────────────────
 
+
 class WikiCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a Location wiki."""
 
     def _get_location_and_profile(self, request, location_uuid):
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import Pin
+
         location = get_object_or_404(Location, uuid=location_uuid)
         profile = _profile(request)
         # Must have this location pinned to comment on its wiki
@@ -153,7 +166,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
             comment.image = request.FILES["image"]
             comment.save(update_fields=["image"])
         if parent and parent.profile != profile:
-            _notify_reply(profile, parent)
+            _notify_reply(profile, parent, reply=comment)
         ctx = _build_context(location.comments.all(), profile, location=location, context_type="wiki")
         return _render_comments(request, ctx)
 
@@ -163,6 +176,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
 
     def delete(self, request, location_uuid, comment_id):
         from urbanlens.dashboard.models.location.model import Location
+
         location = get_object_or_404(Location, uuid=location_uuid)
         profile = _profile(request)
         comment = get_object_or_404(Comment, id=comment_id, location=location)
@@ -173,6 +187,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
 
 
 # ── Reactions ──────────────────────────────────────────────────────────────────
+
 
 class CommentReactionView(LoginRequiredMixin, View):
     """POST /comments/<int>/react/  — toggle an emoji reaction on a Comment."""
@@ -197,6 +212,7 @@ class TripCommentReactionView(LoginRequiredMixin, View):
 
     def post(self, request, trip_uuid, comment_id):
         from urbanlens.dashboard.models.trips.model import Trip, TripComment
+
         profile = _profile(request)
         trip = get_object_or_404(Trip, uuid=trip_uuid)
         comment = get_object_or_404(TripComment, id=comment_id, trip=trip)
@@ -214,26 +230,33 @@ class TripCommentReactionView(LoginRequiredMixin, View):
 
 def _render_reaction_row(request, comment: Comment, profile: Profile) -> HttpResponse:
     reactions = _aggregate_reactions(comment.reactions.all())
-    return render(request, "dashboard/partials/comment_reactions.html", {
-        "comment": comment,
-        "reactions": reactions,
-        "profile": profile,
-        "react_url_name": "comment.react",
-        "allowed_emojis": _ALLOWED_EMOJIS,
-    })
+    return render(
+        request,
+        "dashboard/partials/comment_reactions.html",
+        {
+            "comment": comment,
+            "reactions": reactions,
+            "profile": profile,
+            "react_url_name": "comment.react",
+            "allowed_emojis": _ALLOWED_EMOJIS,
+        },
+    )
 
 
 def _render_trip_reaction_row(request, comment, profile: Profile) -> HttpResponse:
-    from django.urls import reverse
     reactions = _aggregate_reactions(comment.reactions.all())
-    return render(request, "dashboard/partials/comment_reactions.html", {
-        "comment": comment,
-        "reactions": reactions,
-        "profile": profile,
-        "react_url_name": "trips.comment.react",
-        "trip_uuid": comment.trip.uuid,
-        "allowed_emojis": _ALLOWED_EMOJIS,
-    })
+    return render(
+        request,
+        "dashboard/partials/comment_reactions.html",
+        {
+            "comment": comment,
+            "reactions": reactions,
+            "profile": profile,
+            "react_url_name": "trips.comment.react",
+            "trip_uuid": comment.trip.uuid,
+            "allowed_emojis": _ALLOWED_EMOJIS,
+        },
+    )
 
 
 def _aggregate_reactions(reactions_qs) -> dict[str, dict]:
@@ -249,6 +272,7 @@ def _aggregate_reactions(reactions_qs) -> dict[str, dict]:
 
 # ── Location autocomplete endpoint ───────────────────────────────────────────
 
+
 class PinnedLocationsJsonView(LoginRequiredMixin, View):
     """GET /comments/locations/  — return viewer's pinned locations for @mention autocomplete."""
 
@@ -256,6 +280,7 @@ class PinnedLocationsJsonView(LoginRequiredMixin, View):
         import json
 
         from urbanlens.dashboard.models.pin.model import Pin
+
         profile = _profile(request)
         q = request.GET.get("q", "").strip().lower()
         pins = Pin.objects.filter(profile=profile).exclude(location__isnull=True).select_related("location")[:50]
@@ -269,29 +294,45 @@ class PinnedLocationsJsonView(LoginRequiredMixin, View):
 
 # ── Notification helpers ──────────────────────────────────────────────────────
 
-def _notify_reply(actor: Profile, parent_comment) -> None:
-    from urbanlens.dashboard.models.notifications.meta import NotificationType
-    from urbanlens.dashboard.models.notifications.model import NotificationLog
+
+def _comment_url(comment) -> str:
+    """Return the page URL (with anchor) for a comment or trip comment."""
+    anchor = f"#comment-{comment.id}"
+    try:
+        if hasattr(comment, "trip_id") and comment.trip_id:
+            return reverse("trips.detail", kwargs={"trip_uuid": comment.trip.uuid}) + anchor
+        if hasattr(comment, "pin_id") and comment.pin_id:
+            return reverse("pin.details", kwargs={"pin_uuid": comment.pin.uuid}) + anchor
+        if hasattr(comment, "location_id") and comment.location_id:
+            return reverse("location.wiki", kwargs={"location_uuid": comment.location.uuid}) + anchor
+    except Exception:
+        logger.warning("Could not build comment URL for comment %s", comment.id)
+    return ""
+
+
+def _notify_reply(actor: Profile, parent_comment, reply=None) -> None:
     recipient = parent_comment.profile if hasattr(parent_comment, "profile") else parent_comment.author
     if recipient is None or recipient == actor:
         return
+    url = _comment_url(reply or parent_comment)
     NotificationLog.objects.create(
         profile=recipient,
         notification_type=NotificationType.COMMENT_REPLY,
-        title="Someone replied to your comment",
+        title=f"{actor.username} replied to your comment",
         message=f"@{actor.username} replied to your comment.",
+        url=url,
     )
 
 
 def _notify_reaction(actor: Profile, comment) -> None:
-    from urbanlens.dashboard.models.notifications.meta import NotificationType
-    from urbanlens.dashboard.models.notifications.model import NotificationLog
     recipient = comment.profile if hasattr(comment, "profile") else comment.author
     if recipient is None or recipient == actor:
         return
+    url = _comment_url(comment)
     NotificationLog.objects.create(
         profile=recipient,
         notification_type=NotificationType.COMMENT_LIKED,
-        title="Someone reacted to your comment",
+        title=f"{actor.username} reacted to your comment",
         message=f"@{actor.username} reacted to your comment.",
+        url=url,
     )

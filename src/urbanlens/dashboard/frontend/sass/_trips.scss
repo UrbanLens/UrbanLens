@@ -1487,12 +1487,43 @@
     font-weight: 400;
 }
 
-.trip-setting-check {
-    width: 17px;
-    height: 17px;
+.trip-setting-pills {
+    display: flex;
+    gap: .25rem;
     flex-shrink: 0;
+}
+
+.trip-setting-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .3rem .7rem;
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
+    font-size: .78rem;
+    font-weight: 500;
+    color: #64748b;
     cursor: pointer;
-    accent-color: #3b82f6;
+    transition: background .1s, border-color .1s, color .1s;
+    white-space: nowrap;
+
+    input[type="radio"] { display: none; }
+
+    &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+    }
+
+    &--active {
+        background: #eff6ff;
+        border-color: #3b82f6;
+        color: #1d4ed8;
+    }
+
+    &--disabled {
+        opacity: .45;
+        cursor: not-allowed;
+    }
 }
 
 // ── Multi-month calendar ──────────────────────────────────────────────────
@@ -1511,4 +1542,395 @@
     height: 1px;
     background: #e2e8f0;
     margin: .75rem 0 .25rem;
+}
+
+// ── Trip weather panel ────────────────────────────────────────────────────────
+
+.trip-weather-panel {
+    background: var(--card-bg, #fff);
+    border: 1px solid $border-color;
+    border-radius: $radius-md;
+    padding: 1.25rem 1.5rem 1.5rem;
+    margin: 1.25rem 0;
+
+    .trip-weather-header {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        margin-bottom: 1rem;
+
+        .material-icons { color: $primary-color; font-size: 1.3rem; }
+
+        .trip-weather-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: $text-primary;
+            margin: 0;
+        }
+    }
+
+    .trip-weather-empty {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        color: $text-muted;
+        font-size: .9rem;
+        .material-icons { font-size: 1.1rem; }
+    }
+}
+
+// ── Summary strip ─────────────────────────────────────────────────────────────
+
+.trip-weather-summary {
+    display: flex;
+    gap: .25rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: .75rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid $border-color;
+
+    &::-webkit-scrollbar { display: none; }
+}
+
+.trip-weather-summary-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .1rem;
+    min-width: 52px;
+    padding: .35rem .4rem;
+    border-radius: $radius-sm;
+    cursor: default;
+    transition: background .15s;
+
+    &:hover { background: #f0f4ff; }
+
+    .trip-weather-summary-dow {
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: $text-muted;
+    }
+
+    .trip-weather-summary-icon {
+        width: 36px;
+        height: 36px;
+        object-fit: contain;
+    }
+
+    .trip-weather-summary-temp {
+        font-size: .85rem;
+        font-weight: 600;
+        color: $text-primary;
+    }
+}
+
+// ── Day cards ─────────────────────────────────────────────────────────────────
+
+.trip-weather-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: .75rem;
+}
+
+.trip-weather-card {
+    border: 1px solid $border-color;
+    border-radius: $radius-sm;
+    overflow: hidden;
+
+    .trip-weather-card-date {
+        display: flex;
+        align-items: baseline;
+        gap: .4rem;
+        padding: .5rem .75rem .45rem;
+        background: linear-gradient(135deg, #f0f7ff 0%, #e8f4ff 100%);
+        border-bottom: 1px solid $border-color;
+
+        .trip-weather-card-dow {
+            font-weight: 700;
+            font-size: .85rem;
+            color: $primary-color;
+        }
+        .trip-weather-card-mday {
+            font-size: .78rem;
+            color: $text-secondary;
+        }
+    }
+
+    .trip-weather-card-slots {
+        display: flex;
+        flex-direction: column;
+    }
+}
+
+// ── Individual slot (day / night) ─────────────────────────────────────────────
+
+.trip-weather-slot {
+    padding: .65rem .75rem;
+    flex: 1;
+
+    & + & {
+        border-top: 1px solid $border-color;
+    }
+
+    &--night {
+        background: rgba(15, 23, 42, .025);
+    }
+
+    .trip-weather-slot-label {
+        display: flex;
+        align-items: center;
+        gap: .25rem;
+        font-size: .68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: $text-muted;
+        margin-bottom: .4rem;
+
+        .material-icons { font-size: .9rem; }
+    }
+
+    .trip-weather-slot-main {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        margin-bottom: .3rem;
+    }
+
+    .trip-weather-slot-icon {
+        width: 46px;
+        height: 46px;
+        object-fit: contain;
+        flex-shrink: 0;
+    }
+
+    .trip-weather-slot-temps {
+        display: flex;
+        flex-direction: column;
+
+        .trip-weather-slot-temp {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: $text-primary;
+            line-height: 1.1;
+        }
+
+        .trip-weather-slot-feels {
+            font-size: .72rem;
+            color: $text-muted;
+        }
+    }
+
+    .trip-weather-slot-desc {
+        font-size: .78rem;
+        color: $text-secondary;
+        margin: 0 0 .4rem;
+        line-height: 1.3;
+    }
+
+    .trip-weather-slot-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .3rem .65rem;
+        font-size: .72rem;
+        color: $text-muted;
+
+        span {
+            display: flex;
+            align-items: center;
+            gap: .15rem;
+        }
+
+        .material-icons { font-size: .85rem; }
+    }
+}
+
+// ── Activity datetime row (start/end fields side-by-side) ─────────────────────
+
+.activity-datetime-row {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+    flex-wrap: wrap;
+
+    input[type="date"],
+    input[type="time"] {
+        flex: 1 1 120px;
+    }
+
+    .btn-ghost {
+        flex-shrink: 0;
+        padding: .2rem .4rem;
+        font-size: .78rem;
+    }
+}
+
+// ── Child trip search in activity dialogs ──────────────────────────────────────
+
+.activity-child-trip-wrap {
+    position: relative;
+
+    .location-suggestions {
+        top: 100%;
+        z-index: 200;
+    }
+}
+
+.trip-activity-child-trip {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: .78rem;
+    color: $primary-color;
+    margin-top: .1rem;
+
+    .material-icons {
+        font-size: .95rem;
+    }
+}
+
+// ── Split form actions (delete left, save/cancel right) ───────────────────────
+
+.form-actions--split {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+}
+
+.form-actions-right {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+}
+
+.btn-danger {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .45rem .85rem;
+    border-radius: $radius-sm;
+    border: 1.5px solid #ef5350;
+    background: transparent;
+    color: #ef5350;
+    font-size: .88rem;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+
+    .material-icons { font-size: 1rem; }
+
+    &:hover {
+        background: #ef5350;
+        color: #fff;
+    }
+}
+
+// ── Map right-click context menu ──────────────────────────────────────────────
+
+.trip-map-ctx-menu {
+    position: absolute;
+    z-index: 1200;
+    background: #fff;
+    border: 1px solid $border-color;
+    border-radius: $radius-sm;
+    box-shadow: 0 4px 16px rgba(0,0,0,.12);
+    padding: .25rem 0;
+    min-width: 180px;
+    pointer-events: all;
+}
+
+.trip-map-ctx-item {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .55rem .9rem;
+    border: none;
+    background: none;
+    font-size: .88rem;
+    color: $text-primary;
+    cursor: pointer;
+    text-align: left;
+    transition: background .1s;
+
+    .material-icons { font-size: 1.1rem; color: $primary-color; }
+
+    &:hover {
+        background: $surface-hover;
+    }
+}
+
+// ── Child-trip ghost markers on the trip map ──────────────────────────────────
+
+.trip-map-marker--child-trip {
+    opacity: .65;
+    border: 2px dashed #64b5f6 !important;
+    background: rgba(33,150,243,.12) !important;
+
+    .trip-map-marker-num {
+        color: #1565c0;
+        font-size: .7rem;
+    }
+}
+
+// ── Settings radio pills for friend request visibility ────────────────────────
+
+.settings-friend-request-row {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    margin-top: .5rem;
+}
+
+.settings-friend-request-option {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .55rem .85rem;
+    border: 1.5px solid $border-color;
+    border-radius: $radius-sm;
+    cursor: pointer;
+    font-size: .88rem;
+    color: $text-primary;
+    transition: border-color .15s, background .15s;
+    background: var(--card-bg, #fff);
+
+    input[type="radio"] {
+        accent-color: $primary-color;
+        width: 15px;
+        height: 15px;
+        flex-shrink: 0;
+    }
+
+    &:has(input:checked),
+    &.active {
+        border-color: $primary-color;
+        background: #f0f7ff;
+        color: $primary-color;
+        font-weight: 500;
+    }
+
+    &:hover:not(:has(input:checked)) {
+        border-color: color.adjust($primary-color, $lightness: 20%);
+        background: #f8fbff;
+    }
+
+// Dark mode
+[data-theme="dark"] & {
+    background: #1e2130;
+    border-color: #3a3f55;
+    color: #e2e8f0;
+
+    &:has(input:checked),
+    &.active {
+        background: rgba(33, 150, 243, .15);
+        border-color: $primary-color;
+        color: #90caf9;
+    }
+}
 }

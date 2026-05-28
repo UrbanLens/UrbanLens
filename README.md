@@ -60,7 +60,7 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
     * After login, we are redirected to accounts/profile, which is a 404, instead of dashboard/profile.
   * Pin detail page: 
     * <s>Rating should be in stars</s>
-    * Place name - is this required to show?
+    * <s>Place name - is this required to show?</s>
     * <s>Remove categories</s>
     * <s>Better show priority somehow</s>
     * <s>Scrolling the page shouldn't scroll the map (delay on map hover)</s> 
@@ -90,7 +90,7 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
     * Main Trip page: use the whitespace. Calendar? etc?
     * Allow archiving old events.
     * Notify other users when changes.
-    * Allow users to drag/drop events to different dates.
+    * <s>Allow users to drag/drop events to different dates.</s>
     * Ensure users can see pins other users have added even if they don't have them ("Accept pins confirm"?)
     * <s>Users can leave the trip.</s>
     * Trip variations (<s>confirmed/unconfirmed pins</s>, map markup, variation 1/2/3, etc)
@@ -108,6 +108,11 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
     * Trip settings - fix checkbox bug. Also, each option should have 3 states (no one, organizers, everyone)
     * In activity edit dialog, add delete button
     * Add some additional descriptor for activities (an icon, or a category? For instance: Camping, Food)
+    * Never say "0 minutes ago"
+    * When comment has image, must be indication that image will be uploaded after it's selected from user's computer.
+    * Reply button beneath replies
+    * Bug: Comment count does not count replies
+    * Bug: After deleting comment, the comment section duplicates itself.
   * Badges Page:
     * <s>Custom Icons must be clamped to size (do this during upload?)</s>
   * Map Page:
@@ -123,3 +128,13 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
   * Sunrise / Sunset for weather
   * <s>Remove weather from pin details (should be only for trip details)</s>
   * Address often incorrect Smithsonian results (AI filtering? Only names >= certain length?)
+* Misc:
+  * User settings: Allow friend requests checkbox is missing. Should have additional option for "from users with one pin in common", "1 mutual", etc.
+  * Privacy setting for who can find you by search, or by your email, or by using your handle directly.
+  * Clicking on notification should take you to the relevant page.
+  * Viewing notifications in the dropdown should mark them read. Not just clicking on them.
+  * Notification log makes read messages look unread. UI with this needs cleanup.
+  * Hide "(schedule) Never" in pin popup for last visited. This is already implied.
+  * When selecting tags to edit, enable shift+click
+  * Bug: Once you've edited one tag, the edit dialog doesn't come up again for other clicks of the edit button.
+  * Optimize: The organize page takes a long time to load.

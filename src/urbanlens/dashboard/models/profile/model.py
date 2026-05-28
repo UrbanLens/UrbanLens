@@ -46,6 +46,14 @@ class MapViewChoice(TextChoices):
     TOPOGRAPHIC = "topographic", "Topographic"
 
 
+class FriendRequestVisibility(TextChoices):
+    ANYONE = "anyone", "From anyone"
+    COMMON_PIN = "common_pin", "From users with a pin in common"
+    COMMON_FRIEND = "common_friend", "From users with a friend in common"
+    COMMON_TRIP = "common_trip", "From users with a trip in common"
+    NO_ONE = "no_one", "No one"
+
+
 class Profile(abstract.Model):
     avatar = ImageField(upload_to="avatars/", null=True, blank=True)
     bio = TextField(null=True, blank=True)
@@ -64,7 +72,11 @@ class Profile(abstract.Model):
         choices=VisibilityChoice.choices,
         default=VisibilityChoice.EVERYONE,
     )
-    allow_friend_requests = BooleanField(default=True)
+    friend_request_visibility = CharField(
+        max_length=20,
+        choices=FriendRequestVisibility.choices,
+        default=FriendRequestVisibility.ANYONE,
+    )
 
     # Style preferences
     dark_mode = BooleanField(default=False)

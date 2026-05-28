@@ -321,6 +321,64 @@
     }
 }
 
+// ── Trip map context menu dark mode ──────────────────────────────────────────
+
+[data-theme="dark"] {
+    .trip-map-ctx-menu {
+        background: #1e2130;
+        border-color: #2d3348;
+        box-shadow: 0 4px 16px rgba(0,0,0,.4);
+    }
+
+    .trip-map-ctx-item {
+        color: #e2e8f0;
+
+        &:hover { background: rgba(255,255,255,.06); }
+    }
+
+    .btn-danger {
+        border-color: #ef9a9a;
+        color: #ef9a9a;
+
+        &:hover {
+            background: #c62828;
+            border-color: #c62828;
+            color: #fff;
+        }
+    }
+}
+
+// ── Trip weather dark mode ────────────────────────────────────────────────────
+
+[data-theme="dark"] {
+    .trip-weather-panel {
+        background: #1e2130;
+        border-color: #2d3348;
+
+        .trip-weather-header .trip-weather-title { color: #e2e8f0; }
+    }
+
+    .trip-weather-card {
+        border-color: #2d3348;
+        background: #1e2130;
+
+        .trip-weather-card-date {
+            background: linear-gradient(135deg, #1a2540 0%, #162035 100%);
+            border-bottom-color: #2d3348;
+        }
+    }
+
+    .trip-weather-slot--night { background: rgba(0,0,0,.15); }
+
+    .trip-weather-slot-temp { color: #e2e8f0; }
+    .trip-weather-slot-desc,
+    .trip-weather-slot-feels { color: #94a3b8; }
+
+    .trip-weather-summary-item:hover { background: rgba(255,255,255,.05); }
+
+    .trip-weather-summary { border-bottom-color: #2d3348; }
+}
+
 // ── Date-validation error dialog ─────────────────────────────────────────────
 
 .date-error-list {

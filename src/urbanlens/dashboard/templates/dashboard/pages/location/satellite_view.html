@@ -3,14 +3,25 @@
         <i class="material-icons">satellite_alt</i>
         <h3>Satellite View</h3>
     </div>
-    {% if image_b64 %}
-    <img src="data:image/jpeg;base64,{{ image_b64 }}"
-         alt="Satellite view{% if pin %} of {{ pin.effective_name }}{% endif %}"
-         class="view-image">
+    {% if lat and lng %}
+    <div id="pin-satellite-map" class="view-map"></div>
+    <script>
+    (function () {
+        var el = document.getElementById('pin-satellite-map');
+        if (!el || !window.L) return;
+        var map = L.map(el, { zoomControl: false, attributionControl: true }).setView([{{ lat }}, {{ lng }}], 17);
+        L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            { attribution: 'Tiles &copy; Esri', maxZoom: 19 }
+        ).addTo(map);
+        L.marker([{{ lat }}, {{ lng }}]).addTo(map);
+        L.control.zoom({ position: 'topright' }).addTo(map);
+    }());
+    </script>
     {% else %}
     <div class="view-unavailable">
         <i class="material-icons">broken_image</i>
-        <span>{{ error|default:"Satellite image unavailable." }}</span>
+        <span>{{ error|default:"No coordinates available." }}</span>
     </div>
     {% endif %}
 </div>

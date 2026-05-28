@@ -50,9 +50,30 @@ def _expand_trip_dates(trip: Trip, activity_date: datetime.date) -> None:
 
 def _activity_qs(trip: Trip) -> QuerySet:
     """Return the standard activities queryset for a trip with all needed relations."""
-    return trip.activities.select_related("location", "pin", "pin__location", "added_by__user").order_by(
-        "scheduled_at", "order", "created",
+    from django.db.models import F
+    return trip.activities.select_related(
+        "location", "pin", "pin__location", "added_by__user", "child_trip",
+    ).order_by(
+        F("scheduled_at").asc(nulls_last=True), "order", "created",
     )
+
+
+def _activity_coords(act) -> tuple[float, float] | None:
+    """Return (lat, lng) for an activity, respecting override fields.
+
+    Priority: lat_override/lng_override → pin effective coords → location coords.
+    Returns None if no coordinates are available.
+    """
+    if act.lat_override is not None and act.lng_override is not None:
+        return (act.lat_override, act.lng_override)
+    if act.pin:
+        lat = act.pin.effective_latitude
+        lng = act.pin.effective_longitude
+        if lat is not None and lng is not None:
+            return (float(lat), float(lng))
+    if act.location and act.location.latitude is not None and act.location.longitude is not None:
+        return (float(act.location.latitude), float(act.location.longitude))
+    return None
 
 
 def _compute_activity_index_map(activities) -> dict[int, int]:
@@ -60,12 +81,7 @@ def _compute_activity_index_map(activities) -> dict[int, int]:
     index_map: dict[int, int] = {}
     idx = 1
     for act in activities:
-        has_coords = False
-        if (act.pin and act.pin.effective_latitude is not None and act.pin.effective_longitude is not None) or (
-            act.location and act.location.latitude is not None and act.location.longitude is not None
-        ):
-            has_coords = True
-        if has_coords:
+        if _activity_coords(act) is not None:
             index_map[act.id] = idx
             idx += 1
     return index_map
@@ -283,7 +299,11 @@ class TripActivitiesView(LoginRequiredMixin, View):
         title = (body.get("title") or "").strip() or None
         notes = (body.get("notes") or "").strip() or None
         scheduled_at = _parse_scheduled_at(body.get("scheduled_date"), body.get("scheduled_time"))
+        scheduled_end = _parse_scheduled_at(body.get("scheduled_end_date"), body.get("scheduled_end_time"))
         location = _resolve_location(body)
+
+        child_trip_uuid = (body.get("child_trip_uuid") or "").strip()
+        child_trip = Trip.objects.filter(uuid=child_trip_uuid).first() if child_trip_uuid else None
 
         status = (body.get("status") or "proposed").strip()
         if status not in {"proposed", "confirmed"}:
@@ -296,8 +316,10 @@ class TripActivitiesView(LoginRequiredMixin, View):
             title=title,
             notes=notes,
             scheduled_at=scheduled_at,
+            scheduled_end=scheduled_end,
             order=trip.activities.count(),
             status=status,
+            child_trip=child_trip,
         )
 
         return _render_activities_panel(request, trip, profile)
@@ -329,10 +351,18 @@ class TripActivityEditView(LoginRequiredMixin, View):
         activity.title = (body.get("title") or "").strip() or None
         activity.notes = (body.get("notes") or "").strip() or None
         activity.scheduled_at = _parse_scheduled_at(body.get("scheduled_date"), body.get("scheduled_time"))
+        activity.scheduled_end = _parse_scheduled_at(body.get("scheduled_end_date"), body.get("scheduled_end_time"))
         activity.location = _resolve_location(body)
         new_status = (body.get("status") or "").strip()
         if new_status in {"proposed", "confirmed"}:
             activity.status = new_status
+
+        child_trip_uuid = (body.get("child_trip_uuid") or "").strip()
+        if child_trip_uuid:
+            activity.child_trip = Trip.objects.filter(uuid=child_trip_uuid).first()
+        elif "child_trip_uuid" in body:
+            activity.child_trip = None
+
         activity.save()
 
         if activity.status == "confirmed" and activity.scheduled_at:
@@ -404,9 +434,11 @@ def _render_trip_comments(request, trip: Trip, profile: Profile) -> HttpResponse
             "replies": replies_rendered,
         })
 
+    comment_count = sum(1 + len(item.get("replies", [])) for item in rendered)
     return render(request, "dashboard/partials/trip_comments_panel.html", {
         "trip": trip,
         "rendered_comments": rendered,
+        "comment_count": comment_count,
         "profile": profile,
         "allowed_emojis": _ALLOWED_EMOJIS,
     })
@@ -452,7 +484,7 @@ class TripCommentsView(LoginRequiredMixin, View):
             comment.save(update_fields=["image"])
 
         if parent and parent.author and parent.author != profile:
-            _notify_reply(profile, parent)
+            _notify_reply(profile, parent, reply=comment)
 
         return _render_trip_comments(request, trip, profile)
 
@@ -631,31 +663,49 @@ class TripMapDataView(LoginRequiredMixin, View):
 
         points = []
         index = 1
+        seen_child_acts: set[int] = set()
+
         for act in activities:
-            lat = lng = None
-            if act.pin:
-                lat = act.pin.effective_latitude
-                lng = act.pin.effective_longitude
-            elif act.location:
-                lat = act.location.latitude
-                lng = act.location.longitude
+            coords = _activity_coords(act)
 
-            if lat is None or lng is None:
-                continue
+            if coords:
+                label = act.title or (act.location.name if act.location else None) or f"Activity {index}"
+                points.append(
+                    {
+                        "index": index,
+                        "activity_id": act.id,
+                        "label": label,
+                        "lat": coords[0],
+                        "lng": coords[1],
+                        "status": act.status,
+                        "scheduled_at": act.scheduled_at.isoformat() if act.scheduled_at else None,
+                        "draggable": True,
+                    },
+                )
+                index += 1
 
-            label = act.title or (act.location.name if act.location else None) or f"Activity {index}"
-            points.append(
-                {
-                    "index": index,
-                    "activity_id": act.id,
-                    "label": label,
-                    "lat": float(lat),
-                    "lng": float(lng),
-                    "status": act.status,
-                    "scheduled_at": act.scheduled_at.isoformat() if act.scheduled_at else None,
-                },
-            )
-            index += 1
+            # Include child trip's activities as ghost markers
+            if act.child_trip_id and act.child_trip_id not in seen_child_acts:
+                seen_child_acts.add(act.child_trip_id)
+                child_acts = list(_activity_qs(act.child_trip))
+                for child_act in child_acts:
+                    child_coords = _activity_coords(child_act)
+                    if not child_coords:
+                        continue
+                    child_label = child_act.title or (child_act.location.name if child_act.location else None) or "Activity"
+                    points.append(
+                        {
+                            "index": None,
+                            "activity_id": None,
+                            "label": f"[{act.child_trip.name}] {child_label}",
+                            "lat": child_coords[0],
+                            "lng": child_coords[1],
+                            "status": child_act.status,
+                            "scheduled_at": child_act.scheduled_at.isoformat() if child_act.scheduled_at else None,
+                            "draggable": False,
+                            "child_trip": True,
+                        },
+                    )
 
         return JsonResponse({"points": points})
 
@@ -814,10 +864,178 @@ class TripSettingsView(LoginRequiredMixin, View):
         if trip.creator != profile:
             return HttpResponse("Only the trip creator can change settings.", status=403)
 
-        trip.allow_add_members = request.POST.get("allow_add_members") in {"on", "true", "1"}
-        trip.allow_add_activities = request.POST.get("allow_add_activities") in {"on", "true", "1"}
-        trip.allow_edit_activities = request.POST.get("allow_edit_activities") in {"on", "true", "1"}
-        trip.allow_comments = request.POST.get("allow_comments") in {"on", "true", "1"}
+        def _truthy(val: str | None) -> bool:
+            return val in {"on", "true", "1", "everyone"}
+
+        trip.allow_add_members = _truthy(request.POST.get("allow_add_members"))
+        trip.allow_add_activities = _truthy(request.POST.get("allow_add_activities"))
+        trip.allow_edit_activities = _truthy(request.POST.get("allow_edit_activities"))
+        trip.allow_comments = _truthy(request.POST.get("allow_comments"))
         trip.save(update_fields=["allow_add_members", "allow_add_activities", "allow_edit_activities", "allow_comments", "updated"])
 
-        return render(request, "dashboard/partials/trip_settings_partial.html", {"trip": trip, "profile": profile, "saved": True})
+        return render(request, "dashboard/partials/trip_settings_partial.html", {
+            "trip": trip,
+            "profile": profile,
+            "saved": True,
+        })
+
+
+class TripActivityPositionView(LoginRequiredMixin, View):
+    """Save a map-drag position override for a trip activity.
+
+    POST /trips/<uuid>/activities/<int:activity_id>/position/
+    Body: {lat: float, lng: float}
+    This updates lat_override/lng_override on the TripActivity only — the
+    underlying Pin and Location coordinates are never modified.
+    """
+
+    def post(self, request, trip_uuid, activity_id):
+        """Handle POST to update map position override.
+
+        Args:
+            request: The HTTP request.
+            trip_uuid: The trip UUID.
+            activity_id: The TripActivity primary key.
+
+        Returns:
+            JsonResponse confirming saved coordinates, or an error HttpResponse.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(request, trip_uuid, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+
+        activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
+
+        try:
+            body = json.loads(request.body) if request.body else {}
+        except (json.JSONDecodeError, ValueError):
+            body = request.POST.dict()
+
+        try:
+            lat = float(body["lat"])
+            lng = float(body["lng"])
+        except (KeyError, TypeError, ValueError):
+            return HttpResponse("lat and lng are required.", status=400)
+
+        activity.lat_override = lat
+        activity.lng_override = lng
+        activity.save(update_fields=["lat_override", "lng_override", "updated"])
+
+        return JsonResponse({"lat": lat, "lng": lng})
+
+
+class TripChildTripSearchView(LoginRequiredMixin, View):
+    """Search for trips the current user can add as a child activity.
+
+    Only trips the user is a member of (excluding the current trip) are returned.
+
+    GET /trips/<uuid>/child-trip-search/?q=<query>
+    """
+
+    def get(self, request, trip_uuid):
+        """Return JSON list of matching trips.
+
+        Args:
+            request: The HTTP request.
+            trip_uuid: The parent trip UUID (to exclude it from results).
+
+        Returns:
+            JsonResponse with a list of matching trip objects.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        q = (request.GET.get("q") or "").strip()
+        if len(q) < 2:
+            return JsonResponse({"results": []})
+
+        trips = (
+            Trip.objects.filter(profiles=profile, name__icontains=q)
+            .exclude(uuid=trip_uuid)
+            .order_by("name")[:8]
+        )
+        results = [
+            {
+                "uuid": str(t.uuid),
+                "name": t.name,
+                "start_date": t.start_date.isoformat() if t.start_date else None,
+                "end_date": t.end_date.isoformat() if t.end_date else None,
+            }
+            for t in trips
+        ]
+        return JsonResponse({"results": results})
+
+
+def _build_forecast_days(forecast_items: list[dict]) -> list[tuple]:
+    """Organise a flat list of forecast items into sorted (date, {day, night}) pairs."""
+    days: dict = {}
+    for item in forecast_items:
+        date = item["date"].date()
+        period = "day" if item["date"].hour == 12 else "night"
+        if date not in days:
+            days[date] = {}
+        days[date][period] = item
+    return [(d, days[d]) for d in sorted(days)]
+
+
+class TripWeatherView(LoginRequiredMixin, View):
+    """Render the weather forecast panel for a trip.
+
+    GET /trips/<uuid>/weather/
+    """
+
+    def get(self, request, trip_uuid):
+        """Return weather HTML partial for the trip.
+
+        Args:
+            request: The HTTP request.
+            trip_uuid: The trip UUID.
+
+        Returns:
+            Rendered weather partial or an error response.
+        """
+        from urbanlens.dashboard.services.openweather.gateway import WeatherForecastGateway
+        from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(request, trip_uuid, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+
+        # Determine representative coordinates from activities
+        coords: tuple | None = None
+        location_name: str = ""
+        for act in _activity_qs(trip):
+            if act.location and act.location.latitude is not None:
+                coords = (act.location.latitude, act.location.longitude)
+                location_name = act.location.name or ""
+                break
+            if act.pin and act.pin.effective_latitude is not None:
+                coords = (act.pin.effective_latitude, act.pin.effective_longitude)
+                location_name = act.pin.effective_name or ""
+                break
+
+        forecast_days: list[tuple] = []
+        error: str = ""
+
+        if coords and app_settings.openweathermap_api_key:
+            try:
+                gateway = WeatherForecastGateway()
+                raw = gateway.get_weather_forecast(*coords)
+                if raw:
+                    forecast_days = _build_forecast_days(raw)
+            except Exception:
+                logger.warning("Weather fetch failed for trip %s", trip_uuid)
+                error = "Weather data could not be loaded."
+        elif not app_settings.openweathermap_api_key:
+            error = "Weather API key not configured."
+        else:
+            error = "No activity locations found to forecast weather for."
+
+        return render(request, "dashboard/pages/trips/trip_weather.html", {
+            "trip": trip,
+            "forecast_days": forecast_days,
+            "location_name": location_name,
+            "error": error,
+        })

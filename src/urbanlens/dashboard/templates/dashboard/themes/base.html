@@ -242,6 +242,15 @@
         });
     }());
 
+    // ── Comment image upload preview ─────────────────────────────────────────
+    document.addEventListener('change', function (e) {
+        if (!e.target.classList.contains('comment-image-input')) return;
+        var file = e.target.files && e.target.files[0];
+        var actions = e.target.closest('.comment-compose-actions');
+        var preview = actions && actions.querySelector('.comment-image-preview');
+        if (preview) preview.textContent = file ? '📎 ' + file.name : '';
+    });
+
     // ── Activity mention hover → highlight trip map marker ────────────────────
     document.addEventListener('mouseover', function (e) {
         var link = e.target.closest && e.target.closest('.mention--activity');
@@ -254,6 +263,34 @@
         if (!link || !window.tripHighlightMarker) return;
         var id = link.dataset.activityId;
         if (id) window.tripHighlightMarker(id, false);
+    });
+    </script>
+
+    <script>
+    // ── Scroll to hash anchor after HTMX swap (for dynamically loaded comments) ─
+    (function () {
+        function _scrollToHash() {
+            var hash = window.location.hash;
+            if (!hash) return;
+            var el = document.querySelector(hash);
+            if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        }
+        document.addEventListener('htmx:afterSettle', _scrollToHash);
+        document.addEventListener('DOMContentLoaded', function () { setTimeout(_scrollToHash, 400); });
+    }());
+    </script>
+
+    <script>
+    // ── Close any <dialog> on backdrop click ──────────────────────────────────
+    document.addEventListener('click', function (e) {
+        if (e.target.tagName !== 'DIALOG' || !e.target.open) return;
+        var rect = e.target.getBoundingClientRect();
+        if (e.clientX < rect.left || e.clientX > rect.right ||
+            e.clientY < rect.top  || e.clientY > rect.bottom) {
+            var closeFn = e.target.dataset.closefn;
+            if (closeFn && window[closeFn]) { window[closeFn](); }
+            else { e.target.close(); }
+        }
     });
     </script>
 

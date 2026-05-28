@@ -1,5 +1,3 @@
-{# Comment compose / reply form.
-   Expects: context_type, pin/location/trip+trip_uuid, profile, parent_id, is_reply #}
 <form class="comment-compose {% if is_reply %}comment-compose--reply{% endif %}"
       {% if context_type == "pin" %}
       hx-post="{% url 'pin.comments' pin.uuid %}"

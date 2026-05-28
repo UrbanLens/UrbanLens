@@ -1,8 +1,9 @@
+{% load dashboard_tags %}
 <div id="trip-comments-panel" class="comment-panel card trip-comments-panel">
   <div class="card-header">
     <i class="material-icons">chat</i>
     <span>Comments</span>
-    {% if rendered_comments %}<span class="badge">{{ rendered_comments|length }}</span>{% endif %}
+    {% if comment_count %}<span class="badge">{{ comment_count }}</span>{% endif %}
   </div>
 
   {% if rendered_comments %}
@@ -20,11 +21,11 @@
       <div class="comment-body">
         <div class="comment-meta">
           <span class="comment-author">{{ c.author.user.username|default:"Unknown" }}</span>
-          <span class="comment-date">{{ c.created|timesince }} ago</span>
+          <span class="comment-date">{{ c.created|human_timesince }}</span>
           {% if c.author == profile or trip.creator == profile %}
           <button type="button" class="comment-delete-btn" title="Delete"
                   hx-delete="{% url 'trips.comment.delete' trip.uuid c.id %}"
-                  hx-target="#comment-{{ c.id }}"
+                  hx-target="#trip-comments-panel"
                   hx-swap="outerHTML"
                   hx-confirm="Delete this comment?"
                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
@@ -87,7 +88,7 @@
                 hx-target="#trip-comments-panel"
                 hx-swap="outerHTML"
                 hx-encoding="multipart/form-data"
-                hx-on::after-request="if(event.detail.successful){this.reset();this.closest('.comment-reply-form').hidden=true}"
+                hx-on::after-request="if(event.detail.successful){this.reset();document.getElementById('reply-form-{{ c.id }}').hidden=true}"
                 hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
             <input type="hidden" name="parent_id" value="{{ c.id }}">
             <div class="comment-compose-field">
@@ -104,6 +105,7 @@
                   <i class="material-icons">image</i>
                   <input type="file" name="image" accept="image/*" class="comment-image-input">
                 </label>
+                <span class="comment-image-preview"></span>
                 <button type="submit" class="btn-primary btn-sm">Reply</button>
               </div>
             </div>
@@ -126,11 +128,11 @@
             <div class="comment-body">
               <div class="comment-meta">
                 <span class="comment-author">{{ r.author.user.username|default:"Unknown" }}</span>
-                <span class="comment-date">{{ r.created|timesince }} ago</span>
+                <span class="comment-date">{{ r.created|human_timesince }}</span>
                 {% if r.author == profile or trip.creator == profile %}
                 <button type="button" class="comment-delete-btn" title="Delete"
                         hx-delete="{% url 'trips.comment.delete' trip.uuid r.id %}"
-                        hx-target="#comment-{{ r.id }}"
+                        hx-target="#trip-comments-panel"
                         hx-swap="outerHTML"
                         hx-confirm="Delete this reply?"
                         hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
@@ -175,6 +177,11 @@
                   </div>
                 </div>
               </div>
+              {# Reply button on replies — targets the parent's reply form (flat threading) #}
+              <button type="button" class="comment-reply-btn comment-reply-btn--sm"
+                      onclick="toggleReplyForm('reply-form-{{ c.id }}')">
+                <i class="material-icons">reply</i> Reply
+              </button>
             </div>
           </li>
           {% endwith %}
@@ -219,6 +226,7 @@
           <i class="material-icons">image</i>
           <input type="file" name="image" accept="image/*" class="comment-image-input">
         </label>
+        <span class="comment-image-preview"></span>
         <button type="submit" class="btn-primary">Post</button>
       </div>
     </div>

@@ -20,6 +20,17 @@
         <p class="trip-map-empty" id="trip-map-empty" hidden>No activities with locations to display.</p>
     </div>
 
+    {# ── Weather ───────────────────────────────────────────────────────── #}
+    <div id="trip-weather-panel"
+         hx-get="{% url 'trips.weather' trip.uuid %}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+        <div class="trip-panel-loading">
+            <i class="material-icons rotating">refresh</i>
+            Loading weather…
+        </div>
+    </div>
+
     {# ── Three-column body ─────────────────────────────────────────────── #}
     <div class="trip-detail-body">
 
@@ -66,13 +77,7 @@
 
 {# ── Edit trip dialog ───────────────────────────────────────────────────── #}
 <dialog id="edit-trip-dialog" class="trip-create-dialog">
-    <div class="dialog-header">
-        <span>Edit Trip</span>
-        <button type="button" class="dialog-close"
-                onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Edit Trip" %}
     <form hx-post="{% url 'trips.edit' trip.uuid %}"
           hx-target="#trip-header"
           hx-swap="innerHTML"
@@ -110,13 +115,7 @@
 
 {# ── Add activity dialog ────────────────────────────────────────────────── #}
 <dialog id="add-activity-dialog" class="trip-create-dialog">
-    <div class="dialog-header">
-        <span>Add Activity</span>
-        <button type="button" class="dialog-close"
-                onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Add Activity" %}
     <form id="add-activity-form"
           hx-post="{% url 'trips.activities' trip.uuid %}"
           hx-target="#trip-activities-panel"
@@ -155,15 +154,36 @@
             </div>
         </div>
 
-        <div class="form-row form-row--two-col">
-            <div>
-                <label for="activity-date">Date <small>(optional)</small></label>
+        <div class="form-row">
+            <label>Start <small>(optional)</small></label>
+            <div class="activity-datetime-row">
                 <input type="date" name="scheduled_date" id="activity-date"
                        value="{{ trip.start_date|date:'Y-m-d'|default:'' }}">
-            </div>
-            <div>
-                <label for="activity-time">Time <small>(optional)</small></label>
                 <input type="time" name="scheduled_time" id="activity-time">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label>End <small>(optional)</small></label>
+            <div class="activity-datetime-row">
+                <input type="date" name="scheduled_end_date" id="activity-end-date">
+                <input type="time" name="scheduled_end_time" id="activity-end-time">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label>Child Trip <small>(optional — link another trip as an activity)</small></label>
+            <div class="activity-child-trip-wrap">
+                <input type="text" id="activity-child-trip-search"
+                       placeholder="Search your trips…" autocomplete="off">
+                <input type="hidden" name="child_trip_uuid" id="activity-child-trip-uuid">
+                <div id="activity-child-trip-suggestions" class="location-suggestions" hidden></div>
+                <span id="activity-child-trip-display" class="activity-location-display"></span>
+                <button type="button" class="btn-ghost activity-child-trip-clear" id="activity-child-trip-clear"
+                        style="display:none;margin-top:.25rem;font-size:.8rem;padding:.2rem .5rem"
+                        onclick="_clearChildTrip('add')">
+                    <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i> Remove
+                </button>
             </div>
         </div>
 
@@ -196,13 +216,7 @@
 
 {# ── Edit activity dialog ───────────────────────────────────────────────── #}
 <dialog id="edit-activity-dialog" class="trip-create-dialog">
-    <div class="dialog-header">
-        <span>Edit Activity</span>
-        <button type="button" class="dialog-close"
-                onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Edit Activity" %}
     <form id="edit-activity-form"
           hx-post=""
           hx-target="#trip-activities-panel"
@@ -244,20 +258,45 @@
         </div>
 
         <div class="form-row">
-            <label>Date <small>(optional)</small></label>
-            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+            <label>Start <small>(optional)</small></label>
+            <div class="activity-datetime-row">
                 <input type="date" name="scheduled_date" id="edit-activity-date">
+                <input type="time" name="scheduled_time" id="edit-activity-time">
                 <button type="button" class="btn-ghost"
                         style="font-size:.78rem;padding:.2rem .5rem;white-space:nowrap"
                         onclick="document.getElementById('edit-activity-date').value='';document.getElementById('edit-activity-time').value=''">
-                    <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i> Clear
+                    <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i>
                 </button>
             </div>
         </div>
 
         <div class="form-row">
-            <label for="edit-activity-time">Time <small>(optional)</small></label>
-            <input type="time" name="scheduled_time" id="edit-activity-time">
+            <label>End <small>(optional)</small></label>
+            <div class="activity-datetime-row">
+                <input type="date" name="scheduled_end_date" id="edit-activity-end-date">
+                <input type="time" name="scheduled_end_time" id="edit-activity-end-time">
+                <button type="button" class="btn-ghost"
+                        style="font-size:.78rem;padding:.2rem .5rem;white-space:nowrap"
+                        onclick="document.getElementById('edit-activity-end-date').value='';document.getElementById('edit-activity-end-time').value=''">
+                    <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i>
+                </button>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label>Child Trip <small>(optional)</small></label>
+            <div class="activity-child-trip-wrap">
+                <input type="text" id="edit-activity-child-trip-search"
+                       placeholder="Search your trips…" autocomplete="off">
+                <input type="hidden" name="child_trip_uuid" id="edit-activity-child-trip-uuid">
+                <div id="edit-activity-child-trip-suggestions" class="location-suggestions" hidden></div>
+                <span id="edit-activity-child-trip-display" class="activity-location-display"></span>
+                <button type="button" class="btn-ghost activity-child-trip-clear" id="edit-activity-child-trip-clear"
+                        style="display:none;margin-top:.25rem;font-size:.8rem;padding:.2rem .5rem"
+                        onclick="_clearChildTrip('edit')">
+                    <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i> Remove
+                </button>
+            </div>
         </div>
 
         <div class="form-row">
@@ -279,10 +318,16 @@
                 </button>
             </div>
         </div>
-        <div class="form-actions">
-            <button type="submit" class="submit-button">Save Changes</button>
-            <button type="button" class="btn-ghost"
-                    onclick="this.closest('dialog').close()">Cancel</button>
+        <div class="form-actions form-actions--split">
+            <button type="button" class="btn-danger" id="edit-activity-delete-btn"
+                    onclick="_deleteEditActivity()">
+                <i class="material-icons">delete</i> Delete
+            </button>
+            <div class="form-actions-right">
+                <button type="submit" class="submit-button">Save Changes</button>
+                <button type="button" class="btn-ghost"
+                        onclick="this.closest('dialog').close()">Cancel</button>
+            </div>
         </div>
     </form>
 </dialog>
@@ -290,13 +335,7 @@
 {# ── Trip settings dialog ─────────────────────────────────────────────────── #}
 {% if trip.creator == profile %}
 <dialog id="trip-settings-dialog" class="trip-create-dialog">
-    <div class="dialog-header">
-        <span>Trip Settings</span>
-        <button type="button" class="dialog-close"
-                onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Trip Settings" %}
     <div id="trip-settings-content">
         {% include "dashboard/partials/trip_settings_partial.html" %}
     </div>
@@ -305,13 +344,7 @@
 
 {# ── Add member dialog ──────────────────────────────────────────────────── #}
 <dialog id="add-member-dialog" class="trip-create-dialog">
-    <div class="dialog-header">
-        <span>Add Member</span>
-        <button type="button" class="dialog-close"
-                onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Add Member" %}
     <form hx-post="{% url 'trips.members' trip.uuid %}"
           hx-target="#trip-members-panel"
           hx-swap="outerHTML"
@@ -348,6 +381,43 @@
     var _markersGroup = null;
     var _markers = {};   // activity_id → L.Marker
 
+    // Context menu for right-click to add activity
+    var _ctxMenu = null;
+    function _removeCtxMenu() {
+        if (_ctxMenu) { _ctxMenu.remove(); _ctxMenu = null; }
+    }
+
+    function _showCtxMenu(latlng, containerPt) {
+        _removeCtxMenu();
+        var menu = document.createElement('div');
+        menu.className = 'trip-map-ctx-menu';
+        menu.style.left = containerPt.x + 'px';
+        menu.style.top  = containerPt.y + 'px';
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'trip-map-ctx-item';
+        btn.innerHTML = '<i class="material-icons">add_location</i> Add activity here';
+        btn.addEventListener('click', function () {
+            _removeCtxMenu();
+            _openAddActivityAtCoords(latlng.lat, latlng.lng);
+        });
+        menu.appendChild(btn);
+
+        var mapWrap = document.getElementById('trip-map-wrap');
+        mapWrap.appendChild(menu);
+        _ctxMenu = menu;
+    }
+
+    function _openAddActivityAtCoords(lat, lng) {
+        document.getElementById('activity-geocoded-lat').value  = lat;
+        document.getElementById('activity-geocoded-lng').value  = lng;
+        document.getElementById('activity-geocoded-name').value = '';
+        document.getElementById('activity-location-uuid').value = '';
+        document.getElementById('activity-location-display').textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
+        document.getElementById('add-activity-dialog').showModal();
+    }
+
     function _initMap() {
         var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -363,10 +433,23 @@
             maxZoom: 17,
         });
 
-        _map = L.map('trip-map');
+        _map = L.map('trip-map', {contextmenu: false});
         osm.addTo(_map);
         L.control.layers({'Street': osm, 'Satellite': satellite, 'Topographic': topo}).addTo(_map);
         _markersGroup = L.layerGroup().addTo(_map);
+
+        // Right-click on map → context menu to add activity at those coords
+        _map.on('contextmenu', function (e) {
+            L.DomEvent.preventDefault(e.originalEvent);
+            var pt = _map.latLngToContainerPoint(e.latlng);
+            _showCtxMenu(e.latlng, pt);
+        });
+        _map.on('click', _removeCtxMenu);
+        _map.on('movestart', _removeCtxMenu);
+
+        document.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape') _removeCtxMenu();
+        });
 
         window.tripHighlightActivity = function (actId, on) {
             var el = document.getElementById('trip-activity-' + actId);
@@ -379,6 +462,8 @@
                 if (el) el.classList.toggle('trip-map-marker--highlighted', on);
             }
         };
+        // Correct any sizing discrepancy from layout settling after init
+        setTimeout(function () { _map.invalidateSize(); }, 100);
     }
 
     function _loadPoints() {
@@ -407,10 +492,16 @@
 
             var bounds = [];
             points.forEach(function (pt) {
-                var markerClass = 'trip-map-marker' + (pt.status === 'proposed' ? ' trip-map-marker--proposed' : '');
+                var isChildTrip = !!pt.child_trip;
+                var markerClass = 'trip-map-marker' +
+                    (pt.status === 'proposed' ? ' trip-map-marker--proposed' : '') +
+                    (isChildTrip ? ' trip-map-marker--child-trip' : '');
+                var numHtml = pt.index != null
+                    ? '<span class="trip-map-marker-num">' + pt.index + '</span>'
+                    : '<span class="trip-map-marker-num trip-map-marker-num--ghost"><i class="material-icons" style="font-size:13px;line-height:1">link</i></span>';
                 var icon = L.divIcon({
                     className: markerClass,
-                    html: '<span class="trip-map-marker-num">' + pt.index + '</span>',
+                    html: numHtml,
                     iconSize: [28, 28],
                     iconAnchor: [14, 14],
                     popupAnchor: [0, -16],
@@ -419,12 +510,34 @@
                 if (pt.scheduled_at) {
                     popup += '<br><small>' + new Date(pt.scheduled_at).toLocaleString() + '</small>';
                 }
-                var marker = L.marker([pt.lat, pt.lng], {icon: icon}).bindPopup(popup);
+                var markerOpts = {icon: icon, draggable: !isChildTrip && !!pt.draggable};
+                var marker = L.marker([pt.lat, pt.lng], markerOpts).bindPopup(popup);
+
                 if (pt.activity_id) {
                     var actId = pt.activity_id;
                     marker.on('mouseover', function () { window.tripHighlightActivity(actId, true); });
                     marker.on('mouseout',  function () { window.tripHighlightActivity(actId, false); });
                     _markers[actId] = marker;
+
+                    if (!isChildTrip && pt.draggable) {
+                        (function (aId) {
+                            var posUrl = '{% url "trips.activity.position" trip.uuid 0 %}'.replace('/0/', '/' + aId + '/');
+                            marker.on('dragend', function (ev) {
+                                var ll = ev.target.getLatLng();
+                                fetch(posUrl, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                                        'X-Requested-With': 'XMLHttpRequest',
+                                    },
+                                    body: JSON.stringify({lat: ll.lat, lng: ll.lng}),
+                                }).catch(function () {
+                                    toastr && toastr.error('Could not save new position.');
+                                });
+                            });
+                        }(actId));
+                    }
                 }
                 marker.addTo(_markersGroup);
                 bounds.push([pt.lat, pt.lng]);
@@ -579,6 +692,11 @@ function _onAddActivitySuccess() {
     document.getElementById('activity-geocoded-lat').value  = '';
     document.getElementById('activity-geocoded-lng').value  = '';
     document.getElementById('activity-geocoded-name').value = '';
+    document.getElementById('activity-child-trip-uuid').value = '';
+    document.getElementById('activity-child-trip-display').textContent = '';
+    document.getElementById('activity-child-trip-clear').style.display = 'none';
+    document.getElementById('activity-end-date').value = '';
+    document.getElementById('activity-end-time').value = '';
     // Reset status pill to "proposed" and hide custom name field
     _setStatusPill('add', 'proposed');
     var nameWrap = document.getElementById('add-activity-name-wrap');
@@ -896,12 +1014,24 @@ function tripOpenEditDialog(li) {
     document.getElementById('edit-activity-notes').value        = li.dataset.actNotes  || '';
     document.getElementById('edit-activity-date').value         = li.dataset.actDate   || '';
     document.getElementById('edit-activity-time').value         = li.dataset.actTime   || '';
+    document.getElementById('edit-activity-end-date').value     = li.dataset.actEndDate || '';
+    document.getElementById('edit-activity-end-time').value     = li.dataset.actEndTime || '';
     document.getElementById('edit-activity-location-uuid').value = li.dataset.actLocationUuid  || '';
     document.getElementById('edit-activity-geocoded-lat').value  = '';
     document.getElementById('edit-activity-geocoded-lng').value  = '';
     document.getElementById('edit-activity-geocoded-name').value = '';
     document.getElementById('edit-activity-location-display').textContent = li.dataset.actLocationName || '';
     document.getElementById('edit-activity-location-search').value = '';
+
+    var childTripUuid = li.dataset.actChildTripUuid || '';
+    var childTripName = li.dataset.actChildTripName || '';
+    document.getElementById('edit-activity-child-trip-uuid').value = childTripUuid;
+    document.getElementById('edit-activity-child-trip-display').textContent = childTripName;
+    document.getElementById('edit-activity-child-trip-search').value = '';
+    document.getElementById('edit-activity-child-trip-clear').style.display = childTripUuid ? 'inline-flex' : 'none';
+
+    // Store delete URL for the delete button
+    document.getElementById('edit-activity-delete-btn').dataset.deleteUrl = li.dataset.deleteUrl || '';
 
     _setStatusPill('edit', li.dataset.actStatus || 'proposed');
 
@@ -914,6 +1044,94 @@ function _clearEditLocation() {
     document.getElementById('edit-activity-geocoded-lng').value   = '';
     document.getElementById('edit-activity-geocoded-name').value  = '';
     document.getElementById('edit-activity-location-display').textContent = '';
+}
+
+// ── Child trip search ────────────────────────────────────────────────────
+(function () {
+    function _initChildTripSearch(prefix) {
+        var searchInput  = document.getElementById(prefix + '-child-trip-search');
+        var uuidInput    = document.getElementById(prefix + '-child-trip-uuid');
+        var suggestions  = document.getElementById(prefix + '-child-trip-suggestions');
+        var display      = document.getElementById(prefix + '-child-trip-display');
+        var clearBtn     = document.getElementById(prefix + '-child-trip-clear');
+
+        if (!searchInput) return;
+
+        var debounce;
+        searchInput.addEventListener('input', function () {
+            clearTimeout(debounce);
+            var q = this.value.trim();
+            if (q.length < 2) {
+                suggestions.innerHTML = '';
+                suggestions.hidden = true;
+                return;
+            }
+            debounce = setTimeout(function () {
+                fetch('{% url "trips.child_trip_search" trip.uuid %}?q=' + encodeURIComponent(q), {
+                    headers: {'X-Requested-With': 'XMLHttpRequest'}
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    suggestions.innerHTML = '';
+                    var results = data.results || [];
+                    if (!results.length) {
+                        var empty = document.createElement('li');
+                        empty.className = 'location-suggestion-item location-suggestion-empty';
+                        empty.textContent = 'No trips found';
+                        suggestions.appendChild(empty);
+                    } else {
+                        results.forEach(function (t) {
+                            var li = document.createElement('li');
+                            li.className = 'location-suggestion-item';
+                            var dates = '';
+                            if (t.start_date) dates = ' (' + t.start_date + (t.end_date ? ' – ' + t.end_date : '') + ')';
+                            li.textContent = t.name + dates;
+                            li.addEventListener('click', function () {
+                                uuidInput.value = t.uuid;
+                                display.textContent = t.name;
+                                if (clearBtn) clearBtn.style.display = 'inline-flex';
+                                searchInput.value = '';
+                                suggestions.innerHTML = '';
+                                suggestions.hidden = true;
+                            });
+                            suggestions.appendChild(li);
+                        });
+                    }
+                    suggestions.hidden = false;
+                });
+            }, 300);
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.innerHTML = '';
+                suggestions.hidden = true;
+            }
+        });
+    }
+
+    _initChildTripSearch('activity');
+    _initChildTripSearch('edit-activity');
+}());
+
+function _clearChildTrip(prefix) {
+    var p = (prefix === 'add') ? 'activity' : 'edit-activity';
+    document.getElementById(p + '-child-trip-uuid').value = '';
+    document.getElementById(p + '-child-trip-display').textContent = '';
+    document.getElementById(p + '-child-trip-clear').style.display = 'none';
+}
+
+// ── Delete activity from edit dialog ────────────────────────────────────
+function _deleteEditActivity() {
+    var btn = document.getElementById('edit-activity-delete-btn');
+    var deleteUrl = btn && btn.dataset.deleteUrl;
+    if (!deleteUrl) return;
+    if (!confirm('Delete this activity? This cannot be undone.')) return;
+    document.getElementById('edit-activity-dialog').close();
+    htmx.ajax('DELETE', deleteUrl, {
+        target: '#trip-activities-panel',
+        swap: 'outerHTML',
+    });
 }
 
 // ── Activity tabs (All / Proposed / Confirmed) ───────────────────────────

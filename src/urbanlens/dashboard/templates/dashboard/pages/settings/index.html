@@ -43,16 +43,19 @@
                 {% endif %}
             </div>
 
-            <div class="settings-field settings-field--inline">
-                <div class="settings-toggle-wrap">
-                    {{ privacy_form.allow_friend_requests }}
-                    <label class="settings-toggle-label" for="{{ privacy_form.allow_friend_requests.id_for_label }}">
-                        {{ privacy_form.allow_friend_requests.label }}
+            <div class="settings-field">
+                <label class="settings-label">{{ privacy_form.friend_request_visibility.label }}</label>
+                <p class="settings-help">{{ privacy_form.friend_request_visibility.help_text }}</p>
+                <div class="settings-friend-request-row">
+                    {% for radio in privacy_form.friend_request_visibility %}
+                    <label class="settings-friend-request-option{% if radio.data.value == privacy_form.instance.friend_request_visibility %} active{% endif %}">
+                        {{ radio.tag }}
+                        <span>{{ radio.choice_label }}</span>
                     </label>
+                    {% endfor %}
                 </div>
-                <p class="settings-help">{{ privacy_form.allow_friend_requests.help_text }}</p>
-                {% if privacy_form.allow_friend_requests.errors %}
-                <p class="settings-error">{{ privacy_form.allow_friend_requests.errors|join:", " }}</p>
+                {% if privacy_form.friend_request_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.friend_request_visibility.errors|join:", " }}</p>
                 {% endif %}
             </div>
 

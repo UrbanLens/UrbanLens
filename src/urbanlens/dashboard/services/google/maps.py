@@ -134,7 +134,7 @@ class GoogleMapsGateway(Gateway):
         Get the closest Street View image to the given latitude and longitude.
         """
         street_view_url = "https://maps.googleapis.com/maps/api/streetview/metadata"
-        logger.critical("Getting street view")
+        logger.debug("Getting street view for %s, %s", latitude, longitude)
 
         while radius <= max_radius:
             params = {
@@ -151,9 +151,9 @@ class GoogleMapsGateway(Gateway):
             metadata_response.raise_for_status()
             metadata = metadata_response.json()
 
-            if metadata["status"] == "OK":
-                logger.critical("Found street view")
-                # If image is available, get the image with the heading towards the original coordinates
+            status = metadata.get("status", "")
+            if status == "OK":
+                logger.debug("Found street view at radius %s", radius)
                 image_params = params.copy()
                 image_params.pop("radius")
                 image_params["heading"] = self.calculate_heading(
@@ -162,15 +162,17 @@ class GoogleMapsGateway(Gateway):
                     latitude,
                     longitude,
                 )
-                street_view_url = "https://maps.googleapis.com/maps/api/streetview"
-                image_response = self.session.get(street_view_url, params=image_params)
+                image_url = "https://maps.googleapis.com/maps/api/streetview"
+                image_response = self.session.get(image_url, params=image_params)
                 image_response.raise_for_status()
-                return image_response.content  # Returns the raw bytes of the image
+                return image_response.content
+
+            if status in {"REQUEST_DENIED", "INVALID_REQUEST", "UNKNOWN_ERROR"}:
+                raise ValueError(f"Street View API error: {status}")
 
             radius += radius_increment
-            logger.critical("Increasing radius to %s", radius)
+            logger.debug("Street view not found at radius %s, increasing to %s", radius - radius_increment, radius)
 
-        logger.critical("No street view found")
         raise ValueError("No Street View imagery found within the maximum search radius.")
 
     def calculate_heading(self, lat1, lng1, lat2, lng2):

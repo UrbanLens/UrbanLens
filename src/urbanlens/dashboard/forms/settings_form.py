@@ -2,7 +2,7 @@
 
 from django import forms
 
-from urbanlens.dashboard.models.profile.model import MapViewChoice, Profile, VisibilityChoice
+from urbanlens.dashboard.models.profile.model import FriendRequestVisibility, MapViewChoice, Profile, VisibilityChoice
 
 
 class PrivacySettingsForm(forms.ModelForm):
@@ -20,16 +20,16 @@ class PrivacySettingsForm(forms.ModelForm):
         label="Comment Visibility",
         help_text="Who can see your comments on locations.",
     )
-    allow_friend_requests = forms.BooleanField(
-        required=False,
-        widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
-        label="Allow Friend Requests",
-        help_text="When disabled, other users cannot send you friend requests.",
+    friend_request_visibility = forms.ChoiceField(
+        choices=FriendRequestVisibility.choices,
+        widget=forms.RadioSelect(attrs={"class": "settings-radio"}),
+        label="Who Can Send Friend Requests",
+        help_text="Control which users are allowed to send you friend requests.",
     )
 
     class Meta:
         model = Profile
-        fields = ["profile_visibility", "comment_visibility", "allow_friend_requests"]
+        fields = ["profile_visibility", "comment_visibility", "friend_request_visibility"]
 
 
 class ContactSettingsForm(forms.Form):

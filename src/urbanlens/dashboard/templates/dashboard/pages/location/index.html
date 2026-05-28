@@ -293,13 +293,7 @@
 
 {# ── Pin edit dialog ────────────────────────────────────────────────────── #}
 <dialog id="pin-edit-dialog" class="pin-edit-dialog">
-    <div class="dialog-header">
-        <span>Edit Pin</span>
-        <button type="button" class="dialog-close"
-                onclick="this.closest('dialog').close()">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Edit Pin" %}
     <form hx-post="{% url 'pin.edit' pin.uuid %}"
           hx-target="#pin-overview"
           hx-swap="outerHTML"
@@ -405,12 +399,7 @@
 
 {# ── Add detail-pin dialog ──────────────────────────────────────────────── #}
 <dialog id="detail-pin-add-dialog" class="detail-pin-add-dialog">
-    <div class="dialog-header">
-        <span>Add Detail Pin</span>
-        <button type="button" class="dialog-close" id="detail-pin-dialog-close">
-            <i class="material-icons">close</i>
-        </button>
-    </div>
+    {% include "dashboard/partials/_dialog_header.html" with title="Add Detail Pin" %}
     <div class="detail-pin-add-body">
     <p class="detail-pin-add-hint">
         <i class="material-icons">place</i>
@@ -1287,7 +1276,6 @@
             if (e.newState === 'open') { _resetDialog(); _initPickerMap(); }
         });
 
-        document.getElementById('detail-pin-dialog-close').addEventListener('click', () => dlg.close());
         document.getElementById('detail-pin-cancel-btn').addEventListener('click', () => dlg.close());
 
         form.addEventListener('submit', function (e) {
