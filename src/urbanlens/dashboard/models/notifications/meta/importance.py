@@ -37,8 +37,8 @@ class Importance(TextChoices):
     This is used as a class, and never instantiated.
     """
 
-    LOWEST = "lowest"
-    LOW = ("low",)
-    MEDIUM = ("medium",)
-    HIGH = ("high",)
-    CRITICAL = ("critical",)
+    LOWEST = "lowest", "Lowest"
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+    HIGHEST = "highest", "Highest"

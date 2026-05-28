@@ -44,7 +44,9 @@
                     hx-post="{% url 'trips.rsvp' trip.uuid %}"
                     hx-target="#trip-members-panel"
                     hx-swap="outerHTML"
-                    hx-vals='{"rsvp": ""}'>No Response</button>
+                    hx-vals='{"rsvp": ""}'>
+                <i class="material-icons" style="font-size:1rem;vertical-align:middle">clear</i>
+            </button>
         </div>
         {% if membership.profile != trip.creator %}
         <button type="button" class="detail-pin-action-btn trip-leave-btn"

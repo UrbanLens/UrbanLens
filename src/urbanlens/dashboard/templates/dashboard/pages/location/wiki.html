@@ -190,6 +190,19 @@
             <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
         </div>
 
+        {# ── Comments ─────────────────────────────────────────────────────── #}
+        <div id="comment-panel"
+             hx-get="{% url 'location.wiki.comments' location.uuid %}"
+             hx-trigger="load"
+             hx-swap="outerHTML"
+             class="wiki-card">
+            <div class="wiki-card-header">
+                <i class="material-icons">chat</i>
+                <h2>Discussion</h2>
+            </div>
+            <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+        </div>
+
         {# ── Tabs: Details / Edit history ────────────────────────────────── #}
         <div class="wiki-card wiki-tabs-card">
             <div class="wiki-tabs">

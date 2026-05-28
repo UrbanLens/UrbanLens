@@ -1,87 +1,71 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    model.py                                                                                             *
-*        Path:    /dashboard/models/notifications/model.py                                                             *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
-# Generic imports
+"""NotificationLog and NotificationPreference models."""
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
-# Django Imports
+from django.db import models
 from django.db.models import Index
 
-# 3rd Party Imports
-from django.db.models.fields import CharField
-
-# App Imports
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
+from urbanlens.dashboard.models.notifications.meta import (
+    DeliveryPreference,
+    Importance,
+    NotificationType,
+    Status,
+)
 from urbanlens.dashboard.models.notifications.queryset import Manager
 
-#
-# Set up logging for this module. __name__ includes the namespace (e.g. dashboard.models.cases).
-#
-# We can adjust logging settings from the namespace down to the module level in UrbanLens/settings
-#
 logger = logging.getLogger(__name__)
 
 
 class NotificationLog(abstract.Model):
-    """
-    Records important notifications to check on later.
-    """
+    """Records a notification sent to a specific user profile."""
 
-    # id = BigAutoField() # primary-key, auto-generated, can also be referred to by {self.pk} or {queryset.filter(pk=...)}
-    status = CharField(max_length=17, choices=Status.choices, default=Status.UNREAD)
-    importance = CharField(max_length=17, choices=Importance.choices, default=Importance.LOWEST)
-    notificaiton_type = CharField(max_length=17, choices=NotificationType.choices, default=NotificationType.ERROR)
-    message = CharField(max_length=50000, blank=True)
+    profile = models.ForeignKey(
+        "dashboard.Profile",
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        null=True,
+        blank=True,
+    )
+    status = models.CharField(max_length=17, choices=Status.choices, default=Status.UNREAD)
+    importance = models.CharField(max_length=17, choices=Importance.choices, default=Importance.LOWEST)
+    notification_type = models.CharField(max_length=20, choices=NotificationType.choices, default=NotificationType.INFO)
+    title = models.CharField(max_length=255, blank=True)
+    message = models.CharField(max_length=50000, blank=True)
+    url = models.CharField(max_length=500, blank=True)
 
     objects = Manager()
 
     class Meta(abstract.Model.Meta):
-        """
-        Metadata about this model (such as the table name)
-
-        Attributes:
-                db_table (str):
-                        The name of the table in the DB
-                unique_together (list of str):
-                        A list of attributes which form unique keys
-                indexes (list of Index):
-                        A list of indexes to create on the table
-
-        """
-
-        # Tell django where to find the table (in this schema)
         db_table = "dashboard_notifications"
         get_latest_by = "updated"
-
         indexes = [
+            Index(fields=["profile", "status"]),
             Index(fields=["status"]),
             Index(fields=["importance"]),
-            Index(fields=["notificaiton_type"]),
+            Index(fields=["notification_type"]),
         ]
+
+
+class NotificationPreference(abstract.Model):
+    """Per-user delivery preferences for each notification type."""
+
+    profile = models.OneToOneField(
+        "dashboard.Profile",
+        on_delete=models.CASCADE,
+        related_name="notification_preferences",
+    )
+    trip_updated = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    friend_request = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    message = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    comment_reply = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    comment_liked = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    friend_accepted = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    added_to_trip = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    wiki_updated = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+
+    objects = models.Manager()
+
+    class Meta(abstract.Model.Meta):
+        db_table = "dashboard_notification_preferences"

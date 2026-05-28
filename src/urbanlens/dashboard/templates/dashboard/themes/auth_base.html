@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html id="html-root">
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}UrbanLens{% endblock %}</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    {% load static %}
+    <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+<body class="page-auth">
+    <div class="auth-page">
+        <div class="auth-card">
+            <div class="auth-card-header">
+                <a href="{% url 'index' %}" class="auth-logo">
+                    <img src="{% static 'logo.png' %}" alt="UrbanLens">
+                    <span class="auth-brand-name">UrbanLens</span>
+                </a>
+                {% block auth_header %}{% endblock %}
+            </div>
+            <div class="auth-card-body">
+                {% if messages %}
+                <div style="margin-bottom:.75rem">
+                    {% for message in messages %}
+                    <div class="{% if message.tags == 'success' %}auth-success-msg{% else %}auth-errors{% endif %}"
+                         style="{% if message.tags == 'success' %}background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;padding:.7rem 1rem;font-size:.875rem;color:#166534;margin-bottom:.5rem{% endif %}">
+                        {{ message }}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

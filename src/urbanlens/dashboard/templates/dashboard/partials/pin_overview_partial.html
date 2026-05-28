@@ -32,23 +32,55 @@
             {% endif %}
             <div class="detail-row">
                 <span class="field-label">Priority</span>
-                <span class="field-value">{{ pin.priority|default:"—" }}</span>
+                <span class="field-value">
+                    <span class="star-rating-interactive star-rating-interactive--priority">
+                        {% for i in "12345"|make_list %}
+                        <button type="button"
+                                class="sr-star-btn {% if pin.priority and forloop.counter <= pin.priority %}sr-star-btn--on{% endif %}"
+                                hx-post="{% url 'pin.edit' pin.uuid %}"
+                                hx-target="#pin-overview"
+                                hx-swap="outerHTML"
+                                hx-vals='{"priority": {{ forloop.counter }}}'
+                                title="Priority {{ forloop.counter }}">★</button>
+                        {% endfor %}
+                        {% if pin.priority %}
+                        <button type="button"
+                                class="sr-star-clear"
+                                hx-post="{% url 'pin.edit' pin.uuid %}"
+                                hx-target="#pin-overview"
+                                hx-swap="outerHTML"
+                                hx-vals='{"priority": 0}'
+                                title="Clear priority">×</button>
+                        {% endif %}
+                    </span>
+                </span>
             </div>
             <div class="detail-row">
                 <span class="field-label">Rating</span>
                 <span class="field-value">
-                    <span class="star-rating-display">{% for i in "12345"|make_list %}{% if pin.rating and forloop.counter <= pin.rating %}<span class="sr-star sr-star--on">★</span>{% else %}<span class="sr-star">★</span>{% endif %}{% endfor %}</span>
+                    <span class="star-rating-interactive">
+                        {% for i in "12345"|make_list %}
+                        <button type="button"
+                                class="sr-star-btn {% if pin.rating and forloop.counter <= pin.rating %}sr-star-btn--on{% endif %}"
+                                hx-post="{% url 'pin.edit' pin.uuid %}"
+                                hx-target="#pin-overview"
+                                hx-swap="outerHTML"
+                                hx-vals='{"rating": {{ forloop.counter }}}'
+                                title="Rate {{ forloop.counter }} star{% if forloop.counter > 1 %}s{% endif %}">★</button>
+                        {% endfor %}
+                        {% if pin.rating %}
+                        <button type="button"
+                                class="sr-star-clear"
+                                hx-post="{% url 'pin.edit' pin.uuid %}"
+                                hx-target="#pin-overview"
+                                hx-swap="outerHTML"
+                                hx-vals='{"rating": 0}'
+                                title="Clear rating">×</button>
+                        {% endif %}
+                    </span>
                 </span>
             </div>
-            <div class="detail-row">
-                <span class="field-label">Categories</span>
-                <span class="field-value">
-                    {% if pin.categories.all %}
-                    {% for cat in pin.categories.all %}{{ cat.name|title }}{% if not forloop.last %}, {% endif %}{% endfor %}
-                    {% else %}—{% endif %}
-                </span>
-            </div>
-            {% if pin.place_name %}
+            {% if pin.place_name and pin.place_name != "No information available" %}
             <div class="detail-row">
                 <span class="field-label">Place Name</span>
                 <span class="field-value">{{ pin.place_name }}</span>

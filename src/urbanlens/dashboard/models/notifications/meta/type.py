@@ -31,12 +31,14 @@ from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 
 class NotificationType(TextChoices):
-    """
-    Choices used for recording the status of a notification.
-
-    This is used as a class, and never instantiated.
-    """
-
-    ERROR = "error"
-    WARNING = "warning"
-    INFO = "info"
+    TRIP_UPDATED = "trip_updated", "Trip Updated"
+    FRIEND_REQUEST = "friend_request", "Friend Request Received"
+    MESSAGE = "message", "Message Received"
+    COMMENT_REPLY = "comment_reply", "Reply to Comment"
+    COMMENT_LIKED = "comment_liked", "Comment Liked"
+    FRIEND_ACCEPTED = "friend_accepted", "Friend Request Accepted"
+    ADDED_TO_TRIP = "added_to_trip", "Added to Trip"
+    WIKI_UPDATED = "wiki_updated", "Community Wiki Updated"
+    ERROR = "error", "Error"
+    WARNING = "warning", "Warning"
+    INFO = "info", "Info"

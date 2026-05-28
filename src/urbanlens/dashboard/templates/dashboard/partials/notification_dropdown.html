@@ -1,0 +1,37 @@
+<div class="notif-dropdown" id="notif-dropdown">
+  <div class="notif-dropdown__header">
+    <span class="notif-dropdown__title">Notifications</span>
+    {% if unread_count %}
+    <button class="notif-mark-all-btn"
+            hx-post="{% url 'notifications.read_all' %}"
+            hx-target="#notif-dropdown"
+            hx-swap="outerHTML"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+      Mark all read
+    </button>
+    {% endif %}
+  </div>
+
+  {% if notifications %}
+  <ul class="notif-list">
+    {% for n in notifications %}
+    <li class="notif-item{% if n.status == 'unread' %} notif-item--unread{% endif %}"
+        id="notif-{{ n.id }}"
+        hx-post="{% url 'notifications.read' n.id %}"
+        hx-swap="none"
+        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+        hx-trigger="click"
+        {% if n.url %}onclick="window.location='{{ n.url }}'"{% endif %}>
+      <div class="notif-item__dot"></div>
+      <div class="notif-item__body">
+        {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
+        {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
+        <p class="notif-item__time">{{ n.created|timesince }} ago</p>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="notif-empty">No notifications yet.</p>
+  {% endif %}
+</div>

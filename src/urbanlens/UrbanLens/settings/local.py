@@ -187,6 +187,24 @@ SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.getenv("UL_GOOGLE_CLIENT_ID", "")
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.getenv("UL_GOOGLE_CLIENT_SECRET", "")
 SOCIAL_AUTH_DISCORD_KEY = os.getenv("UL_DISCORD_KEY", "")
 SOCIAL_AUTH_DISCORD_SECRET = os.getenv("UL_DISCORD_SECRET", "")
+
+# After login/signup, send users to the map (not the non-existent /accounts/profile/)
+LOGIN_REDIRECT_URL = "/dashboard/map/"
+LOGIN_URL = "/accounts/login/"
+LOGOUT_REDIRECT_URL = "/"
+
+# social-auth redirects after OAuth completion
+SOCIAL_AUTH_LOGIN_REDIRECT_URL = "/dashboard/map/"
+SOCIAL_AUTH_NEW_USER_REDIRECT_URL = "/dashboard/map/"
+
+# Email backend — use console in dev, configure via env in production
+EMAIL_BACKEND = os.getenv("UL_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = os.getenv("UL_EMAIL_HOST", "")
+EMAIL_PORT = int(os.getenv("UL_EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("UL_EMAIL_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("UL_EMAIL_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("UL_EMAIL_TLS", "True") == "True"
+DEFAULT_FROM_EMAIL = os.getenv("UL_FROM_EMAIL", "noreply@urbanlens.org")
 SMITHSONIAN_API_KEY = os.getenv("UL_SMITHSONIAN_API_KEY", "")
 GOOGLE_PLACES_API_KEY = os.getenv("UL_GOOGLE_PLACES_API_KEY", "")
 GOOGLE_MAPS_API_KEY = os.getenv("UL_GOOGLE_PLACES_API_KEY", "")

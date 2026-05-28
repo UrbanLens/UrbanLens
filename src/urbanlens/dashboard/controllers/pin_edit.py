@@ -98,12 +98,29 @@ class PinEditView(LoginRequiredMixin, View):
         status = body.get("status") or pin.status
         pin_type = body.get("pin_type") or pin.pin_type
         priority_raw = body.get("priority")
+        rating_raw = body.get("rating")
         last_visited_raw = (body.get("last_visited") or "").strip() or None
 
         try:
-            priority = int(priority_raw) if priority_raw is not None and str(priority_raw).strip() else pin.priority
+            if priority_raw is not None and str(priority_raw).strip():
+                p = int(priority_raw)
+                priority = None if p == 0 else p
+            else:
+                priority = pin.priority
         except (TypeError, ValueError):
             priority = pin.priority
+
+        try:
+            if rating_raw is not None and str(rating_raw).strip():
+                rating = int(rating_raw)
+                if not (0 <= rating <= 5):
+                    rating = pin.rating
+                elif rating == 0:
+                    rating = None
+            else:
+                rating = pin.rating
+        except (TypeError, ValueError):
+            rating = pin.rating
 
         last_visited = None
         if last_visited_raw:
@@ -156,6 +173,7 @@ class PinEditView(LoginRequiredMixin, View):
         pin.status = status
         pin.pin_type = pin_type
         pin.priority = priority
+        pin.rating = rating
         if last_visited is not None:
             pin.last_visited = last_visited
         for sf, val in security_values.items():
@@ -163,7 +181,7 @@ class PinEditView(LoginRequiredMixin, View):
         pin.date_abandoned = date_abandoned
         pin.date_last_active = date_last_active
         pin.save(update_fields=[
-            "nickname", "description", "status", "pin_type", "priority", "last_visited",
+            "nickname", "description", "status", "pin_type", "priority", "rating", "last_visited",
             "fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked",
             "date_abandoned", "date_last_active", "updated",
         ])

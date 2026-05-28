@@ -1,33 +1,20 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    queryset.py                                                                                          *
-*        Path:    /queryset.py                                                                                         *
-*        Project: comments                                                                                             *
-*        Version: <<projectversion>>                                                                                   *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
+"""QuerySet and Manager for Comment."""
+from __future__ import annotations
+
 from django.db.models import Manager, QuerySet
 
 
 class CommentQuerySet(QuerySet):
-    pass
+
+    def top_level(self) -> CommentQuerySet:
+        """Return only top-level comments (not replies)."""
+        return self.filter(parent__isnull=True)
+
+    def for_pin(self, pin) -> CommentQuerySet:
+        return self.filter(pin=pin, parent__isnull=True)
+
+    def for_location(self, location) -> CommentQuerySet:
+        return self.filter(location=location, parent__isnull=True)
 
 
 class CommentManager(Manager.from_queryset(CommentQuerySet)):

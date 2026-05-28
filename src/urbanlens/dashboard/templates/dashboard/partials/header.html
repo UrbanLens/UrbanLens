@@ -19,6 +19,25 @@
         {# ── Right: user menu or login ────────────────────────────────────────── #}
         <div class="app-nav-right">
             {% if user.is_authenticated %}
+
+            {# ── Notification bell ──────────────────────────────────────────── #}
+            <div class="nav-notif" id="nav-notif">
+                <button class="nav-notif-btn" id="nav-notif-btn" type="button"
+                        aria-haspopup="true" aria-expanded="false" aria-label="Notifications">
+                    <i class="material-icons nav-notif-icon">notifications</i>
+                    <span id="notif-badge-wrap"
+                          hx-get="{% url 'notifications.unread_count' %}"
+                          hx-trigger="load"
+                          hx-swap="innerHTML">
+                    </span>
+                </button>
+                <div class="nav-notif-panel" id="notif-dropdown-wrap" role="menu"
+                     hx-get="{% url 'notifications.dropdown' %}"
+                     hx-trigger="notifOpen from:body"
+                     hx-swap="innerHTML">
+                </div>
+            </div>
+
             <div class="nav-user" id="nav-user">
                 <button class="nav-user-btn" id="nav-user-btn" type="button"
                         aria-haspopup="menu" aria-expanded="false" aria-controls="nav-dropdown">
@@ -90,34 +109,49 @@
 
 <script>
 (function () {
+    // User menu
     var menu = document.getElementById('nav-user');
     var btn  = document.getElementById('nav-user-btn');
     var drop = document.getElementById('nav-dropdown');
-    if (!menu || !btn || !drop) return;
-
-    function open() {
-        menu.classList.add('is-open');
-        btn.setAttribute('aria-expanded', 'true');
+    if (menu && btn && drop) {
+        function openMenu() { menu.classList.add('is-open'); btn.setAttribute('aria-expanded', 'true'); }
+        function closeMenu() { menu.classList.remove('is-open'); btn.setAttribute('aria-expanded', 'false'); }
+        btn.addEventListener('click', function (e) { e.stopPropagation(); menu.classList.contains('is-open') ? closeMenu() : openMenu(); });
+        document.addEventListener('click', closeMenu);
+        drop.addEventListener('click', function (e) { e.stopPropagation(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
     }
 
-    function close() {
-        menu.classList.remove('is-open');
-        btn.setAttribute('aria-expanded', 'false');
+    // Notification bell
+    var notifWrap  = document.getElementById('nav-notif');
+    var notifBtn   = document.getElementById('nav-notif-btn');
+    var notifPanel = document.getElementById('notif-dropdown-wrap');
+    if (notifWrap && notifBtn && notifPanel) {
+        var _notifLoaded = false;
+        function openNotif() {
+            notifWrap.classList.add('is-open');
+            notifBtn.setAttribute('aria-expanded', 'true');
+            if (!_notifLoaded) {
+                _notifLoaded = true;
+                document.body.dispatchEvent(new Event('notifOpen'));
+            }
+        }
+        function closeNotif() { notifWrap.classList.remove('is-open'); notifBtn.setAttribute('aria-expanded', 'false'); }
+        notifBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            notifWrap.classList.contains('is-open') ? closeNotif() : openNotif();
+        });
+        // After dropdown loads, refresh the badge count
+        document.body.addEventListener('htmx:afterSwap', function (ev) {
+            if (ev.detail.target.id === 'notif-dropdown-wrap') {
+                htmx.trigger(document.getElementById('notif-badge-wrap'), 'load');
+            }
+        });
+        document.addEventListener('click', function (e) {
+            if (!notifWrap.contains(e.target)) closeNotif();
+        });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeNotif(); });
+        notifPanel.addEventListener('click', function (e) { e.stopPropagation(); });
     }
-
-    btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        menu.classList.contains('is-open') ? close() : open();
-    });
-
-    document.addEventListener('click', close);
-
-    drop.addEventListener('click', function (e) {
-        e.stopPropagation(); // keep open when clicking inside dropdown links
-    });
-
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') close();
-    });
 }());
 </script>

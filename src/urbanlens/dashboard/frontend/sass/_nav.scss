@@ -371,3 +371,256 @@ nav .brand-logo img {
     max-height: 50px;
     border-radius: 50%;
 }
+
+// ── Notification bell ──────────────────────────────────────────────────────
+
+.nav-notif {
+    position: relative;
+}
+
+.nav-notif-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 38px;
+    height: 38px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-radius: 8px;
+    color: #6b7280;
+    transition: background .12s, color .12s;
+
+    &:hover {
+        background: rgba(99, 102, 241, .08);
+        color: #4f46e5;
+    }
+
+    .nav-notif-icon {
+        font-size: 1.3rem;
+    }
+}
+
+.notif-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: #ef4444;
+    color: #fff;
+    font-size: .68rem;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    pointer-events: none;
+
+    &--hidden {
+        display: none;
+    }
+}
+
+.nav-notif-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 340px;
+    max-height: 480px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .14);
+    z-index: 9000;
+    opacity: 0;
+    transform: translateY(-6px);
+    pointer-events: none;
+    transition: opacity .15s ease, transform .15s ease;
+
+    .nav-notif.is-open & {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+    }
+}
+
+.notif-dropdown {
+    &__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: .75rem 1rem .5rem;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    &__title {
+        font-size: .9rem;
+        font-weight: 600;
+        color: #111827;
+    }
+}
+
+.notif-mark-all-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .78rem;
+    color: #6366f1;
+    padding: .2rem .4rem;
+    border-radius: 4px;
+
+    &:hover {
+        background: #f5f3ff;
+    }
+}
+
+.notif-list {
+    list-style: none;
+    margin: 0;
+    padding: .3rem 0;
+}
+
+.notif-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .6rem;
+    padding: .65rem 1rem;
+    cursor: pointer;
+    transition: background .1s;
+
+    &:hover {
+        background: #f9fafb;
+    }
+
+    &--unread {
+        background: #faf9ff;
+
+        &:hover {
+            background: #f5f3ff;
+        }
+
+        .notif-item__dot {
+            background: #6366f1;
+        }
+    }
+
+    &__dot {
+        flex-shrink: 0;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: transparent;
+        margin-top: .35rem;
+    }
+
+    &__body {
+        flex: 1;
+        min-width: 0;
+    }
+
+    &__title {
+        font-size: .84rem;
+        font-weight: 600;
+        color: #111827;
+        margin: 0 0 .15rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    &__msg {
+        font-size: .8rem;
+        color: #6b7280;
+        margin: 0 0 .2rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    &__time {
+        font-size: .72rem;
+        color: #9ca3af;
+        margin: 0;
+    }
+}
+
+.notif-empty {
+    padding: 1.5rem 1rem;
+    text-align: center;
+    font-size: .84rem;
+    color: #9ca3af;
+    margin: 0;
+}
+
+// ── Notification preferences (profile page section) ────────────────────────
+
+.notif-prefs {
+    &__saved {
+        background: #dcfce7;
+        color: #166534;
+        border-radius: 6px;
+        padding: .5rem .85rem;
+        font-size: .84rem;
+        margin-bottom: .75rem;
+    }
+
+    &__table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: .84rem;
+
+        th {
+            padding: .4rem .6rem;
+            text-align: center;
+            color: #6b7280;
+            font-weight: 600;
+            font-size: .78rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        th:first-child {
+            text-align: left;
+        }
+    }
+
+    &__row {
+        border-bottom: 1px solid #f3f4f6;
+
+        &:hover {
+            background: #f9fafb;
+        }
+    }
+
+    &__label {
+        padding: .5rem .6rem;
+        color: #374151;
+        font-weight: 500;
+    }
+
+    &__cell {
+        text-align: center;
+        padding: .4rem;
+    }
+
+    &__radio {
+        cursor: pointer;
+
+        input[type="radio"] {
+            accent-color: #6366f1;
+            width: 15px;
+            height: 15px;
+            cursor: pointer;
+        }
+    }
+
+    &__col-hdr {
+        min-width: 56px;
+    }
+
+    &__footer {
+        padding: .85rem 0 .2rem;
+    }
+}

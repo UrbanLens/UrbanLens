@@ -36,7 +36,7 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import aliases, campus, categories, detail_pins, friendship, location_wiki, maps, markup, organize, pin, pin_edit, settings, site_admin, tags, trip, userprofile, visits
+from urbanlens.dashboard.controllers import aliases, campus, categories, comments, detail_pins, friendship, location_wiki, maps, markup, notifications, organize, pin, pin_edit, settings, site_admin, tags, trip, userprofile, visits
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -227,6 +227,16 @@ urlpatterns = [
                                 name="pin.alias.delete",
                             ),
                             path(
+                                "<uuid:pin_uuid>/comments/",
+                                comments.PinCommentsView.as_view(),
+                                name="pin.comments",
+                            ),
+                            path(
+                                "<uuid:pin_uuid>/comments/<int:comment_id>/delete/",
+                                comments.PinCommentDeleteView.as_view(),
+                                name="pin.comment.delete",
+                            ),
+                            path(
                                 "import/",
                                 include(
                                     [
@@ -373,6 +383,16 @@ urlpatterns = [
                     name="location.wiki.detail_pin.edit",
                 ),
                 path(
+                    "<uuid:location_uuid>/wiki/comments/",
+                    comments.WikiCommentsView.as_view(),
+                    name="location.wiki.comments",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/comments/<int:comment_id>/delete/",
+                    comments.WikiCommentDeleteView.as_view(),
+                    name="location.wiki.comment.delete",
+                ),
+                path(
                     "<uuid:location_uuid>/wiki/aliases/",
                     aliases.LocationAliasView.as_view(),
                     name="location.wiki.aliases",
@@ -402,6 +422,7 @@ urlpatterns = [
                 path("<uuid:trip_uuid>/activities/<int:activity_id>/move/", trip.TripActivityMoveView.as_view(), name="trips.activity.move"),
                 path("<uuid:trip_uuid>/comments/", trip.TripCommentsView.as_view(), name="trips.comments"),
                 path("<uuid:trip_uuid>/comments/<int:comment_id>/delete/", trip.TripCommentDeleteView.as_view(), name="trips.comment.delete"),
+                path("<uuid:trip_uuid>/comments/<int:comment_id>/react/", comments.TripCommentReactionView.as_view(), name="trips.comment.react"),
                 path("<uuid:trip_uuid>/members/", trip.TripMembersView.as_view(), name="trips.members"),
                 path("<uuid:trip_uuid>/members/<int:profile_id>/remove/", trip.TripMemberRemoveView.as_view(), name="trips.member.remove"),
                 path("<uuid:trip_uuid>/rsvp/", trip.TripMemberRSVPView.as_view(), name="trips.rsvp"),
@@ -438,6 +459,27 @@ urlpatterns = [
             [
                 path("", organize.OrganizeIndexView.as_view(), name="organize.index"),
                 path("priority/save/", organize.OrganizePrioritySaveView.as_view(), name="organize.priority.save"),
+            ],
+        ),
+    ),
+    path(
+        "comments/",
+        include(
+            [
+                path("<int:comment_id>/react/", comments.CommentReactionView.as_view(), name="comment.react"),
+                path("locations/", comments.PinnedLocationsJsonView.as_view(), name="comment.locations"),
+            ],
+        ),
+    ),
+    path(
+        "notifications/",
+        include(
+            [
+                path("dropdown/", notifications.NotificationDropdownView.as_view(), name="notifications.dropdown"),
+                path("read-all/", notifications.NotificationMarkAllReadView.as_view(), name="notifications.read_all"),
+                path("unread-count/", notifications.NotificationUnreadCountView.as_view(), name="notifications.unread_count"),
+                path("preferences/", notifications.NotificationPreferencesView.as_view(), name="notifications.preferences"),
+                path("<int:notification_id>/read/", notifications.NotificationMarkReadView.as_view(), name="notifications.read"),
             ],
         ),
     ),

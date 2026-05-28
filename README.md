@@ -44,68 +44,82 @@ Contributions to this project are welcome. Ensure that your code adheres to the 
     * <s>Friends</s>
     * Sharing
     * Comments
+      * Ability to @ friends, etc
     * User List (with privacy settings)
-  * UI:
-    * <s>Dark mode</s>
-    * Mobile responsiveness
-    * Trim icon options (currently too many)
-    * Add missing icons (some themes aren't represented)
-    * Allow user to reorder pin details sections
-    * Change default pin details sections order
-    * Better looking confirmation dialogs (delete, etc)
-    * Beautify registration / login pages
-      * Standardize SSO registration buttons
-      * After login, we are redirected to accounts/profile, which is a 404, instead of dashboard/profile.
-    * Pin detail page: 
-      * Rating should be in stars
-      * Place name - is this required to show?
-      * Remove categories
-      * Better show priority somehow
-      * Scrolling the page shouldn't scroll the map (delay on map hover) 
-      * Map sometimes double scrolls (latency?)
-      * Fix Sat view (street may also be broken?)
-      * Fix web results
-        * Web results filtering through ai?
-      * Fix boundary markup
-      * Fix security indicators
-      * Map search needs overhaul
-      * Sections need stronger borders or colors
-      * Users can reorder sections
-      * When adding tags: 
-        * the search bar needs padding.
-        * Clicking outside the dialog should close it.
-      * Main detail section: Category is now out of date. Combine with description??
-    * Trip Details Page:
-      * <s>Map needs layers, etc.</s>
-      * <s>Activities should be editable.</s>
-      * Calendar view?
-      * <s>After adding pins, map should auto update</s>
-      * Pin icons (1, 2, ...) should better communicate the idea, rather than looking like grouping blobs from other maps. Also should still use custom icons.
-      * <s>Activity view must show date proposal.</s>
-      * <s>Add activity should allow adding an arbitrary address</s>
-      * <s>Improve UI when pin search has no results.</s>
-      * Delete should probably not delete for everyone?
-      * Main Trip page: use the whitespace. Calendar? etc?
-      * Allow archiving old events.
-      * Notify other users when changes.
-      * Allow users to drag/drop events to different dates.
-      * Ensure users can see pins other users have added even if they don't have them ("Accept pins confirm"?)
-      * Users can leave the trip.
-      * Trip variations (confirmed/unconfirmed pins, map markup, etc)
-      * RSVP per activity
-      * Leaving a trip should take you back to the trip list.
-    * Badges Page:
-      * Custom Icons must be clamped to size (do this during upload?)
-    * Map Page:
-      * Icons are sometimes not showing up (caching? Cat icon for example.)
-  * Development:
-    * Unit Tests
-    * CI/CD 
-    * Code Coverage Report
-  * Optimize:
-    * Local storage in browser for faster loading and offline use
-  * APIs
-    * Use Aliases with Smithsonian, etc
-    * Sunrise / Sunset for weather
-    * Remove weather from pin details (should be only for trip details)
-    * Address often incorrect Smithsonian results (AI filtering? Only names >= certain length?)
+    * Ability to view other user profiles by clicking on comments, etc
+* UI:
+  * <s>Dark mode</s>
+  * Mobile responsiveness
+  * Trim icon options (currently too many)
+  * Add missing icons (some themes aren't represented)
+  * Allow user to reorder pin details sections
+  * Change default pin details sections order
+  * Better looking confirmation dialogs (delete, etc)
+  * Beautify registration / login pages
+    * Standardize SSO registration buttons
+    * After login, we are redirected to accounts/profile, which is a 404, instead of dashboard/profile.
+  * Pin detail page: 
+    * <s>Rating should be in stars</s>
+    * Place name - is this required to show?
+    * <s>Remove categories</s>
+    * <s>Better show priority somehow</s>
+    * <s>Scrolling the page shouldn't scroll the map (delay on map hover)</s> 
+    * Map sometimes double scrolls (latency?)
+    * Fix Sat view (street may also be broken?)
+    * Fix web results
+      * Web results filtering through ai?
+    * Fix boundary markup
+    * Fix security indicators
+    * Map search needs overhaul
+    * Sections need stronger borders or colors
+    * Users can reorder sections
+    * When adding tags: 
+      * the search bar needs padding.
+      * Clicking outside the dialog should close it.
+    * <s>Main detail section: Category is now out of date. Combine with description??</s>
+  * Trip Details Page:
+    * <s>Map needs layers, etc.</s>
+    * <s>Activities should be editable.</s>
+    * <s>Calendar view?</s>
+    * <s>After adding pins, map should auto update</s>
+    * Pin icons (1, 2, ...) should better communicate the idea, rather than looking like grouping blobs from other maps. Also should still use custom icons.
+    * <s>Activity view must show date proposal.</s>
+    * <s>Add activity should allow adding an arbitrary address</s>
+    * <s>Improve UI when pin search has no results.</s>
+    * Delete should probably not delete for everyone?
+    * Main Trip page: use the whitespace. Calendar? etc?
+    * Allow archiving old events.
+    * Notify other users when changes.
+    * Allow users to drag/drop events to different dates.
+    * Ensure users can see pins other users have added even if they don't have them ("Accept pins confirm"?)
+    * <s>Users can leave the trip.</s>
+    * Trip variations (<s>confirmed/unconfirmed pins</s>, map markup, variation 1/2/3, etc)
+    * RSVP per activity
+    * Leaving a trip should take you back to the trip list.
+    * Users can click on the map to add a pin
+    * Ability to drag and drop some pins on the map (especially ones that were added via coordinates or right clicking)
+    * Ability to add pins based on coordinate, not just geolookup addresses.
+    * ...and based on places lookup, maybe?
+    * Order activity list by date
+    * Add one trip inside another??
+    * Multiple organizers
+    * Map bug (grey tile on right side)
+    * Activity end dates
+    * Trip settings - fix checkbox bug. Also, each option should have 3 states (no one, organizers, everyone)
+    * In activity edit dialog, add delete button
+    * Add some additional descriptor for activities (an icon, or a category? For instance: Camping, Food)
+  * Badges Page:
+    * <s>Custom Icons must be clamped to size (do this during upload?)</s>
+  * Map Page:
+    * <s>Icons are sometimes not showing up (caching? Cat icon for example.)</s>
+* Development:
+  * Unit Tests
+  * CI/CD 
+  * Code Coverage Report
+* Optimize:
+  * Local storage in browser for faster loading and offline use
+* APIs
+  * Use Aliases with Smithsonian, etc
+  * Sunrise / Sunset for weather
+  * <s>Remove weather from pin details (should be only for trip details)</s>
+  * Address often incorrect Smithsonian results (AI filtering? Only names >= certain length?)

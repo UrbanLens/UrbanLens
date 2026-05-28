@@ -1,0 +1,108 @@
+{# Reusable comment body — used for both top-level comments and replies.
+   Expects: comment, rendered_text, reactions (dict), replies (list of dicts, omit for reply),
+            context_type, pin/location/trip+trip_uuid, profile, allowed_emojis, is_reply #}
+<div class="comment-avatar {% if is_reply %}comment-avatar--sm{% endif %}">
+  {% if comment.profile.avatar %}
+  <img src="{{ comment.profile.avatar.url }}" alt="" class="comment-avatar-img">
+  {% else %}
+  <span class="comment-avatar-initial">{{ comment.profile.username|first|upper }}</span>
+  {% endif %}
+</div>
+
+<div class="comment-body">
+  <div class="comment-meta">
+    <span class="comment-author">{{ comment.profile.username }}</span>
+    <span class="comment-date">{{ comment.created|timesince }} ago</span>
+    {% if comment.profile == profile %}
+    <button type="button" class="comment-delete-btn" title="Delete"
+            {% if context_type == "pin" %}
+            hx-delete="{% url 'pin.comment.delete' pin.uuid comment.id %}"
+            {% elif context_type == "wiki" %}
+            hx-delete="{% url 'location.wiki.comment.delete' location.uuid comment.id %}"
+            {% endif %}
+            hx-target="#comment-{{ comment.id }}"
+            hx-swap="outerHTML"
+            hx-confirm="Delete this comment?"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+      <i class="material-icons">delete</i>
+    </button>
+    {% endif %}
+  </div>
+
+  <div class="comment-text">{{ rendered_text }}</div>
+
+  {% if comment.image %}
+  <a href="{{ comment.image.url }}" target="_blank" class="comment-image-link">
+    <img src="{{ comment.image.url }}" alt="Attached" class="comment-image">
+  </a>
+  {% endif %}
+
+  {# ── Reactions ── #}
+  <div class="comment-reactions" id="comment-reactions-{{ comment.id }}">
+    {% for emoji, data in reactions.items %}
+    <button type="button"
+            class="reaction-pill{% if profile.id in data.reacted_by %} reaction-pill--mine{% endif %}"
+            {% if context_type == "pin" or context_type == "wiki" %}
+            hx-post="{% url 'comment.react' comment.id %}"
+            {% else %}
+            hx-post="{% url 'trips.comment.react' trip_uuid comment.id %}"
+            {% endif %}
+            hx-target="#comment-reactions-{{ comment.id }}"
+            hx-swap="outerHTML"
+            hx-vals='{"emoji": "{{ emoji }}"}'
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+      {{ emoji }} <span class="reaction-count">{{ data.count }}</span>
+    </button>
+    {% endfor %}
+    <div class="reaction-picker">
+      <button type="button" class="reaction-add-btn" title="Add reaction"
+              onclick="toggleReactionPicker(this)">
+        <i class="material-icons">add_reaction</i>
+      </button>
+      <div class="reaction-picker-popup" hidden>
+        {% for emoji in allowed_emojis %}
+        <button type="button" class="reaction-picker-emoji"
+                {% if context_type == "pin" or context_type == "wiki" %}
+                hx-post="{% url 'comment.react' comment.id %}"
+                {% else %}
+                hx-post="{% url 'trips.comment.react' trip_uuid comment.id %}"
+                {% endif %}
+                hx-target="#comment-reactions-{{ comment.id }}"
+                hx-swap="outerHTML"
+                hx-vals='{"emoji": "{{ emoji }}"}'
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                onclick="this.closest('.reaction-picker-popup').hidden=true">
+          {{ emoji }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Reply button (top-level only) ── #}
+  {% if not is_reply %}
+  <button type="button" class="comment-reply-btn"
+          onclick="toggleReplyForm('reply-form-{{ comment.id }}')">
+    <i class="material-icons">reply</i> Reply
+    {% if replies %}<span class="reply-count">({{ replies|length }})</span>{% endif %}
+  </button>
+
+  {# Reply form #}
+  <div id="reply-form-{{ comment.id }}" class="comment-reply-form" hidden>
+    {% include "dashboard/partials/_comment_compose.html" with context_type=context_type pin=pin location=location trip=trip trip_uuid=trip_uuid profile=profile parent_id=comment.id is_reply=True %}
+  </div>
+
+  {# Existing replies #}
+  {% if replies %}
+  <ul class="comment-replies">
+    {% for reply_item in replies %}
+    {% with r=reply_item.comment %}
+    <li class="comment-item comment-item--reply" id="comment-{{ r.id }}">
+      {% include "dashboard/partials/_comment_body.html" with comment=r rendered_text=reply_item.rendered_text reactions=reply_item.reactions replies=None context_type=context_type pin=pin location=location trip=trip trip_uuid=trip_uuid profile=profile allowed_emojis=allowed_emojis is_reply=True %}
+    </li>
+    {% endwith %}
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endif %}
+</div>

@@ -1,45 +1,5 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-URL configuration for urbanlens project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/4.2/topics/http/urls/
-
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    urls.py                                                                                              *
-*        Path:    /UrbanLens/urls.py                                                                                   *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-31     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************
-
-"""
+"""URL configuration for urbanlens project."""
+from __future__ import annotations
 
 import logging
 
@@ -49,7 +9,13 @@ from django.contrib import admin
 from django.urls import include, path, re_path
 from django.views.generic import TemplateView
 
-from urbanlens.dashboard.controllers.account import SignupView
+from urbanlens.dashboard.controllers.account import (
+    CustomLoginView,
+    ResendVerificationView,
+    SignupView,
+    VerifyEmailSentView,
+    VerifyEmailView,
+)
 from urbanlens.dashboard.controllers.health import HealthController
 from urbanlens.dashboard.controllers.index import IndexController
 from urbanlens.dashboard.urls import urlpatterns as dashboard_urls
@@ -60,12 +26,23 @@ admin.autodiscover()
 
 urlpatterns = [
     path("admin/", admin.site.urls, name="admin"),
+
+    # Override Django's default login view with our custom one (must come before accounts/ include)
+    path("accounts/login/", CustomLoginView.as_view(), name="login"),
     path("accounts/", include("django.contrib.auth.urls")),
+
+    # Registration
     path("signup/", SignupView.as_view(), name="signup"),
+
+    # Email verification
+    path("verify-email/sent/", VerifyEmailSentView.as_view(), name="verify_email_sent"),
+    path("verify-email/<uuid:token>/", VerifyEmailView.as_view(), name="verify_email"),
+    path("resend-verification/", ResendVerificationView.as_view(), name="resend_verification"),
+
     path("dashboard/", include(dashboard_urls), name="dashboard"),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),
     path("", IndexController.as_view(), name="index"),
     *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
-    # 404 catch-all — must be last so it doesn't swallow valid routes
+    # 404 catch-all — must be last
     re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),
 ]

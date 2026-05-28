@@ -1,12 +1,90 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% block content %}
-<div class="section">
-    <div class="icon-block">
-        <h2 class="center brown-text"><i class="material-icons">flash_on</i></h2>
-        <h5 class="center">Lorem</h5>
 
-        <p class="light">lorem ipsum.</p>
+{# ── Hero ───────────────────────────────────────────────────────────────── #}
+<section class="home-hero">
+    <p class="home-eyebrow">Urban Exploration Platform</p>
+    <h1 class="home-title">
+        Explore the forgotten.<br>
+        <em>Document the hidden.</em>
+    </h1>
+    <p class="home-subtitle">
+        UrbanLens is a private mapping platform for urban explorers.
+        Pin locations, track visits, organise expeditions, and share
+        knowledge with your community — responsibly.
+    </p>
+    <div class="home-actions">
+        <a href="{% url 'signup' %}" class="home-btn home-btn--primary">
+            <i class="material-icons" style="font-size:1.1rem">person_add</i>
+            Get started free
+        </a>
+        <a href="{% url 'login' %}" class="home-btn home-btn--secondary">
+            Sign in
+        </a>
     </div>
-</div>
+</section>
+
+{# ── Features ─────────────────────────────────────────────────────────────── #}
+<section class="home-features">
+    <div class="home-features-inner">
+        <h2 class="home-section-title">Everything you need to explore safely</h2>
+        <p class="home-section-subtitle">Built by explorers, for explorers.</p>
+        <div class="home-features-grid">
+
+            <div class="home-feature-card">
+                <div class="home-feature-icon">
+                    <i class="material-icons">map</i>
+                </div>
+                <h3 class="home-feature-title">Interactive map</h3>
+                <p class="home-feature-desc">
+                    Drop pins on your locations, add photos, and build your personal database of explored sites.
+                </p>
+            </div>
+
+            <div class="home-feature-card">
+                <div class="home-feature-icon">
+                    <i class="material-icons">group</i>
+                </div>
+                <h3 class="home-feature-title">Plan trips together</h3>
+                <p class="home-feature-desc">
+                    Organise group expeditions, invite fellow explorers, track RSVPs, and coordinate activities.
+                </p>
+            </div>
+
+            <div class="home-feature-card">
+                <div class="home-feature-icon">
+                    <i class="material-icons">public</i>
+                </div>
+                <h3 class="home-feature-title">Community wiki</h3>
+                <p class="home-feature-desc">
+                    Each location has a community wiki page where explorers can share history, access notes, and hazards.
+                </p>
+            </div>
+
+            <div class="home-feature-card">
+                <div class="home-feature-icon">
+                    <i class="material-icons">label</i>
+                </div>
+                <h3 class="home-feature-title">Tags &amp; categories</h3>
+                <p class="home-feature-desc">
+                    Organise pins with custom tags and categories. Filter your map to find exactly what you're looking for.
+                </p>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+{# ── Bottom CTA ──────────────────────────────────────────────────────────── #}
+<section class="home-cta-section">
+    <h2 class="home-cta-title">Ready to start mapping?</h2>
+    <p class="home-cta-text">Create a free account in under a minute.</p>
+    <a href="{% url 'signup' %}" class="home-btn home-btn--primary" style="display:inline-flex">
+        <i class="material-icons" style="font-size:1.1rem">rocket_launch</i>
+        Create free account
+    </a>
+</section>
+
 {% endblock %}

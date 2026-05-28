@@ -1,0 +1,37 @@
+{% load dashboard_tags %}
+<div class="notif-prefs" id="notif-prefs">
+  {% if saved %}<p class="notif-prefs__saved">Preferences saved.</p>{% endif %}
+  <form hx-post="{% url 'notifications.preferences' %}"
+        hx-target="#notif-prefs"
+        hx-swap="outerHTML"
+        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    <table class="notif-prefs__table">
+      <thead>
+        <tr>
+          <th>Notification</th>
+          {% for val, label in delivery_choices %}
+          <th class="notif-prefs__col-hdr">{{ label }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for field, title in pref_fields %}
+        <tr class="notif-prefs__row">
+          <td class="notif-prefs__label">{{ title }}</td>
+          {% for val, label in delivery_choices %}
+          <td class="notif-prefs__cell">
+            <label class="notif-prefs__radio">
+              <input type="radio" name="{{ field }}" value="{{ val }}"
+                     {% if prefs|get_attr:field == val %}checked{% endif %}>
+            </label>
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="notif-prefs__footer">
+      <button type="submit" class="btn btn-primary btn-sm">Save Preferences</button>
+    </div>
+  </form>
+</div>

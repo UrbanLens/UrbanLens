@@ -1697,6 +1697,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    margin-right: 1em;
 }
 
 .priority-item-desc {
@@ -1721,6 +1722,7 @@
     letter-spacing: .04em;
     padding: 2px 8px;
     border-radius: 20px;
+    margin-left: 3px;
 
     &.priority-kind-badge--tag {
         background: #dbeafe;

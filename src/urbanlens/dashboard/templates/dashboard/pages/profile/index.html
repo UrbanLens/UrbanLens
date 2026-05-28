@@ -139,6 +139,18 @@
         <p class="loading-text">Loading friends…</p>
     </div>
 
+    {# ── Notification preferences (own profile only) ───────────────────────── #}
+    {% if profile.user == request.user %}
+    <div class="profile-section">
+        <h3 class="profile-section-title">Notification Preferences</h3>
+        <div hx-get="{% url 'notifications.preferences' %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            <p class="loading-text">Loading preferences…</p>
+        </div>
+    </div>
+    {% endif %}
+
 </div>
 
 {# ── External-link warning dialog ──────────────────────────────────────────── #}

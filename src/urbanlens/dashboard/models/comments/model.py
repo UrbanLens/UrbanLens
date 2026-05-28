@@ -1,55 +1,51 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    model.py                                                                                             *
-*        Path:    /dashboard/models/comments/model.py                                                                  *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
+"""Comment model — for Pin and Location (wiki) comments."""
 from __future__ import annotations
 
-from django.db.models import CASCADE, CharField, ForeignKey
+from django.db import models
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.comments.queryset import CommentManager
 
 
 class Comment(abstract.Model):
-    """
-    Records comment data.
-    """
-    text = CharField(max_length=500)
+    """A user comment on a Pin or a Location wiki page.
 
-    pin = ForeignKey(
+    Exactly one of ``pin`` or ``location`` must be non-null.
+    ``parent`` is set only for replies (depth-1 threading).
+    """
+
+    pin = models.ForeignKey(
         "dashboard.Pin",
-        on_delete=CASCADE,
+        on_delete=models.CASCADE,
         related_name="comments",
+        null=True,
+        blank=True,
     )
-    profile = ForeignKey(
+    location = models.ForeignKey(
+        "dashboard.Location",
+        on_delete=models.CASCADE,
+        related_name="comments",
+        null=True,
+        blank=True,
+    )
+    profile = models.ForeignKey(
         "dashboard.Profile",
-        on_delete=CASCADE,
+        on_delete=models.CASCADE,
         related_name="comments",
     )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        related_name="replies",
+        null=True,
+        blank=True,
+    )
+    text = models.TextField()
+    image = models.ImageField(upload_to="comment_images/", null=True, blank=True)
 
     objects = CommentManager()
 
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_comments"
         get_latest_by = "updated"
+        ordering = ["created"]

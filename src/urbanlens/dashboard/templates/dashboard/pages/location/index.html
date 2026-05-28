@@ -275,6 +275,20 @@
         </div>
     </div>
 
+    {# ── Comments ─────────────────────────────────────────────────────── #}
+    <div id="comment-panel"
+         hx-get="{% url 'pin.comments' pin.uuid %}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+        <div class="card">
+            <div class="card-header">
+                <i class="material-icons">chat</i>
+                <span>Comments</span>
+            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+        </div>
+    </div>
+
 </div>
 
 {# ── Pin edit dialog ────────────────────────────────────────────────────── #}

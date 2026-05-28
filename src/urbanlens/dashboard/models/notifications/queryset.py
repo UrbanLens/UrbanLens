@@ -1,47 +1,26 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    queryset.py                                                                                          *
-*        Path:    /dashboard/models/notifications/queryset.py                                                          *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-01-01     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
-# Generic imports
+"""QuerySet and Manager for NotificationLog."""
 from __future__ import annotations
 
-# Django Imports
-# Lib Imports
-# App Imports
 from urbanlens.dashboard.models import abstract
 
 
 class QuerySet(abstract.QuerySet):
-    """
-    A queryset for interacting with our local DB.
-    """
+    """QuerySet for NotificationLog with convenience filters."""
+
+    def unread(self) -> QuerySet:
+        """Return only unread notifications."""
+        from urbanlens.dashboard.models.notifications.meta import Status
+        return self.filter(status=Status.UNREAD)
+
+    def for_profile(self, profile) -> QuerySet:
+        """Return notifications belonging to a specific profile."""
+        return self.filter(profile=profile)
+
+    def mark_read(self) -> int:
+        """Mark all matching notifications as read. Returns updated count."""
+        from urbanlens.dashboard.models.notifications.meta import Status
+        return self.update(status=Status.READ)
 
 
 class Manager(abstract.Manager.from_queryset(QuerySet)):
-    """
-    A manager for creating querysets.
-
-    This class inherits the methods from QuerySet in this module (although VSCode doesn't show them as hints)
-    """
+    """Manager for NotificationLog."""

@@ -80,6 +80,183 @@
             });
         }());
     </script>
+    <script>
+    // ── Comment utilities ─────────────────────────────────────────────────────
+
+    function toggleReplyForm(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.hidden = !el.hidden;
+        if (!el.hidden) {
+            var ta = el.querySelector('textarea');
+            if (ta) setTimeout(function () { ta.focus(); }, 30);
+        }
+    }
+
+    function toggleReactionPicker(btn) {
+        var popup = btn.parentElement && btn.parentElement.querySelector('.reaction-picker-popup');
+        if (!popup) return;
+        document.querySelectorAll('.reaction-picker-popup:not([hidden])').forEach(function (p) {
+            if (p !== popup) p.hidden = true;
+        });
+        popup.hidden = !popup.hidden;
+    }
+
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('.reaction-picker')) {
+            document.querySelectorAll('.reaction-picker-popup:not([hidden])').forEach(function (p) {
+                p.hidden = true;
+            });
+        }
+    });
+
+    // ── @mention autocomplete ─────────────────────────────────────────────────
+    (function () {
+        var _timer = null;
+
+        function _query(ta) {
+            var pos = ta.selectionStart;
+            var before = ta.value.substring(0, pos);
+            var atIdx = before.lastIndexOf('@');
+            if (atIdx === -1) return null;
+            var frag = before.substring(atIdx + 1);
+            if (/\s/.test(frag)) return null;
+            return { start: atIdx, query: frag };
+        }
+
+        function _showDropdown(ta, items, onSelect) {
+            var wrap = ta.closest('.comment-input-wrap');
+            var dd = wrap && wrap.querySelector('.mention-dropdown');
+            if (!dd) return;
+            dd.innerHTML = '';
+            if (!items.length) { dd.hidden = true; return; }
+            items.forEach(function (item) {
+                var div = document.createElement('div');
+                div.className = 'mention-option';
+                div.innerHTML = '<span class="mention-option__name">' +
+                    item.name.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>';
+                div.addEventListener('mousedown', function (e) {
+                    e.preventDefault();
+                    onSelect(item);
+                    dd.hidden = true;
+                    dd.innerHTML = '';
+                });
+                dd.appendChild(div);
+            });
+            dd.hidden = false;
+        }
+
+        function _hide(ta) {
+            var wrap = ta.closest('.comment-input-wrap');
+            var dd = wrap && wrap.querySelector('.mention-dropdown');
+            if (dd) { dd.hidden = true; dd.innerHTML = ''; }
+        }
+
+        function _insert(ta, start, text) {
+            var pos = ta.selectionStart;
+            ta.value = ta.value.substring(0, start) + text + ' ' + ta.value.substring(pos);
+            var cur = start + text.length + 1;
+            ta.setSelectionRange(cur, cur);
+            ta.focus();
+        }
+
+        function _fetch(ta) {
+            var q = _query(ta);
+            if (!q || q.query.length < 1) { _hide(ta); return; }
+            var ctx = ta.dataset.contextType || '';
+            var tripUuid = ta.dataset.tripUuid || '';
+            var isNum = /^\d+$/.test(q.query);
+
+            if (isNum && ctx === 'trip' && tripUuid) {
+                fetch('/dashboard/trips/' + encodeURIComponent(tripUuid) + '/map-data/', {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    var pts = (data.points || []).filter(function (p) {
+                        return String(p.index).startsWith(q.query);
+                    });
+                    _showDropdown(ta, pts.map(function (p) {
+                        return { name: '#' + p.index + ' – ' + p.label, actIndex: p.index };
+                    }), function (item) {
+                        _insert(ta, q.start, '@act:' + item.actIndex);
+                    });
+                })
+                .catch(function () {});
+            } else {
+                fetch('/dashboard/comments/locations/?q=' + encodeURIComponent(q.query), {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (results) {
+                    _showDropdown(ta, results, function (item) {
+                        _insert(ta, q.start, '@[' + item.name + '](loc:' + item.uuid + ')');
+                    });
+                })
+                .catch(function () {});
+            }
+        }
+
+        document.addEventListener('input', function (e) {
+            if (!e.target.classList.contains('mention-input')) return;
+            clearTimeout(_timer);
+            var ta = e.target;
+            _timer = setTimeout(function () { _fetch(ta); }, 200);
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (!e.target.classList.contains('mention-input')) return;
+            var ta = e.target;
+            var wrap = ta.closest('.comment-input-wrap');
+            var dd = wrap && wrap.querySelector('.mention-dropdown');
+            if (!dd || dd.hidden) return;
+            var opts = Array.from(dd.querySelectorAll('.mention-option'));
+            var cur = dd.querySelector('.mention-option.is-selected');
+            var idx = cur ? opts.indexOf(cur) : -1;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (cur) cur.classList.remove('is-selected');
+                var nxt = opts[Math.min(idx + 1, opts.length - 1)];
+                if (nxt) nxt.classList.add('is-selected');
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (cur) cur.classList.remove('is-selected');
+                var prv = opts[Math.max(idx - 1, 0)];
+                if (prv) prv.classList.add('is-selected');
+            } else if ((e.key === 'Enter' || e.key === 'Tab') && cur) {
+                e.preventDefault();
+                cur.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            } else if (e.key === 'Escape') {
+                dd.hidden = true;
+                dd.innerHTML = '';
+            }
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!e.target.classList.contains('mention-input')) {
+                document.querySelectorAll('.mention-dropdown:not([hidden])').forEach(function (dd) {
+                    dd.hidden = true;
+                    dd.innerHTML = '';
+                });
+            }
+        });
+    }());
+
+    // ── Activity mention hover → highlight trip map marker ────────────────────
+    document.addEventListener('mouseover', function (e) {
+        var link = e.target.closest && e.target.closest('.mention--activity');
+        if (!link || !window.tripHighlightMarker) return;
+        var id = link.dataset.activityId;
+        if (id) window.tripHighlightMarker(id, true);
+    });
+    document.addEventListener('mouseout', function (e) {
+        var link = e.target.closest && e.target.closest('.mention--activity');
+        if (!link || !window.tripHighlightMarker) return;
+        var id = link.dataset.activityId;
+        if (id) window.tripHighlightMarker(id, false);
+    });
+    </script>
+
     {% block scripts %}{% endblock %}
 
 </body>

@@ -33,7 +33,7 @@ from urbanlens.dashboard.models.friendship import Friendship
 from urbanlens.dashboard.models.images import Image
 from urbanlens.dashboard.models.pin import Pin, PinNote
 from urbanlens.dashboard.models.location import Location
-from urbanlens.dashboard.models.notifications import NotificationLog
+from urbanlens.dashboard.models.notifications import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.reviews import Review
 from urbanlens.dashboard.models.badges import Badge, BadgeCustomization, ICON_CHOICES, COLOR_CHOICES, BadgeSerializer
 from urbanlens.dashboard.models.cache import GeocodedLocation
@@ -44,3 +44,5 @@ from urbanlens.dashboard.models.visits import PinVisit, VisitSource
 from urbanlens.dashboard.models.aliases import PinAlias, LocationAlias
 from urbanlens.dashboard.models.markup import MarkupType, PinMarkup
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+from urbanlens.dashboard.models.account import EmailVerification
+from urbanlens.dashboard.models.reactions import Reaction

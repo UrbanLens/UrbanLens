@@ -31,6 +31,15 @@ def tag_total_pins(tag) -> int:
 
 
 @register.filter
+def get_attr(obj, attr: str):
+    """Return getattr(obj, attr), useful in loops over field names.
+
+    Usage: {{ object|get_attr:field_name }}
+    """
+    return getattr(obj, attr, "")
+
+
+@register.filter
 def is_material_icon(value) -> bool:
     """Return True if value is a Material Icons name (ASCII letters/underscores only).
 

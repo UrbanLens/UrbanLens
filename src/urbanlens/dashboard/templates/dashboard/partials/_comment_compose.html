@@ -1,0 +1,54 @@
+{# Comment compose / reply form.
+   Expects: context_type, pin/location/trip+trip_uuid, profile, parent_id, is_reply #}
+<form class="comment-compose {% if is_reply %}comment-compose--reply{% endif %}"
+      {% if context_type == "pin" %}
+      hx-post="{% url 'pin.comments' pin.uuid %}"
+      {% elif context_type == "wiki" %}
+      hx-post="{% url 'location.wiki.comments' location.uuid %}"
+      {% else %}
+      hx-post="{% url 'trips.comments' trip.uuid %}"
+      {% endif %}
+      {% if is_reply %}
+      hx-target="#comment-panel"
+      {% else %}
+      hx-target="#comment-panel"
+      {% endif %}
+      hx-swap="outerHTML"
+      hx-encoding="multipart/form-data"
+      hx-on::after-request="if(event.detail.successful){this.reset();this.closest('.comment-reply-form') && (this.closest('.comment-reply-form').hidden=true)}"
+      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  {% if parent_id %}<input type="hidden" name="parent_id" value="{{ parent_id }}">{% endif %}
+  <div class="comment-compose-inner">
+    {% if not is_reply %}
+    <div class="comment-avatar comment-avatar--compose">
+      {% if profile.avatar %}
+      <img src="{{ profile.avatar.url }}" alt="" class="comment-avatar-img">
+      {% else %}
+      <span class="comment-avatar-initial">{{ profile.username|first|upper }}</span>
+      {% endif %}
+    </div>
+    {% endif %}
+    <div class="comment-compose-field">
+      <div class="comment-input-wrap">
+        <textarea name="text" rows="2"
+                  placeholder="{% if is_reply %}Write a reply…{% else %}Add a comment…{% endif %}"
+                  class="comment-input mention-input"
+                  data-context-type="{{ context_type }}"
+                  {% if trip_uuid %}data-trip-uuid="{{ trip_uuid }}"{% elif trip %}data-trip-uuid="{{ trip.uuid }}"{% endif %}
+                  required></textarea>
+        {# @ mention autocomplete container #}
+        <div class="mention-dropdown" hidden></div>
+      </div>
+      <div class="comment-compose-actions">
+        <label class="comment-image-label" title="Attach image">
+          <i class="material-icons">image</i>
+          <input type="file" name="image" accept="image/*" class="comment-image-input">
+        </label>
+        <span class="comment-image-preview"></span>
+        <button type="submit" class="btn-primary {% if is_reply %}btn-sm{% endif %}">
+          {% if is_reply %}Reply{% else %}Post{% endif %}
+        </button>
+      </div>
+    </div>
+  </div>
+</form>

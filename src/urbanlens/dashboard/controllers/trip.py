@@ -362,6 +362,56 @@ class TripActivityDeleteView(LoginRequiredMixin, View):
         return _render_activities_panel(request, trip, profile)
 
 
+def _render_trip_comments(request, trip: Trip, profile: Profile) -> HttpResponse:
+    """Build comment panel context with activity mentions and re-render."""
+    from urbanlens.dashboard.controllers.comments import _ALLOWED_EMOJIS, _aggregate_reactions
+    from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
+
+    activities = list(_activity_qs(trip))
+    index_map = _compute_activity_index_map(activities)
+    act_by_index = {v: a for a, v in index_map.items()}
+    act_objects = {a.id: a for a in activities}
+    act_index_for_render = {idx: act_objects[act_id] for idx, act_id in act_by_index.items()}
+
+    pinned = viewer_pinned_uuids(profile)
+    top_comments = (
+        trip.comments.filter(parent__isnull=True)
+        .select_related("author__user")
+        .prefetch_related("reactions", "replies__reactions", "replies__author__user")
+        .order_by("created")
+    )
+
+    rendered = []
+    for c in top_comments:
+        html = render_comment_text(c.text, pinned, act_index_for_render)
+        if html is None:
+            continue
+        reactions = _aggregate_reactions(c.reactions.all())
+        replies_rendered = []
+        for r in c.replies.all():
+            r_html = render_comment_text(r.text, pinned, act_index_for_render)
+            if r_html is None:
+                continue
+            replies_rendered.append({
+                "comment": r,
+                "rendered_text": r_html,
+                "reactions": _aggregate_reactions(r.reactions.all()),
+            })
+        rendered.append({
+            "comment": c,
+            "rendered_text": html,
+            "reactions": reactions,
+            "replies": replies_rendered,
+        })
+
+    return render(request, "dashboard/partials/trip_comments_panel.html", {
+        "trip": trip,
+        "rendered_comments": rendered,
+        "profile": profile,
+        "allowed_emojis": _ALLOWED_EMOJIS,
+    })
+
+
 class TripCommentsView(LoginRequiredMixin, View):
     """Comments panel for a trip.
 
@@ -374,15 +424,10 @@ class TripCommentsView(LoginRequiredMixin, View):
         result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
             return result
-        trip = result
-        comments = trip.comments.select_related("author__user").order_by("created")
-        return render(
-            request,
-            "dashboard/partials/trip_comments_panel.html",
-            {"trip": trip, "comments": comments, "profile": profile},
-        )
+        return _render_trip_comments(request, result, profile)
 
     def post(self, request, trip_uuid):
+        from urbanlens.dashboard.controllers.comments import _notify_reply
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
@@ -392,23 +437,24 @@ class TripCommentsView(LoginRequiredMixin, View):
         if not trip.allow_comments:
             return HttpResponse("Comments are disabled for this trip.", status=403)
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
-
-        text = (body.get("text") or "").strip()
+        text = request.POST.get("text", "").strip()
         if not text:
             return HttpResponse("Comment text is required.", status=400)
 
-        TripComment.objects.create(trip=trip, author=profile, text=text)
+        parent_id = request.POST.get("parent_id")
+        parent = None
+        if parent_id:
+            parent = get_object_or_404(TripComment, id=parent_id, trip=trip)
 
-        comments = trip.comments.select_related("author__user").order_by("created")
-        return render(
-            request,
-            "dashboard/partials/trip_comments_panel.html",
-            {"trip": trip, "comments": comments, "profile": profile},
-        )
+        comment = TripComment.objects.create(trip=trip, author=profile, text=text, parent=parent)
+        if request.FILES.get("image"):
+            comment.image = request.FILES["image"]
+            comment.save(update_fields=["image"])
+
+        if parent and parent.author and parent.author != profile:
+            _notify_reply(profile, parent)
+
+        return _render_trip_comments(request, trip, profile)
 
 
 class TripCommentDeleteView(LoginRequiredMixin, View):
@@ -426,7 +472,7 @@ class TripCommentDeleteView(LoginRequiredMixin, View):
         if profile not in {comment.author, trip.creator}:
             return HttpResponse("You can only delete your own comments.", status=403)
         comment.delete()
-        return HttpResponse("", status=200)
+        return _render_trip_comments(request, trip, profile)
 
 
 class TripMembersView(LoginRequiredMixin, View):

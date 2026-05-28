@@ -1,0 +1,31 @@
+{% extends "dashboard/themes/auth_base.html" %}
+
+{% block title %}Check your email — UrbanLens{% endblock %}
+
+{% block auth_header %}{% endblock %}
+
+{% block content %}
+<div class="auth-info-icon">
+    <i class="material-icons">mark_email_unread</i>
+</div>
+<h2 class="auth-info-title">Check your email</h2>
+<p class="auth-info-text">
+    We sent a verification link to
+    {% if email %}<span class="auth-info-email">{{ email }}</span>{% else %}your email address{% endif %}.
+    Click the link to activate your account.
+    <br><br>
+    The link expires in 48 hours.
+</p>
+
+{% if debug_verify_url %}
+<div class="auth-debug-block">
+    <strong>Development mode — verification link:</strong>
+    <a href="{{ debug_verify_url }}">{{ debug_verify_url }}</a>
+</div>
+{% endif %}
+
+<div class="auth-footer">
+    <span>Didn't receive it? <a href="{% url 'resend_verification' %}">Resend email</a></span>
+    <a href="{% url 'login' %}" style="font-size:.82rem;color:#9ca3af;font-weight:400">Back to sign in</a>
+</div>
+{% endblock %}
