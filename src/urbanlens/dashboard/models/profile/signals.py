@@ -5,7 +5,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 
-@receiver(post_save, sender=User)
+@receiver(post_save, sender=User, dispatch_uid="profile_create_user_profile")
 def create_user_profile(sender, instance: User, created: bool, **kwargs) -> None:
     if created:
         from urbanlens.dashboard.models.profile.model import Profile

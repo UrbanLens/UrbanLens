@@ -4,6 +4,10 @@ from django import forms
 
 from urbanlens.dashboard.models.profile.model import MapViewChoice, Profile, VisibilityChoice
 
+# "Friends only" is circular for friend requests (they're not friends yet), so exclude it.
+_FRIEND_REQUEST_CHOICES = [(k, v) for k, v in VisibilityChoice.choices if k != VisibilityChoice.FRIENDS]
+
+
 class PrivacySettingsForm(forms.ModelForm):
     """Controls who can see this user's profile and comments, and whether they accept friend requests."""
 
@@ -20,7 +24,7 @@ class PrivacySettingsForm(forms.ModelForm):
         help_text="Who can see your comments on locations.",
     )
     friend_request_visibility = forms.ChoiceField(
-        choices=VisibilityChoice.choices,
+        choices=_FRIEND_REQUEST_CHOICES,
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Who Can Send Friend Requests",
         help_text="Control which users are allowed to send you friend requests.",
