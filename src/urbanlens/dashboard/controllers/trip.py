@@ -973,7 +973,7 @@ def _build_forecast_days(forecast_items: list[dict]) -> list[tuple]:
         date = item["date"].date()
         period = "day" if item["date"].hour == 12 else "night"
         if date not in days:
-            days[date] = {}
+            days[date] = {"day": None, "night": None}
         days[date][period] = item
     return [(d, days[d]) for d in sorted(days)]
 
