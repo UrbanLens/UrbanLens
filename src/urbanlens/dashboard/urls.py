@@ -431,6 +431,7 @@ urlpatterns = [
                 path("<uuid:trip_uuid>/activities/<int:activity_id>/status/", trip.TripActivityStatusView.as_view(), name="trips.activity.status"),
                 path("<uuid:trip_uuid>/activities/<int:activity_id>/move/", trip.TripActivityMoveView.as_view(), name="trips.activity.move"),
                 path("<uuid:trip_uuid>/activities/<int:activity_id>/position/", trip.TripActivityPositionView.as_view(), name="trips.activity.position"),
+                path("<uuid:trip_uuid>/activities/<int:activity_id>/vote/", trip.TripActivityVoteView.as_view(), name="trips.activity.vote"),
                 path("<uuid:trip_uuid>/child-trip-search/", trip.TripChildTripSearchView.as_view(), name="trips.child_trip_search"),
                 path("<uuid:trip_uuid>/comments/", trip.TripCommentsView.as_view(), name="trips.comments"),
                 path("<uuid:trip_uuid>/comments/<int:comment_id>/delete/", trip.TripCommentDeleteView.as_view(), name="trips.comment.delete"),

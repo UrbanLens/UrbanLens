@@ -54,6 +54,19 @@
                 {% endif %}
             </div>
 
+            <div class="settings-field settings-field--checkbox">
+                <label class="settings-checkbox-label" for="{{ privacy_form.hide_pin_locations_in_trips.id_for_label }}">
+                    <span class="settings-checkbox-wrap">{{ privacy_form.hide_pin_locations_in_trips }}</span>
+                    <span>
+                        <span class="settings-label">{{ privacy_form.hide_pin_locations_in_trips.label }}</span>
+                        <p class="settings-help">{{ privacy_form.hide_pin_locations_in_trips.help_text }}</p>
+                    </span>
+                </label>
+                {% if privacy_form.hide_pin_locations_in_trips.errors %}
+                <p class="settings-error">{{ privacy_form.hide_pin_locations_in_trips.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
             <div class="settings-actions">
                 <button type="submit" class="settings-save-btn">Save Privacy Settings</button>
             </div>

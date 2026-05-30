@@ -121,6 +121,11 @@ class TripActivity(abstract.Model):
     lat_override = FloatField(null=True, blank=True)
     lng_override = FloatField(null=True, blank=True)
 
+    location_hidden = BooleanField(
+        default=False,
+        help_text="Hide location from the map. The activity still appears in the list as 'Secret Location'.",
+    )
+
     def __str__(self) -> str:
         loc = self.location.name if self.location else (self.title or "Activity")
         return f"{loc} ({self.trip})"
@@ -206,6 +211,43 @@ class TripComment(abstract.Model):
         ordering = ["created"]
         indexes = [
             Index(fields=["trip"], name="dashboard_tc_trip_idx"),
+        ]
+
+
+class TripActivityVote(abstract.Model):
+    """A member's thumbs-up or thumbs-down vote on a proposed activity.
+
+    Only one vote per (activity, profile) pair is allowed. Votes are only
+    meaningful while the activity is in the 'proposed' status.
+    """
+
+    VOTE_UP = "up"
+    VOTE_DOWN = "down"
+    VOTE_CHOICES = [
+        ("up", "Up"),
+        ("down", "Down"),
+    ]
+
+    activity = ForeignKey(
+        TripActivity,
+        on_delete=CASCADE,
+        related_name="votes",
+    )
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=CASCADE,
+        related_name="activity_votes",
+    )
+    vote = CharField(max_length=4, choices=VOTE_CHOICES)
+
+    def __str__(self) -> str:
+        return f"{self.profile} {self.vote} on {self.activity}"
+
+    class Meta(abstract.Model.Meta):
+        db_table = "dashboard_trip_activity_votes"
+        unique_together = [("activity", "profile")]
+        indexes = [
+            Index(fields=["activity"], name="dashboard_tav_activity_idx"),
         ]
 
 

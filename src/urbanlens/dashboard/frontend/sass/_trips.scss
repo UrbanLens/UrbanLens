@@ -1608,181 +1608,162 @@
     }
 }
 
-// ── Summary strip ─────────────────────────────────────────────────────────────
+// ── Per-day sections ──────────────────────────────────────────────────────────
 
-.trip-weather-summary {
-    display: flex;
-    gap: .25rem;
-    overflow-x: auto;
-    scrollbar-width: none;
-    padding-bottom: .75rem;
-    margin-bottom: 1rem;
-    border-bottom: 1px solid $border-color;
-
-    &::-webkit-scrollbar {
-        display: none;
-    }
-}
-
-.trip-weather-summary-item {
+.trip-weather-days {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: .1rem;
-    min-width: 52px;
-    padding: .35rem .4rem;
-    border-radius: $radius-sm;
-    cursor: default;
-    transition: background .15s;
-
-    &:hover {
-        background: #f0f4ff;
-    }
-
-    .trip-weather-summary-dow {
-        font-size: .72rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: .05em;
-        color: $text-muted;
-    }
-
-    .trip-weather-summary-icon {
-        width: 36px;
-        height: 36px;
-        object-fit: contain;
-    }
-
-    .trip-weather-summary-temp {
-        font-size: .85rem;
-        font-weight: 600;
-        color: $text-primary;
-    }
+    gap: 1.25rem;
 }
 
-// ── Day cards ─────────────────────────────────────────────────────────────────
-
-.trip-weather-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: .75rem;
-}
-
-.trip-weather-card {
+.trip-weather-day {
     border: 1px solid $border-color;
     border-radius: $radius-sm;
     overflow: hidden;
+}
 
-    .trip-weather-card-date {
-        display: flex;
-        align-items: baseline;
-        gap: .4rem;
-        padding: .5rem .75rem .45rem;
-        background: linear-gradient(135deg, #f0f7ff 0%, #e8f4ff 100%);
-        border-bottom: 1px solid $border-color;
+.trip-weather-day-header {
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    padding: .5rem .75rem .45rem;
+    background: linear-gradient(135deg, #f0f7ff 0%, #e8f4ff 100%);
+    border-bottom: 1px solid $border-color;
 
-        .trip-weather-card-dow {
-            font-weight: 700;
-            font-size: .85rem;
-            color: $primary-color;
-        }
-
-        .trip-weather-card-mday {
-            font-size: .78rem;
-            color: $text-secondary;
-        }
+    .trip-weather-day-dow {
+        font-weight: 700;
+        font-size: .88rem;
+        color: $primary-color;
     }
 
-    .trip-weather-card-slots {
-        display: flex;
-        flex-direction: column;
+    .trip-weather-day-date {
+        font-size: .78rem;
+        color: $text-secondary;
     }
 }
 
-// ── Individual slot (day / night) ─────────────────────────────────────────────
+// ── Activity rows ─────────────────────────────────────────────────────────────
 
-.trip-weather-slot {
+.trip-weather-activities {
+    display: flex;
+    flex-direction: column;
+}
+
+.trip-weather-activity {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
     padding: .65rem .75rem;
-    flex: 1;
 
-    &+& {
+    & + & {
         border-top: 1px solid $border-color;
     }
 
-    &--night {
-        background: rgba(15, 23, 42, .025);
-    }
-
-    .trip-weather-slot-label {
-        display: flex;
-        align-items: center;
-        gap: .25rem;
-        font-size: .68rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: .06em;
-        color: $text-muted;
-        margin-bottom: .4rem;
-
-        .material-icons {
-            font-size: .9rem;
-        }
-    }
-
-    .trip-weather-slot-main {
-        display: flex;
-        align-items: center;
-        gap: .5rem;
-        margin-bottom: .3rem;
-    }
-
-    .trip-weather-slot-icon {
-        width: 46px;
-        height: 46px;
-        object-fit: contain;
-        flex-shrink: 0;
-    }
-
-    .trip-weather-slot-temps {
+    .trip-weather-activity-info {
         display: flex;
         flex-direction: column;
+        min-width: 0;
+        flex: 0 0 160px;
 
-        .trip-weather-slot-temp {
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: $text-primary;
-            line-height: 1.1;
-        }
-
-        .trip-weather-slot-feels {
+        .trip-weather-activity-time {
             font-size: .72rem;
-            color: $text-muted;
+            font-weight: 700;
+            color: $primary-color;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        .trip-weather-activity-name {
+            font-size: .85rem;
+            font-weight: 500;
+            color: $text-primary;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
     }
 
-    .trip-weather-slot-desc {
-        font-size: .78rem;
-        color: $text-secondary;
-        margin: 0 0 .4rem;
-        line-height: 1.3;
+    .trip-weather-activity-forecast {
+        flex: 1;
+        min-width: 0;
+    }
+}
+
+// ── Inline weather slot ───────────────────────────────────────────────────────
+
+.trip-weather-slot-inline {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.trip-weather-slot-icon {
+    width: 46px;
+    height: 46px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.trip-weather-slot-temps {
+    display: flex;
+    flex-direction: column;
+
+    .trip-weather-slot-temp {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: $text-primary;
+        line-height: 1.1;
     }
 
-    .trip-weather-slot-meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: .3rem .65rem;
+    .trip-weather-slot-feels {
         font-size: .72rem;
         color: $text-muted;
+    }
+}
 
-        span {
-            display: flex;
-            align-items: center;
-            gap: .15rem;
-        }
+.trip-weather-slot-right {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
 
-        .material-icons {
-            font-size: .85rem;
-        }
+.trip-weather-slot-desc {
+    font-size: .78rem;
+    color: $text-secondary;
+    margin: 0 0 .25rem;
+    line-height: 1.3;
+}
+
+.trip-weather-slot-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .2rem .55rem;
+    font-size: .72rem;
+    color: $text-muted;
+
+    span {
+        display: flex;
+        align-items: center;
+        gap: .15rem;
+    }
+
+    .material-icons {
+        font-size: .85rem;
+    }
+}
+
+// ── N/A states ────────────────────────────────────────────────────────────────
+
+.trip-weather-na {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .8rem;
+    color: $text-muted;
+    font-style: italic;
+
+    .material-icons {
+        font-size: 1rem;
     }
 }
 
@@ -1868,6 +1849,103 @@
         background: #ef5350;
         color: #fff;
     }
+}
+
+// ── Activity voting ────────────────────────────────────────────────────────────
+
+.activity-vote-row {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    margin-top: .35rem;
+}
+
+.activity-vote-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .2rem .4rem;
+    border: 1px solid $border-color;
+    border-radius: $radius-sm;
+    background: transparent;
+    color: $text-muted;
+    font-size: .75rem;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+
+    .material-icons {
+        font-size: .9rem;
+    }
+
+    &:hover {
+        background: $border-color;
+        color: $text-secondary;
+    }
+
+    &--active {
+        border-color: transparent;
+
+        &.activity-vote-btn--up {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+
+        &.activity-vote-btn--down {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+    }
+
+    &--clear {
+        border-color: transparent;
+        color: $text-muted;
+        padding: .2rem .3rem;
+
+        &:hover {
+            background: #f3f4f6;
+            color: $text-secondary;
+        }
+    }
+}
+
+.activity-vote-count {
+    font-weight: 600;
+    font-size: .75rem;
+    min-width: .75ch;
+}
+
+// ── Hide-location form toggle ──────────────────────────────────────────────────
+
+.form-row--toggle {
+    padding: .35rem 0 .1rem;
+}
+
+.activity-hide-label {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    cursor: pointer;
+    font-size: .84rem;
+    color: $text-secondary;
+    user-select: none;
+
+    input[type="checkbox"] {
+        accent-color: $primary-color;
+        width: 15px;
+        height: 15px;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    .material-icons {
+        font-size: 1rem;
+        color: $text-muted;
+    }
+}
+
+.trip-activity-name--secret {
+    font-style: italic;
+    color: $text-muted;
 }
 
 // ── Map right-click context menu ──────────────────────────────────────────────

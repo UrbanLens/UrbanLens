@@ -86,16 +86,28 @@ class WeatherForecastGateway(Gateway):
             logger.exception('Error decoding JSON response -> Message: "%s"', e)
             return None
 
-    def filter_forecast(self, forecast: list[dict]) -> list[dict]:
-        """
-        Filter the forecast to only include morning and evening for each day.
-        """
-        filtered_forecast = []
-        for forecast_item in forecast:
-            date = forecast_item.get("dt_txt", "")
-            # Parse the date into a date object
-            forecast_item["date"] = datetime.strptime(date, "%Y-%m-%d %H:%M:%S")
+    def get_raw_forecast(self, latitude: float | Decimal, longitude: float | Decimal) -> list[dict] | None:
+        """Return all 3-hourly forecast slots with a parsed 'date' field, unfiltered."""
+        params = {
+            "lat": float(latitude),
+            "lon": float(longitude),
+            "appid": self.api_key,
+            "units": "imperial",
+        }
+        result = self.get(params)
+        if result is None:
+            return None
+        return self._parse_dates(result.get("list", []))
 
-            if date.endswith(("12:00:00", "21:00:00")):
-                filtered_forecast.append(forecast_item)
-        return filtered_forecast
+    def _parse_dates(self, forecast: list[dict]) -> list[dict]:
+        """Add a parsed 'date' datetime field to each forecast item in-place."""
+        for item in forecast:
+            dt_txt = item.get("dt_txt", "")
+            if dt_txt:
+                item["date"] = datetime.strptime(dt_txt, "%Y-%m-%d %H:%M:%S")
+        return forecast
+
+    def filter_forecast(self, forecast: list[dict]) -> list[dict]:
+        """Filter the forecast to only include morning and evening for each day."""
+        self._parse_dates(forecast)
+        return [item for item in forecast if item.get("dt_txt", "").endswith(("12:00:00", "21:00:00"))]

@@ -84,6 +84,13 @@ class Profile(abstract.Model):
         choices=VisibilityChoice.choices,
         default=VisibilityChoice.ANYONE,
     )
+    hide_pin_locations_in_trips = BooleanField(
+        default=False,
+        help_text=(
+            "When sharing one of your pins as a trip activity, hide the location "
+            "from members who don't already have that pin on their map."
+        ),
+    )
 
     # Style preferences
     dark_mode = BooleanField(default=False)

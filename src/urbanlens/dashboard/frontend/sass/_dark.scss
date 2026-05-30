@@ -362,18 +362,22 @@
         }
     }
 
-    .trip-weather-card {
+    .trip-weather-day {
         border-color: #2d3348;
         background: #1e2130;
 
-        .trip-weather-card-date {
+        .trip-weather-day-header {
             background: linear-gradient(135deg, #1a2540 0%, #162035 100%);
             border-bottom-color: #2d3348;
         }
     }
 
-    .trip-weather-slot--night {
-        background: rgba(0, 0, 0, .15);
+    .trip-weather-activity {
+        border-top-color: #2d3348;
+
+        .trip-weather-activity-name {
+            color: #e2e8f0;
+        }
     }
 
     .trip-weather-slot-temp {
@@ -383,14 +387,6 @@
     .trip-weather-slot-desc,
     .trip-weather-slot-feels {
         color: #94a3b8;
-    }
-
-    .trip-weather-summary-item:hover {
-        background: rgba(255, 255, 255, .05);
-    }
-
-    .trip-weather-summary {
-        border-bottom-color: #2d3348;
     }
 }
 

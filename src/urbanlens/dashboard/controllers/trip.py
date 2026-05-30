@@ -17,6 +17,8 @@ from urbanlens.dashboard.models.trips.model import SiteSettings, Trip, TripActiv
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
+    from urbanlens.dashboard.models.trips.model import TripActivityVote as _TripActivityVote
+    from urbanlens.dashboard.services.openweather.gateway import WeatherForecastGateway
 
 logger = logging.getLogger(__name__)
 
@@ -77,11 +79,11 @@ def _activity_coords(act) -> tuple[float, float] | None:
 
 
 def _compute_activity_index_map(activities) -> dict[int, int]:
-    """Return {activity_id: map_index} for activities that have resolvable coordinates."""
+    """Return {activity_id: map_index} for activities that are visible on the map."""
     index_map: dict[int, int] = {}
     idx = 1
     for act in activities:
-        if _activity_coords(act) is not None:
+        if _activity_coords(act) is not None and not act.location_hidden:
             index_map[act.id] = idx
             idx += 1
     return index_map
@@ -149,10 +151,66 @@ def _render_members_panel(request, trip: Trip, profile: Profile) -> HttpResponse
 
 
 def _render_activities_panel(request, trip: Trip, profile: Profile) -> HttpResponse:
-    """Re-render the activities panel partial with computed index map."""
+    """Re-render the activities panel with index map, vote counts, and per-activity permissions."""
+    from urbanlens.dashboard.models.trips.model import TripActivityVote
+
     activities = list(_activity_qs(trip))
     index_map = _compute_activity_index_map(activities)
-    activities_with_index = [(act, index_map.get(act.id)) for act in activities]
+
+    activity_ids = [a.id for a in activities]
+    raw_votes = TripActivityVote.objects.filter(activity_id__in=activity_ids).values(
+        "activity_id", "profile_id", "vote"
+    )
+    up_counts: dict[int, int] = {}
+    down_counts: dict[int, int] = {}
+    user_votes: dict[int, str] = {}
+    for v in raw_votes:
+        aid = v["activity_id"]
+        if v["vote"] == "up":
+            up_counts[aid] = up_counts.get(aid, 0) + 1
+        else:
+            down_counts[aid] = down_counts.get(aid, 0) + 1
+        if v["profile_id"] == profile.id:
+            user_votes[aid] = v["vote"]
+
+    # Determine which activities have their location hidden from this viewer
+    # due to the adder's hide_pin_locations_in_trips privacy setting.
+    viewer_hidden: set[int] = set()
+    sensitive = [
+        act for act in activities
+        if not act.location_hidden
+        and act.added_by_id
+        and act.added_by_id != profile.id
+        and act.added_by
+        and act.added_by.hide_pin_locations_in_trips
+        and act.location_id
+    ]
+    if sensitive:
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        sensitive_location_ids = {act.location_id for act in sensitive}
+        viewer_pin_locations = set(
+            Pin.objects.filter(
+                profile=profile,
+                location_id__in=sensitive_location_ids,
+            ).values_list("location_id", flat=True)
+        )
+        for act in sensitive:
+            if act.location_id not in viewer_pin_locations:
+                viewer_hidden.add(act.id)
+
+    activities_with_index = [
+        {
+            "activity": act,
+            "index": index_map.get(act.id),
+            "vote_up": up_counts.get(act.id, 0),
+            "vote_down": down_counts.get(act.id, 0),
+            "user_vote": user_votes.get(act.id),
+            "can_manage": (act.added_by_id == profile.id or trip.creator_id == profile.id),
+            "effective_location_hidden": act.location_hidden or (act.id in viewer_hidden),
+        }
+        for act in activities
+    ]
     return render(
         request,
         "dashboard/partials/trip_activities_panel.html",
@@ -309,6 +367,8 @@ class TripActivitiesView(LoginRequiredMixin, View):
         if status not in {"proposed", "confirmed"}:
             status = "proposed"
 
+        location_hidden = body.get("location_hidden") in ("true", "1", "on", True)
+
         TripActivity.objects.create(
             trip=trip,
             location=location,
@@ -320,6 +380,7 @@ class TripActivitiesView(LoginRequiredMixin, View):
             order=trip.activities.count(),
             status=status,
             child_trip=child_trip,
+            location_hidden=location_hidden,
         )
 
         return _render_activities_panel(request, trip, profile)
@@ -363,6 +424,10 @@ class TripActivityEditView(LoginRequiredMixin, View):
         elif "child_trip_uuid" in body:
             activity.child_trip = None
 
+        # location_hidden may only be changed by the activity creator or trip organizer
+        if activity.added_by_id == profile.id or trip.creator_id == profile.id:
+            activity.location_hidden = body.get("location_hidden") in ("true", "1", "on", True)
+
         activity.save()
 
         if activity.status == "confirmed" and activity.scheduled_at:
@@ -389,6 +454,53 @@ class TripActivityDeleteView(LoginRequiredMixin, View):
 
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
         activity.delete()
+        return _render_activities_panel(request, trip, profile)
+
+
+class TripActivityVoteView(LoginRequiredMixin, View):
+    """Cast, update, or clear a member's vote on a proposed activity.
+
+    POST /trips/<uuid>/activities/<int:activity_id>/vote/
+    Form body: vote=up | vote=down | vote= (empty to clear)
+    """
+
+    def post(self, request, trip_uuid, activity_id):
+        """Handle a vote submission and re-render the activities panel.
+
+        Args:
+            request: The HTTP request.
+            trip_uuid: The trip UUID.
+            activity_id: The activity ID.
+
+        Returns:
+            Re-rendered activities panel or an error response.
+        """
+        from urbanlens.dashboard.models.trips.model import TripActivityVote
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(request, trip_uuid, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+
+        activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
+
+        if activity.status != TripActivity.STATUS_PROPOSED:
+            return HttpResponse("Voting is only available for proposed activities.", status=400)
+
+        vote_value = request.POST.get("vote", "").strip()
+
+        if not vote_value:
+            TripActivityVote.objects.filter(activity=activity, profile=profile).delete()
+        elif vote_value in (TripActivityVote.VOTE_UP, TripActivityVote.VOTE_DOWN):
+            TripActivityVote.objects.update_or_create(
+                activity=activity,
+                profile=profile,
+                defaults={"vote": vote_value},
+            )
+        else:
+            return HttpResponse("Invalid vote value.", status=400)
+
         return _render_activities_panel(request, trip, profile)
 
 
@@ -661,6 +773,31 @@ class TripMapDataView(LoginRequiredMixin, View):
 
         activities = list(_activity_qs(trip))
 
+        # Determine activities viewer-hidden due to adder's privacy setting
+        viewer_hidden_map: set[int] = set()
+        sensitive_map = [
+            act for act in activities
+            if not act.location_hidden
+            and act.added_by_id
+            and act.added_by_id != profile.id
+            and act.added_by
+            and act.added_by.hide_pin_locations_in_trips
+            and act.location_id
+        ]
+        if sensitive_map:
+            from urbanlens.dashboard.models.pin.model import Pin
+
+            sens_loc_ids = {act.location_id for act in sensitive_map}
+            viewer_has = set(
+                Pin.objects.filter(
+                    profile=profile,
+                    location_id__in=sens_loc_ids,
+                ).values_list("location_id", flat=True)
+            )
+            for act in sensitive_map:
+                if act.location_id not in viewer_has:
+                    viewer_hidden_map.add(act.id)
+
         points = []
         index = 1
         seen_child_acts: set[int] = set()
@@ -668,7 +805,7 @@ class TripMapDataView(LoginRequiredMixin, View):
         for act in activities:
             coords = _activity_coords(act)
 
-            if coords:
+            if coords and not act.location_hidden and act.id not in viewer_hidden_map:
                 label = act.title or (act.location.name if act.location else None) or f"Activity {index}"
                 points.append(
                     {
@@ -966,16 +1103,67 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
         return JsonResponse({"results": results})
 
 
-def _build_forecast_days(forecast_items: list[dict]) -> list[tuple]:
-    """Organise a flat list of forecast items into sorted (date, {day, night}) pairs."""
-    days: dict = {}
-    for item in forecast_items:
-        date = item["date"].date()
-        period = "day" if item["date"].hour == 12 else "night"
-        if date not in days:
-            days[date] = {"day": None, "night": None}
-        days[date][period] = item
-    return [(d, days[d]) for d in sorted(days)]
+def _build_activity_forecasts(activities: list, gateway: "WeatherForecastGateway") -> list[dict]:
+    """For each activity, find the closest 3-hourly forecast slot at its location/time.
+
+    Returns a list of dicts with keys:
+      activity, location_name, scheduled_at, slot, no_coords, out_of_range
+    """
+    cache: dict[tuple[float, float], list[dict] | None] = {}
+    results = []
+
+    for act in activities:
+        coords = _activity_coords(act)
+
+        location_name = ""
+        if act.location:
+            location_name = act.location.name or ""
+        elif act.pin:
+            location_name = act.pin.effective_name or ""
+        if not location_name and act.title:
+            location_name = act.title
+
+        entry: dict = {
+            "activity": act,
+            "location_name": location_name,
+            "scheduled_at": act.scheduled_at,
+            "slot": None,
+            "no_coords": coords is None,
+            "out_of_range": False,
+        }
+
+        if coords is None or act.scheduled_at is None:
+            results.append(entry)
+            continue
+
+        key = (round(coords[0], 2), round(coords[1], 2))
+        if key not in cache:
+            try:
+                cache[key] = gateway.get_raw_forecast(*coords)
+            except Exception:
+                logger.warning("Weather fetch failed for coords %s", key)
+                cache[key] = None
+
+        slots = cache.get(key) or []
+        if not slots:
+            results.append(entry)
+            continue
+
+        target = act.scheduled_at
+        if target.tzinfo is not None:
+            target = target.replace(tzinfo=None)
+
+        closest = min(slots, key=lambda s: abs((s["date"] - target).total_seconds()))
+        gap_hours = abs((closest["date"] - target).total_seconds()) / 3600
+
+        if gap_hours > 36:
+            entry["out_of_range"] = True
+        else:
+            entry["slot"] = closest
+
+        results.append(entry)
+
+    return results
 
 
 class TripWeatherView(LoginRequiredMixin, View):
@@ -994,6 +1182,8 @@ class TripWeatherView(LoginRequiredMixin, View):
         Returns:
             Rendered weather partial or an error response.
         """
+        from collections import defaultdict
+
         from urbanlens.dashboard.services.openweather.gateway import WeatherForecastGateway
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -1003,39 +1193,34 @@ class TripWeatherView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        # Determine representative coordinates from activities
-        coords: tuple | None = None
-        location_name: str = ""
-        for act in _activity_qs(trip):
-            if act.location and act.location.latitude is not None:
-                coords = (act.location.latitude, act.location.longitude)
-                location_name = act.location.name or ""
-                break
-            if act.pin and act.pin.effective_latitude is not None:
-                coords = (act.pin.effective_latitude, act.pin.effective_longitude)
-                location_name = act.pin.effective_name or ""
-                break
-
-        forecast_days: list[tuple] = []
         error: str = ""
+        grouped: list[tuple] = []
 
-        if coords and app_settings.openweathermap_api_key:
-            try:
-                gateway = WeatherForecastGateway()
-                raw = gateway.get_weather_forecast(*coords)
-                if raw:
-                    forecast_days = _build_forecast_days(raw)
-            except Exception:
-                logger.warning("Weather fetch failed for trip %s", trip_uuid)
-                error = "Weather data could not be loaded."
-        elif not app_settings.openweathermap_api_key:
+        if not app_settings.openweathermap_api_key:
             error = "Weather API key not configured."
         else:
-            error = "No activity locations found to forecast weather for."
+            activities = list(_activity_qs(trip))
+            if not activities:
+                error = "This trip has no activities yet."
+            else:
+                try:
+                    gateway = WeatherForecastGateway()
+                    activity_forecasts = _build_activity_forecasts(activities, gateway)
+
+                    day_map: dict = defaultdict(list)
+                    for af in activity_forecasts:
+                        day = af["scheduled_at"].date() if af["scheduled_at"] else None
+                        day_map[day].append(af)
+
+                    dated = sorted(d for d in day_map if d is not None)
+                    keys = dated + ([None] if None in day_map else [])
+                    grouped = [(d, day_map[d]) for d in keys]
+                except Exception:
+                    logger.warning("Weather fetch failed for trip %s", trip_uuid)
+                    error = "Weather data could not be loaded."
 
         return render(request, "dashboard/pages/trips/trip_weather.html", {
             "trip": trip,
-            "forecast_days": forecast_days,
-            "location_name": location_name,
+            "grouped": grouped,
             "error": error,
         })

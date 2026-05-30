@@ -206,6 +206,14 @@
                 </button>
             </div>
         </div>
+        <div class="form-row form-row--toggle">
+            <label class="activity-hide-label">
+                <input type="checkbox" name="location_hidden" id="add-activity-location-hidden" value="true">
+                <i class="material-icons">visibility_off</i>
+                Hide location
+            </label>
+            <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
+        </div>
         <div class="form-actions">
             <button type="submit" class="submit-button">Add Activity</button>
             <button type="button" class="btn-ghost"
@@ -317,6 +325,14 @@
                     <i class="material-icons">check_circle</i> Confirmed
                 </button>
             </div>
+        </div>
+        <div class="form-row form-row--toggle" id="edit-activity-hide-wrap" hidden>
+            <label class="activity-hide-label">
+                <input type="checkbox" name="location_hidden" id="edit-activity-location-hidden" value="true">
+                <i class="material-icons">visibility_off</i>
+                Hide location
+            </label>
+            <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
         </div>
         <div class="form-actions form-actions--split">
             <button type="button" class="btn-danger" id="edit-activity-delete-btn"
@@ -697,8 +713,10 @@ function _onAddActivitySuccess() {
     document.getElementById('activity-child-trip-clear').style.display = 'none';
     document.getElementById('activity-end-date').value = '';
     document.getElementById('activity-end-time').value = '';
-    // Reset status pill to "proposed" and hide custom name field
+    // Reset status pill, hide toggle, and custom name field
     _setStatusPill('add', 'proposed');
+    var hideCheck = document.getElementById('add-activity-location-hidden');
+    if (hideCheck) hideCheck.checked = false;
     var nameWrap = document.getElementById('add-activity-name-wrap');
     if (nameWrap) nameWrap.setAttribute('hidden', '');
     var nameToggle = document.getElementById('add-activity-name-toggle');
@@ -1034,6 +1052,17 @@ function tripOpenEditDialog(li) {
     document.getElementById('edit-activity-delete-btn').dataset.deleteUrl = li.dataset.deleteUrl || '';
 
     _setStatusPill('edit', li.dataset.actStatus || 'proposed');
+
+    // Hide-location toggle: only shown for activity creator or trip organiser
+    var hideWrap = document.getElementById('edit-activity-hide-wrap');
+    var hideInput = document.getElementById('edit-activity-location-hidden');
+    if (hideWrap && hideInput) {
+        var canManage = li.dataset.actCanManage === 'true';
+        hideWrap.hidden = !canManage;
+        if (canManage) {
+            hideInput.checked = li.dataset.actLocationHidden === 'true';
+        }
+    }
 
     document.getElementById('edit-activity-dialog').showModal();
 }

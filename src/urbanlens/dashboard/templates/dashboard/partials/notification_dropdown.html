@@ -22,12 +22,29 @@
         hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
         hx-trigger="click"
         {% if n.url %}onclick="window.location='{{ n.url }}'"{% endif %}>
-      <div class="notif-item__dot"></div>
+
+      <div class="notif-item__icon-wrap notif-item__icon-wrap--{{ n.notification_type }}">
+        <i class="material-icons">
+          {% if n.notification_type == 'friend_request' %}person_add
+          {% elif n.notification_type == 'friend_accepted' %}people
+          {% elif n.notification_type == 'added_to_trip' %}directions
+          {% elif n.notification_type == 'trip_updated' %}map
+          {% elif n.notification_type == 'comment_reply' %}reply
+          {% elif n.notification_type == 'comment_liked' %}favorite
+          {% elif n.notification_type == 'wiki_updated' %}article
+          {% elif n.notification_type == 'error' %}error
+          {% elif n.notification_type == 'warning' %}warning
+          {% else %}notifications{% endif %}
+        </i>
+      </div>
+
       <div class="notif-item__body">
         {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
         {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
         <p class="notif-item__time">{{ n.created|timesince }} ago</p>
       </div>
+
+      {% if n.status == 'unread' %}<div class="notif-item__dot"></div>{% endif %}
     </li>
     {% endfor %}
   </ul>

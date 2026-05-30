@@ -39,7 +39,8 @@
     <div class="activity-view activity-view--list" data-view="list">
         {% if activities_with_index %}
         <ul class="trip-activity-list">
-            {% for act, act_index in activities_with_index %}
+            {% for item in activities_with_index %}
+            {% with act=item.activity act_index=item.index %}
             <li class="trip-activity-item"
                 id="trip-activity-{{ act.id }}"
                 data-act-id="{{ act.id }}"
@@ -54,22 +55,36 @@
                 data-act-child-trip-uuid="{{ act.child_trip.uuid|default:'' }}"
                 data-act-child-trip-name="{{ act.child_trip.name|default:'' }}"
                 data-act-status="{{ act.status }}"
+                data-act-location-hidden="{{ act.location_hidden|yesno:'true,false' }}"
+                data-act-can-manage="{{ item.can_manage|yesno:'true,false' }}"
                 data-edit-url="{% url 'trips.activity.edit' trip.uuid act.id %}"
                 data-delete-url="{% url 'trips.activity.delete' trip.uuid act.id %}"
                 data-status-url="{% url 'trips.activity.status' trip.uuid act.id %}"
                 {% if act_index %}onmouseenter="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},true)"
                 onmouseleave="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},false)"{% endif %}>
 
-                {% if act_index %}
+                {% if act_index and not item.effective_location_hidden %}
                 <div class="trip-activity-num {% if act.status == 'proposed' %}trip-activity-num--proposed{% endif %}">{{ act_index }}</div>
                 {% else %}
                 <div class="trip-activity-icon">
-                    <i class="material-icons">{% if act.location %}place{% else %}radio_button_unchecked{% endif %}</i>
+                    {% if item.effective_location_hidden %}
+                    <i class="material-icons">visibility_off</i>
+                    {% elif act.location %}
+                    <i class="material-icons">place</i>
+                    {% else %}
+                    <i class="material-icons">radio_button_unchecked</i>
+                    {% endif %}
                 </div>
                 {% endif %}
 
                 <div class="trip-activity-body">
-                    <span class="trip-activity-name">{% firstof act.title act.location.name "Unnamed activity" %}</span>
+                    <span class="trip-activity-name{% if item.effective_location_hidden %} trip-activity-name--secret{% endif %}">
+                        {% if item.effective_location_hidden %}
+                            Secret Location
+                        {% else %}
+                            {% firstof act.title act.location.name "Unnamed activity" %}
+                        {% endif %}
+                    </span>
                     {% if act.scheduled_at %}
                     <span class="trip-activity-time">
                         <i class="material-icons">schedule</i>
@@ -93,6 +108,43 @@
                     {% endif %}
                     {% if act.added_by %}
                     <span class="trip-activity-attr">Added by <a href="{% url 'profile.view_user' act.added_by.id %}" class="trip-attr-link">{{ act.added_by.user.username }}</a></span>
+                    {% endif %}
+
+                    {# ── Voting (proposed activities only) ────────────────── #}
+                    {% if act.status == 'proposed' %}
+                    <div class="activity-vote-row">
+                        <button type="button"
+                                class="activity-vote-btn{% if item.user_vote == 'up' %} activity-vote-btn--active activity-vote-btn--up{% endif %}"
+                                title="Vote up"
+                                hx-post="{% url 'trips.activity.vote' trip.uuid act.id %}"
+                                hx-vals='{"vote": "up"}'
+                                hx-target="#trip-activities-panel"
+                                hx-swap="outerHTML">
+                            <i class="material-icons">thumb_up</i>
+                            {% if item.vote_up %}<span class="activity-vote-count">{{ item.vote_up }}</span>{% endif %}
+                        </button>
+                        <button type="button"
+                                class="activity-vote-btn{% if item.user_vote == 'down' %} activity-vote-btn--active activity-vote-btn--down{% endif %}"
+                                title="Vote down"
+                                hx-post="{% url 'trips.activity.vote' trip.uuid act.id %}"
+                                hx-vals='{"vote": "down"}'
+                                hx-target="#trip-activities-panel"
+                                hx-swap="outerHTML">
+                            <i class="material-icons">thumb_down</i>
+                            {% if item.vote_down %}<span class="activity-vote-count">{{ item.vote_down }}</span>{% endif %}
+                        </button>
+                        {% if item.user_vote %}
+                        <button type="button"
+                                class="activity-vote-btn activity-vote-btn--clear"
+                                title="Clear my vote"
+                                hx-post="{% url 'trips.activity.vote' trip.uuid act.id %}"
+                                hx-vals='{"vote": ""}'
+                                hx-target="#trip-activities-panel"
+                                hx-swap="outerHTML">
+                            <i class="material-icons">clear</i>
+                        </button>
+                        {% endif %}
+                    </div>
                     {% endif %}
                 </div>
 
@@ -121,6 +173,7 @@
                     </button>
                 </div>
             </li>
+            {% endwith %}
             {% endfor %}
         </ul>
         {% else %}

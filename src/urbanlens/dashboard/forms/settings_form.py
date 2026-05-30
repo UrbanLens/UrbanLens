@@ -29,10 +29,19 @@ class PrivacySettingsForm(forms.ModelForm):
         label="Who Can Send Friend Requests",
         help_text="Control which users are allowed to send you friend requests.",
     )
+    hide_pin_locations_in_trips = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
+        label="Hide My Pin Locations in Trips",
+        help_text=(
+            "When you share one of your pins as a trip activity, hide the location "
+            "from trip members who don't already have that pin on their own map."
+        ),
+    )
 
     class Meta:
         model = Profile
-        fields = ["profile_visibility", "comment_visibility", "friend_request_visibility"]
+        fields = ["profile_visibility", "comment_visibility", "friend_request_visibility", "hide_pin_locations_in_trips"]
 
 
 class ContactSettingsForm(forms.Form):
