@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.trips.model import SiteSettings, Trip, TripActiv
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
+
     from urbanlens.dashboard.models.trips.model import TripActivityVote as _TripActivityVote
     from urbanlens.dashboard.services.openweather.gateway import WeatherForecastGateway
 
@@ -79,11 +80,15 @@ def _activity_coords(act) -> tuple[float, float] | None:
 
 
 def _compute_activity_index_map(activities) -> dict[int, int]:
-    """Return {activity_id: map_index} for activities that are visible on the map."""
+    """Return {activity_id: map_index} for activities visible on the map (excludes completed/hidden)."""
     index_map: dict[int, int] = {}
     idx = 1
     for act in activities:
-        if _activity_coords(act) is not None and not act.location_hidden:
+        if (
+            _activity_coords(act) is not None
+            and not act.location_hidden
+            and act.status != TripActivity.STATUS_COMPLETED
+        ):
             index_map[act.id] = idx
             idx += 1
     return index_map
@@ -140,6 +145,28 @@ def _resolve_location(body: dict):
     return None
 
 
+def _is_organizer(profile: Profile, trip: Trip) -> bool:
+    """Return True if profile is the trip creator or a designated organizer."""
+    if trip.creator_id == profile.id:
+        return True
+    return TripMembership.objects.filter(trip=trip, profile=profile, is_organizer=True).exists()
+
+
+def _can_perform(profile: Profile, trip: Trip, level: str) -> bool:
+    """Return True if profile is allowed to act at the given permission level.
+
+    Organizers and the creator are always allowed. 'everyone' allows any member.
+    'organizers' requires organizer/creator status. 'none' allows only the creator.
+    """
+    if trip.creator_id == profile.id:
+        return True
+    if level == Trip.PERM_EVERYONE:
+        return True
+    if level == Trip.PERM_ORGANIZERS:
+        return TripMembership.objects.filter(trip=trip, profile=profile, is_organizer=True).exists()
+    return False
+
+
 def _render_members_panel(request, trip: Trip, profile: Profile) -> HttpResponse:
     """Re-render the members panel partial."""
     members = trip.memberships.select_related("profile__user").order_by("profile__user__username")
@@ -159,7 +186,7 @@ def _render_activities_panel(request, trip: Trip, profile: Profile) -> HttpRespo
 
     activity_ids = [a.id for a in activities]
     raw_votes = TripActivityVote.objects.filter(activity_id__in=activity_ids).values(
-        "activity_id", "profile_id", "vote"
+        "activity_id", "profile_id", "vote",
     )
     up_counts: dict[int, int] = {}
     down_counts: dict[int, int] = {}
@@ -193,12 +220,13 @@ def _render_activities_panel(request, trip: Trip, profile: Profile) -> HttpRespo
             Pin.objects.filter(
                 profile=profile,
                 location_id__in=sensitive_location_ids,
-            ).values_list("location_id", flat=True)
+            ).values_list("location_id", flat=True),
         )
         for act in sensitive:
             if act.location_id not in viewer_pin_locations:
                 viewer_hidden.add(act.id)
 
+    viewer_is_organizer = _is_organizer(profile, trip)
     activities_with_index = [
         {
             "activity": act,
@@ -206,7 +234,7 @@ def _render_activities_panel(request, trip: Trip, profile: Profile) -> HttpRespo
             "vote_up": up_counts.get(act.id, 0),
             "vote_down": down_counts.get(act.id, 0),
             "user_vote": user_votes.get(act.id),
-            "can_manage": (act.added_by_id == profile.id or trip.creator_id == profile.id),
+            "can_manage": (act.added_by_id == profile.id or viewer_is_organizer),
             "effective_location_hidden": act.location_hidden or (act.id in viewer_hidden),
         }
         for act in activities
@@ -277,7 +305,12 @@ class TripDetailView(LoginRequiredMixin, View):
         return render(
             request,
             "dashboard/pages/trips/detail.html",
-            {"trip": trip, "profile": profile, "page_name": "trip-detail"},
+            {
+                "trip": trip,
+                "profile": profile,
+                "page_name": "trip-detail",
+                "viewer_is_organizer": _is_organizer(profile, trip),
+            },
         )
 
 
@@ -307,7 +340,11 @@ class TripEditView(LoginRequiredMixin, View):
         trip.end_date = body.get("end_date") or None
         trip.save()
 
-        return render(request, "dashboard/partials/trip_header_partial.html", {"trip": trip, "profile": profile})
+        return render(request, "dashboard/partials/trip_header_partial.html", {
+            "trip": trip,
+            "profile": profile,
+            "viewer_is_organizer": _is_organizer(profile, trip),
+        })
 
 
 class TripDeleteView(LoginRequiredMixin, View):
@@ -346,8 +383,8 @@ class TripActivitiesView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        if trip.creator != profile and not trip.allow_add_activities:
-            return HttpResponse("The trip creator has not allowed others to add activities.", status=403)
+        if not _can_perform(profile, trip, trip.allow_add_activities):
+            return HttpResponse("You don't have permission to add activities to this trip.", status=403)
 
         try:
             body = json.loads(request.body) if request.body else {}
@@ -367,7 +404,7 @@ class TripActivitiesView(LoginRequiredMixin, View):
         if status not in {"proposed", "confirmed"}:
             status = "proposed"
 
-        location_hidden = body.get("location_hidden") in ("true", "1", "on", True)
+        location_hidden = body.get("location_hidden") in {"true", "1", "on", True}
 
         TripActivity.objects.create(
             trip=trip,
@@ -399,8 +436,8 @@ class TripActivityEditView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        if trip.creator != profile and not trip.allow_edit_activities:
-            return HttpResponse("The trip creator has not allowed others to edit activities.", status=403)
+        if not _can_perform(profile, trip, trip.allow_edit_activities):
+            return HttpResponse("You don't have permission to edit activities on this trip.", status=403)
 
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
 
@@ -424,9 +461,9 @@ class TripActivityEditView(LoginRequiredMixin, View):
         elif "child_trip_uuid" in body:
             activity.child_trip = None
 
-        # location_hidden may only be changed by the activity creator or trip organizer
-        if activity.added_by_id == profile.id or trip.creator_id == profile.id:
-            activity.location_hidden = body.get("location_hidden") in ("true", "1", "on", True)
+        # location_hidden may only be changed by the activity creator or trip organizers
+        if activity.added_by_id == profile.id or _is_organizer(profile, trip):
+            activity.location_hidden = body.get("location_hidden") in {"true", "1", "on", True}
 
         activity.save()
 
@@ -449,11 +486,36 @@ class TripActivityDeleteView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        if trip.creator != profile and not trip.allow_edit_activities:
-            return HttpResponse("The trip creator has not allowed others to delete activities.", status=403)
+        if not _can_perform(profile, trip, trip.allow_edit_activities):
+            return HttpResponse("You don't have permission to delete activities on this trip.", status=403)
 
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
         activity.delete()
+        return _render_activities_panel(request, trip, profile)
+
+
+class TripActivityCompleteView(LoginRequiredMixin, View):
+    """Mark an activity as completed, snapping its date to today if it was in the future.
+
+    POST /trips/<uuid>/activities/<int:activity_id>/complete/
+    """
+
+    def post(self, request, trip_uuid, activity_id):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(request, trip_uuid, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+
+        activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
+
+        today = datetime.date.today()
+        if activity.scheduled_at is None or activity.scheduled_at.date() > today:
+            activity.scheduled_at = datetime.datetime.combine(today, activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0))
+
+        activity.status = TripActivity.STATUS_COMPLETED
+        activity.save(update_fields=["status", "scheduled_at", "updated"])
+
         return _render_activities_panel(request, trip, profile)
 
 
@@ -492,7 +554,7 @@ class TripActivityVoteView(LoginRequiredMixin, View):
 
         if not vote_value:
             TripActivityVote.objects.filter(activity=activity, profile=profile).delete()
-        elif vote_value in (TripActivityVote.VOTE_UP, TripActivityVote.VOTE_DOWN):
+        elif vote_value in {TripActivityVote.VOTE_UP, TripActivityVote.VOTE_DOWN}:
             TripActivityVote.objects.update_or_create(
                 activity=activity,
                 profile=profile,
@@ -578,8 +640,8 @@ class TripCommentsView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        if not trip.allow_comments:
-            return HttpResponse("Comments are disabled for this trip.", status=403)
+        if not _can_perform(profile, trip, trip.allow_comments):
+            return HttpResponse("You don't have permission to comment on this trip.", status=403)
 
         text = request.POST.get("text", "").strip()
         if not text:
@@ -640,8 +702,8 @@ class TripMembersView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        if trip.creator != profile and not trip.allow_add_members:
-            return HttpResponse("The trip creator has not allowed others to add members.", status=403)
+        if not _can_perform(profile, trip, trip.allow_add_members):
+            return HttpResponse("You don't have permission to add members to this trip.", status=403)
 
         try:
             body = json.loads(request.body) if request.body else {}
@@ -691,6 +753,33 @@ class TripMemberRemoveView(LoginRequiredMixin, View):
         if profile not in {target, trip.creator}:
             return HttpResponse("Only the trip creator can remove other members.", status=403)
         TripMembership.objects.filter(trip=trip, profile=target).delete()
+
+        return _render_members_panel(request, trip, profile)
+
+
+class TripMemberOrganizerView(LoginRequiredMixin, View):
+    """Toggle organizer status for a trip member (creator only).
+
+    POST /trips/<uuid>/members/<int:profile_id>/organizer/
+    """
+
+    def post(self, request, trip_uuid, profile_id):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(request, trip_uuid, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+
+        if trip.creator_id != profile.id:
+            return HttpResponse("Only the trip creator can manage organizers.", status=403)
+
+        target = get_object_or_404(Profile, pk=profile_id)
+        if target.id == trip.creator_id:
+            return HttpResponse("The trip creator is always an organizer.", status=400)
+
+        membership = get_object_or_404(TripMembership, trip=trip, profile=target)
+        membership.is_organizer = not membership.is_organizer
+        membership.save(update_fields=["is_organizer", "updated"])
 
         return _render_members_panel(request, trip, profile)
 
@@ -792,17 +881,22 @@ class TripMapDataView(LoginRequiredMixin, View):
                 Pin.objects.filter(
                     profile=profile,
                     location_id__in=sens_loc_ids,
-                ).values_list("location_id", flat=True)
+                ).values_list("location_id", flat=True),
             )
             for act in sensitive_map:
                 if act.location_id not in viewer_has:
                     viewer_hidden_map.add(act.id)
+
+        include_past = request.GET.get("include_past", "0") not in {"", "0", "false"}
 
         points = []
         index = 1
         seen_child_acts: set[int] = set()
 
         for act in activities:
+            if act.status == TripActivity.STATUS_COMPLETED and not include_past:
+                continue
+
             coords = _activity_coords(act)
 
             if coords and not act.location_hidden and act.id not in viewer_hidden_map:
@@ -998,16 +1092,19 @@ class TripSettingsView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        if trip.creator != profile:
-            return HttpResponse("Only the trip creator can change settings.", status=403)
+        if not _is_organizer(profile, trip):
+            return HttpResponse("Only the trip creator or an organizer can change settings.", status=403)
 
-        def _truthy(val: str | None) -> bool:
-            return val in {"on", "true", "1", "everyone"}
+        valid_levels = {Trip.PERM_NONE, Trip.PERM_ORGANIZERS, Trip.PERM_EVERYONE}
 
-        trip.allow_add_members = _truthy(request.POST.get("allow_add_members"))
-        trip.allow_add_activities = _truthy(request.POST.get("allow_add_activities"))
-        trip.allow_edit_activities = _truthy(request.POST.get("allow_edit_activities"))
-        trip.allow_comments = _truthy(request.POST.get("allow_comments"))
+        def _level(key: str, default: str) -> str:
+            val = (request.POST.get(key) or "").strip()
+            return val if val in valid_levels else default
+
+        trip.allow_add_members = _level("allow_add_members", Trip.PERM_NONE)
+        trip.allow_add_activities = _level("allow_add_activities", Trip.PERM_EVERYONE)
+        trip.allow_edit_activities = _level("allow_edit_activities", Trip.PERM_EVERYONE)
+        trip.allow_comments = _level("allow_comments", Trip.PERM_EVERYONE)
         trip.save(update_fields=["allow_add_members", "allow_add_activities", "allow_edit_activities", "allow_comments", "updated"])
 
         return render(request, "dashboard/partials/trip_settings_partial.html", {
@@ -1103,7 +1200,7 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
         return JsonResponse({"results": results})
 
 
-def _build_activity_forecasts(activities: list, gateway: "WeatherForecastGateway") -> list[dict]:
+def _build_activity_forecasts(activities: list, gateway: WeatherForecastGateway) -> list[dict]:
     """For each activity, find the closest 3-hourly forecast slot at its location/time.
 
     Returns a list of dicts with keys:
@@ -1199,7 +1296,12 @@ class TripWeatherView(LoginRequiredMixin, View):
         if not app_settings.openweathermap_api_key:
             error = "Weather API key not configured."
         else:
-            activities = list(_activity_qs(trip))
+            today = datetime.date.today()
+            activities = [
+                act for act in _activity_qs(trip)
+                if act.status != TripActivity.STATUS_COMPLETED
+                and (act.scheduled_at is None or act.scheduled_at.date() >= today)
+            ]
             if not activities:
                 error = "This trip has no activities yet."
             else:

@@ -74,7 +74,7 @@ class ViewProfileView(LoginRequiredMixin, View):
             return False
 
         if visibility == VisibilityChoice.FRIENDS:
-            from urbanlens.dashboard.models.friendship.model import Friendship
+            from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 
             try:
                 friendship = Friendship.objects.between(my_profile, profile)
@@ -92,17 +92,29 @@ class ViewProfileView(LoginRequiredMixin, View):
             return bool(my_loc_ids & their_loc_ids)
 
         if visibility == VisibilityChoice.COMMON_FRIEND:
-            from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus as FS
+            from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 
             my_friends = set(
-                Friendship.objects.filter(from_profile=my_profile, status=FS.ACCEPTED).values_list("to_profile_id", flat=True)
+                Friendship.objects.filter(from_profile=my_profile, status=FriendshipStatus.ACCEPTED).values_list(
+                    "to_profile_id",
+                    flat=True,
+                ),
             ) | set(
-                Friendship.objects.filter(to_profile=my_profile, status=FS.ACCEPTED).values_list("from_profile_id", flat=True)
+                Friendship.objects.filter(to_profile=my_profile, status=FriendshipStatus.ACCEPTED).values_list(
+                    "from_profile_id",
+                    flat=True,
+                ),
             )
             their_friends = set(
-                Friendship.objects.filter(from_profile=profile, status=FS.ACCEPTED).values_list("to_profile_id", flat=True)
+                Friendship.objects.filter(from_profile=profile, status=FriendshipStatus.ACCEPTED).values_list(
+                    "to_profile_id",
+                    flat=True,
+                ),
             ) | set(
-                Friendship.objects.filter(to_profile=profile, status=FS.ACCEPTED).values_list("from_profile_id", flat=True)
+                Friendship.objects.filter(to_profile=profile, status=FriendshipStatus.ACCEPTED).values_list(
+                    "from_profile_id",
+                    flat=True,
+                ),
             )
             return bool(my_friends & their_friends)
 

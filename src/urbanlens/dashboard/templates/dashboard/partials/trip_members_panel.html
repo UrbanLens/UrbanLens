@@ -81,6 +81,8 @@
             {# Badges #}
             {% if member == trip.creator %}
             <span class="trip-member-badge trip-member-badge--creator">creator</span>
+            {% elif membership.is_organizer %}
+            <span class="trip-member-badge trip-member-badge--organizer">organizer</span>
             {% endif %}
             <span class="trip-member-rsvp trip-member-rsvp--{{ membership.rsvp|default:'none' }}">
                 {% if membership.rsvp == 'yes' %}Yes
@@ -89,9 +91,17 @@
                 {% else %}–{% endif %}
             </span>
 
-            {# Creator can remove other members #}
+            {# Creator can manage other members #}
             <div class="trip-member-actions">
                 {% if profile == trip.creator and member != trip.creator %}
+                <button type="button"
+                        class="detail-pin-action-btn trip-organizer-btn{% if membership.is_organizer %} trip-organizer-btn--active{% endif %}"
+                        title="{% if membership.is_organizer %}Remove organizer role{% else %}Make organizer{% endif %}"
+                        hx-post="{% url 'trips.member.organizer' trip.uuid member.id %}"
+                        hx-target="#trip-members-panel"
+                        hx-swap="outerHTML">
+                    <i class="material-icons">{% if membership.is_organizer %}manage_accounts{% else %}person_add_alt_1{% endif %}</i>
+                </button>
                 <button type="button" class="detail-pin-action-btn"
                         title="Remove member"
                         hx-delete="{% url 'trips.member.remove' trip.uuid member.id %}"
@@ -101,8 +111,6 @@
                         hx-on::before-request="this.closest('li').classList.add('is-deleting')">
                     <i class="material-icons">person_remove</i>
                 </button>
-                {% elif member == profile and member != trip.creator %}
-                {# Non-creator can remove themselves via the RSVP row; keep remove button for extra access #}
                 {% endif %}
             </div>
         </li>

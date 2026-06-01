@@ -4,6 +4,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -17,39 +18,42 @@
     {# ── Activity map ──────────────────────────────────────────────────── #}
     <div class="trip-map-wrap" id="trip-map-wrap">
         <div id="trip-map"></div>
+        <div class="trip-map-overlay">
+            <button type="button" class="trip-map-past-btn" id="trip-map-completed-toggle"
+                    onclick="window.tripToggleShowCompleted()"
+                    title="Show completed / past activities">
+                <i class="material-icons">history</i>
+            </button>
+        </div>
         <p class="trip-map-empty" id="trip-map-empty" hidden>No activities with locations to display.</p>
     </div>
 
-    {# ── Weather ───────────────────────────────────────────────────────── #}
-    <div id="trip-weather-panel"
-         hx-get="{% url 'trips.weather' trip.uuid %}"
-         hx-trigger="load"
-         hx-swap="outerHTML">
-        <div class="trip-panel-loading">
-            <i class="material-icons rotating">refresh</i>
-            Loading weather…
-        </div>
-    </div>
+    {# ── Sortable sections — draggable per user, order stored in localStorage ── #}
+    <div id="trip-sections" class="trip-sections">
 
-    {# ── Three-column body ─────────────────────────────────────────────── #}
-    <div class="trip-detail-body">
-
-        {# ── Left: activities ──────────────────────────────────────────── #}
-        <section class="trip-detail-section trip-detail-activities">
-            <div id="trip-activities-panel"
-                 hx-get="{% url 'trips.activities' trip.uuid %}"
-                 hx-trigger="load"
-                 hx-swap="outerHTML">
-                <div class="trip-panel-loading">
-                    <i class="material-icons rotating">refresh</i>
-                    Loading activities…
-                </div>
+        {# Activities #}
+        <div class="trip-section" data-section="activities">
+            <div class="trip-section-grip" title="Drag to reorder">
+                <i class="material-icons">drag_indicator</i>
             </div>
-        </section>
+            <section class="trip-detail-section trip-detail-activities">
+                <div id="trip-activities-panel"
+                     hx-get="{% url 'trips.activities' trip.uuid %}"
+                     hx-trigger="load"
+                     hx-swap="outerHTML">
+                    <div class="trip-panel-loading">
+                        <i class="material-icons rotating">refresh</i>
+                        Loading activities…
+                    </div>
+                </div>
+            </section>
+        </div>
 
-        {# ── Right: members + comments ─────────────────────────────────── #}
-        <aside class="trip-detail-aside">
-
+        {# Members #}
+        <div class="trip-section" data-section="members">
+            <div class="trip-section-grip" title="Drag to reorder">
+                <i class="material-icons">drag_indicator</i>
+            </div>
             <div id="trip-members-panel"
                  hx-get="{% url 'trips.members' trip.uuid %}"
                  hx-trigger="load"
@@ -59,7 +63,13 @@
                     Loading members…
                 </div>
             </div>
+        </div>
 
+        {# Comments #}
+        <div class="trip-section" data-section="comments">
+            <div class="trip-section-grip" title="Drag to reorder">
+                <i class="material-icons">drag_indicator</i>
+            </div>
             <div id="trip-comments-panel"
                  hx-get="{% url 'trips.comments' trip.uuid %}"
                  hx-trigger="load"
@@ -69,8 +79,24 @@
                     Loading comments…
                 </div>
             </div>
+        </div>
 
-        </aside>
+        {# Weather — default last per requirements #}
+        <div class="trip-section" data-section="weather">
+            <div class="trip-section-grip" title="Drag to reorder">
+                <i class="material-icons">drag_indicator</i>
+            </div>
+            <div id="trip-weather-panel"
+                 hx-get="{% url 'trips.weather' trip.uuid %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <div class="trip-panel-loading">
+                    <i class="material-icons rotating">refresh</i>
+                    Loading weather…
+                </div>
+            </div>
+        </div>
+
     </div>
 
 </div>
@@ -349,7 +375,7 @@
 </dialog>
 
 {# ── Trip settings dialog ─────────────────────────────────────────────────── #}
-{% if trip.creator == profile %}
+{% if viewer_is_organizer %}
 <dialog id="trip-settings-dialog" class="trip-create-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Trip Settings" %}
     <div id="trip-settings-content">
@@ -483,7 +509,9 @@
     }
 
     function _loadPoints() {
-        fetch('{% url "trips.map_data" trip.uuid %}', {
+        var url = '{% url "trips.map_data" trip.uuid %}';
+        if (window._tripShowCompleted) url += '?include_past=1';
+        fetch(url, {
             headers: {'X-Requested-With': 'XMLHttpRequest'}
         })
         .then(function (r) { return r.json(); })
@@ -572,6 +600,60 @@
 
     _loadPoints();
     window.refreshTripMap = _loadPoints;
+}());
+
+// ── Show completed toggle (shared between map overlay and activities panel) ─
+window._tripShowCompleted = (function () {
+    try { return JSON.parse(localStorage.getItem('trip-show-completed-{{ trip.uuid }}') || 'false'); } catch (e) { return false; }
+}());
+
+function _applyShowCompletedState() {
+    var on = window._tripShowCompleted;
+
+    var panelBtn = document.getElementById('trip-show-completed-btn');
+    if (panelBtn) panelBtn.classList.toggle('view-toggle-btn--active', on);
+
+    var mapBtn = document.getElementById('trip-map-completed-toggle');
+    if (mapBtn) mapBtn.classList.toggle('trip-map-past-btn--active', on);
+
+    tripSetTab(window._tripCurrentTab || 'all');
+
+    if (window.refreshTripMap) window.refreshTripMap();
+}
+
+window.tripToggleShowCompleted = function () {
+    window._tripShowCompleted = !window._tripShowCompleted;
+    try { localStorage.setItem('trip-show-completed-{{ trip.uuid }}', JSON.stringify(window._tripShowCompleted)); } catch (e) {}
+    _applyShowCompletedState();
+};
+
+// ── Sortable sections ────────────────────────────────────────────────────
+(function () {
+    var container = document.getElementById('trip-sections');
+    if (!container || typeof Sortable === 'undefined') return;
+
+    var orderKey = 'trip-section-order-{{ trip.uuid }}';
+    var savedOrder = null;
+    try { savedOrder = JSON.parse(localStorage.getItem(orderKey)); } catch (e) {}
+    if (Array.isArray(savedOrder)) {
+        savedOrder.forEach(function (section) {
+            var el = container.querySelector('.trip-section[data-section="' + section + '"]');
+            if (el) container.appendChild(el);
+        });
+    }
+
+    Sortable.create(container, {
+        animation: 150,
+        handle: '.trip-section-grip',
+        ghostClass: 'trip-section--ghost',
+        chosenClass: 'trip-section--chosen',
+        onEnd: function () {
+            var order = Array.from(container.querySelectorAll('.trip-section')).map(function (el) {
+                return el.dataset.section;
+            });
+            try { localStorage.setItem(orderKey, JSON.stringify(order)); } catch (e) {}
+        },
+    });
 }());
 
 // ── Location search (shared between add + edit dialogs) ──────────────────
@@ -733,6 +815,8 @@ function _onAddActivitySuccess() {
         if (window._tripCurrentView && window._tripCurrentView !== 'list') {
             tripSetView(window._tripCurrentView);
         }
+        // Apply initial show-completed state on first load
+        if (window._tripShowCompleted) _applyShowCompletedState();
     });
 }());
 
@@ -1175,9 +1259,17 @@ window.tripSetTab = function (tab) {
         btn.classList.toggle('activity-tab--active', btn.dataset.tab === tab);
     });
 
+    var showCompleted = !!window._tripShowCompleted;
     panel.querySelectorAll('.trip-activity-item').forEach(function (li) {
         var status = li.dataset.actStatus || 'proposed';
-        var visible = (tab === 'all') || (tab === status);
+        var isCompleted = status === 'completed';
+        var visible;
+        if (isCompleted) {
+            // Completed only appear when the show-completed toggle is on AND the tab is 'all'
+            visible = showCompleted && (tab === 'all');
+        } else {
+            visible = (tab === 'all') || (tab === status);
+        }
         li.style.display = visible ? '' : 'none';
     });
 
@@ -1195,18 +1287,18 @@ window.tripSetTab = function (tab) {
     if (window._tripCurrentView === 'calendar') _renderTripCalendar();
 };
 
-// Restore tab after panel swap
+// Restore tab + show-completed state after panel swap
 (function () {
     var sec = document.querySelector('.trip-detail-activities');
     if (!sec) return;
-    var _orig = sec.addEventListener.bind(sec);
-    // Piggyback on the existing htmx:afterSwap listener — run tab restore after it fires
     document.body.addEventListener('htmx:afterSettle', function (e) {
         if (e.target === document.getElementById('trip-activities-panel') ||
             sec.contains(e.target)) {
-            if (window._tripCurrentTab && window._tripCurrentTab !== 'all') {
-                tripSetTab(window._tripCurrentTab);
-            }
+            // Restore tab first (also filters by completed state)
+            tripSetTab(window._tripCurrentTab || 'all');
+            // Sync show-completed button active state in the freshly-rendered panel
+            var panelBtn = document.getElementById('trip-show-completed-btn');
+            if (panelBtn) panelBtn.classList.toggle('view-toggle-btn--active', !!window._tripShowCompleted);
         }
     });
 }());

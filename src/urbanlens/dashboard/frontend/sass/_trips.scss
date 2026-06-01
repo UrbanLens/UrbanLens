@@ -310,6 +310,49 @@
     }
 }
 
+// ── Sortable sections ─────────────────────────────────────────────────────
+
+.trip-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.trip-section {
+    position: relative;
+
+    &:hover .trip-section-grip {
+        opacity: 1;
+    }
+
+    &--ghost {
+        opacity: 0.3;
+        border-radius: 10px;
+        outline: 2px dashed #cbd5e1;
+    }
+
+    &--chosen {
+        .trip-section-grip { opacity: 1; color: #64748b; }
+    }
+}
+
+.trip-section-grip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 16px;
+    cursor: grab;
+    opacity: 0;
+    transition: opacity 0.15s;
+    color: #94a3b8;
+    margin-bottom: -4px;
+
+    .material-icons { font-size: 1rem; }
+
+    &:active { cursor: grabbing; }
+    &:hover { color: #64748b; }
+}
+
 // ── Trip panels (shared) ──────────────────────────────────────────────────
 
 .trip-panel {
@@ -384,10 +427,6 @@
 }
 
 // ── Calendar view ─────────────────────────────────────────────────────────
-
-.activity-view {
-    // Nothing needed — views are shown/hidden via `hidden` attribute
-}
 
 .activity-view--calendar {
     padding: .75rem 1rem 1rem;
@@ -769,6 +808,24 @@
         color: #d97706;
         border: 1px solid #fde68a;
     }
+
+    &--organizer {
+        background: #ede9fe;
+        color: #7c3aed;
+        border: 1px solid #c4b5fd;
+    }
+}
+
+.trip-organizer-btn {
+    color: #94a3b8;
+
+    &--active {
+        color: #7c3aed !important;
+
+        &:hover {
+            background: #ede9fe !important;
+        }
+    }
 }
 
 // ── Comments ──────────────────────────────────────────────────────────────
@@ -981,6 +1038,7 @@
     border-radius: 10px;
     overflow: hidden;
     border: 1px solid #e2e8f0;
+    position: relative;
 
     #trip-map {
         height: 340px;
@@ -993,6 +1051,46 @@
         color: #64748b;
         font-size: .88rem;
         margin: 0;
+    }
+}
+
+.trip-map-overlay {
+    position: absolute;
+    bottom: 30px;
+    left: 10px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    pointer-events: none;
+
+    > * { pointer-events: auto; }
+}
+
+.trip-map-past-btn {
+    background: #fff;
+    border: 2px solid rgba(0, 0, 0, .2);
+    border-radius: 4px;
+    width: 34px;
+    height: 34px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    transition: background .15s, color .15s, border-color .15s;
+    padding: 0;
+
+    .material-icons { font-size: 1rem; }
+
+    &:hover { background: #f8fafc; color: #334155; }
+
+    &--active {
+        background: #3b82f6;
+        border-color: #2563eb;
+        color: #fff;
+
+        &:hover { background: #2563eb; }
     }
 }
 
@@ -1022,8 +1120,45 @@
     }
 }
 
-.trip-activity-item:hover .trip-status-btn {
+.trip-activity-item:hover .trip-status-btn,
+.trip-activity-item:hover .trip-complete-btn {
     opacity: 1;
+}
+
+// ── Completed activity ────────────────────────────────────────────────────
+
+.trip-activity--completed {
+    opacity: 0.65;
+
+    .trip-activity-name {
+        text-decoration: line-through;
+        color: #94a3b8;
+    }
+}
+
+.trip-activity-icon--completed {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .material-icons {
+        font-size: 1.1rem;
+        color: #22c55e;
+    }
+}
+
+.trip-complete-btn {
+    opacity: 0;
+    transition: opacity .15s;
+    color: #22c55e !important;
+
+    &:hover {
+        background: #dcfce7 !important;
+        color: #16a34a !important;
+    }
 }
 
 // ── Activity tabs ─────────────────────────────────────────────────────────

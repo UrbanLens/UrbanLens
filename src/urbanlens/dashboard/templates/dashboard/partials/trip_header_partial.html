@@ -15,7 +15,7 @@
         {% endif %}
     </div>
     <div class="trip-detail-header-right">
-        {% if trip.creator == profile %}
+        {% if viewer_is_organizer %}
         <button type="button" class="trip-header-btn trip-header-btn--settings"
                 title="Trip settings"
                 onclick="document.getElementById('trip-settings-dialog').showModal()">

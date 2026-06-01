@@ -41,10 +41,19 @@ class Trip(abstract.Model):
         through="TripMembership",
     )
 
-    allow_add_members = BooleanField(default=False, help_text="Non-creator members can add new members.")
-    allow_add_activities = BooleanField(default=True, help_text="Non-creator members can add activities.")
-    allow_edit_activities = BooleanField(default=False, help_text="Non-creator members can edit or delete activities.")
-    allow_comments = BooleanField(default=True, help_text="Comments are enabled for this trip.")
+    PERM_NONE = "none"
+    PERM_ORGANIZERS = "organizers"
+    PERM_EVERYONE = "everyone"
+    PERMISSION_CHOICES = [
+        ("none", "No one (creator only)"),
+        ("organizers", "Organizers"),
+        ("everyone", "Everyone"),
+    ]
+
+    allow_add_members = CharField(max_length=20, choices=PERMISSION_CHOICES, default="none", help_text="Who can add new members.")
+    allow_add_activities = CharField(max_length=20, choices=PERMISSION_CHOICES, default="everyone", help_text="Who can add activities.")
+    allow_edit_activities = CharField(max_length=20, choices=PERMISSION_CHOICES, default="everyone", help_text="Who can edit or delete activities.")
+    allow_comments = CharField(max_length=20, choices=PERMISSION_CHOICES, default="everyone", help_text="Who can leave comments.")
 
     def __str__(self) -> str:
         return self.name or f"Trip #{self.id}"
@@ -96,9 +105,11 @@ class TripActivity(abstract.Model):
     )
     STATUS_PROPOSED = "proposed"
     STATUS_CONFIRMED = "confirmed"
+    STATUS_COMPLETED = "completed"
     STATUS_CHOICES = [
         ("proposed", "Proposed"),
         ("confirmed", "Confirmed"),
+        ("completed", "Completed"),
     ]
 
     # Optional link to a child trip (its activities appear on the parent map).
@@ -162,6 +173,7 @@ class TripMembership(abstract.Model):
         related_name="trip_memberships",
     )
     rsvp = CharField(max_length=20, choices=RSVP_CHOICES, null=True, blank=True)
+    is_organizer = BooleanField(default=False, help_text="Organizers have the same trip-management rights as the creator.")
 
     def __str__(self) -> str:
         return f"{self.profile} in {self.trip} ({self.rsvp or 'no response'})"

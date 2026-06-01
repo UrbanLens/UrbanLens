@@ -6,6 +6,12 @@
         <span>Activities</span>
         {% if activities_with_index %}<span class="badge">{{ activities_with_index|length }}</span>{% endif %}
         <div class="card-header-actions">
+            <button type="button" class="view-toggle-btn" id="trip-show-completed-btn"
+                    data-view="completed"
+                    title="Show completed activities"
+                    onclick="window.tripToggleShowCompleted()">
+                <i class="material-icons">check_circle</i>
+            </button>
             <div class="view-toggle-group" role="group" aria-label="Activities view">
                 <button type="button" class="view-toggle-btn view-toggle-btn--active"
                         data-view="list" title="List view"
@@ -41,7 +47,7 @@
         <ul class="trip-activity-list">
             {% for item in activities_with_index %}
             {% with act=item.activity act_index=item.index %}
-            <li class="trip-activity-item"
+            <li class="trip-activity-item{% if act.status == 'completed' %} trip-activity--completed{% endif %}"
                 id="trip-activity-{{ act.id }}"
                 data-act-id="{{ act.id }}"
                 data-act-title="{{ act.title|default:'' }}"
@@ -63,7 +69,11 @@
                 {% if act_index %}onmouseenter="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},true)"
                 onmouseleave="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},false)"{% endif %}>
 
-                {% if act_index and not item.effective_location_hidden %}
+                {% if act.status == 'completed' %}
+                <div class="trip-activity-icon trip-activity-icon--completed">
+                    <i class="material-icons">check_circle</i>
+                </div>
+                {% elif act_index and not item.effective_location_hidden %}
                 <div class="trip-activity-num {% if act.status == 'proposed' %}trip-activity-num--proposed{% endif %}">{{ act_index }}</div>
                 {% else %}
                 <div class="trip-activity-icon">
@@ -149,6 +159,16 @@
                 </div>
 
                 <div class="trip-activity-actions">
+                    {% if act.status != 'completed' %}
+                    <button type="button"
+                            class="detail-pin-action-btn trip-complete-btn"
+                            title="Mark as completed"
+                            hx-post="{% url 'trips.activity.complete' trip.uuid act.id %}"
+                            hx-target="#trip-activities-panel"
+                            hx-swap="outerHTML"
+                            hx-confirm="Mark this activity as completed?">
+                        <i class="material-icons">check</i>
+                    </button>
                     <button type="button"
                             class="detail-pin-action-btn trip-status-btn {% if act.status == 'confirmed' %}trip-status-btn--confirmed{% else %}trip-status-btn--proposed{% endif %}"
                             title="{% if act.status == 'confirmed' %}Mark as proposed{% else %}Mark as confirmed{% endif %}"
@@ -157,6 +177,7 @@
                             hx-swap="outerHTML">
                         <i class="material-icons">{% if act.status == 'confirmed' %}check_circle{% else %}radio_button_unchecked{% endif %}</i>
                     </button>
+                    {% endif %}
                     <button type="button" class="detail-pin-action-btn"
                             title="Edit activity"
                             onclick="tripOpenEditDialog(this.closest('li'))">

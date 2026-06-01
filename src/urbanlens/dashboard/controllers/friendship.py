@@ -109,7 +109,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         requesting = request.user.profile
         visibility = to_profile.friend_request_visibility
 
-        if visibility in (VisibilityChoice.NO_ONE, VisibilityChoice.FRIENDS):
+        if visibility in {VisibilityChoice.NO_ONE, VisibilityChoice.FRIENDS}:
             return HttpResponse("This user is not accepting friend requests.", status=403)
 
         if visibility == VisibilityChoice.COMMON_PIN:
