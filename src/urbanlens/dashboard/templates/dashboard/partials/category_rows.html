@@ -17,10 +17,6 @@
             <span class="cat-select-check"></span>
         </label>
 
-        <div class="tag-drag-handle" title="Drag to reorder">
-            <i class="material-icons">drag_indicator</i>
-        </div>
-
         <div class="tag-card-icon" {% if category.effective_color %}style="background:{{ category.effective_color }}22; border-color:{{ category.effective_color }}44;"{% endif %}>
             {% if category.effective_icon %}
                 {% if category.effective_icon|is_material_icon %}
@@ -67,7 +63,6 @@
         </div>
 
         <div class="tag-card-actions">
-            <span class="tag-order-badge" title="Order">{{ forloop.counter }}</span>
             <button type="button" class="btn-icon{% if category.is_customized %} btn-icon--active{% endif %}"
                     title="Customize your display of this category"
                     hx-get="{% url 'category.customize' category.id %}"

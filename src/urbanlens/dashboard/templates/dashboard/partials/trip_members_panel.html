@@ -11,56 +11,6 @@
         {% endif %}
     </div>
 
-    {# Prominent RSVP control for the current user #}
-    {% for membership in members %}
-    {% if membership.profile == profile %}
-    <div class="trip-your-rsvp">
-        <span class="trip-your-rsvp-label">Your RSVP</span>
-        <div class="rsvp-pill-group">
-            <button type="button"
-                    class="rsvp-pill-btn {% if membership.rsvp == 'yes' %}is-active{% endif %}"
-                    data-rsvp="yes"
-                    hx-post="{% url 'trips.rsvp' trip.uuid %}"
-                    hx-target="#trip-members-panel"
-                    hx-swap="outerHTML"
-                    hx-vals='{"rsvp": "yes"}'>Yes</button>
-            <button type="button"
-                    class="rsvp-pill-btn {% if membership.rsvp == 'no' %}is-active{% endif %}"
-                    data-rsvp="no"
-                    hx-post="{% url 'trips.rsvp' trip.uuid %}"
-                    hx-target="#trip-members-panel"
-                    hx-swap="outerHTML"
-                    hx-vals='{"rsvp": "no"}'>No</button>
-            <button type="button"
-                    class="rsvp-pill-btn {% if membership.rsvp == 'maybe' %}is-active{% endif %}"
-                    data-rsvp="maybe"
-                    hx-post="{% url 'trips.rsvp' trip.uuid %}"
-                    hx-target="#trip-members-panel"
-                    hx-swap="outerHTML"
-                    hx-vals='{"rsvp": "maybe"}'>Maybe</button>
-            <button type="button"
-                    class="rsvp-pill-btn {% if not membership.rsvp %}is-active{% endif %}"
-                    data-rsvp=""
-                    hx-post="{% url 'trips.rsvp' trip.uuid %}"
-                    hx-target="#trip-members-panel"
-                    hx-swap="outerHTML"
-                    hx-vals='{"rsvp": ""}'>
-                <i class="material-icons" style="font-size:1rem;vertical-align:middle">clear</i>
-            </button>
-        </div>
-        {% if membership.profile != trip.creator %}
-        <button type="button" class="detail-pin-action-btn trip-leave-btn"
-                title="Leave trip"
-                style="opacity:1"
-                hx-delete="{% url 'trips.leave' trip.uuid %}"
-                hx-confirm="Leave this trip? You can be re-added by the creator.">
-            <i class="material-icons">exit_to_app</i>
-        </button>
-        {% endif %}
-    </div>
-    {% endif %}
-    {% endfor %}
-
     {% if members %}
     <ul class="trip-member-list">
         {% for membership in members %}
@@ -78,20 +28,47 @@
                 <span class="trip-member-username">@{{ member.user.username }}</span>
             </div>
 
-            {# Badges #}
+            {# Role badge #}
             {% if member == trip.creator %}
             <span class="trip-member-badge trip-member-badge--creator">creator</span>
             {% elif membership.is_organizer %}
             <span class="trip-member-badge trip-member-badge--organizer">organizer</span>
             {% endif %}
+
+            {# RSVP: clickable dropdown for current user, static badge for others #}
+            {% if membership.profile == profile %}
+            <div class="trip-member-rsvp-wrap">
+                <button type="button"
+                        class="trip-member-rsvp trip-member-rsvp--{{ membership.rsvp|default:'none' }} trip-member-rsvp--mine"
+                        title="Change your RSVP"
+                        onclick="var p=document.getElementById('rsvp-popup-{{ member.id }}');p.hidden=!p.hidden;event.stopPropagation()">
+                    {% if membership.rsvp == 'yes' %}Yes
+                    {% elif membership.rsvp == 'no' %}No
+                    {% elif membership.rsvp == 'maybe' %}Maybe
+                    {% else %}RSVP{% endif %}
+                    <i class="material-icons" style="font-size:.75rem;vertical-align:middle;margin-left:1px">expand_more</i>
+                </button>
+                <div class="rsvp-popup" id="rsvp-popup-{{ member.id }}" hidden>
+                    <button type="button" class="rsvp-popup-opt rsvp-popup-opt--yes"
+                            hx-post="{% url 'trips.rsvp' trip.uuid %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "yes"}'>Yes</button>
+                    <button type="button" class="rsvp-popup-opt rsvp-popup-opt--no"
+                            hx-post="{% url 'trips.rsvp' trip.uuid %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "no"}'>No</button>
+                    <button type="button" class="rsvp-popup-opt rsvp-popup-opt--maybe"
+                            hx-post="{% url 'trips.rsvp' trip.uuid %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "maybe"}'>Maybe</button>
+                    <button type="button" class="rsvp-popup-opt rsvp-popup-opt--clear"
+                            hx-post="{% url 'trips.rsvp' trip.uuid %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": ""}'>Clear</button>
+                </div>
+            </div>
+            {% else %}
             <span class="trip-member-rsvp trip-member-rsvp--{{ membership.rsvp|default:'none' }}">
                 {% if membership.rsvp == 'yes' %}Yes
                 {% elif membership.rsvp == 'no' %}No
                 {% elif membership.rsvp == 'maybe' %}Maybe
                 {% else %}–{% endif %}
             </span>
+            {% endif %}
 
-            {# Creator can manage other members #}
+            {# Actions: creator manages others; current user can leave #}
             <div class="trip-member-actions">
                 {% if profile == trip.creator and member != trip.creator %}
                 <button type="button"
@@ -110,6 +87,13 @@
                         hx-confirm="Remove {{ member.user.username }} from this trip?"
                         hx-on::before-request="this.closest('li').classList.add('is-deleting')">
                     <i class="material-icons">person_remove</i>
+                </button>
+                {% elif membership.profile == profile and profile != trip.creator %}
+                <button type="button" class="detail-pin-action-btn"
+                        title="Leave trip"
+                        hx-delete="{% url 'trips.leave' trip.uuid %}"
+                        hx-confirm="Leave this trip? You can be re-added by the creator.">
+                    <i class="material-icons">exit_to_app</i>
                 </button>
                 {% endif %}
             </div>

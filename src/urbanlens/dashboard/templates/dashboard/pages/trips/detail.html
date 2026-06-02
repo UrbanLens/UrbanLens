@@ -520,12 +520,12 @@
 
             if (!points.length) {
                 if (!_map) {
-                    mapEl.hidden = true;
-                    if (emptyEl) emptyEl.hidden = false;
+                    wrapEl.hidden = true;
                 }
                 return;
             }
 
+            wrapEl.hidden = false;
             mapEl.hidden = false;
             if (emptyEl) emptyEl.hidden = true;
 
@@ -601,6 +601,15 @@
     _loadPoints();
     window.refreshTripMap = _loadPoints;
 }());
+
+// ── Hide trip sections whose HTMX panel comes back hidden (e.g. weather with no data) ─
+document.body.addEventListener('htmx:afterSettle', function () {
+    var weatherPanel = document.getElementById('trip-weather-panel');
+    if (weatherPanel) {
+        var sec = weatherPanel.closest('.trip-section');
+        if (sec) sec.hidden = weatherPanel.hidden;
+    }
+});
 
 // ── Show completed toggle (shared between map overlay and activities panel) ─
 window._tripShowCompleted = (function () {

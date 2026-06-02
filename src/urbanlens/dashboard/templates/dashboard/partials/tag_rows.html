@@ -17,9 +17,6 @@
             <input type="checkbox" class="tag-select-cb" data-tag-id="{{ tag.id }}">
             <span class="cat-select-check"></span>
         </label>
-        <div class="tag-drag-handle" title="Drag to reorder">
-            <i class="material-icons">drag_indicator</i>
-        </div>
         {% endif %}
 
         <div class="tag-card-icon" {% if tag.effective_color %}style="background:{{ tag.effective_color }}22; border-color:{{ tag.effective_color }}44;"{% endif %}>
@@ -76,7 +73,6 @@
 
         {% if tag.profile %}
         <div class="tag-card-actions">
-            <span class="tag-order-badge" title="Order">{{ forloop.counter }}</span>
             <button type="button" class="btn-icon" title="Edit"
                     hx-get="{% url 'tag.edit' tag.id %}"
                     hx-target="#tag-edit-dialog-body"

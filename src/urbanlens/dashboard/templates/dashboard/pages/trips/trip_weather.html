@@ -1,3 +1,4 @@
+{% if not error and not grouped %}<div id="trip-weather-panel" hidden></div>{% else %}
 <div id="trip-weather-panel" class="trip-weather-panel">
 
     <div class="trip-weather-header">
@@ -9,12 +10,6 @@
     <p class="trip-weather-empty">
         <i class="material-icons">info_outline</i>
         {{ error }}
-    </p>
-
-    {% elif not grouped %}
-    <p class="trip-weather-empty">
-        <i class="material-icons">cloud_off</i>
-        No forecast available.
     </p>
 
     {% else %}
@@ -97,3 +92,4 @@
     {% endif %}
 
 </div>
+{% endif %}

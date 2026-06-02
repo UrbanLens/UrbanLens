@@ -108,6 +108,11 @@
                 p.hidden = true;
             });
         }
+        if (!e.target.closest('.trip-member-rsvp-wrap')) {
+            document.querySelectorAll('.rsvp-popup:not([hidden])').forEach(function (p) {
+                p.hidden = true;
+            });
+        }
     });
 
     // ── @mention autocomplete ─────────────────────────────────────────────────

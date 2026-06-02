@@ -402,51 +402,12 @@ document.getElementById('new-category-btn').addEventListener('click', function()
     }
 });
 
-// ── Drag-and-drop reorder ──────────────────────────────────────────────────────
-function updateOrderBadges() {
-    var cards = document.querySelectorAll('#category-rows .tag-card[data-category-id]');
-    cards.forEach(function(card, i) {
-        var badge = card.querySelector('.tag-order-badge');
-        if (badge) badge.textContent = i + 1;
-    });
-}
-
-function initSortable() {
-    var rows = document.getElementById('category-rows');
-    if (!rows) return;
-    if (rows._sortable) { rows._sortable.destroy(); }
-    rows._sortable = new Sortable(rows, {
-        handle: '.tag-drag-handle',
-        animation: 150,
-        ghostClass: 'tag-card--ghost',
-        onEnd: function() {
-            var ids = Array.from(rows.querySelectorAll('.tag-card[data-category-id]')).map(function(el) {
-                return parseInt(el.dataset.categoryId, 10);
-            });
-            fetch('{% url "category.reorder" %}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrftoken,
-                },
-                body: JSON.stringify({ category_ids: ids }),
-            })
-            .then(function() { updateOrderBadges(); })
-            .catch(function(err) { toastr.error('Reorder failed: ' + err.message); });
-        },
-    });
-}
-
 function _onRowsUpdated() {
     _selected.clear();
     _updateBar();
     _syncCheckboxes();
-    initSortable();
-    updateOrderBadges();
     applyCurrentView();
 }
-
-initSortable();
 
 document.getElementById('category-rows').addEventListener('htmx:afterSwap', _onRowsUpdated);
 

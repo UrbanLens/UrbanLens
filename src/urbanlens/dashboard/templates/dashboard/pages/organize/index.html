@@ -691,35 +691,6 @@ function showTagCustomPreview(input) {
         }
     }
 
-    function updateTagOrderBadges() {
-        document.querySelectorAll('#tag-rows .tag-card[data-tag-id]').forEach(function(card, i) {
-            var badge = card.querySelector('.tag-order-badge');
-            if (badge) badge.textContent = i + 1;
-        });
-    }
-
-    function initTagSortable() {
-        var rows = document.getElementById('tag-rows');
-        if (!rows) return;
-        if (rows._sortable) rows._sortable.destroy();
-        rows._sortable = new Sortable(rows, {
-            handle: '.tag-drag-handle',
-            animation: 150,
-            ghostClass: 'tag-card--ghost',
-            onEnd: function() {
-                var ids = Array.from(rows.querySelectorAll('.tag-card[data-tag-id]')).map(function(el) {
-                    return parseInt(el.dataset.tagId, 10);
-                });
-                fetch('{% url "tag.reorder" %}', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-                    body: JSON.stringify({ tag_ids: ids }),
-                }).then(function() { updateTagOrderBadges(); })
-                  .catch(function(err) { toastr.error('Reorder failed: ' + err.message); });
-            },
-        });
-    }
-
     function applyTagView() {
         var rows = document.getElementById('tag-rows');
         if (!rows) return;
@@ -790,7 +761,7 @@ function showTagCustomPreview(input) {
 
     function _onTagRowsUpdated() {
         _tagSelected.clear(); _updateTagBar(); _syncTagCheckboxes();
-        initTagSortable(); updateTagOrderBadges(); applyTagView();
+        applyTagView();
     }
 
     // ── New tag form ──────────────────────────────────────────────────────────
@@ -1048,7 +1019,6 @@ function showTagCustomPreview(input) {
     });
 
     // ── Init ──────────────────────────────────────────────────────────────────
-    initTagSortable();
     applyTagView();
 })();
 </script>
@@ -1100,27 +1070,6 @@ function showTagCustomPreview(input) {
         }
     }
 
-    function updateCatOrderBadges() {
-        document.querySelectorAll('#category-rows .tag-card[data-category-id]').forEach(function(card,i) {
-            var badge = card.querySelector('.tag-order-badge'); if (badge) badge.textContent = i+1;
-        });
-    }
-
-    function initCatSortable() {
-        var rows = document.getElementById('category-rows'); if (!rows) return;
-        if (rows._sortable) rows._sortable.destroy();
-        rows._sortable = new Sortable(rows, {
-            handle: '.tag-drag-handle', animation: 150, ghostClass: 'tag-card--ghost',
-            onEnd: function() {
-                var ids = Array.from(rows.querySelectorAll('.tag-card[data-category-id]')).map(function(el){return parseInt(el.dataset.categoryId,10);});
-                fetch('{% url "category.reorder" %}', {
-                    method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
-                    body:JSON.stringify({category_ids:ids}),
-                }).then(function(){updateCatOrderBadges();}).catch(function(err){toastr.error('Reorder failed: '+err.message);});
-            },
-        });
-    }
-
     function applyCatView() {
         var rows = document.getElementById('category-rows'); if (!rows) return;
         rows.classList.remove('tag-view--list','tag-view--gallery','tag-view--tree');
@@ -1134,7 +1083,6 @@ function showTagCustomPreview(input) {
             var tr=rows.querySelector('.tag-tree-root'); if(tr) tr.remove();
             rows.querySelectorAll('.tag-card').forEach(function(c){c.style.display='';});
         }
-        if (rows._sortable) rows._sortable.option('disabled', _catCurrentView!=='list');
     }
 
     function renderCatTree(rows) {
@@ -1177,7 +1125,7 @@ function showTagCustomPreview(input) {
 
     function _onCatRowsUpdated() {
         _catSelected.clear(); _updateCatBar(); _syncCatCheckboxes();
-        initCatSortable(); updateCatOrderBadges(); applyCatView();
+        applyCatView();
     }
 
     // ── New category form ─────────────────────────────────────────────────────
@@ -1409,7 +1357,6 @@ function showTagCustomPreview(input) {
     });
 
     // ── Init ──────────────────────────────────────────────────────────────────
-    initCatSortable();
     applyCatView();
 })();
 </script>
