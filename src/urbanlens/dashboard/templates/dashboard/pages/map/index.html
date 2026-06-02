@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load dashboard_tags %}
 
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -686,7 +687,7 @@
                 {% for tag in tags %}
                 <label class="apdlg-chip">
                     <input type="checkbox" name="tag_id" value="{{ tag.id }}">
-                    {% if tag.icon %}<span style="{% if tag.color %}color:{{ tag.color }}{% endif %}">{{ tag.icon }}</span>{% endif %}
+                    {% if tag.icon %}{% if tag.icon|is_material_icon %}<i class="material-icons" {% if tag.color %}style="color:{{ tag.color }}"{% endif %}>{{ tag.icon }}</i>{% else %}<span {% if tag.color %}style="color:{{ tag.color }}"{% endif %}>{{ tag.icon }}</span>{% endif %}{% endif %}
                     <span>{{ tag.name }}</span>
                 </label>
                 {% endfor %}
@@ -702,7 +703,7 @@
                 {% for cat in categories %}
                 <label class="apdlg-chip">
                     <input type="checkbox" name="category_id" value="{{ cat.id }}">
-                    {% if cat.icon %}<span {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</span>{% endif %}
+                    {% if cat.icon %}{% if cat.icon|is_material_icon %}<i class="material-icons" {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</i>{% else %}<span {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</span>{% endif %}{% endif %}
                     <span>{{ cat.name }}</span>
                 </label>
                 {% endfor %}
@@ -1352,6 +1353,7 @@
     });
 
     map.on('contextmenu', function(e) {
+        map.closePopup();
         document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
@@ -1606,11 +1608,14 @@
         btn.textContent = 'Add Pin';
         // Remove any previous preview marker
         if (_addPinMarker) { map.removeLayer(_addPinMarker); _addPinMarker = null; }
-        _addPinClickMode = true;
+        _addPinClickMode = false;
         // Pre-fill coordinates when called from right-click context menu
         if (lat !== null && lng !== null) {
-            _addPinClickMode = false;  // Don't require another map click
             _setAddPinLocation(lat, lng);
+        } else {
+            // Delay enabling click mode so the button's own click event doesn't
+            // immediately register as a map coordinate
+            setTimeout(() => { _addPinClickMode = true; }, 0);
         }
         document.getElementById('add-pin-dialog').showModal();
     }

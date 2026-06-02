@@ -54,10 +54,17 @@ def _expand_trip_dates(trip: Trip, activity_date: datetime.date) -> None:
 def _activity_qs(trip: Trip) -> QuerySet:
     """Return the standard activities queryset for a trip with all needed relations."""
     from django.db.models import F
+
     return trip.activities.select_related(
-        "location", "pin", "pin__location", "added_by__user", "child_trip",
+        "location",
+        "pin",
+        "pin__location",
+        "added_by__user",
+        "child_trip",
     ).order_by(
-        F("scheduled_at").asc(nulls_last=True), "order", "created",
+        F("scheduled_at").asc(nulls_last=True),
+        "order",
+        "created",
     )
 
 
@@ -186,7 +193,9 @@ def _render_activities_panel(request, trip: Trip, profile: Profile) -> HttpRespo
 
     activity_ids = [a.id for a in activities]
     raw_votes = TripActivityVote.objects.filter(activity_id__in=activity_ids).values(
-        "activity_id", "profile_id", "vote",
+        "activity_id",
+        "profile_id",
+        "vote",
     )
     up_counts: dict[int, int] = {}
     down_counts: dict[int, int] = {}
@@ -204,7 +213,8 @@ def _render_activities_panel(request, trip: Trip, profile: Profile) -> HttpRespo
     # due to the adder's hide_pin_locations_in_trips privacy setting.
     viewer_hidden: set[int] = set()
     sensitive = [
-        act for act in activities
+        act
+        for act in activities
         if not act.location_hidden
         and act.added_by_id
         and act.added_by_id != profile.id
@@ -340,11 +350,15 @@ class TripEditView(LoginRequiredMixin, View):
         trip.end_date = body.get("end_date") or None
         trip.save()
 
-        return render(request, "dashboard/partials/trip_header_partial.html", {
-            "trip": trip,
-            "profile": profile,
-            "viewer_is_organizer": _is_organizer(profile, trip),
-        })
+        return render(
+            request,
+            "dashboard/partials/trip_header_partial.html",
+            {
+                "trip": trip,
+                "profile": profile,
+                "viewer_is_organizer": _is_organizer(profile, trip),
+            },
+        )
 
 
 class TripDeleteView(LoginRequiredMixin, View):
@@ -511,7 +525,9 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
 
         today = datetime.date.today()
         if activity.scheduled_at is None or activity.scheduled_at.date() > today:
-            activity.scheduled_at = datetime.datetime.combine(today, activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0))
+            activity.scheduled_at = datetime.datetime.combine(
+                today, activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0)
+            )
 
         activity.status = TripActivity.STATUS_COMPLETED
         activity.save(update_fields=["status", "scheduled_at", "updated"])
@@ -596,26 +612,34 @@ def _render_trip_comments(request, trip: Trip, profile: Profile) -> HttpResponse
             r_html = render_comment_text(r.text, pinned, act_index_for_render)
             if r_html is None:
                 continue
-            replies_rendered.append({
-                "comment": r,
-                "rendered_text": r_html,
-                "reactions": _aggregate_reactions(r.reactions.all()),
-            })
-        rendered.append({
-            "comment": c,
-            "rendered_text": html,
-            "reactions": reactions,
-            "replies": replies_rendered,
-        })
+            replies_rendered.append(
+                {
+                    "comment": r,
+                    "rendered_text": r_html,
+                    "reactions": _aggregate_reactions(r.reactions.all()),
+                }
+            )
+        rendered.append(
+            {
+                "comment": c,
+                "rendered_text": html,
+                "reactions": reactions,
+                "replies": replies_rendered,
+            }
+        )
 
     comment_count = sum(1 + len(item.get("replies", [])) for item in rendered)
-    return render(request, "dashboard/partials/trip_comments_panel.html", {
-        "trip": trip,
-        "rendered_comments": rendered,
-        "comment_count": comment_count,
-        "profile": profile,
-        "allowed_emojis": _ALLOWED_EMOJIS,
-    })
+    return render(
+        request,
+        "dashboard/partials/trip_comments_panel.html",
+        {
+            "trip": trip,
+            "rendered_comments": rendered,
+            "comment_count": comment_count,
+            "profile": profile,
+            "allowed_emojis": _ALLOWED_EMOJIS,
+        },
+    )
 
 
 class TripCommentsView(LoginRequiredMixin, View):
@@ -634,6 +658,7 @@ class TripCommentsView(LoginRequiredMixin, View):
 
     def post(self, request, trip_uuid):
         from urbanlens.dashboard.controllers.comments import _notify_reply
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
@@ -802,7 +827,10 @@ class TripLocationSearchView(LoginRequiredMixin, View):
 
         db_rows = list(
             Location.objects.filter(name__icontains=q).values(
-                "uuid", "name", "locality", "administrative_area_level_1",
+                "uuid",
+                "name",
+                "locality",
+                "administrative_area_level_1",
             )[:5],
         )
         db_results = [
@@ -865,7 +893,8 @@ class TripMapDataView(LoginRequiredMixin, View):
         # Determine activities viewer-hidden due to adder's privacy setting
         viewer_hidden_map: set[int] = set()
         sensitive_map = [
-            act for act in activities
+            act
+            for act in activities
             if not act.location_hidden
             and act.added_by_id
             and act.added_by_id != profile.id
@@ -923,7 +952,9 @@ class TripMapDataView(LoginRequiredMixin, View):
                     child_coords = _activity_coords(child_act)
                     if not child_coords:
                         continue
-                    child_label = child_act.title or (child_act.location.name if child_act.location else None) or "Activity"
+                    child_label = (
+                        child_act.title or (child_act.location.name if child_act.location else None) or "Activity"
+                    )
                     points.append(
                         {
                             "index": None,
@@ -1105,13 +1136,25 @@ class TripSettingsView(LoginRequiredMixin, View):
         trip.allow_add_activities = _level("allow_add_activities", Trip.PERM_EVERYONE)
         trip.allow_edit_activities = _level("allow_edit_activities", Trip.PERM_EVERYONE)
         trip.allow_comments = _level("allow_comments", Trip.PERM_EVERYONE)
-        trip.save(update_fields=["allow_add_members", "allow_add_activities", "allow_edit_activities", "allow_comments", "updated"])
+        trip.save(
+            update_fields=[
+                "allow_add_members",
+                "allow_add_activities",
+                "allow_edit_activities",
+                "allow_comments",
+                "updated",
+            ]
+        )
 
-        return render(request, "dashboard/partials/trip_settings_partial.html", {
-            "trip": trip,
-            "profile": profile,
-            "saved": True,
-        })
+        return render(
+            request,
+            "dashboard/partials/trip_settings_partial.html",
+            {
+                "trip": trip,
+                "profile": profile,
+                "saved": True,
+            },
+        )
 
 
 class TripActivityPositionView(LoginRequiredMixin, View):
@@ -1183,11 +1226,7 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
         if len(q) < 2:
             return JsonResponse({"results": []})
 
-        trips = (
-            Trip.objects.filter(profiles=profile, name__icontains=q)
-            .exclude(uuid=trip_uuid)
-            .order_by("name")[:8]
-        )
+        trips = Trip.objects.filter(profiles=profile, name__icontains=q).exclude(uuid=trip_uuid).order_by("name")[:8]
         results = [
             {
                 "uuid": str(t.uuid),
@@ -1298,12 +1337,14 @@ class TripWeatherView(LoginRequiredMixin, View):
         else:
             today = datetime.date.today()
             activities = [
-                act for act in _activity_qs(trip)
+                act
+                for act in _activity_qs(trip)
                 if act.status != TripActivity.STATUS_COMPLETED
                 and (act.scheduled_at is None or act.scheduled_at.date() >= today)
             ]
             if not activities:
                 error = "This trip has no activities yet."
+                # TODO: Hide the section
             else:
                 try:
                     gateway = WeatherForecastGateway()
@@ -1321,8 +1362,12 @@ class TripWeatherView(LoginRequiredMixin, View):
                     logger.warning("Weather fetch failed for trip %s", trip_uuid)
                     error = "Weather data could not be loaded."
 
-        return render(request, "dashboard/pages/trips/trip_weather.html", {
-            "trip": trip,
-            "grouped": grouped,
-            "error": error,
-        })
+        return render(
+            request,
+            "dashboard/pages/trips/trip_weather.html",
+            {
+                "trip": trip,
+                "grouped": grouped,
+                "error": error,
+            },
+        )

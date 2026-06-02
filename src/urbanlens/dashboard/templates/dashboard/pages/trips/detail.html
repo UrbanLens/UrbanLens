@@ -1235,11 +1235,11 @@ function _clearChildTrip(prefix) {
 }
 
 // ── Delete activity from edit dialog ────────────────────────────────────
-function _deleteEditActivity() {
+async function _deleteEditActivity() {
     var btn = document.getElementById('edit-activity-delete-btn');
     var deleteUrl = btn && btn.dataset.deleteUrl;
     if (!deleteUrl) return;
-    if (!confirm('Delete this activity? This cannot be undone.')) return;
+    if (!await confirmDialog({title:'Delete Activity', message:'Delete this activity? This cannot be undone.', confirmLabel:'Delete'})) return;
     document.getElementById('edit-activity-dialog').close();
     htmx.ajax('DELETE', deleteUrl, {
         target: '#trip-activities-panel',

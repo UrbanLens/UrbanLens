@@ -869,11 +869,11 @@ document.getElementById('tag-merge-confirm-btn').addEventListener('click', funct
 });
 
 // ── Bulk delete ────────────────────────────────────────────────────────────────
-document.getElementById('tag-sel-delete').addEventListener('click', function() {
+document.getElementById('tag-sel-delete').addEventListener('click', async function() {
     var n = _tagSelected.size;
     if (n === 0) return;
     var msg = (n === 1 ? 'Delete 1 tag?' : 'Delete ' + n + ' tags?') + '\nPins will keep their other tags.';
-    if (!confirm(msg)) return;
+    if (!await confirmDialog({title:'Delete Tags', message:msg, confirmLabel:'Delete'})) return;
     var ids = Array.from(_tagSelected).map(function(id) { return parseInt(id, 10); });
     fetch('{% url "tag.bulk_delete" %}', {
         method: 'POST',

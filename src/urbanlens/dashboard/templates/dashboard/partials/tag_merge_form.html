@@ -48,8 +48,8 @@
     </div>
 
     <div class="tag-form-actions">
-        <button type="submit" class="btn-primary"
-                onclick="return confirm('Merge \'{{ tag.name|escapejs }}\' into the selected tag?\n\nThis cannot be undone.')">
+        <button type="button" class="btn-primary" data-merge-name="{{ tag.name|escapejs }}"
+                onclick="(async function(btn){ if(await confirmDialog({title:'Merge Tag',message:'Merge "'+btn.dataset.mergeName+'" into the selected tag?\n\nThis cannot be undone.',confirmLabel:'Merge'})) btn.closest('form').requestSubmit(); })(this)">
             <i class="material-icons" style="font-size:1rem;vertical-align:middle;">merge</i>
             Merge
         </button>

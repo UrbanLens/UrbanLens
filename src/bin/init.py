@@ -166,27 +166,50 @@ class DjangoProjectInitializer:
         except subprocess.CalledProcessError as e:
             logger.exception("Error configuring git: %s", e)
 
+    def enable_postgis(self) -> None:
+        """Enable the PostGIS extension in the application database.
+
+        This is idempotent — CREATE EXTENSION IF NOT EXISTS is a no-op when
+        PostGIS is already present.  Must be called after the database exists.
+        """
+        self.run_command(
+            [
+                "psql",
+                "-U", self.db_user,
+                "-h", self.db_host,
+                "-p", str(self.db_port),
+                "-w",
+                "-d", self.db_name,
+                "-c", "CREATE EXTENSION IF NOT EXISTS postgis",
+            ],
+            "enabling postgis extension",
+            raise_error=False,
+        )
+
     def init_db(self):
         """
-        Create the "UrbanLens" database in postgres
+        Create the "UrbanLens" database in postgres and enable PostGIS.
         """
         self.create_pgpass()
 
         if self.check_db():
             logger.info("Database %s already exists.", self.db_name)
-            return
+        else:
+            logger.info("Database %s does not exist. Creating...", self.db_name)
 
-        logger.info("Database %s does not exist. Creating...", self.db_name)
+            # Create the database
+            self.run_command(
+                ["psql", "-U", self.db_user, "-h", self.db_host, "-w", "-c", f"CREATE DATABASE {self.db_name}"],
+                "creating database",
+            )
 
-        # Create the database
-        self.run_command(
-            ["psql", "-U", self.db_user, "-h", self.db_host, "-w", "-c", f"CREATE DATABASE {self.db_name}"],
-            "creating database",
-        )
+            if not self.check_db():
+                logger.error("Database %s was not created.", self.db_name)
+                raise UnrecoverableError(f"Database {self.db_name} was not created.")
 
-        if not self.check_db():
-            logger.error("Database %s was not created.", self.db_name)
-            raise UnrecoverableError(f"Database {self.db_name} was not created.")
+        # Always ensure PostGIS is available — required for the PointField on Pin.
+        # Safe to call even on existing databases; IF NOT EXISTS makes it idempotent.
+        self.enable_postgis()
 
     def copy_sample_env(self):
         """

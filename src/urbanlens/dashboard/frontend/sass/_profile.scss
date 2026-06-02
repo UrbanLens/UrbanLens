@@ -1120,6 +1120,29 @@ textarea.edit-textarea {
     }
 }
 
+.btn-danger-filled {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: $danger-color;
+    color: #fff;
+    border: none;
+    border-radius: $radius-sm;
+    padding: 9px 18px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+
+    i {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: color.adjust($danger-color, $lightness: -8%);
+    }
+}
+
 .btn-icon {
     background: none;
     border: none;

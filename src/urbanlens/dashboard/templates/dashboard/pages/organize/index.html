@@ -265,7 +265,7 @@
     {# ══════════════════════════════════════════════════════════════════════════ #}
     {# PRIORITY PANEL                                                            #}
     {# ══════════════════════════════════════════════════════════════════════════ #}
-    <div class="organize-panel" id="panel-priority" role="tabpanel"
+    <div class="organize-panel tag-page" id="panel-priority" role="tabpanel"
          {% if active_tab != 'priority' %}hidden{% endif %}>
 
         <div class="tag-header">
@@ -909,9 +909,9 @@ function showTagCustomPreview(input) {
     });
 
     // ── Bulk delete ───────────────────────────────────────────────────────────
-    document.getElementById('tag-sel-delete').addEventListener('click', function() {
+    document.getElementById('tag-sel-delete').addEventListener('click', async function() {
         var n = _tagSelected.size; if (!n) return;
-        if (!confirm((n===1?'Delete 1 tag?':'Delete '+n+' tags?')+'\nPins will keep their other tags.')) return;
+        if (!await confirmDialog({title:'Delete Tags',message:(n===1?'Delete 1 tag?':'Delete '+n+' tags?')+'\nPins will keep their other tags.',confirmLabel:'Delete'})) return;
         var ids = Array.from(_tagSelected).map(function(id){return parseInt(id,10);});
         fetch('{% url "tag.bulk_delete" %}', {
             method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
@@ -1286,9 +1286,9 @@ function showTagCustomPreview(input) {
     });
 
     // ── Bulk delete ───────────────────────────────────────────────────────────
-    document.getElementById('cat-sel-delete').addEventListener('click', function(){
+    document.getElementById('cat-sel-delete').addEventListener('click', async function(){
         var n=_catSelected.size; if(!n)return;
-        if(!confirm((n===1?'Delete 1 category?':'Delete '+n+' categories?')+'\nPins and locations will keep their other categories.'))return;
+        if(!await confirmDialog({title:'Delete Categories',message:(n===1?'Delete 1 category?':'Delete '+n+' categories?')+'\nPins and locations will keep their other categories.',confirmLabel:'Delete'}))return;
         var ids=Array.from(_catSelected).map(function(id){return parseInt(id,10);});
         fetch('{% url "category.bulk_delete" %}', {
             method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},

@@ -634,9 +634,9 @@
                 if (e.target.closest('.detail-pin-list-item-delete')) return;
                 _highlightDetailPin(dp.uuid);
             });
-            li.querySelector('.detail-pin-list-item-delete').addEventListener('click', e => {
+            li.querySelector('.detail-pin-list-item-delete').addEventListener('click', async e => {
                 e.stopPropagation();
-                if (!confirm(`Delete "${dp.name}"?`)) return;
+                if (!await confirmDialog({title:'Delete Pin', message:`Delete "${dp.name}"?`, confirmLabel:'Delete'})) return;
                 fetch(_dpEditBase + dp.uuid + '/', {
                     method: 'DELETE',
                     headers: { 'X-CSRFToken': csrftoken },
@@ -666,9 +666,9 @@
                 if (e.target.closest('.detail-pin-list-item-delete')) return;
                 _highlightMarkupItem(item);
             });
-            li.querySelector('.detail-pin-list-item-delete').addEventListener('click', e => {
+            li.querySelector('.detail-pin-list-item-delete').addEventListener('click', async e => {
                 e.stopPropagation();
-                if (!confirm(`Delete this ${item.markup_type}?`)) return;
+                if (!await confirmDialog({title:'Delete Item', message:`Delete this ${item.markup_type}?`, confirmLabel:'Delete'})) return;
                 fetch(_markupEditBase + item.uuid + '/', {
                     method: 'DELETE',
                     headers: { 'X-CSRFToken': csrftoken },
@@ -1129,8 +1129,8 @@
         .catch(() => toastr.error('Failed to save campus boundary.'));
     }
 
-    function clearCampus() {
-        if (!confirm('Remove all boundary polygons from the map? Click Save afterwards to confirm.')) return;
+    async function clearCampus() {
+        if (!await confirmDialog({title:'Clear Boundary', message:'Remove all boundary polygons from the map? Click Save afterwards to confirm.', confirmLabel:'Clear'})) return;
         campusItems.clearLayers();
         _setPinMarkerVisible(true);
         toastr.info('All polygons removed. Click Save to save the empty boundary, or Cancel to restore.');

@@ -158,9 +158,6 @@
     flex-wrap: wrap;
     gap: 1rem;
     margin-bottom: 1.75rem;
-    min-width: 50rem;
-    max-width: 40vw;
-    width: 50em;
 
     .tag-title {
         font-size: 1.6rem;
@@ -936,8 +933,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: .75rem;
-    width: 90vw;
-    margin-left: calc((100% - 90vw) / 2);
+    width: 100%;
 
     .tag-card {
         margin-bottom: 0;

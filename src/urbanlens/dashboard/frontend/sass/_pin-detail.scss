@@ -212,7 +212,7 @@
         background: rgba(0, 0, 0, .35);
     }
 
-    .dialog-header {
+    .panel-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -774,32 +774,37 @@
     }
 }
 
+.panel-header {
+    background: #f8f9fb;
+}
+
 // ── Pin details card theming (pin overview / location details page) ────────
 body.page-location-details {
     .location-details.card {
-        border: 1px solid #c7d2fe;
-        box-shadow: 0 2px 10px rgba(79, 70, 229, .12);
+        border: 1px solid #e0e3f0;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, .07);
 
-        > .card-header {
-            background: linear-gradient(135deg, #312e81 0%, #4338ca 50%, #6366f1 100%);
-            color: #fff;
-            border-bottom-color: #4338ca;
+        >.card-header {
+            @extend .panel-header;
+            background: #f0f2ff;
+            color: #3730a3;
+            border-bottom-color: #c7d2fe;
 
             span {
-                color: #fff;
+                color: #3730a3;
             }
 
             .material-icons {
-                color: #c7d2fe;
+                color: #6366f1;
                 opacity: 1;
             }
 
             .btn-icon-sm {
-                color: #c7d2fe;
+                color: #6366f1;
 
                 &:hover {
-                    background: rgba(255, 255, 255, .18);
-                    color: #fff;
+                    background: #e0e7ff;
+                    color: #4338ca;
                 }
             }
         }
@@ -808,7 +813,7 @@ body.page-location-details {
     .details-grid {
         .detail-row {
             padding: .45rem .9rem;
-            border-bottom: 1px solid #eef2ff;
+            border-bottom: 1px solid $border-color;
             border-radius: 0;
 
             &:last-child {
@@ -816,17 +821,17 @@ body.page-location-details {
             }
 
             &:nth-child(even) {
-                background: #f8f7ff;
+                background: #f8f9fb;
             }
         }
 
         .field-label {
-            color: #4338ca;
+            color: $text-secondary;
         }
     }
 
     .security-indicators {
-        border-top-color: #c7d2fe;
+        border-top-color: $border-color;
     }
 }
 
@@ -961,6 +966,7 @@ body.page-location-details {
 // ── Pin detail page: section card accents ────────────────────────────────
 
 body.page-location-details {
+
     // Elevate all cards on this page
     .card {
         box-shadow: 0 2px 10px rgba(0, 0, 0, .09);
@@ -968,74 +974,124 @@ body.page-location-details {
 
     // Notes section: warm amber
     .pin-notes-panel.card .card-header {
-        background: linear-gradient(135deg, #92400e 0%, #b45309 50%, #d97706 100%);
-        color: #fff;
-        border-bottom-color: #b45309;
+        @extend .panel-header;
+        background: #fffbeb;
+        color: #92400e;
+        border-bottom-color: #fde68a;
 
-        .material-icons { color: #fde68a; opacity: 1; }
-        span { color: #fff; }
-        .badge { background: rgba(255,255,255,.25); color: #fff; }
+        .material-icons {
+            color: #d97706;
+            opacity: 1;
+        }
+
+        span {
+            color: #92400e;
+        }
+
+        .badge {
+            background: #fef3c7;
+            color: #92400e;
+        }
     }
 
     // Visit history: teal
     .visit-history.card .card-header {
-        background: linear-gradient(135deg, #0f766e 0%, #0d9488 50%, #14b8a6 100%);
-        color: #fff;
-        border-bottom-color: #0d9488;
+        @extend .panel-header;
+        background: #f0fdfb;
+        color: #134e4a;
+        border-bottom-color: #99f6e4;
 
-        .material-icons { color: #99f6e4; opacity: 1; }
-        span { color: #fff; }
+        .material-icons {
+            color: #0d9488;
+            opacity: 1;
+        }
+
+        span {
+            color: #134e4a;
+        }
     }
 
     // Aliases: orange
     .aliases-panel.card .card-header {
-        background: linear-gradient(135deg, #9a3412 0%, #c2410c 50%, #ea580c 100%);
-        color: #fff;
-        border-bottom-color: #c2410c;
+        @extend .panel-header;
+        background: #fff7ed;
+        color: #9a3412;
+        border-bottom-color: #fed7aa;
 
-        .material-icons { color: #fed7aa; opacity: 1; }
-        span { color: #fff; }
+        .material-icons {
+            color: #ea580c;
+            opacity: 1;
+        }
+
+        span {
+            color: #9a3412;
+        }
     }
 
     // Map section: slate
     .location-map.card .card-header {
-        background: linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%);
-        color: #fff;
-        border-bottom-color: #334155;
+        @extend .panel-header;
+        background: #f8fafc;
+        color: #1e293b;
+        border-bottom-color: #e2e8f0;
 
-        .material-icons { color: #94a3b8; opacity: 1; }
-        span { color: #fff; }
-        h3 { color: #fff; }
+        .material-icons {
+            color: #64748b;
+            opacity: 1;
+        }
+
+        span, h3 {
+            color: #1e293b;
+        }
     }
 
-    // Tag panel: indigo/violet
+    // Tag panel: violet
     #tag-panel .tag-panel-header {
-        background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 50%, #7c3aed 100%);
-        color: #fff;
-        border-bottom-color: #6d28d9;
+        @extend .panel-header;
+        background: #f5f3ff;
+        color: #4c1d95;
+        border-bottom-color: #ddd6fe;
 
-        i { color: #ddd6fe; }
-        span { color: #fff; }
+        i {
+            color: #7c3aed;
+        }
+
+        span {
+            color: #4c1d95;
+        }
     }
 
     // Category panel: blue
     #category-panel .tag-panel-header {
-        background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 50%, #2563eb 100%);
-        color: #fff;
-        border-bottom-color: #1d4ed8;
+        @extend .panel-header;
+        background: #eff6ff;
+        color: #1e3a8a;
+        border-bottom-color: #bfdbfe;
 
-        i { color: #bfdbfe; }
-        span { color: #fff; }
+        i {
+            color: #3b82f6;
+        }
+
+        span {
+            color: #1e3a8a;
+        }
     }
 
     // Comments section: green
     .pin-comments.card .card-header {
-        background: linear-gradient(135deg, #14532d 0%, #166534 50%, #16a34a 100%);
-        color: #fff;
-        border-bottom-color: #166534;
+        @extend .panel-header;
+        background: #f0fdf4;
+        color: #14532d;
+        border-bottom-color: #bbf7d0;
 
-        .material-icons { color: #bbf7d0; opacity: 1; }
-        span { color: #fff; }
+        .material-icons {
+            color: #16a34a;
+            opacity: 1;
+        }
+
+        span {
+            color: #14532d;
+        }
     }
 }
 
@@ -1067,4 +1123,3 @@ body.page-location-details {
         outline: none;
     }
 }
-

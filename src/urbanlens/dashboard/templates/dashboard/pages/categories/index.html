@@ -743,12 +743,12 @@ document.getElementById('cat-merge-sources-list').addEventListener('click', func
 });
 
 // ── Bulk delete ────────────────────────────────────────────────────────────────
-document.getElementById('cat-sel-delete').addEventListener('click', function() {
+document.getElementById('cat-sel-delete').addEventListener('click', async function() {
     var n = _selected.size;
     if (n === 0) return;
     var msg = (n === 1 ? 'Delete 1 category?' : 'Delete ' + n + ' categories?')
             + '\nPins and locations will keep their other categories.';
-    if (!confirm(msg)) return;
+    if (!await confirmDialog({title:'Delete Categories', message:msg, confirmLabel:'Delete'})) return;
 
     var ids = Array.from(_selected).map(function(id) { return parseInt(id, 10); });
     fetch('{% url "category.bulk_delete" %}', {

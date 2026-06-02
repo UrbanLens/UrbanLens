@@ -53,7 +53,7 @@ SECRET_KEY = "django-insecure-r-8lxm+kdnd+j)-lxp7bdr8w260+7#d$j%&6l6g^3)3ly*()wb
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['urbanlens.org', 'localhost']
+ALLOWED_HOSTS = ['urbanlens.org', 'localhost', 'localhost:21080']
 
 # Application definition
 INSTALLED_APPS = [
@@ -171,9 +171,10 @@ MEDIA_ROOT = os.path.join(PROJECT_ROOT, "media")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# TODO: Potentially remove 'http', and only allow 'localhost' in dev.
 # http://urbanlens.org, http://urbanlens.com, https://urbanlens.org, https://urbanlens.com, etc
 protocols = ['http://', 'https://']
-domains = ['urbanlens.org']
+domains = ['urbanlens.org', 'localhost', 'localhost:21080']
 subdomains = ['www.', '']
 CORS_ALLOWED_ORIGINS = [
     f'{protocol}{subdomain}{domain}'

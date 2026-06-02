@@ -294,6 +294,55 @@
     });
     </script>
 
+    {# ── Global confirm dialog (replaces browser confirm()) ──────────────────── #}
+    <dialog id="confirm-dialog" class="confirm-dialog">
+        <div class="dialog-header">
+            <span id="confirm-dialog-title">Are you sure?</span>
+            <button type="button" class="dialog-close" id="confirm-dialog-x" aria-label="Close">
+                <i class="material-icons">close</i>
+            </button>
+        </div>
+        <div class="confirm-dialog-body">
+            <p id="confirm-dialog-message"></p>
+        </div>
+        <div class="confirm-dialog-footer">
+            <button type="button" class="btn-ghost" id="confirm-dialog-cancel">Cancel</button>
+            <button type="button" class="btn-danger-filled" id="confirm-dialog-ok">Confirm</button>
+        </div>
+    </dialog>
+    <script>
+    (function () {
+        var _resolve = null;
+        var dlg = document.getElementById('confirm-dialog');
+        var okBtn = document.getElementById('confirm-dialog-ok');
+
+        function _done(result) {
+            if (_resolve) { var r = _resolve; _resolve = null; r(result); }
+            if (dlg.open) dlg.close();
+        }
+
+        document.getElementById('confirm-dialog-cancel').addEventListener('click', function () { _done(false); });
+        document.getElementById('confirm-dialog-x').addEventListener('click', function () { _done(false); });
+        okBtn.addEventListener('click', function () { _done(true); });
+        // Catches all close paths: backdrop click, Escape key, and direct .close() calls
+        dlg.addEventListener('close', function () { _done(false); });
+
+        window.confirmDialog = function (opts) {
+            if (typeof opts === 'string') opts = { message: opts };
+            opts = opts || {};
+            document.getElementById('confirm-dialog-title').textContent = opts.title || 'Are you sure?';
+            document.getElementById('confirm-dialog-message').innerHTML =
+                (opts.message || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>');
+            okBtn.textContent = opts.confirmLabel || 'Confirm';
+            okBtn.className = (opts.danger === false) ? 'btn-primary' : 'btn-danger-filled';
+            return new Promise(function (resolve) {
+                _resolve = resolve;
+                dlg.showModal();
+            });
+        };
+    }());
+    </script>
+
     {% block scripts %}{% endblock %}
 
 </body>
