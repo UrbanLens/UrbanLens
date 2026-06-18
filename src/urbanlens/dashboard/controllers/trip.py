@@ -526,7 +526,7 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         today = datetime.date.today()
         if activity.scheduled_at is None or activity.scheduled_at.date() > today:
             activity.scheduled_at = datetime.datetime.combine(
-                today, activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0)
+                today, activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
             )
 
         activity.status = TripActivity.STATUS_COMPLETED
@@ -617,7 +617,7 @@ def _render_trip_comments(request, trip: Trip, profile: Profile) -> HttpResponse
                     "comment": r,
                     "rendered_text": r_html,
                     "reactions": _aggregate_reactions(r.reactions.all()),
-                }
+                },
             )
         rendered.append(
             {
@@ -625,7 +625,7 @@ def _render_trip_comments(request, trip: Trip, profile: Profile) -> HttpResponse
                 "rendered_text": html,
                 "reactions": reactions,
                 "replies": replies_rendered,
-            }
+            },
         )
 
     comment_count = sum(1 + len(item.get("replies", [])) for item in rendered)
@@ -1143,7 +1143,7 @@ class TripSettingsView(LoginRequiredMixin, View):
                 "allow_edit_activities",
                 "allow_comments",
                 "updated",
-            ]
+            ],
         )
 
         return render(

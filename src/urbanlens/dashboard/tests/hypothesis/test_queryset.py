@@ -39,7 +39,7 @@ class FilterByCriteriaStatusTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 		# One pin per status — covers all statuses exactly once.
 		self.pins_by_status: dict[str, Pin] = {}
 		for status in PinStatus.values:
@@ -77,7 +77,7 @@ class FilterByCriteriaHasVisitsTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 		self.visited = baker.make(Pin, profile=self.profile, last_visited=baker.random_gen.gen_datetime())
 		self.unvisited = baker.make(Pin, profile=self.profile, last_visited=None)
 
@@ -114,7 +114,7 @@ class FilterByCriteriaPriorityTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 		# Pins at fixed priority levels.
 		self.priorities = [0, 25, 50, 75, 100]
 		self.pins_by_priority: dict[int, Pin] = {
@@ -154,7 +154,7 @@ class FilterByCriteriaDateTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 
 	def _base_qs(self):
 		return Pin.objects.filter(profile=self.profile)
@@ -187,7 +187,7 @@ class FilterByCriteriaRatingTests(HypothesisTestCase):
 	def setUp(self) -> None:
 		super().setUp()
 		self.user = baker.make("auth.User")
-		self.profile = baker.make("dashboard.Profile", user=self.user)
+		self.profile = self.user.profile  # auto-created by post_save signal
 		# One pin per rating 1-5 (rating 0 = no review).
 		self.pins_by_rating: dict[int, Pin] = {}
 		for rating in range(1, 6):
@@ -234,7 +234,7 @@ class FilterByCriteriaNameTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 		self.target = baker.make(Pin, profile=self.profile, nickname="Urbex Hospital")
 		self.decoy = baker.make(Pin, profile=self.profile, nickname="Mountain Trail")
 
@@ -280,7 +280,7 @@ class FilterByCriteriaIdempotencyTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 		for status in PinStatus.values:
 			baker.make(Pin, profile=self.profile, status=status)
 
@@ -304,7 +304,7 @@ class FilterByCriteriaMonotonicityTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 		for status in PinStatus.values:
 			baker.make(Pin, profile=self.profile, status=status, priority=50)
 
@@ -344,7 +344,7 @@ class FilterByCriteriaTagTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 		self.tag = baker.make(Badge, kind=KIND_TAG, profile=None, name="urban-exploration")
 		self.tagged_pin = baker.make(Pin, profile=self.profile)
 		self.tagged_pin.tags.add(self.tag)

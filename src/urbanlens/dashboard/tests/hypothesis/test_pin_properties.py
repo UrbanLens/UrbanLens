@@ -13,7 +13,7 @@ from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock
 
-from hypothesis import assume, given, settings
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from urbanlens.dashboard.models.pin.model import Pin
@@ -22,8 +22,10 @@ from urbanlens.dashboard.tests.hypothesis.strategies import (
 	longitude,
 	nonempty_name,
 	reasonable_date,
-	short_text_or_none,
 )
+
+
+_FK_FIELDS: frozenset[str] = frozenset({"location"})
 
 
 def _make_pin(**kwargs: Any) -> Pin:
@@ -43,9 +45,14 @@ def _make_pin(**kwargs: Any) -> Pin:
 		"color": None,
 	}
 	defaults.update(kwargs)
-	pin = Pin.__new__(Pin)
+	pin = Pin()
 	for k, v in defaults.items():
-		object.__setattr__(pin, k, v)
+		if k in _FK_FIELDS:
+			# Inject directly into the field cache to bypass the FK descriptor's
+			# isinstance check — location is often a MagicMock in these tests.
+			pin._state.fields_cache[k] = v
+		else:
+			setattr(pin, k, v)
 	return pin
 
 

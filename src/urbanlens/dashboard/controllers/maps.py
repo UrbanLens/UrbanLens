@@ -225,10 +225,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         from django.db.models import Max
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = Pin.objects.filter(profile=profile).root_pins().aggregate(last_updated=Max('updated'))
-        last_updated = result['last_updated']
+        result = Pin.objects.filter(profile=profile).root_pins().aggregate(last_updated=Max("updated"))
+        last_updated = result["last_updated"]
         return JsonResponse({
-            'last_updated': last_updated.isoformat() if last_updated else None,
+            "last_updated": last_updated.isoformat() if last_updated else None,
         })
 
     def init_map(self, request, *args, **kwargs):

@@ -35,7 +35,7 @@ class ReviewRatingBoundsTests(HypothesisTestCase):
 	def setUp(self) -> None:
 		super().setUp()
 		self.user = baker.make("auth.User")
-		self.profile = baker.make("dashboard.Profile", user=self.user)
+		self.profile = self.user.profile  # auto-created by post_save signal
 		self.pin = baker.make(Pin, profile=self.profile)
 
 	@given(valid_rating)
@@ -76,7 +76,7 @@ class ReviewUniqueConstraintTests(HypothesisTestCase):
 	def setUp(self) -> None:
 		super().setUp()
 		self.user = baker.make("auth.User")
-		self.profile = baker.make("dashboard.Profile", user=self.user)
+		self.profile = self.user.profile  # auto-created by post_save signal
 		self.pin = baker.make(Pin, profile=self.profile)
 
 	@given(valid_rating, valid_rating)
@@ -118,7 +118,7 @@ class PinRatingPropertyTests(HypothesisTestCase):
 	def setUp(self) -> None:
 		super().setUp()
 		self.user = baker.make("auth.User")
-		self.profile = baker.make("dashboard.Profile", user=self.user)
+		self.profile = self.user.profile  # auto-created by post_save signal
 
 	def test_rating_is_zero_when_no_reviews(self) -> None:
 		pin = baker.make(Pin, profile=self.profile)

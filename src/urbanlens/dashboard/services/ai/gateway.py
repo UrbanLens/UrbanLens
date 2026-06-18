@@ -286,8 +286,8 @@ class LLMGateway[Response](ABC):
             encoding = tiktoken.encoding_for_model(self.model)
             tokens = encoding.encode(prompt)
         except KeyError:
-            logger.debug("KeyError when using model %s to calculate tokens", self.model)
-            encoding = tiktoken.encoding_for_model("gpt-5-nano")
+            logger.debug("tiktoken does not know model %s; falling back to o200k_base encoding", self.model)
+            encoding = tiktoken.get_encoding("o200k_base")
             tokens = encoding.encode(prompt)
 
         return len(tokens)

@@ -24,10 +24,14 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
+import logging
+
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.pin import Pin
+
+logger = logging.getLogger(__name__)
 
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_suggest_categories")
@@ -42,8 +46,13 @@ def suggest_and_add_categories(sender, instance: Pin, created, **kwargs):
         **kwargs: Additional keyword arguments.
 
     """
-    if created:
-        # Perform the category suggestion and addition only for new instances.
-        # M2M changes from add_category(save=False) are committed by .add() directly;
-        # no save() needed here.
+    if not created:
+        return
+    # Perform the category suggestion and addition only for new instances.
+    # M2M changes from add_category(save=False) are committed by .add() directly;
+    # no save() needed here.
+    try:
         instance.suggest_category(append_suggestion=True)
+    except Exception:
+        # TODO: Consider more specific exception handling if possible
+        logger.warning("suggest_category failed for pin %s", instance.pk, exc_info=True)

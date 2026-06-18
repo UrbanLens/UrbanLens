@@ -29,13 +29,13 @@ import argparse
 from enum import Enum
 import logging
 import os
+from pathlib import Path
 import re
 from shutil import which
 import subprocess
 import sys
 import textwrap
 import time
-from pathlib import Path
 
 from dotenv import load_dotenv
 from tqdm import tqdm
@@ -237,7 +237,7 @@ class Db:
         """Report queries running longer than 5 minutes."""
         return self.execute_sql(
             "SELECT pid, now() - pg_stat_activity.query_start AS duration, query "
-            "FROM pg_stat_activity WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';"
+            "FROM pg_stat_activity WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';",
         )
 
     def locks(self) -> int:

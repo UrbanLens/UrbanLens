@@ -44,7 +44,7 @@ class GetNearbyOrCreateNullGuardsTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 
 	def test_none_lat_none_lon(self) -> None:
 		pin, created = Pin.objects.get_nearby_or_create(None, None, self.profile)
@@ -111,7 +111,7 @@ class GetNearbyOrCreateCreationTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 
 	@given(lat=lat_float, lon=lon_float)
 	@settings(**_DB_SETTINGS)
@@ -161,7 +161,7 @@ class PinQuerySetRootPinsTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 
 	@given(n_root=st.integers(min_value=0, max_value=5), n_child=st.integers(min_value=0, max_value=5))
 	@settings(**_DB_SETTINGS)
@@ -199,7 +199,7 @@ class PinQuerySetVisitFiltersTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 
 	@given(
 		n_visited=st.integers(min_value=0, max_value=5),
@@ -234,7 +234,7 @@ class PinQuerySetByNameTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 
 	@given(nonempty_name)
 	@settings(**_DB_SETTINGS)
@@ -268,7 +268,7 @@ class PinQuerySetStatusTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 
 	@given(pin_status)
 	@settings(**_DB_SETTINGS)
@@ -291,7 +291,7 @@ class PinQuerySetPriorityTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("dashboard.Profile")
+		self.profile = baker.make("auth.User").profile
 
 	@given(priority)
 	@settings(**_DB_SETTINGS)
