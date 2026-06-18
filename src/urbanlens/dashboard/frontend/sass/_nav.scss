@@ -623,7 +623,7 @@ nav .brand-logo img {
     margin: 0;
 }
 
-// ── Notification preferences (profile page section) ────────────────────────
+// ── Notification preferences (settings page section) ───────────────────────
 
 .notif-prefs {
     &__saved {
@@ -668,24 +668,30 @@ nav .brand-logo img {
         font-weight: 500;
     }
 
-    &__cell {
-        text-align: center;
-        padding: .4rem;
-    }
-
-    &__radio {
-        cursor: pointer;
-
-        input[type="radio"] {
-            accent-color: #6366f1;
-            width: 15px;
-            height: 15px;
-            cursor: pointer;
-        }
+    &__type-hdr {
+        text-align: left;
+        min-width: 180px;
     }
 
     &__col-hdr {
-        min-width: 56px;
+        min-width: 80px;
+    }
+
+    &__cell {
+        text-align: center;
+        padding: .4rem;
+
+        // Materialize globally hides all [type=checkbox]. Override for the table.
+        input[type="checkbox"] {
+            position: static !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
+            width: 15px;
+            height: 15px;
+            accent-color: $primary-color;
+            cursor: pointer;
+            display: inline-block;
+        }
     }
 
     &__footer {

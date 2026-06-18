@@ -416,6 +416,28 @@
     }
 }
 
+// ── Notification preferences table ───────────────────────────────────────────
+
+[data-theme="dark"] {
+    .notif-prefs__table th {
+        color: #888;
+        border-bottom-color: #333;
+    }
+
+    .notif-prefs__row {
+        border-bottom-color: #2a2a2a;
+
+        &:hover { background: #252525; }
+    }
+
+    .notif-prefs__label { color: #ccc; }
+
+    .notif-prefs__saved {
+        background: #1a2e1a;
+        color: #86efac;
+    }
+}
+
 // ── Profile page ─────────────────────────────────────────────────────────────
 
 [data-theme="dark"] {

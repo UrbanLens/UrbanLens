@@ -267,6 +267,22 @@
             </div>
         </form>
     </section>
+
+    {# ── Notifications ─────────────────────────────────────────────────────── #}
+    <section class="settings-section">
+        <div class="settings-section-header">
+            <i class="material-icons">notifications</i>
+            <div>
+                <h2 class="settings-section-title">Notifications</h2>
+                <p class="settings-section-desc">Choose how you receive alerts for each event type.</p>
+            </div>
+        </div>
+        <div hx-get="{% url 'notifications.preferences' %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            <p class="loading-text">Loading…</p>
+        </div>
+    </section>
 </div>
 {% endblock %}
 
