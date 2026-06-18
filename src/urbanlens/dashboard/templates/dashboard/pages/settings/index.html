@@ -55,8 +55,9 @@
             </div>
 
             <div class="settings-field settings-field--checkbox">
-                <label class="settings-checkbox-label" for="{{ privacy_form.hide_pin_locations_in_trips.id_for_label }}">
-                    <span class="settings-checkbox-wrap">{{ privacy_form.hide_pin_locations_in_trips }}</span>
+                <label class="settings-checkbox-label">
+                    {{ privacy_form.hide_pin_locations_in_trips }}
+                    <span class="settings-checkbox-materialize"></span>
                     <span>
                         <span class="settings-label">{{ privacy_form.hide_pin_locations_in_trips.label }}</span>
                         <p class="settings-help">{{ privacy_form.hide_pin_locations_in_trips.help_text }}</p>
@@ -68,7 +69,7 @@
             </div>
 
             <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save Privacy Settings</button>
+                <button type="submit" class="settings-save-btn">Save</button>
             </div>
         </form>
     </section>
@@ -99,7 +100,7 @@
             </div>
 
             <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save Contact Settings</button>
+                <button type="submit" class="settings-save-btn">Save</button>
             </div>
         </form>
     </section>
@@ -110,32 +111,13 @@
             <i class="material-icons">palette</i>
             <div>
                 <h2 class="settings-section-title">Style</h2>
-                <p class="settings-section-desc">Theme and display preferences.</p>
+                <p class="settings-section-desc">Site-wide appearance preferences.</p>
             </div>
         </div>
 
         <form method="post" class="settings-form" id="style-form">
             {% csrf_token %}
             <input type="hidden" name="section" value="style">
-
-            <div class="settings-field">
-                <label class="settings-label">Default Map View</label>
-                <p class="settings-help">{{ style_form.default_map_view.help_text }}</p>
-                <div class="settings-map-view-row">
-                    {% for radio in style_form.default_map_view %}
-                    <label class="settings-map-view-option {% if radio.data.value == style_form.initial.default_map_view or radio.data.value == style_form.instance.default_map_view %}active{% endif %}">
-                        {{ radio.tag }}
-                        {% if radio.data.value == "satellite" %}<i class="material-icons">satellite_alt</i>
-                        {% elif radio.data.value == "topographic" %}<i class="material-icons">terrain</i>
-                        {% else %}<i class="material-icons">map</i>{% endif %}
-                        <span>{{ radio.choice_label }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
-                {% if style_form.default_map_view.errors %}
-                <p class="settings-error">{{ style_form.default_map_view.errors|join:", " }}</p>
-                {% endif %}
-            </div>
 
             <div class="settings-field">
                 <label class="settings-label">Color Theme</label>
@@ -156,82 +138,100 @@
                         <span>Dark</span>
                     </label>
                 </div>
-                {# hidden checkbox that the form actually submits #}
+                {# hidden checkbox submitted in place of the radio buttons above #}
                 <input type="hidden" name="dark_mode" id="dark-mode-hidden" value="{% if style_form.dark_mode.value %}on{% endif %}">
             </div>
 
-            <div class="settings-field">
-                <label class="settings-label" for="{{ style_form.cluster_radius.id_for_label }}">
-                    {{ style_form.cluster_radius.label }}
-                </label>
-                <p class="settings-help">{{ style_form.cluster_radius.help_text }}</p>
-                <div class="settings-cluster-row">
-                    {{ style_form.cluster_radius }}
-                    {% if style_form.cluster_radius.value != 'auto' %}
-                    <button type="button" class="settings-reset-btn"
-                            onclick="document.getElementById('{{ style_form.cluster_radius.id_for_label }}').value = ''">
-                        Reset
-                    </button>
-                    {% endif %}
-                </div>
-                {% if style_form.cluster_radius.errors %}
-                <p class="settings-error">{{ style_form.cluster_radius.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
-            <div class="settings-field settings-field--checkbox">
-                <label class="settings-checkbox-label" for="{{ style_form.use_pin_cache.id_for_label }}">
-                    <span class="settings-checkbox-wrap">{{ style_form.use_pin_cache }}</span>
-                    <span>
-                        <span class="settings-checkbox-title">{{ style_form.use_pin_cache.label }}</span>
-                        <span class="settings-help">{{ style_form.use_pin_cache.help_text }}</span>
-                        {% if not style_form.use_pin_cache.value %}
-                        <span class="settings-warning">
-                            <i class="material-icons" style="font-size:0.9rem;vertical-align:-0.15em;">warning</i>
-                            Browser caching is currently disabled. Map loads will be slower.
-                        </span>
-                        {% endif %}
-                    </span>
-                </label>
-                {% if style_form.use_pin_cache.errors %}
-                <p class="settings-error">{{ style_form.use_pin_cache.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
             <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save Style Settings</button>
+                <button type="submit" class="settings-save-btn">Save</button>
             </div>
         </form>
     </section>
 
-    {# ── Map Center ─────────────────────────────────────────────────────────── #}
+    {# ── Map ───────────────────────────────────────────────────────────────── #}
     <section class="settings-section">
         <div class="settings-section-header">
-            <i class="material-icons">my_location</i>
+            <i class="material-icons">map</i>
             <div>
-                <h2 class="settings-section-title">Map Starting Point</h2>
-                <p class="settings-section-desc">Choose where the map centers when you open it.</p>
+                <h2 class="settings-section-title">Map</h2>
+                <p class="settings-section-desc">Display, performance, and starting point.</p>
             </div>
         </div>
 
-        <form method="post" class="settings-form" id="map-center-form">
+        <form method="post" class="settings-form" id="map-form">
             {% csrf_token %}
-            <input type="hidden" name="section" value="map_center">
+            <input type="hidden" name="section" value="map">
             {{ map_center_form.map_custom_latitude }}
             {{ map_center_form.map_custom_longitude }}
             {{ map_center_form.map_default_zoom }}
 
             <div class="settings-field">
+                <label class="settings-label">Default Map View</label>
+                <p class="settings-help">{{ map_display_form.default_map_view.help_text }}</p>
+                <div class="settings-map-view-row">
+                    {% for radio in map_display_form.default_map_view %}
+                    <label class="settings-map-view-option settings-radio-button {% if radio.data.value == map_display_form.instance.default_map_view %}active{% endif %}">
+                        {{ radio.tag }}
+                        {% if radio.data.value == "satellite" %}<i class="material-icons">satellite_alt</i>
+                        {% elif radio.data.value == "topographic" %}<i class="material-icons">terrain</i>
+                        {% else %}<i class="material-icons">map</i>{% endif %}
+                        <span>{{ radio.choice_label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% if map_display_form.default_map_view.errors %}
+                <p class="settings-error">{{ map_display_form.default_map_view.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ map_display_form.cluster_radius.id_for_label }}">
+                    {{ map_display_form.cluster_radius.label }}
+                </label>
+                <p class="settings-help">{{ map_display_form.cluster_radius.help_text }}</p>
+                <div class="settings-cluster-row">
+                    {{ map_display_form.cluster_radius }}
+                    <button type="button" class="settings-reset-btn settings-radio-button"
+                            onclick="document.getElementById('{{ map_display_form.cluster_radius.id_for_label }}').value = ''">
+                        Reset
+                    </button>
+                </div>
+                {% if map_display_form.cluster_radius.errors %}
+                <p class="settings-error">{{ map_display_form.cluster_radius.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field settings-field--checkbox">
+                <label class="settings-checkbox-label">
+                    {{ map_display_form.use_pin_cache }}
+                    <span class="settings-checkbox-materialize"></span>
+                    <span>
+                        <span class="settings-label">{{ map_display_form.use_pin_cache.label }}</span>
+                        <p class="settings-help">{{ map_display_form.use_pin_cache.help_text }}</p>
+                        {% if not map_display_form.use_pin_cache.value %}
+                        <span class="settings-warning">
+                            <i class="material-icons" style="font-size:0.9rem;vertical-align:-0.15em;">warning</i>
+                            Caching is off — map loads will be slower.
+                        </span>
+                        {% endif %}
+                    </span>
+                </label>
+                {% if map_display_form.use_pin_cache.errors %}
+                <p class="settings-error">{{ map_display_form.use_pin_cache.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
                 <label class="settings-label">Starting Point</label>
                 <div class="settings-map-view-row">
                     {% for radio in map_center_form.map_center_mode %}
-                    <label class="settings-map-view-option{% if radio.data.value == map_center_form.instance.map_center_mode %} active{% endif %}"
+                    <label class="settings-map-view-option settings-radio-button{% if radio.data.value == map_center_form.instance.map_center_mode %} active{% endif %}"
                            onclick="selectMapMode('{{ radio.data.value }}')">
                         {{ radio.tag }}
                         {% if radio.data.value == 'auto' %}
                             <i class="material-icons">push_pin</i><span>My Pins</span>
                         {% elif radio.data.value == 'gps' %}
-                            <i class="material-icons">gps_fixed</i><span>Current Location</span>
+                            <i class="material-icons">gps_fixed</i><span>My Location</span>
                         {% else %}
                             <i class="material-icons">place</i><span>Custom</span>
                         {% endif %}
@@ -242,14 +242,14 @@
 
             <div class="settings-field" id="custom-location-field" style="display:none">
                 <label class="settings-label">Custom Location</label>
-                <p class="settings-help">Enter an address, city name, or GPS coordinates (lat, lng).</p>
+                <p class="settings-help">Enter an address, city name, or GPS coordinates.</p>
                 <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
                     <input type="text" id="map-center-address" class="settings-input" style="flex:1; min-width:200px"
                            placeholder="e.g. Albany, NY  or  42.6526, -73.7562">
-                    <button type="button" class="settings-reset-btn" onclick="geocodeAddress()">
+                    <button type="button" class="settings-reset-btn settings-radio-button" onclick="geocodeAddress()">
                         <i class="material-icons" style="font-size:16px;vertical-align:middle">search</i> Find
                     </button>
-                    <button type="button" class="settings-reset-btn" onclick="useDeviceLocation()">
+                    <button type="button" class="settings-reset-btn settings-radio-button" onclick="useDeviceLocation()">
                         <i class="material-icons" style="font-size:16px;vertical-align:middle">my_location</i> Use Current
                     </button>
                 </div>
@@ -257,13 +257,13 @@
             </div>
 
             <div class="settings-field">
-                <label class="settings-label">Preview <span style="font-weight:400;font-size:.85em;color:var(--color-muted,#888)">(drag or zoom to adjust)</span></label>
+                <label class="settings-label" title="Drag or zoom to adjust">Preview</label>
                 <div id="map-center-preview" style="height:300px;border-radius:8px;overflow:hidden;border:1px solid var(--color-border,#ddd)"></div>
                 <p class="settings-help" style="margin-top:4px">The zoom level you leave this map at will be used as your default zoom.</p>
             </div>
 
             <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save Map Center</button>
+                <button type="submit" class="settings-save-btn">Save</button>
             </div>
         </form>
     </section>

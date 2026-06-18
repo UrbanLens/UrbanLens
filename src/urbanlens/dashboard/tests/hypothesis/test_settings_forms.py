@@ -1,11 +1,11 @@
-"""Tests for MapCenterForm and StyleSettingsForm.
+"""Tests for MapCenterForm, StyleSettingsForm, and MapDisplayForm.
 
 Invariants verified:
   - MapCenterForm.clean_map_default_zoom returns 13 when the field is omitted,
     and passes through any valid value in [1, 19] unchanged.
-  - StyleSettingsForm.use_pin_cache is optional: omitting it (unchecked) is valid
+  - MapDisplayForm.use_pin_cache is optional: omitting it (unchecked) is valid
     and produces False; submitting it produces True.
-  - StyleSettingsForm saves use_pin_cache correctly to the Profile.
+  - MapDisplayForm saves use_pin_cache correctly to the Profile.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
-from urbanlens.dashboard.forms.settings_form import MapCenterForm, StyleSettingsForm
+from urbanlens.dashboard.forms.settings_form import MapCenterForm, MapDisplayForm, StyleSettingsForm
 from urbanlens.dashboard.models.profile.model import MapCenterMode, Profile
 from urbanlens.dashboard.tests.hypothesis.strategies import valid_zoom
 
@@ -110,34 +110,34 @@ class MapCenterFormModeTests(HypothesisTestCase):
 		self.assertIn("map_center_mode", form.errors)
 
 
-# ── StyleSettingsForm.use_pin_cache ───────────────────────────────────────────
+# ── MapDisplayForm.use_pin_cache ──────────────────────────────────────────────
 
-class StyleFormUsePinCacheTests(HypothesisTestCase):
+class MapDisplayFormUsePinCacheTests(HypothesisTestCase):
 	"""use_pin_cache is optional; omitting it (unchecked) must be valid and produce False."""
 
-	def _style_data(self, **extra) -> dict:
+	def _map_data(self, **extra) -> dict:
 		return {"default_map_view": "satellite", **extra}
 
 	def test_omitting_use_pin_cache_is_valid(self) -> None:
 		profile = _profile()
-		form = StyleSettingsForm(data=self._style_data(), instance=profile)
+		form = MapDisplayForm(data=self._map_data(), instance=profile)
 		self.assertTrue(form.is_valid(), form.errors)
 
 	def test_omitting_use_pin_cache_produces_false(self) -> None:
 		profile = _profile()
-		form = StyleSettingsForm(data=self._style_data(), instance=profile)
+		form = MapDisplayForm(data=self._map_data(), instance=profile)
 		form.is_valid()
 		self.assertFalse(form.cleaned_data["use_pin_cache"])
 
 	def test_submitting_use_pin_cache_produces_true(self) -> None:
 		profile = _profile()
-		form = StyleSettingsForm(data=self._style_data(use_pin_cache="on"), instance=profile)
+		form = MapDisplayForm(data=self._map_data(use_pin_cache="on"), instance=profile)
 		form.is_valid()
 		self.assertTrue(form.cleaned_data["use_pin_cache"])
 
 	def test_saving_use_pin_cache_true_persists_to_db(self) -> None:
 		profile = _profile()
-		form = StyleSettingsForm(data=self._style_data(use_pin_cache="on"), instance=profile)
+		form = MapDisplayForm(data=self._map_data(use_pin_cache="on"), instance=profile)
 		self.assertTrue(form.is_valid(), form.errors)
 		form.save()
 		profile.refresh_from_db()
@@ -147,7 +147,7 @@ class StyleFormUsePinCacheTests(HypothesisTestCase):
 		profile = _profile()
 		# Ensure it starts as True so the change is meaningful.
 		Profile.objects.filter(pk=profile.pk).update(use_pin_cache=True)
-		form = StyleSettingsForm(data=self._style_data(), instance=profile)
+		form = MapDisplayForm(data=self._map_data(), instance=profile)
 		self.assertTrue(form.is_valid(), form.errors)
 		form.save()
 		profile.refresh_from_db()

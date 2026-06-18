@@ -14,6 +14,7 @@ from django.views import View
 from urbanlens.dashboard.forms.settings_form import (
     ContactSettingsForm,
     MapCenterForm,
+    MapDisplayForm,
     PrivacySettingsForm,
     StyleSettingsForm,
 )
@@ -66,6 +67,7 @@ class SettingsView(LoginRequiredMixin, View):
             "privacy_form": PrivacySettingsForm(instance=profile),
             "contact_form": ContactSettingsForm(initial={"email": request.user.email}),
             "style_form": StyleSettingsForm(instance=profile),
+            "map_display_form": MapDisplayForm(instance=profile),
             "map_center_form": MapCenterForm(instance=profile),
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),
@@ -81,6 +83,7 @@ class SettingsView(LoginRequiredMixin, View):
         privacy_form = PrivacySettingsForm(instance=profile)
         contact_form = ContactSettingsForm(initial={"email": request.user.email})
         style_form = StyleSettingsForm(instance=profile)
+        map_display_form = MapDisplayForm(instance=profile)
         map_center_form = MapCenterForm(instance=profile)
 
         if section == "privacy":
@@ -105,17 +108,20 @@ class SettingsView(LoginRequiredMixin, View):
                 messages.success(request, "Style settings saved.")
                 return redirect("settings.view")
 
-        elif section == "map_center":
+        elif section == "map":
+            map_display_form = MapDisplayForm(request.POST, instance=profile)
             map_center_form = MapCenterForm(request.POST, instance=profile)
-            if map_center_form.is_valid():
+            if map_display_form.is_valid() and map_center_form.is_valid():
+                map_display_form.save()
                 map_center_form.save()
-                messages.success(request, "Map center saved.")
+                messages.success(request, "Map settings saved.")
                 return redirect("settings.view")
 
         context = {
             "privacy_form": privacy_form,
             "contact_form": contact_form,
             "style_form": style_form,
+            "map_display_form": map_display_form,
             "map_center_form": map_center_form,
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),

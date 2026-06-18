@@ -26,13 +26,13 @@ class PrivacySettingsForm(forms.ModelForm):
     friend_request_visibility = forms.ChoiceField(
         choices=_FRIEND_REQUEST_CHOICES,
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
-        label="Who Can Send Friend Requests",
-        help_text="Control which users are allowed to send you friend requests.",
+        label="Friend Requests",
+        help_text="Which users are allowed to send you friend requests.",
     )
     hide_pin_locations_in_trips = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
-        label="Hide My Pin Locations in Trips",
+        label="Hide My Pins in Trips",
         help_text=(
             "When you share one of your pins as a trip activity, hide the location "
             "from trip members who don't already have that pin on their own map."
@@ -61,7 +61,7 @@ class ContactSettingsForm(forms.Form):
 
 
 class StyleSettingsForm(forms.ModelForm):
-    """Display preferences saved on the Profile."""
+    """Site-wide appearance — color theme only."""
 
     dark_mode = forms.BooleanField(
         required=False,
@@ -69,11 +69,20 @@ class StyleSettingsForm(forms.ModelForm):
         label="Dark Mode",
         help_text="Use a dark color scheme across the app.",
     )
+
+    class Meta:
+        model = Profile
+        fields = ["dark_mode"]
+
+
+class MapDisplayForm(forms.ModelForm):
+    """Map display and performance settings."""
+
     default_map_view = forms.ChoiceField(
         choices=MapViewChoice.choices,
         widget=forms.RadioSelect(attrs={"class": "settings-radio"}),
         label="Default Map View",
-        help_text="Which map layer to use by default on location pages.",
+        help_text="Which map layer to use by default.",
     )
     cluster_radius = forms.IntegerField(
         required=False,
@@ -81,22 +90,21 @@ class StyleSettingsForm(forms.ModelForm):
         max_value=500,
         widget=forms.NumberInput(attrs={"class": "settings-input", "placeholder": "Auto (zoom-based)"}),
         label="Cluster Radius",
-        help_text="Pixels within which nearby pins are grouped into a cluster. Leave blank to use the automatic zoom-based value.",
+        help_text="Pixels within which nearby pins are grouped. Leave blank for automatic zoom-based grouping.",
     )
     use_pin_cache = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
-        label="Cache pins in browser storage",
+        label="Local Storage",
         help_text=(
-            "Stores your pins in your browser so the map loads instantly on repeat visits. "
-            "Disabling this means pins must be re-fetched from the server every time you open the map, "
-            "which will noticeably slow down load times — especially if you have many pins."
+            "Caches your pins in the browser for instant map loads on return visits. "
+            "Disabling this re-fetches all pins from the server on every load."
         ),
     )
 
     class Meta:
         model = Profile
-        fields = ["dark_mode", "default_map_view", "cluster_radius", "use_pin_cache"]
+        fields = ["default_map_view", "cluster_radius", "use_pin_cache"]
 
 
 class MapCenterForm(forms.ModelForm):
