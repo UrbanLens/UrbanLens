@@ -49,7 +49,7 @@ def render_comment_text(
     if not is_visible_to(text, viewer_pinned_uuids):
         return None
 
-    from django.urls import reverse
+    from django.urls import NoReverseMatch, reverse
 
     parts: list[str] = []
     last_end = 0
@@ -62,7 +62,7 @@ def render_comment_text(
         loc_uuid = m.group(2)
         try:
             wiki_url = reverse("location.wiki", args=[loc_uuid])
-        except Exception:
+        except NoReverseMatch:
             wiki_url = "#"
         html = format_html(
             '<a href="{}" class="mention mention--location">@{}</a>',
@@ -90,7 +90,7 @@ def render_comment_text(
                         n,
                         act_name,
                     )
-                except Exception:
+                except NoReverseMatch:
                     html = format_html("@act:{} {}", n, act_name)
             else:
                 html = format_html(

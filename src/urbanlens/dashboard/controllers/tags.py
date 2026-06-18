@@ -47,8 +47,8 @@ def _resize_custom_icon(uploaded_file):
         if not name.lower().endswith(ext):
             name = name.rsplit(".", 1)[0] + ext
         return InMemoryUploadedFile(out, "ImageField", name, f"image/{fmt.lower()}", out.getbuffer().nbytes, None)
-    except Exception:
-        with contextlib.suppress(Exception):
+    except (OSError, ValueError):
+        with contextlib.suppress(OSError):
             uploaded_file.seek(0)
         return uploaded_file
 

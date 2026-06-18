@@ -79,7 +79,7 @@ class ViewProfileView(LoginRequiredMixin, View):
             try:
                 friendship = Friendship.objects.between(my_profile, profile)
                 return FriendshipStatus.is_friend(friendship.status)
-            except Exception:
+            except Friendship.DoesNotExist:
                 return False
 
         if visibility == VisibilityChoice.COMMON_PIN:

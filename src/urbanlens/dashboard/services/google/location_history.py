@@ -157,7 +157,7 @@ def import_location_history_streaming(
     for filename, raw_bytes in files:
         try:
             data = json.loads(raw_bytes.decode("utf-8"))
-        except Exception:
+        except (UnicodeDecodeError, ValueError):
             logger.debug("Skipping non-JSON file in location history import: %s", filename)
             continue
         fmt = detect_location_history_format(data)

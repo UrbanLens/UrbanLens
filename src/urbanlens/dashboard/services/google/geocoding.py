@@ -33,6 +33,7 @@ import re
 import sys
 from typing import TYPE_CHECKING, Any
 
+from django.db import DatabaseError
 import s2sphere
 
 from urbanlens.dashboard.models.cache import GeocodedLocation
@@ -166,7 +167,7 @@ class GoogleGeocodingGateway(Gateway):
                 place_name=request_data.get("place_name", None),
                 json_response=json.dumps(body),
             )
-        except Exception:
+        except DatabaseError:
             logger.exception("Error caching geocoded location for %s", request_data)
 
         return body
@@ -278,7 +279,7 @@ class GoogleGeocodingGateway(Gateway):
                 longitude=lng,
                 json_response=json.dumps(body),
             )
-        except Exception:
+        except DatabaseError:
             logger.warning("Failed to cache CID lookup for %d", cid)
 
         if lat is None or lng is None:

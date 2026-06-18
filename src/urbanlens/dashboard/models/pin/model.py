@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import CASCADE, SET_NULL, ForeignKey, ImageField, Index, ManyToManyField, Q, UniqueConstraint, UUIDField
 from django.db.models.fields import CharField, DateField, DateTimeField, DecimalField, IntegerField, TextField
 
@@ -279,7 +280,7 @@ class Pin(abstract.Model):
             review = self.reviews.all().latest()
             if review:
                 return review.rating
-        except Exception:
+        except ObjectDoesNotExist:
             logger.debug("no rating found for pin %s", self.id)
         return 0
 

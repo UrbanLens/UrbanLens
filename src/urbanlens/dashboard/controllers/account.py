@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import smtplib
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
@@ -109,7 +110,7 @@ class SignupView(generic.CreateView):
             msg.attach_alternative(html_body, "text/html")
             msg.send()
             logger.info("Verification email sent to %s", user.email)
-        except Exception:
+        except (smtplib.SMTPException, OSError):
             logger.exception("Failed to send verification email to %s", user.email)
             # Store the verify URL in session for debug display
             self.request.session["debug_verify_url"] = verify_url
@@ -192,7 +193,7 @@ def _send_verification_email(request: HttpRequest, user: User, verification: Ema
         msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[user.email])
         msg.attach_alternative(html_body, "text/html")
         msg.send()
-    except Exception:
+    except (smtplib.SMTPException, OSError):
         logger.exception("Failed to send verification email to %s", user.email)
         request.session["debug_verify_url"] = verify_url
 

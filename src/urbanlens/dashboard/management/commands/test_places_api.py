@@ -32,7 +32,7 @@ def _mask(key: str | None) -> str:
 def _print_result(label: str, response: requests.Response) -> None:
     try:
         body = response.json()
-    except Exception:
+    except ValueError:
         body = {"raw": response.text}
 
     status = body.get("status", "N/A")

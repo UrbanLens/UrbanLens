@@ -29,6 +29,7 @@ import os
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+import requests
 
 from urbanlens.dashboard.models.pin import Pin
 
@@ -55,6 +56,5 @@ def suggest_and_add_categories(sender, instance: Pin, created, **kwargs):
     # no save() needed here.
     try:
         instance.suggest_category(append_suggestion=True)
-    except Exception:
-        # TODO: Consider more specific exception handling if possible
+    except (requests.RequestException, ValueError):
         logger.warning("suggest_category failed for pin %s", instance.pk, exc_info=True)

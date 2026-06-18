@@ -11,6 +11,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
+import requests
 
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import SiteSettings, Trip, TripActivity, TripComment, TripMembership
@@ -1276,7 +1277,7 @@ def _build_activity_forecasts(activities: list, gateway: WeatherForecastGateway)
         if key not in cache:
             try:
                 cache[key] = gateway.get_raw_forecast(*coords)
-            except Exception:
+            except requests.RequestException:
                 logger.warning("Weather fetch failed for coords %s", key)
                 cache[key] = None
 
@@ -1358,7 +1359,7 @@ class TripWeatherView(LoginRequiredMixin, View):
                     dated = sorted(d for d in day_map if d is not None)
                     keys = dated + ([None] if None in day_map else [])
                     grouped = [(d, day_map[d]) for d in keys]
-                except Exception:
+                except (requests.RequestException, KeyError, TypeError):
                     logger.warning("Weather fetch failed for trip %s", trip_uuid)
                     error = "Weather data could not be loaded."
 

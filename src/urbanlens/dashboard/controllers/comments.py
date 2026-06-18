@@ -7,7 +7,7 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.views import View
 
 from urbanlens.dashboard.models.comments.model import Comment
@@ -305,7 +305,7 @@ def _comment_url(comment) -> str:
             return reverse("pin.details", kwargs={"pin_uuid": comment.pin.uuid}) + anchor
         if hasattr(comment, "location_id") and comment.location_id:
             return reverse("location.wiki", kwargs={"location_uuid": comment.location.uuid}) + anchor
-    except Exception:
+    except NoReverseMatch:
         logger.warning("Could not build comment URL for comment %s", comment.id)
     return ""
 
