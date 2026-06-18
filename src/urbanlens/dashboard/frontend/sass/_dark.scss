@@ -427,10 +427,14 @@
     .notif-prefs__row {
         border-bottom-color: #2a2a2a;
 
-        &:hover { background: #252525; }
+        &:hover {
+            background: #252525;
+        }
     }
 
-    .notif-prefs__label { color: #ccc; }
+    .notif-prefs__label {
+        color: #ccc;
+    }
 
     .notif-prefs__saved {
         background: #1a2e1a;
@@ -441,6 +445,7 @@
 // ── Profile page ─────────────────────────────────────────────────────────────
 
 [data-theme="dark"] {
+
     // Main cards
     .profile-hero,
     .profile-stat,
@@ -457,7 +462,9 @@
     .profile-bio {
         color: #ccc;
 
-        &.empty { color: #555; }
+        &.empty {
+            color: #555;
+        }
     }
 
     .profile-username,
@@ -488,7 +495,10 @@
         border-color: #444;
         color: #aaa;
 
-        &:hover { border-color: $primary-color; color: $primary-color; }
+        &:hover {
+            border-color: $primary-color;
+            color: $primary-color;
+        }
     }
 
     .shared-visited-item {
@@ -502,23 +512,36 @@
         background: #252525;
         border-color: #383838;
 
-        &:hover { border-color: #555; }
+        &:hover {
+            border-color: #555;
+        }
     }
 
-    .friend-card-name { color: #e0e0e0; }
+    .friend-card-name {
+        color: #e0e0e0;
+    }
+
     .friend-card-username,
-    .friend-card-area { color: #666; }
+    .friend-card-area {
+        color: #666;
+    }
 
     .friend-requests-section {
         background: #1e1a0e;
         border-color: #4a3a10;
     }
 
-    .friend-requests-label { color: #d4a44c; }
+    .friend-requests-label {
+        color: #d4a44c;
+    }
 
-    .friend-request-name { color: #ccc; }
+    .friend-request-name {
+        color: #ccc;
+    }
 
-    .friend-request-sub { color: #666; }
+    .friend-request-sub {
+        color: #666;
+    }
 
     .friend-request-item {
         border-bottom-color: rgba(255, 255, 255, .06);
@@ -530,7 +553,9 @@
         border-color: #2d6a2d;
         color: #86efac;
 
-        &:hover { background: #1f3a1f; }
+        &:hover {
+            background: #1f3a1f;
+        }
     }
 
     .btn-friend-reject {
@@ -538,7 +563,9 @@
         border-color: #6a2d2d;
         color: #fca5a5;
 
-        &:hover { background: #3a2020; }
+        &:hover {
+            background: #3a2020;
+        }
     }
 
     .btn-friend-ignore {
@@ -546,7 +573,9 @@
         border-color: #444;
         color: #888;
 
-        &:hover { background: #2d2d2d; }
+        &:hover {
+            background: #2d2d2d;
+        }
     }
 
     .btn-friend-remove:hover {
@@ -568,23 +597,39 @@
     }
 
     // Profile section title / counts / links
-    .profile-section-title { color: #888; }
-    .profile-section-empty { color: #555; }
+    .profile-section-title {
+        color: #888;
+    }
+
+    .profile-section-empty {
+        color: #555;
+    }
 
     // Full friends page
     .friends-back-link {
         color: #666;
 
-        &:hover { color: #ccc; }
+        &:hover {
+            color: #ccc;
+        }
     }
 
-    .friends-page-title { color: #e0e0e0; }
+    .friends-page-title {
+        color: #e0e0e0;
+    }
 
-    .friends-section--requests { border-color: #4a3a10; }
+    .friends-section--requests {
+        border-color: #4a3a10;
+    }
 
     .friends-empty {
-        .material-icons { color: #444; }
-        p { color: #666; }
+        .material-icons {
+            color: #444;
+        }
+
+        p {
+            color: #666;
+        }
     }
 
     // Full-page .btn-friend pills (labelled, used on the friends.html full page)
@@ -593,7 +638,9 @@
         border-color: #2d6a2d;
         color: #86efac;
 
-        &:hover { background: #1f3a1f; }
+        &:hover {
+            background: #1f3a1f;
+        }
     }
 
     .btn-friend--reject {
@@ -601,7 +648,9 @@
         border-color: #6a2d2d;
         color: #fca5a5;
 
-        &:hover { background: #3a2020; }
+        &:hover {
+            background: #3a2020;
+        }
     }
 
     .btn-friend--ignore {
@@ -609,32 +658,38 @@
         border-color: #444;
         color: #888;
 
-        &:hover { background: #2d2d2d; }
+        &:hover {
+            background: #2d2d2d;
+        }
     }
 
     .btn-friend--remove {
         border-color: #444;
         color: #888;
 
-        &:hover { background: #3a1a1a; border-color: #6a2d2d; color: #fca5a5; }
+        &:hover {
+            background: #3a1a1a;
+            border-color: #6a2d2d;
+            color: #fca5a5;
+        }
     }
-}
 
-// ── Date-validation error dialog ─────────────────────────────────────────────
+    // ── Date-validation error dialog ─────────────────────────────────────────────
 
-.date-error-list {
-    margin: 0 0 0.75rem;
-    padding-left: 1.25rem;
-    color: #d32f2f;
-    font-size: 0.9rem;
+    .date-error-list {
+        margin: 0 0 0.75rem;
+        padding-left: 1.25rem;
+        color: #d32f2f;
+        font-size: 0.9rem;
 
-    li {
-        margin-bottom: 0.25rem;
+        li {
+            margin-bottom: 0.25rem;
+        }
     }
-}
 
-.date-error-hint {
-    font-size: 0.85rem;
-    color: $text-secondary;
-    margin: 0;
+    .date-error-hint {
+        font-size: 0.85rem;
+        color: $text-secondary;
+        margin: 0;
+    }
 }
