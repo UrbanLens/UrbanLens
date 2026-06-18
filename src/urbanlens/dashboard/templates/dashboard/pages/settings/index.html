@@ -167,10 +167,12 @@
                 <p class="settings-help">{{ style_form.cluster_radius.help_text }}</p>
                 <div class="settings-cluster-row">
                     {{ style_form.cluster_radius }}
+                    {% if style_form.cluster_radius.value != 'auto' %}
                     <button type="button" class="settings-reset-btn"
                             onclick="document.getElementById('{{ style_form.cluster_radius.id_for_label }}').value = ''">
-                        Reset to auto
+                        Reset
                     </button>
+                    {% endif %}
                 </div>
                 {% if style_form.cluster_radius.errors %}
                 <p class="settings-error">{{ style_form.cluster_radius.errors|join:", " }}</p>
@@ -315,16 +317,18 @@ function applyThemePreview(theme) {
     }
 
     // Keep hidden fields in sync whenever the map or marker changes.
+    // Dragging or clicking auto-switches to Custom so the chosen position is saved.
     marker.on('dragend', function (e) {
         var pos = e.target.getLatLng();
         previewMap.setView(pos);
         syncHiddenFields(pos.lat, pos.lng);
+        if (currentMode !== 'custom') selectMapMode('custom');
     });
     previewMap.on('click', function (e) {
-        if (currentMode !== 'custom') return;
         marker.setLatLng(e.latlng);
         previewMap.setView(e.latlng);
         syncHiddenFields(e.latlng.lat, e.latlng.lng);
+        if (currentMode !== 'custom') selectMapMode('custom');
     });
     previewMap.on('zoomend', syncZoom);
 
@@ -351,6 +355,9 @@ function applyThemePreview(theme) {
         });
     }
 
+    var _GPS_ZOOM  = 13;  // street/neighbourhood — appropriate for "where am I now"
+    var _AUTO_ZOOM = 11;  // slightly wider — shows a whole pin cluster
+
     window.selectMapMode = function (mode) {
         // Select the matching hidden radio input.
         var radio = document.querySelector('input[name="map_center_mode"][value="' + mode + '"]');
@@ -358,8 +365,14 @@ function applyThemePreview(theme) {
         applyMode(mode);
 
         if (mode === 'gps') {
+            previewMap.setZoom(_GPS_ZOOM);
+            document.getElementById('id_map_default_zoom').value = _GPS_ZOOM;
             useDeviceLocation();
+        } else if (mode === 'auto') {
+            previewMap.setZoom(_AUTO_ZOOM);
+            document.getElementById('id_map_default_zoom').value = _AUTO_ZOOM;
         }
+        // Custom: keep whatever zoom the user last set.
     };
 
     // Geocode an address string and move the preview map there.

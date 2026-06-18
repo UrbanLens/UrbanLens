@@ -5,8 +5,11 @@ Invariants verified:
   - view_map populates key context variables: pin_count, use_pin_cache,
     map_center_mode, and map_default_zoom from the user's profile.
   - pin_count in context equals the real number of root pins for the profile.
-  - GPS mode sets map_center_lat/lng to None in the context.
+  - GPS mode sets map_center_lat/lng to None in the context, but populates
+    gps_fallback_lat/lng with the pin-cluster centroid when pins exist.
+  - GPS mode sets gps_fallback_lat/lng to None when the profile has no pins.
   - CUSTOM mode with stored coordinates sets map_center_lat/lng correctly.
+  - CUSTOM / AUTO modes always set gps_fallback_lat/lng to None.
   - map_pins_meta returns null when the profile has no pins, and an ISO
     timestamp equal to the most-recently-updated pin's timestamp otherwise.
 """
@@ -99,6 +102,41 @@ class ViewMapContextTests(HypothesisTestCase):
 		resp = self.client.get(_MAP_URL)
 		self.assertIsNone(resp.context["map_center_lat"])
 		self.assertIsNone(resp.context["map_center_lng"])
+
+	def test_gps_mode_with_no_pins_sets_gps_fallback_to_none(self) -> None:
+		Profile.objects.filter(pk=self.profile.pk).update(map_center_mode=MapCenterMode.GPS)
+		resp = self.client.get(_MAP_URL)
+		self.assertIsNone(resp.context["gps_fallback_lat"])
+		self.assertIsNone(resp.context["gps_fallback_lng"])
+
+	def test_gps_mode_with_pins_provides_gps_fallback(self) -> None:
+		Profile.objects.filter(pk=self.profile.pk).update(map_center_mode=MapCenterMode.GPS)
+		baker.make(Pin, profile=self.profile, latitude=40.7, longitude=-74.0)
+		resp = self.client.get(_MAP_URL)
+		self.assertIsNotNone(resp.context["gps_fallback_lat"])
+		self.assertIsNotNone(resp.context["gps_fallback_lng"])
+		self.assertAlmostEqual(resp.context["gps_fallback_lat"], 40.7, places=2)
+		self.assertAlmostEqual(resp.context["gps_fallback_lng"], -74.0, places=2)
+
+	def test_gps_mode_uses_cached_centroid_without_recomputing(self) -> None:
+		"""If map_center_latitude is already cached, the controller should not recompute."""
+		Profile.objects.filter(pk=self.profile.pk).update(
+			map_center_mode=MapCenterMode.GPS,
+			map_center_latitude=decimal.Decimal("51.5"),
+			map_center_longitude=decimal.Decimal("-0.1"),
+		)
+		resp = self.client.get(_MAP_URL)
+		self.assertAlmostEqual(resp.context["gps_fallback_lat"], 51.5, places=2)
+		self.assertAlmostEqual(resp.context["gps_fallback_lng"], -0.1, places=2)
+
+	def test_non_gps_mode_does_not_set_gps_fallback(self) -> None:
+		baker.make(Pin, profile=self.profile, latitude=40.7, longitude=-74.0)
+		for mode in (MapCenterMode.AUTO, MapCenterMode.CUSTOM):
+			with self.subTest(mode=mode):
+				Profile.objects.filter(pk=self.profile.pk).update(map_center_mode=mode)
+				resp = self.client.get(_MAP_URL)
+				self.assertIsNone(resp.context["gps_fallback_lat"])
+				self.assertIsNone(resp.context["gps_fallback_lng"])
 
 	def test_custom_mode_with_coords_sets_map_center_in_context(self) -> None:
 		Profile.objects.filter(pk=self.profile.pk).update(

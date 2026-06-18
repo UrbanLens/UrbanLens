@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_invalidate_map_center")
-def invalidate_profile_map_center(_sender, instance: Pin, created: bool, **_kwargs) -> None:
+def invalidate_profile_map_center(sender, instance: Pin, created: bool, **kwargs) -> None:
     """Clear the cached map center so it is recomputed on the next map load.
 
     Args:

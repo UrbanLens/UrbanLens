@@ -759,23 +759,31 @@
     let   _totalPins         = {{ pin_count|default:0 }};
 
     // ── Map ───────────────────────────────────────────────────────────────────
-    const _MAP_CENTER_MODE = '{{ map_center_mode|default:"auto" }}';
+    const _MAP_CENTER_MODE   = '{{ map_center_mode|default:"gps" }}';
     const _SERVER_CENTER_LAT = {{ map_center_lat|default:"null" }};
     const _SERVER_CENTER_LNG = {{ map_center_lng|default:"null" }};
-    const _defaultZoom     = {{ map_default_zoom|default:13 }};
-    const _serverCenter    = (_SERVER_CENTER_LAT !== null && _SERVER_CENTER_LNG !== null)
+    // Pin-cluster centroid — used as fallback when GPS permission is denied.
+    const _GPS_FALLBACK_LAT  = {{ gps_fallback_lat|default:"null" }};
+    const _GPS_FALLBACK_LNG  = {{ gps_fallback_lng|default:"null" }};
+    const _defaultZoom       = {{ map_default_zoom|default:13 }};
+    const _serverCenter      = (_SERVER_CENTER_LAT !== null && _SERVER_CENTER_LNG !== null)
         ? [_SERVER_CENTER_LAT, _SERVER_CENTER_LNG]
-        : [40.7128, -74.0060];  // NYC — shown only when user has no pins and GPS denied
+        : (_GPS_FALLBACK_LAT !== null ? [_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG] : [40.7128, -74.0060]);
 
     const map = L.map('map', { maxZoom: 19 }).setView(_serverCenter, _defaultZoom);
     window.map = map;
     window.pin = null;
 
-    // GPS mode: always re-center to the user's actual location on load.
+    // GPS mode: re-center to the user's actual location on load.
+    // If the permission request is denied, fall back to the pin-cluster centroid.
     if (_MAP_CENTER_MODE === 'gps' && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             (pos) => { map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom); },
-            () => { /* permission denied — server center already applied */ },
+            () => {
+                if (_GPS_FALLBACK_LAT !== null && _GPS_FALLBACK_LNG !== null) {
+                    map.setView([_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG], _defaultZoom);
+                }
+            },
             { timeout: 8000, maximumAge: 300000 },
         );
     }

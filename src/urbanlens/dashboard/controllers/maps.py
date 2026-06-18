@@ -54,11 +54,24 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def view_map(self, request, *args, **kwargs):
         from urbanlens.dashboard.models.pin.model import PinStatus
 
+        from urbanlens.dashboard.models.profile.model import MapCenterMode
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         tags = Badge.objects.tags().visible_to(profile).ordered()
         categories = Badge.objects.categories().ordered()
         map_center = profile.get_map_center()
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
+
+        # When GPS mode is active, the JS centers the map via geolocation.  If
+        # the user denies the permission request we fall back to the pin-cluster
+        # centroid so they still land on a sensible view (not mid-Atlantic NYC).
+        gps_fallback: tuple[float, float] | None = None
+        if profile.map_center_mode == MapCenterMode.GPS:
+            if profile.map_center_latitude is not None and profile.map_center_longitude is not None:
+                gps_fallback = (float(profile.map_center_latitude), float(profile.map_center_longitude))
+            else:
+                gps_fallback = profile.compute_map_center()
+
         return render(
             request,
             "dashboard/pages/map/index.html",
@@ -75,6 +88,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "map_center_lng": map_center[1] if map_center else None,
                 "map_center_mode": profile.map_center_mode,
                 "map_default_zoom": profile.map_default_zoom or 13,
+                "gps_fallback_lat": gps_fallback[0] if gps_fallback else None,
+                "gps_fallback_lng": gps_fallback[1] if gps_fallback else None,
             },
         )
 

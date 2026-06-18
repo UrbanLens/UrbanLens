@@ -26,6 +26,8 @@
 
 from __future__ import annotations
 
+import math
+
 from django.contrib.auth.models import User
 from django.db.models import (
     CASCADE,
@@ -43,6 +45,20 @@ from django.db.models import (
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.profile.queryset import Manager
+
+# Pins within this distance are considered part of the same cluster.
+# 1 000 km groups intra-continental pins together while keeping intercontinental
+# collections (e.g. US east coast vs Europe, ~5 600 km) in separate clusters.
+_CLUSTER_RADIUS_KM = 1_000.0
+
+
+def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
+    """Great-circle distance in kilometres between two (lat, lng) points."""
+    lat1, lng1 = math.radians(p1[0]), math.radians(p1[1])
+    lat2, lng2 = math.radians(p2[0]), math.radians(p2[1])
+    dlat, dlng = lat2 - lat1, lng2 - lng1
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng / 2) ** 2
+    return 6_371.0 * 2 * math.asin(math.sqrt(a))
 
 
 class VisibilityChoice(TextChoices):
@@ -115,7 +131,7 @@ class Profile(abstract.Model):
     map_center_mode = CharField(
         max_length=10,
         choices=MapCenterMode.choices,
-        default=MapCenterMode.AUTO,
+        default=MapCenterMode.GPS,
     )
     # Cached centroid of the user's pins (auto mode). Cleared by post_save signal
     # on new pin; recomputed lazily on the next map load.
@@ -155,32 +171,60 @@ class Profile(abstract.Model):
         return self.user.get_full_name()
 
     def compute_map_center(self) -> tuple[float, float] | None:
-        """Compute the geographic centroid of all user pins and cache it on the profile.
+        """Find the densest geographic cluster of pins and return its centroid.
+
+        A naive average breaks when the user has pins on multiple continents —
+        the centre point ends up in the ocean between them.  Instead we find the
+        "seed" point with the most neighbours within _CLUSTER_RADIUS_KM, then
+        return the centroid of those neighbours.  For a single tight collection
+        this equals the regular centroid; for intercontinental spreads the
+        largest regional cluster wins.
 
         Returns:
-            (latitude, longitude) tuple, or None if the user has no pins with coordinates.
+            (latitude, longitude) as floats, or None if the user has no pins
+            with resolvable coordinates.
         """
-        from django.db.models import Avg, F
+        from django.db.models import F
         from django.db.models.functions import Coalesce
 
         from urbanlens.dashboard.models.pin.model import Pin
 
-        result = Pin.objects.filter(profile=self).aggregate(
-            avg_lat=Avg(Coalesce(F("latitude"), F("location__latitude"))),
-            avg_lng=Avg(Coalesce(F("longitude"), F("location__longitude"))),
+        rows = list(
+            Pin.objects.filter(profile=self)
+            .annotate(
+                eff_lat=Coalesce(F("latitude"), F("location__latitude")),
+                eff_lng=Coalesce(F("longitude"), F("location__longitude")),
+            )
+            .filter(eff_lat__isnull=False, eff_lng__isnull=False)
+            .values_list("eff_lat", "eff_lng")
         )
-        lat = result.get("avg_lat")
-        lng = result.get("avg_lng")
-        if lat is None or lng is None:
+        if not rows:
             return None
 
-        Profile.objects.filter(pk=self.pk).update(
-            map_center_latitude=lat,
-            map_center_longitude=lng,
+        pts = [(float(lat), float(lng)) for lat, lng in rows]
+
+        # For each point count how many other points fall within the cluster radius.
+        # The point with the highest count is the cluster seed.
+        best_idx = max(
+            range(len(pts)),
+            key=lambda i: sum(
+                1 for other in pts
+                if _haversine_km(pts[i], other) <= _CLUSTER_RADIUS_KM
+            ),
         )
-        self.map_center_latitude = lat
-        self.map_center_longitude = lng
-        return float(lat), float(lng)
+
+        seed = pts[best_idx]
+        cluster = [p for p in pts if _haversine_km(seed, p) <= _CLUSTER_RADIUS_KM]
+        avg_lat = sum(p[0] for p in cluster) / len(cluster)
+        avg_lng = sum(p[1] for p in cluster) / len(cluster)
+
+        Profile.objects.filter(pk=self.pk).update(
+            map_center_latitude=avg_lat,
+            map_center_longitude=avg_lng,
+        )
+        self.map_center_latitude = avg_lat
+        self.map_center_longitude = avg_lng
+        return avg_lat, avg_lng
 
     def get_map_center(self) -> tuple[float, float] | None:
         """Return the map center coordinates to use as the initial view.

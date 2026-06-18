@@ -5,8 +5,12 @@ Invariants verified:
   - CUSTOM mode returns stored coordinates as floats, or None when either is unset.
   - AUTO mode returns the cached centroid without touching the DB; falls back to
     compute_map_center() when the cache is empty.
-  - compute_map_center() averages pin coordinates (falling back to location coords
-    via Coalesce), writes the result to the DB cache, and returns floats.
+  - compute_map_center() finds the densest cluster of pins and returns its centroid,
+    rather than a naive average across all pins (which would land in the ocean for
+    users with pins on multiple continents).
+  - When all pins are nearby, the cluster centroid equals their geographic midpoint.
+  - When pins are spread across continents, the largest regional cluster wins.
+  - The result is written to the DB cache and returned as (float, float).
   - Pins with no usable coordinates produce None from compute_map_center().
 """
 from __future__ import annotations
@@ -14,7 +18,7 @@ from __future__ import annotations
 import decimal
 from unittest.mock import patch
 
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
@@ -22,6 +26,7 @@ from model_bakery import baker
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import MapCenterMode, Profile
+from urbanlens.dashboard.models.profile.model import _CLUSTER_RADIUS_KM, _haversine_km
 from urbanlens.dashboard.tests.hypothesis.strategies import latitude, longitude, valid_zoom
 
 _DB_SETTINGS = dict(
@@ -219,13 +224,14 @@ class ComputeMapCenterTests(HypothesisTestCase):
 		self.assertAlmostEqual(result[0], 42.65, places=4)
 		self.assertAlmostEqual(result[1], -73.75, places=4)
 
-	def test_two_pins_centroid_is_their_midpoint(self) -> None:
+	def test_two_nearby_pins_result_is_their_midpoint(self) -> None:
+		# These two points are ~140 km apart — both in the same cluster.
 		baker.make(Pin, profile=self.profile, latitude=40.0, longitude=-70.0)
-		baker.make(Pin, profile=self.profile, latitude=44.0, longitude=-78.0)
+		baker.make(Pin, profile=self.profile, latitude=41.0, longitude=-71.0)
 		result = self.profile.compute_map_center()
 		self.assertIsNotNone(result)
-		self.assertAlmostEqual(result[0], 42.0, places=3)
-		self.assertAlmostEqual(result[1], -74.0, places=3)
+		self.assertAlmostEqual(result[0], 40.5, places=3)
+		self.assertAlmostEqual(result[1], -70.5, places=3)
 
 	def test_result_is_cached_on_profile_in_db(self) -> None:
 		baker.make(Pin, profile=self.profile, latitude=42.65, longitude=-73.75)
@@ -257,21 +263,92 @@ class ComputeMapCenterTests(HypothesisTestCase):
 		self.assertAlmostEqual(result[1], 10.0, places=2)
 
 	@given(
-		lat1=st.floats(min_value=-80.0, max_value=80.0, allow_nan=False, allow_infinity=False),
-		lat2=st.floats(min_value=-80.0, max_value=80.0, allow_nan=False, allow_infinity=False),
+		lat1=st.floats(min_value=-80.0, max_value=78.0, allow_nan=False, allow_infinity=False),
+		dlat=st.floats(min_value=0.01, max_value=2.0, allow_nan=False, allow_infinity=False),
 		lng1=st.floats(min_value=-170.0, max_value=170.0, allow_nan=False, allow_infinity=False),
-		lng2=st.floats(min_value=-170.0, max_value=170.0, allow_nan=False, allow_infinity=False),
+		dlng=st.floats(min_value=0.01, max_value=2.0, allow_nan=False, allow_infinity=False),
 	)
 	@settings(**_DB_SETTINGS)
-	def test_centroid_latitude_is_between_input_latitudes(
-		self, lat1: float, lat2: float, lng1: float, lng2: float
+	def test_two_nearby_pins_result_is_their_midpoint_hypothesis(
+		self, lat1: float, dlat: float, lng1: float, dlng: float,
 	) -> None:
+		"""For two pins that are close together, the cluster centroid equals their midpoint."""
+		lat2, lng2 = lat1 + dlat, lng1 + dlng
+		assume(_haversine_km((lat1, lng1), (lat2, lng2)) <= _CLUSTER_RADIUS_KM)
 		baker.make(Pin, profile=self.profile, latitude=lat1, longitude=lng1)
 		baker.make(Pin, profile=self.profile, latitude=lat2, longitude=lng2)
 		result = self.profile.compute_map_center()
 		self.assertIsNotNone(result)
-		self.assertGreaterEqual(result[0], min(lat1, lat2) - 0.001)
-		self.assertLessEqual(result[0], max(lat1, lat2) + 0.001)
+		self.assertAlmostEqual(result[0], (lat1 + lat2) / 2, places=4)
+		self.assertAlmostEqual(result[1], (lng1 + lng2) / 2, places=4)
+
+
+# ── Clustering behaviour ──────────────────────────────────────────────────────
+
+class ComputeMapCenterClusteringTests(HypothesisTestCase):
+	"""The largest geographic cluster wins over intercontinental spreads."""
+
+	def setUp(self) -> None:
+		super().setUp()
+		self.profile = baker.make("auth.User").profile
+
+	def test_larger_cluster_wins_over_isolated_pin(self) -> None:
+		# Three pins near NYC (~40°N 74°W) vs one pin near London (51°N 0°W).
+		# The NYC cluster has more members and must win.
+		nyc = [(40.7, -74.0), (40.8, -73.9), (40.6, -74.1)]
+		for lat, lng in nyc:
+			baker.make(Pin, profile=self.profile, latitude=lat, longitude=lng)
+		baker.make(Pin, profile=self.profile, latitude=51.5, longitude=-0.1)  # London
+		result = self.profile.compute_map_center()
+		self.assertIsNotNone(result)
+		# Result must be near NYC, not in the middle of the Atlantic.
+		self.assertGreater(result[0], 35.0)   # latitude well above equator
+		self.assertLess(result[0], 50.0)      # but not near London
+		self.assertLess(result[1], -40.0)     # longitude clearly in the Americas
+
+	def test_equal_sized_clusters_returns_a_cluster_centroid_not_midpoint(self) -> None:
+		# One pin in NYC and one in London.  The result must be one of the two
+		# locations — NOT the midpoint in the mid-Atlantic (~46°N 37°W).
+		baker.make(Pin, profile=self.profile, latitude=40.7, longitude=-74.0)   # NYC
+		baker.make(Pin, profile=self.profile, latitude=51.5, longitude=-0.1)    # London
+		result = self.profile.compute_map_center()
+		self.assertIsNotNone(result)
+		near_nyc = abs(result[0] - 40.7) < 1.0 and abs(result[1] - -74.0) < 1.0
+		near_london = abs(result[0] - 51.5) < 1.0 and abs(result[1] - -0.1) < 1.0
+		self.assertTrue(
+			near_nyc or near_london,
+			f"Result {result} should be near NYC or London, not mid-Atlantic",
+		)
+
+	def test_result_is_within_the_winning_cluster_bounding_box(self) -> None:
+		# Six pins in Europe, two pins in South America.  Result must be in Europe.
+		europe = [(48.8, 2.3), (51.5, -0.1), (52.5, 13.4), (41.9, 12.5), (40.4, -3.7), (50.0, 14.4)]
+		for lat, lng in europe:
+			baker.make(Pin, profile=self.profile, latitude=lat, longitude=lng)
+		for lat, lng in [(-23.5, -46.6), (-34.6, -58.4)]:
+			baker.make(Pin, profile=self.profile, latitude=lat, longitude=lng)
+		result = self.profile.compute_map_center()
+		self.assertIsNotNone(result)
+		# Result must be in the European latitude/longitude band.
+		self.assertGreater(result[0], 30.0)   # north of Africa
+		self.assertLess(result[0], 60.0)      # south of Scandinavia
+		self.assertGreater(result[1], -10.0)  # east of Atlantic
+		self.assertLess(result[1], 25.0)      # west of Turkey
+
+	@given(n=st.integers(min_value=1, max_value=8))
+	@settings(**_DB_SETTINGS)
+	def test_result_is_always_within_bounding_box_of_all_pins(self, n: int) -> None:
+		"""The cluster centroid must never fall outside the geographic extent of all pins."""
+		lats = [40.0 + i * 0.1 for i in range(n)]
+		lngs = [-74.0 - i * 0.1 for i in range(n)]
+		for lat, lng in zip(lats, lngs):
+			baker.make(Pin, profile=self.profile, latitude=lat, longitude=lng)
+		result = self.profile.compute_map_center()
+		self.assertIsNotNone(result)
+		self.assertGreaterEqual(result[0], min(lats) - 0.001)
+		self.assertLessEqual(result[0], max(lats) + 0.001)
+		self.assertGreaterEqual(result[1], min(lngs) - 0.001)
+		self.assertLessEqual(result[1], max(lngs) + 0.001)
 
 
 # ── map_default_zoom default ──────────────────────────────────────────────────
