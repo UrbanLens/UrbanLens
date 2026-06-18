@@ -161,6 +161,10 @@ class ViewMapContextTests(HypothesisTestCase):
 	@given(n=st.integers(min_value=0, max_value=6))
 	@settings(**_DB_SETTINGS)
 	def test_pin_count_equals_root_pin_count_for_n_pins(self, n: int) -> None:
+		# hypothesis.extra.django flushes the DB session between examples via
+		# _pre_setup/_post_teardown even though setUp data survives in the outer
+		# class transaction.  Re-login here so each example has a valid session.
+		self.client.force_login(self.user)
 		for _ in range(n):
 			baker.make(Pin, profile=self.profile, parent_pin=None, parent_location=None)
 		resp = self.client.get(_MAP_URL)

@@ -196,7 +196,7 @@ class Profile(abstract.Model):
                 eff_lng=Coalesce(F("longitude"), F("location__longitude")),
             )
             .filter(eff_lat__isnull=False, eff_lng__isnull=False)
-            .values_list("eff_lat", "eff_lng")
+            .values_list("eff_lat", "eff_lng"),
         )
         if not rows:
             return None

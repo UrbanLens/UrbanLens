@@ -26,19 +26,49 @@ logger = logging.getLogger(__name__)
 
 
 class SettingsView(LoginRequiredMixin, View):
+    def _build_map_center_context(self, profile: Profile) -> dict:
+        """Return preview coordinates and centroid for the map-center settings section.
+
+        The preview differs by mode:
+        - CUSTOM: show the stored custom coordinates.
+        - GPS / AUTO: show the pin-cluster centroid (GPS mode adds live geolocation
+          on top of this in the browser).
+
+        We always recompute the centroid here rather than reading the cached value so
+        that any stale cache entry from the old averaging algorithm is replaced with
+        the current clustering result.
+        """
+        from urbanlens.dashboard.models.profile.model import MapCenterMode
+
+        pin_centroid = profile.compute_map_center()
+        pin_centroid_lat = pin_centroid[0] if pin_centroid else None
+        pin_centroid_lng = pin_centroid[1] if pin_centroid else None
+
+        if profile.map_center_mode == MapCenterMode.CUSTOM:
+            preview_lat = float(profile.map_custom_latitude) if profile.map_custom_latitude is not None else None
+            preview_lng = float(profile.map_custom_longitude) if profile.map_custom_longitude is not None else None
+        else:
+            preview_lat = pin_centroid_lat
+            preview_lng = pin_centroid_lng
+
+        return {
+            "preview_lat": preview_lat,
+            "preview_lng": preview_lng,
+            "pin_centroid_lat": pin_centroid_lat,
+            "pin_centroid_lng": pin_centroid_lng,
+        }
+
     def get(self, request: HttpRequest) -> HttpResponse:
         if not request.user.is_authenticated:
             return redirect("login")
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        map_center = profile.get_map_center()
         context = {
             "privacy_form": PrivacySettingsForm(instance=profile),
             "contact_form": ContactSettingsForm(initial={"email": request.user.email}),
             "style_form": StyleSettingsForm(instance=profile),
             "map_center_form": MapCenterForm(instance=profile),
-            "preview_lat": map_center[0] if map_center else None,
-            "preview_lng": map_center[1] if map_center else None,
             "preview_zoom": profile.map_default_zoom or 13,
+            **self._build_map_center_context(profile),
         }
         return render(request, "dashboard/pages/settings/index.html", context)
 
@@ -82,15 +112,13 @@ class SettingsView(LoginRequiredMixin, View):
                 messages.success(request, "Map center saved.")
                 return redirect("settings.view")
 
-        map_center = profile.get_map_center()
         context = {
             "privacy_form": privacy_form,
             "contact_form": contact_form,
             "style_form": style_form,
             "map_center_form": map_center_form,
-            "preview_lat": map_center[0] if map_center else None,
-            "preview_lng": map_center[1] if map_center else None,
             "preview_zoom": profile.map_default_zoom or 13,
+            **self._build_map_center_context(profile),
         }
         return render(request, "dashboard/pages/settings/index.html", context)
 

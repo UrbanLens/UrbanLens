@@ -133,3 +133,26 @@ class MapCenterForm(forms.ModelForm):
     def clean_map_default_zoom(self):
         zoom = self.cleaned_data.get("map_default_zoom")
         return zoom if zoom is not None else 13
+
+    def save(self, commit: bool = True):
+        """Save map center preferences.
+
+        ``map_custom_latitude`` / ``map_custom_longitude`` are only meaningful
+        when the mode is CUSTOM.  In GPS or AUTO modes the hidden form fields
+        contain whatever the preview map happened to be showing, which must not
+        overwrite the user's saved custom location.
+        """
+        instance = super().save(commit=False)
+        if instance.map_center_mode != MapCenterMode.CUSTOM:
+            # Restore original custom coordinates from the database.
+            original = (
+                type(instance).objects
+                .filter(pk=instance.pk)
+                .values("map_custom_latitude", "map_custom_longitude")
+                .first()
+            ) or {}
+            instance.map_custom_latitude = original.get("map_custom_latitude")
+            instance.map_custom_longitude = original.get("map_custom_longitude")
+        if commit:
+            instance.save()
+        return instance

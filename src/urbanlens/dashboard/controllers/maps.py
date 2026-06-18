@@ -53,7 +53,6 @@ logger = logging.getLogger(__name__)
 class MapController(LoginRequiredMixin, GenericViewSet):
     def view_map(self, request, *args, **kwargs):
         from urbanlens.dashboard.models.pin.model import PinStatus
-
         from urbanlens.dashboard.models.profile.model import MapCenterMode
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
