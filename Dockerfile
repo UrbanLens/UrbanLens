@@ -75,9 +75,6 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | b
 COPY requirements /tmp/pip-tmp/requirements/
 RUN pip --no-cache-dir install -r /tmp/pip-tmp/requirements/dev.txt
 
-# Copy init.py into the container
-COPY src/bin/init.py /usr/local/bin/urbanlens_init.py
-
 # Copy all source files into the container
 COPY . /app
 
@@ -90,5 +87,5 @@ RUN pip install -e .
 # Install npm packages
 RUN npm install -y
 
-#ENTRYPOINT ["gunicorn", "urbanlens.UrbanLens.wsgi:application", "--bind", "0.0.0.0:8000", "-t", "600", "-k", "gevent"]
-ENTRYPOINT ["python", "/usr/local/bin/urbanlens_init.py"]
+# Run from /app/src/bin/init.py so ROOT_DIR resolves correctly to /app
+ENTRYPOINT ["python", "/app/src/bin/init.py"]
