@@ -43,7 +43,8 @@ class UnrecoverableError(Exception):
     """
 
 
-ROOT_DIR = Path("/app")
+# Resolve from this file's location: src/bin/init.py → src/ → project root
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 SRC_DIR = ROOT_DIR / "src"
 APP_DIR = SRC_DIR / "urbanlens"
 
@@ -158,9 +159,9 @@ class DjangoProjectInitializer:
         git_email = os.environ.get("GIT_EMAIL")
         try:
             if git_user:
-                subprocess.run(["git", "config", "--global", "user.name", git_user], check=True, cwd="/app")
+                subprocess.run(["git", "config", "--global", "user.name", git_user], check=True, cwd=ROOT_DIR)
             if git_email:
-                subprocess.run(["git", "config", "--global", "user.email", git_email], check=True, cwd="/app")
+                subprocess.run(["git", "config", "--global", "user.email", git_email], check=True, cwd=ROOT_DIR)
             logger.info("Git configured with username %s and email %s.", git_user, git_email)
 
         except subprocess.CalledProcessError as e:
@@ -219,21 +220,23 @@ class DjangoProjectInitializer:
             UnrecoverableError: if the file cannot be copied
 
         """
-        if Path("/app/.env").exists():
+        env_file = ROOT_DIR / ".env"
+        env_sample = ROOT_DIR / ".env-sample"
+
+        if env_file.exists():
             return
 
         try:
-            with Path("/app/.env-sample").open(encoding="utf-8") as sample_file:
+            with env_sample.open(encoding="utf-8") as sample_file:
                 sample_data = sample_file.read()
-            with Path("/app/.env").open("w", encoding="utf-8") as new_file:
+            with env_file.open("w", encoding="utf-8") as new_file:
                 new_file.write(sample_data)
             logger.info("Copied .env-sample to .env.")
         except OSError as e:
             logger.exception("Error copying .env-sample: %s", e)
             raise UnrecoverableError from e
 
-        # Check that it now exists
-        if not Path("/app/.env").exists():
+        if not env_file.exists():
             logger.error(".env was copied but still does not exist.")
             raise UnrecoverableError(".env was copied but still does not exist.")
 
@@ -251,8 +254,10 @@ class DjangoProjectInitializer:
             UnrecoverableError: if the file cannot be updated
 
         """
+        env_file = ROOT_DIR / ".env"
+
         try:
-            with Path("/app/.env").open(encoding="utf-8") as file:
+            with env_file.open(encoding="utf-8") as file:
                 data = file.readlines()
 
             for i, line in enumerate(data):
@@ -261,15 +266,14 @@ class DjangoProjectInitializer:
                 elif line.startswith("GIT_EMAIL="):
                     data[i] = f"GIT_EMAIL={email}\n"
 
-            with Path("/app/.env").open("w", encoding="utf-8") as file:
+            with env_file.open("w", encoding="utf-8") as file:
                 file.writelines(data)
             logger.info("Updated git username and email in .env.")
         except OSError as e:
             logger.exception("Error updating .env: %s", e)
             raise UnrecoverableError from e
 
-        # Check that it now exists
-        if not Path("/app/.env").exists():
+        if not env_file.exists():
             logger.error(".env was updated but still does not exist.")
             raise UnrecoverableError(".env was updated but still does not exist.")
 
@@ -343,7 +347,7 @@ class DjangoProjectInitializer:
         self,
         command: list[str],
         description: str | None = None,
-        cwd: str | Path = "/app",
+        cwd: str | Path | None = None,
         raise_error: bool = True,
     ) -> bool:
         """
@@ -360,7 +364,7 @@ class DjangoProjectInitializer:
 
         """
         try:
-            subprocess.run(command, check=True, cwd=cwd)
+            subprocess.run(command, check=True, cwd=cwd or ROOT_DIR)
             return True
 
         except subprocess.CalledProcessError as e:
@@ -471,7 +475,7 @@ class DjangoProjectInitializer:
 
         """
         # Clone the repo
-        if not Path("/app").exists():
+        if not ROOT_DIR.exists():
             logger.warning("Project source files cannot be found.")
             return
 

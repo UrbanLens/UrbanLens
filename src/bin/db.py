@@ -25,7 +25,6 @@
 *********************************************************************************************************************"""
 # !/usr/bin/env python
 
-# Generic imports
 import argparse
 from enum import Enum
 import logging
@@ -36,15 +35,19 @@ import subprocess
 import sys
 import textwrap
 import time
+from pathlib import Path
 
+from dotenv import load_dotenv
 from tqdm import tqdm
 
-# Our imports
 from bin.utils.action import EnumAction
 
 logger = logging.getLogger(__name__)
 
-# The project root
+# The project root: src/bin/db.py → src/ → project root
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+
+# Data/log defaults are relative to the src/ directory (original behaviour).
 DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Default path to the data directory, which we pass directly to postgres
@@ -60,6 +63,8 @@ class Db:
     _log_path: str
     _user: str
     _database: str
+    _host: str
+    _port: int
 
     @property
     def log_path(self) -> str:
@@ -76,6 +81,11 @@ class Db:
     @property
     def database(self) -> str:
         return self._database
+
+    @property
+    def socket_dir(self) -> Path:
+        """Local directory for postgres socket/lock files (avoids /var/run/postgresql permission issues)."""
+        return Path(self._data_path).parent / "tmp" / "socket"
 
     @log_path.setter
     def log_path(self, user_input_path: str) -> None:
@@ -126,6 +136,8 @@ class Db:
             FileNotFoundError: If the postgres executable cannot be found.
 
         """
+        load_dotenv(ROOT_DIR / ".env")
+
         # Validation
         if not os.path.isdir(data_path):
             raise ValueError(f'Data path not found: "{data_path}"')
@@ -138,125 +150,115 @@ class Db:
         self.data_path = data_path
         self.log_path = log_path
 
-        self._user = os.environ.get("URBANLENS_DB_USER", "postgres")
-        self._database = os.environ.get("URBANLENS_DB_DATABASE", "UrbanLens")
+        self._user = os.environ.get("UL_DB_USER", "urbanlens")
+        self._database = os.environ.get("UL_DB_NAME", "urbanlens")
+        self._host = os.environ.get("UL_DB_HOST", "localhost")
+        self._port = int(os.environ.get("UL_DB_PORT", "5432"))
 
-    def start(self) -> int:
-        """
-        Starts the PostgresSQL server (if it is not running) and prints all output to stdout.
+    def _pg_ctl(self, command: str, with_server_opts: bool = False, pg_wait: bool = False, **kwargs) -> subprocess.CompletedProcess:
+        """Build and run a pg_ctl command.
 
-        If the server is already running, prints a message indicating so, but does NOT attempt to restart.
+        Args:
+            command (str): The pg_ctl subcommand (start, stop, status, restart, …).
+            with_server_opts (bool): When True, pass socket dir and port via -o so the
+                server process uses them.  Should be True for start/restart only.
+            pg_wait (bool): When True, pass -w to pg_ctl so it blocks until the server
+                is ready to accept connections.
+            **kwargs: Forwarded to subprocess.run.
 
         Returns:
-            int: The exit code returned from executing the postgres command (pg_ctl), or -1 if the server is already running.
+            subprocess.CompletedProcess: The completed process result.
 
         """
-        # If we're already running, then just return right away.
+        cmd = [EXE, "-D", self.data_path, "-l", self.log_path]
+        if pg_wait:
+            cmd.append("-w")
+        if with_server_opts:
+            self.socket_dir.mkdir(parents=True, exist_ok=True)
+            server_opts = [f"-k {self.socket_dir}", f"-p {self._port}"]
+            cmd += ["-o", " ".join(server_opts)]
+        cmd.append(command)
+        kwargs.setdefault("check", True)
+        return subprocess.run(cmd, **kwargs)
+
+    def execute_sql(self, sql: str, database: str | None = None) -> int:
+        """Run a SQL statement via psql and return the exit code.
+
+        Args:
+            sql (str): The SQL statement to execute.
+            database (str | None): Database to connect to; defaults to self.database.
+
+        Returns:
+            int: psql exit code (0 on success).
+
+        """
+        cmd = [
+            "psql", "-U", self.user, "-h", self._host, "-p", str(self._port),
+            "-d", database or self.database, "-c", sql,
+        ]
+        return subprocess.call(cmd)
+
+    def start(self) -> None:
+        """Start the postgres server if it is not already running."""
         if self.is_running():
             print("Postgres server already running")
-            return -1
+            return
+        self._pg_ctl("start", with_server_opts=True)
 
-        # Okay, not running. Try starting it.
-        return os.system(f"{EXE} -D {self.data_path} -l {self.log_path} start")
+    def restart(self) -> None:
+        """Restart the postgres server."""
+        self._pg_ctl("restart", with_server_opts=True)
 
-    def restart(self) -> int:
-        """
-        Restarts the PostgresSQL server and prints all output to stdout.
+    def stop(self) -> None:
+        """Stop the postgres server."""
+        self._pg_ctl("stop")
 
-        Returns:
-            int: The exit code returned from executing the postgres command (pg_ctl)
-
-        """
-        return os.system(f"{EXE} -D {self.data_path} -l {self.log_path} restart")
-
-    def stop(self) -> int:
-        """
-        Stops the PostgresSQL server and prints all output to stdout.
-
-        Returns:
-            int: The exit code returned from executing the postgres command (pg_ctl)
-
-        """
-        return os.system(f"{EXE} -D {self.data_path} -l {self.log_path} stop")
-
-    def status(self) -> int:
-        """
-        Checks the status of the postgres server and prints all output to stdout.
-
-        Returns:
-            int: The exit code returned from executing the postgres command (pg_ctl)
-
-        """
-        return os.system(f"{EXE} -D {self.data_path} -l {self.log_path} status")
+    def status(self) -> None:
+        """Print the postgres server status to stdout."""
+        self._pg_ctl("status", check=False)
 
     def check_errors(self) -> int:
-        cmd = [
-            "psql",
-            "-U",
-            self.user,
-            "-d",
-            self.database,
-            "-c",
-            "SELECT * FROM pg_stat_database_conflicts WHERE datname = current_database();",
-        ]
-        return subprocess.call(cmd)
+        """Report database conflicts for the current database."""
+        return self.execute_sql("SELECT * FROM pg_stat_database_conflicts WHERE datname = current_database();")
 
     def analyze(self) -> int:
-        cmd = ["psql", "-U", self.user, "-d", self.database, "-c", "ANALYZE VERBOSE;"]
-        return subprocess.call(cmd)
+        """Run ANALYZE VERBOSE on the database."""
+        return self.execute_sql("ANALYZE VERBOSE;")
 
     def repair_errors(self) -> int:
-        cmd = ["psql", "-U", self.user, "-d", self.database, "-c", "REINDEX DATABASE current_database;"]
-        return subprocess.call(cmd)
+        """Reindex the database to repair errors."""
+        return self.execute_sql("REINDEX DATABASE current_database;")
 
     def dead_rows(self) -> int:
-        cmd = [
-            "psql",
-            "-U",
-            self.user,
-            "-d",
-            self.database,
-            "-c",
-            "SELECT relname, n_dead_tup FROM pg_stat_user_tables WHERE n_dead_tup > 0;",
-        ]
-        return subprocess.call(cmd)
+        """Report tables with dead rows."""
+        return self.execute_sql("SELECT relname, n_dead_tup FROM pg_stat_user_tables WHERE n_dead_tup > 0;")
 
     def long_queries(self) -> int:
-        cmd = [
-            "psql",
-            "-U",
-            self.user,
-            "-d",
-            self.database,
-            "-c",
-            "SELECT pid, now() - pg_stat_activity.query_start AS duration, query FROM pg_stat_activity WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';",
-        ]
-        return subprocess.call(cmd)
+        """Report queries running longer than 5 minutes."""
+        return self.execute_sql(
+            "SELECT pid, now() - pg_stat_activity.query_start AS duration, query "
+            "FROM pg_stat_activity WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';"
+        )
 
     def locks(self) -> int:
-        cmd = [
-            "psql",
-            "-U",
-            self.user,
-            "-d",
-            self.database,
-            "-c",
-            "SELECT pid, relation::regclass, mode, granted FROM pg_locks WHERE NOT granted;",
-        ]
-        return subprocess.call(cmd)
+        """Report ungranted locks."""
+        return self.execute_sql("SELECT pid, relation::regclass, mode, granted FROM pg_locks WHERE NOT granted;")
 
     def backup(self) -> int:
+        """Back up the database to a timestamped SQL file.
+
+        Returns:
+            int: The PID of the pg_dump process, or -1 on failure.
+
+        """
         BACKUP_DIR = "Z:/DEV/backups/db/postgres"
         name = "backup.sql"
 
-        # Check if directory exists
         if not os.path.exists(BACKUP_DIR):
             os.makedirs(BACKUP_DIR)
-
             if not os.path.exists(BACKUP_DIR):
                 raise ValueError(f'Backup directory not found and could not be created: "{BACKUP_DIR}"')
 
-        # Check if existing backup exists. If it does, modify the name
         if os.path.exists(os.path.join(BACKUP_DIR, name)):
             count = 0
             while os.path.exists(os.path.join(BACKUP_DIR, name)):
@@ -267,14 +269,12 @@ class Db:
             cmd = ["pg_dump", "-U", self.user, "-d", self.database, "-f", os.path.join(BACKUP_DIR, name)]
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-            # Progress bar
             with tqdm(total=100) as progress_bar:
                 while process.poll() is None:
                     progress_bar.update(1)
                     time.sleep(1)
 
             _stdout, stderr = process.communicate()
-
             if process.returncode != 0:
                 logger.error("pg_dump failed with error: %s", stderr.decode("utf-8"))
 
@@ -286,6 +286,7 @@ class Db:
         return -1
 
     def manage(self) -> None:
+        """Continuously ensure the postgres server is running."""
         while True:
             if not self.is_running():
                 print("Postgres is not running. Starting it up...")
@@ -305,18 +306,7 @@ class Db:
             FileNotFoundError: If postgres is not able to find the data directory
 
         """
-        # Create a child process, supressing output
-        child = subprocess.run([EXE, "-D", self.data_path, "status"], stdout=subprocess.PIPE, check=False)
-
-        """
-        Postgres returns exit code 3 if the server is NOT running, and 4 on error. It returns 0 otherwise.
-
-        See here: https://www.postgresql.org/docs/current/app-pg-ctl.html
-            status mode checks whether a server is running in the specified data directory. If it is,
-              the server's PID and the command line options that were used to invoke it are displayed.
-            If the server is not running, pg_ctl returns an exit status of 3.
-             If an accessible data directory is not specified, pg_ctl returns an exit status of 4.
-        """
+        child = self._pg_ctl("status", check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if child.returncode == 4:
             raise FileNotFoundError(f"Postgres is not able to find the data directory: {self.data_path}")
         return child.returncode == 0
@@ -335,29 +325,180 @@ class Db:
             str: The sanitized path
 
         """
-        # Whitelist "good" characters and remove all others
-
         if os.name == "nt":
-            # If we're running on windows, we must accept colons and backslashes
             return re.sub(r"[^a-zA-Z0-9:/\\_.-]", "", user_input_path)
-
-        # If we're running on a sane operating system, don't allow colons or backslashes.
         return re.sub(r"[^a-zA-Z0-9/_.-]", "", user_input_path)
+
+    def run_action(self, action: "Actions") -> None:
+        """Dispatch to the method matching the action name.
+
+        Args:
+            action (Actions): The action to run.
+
+        Raises:
+            SystemExit: If the action is unknown.
+
+        """
+        method = getattr(self, action.value, None)
+        if method is None or not callable(method):
+            print(f"Error: Unknown action '{action}'. Try --help to see how to call this script.")
+            sys.exit(1)
+        method()
+
+
+class DbInitializer:
+    """Handles first-time database setup: create role, create DB, enable PostGIS, run migrations."""
+
+    def __init__(self):
+        """Read connection parameters from environment variables.
+
+        Defaults match Django settings/local.py so behaviour is consistent
+        whether the caller sets the env vars or not.
+        """
+        load_dotenv(ROOT_DIR / ".env")
+        self.db_host = os.environ.get("UL_DB_HOST", "localhost")
+        self.db_port = os.environ.get("UL_DB_PORT", "5432")
+        self.db_name = os.environ.get("UL_DB_NAME", "urbanlens")
+        self.db_user = os.environ.get("UL_DB_USER", "urbanlens")
+        self.db_pass = os.environ.get("UL_DB_PASS", "")
+
+    def run(self) -> None:
+        """Run the full database initialisation sequence.
+
+        Steps: create .pgpass → ensure role exists → create DB + enable PostGIS → run migrations.
+        """
+        self.create_pgpass()
+        self._ensure_role()
+        self.init_db()
+        self.run_migrations()
+
+    def create_pgpass(self) -> None:
+        """Write a ~/.pgpass entry so psql commands don't prompt for a password."""
+        pgpass = Path(os.path.expanduser("~/.pgpass"))
+        if pgpass.exists():
+            logger.debug(".pgpass file already exists.")
+            return
+
+        try:
+            pgpass.write_text(f"{self.db_host}:{self.db_port}:*:{self.db_user}:{self.db_pass}\n", encoding="utf-8")
+            pgpass.chmod(0o600)
+        except OSError as e:
+            logger.exception("Error creating .pgpass file: %s", e)
+            raise
+
+    def _psql_env(self) -> dict[str, str]:
+        """Return an env dict with PGPASSWORD set for psql subprocesses."""
+        env = os.environ.copy()
+        env["PGPASSWORD"] = self.db_pass
+        return env
+
+    def execute_sql(self, sql: str, database: str | None = None, check: bool = True) -> subprocess.CompletedProcess:
+        """Run a SQL statement via psql against the maintenance database.
+
+        Args:
+            sql (str): The SQL statement to execute.
+            database (str | None): Database to connect to; defaults to 'postgres' maintenance DB.
+            check (bool): If True, raise CalledProcessError on non-zero exit.
+
+        Returns:
+            subprocess.CompletedProcess: The completed process result.
+
+        """
+        cmd = [
+            "psql", "-U", self.db_user, "-h", self.db_host, "-p", self.db_port,
+            "-d", database or "postgres", "-w", "-c", sql,
+        ]
+        return subprocess.run(cmd, env=self._psql_env(), check=check,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    def _check_role_exists(self) -> bool:
+        """Return True if the db_user role already exists in this cluster.
+
+        Uses COUNT(*) and checks stdout because a SELECT that finds no rows
+        still exits with code 0 — only the output distinguishes the cases.
+
+        Returns:
+            bool: True if the role exists, False otherwise.
+
+        """
+        result = self.execute_sql(
+            f"SELECT COUNT(*) FROM pg_roles WHERE rolname='{self.db_user}'",  # noqa: S608
+            check=False,
+        )
+        return result.returncode == 0 and b"1" in result.stdout
+
+    def _ensure_role(self) -> None:
+        """Create the application login role if it does not already exist."""
+        if self._check_role_exists():
+            logger.info("Role %s already exists.", self.db_user)
+            return
+        logger.info("Creating role %s ...", self.db_user)
+        self.execute_sql(f'CREATE ROLE "{self.db_user}" WITH LOGIN SUPERUSER')
+
+    def check_db(self) -> bool:
+        """Return True if the application database already exists.
+
+        Attempts a direct connection to the target database rather than
+        querying pg_database — a SELECT always exits 0 even with no rows,
+        but a connection to a non-existent database exits non-zero.
+
+        Returns:
+            bool: True if the database exists and is reachable, False otherwise.
+
+        """
+        result = subprocess.run(
+            [
+                "psql", "-U", self.db_user, "-h", self.db_host, "-p", self.db_port,
+                "-d", self.db_name, "-w", "-c", "SELECT 1",
+            ],
+            env=self._psql_env(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        return result.returncode == 0
+
+    def enable_postgis(self) -> None:
+        """Enable the PostGIS extension in the application database (idempotent)."""
+        self.execute_sql("CREATE EXTENSION IF NOT EXISTS postgis", database=self.db_name, check=False)
+
+    def init_db(self) -> None:
+        """Create the application database and enable PostGIS if not already present."""
+        if self.check_db():
+            logger.info("Database %s already exists.", self.db_name)
+        else:
+            logger.info("Database %s does not exist. Creating...", self.db_name)
+            self.execute_sql(f'CREATE DATABASE "{self.db_name}"')
+            if not self.check_db():
+                raise RuntimeError(f"Database {self.db_name} was not created.")
+        self.enable_postgis()
+
+    def run_migrations(self) -> None:
+        """Run Django database migrations.
+
+        Passes UL_DB_PASS explicitly so Django's psycopg2 connection has the
+        password even when it isn't already in the shell environment.
+
+        Raises:
+            subprocess.CalledProcessError: if the migration command fails.
+
+        """
+        manage = ROOT_DIR / "src" / "urbanlens" / "manage.py"
+        env = os.environ.copy()
+        env.setdefault("UL_DB_PASS", self.db_pass)
+        subprocess.run(["python", str(manage), "migrate"], check=True, cwd=ROOT_DIR, env=env)
 
 
 class Actions(Enum):
     """
     Defines the options we allow to be passed in from the command line when this script is run.
 
-    Attribues:
-        status:
-            check the DB status
-        start:
-            start the DB (if it is not already running)
-        restart:
-            stop the DB (if it is running) and start it again.
-        stop:
-            stop the DB (if it is running)
+    Attributes:
+        status: check the DB status
+        start: start the DB (if it is not already running)
+        restart: stop the DB (if it is running) and start it again.
+        stop: stop the DB (if it is running)
+        init: initialize the project (create DB, run migrations)
     """
 
     start = "start"
@@ -371,16 +512,14 @@ class Actions(Enum):
     dead_rows = "dead_rows"
     long_queries = "long_queries"
     locks = "locks"
+    init = "init"
 
     def __str__(self):
-        """
-        Turns an option into a string representation
-        """
+        """Turns an option into a string representation."""
         return self.value
 
 
 def main():
-    # Setup the basic configuration for the parser
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawTextHelpFormatter,
         description=textwrap.dedent("""
@@ -389,18 +528,18 @@ def main():
         epilog="",
     )
 
-    # Define the arguments we will accept from the command line.
     parser.add_argument(
         "action",
         type=Actions,
         action=EnumAction,
         help=textwrap.dedent("""\
-                        Start the local application DB
+                        Interact with the application DB or project initializer
 
                         status: check the DB status
                         start: start the DB (if it is not already running)
                         restart: stop the DB (if it is running) and start it again.
                         stop: stop the DB (if it is running)
+                        init: initialize the project (create DB, run migrations)
                      """),
     )
     parser.add_argument(
@@ -420,53 +559,93 @@ def main():
         help="Path to the data directory for postgres.",
     )
 
-    # Parse the arguments provided to our script from the command line
-    # These are used as attributes. For example: options.action
     options = parser.parse_args()
 
+    if options.action == Actions.init:
+        # Load .env early so UL_DB_PORT/UL_DB_USER are available for cluster config.
+        load_dotenv(ROOT_DIR / ".env")
+        db_port = os.environ.get("UL_DB_PORT", "5432")
+        db_user = os.environ.get("UL_DB_USER", "urbanlens")
+        print(f"Using postgres port: {db_port}, superuser: {db_user}")
+
+        data_path = Path(options.data)
+        log_path = Path(options.log)
+
+        # Create directories and an empty log file if they don't exist yet.
+        data_path.mkdir(parents=True, exist_ok=True)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        if not log_path.exists():
+            log_path.touch()
+
+        # Initialize the postgres cluster if the data directory is empty.
+        if not (data_path / "PG_VERSION").exists():
+            logger.info("Initializing postgres cluster at %s ...", data_path)
+            try:
+                # --username sets the superuser name so it matches UL_DB_USER.
+                # Without this, initdb defaults to the OS user.
+                subprocess.run(
+                    [EXE, "initdb", "-D", str(data_path), "-o", f"--username={db_user}"],
+                    check=True,
+                )
+            except subprocess.CalledProcessError:
+                logger.exception("pg_ctl initdb failed.")
+                sys.exit(1)
+
+        # Patch postgresql.conf for local dev.  Runs on every init so the config
+        # is always consistent even after a failed previous start.
+        conf_path = data_path / "postgresql.conf"
+        if conf_path.exists():
+            conf = conf_path.read_text(encoding="utf-8")
+            conf = re.sub(r"^#?port\s*=\s*\d+", f"port = {db_port}", conf, flags=re.MULTILINE)
+            # Use the data directory for socket/lock files — /var/run/postgresql requires root.
+            conf = re.sub(
+                r"^#?unix_socket_directories\s*=\s*'[^']*'",
+                f"unix_socket_directories = '{data_path}'",
+                conf,
+                flags=re.MULTILINE,
+            )
+            conf_path.write_text(conf, encoding="utf-8")
+            print(f"Configured postgresql.conf (port={db_port}, socket dir={data_path})")
+
+        # Now that paths exist we can build the Db wrapper.
+        try:
+            db = Db(data_path=str(data_path), log_path=str(log_path))
+        except (ValueError, FileNotFoundError) as e:
+            print(f"Cannot initialize postgres: {e}")
+            sys.exit(1)
+
+        # Start the server and wait until it is ready to accept connections.
+        if not db.is_running():
+            print(f"Starting postgres server on port {db_port} ...")
+            try:
+                db._pg_ctl("start", with_server_opts=True, pg_wait=True)
+            except subprocess.CalledProcessError:
+                print(f"Failed to start postgres. Log ({log_path}):")
+                try:
+                    lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                    print("\n".join(lines[-30:]))
+                except OSError as log_err:
+                    print(f"  (could not read log: {log_err})")
+                sys.exit(1)
+
+        # Create the application database, enable PostGIS, and run migrations.
+        try:
+            DbInitializer().run()
+        except (subprocess.CalledProcessError, RuntimeError, OSError):
+            logger.exception("Database initialization failed.")
+            sys.exit(1)
+        sys.exit(0)
+
     try:
-        # Instantiate a new DB object based on our arguments
         db = Db(data_path=options.data, log_path=options.log)
     except ValueError as ve:
-        # One of the options contains bad data. Print the message and exit.
         print(f"Bad option provided: {ve}")
         sys.exit()
     except FileNotFoundError as fnf:
-        # The options were okay, but we can't find a necessary file (probably the executable)
         print(f"Unable to find a necessary file: {fnf}")
         sys.exit()
 
-    match options.action:
-        case Actions.start:
-            # Check the status and start the server if it isn't running, and print output to stdout.
-            result = db.start()
-        case Actions.stop:
-            # Stop the server and print output to stdout.
-            result = db.stop()
-        case Actions.restart:
-            # Restart the server and print output to stdout.
-            result = db.restart()
-        case Actions.status:
-            # Check the server status and print output to stdout.
-            result = db.status()
-        case Actions.check_errors:
-            result = db.check_errors()
-        case Actions.analyze:
-            result = db.analyze()
-        case Actions.repair_errors:
-            result = db.repair_errors()
-        case Actions.dead_rows:
-            result = db.dead_rows()
-        case Actions.long_queries:
-            result = db.long_queries()
-        case Actions.locks:
-            result = db.locks()
-        case Actions.manage:
-            db.manage()
-        case _:
-            print("Error: Unknown action. Try --help to see how to call this script.")
-
-    logger.debug("Result is %s", result)
+    db.run_action(options.action)
     sys.exit()
 
 

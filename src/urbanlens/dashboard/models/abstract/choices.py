@@ -42,8 +42,7 @@ class TextChoices(models.TextChoices):
         Convenience method
         Determine if a given choice is valid
         """
-        option = choice_name.capitalize()
-        return option in cls.values
+        return choice_name.lower() in cls.values
 
     @classmethod
     def invalid(cls, choice_name: str) -> bool:
@@ -51,8 +50,7 @@ class TextChoices(models.TextChoices):
         Convenience method
         Determine if a given choice is valid
         """
-        option = choice_name.capitalize()
-        return option not in cls.values
+        return choice_name.lower() not in cls.values
 
     @classmethod
     def get_name(cls, choice: str) -> str | None:

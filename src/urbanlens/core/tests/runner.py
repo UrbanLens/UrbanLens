@@ -52,7 +52,7 @@ from model_bakery import baker, seq
 from model_bakery.generators import default_mapping
 
 from urbanlens.core.tests.result import MessageResult
-from lib.models.faker import fake
+from faker import Faker
 
 class BufferingLogHandler(logging.Handler):
     """
@@ -218,11 +218,11 @@ def generate_uniquechar():
 
 def generate_dict():
     total_elements = randrange(1, 10)
-    result = {fake.word(): fake.word() for _ in range(total_elements)}
+    result = {Faker().word(): Faker().word() for _ in range(total_elements)}
 
 def generate_list():
     total_elements = randrange(1, 10)
-    return [fake.word() for _ in range(total_elements)]
+    return [Faker().word() for _ in range(total_elements)]
 
 def generate_pickledobject():
     options = [generate_dict, generate_list]

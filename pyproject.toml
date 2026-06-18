@@ -848,6 +848,7 @@ dev = [
     "kombu>=5.4.2",
     "libcst>=1.8.5",
     "lxml>=5.3.1",
+    "hypothesis[django]>=6.130.0",
     "model-bakery>=1.20.4",
     "mypy>=1.19.1",
     "openai>=1.65.2",
@@ -882,6 +883,7 @@ dev = [
     "typing-extensions>=4.12.2",
     "uv>=0.6.3",
     "whitenoise>=6.9.0",
+    "faker>=40.23.0",
 ]
 prod = [
     "channels>=4.2.0",
