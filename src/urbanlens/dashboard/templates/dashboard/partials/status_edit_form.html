@@ -3,6 +3,25 @@
       class="tag-form"
       hx-on::after-request="if(event.detail.successful){ document.getElementById('status-edit-dialog').close(); toastr.success('Status updated.'); }">
     {% csrf_token %}
+    <div class="form-field" style="margin-bottom:1rem;">
+        <label class="form-label">Type</label>
+        <div class="kind-toggle">
+            <label class="kind-toggle-option">
+                <input type="radio" name="kind" value="tag">
+                <span><i class="material-icons">label</i> Tag</span>
+            </label>
+            <label class="kind-toggle-option">
+                <input type="radio" name="kind" value="category">
+                <span><i class="material-icons">category</i> Category</span>
+            </label>
+            <label class="kind-toggle-option">
+                <input type="radio" name="kind" value="status" checked>
+                <span><i class="material-icons">flag</i> Status</span>
+            </label>
+        </div>
+        <p class="form-hint">Converting to a tag moves pin statuses to pin tags. Converting to a category makes it global.</p>
+    </div>
+
     <div class="tag-form-grid">
         <div class="form-field">
             <label class="form-label" for="edit-status-name-{{ badge.id }}">Status name</label>

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, FloatField, ForeignKey, ImageField, Index, IntegerField, ManyToManyField, UUIDField
+from django.db.models import CASCADE, JSONField, SET_NULL, FloatField, ForeignKey, ImageField, Index, IntegerField, ManyToManyField, UUIDField
 from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, TextField
 
 from urbanlens.dashboard.models import abstract
@@ -213,6 +213,7 @@ class TripComment(abstract.Model):
     )
     text = TextField()
     image = ImageField(upload_to="comment_images/", null=True, blank=True)
+    map_data = JSONField(null=True, blank=True)
 
     def __str__(self) -> str:
         author = self.author.user.username if self.author and self.author.user else "Unknown"

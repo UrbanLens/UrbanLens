@@ -28,6 +28,7 @@ def _pin_for_user(pin_uuid, request) -> Pin | HttpResponse:
 
 def _overview_context(pin: Pin) -> dict:
     from urbanlens.dashboard.models.badges.model import COLOR_CHOICES
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import PinType
 
     detail_pin_icon_choices = [
@@ -39,6 +40,13 @@ def _overview_context(pin: Pin) -> dict:
         ("construction", "Construction"), ("emergency", "Emergency"),
     ]
 
+    lat, lng = pin.effective_latitude, pin.effective_longitude
+    overlapping_location_count = (
+        Location.objects.get_all_for_point(float(lat), float(lng)).count()
+        if lat is not None and lng is not None
+        else 0
+    )
+
     return {
         "pin": pin,
         "pin_type_choices": PinType.choices,
@@ -46,6 +54,7 @@ def _overview_context(pin: Pin) -> dict:
         "detail_pin_icon_choices": detail_pin_icon_choices,
         "color_choices": COLOR_CHOICES,
         "security_level_choices": SecurityLevel.choices,
+        "overlapping_location_count": overlapping_location_count,
         "pin_security_values": [
             ("fences", "Fences", pin.fences),
             ("alarms", "Alarms", pin.alarms),

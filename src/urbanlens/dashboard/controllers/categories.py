@@ -149,6 +149,8 @@ class CategoryEditView(LoginRequiredMixin, View):
             return HttpResponse("Name is required.", status=400)
 
         new_kind = request.POST.get("kind", "category")
+        if new_kind not in {"tag", "category", "status"}:
+            new_kind = "category"
         kind_changed = new_kind != category.kind
 
         category.name = name
@@ -157,10 +159,11 @@ class CategoryEditView(LoginRequiredMixin, View):
         category.color = request.POST.get("color") or None
         category.order = int(request.POST.get("order", category.order))
 
+        profile = request.user.profile
+
         if kind_changed and new_kind == "tag":
             # Migrate category → tag: move pin.categories → pin.tags and
             # location.categories → location.tags.
-            profile = request.user.profile
             for pin in Pin.objects.filter(categories=category):
                 pin.tags.add(category)
                 pin.categories.remove(category)
@@ -168,6 +171,15 @@ class CategoryEditView(LoginRequiredMixin, View):
                 loc.tags.add(category)
                 loc.categories.remove(category)
             category.kind = "tag"
+            category.profile = profile
+
+        elif kind_changed and new_kind == "status":
+            # Migrate category → status: remove from pin.categories, add to pin.statuses.
+            # Location memberships are dropped (statuses are per-pin, not per-location).
+            for pin in Pin.objects.filter(categories=category, profile=profile):
+                pin.statuses.add(category)
+                pin.categories.remove(category)
+            category.kind = "status"
             category.profile = profile
 
         category.save()
@@ -186,6 +198,11 @@ class CategoryEditView(LoginRequiredMixin, View):
         if kind_changed and new_kind == "tag":
             response = HttpResponse(status=204)
             response["HX-Redirect"] = reverse("organize.index") + "?tab=tags"
+            return response
+
+        if kind_changed and new_kind == "status":
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = reverse("organize.index") + "?tab=statuses"
             return response
 
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))

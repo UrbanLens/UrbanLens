@@ -405,18 +405,19 @@
     }());
     </script>
 
-    {# ── Leaflet global — needed for comment-map composer on any page ─────────── #}
-    {# Already loaded in <head> on map/location pages, but same CDN version so browser deduplicates via cache #}
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
     {# ── Comment map composer + viewer JS ────────────────────────────────────── #}
+    {# Leaflet is NOT re-loaded here — pages with maps (pin detail, wiki, trips) already load  #}
+    {# it in {% block header %} along with their plugins (MarkerCluster, Leaflet.draw).         #}
+    {# Re-loading would clobber those plugins by replacing window.L.  Comment-map code          #}
+    {# guards every Leaflet call with typeof L checks so it degrades gracefully on other pages. #}
     <script>
     (function () {
-        // ── Shared tile layers ────────────────────────────────────────────────
-        var _OSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors', maxZoom: 19
-        });
+        // ── Shared tile layer factory (guarded — L may not be present on every page) ──
+        function _makeTileLayer() {
+            return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors', maxZoom: 19
+            });
+        }
 
         // ── Composer state ────────────────────────────────────────────────────
         var _composerMap = null;
@@ -433,6 +434,10 @@
 
         // ── Open composer ─────────────────────────────────────────────────────
         window._openCommentMapComposer = function (form) {
+            if (typeof L === 'undefined') {
+                toastr.warning('Map feature is not available on this page. Try from a pin or wiki page.');
+                return;
+            }
             _originForm = form;
 
             // Restore existing map_data if the form already has one
@@ -448,7 +453,7 @@
             var mapEl = document.getElementById('comment-map-composer-map');
             if (!_composerMap) {
                 _composerMap = L.map(mapEl, { zoomControl: true });
-                _OSM.addTo(_composerMap);
+                _makeTileLayer().addTo(_composerMap);
                 _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
                 _attachMapEvents();
             } else {
@@ -705,6 +710,7 @@
         var _viewerMaps = {};   // commentId → L.Map
 
         window._expandCommentMap = function (commentId) {
+            if (typeof L === 'undefined') return;
             var dlg = document.getElementById('comment-map-dialog-' + commentId);
             if (!dlg) return;
             dlg.showModal();
@@ -721,9 +727,7 @@
 
             var el = document.getElementById('comment-map-view-' + commentId);
             var viewMap = L.map(el).setView([data.center_lat, data.center_lng], data.zoom || 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors', maxZoom: 19
-            }).addTo(viewMap);
+            _makeTileLayer().addTo(viewMap);
 
             var markupGroup = L.layerGroup().addTo(viewMap);
             (data.markup || []).forEach(function (s) { _renderShape(s, markupGroup); });
@@ -735,6 +739,7 @@
         // ── Render thumbnail map inside .comment-map-thumb ────────────────────
         // Runs on DOMContentLoaded and after HTMX swaps
         function _initThumbs() {
+            if (typeof L === 'undefined') return;  // Leaflet not loaded on this page
             document.querySelectorAll('.comment-map-preview').forEach(function (preview) {
                 var id = preview.dataset.commentId;
                 var thumb = preview.querySelector('.comment-map-thumb');
@@ -747,7 +752,7 @@
                 thumb.dataset.initialized = '1';
                 var tmap = L.map(thumb, { zoomControl: false, attributionControl: false, dragging: false,
                                           scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(tmap);
+                _makeTileLayer().addTo(tmap);
                 tmap.setView([data.center_lat, data.center_lng], data.zoom || 13);
                 var mg = L.layerGroup().addTo(tmap);
                 (data.markup || []).forEach(function (s) { _renderShape(s, mg); });

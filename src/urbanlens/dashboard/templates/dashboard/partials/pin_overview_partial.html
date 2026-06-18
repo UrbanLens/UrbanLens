@@ -145,6 +145,7 @@
                     </a>
                 </div>
                 <div class="pin-location-actions">
+                    {% if overlapping_location_count > 1 %}
                     <button type="button" class="btn-ghost btn-sm pin-loc-change-btn"
                             hx-get="{% url 'pin.link' pin.uuid %}"
                             hx-target="#pin-location-picker"
@@ -153,6 +154,7 @@
                         <i class="material-icons">swap_horiz</i>
                         Change
                     </button>
+                    {% endif %}
                     <button type="button" class="btn-ghost btn-sm pin-loc-detach-btn"
                             hx-post="{% url 'pin.link' pin.uuid %}"
                             hx-target="#pin-overview"

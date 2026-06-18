@@ -164,6 +164,8 @@ class TagEditView(LoginRequiredMixin, View):
             return HttpResponse("Name is required.", status=400)
 
         new_kind = request.POST.get("kind", "tag")
+        if new_kind not in {"tag", "category", "status"}:
+            new_kind = "tag"
         kind_changed = new_kind != tag.kind
 
         tag.name = name
@@ -177,6 +179,8 @@ class TagEditView(LoginRequiredMixin, View):
             tag.custom_icon = _resize_custom_icon(custom_icon)
         elif request.POST.get("clear_custom_icon"):
             tag.custom_icon = None
+
+        profile = request.user.profile
 
         if kind_changed and new_kind == "category":
             # Migrate tag → category: move pin.tags → pin.categories and
@@ -193,9 +197,18 @@ class TagEditView(LoginRequiredMixin, View):
             tag.kind = "category"
             tag.profile = None
 
+        elif kind_changed and new_kind == "status":
+            # Migrate tag → status: remove from pin.tags, add to pin.statuses.
+            from urbanlens.dashboard.models.pin.model import Pin
+
+            for pin in Pin.objects.filter(tags=tag, profile=profile):
+                pin.statuses.add(tag)
+                pin.tags.remove(tag)
+            tag.kind = "status"
+            tag.profile = profile
+
         tag.save()
 
-        profile = request.user.profile
         if kind_changed:
             # Parent IDs from the form belong to the old kind — clear and let the user re-set them.
             tag.parents.clear()
@@ -210,6 +223,11 @@ class TagEditView(LoginRequiredMixin, View):
         if kind_changed and new_kind == "category":
             response = HttpResponse(status=204)
             response["HX-Redirect"] = reverse("organize.index") + "?tab=categories"
+            return response
+
+        if kind_changed and new_kind == "status":
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = reverse("organize.index") + "?tab=statuses"
             return response
 
         return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM)))

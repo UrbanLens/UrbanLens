@@ -678,7 +678,9 @@ class TripCommentsView(LoginRequiredMixin, View):
         if parent_id:
             parent = get_object_or_404(TripComment, id=parent_id, trip=trip)
 
-        comment = TripComment.objects.create(trip=trip, author=profile, text=text, parent=parent)
+        from urbanlens.dashboard.controllers.comments import _parse_map_data
+        map_data = _parse_map_data(request)
+        comment = TripComment.objects.create(trip=trip, author=profile, text=text, parent=parent, map_data=map_data)
         if request.FILES.get("image"):
             comment.image = request.FILES["image"]
             comment.save(update_fields=["image"])

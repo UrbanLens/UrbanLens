@@ -39,6 +39,27 @@
           <img src="{{ c.image.url }}" alt="Attached" class="comment-image">
         </a>
         {% endif %}
+        {% if c.map_data %}
+        {% with _sid="comment-map-data-"|add:c.id %}
+        {{ c.map_data|json_script:_sid }}
+        {% endwith %}
+        <div class="comment-map-preview" data-comment-id="{{ c.id }}">
+          <div class="comment-map-thumb" id="comment-map-thumb-{{ c.id }}"></div>
+          <button type="button" class="comment-map-expand-btn"
+                  onclick="_expandCommentMap('{{ c.id }}')">
+            <i class="material-icons">fullscreen</i> Expand map
+          </button>
+        </div>
+        <dialog id="comment-map-dialog-{{ c.id }}" class="comment-map-view-dialog">
+          <div class="dialog-header">
+            <span>Attached map</span>
+            <button type="button" onclick="this.closest('dialog').close()">
+              <i class="material-icons">close</i>
+            </button>
+          </div>
+          <div class="comment-map-view-body" id="comment-map-view-{{ c.id }}"></div>
+        </dialog>
+        {% endif %}
 
         {# Reactions #}
         <div class="comment-reactions" id="comment-reactions-{{ c.id }}">
@@ -88,9 +109,10 @@
                 hx-target="#trip-comments-panel"
                 hx-swap="outerHTML"
                 hx-encoding="multipart/form-data"
-                hx-on::after-request="if(event.detail.successful){this.reset();document.getElementById('reply-form-{{ c.id }}').hidden=true}"
+                hx-on::after-request="if(event.detail.successful){this.reset();_clearCommentMap(this);document.getElementById('reply-form-{{ c.id }}').hidden=true}"
                 hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
             <input type="hidden" name="parent_id" value="{{ c.id }}">
+            <input type="hidden" name="map_data" class="comment-map-data-field" value="">
             <div class="comment-compose-field">
               <div class="comment-input-wrap">
                 <textarea name="text" rows="2" placeholder="Write a reply…"
@@ -100,11 +122,22 @@
                           required></textarea>
                 <div class="mention-dropdown" hidden></div>
               </div>
+              <div class="comment-map-chip" hidden>
+                <i class="material-icons" style="font-size:14px">map</i>
+                <span>Map attached</span>
+                <button type="button" onclick="_clearCommentMap(this.closest('.comment-compose'))" title="Remove map">
+                  <i class="material-icons" style="font-size:14px">close</i>
+                </button>
+              </div>
               <div class="comment-compose-actions">
                 <label class="comment-image-label" title="Attach image">
                   <i class="material-icons">image</i>
                   <input type="file" name="image" accept="image/*" class="comment-image-input">
                 </label>
+                <button type="button" class="comment-map-btn" title="Attach map"
+                        onclick="_openCommentMapComposer(this.closest('.comment-compose'))">
+                  <i class="material-icons">map</i>
+                </button>
                 <span class="comment-image-preview"></span>
                 <button type="submit" class="btn-primary btn-sm">Reply</button>
               </div>
@@ -145,6 +178,27 @@
               <a href="{{ r.image.url }}" target="_blank" class="comment-image-link">
                 <img src="{{ r.image.url }}" alt="Attached" class="comment-image">
               </a>
+              {% endif %}
+              {% if r.map_data %}
+              {% with _sid="comment-map-data-"|add:r.id %}
+              {{ r.map_data|json_script:_sid }}
+              {% endwith %}
+              <div class="comment-map-preview" data-comment-id="{{ r.id }}">
+                <div class="comment-map-thumb" id="comment-map-thumb-{{ r.id }}"></div>
+                <button type="button" class="comment-map-expand-btn"
+                        onclick="_expandCommentMap('{{ r.id }}')">
+                  <i class="material-icons">fullscreen</i> Expand map
+                </button>
+              </div>
+              <dialog id="comment-map-dialog-{{ r.id }}" class="comment-map-view-dialog">
+                <div class="dialog-header">
+                  <span>Attached map</span>
+                  <button type="button" onclick="this.closest('dialog').close()">
+                    <i class="material-icons">close</i>
+                  </button>
+                </div>
+                <div class="comment-map-view-body" id="comment-map-view-{{ r.id }}"></div>
+              </dialog>
               {% endif %}
               <div class="comment-reactions" id="comment-reactions-{{ r.id }}">
                 {% for emoji, data in reply_item.reactions.items %}
@@ -203,8 +257,9 @@
         hx-target="#trip-comments-panel"
         hx-swap="outerHTML"
         hx-encoding="multipart/form-data"
-        hx-on::after-request="if(event.detail.successful){this.reset()}"
+        hx-on::after-request="if(event.detail.successful){this.reset();_clearCommentMap(this)}"
         hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    <input type="hidden" name="map_data" class="comment-map-data-field" value="">
     <div class="comment-avatar comment-avatar--compose">
       {% if profile.avatar %}
       <img src="{{ profile.avatar.url }}" alt="" class="comment-avatar-img">
@@ -221,11 +276,22 @@
                   required></textarea>
         <div class="mention-dropdown" hidden></div>
       </div>
+      <div class="comment-map-chip" hidden>
+        <i class="material-icons" style="font-size:14px">map</i>
+        <span>Map attached</span>
+        <button type="button" onclick="_clearCommentMap(this.closest('.comment-compose'))" title="Remove map">
+          <i class="material-icons" style="font-size:14px">close</i>
+        </button>
+      </div>
       <div class="comment-compose-actions">
         <label class="comment-image-label" title="Attach image">
           <i class="material-icons">image</i>
           <input type="file" name="image" accept="image/*" class="comment-image-input">
         </label>
+        <button type="button" class="comment-map-btn" title="Attach map"
+                onclick="_openCommentMapComposer(this.closest('.comment-compose'))">
+          <i class="material-icons">map</i>
+        </button>
         <span class="comment-image-preview"></span>
         <button type="submit" class="btn-primary">Post</button>
       </div>

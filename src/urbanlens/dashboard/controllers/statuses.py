@@ -120,6 +120,14 @@ class StatusEditView(LoginRequiredMixin, View):
         if badge.profile is None or badge.profile.user != request.user:
             return HttpResponseForbidden()
 
+        new_kind = request.POST.get("kind", "status")
+        if new_kind not in {"tag", "category", "status"}:
+            new_kind = "status"
+        kind_changed = new_kind != badge.kind
+
+        if kind_changed and badge.is_protected:
+            return HttpResponse("Protected statuses cannot be converted to another type.", status=403)
+
         # Protected badges may not be renamed.
         if not badge.is_protected:
             name = request.POST.get("name", "").strip()
@@ -131,7 +139,38 @@ class StatusEditView(LoginRequiredMixin, View):
         badge.icon = request.POST.get("icon") or None
         badge.color = request.POST.get("color") or None
         badge.order = int(request.POST.get("order", badge.order))
+
+        profile = request.user.profile
+
+        if kind_changed and new_kind == "tag":
+            # Migrate status → tag: remove from pin.statuses, add to pin.tags.
+            for pin in Pin.objects.filter(statuses=badge, profile=profile):
+                pin.tags.add(badge)
+                pin.statuses.remove(badge)
+            badge.kind = "tag"
+            badge.profile = profile
+
+        elif kind_changed and new_kind == "category":
+            # Migrate status → category: remove from pin.statuses, add to pin.categories. Make global.
+            for pin in Pin.objects.filter(statuses=badge, profile=profile):
+                pin.categories.add(badge)
+                pin.statuses.remove(badge)
+            badge.kind = "category"
+            badge.profile = None
+
         badge.save()
+
+        if kind_changed and new_kind == "tag":
+            from django.urls import reverse
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = reverse("organize.index") + "?tab=tags"
+            return response
+
+        if kind_changed and new_kind == "category":
+            from django.urls import reverse
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = reverse("organize.index") + "?tab=categories"
+            return response
 
         return render(request, "dashboard/partials/status_rows.html", _rows_ctx(request.user.profile))
 
