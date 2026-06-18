@@ -489,6 +489,7 @@ nav .brand-logo img {
 .notif-item {
     display: flex;
     align-items: flex-start;
+    float: none;
     gap: .75rem;
     padding: .7rem 1rem .7rem .85rem;
     cursor: pointer;
@@ -592,29 +593,44 @@ nav .brand-logo img {
     &--unread &__icon-wrap--friend_request,
     &--unread &__icon-wrap--friend_accepted {
         background: #dcfce7;
-        .material-icons { color: #16a34a; }
+
+        .material-icons {
+            color: #16a34a;
+        }
     }
 
     &--unread &__icon-wrap--added_to_trip,
     &--unread &__icon-wrap--trip_updated {
         background: #dbeafe;
-        .material-icons { color: #2563eb; }
+
+        .material-icons {
+            color: #2563eb;
+        }
     }
 
     &--unread &__icon-wrap--comment_reply,
     &--unread &__icon-wrap--comment_liked {
         background: #fce7f3;
-        .material-icons { color: #db2777; }
+
+        .material-icons {
+            color: #db2777;
+        }
     }
 
     &--unread &__icon-wrap--error {
         background: #fee2e2;
-        .material-icons { color: #dc2626; }
+
+        .material-icons {
+            color: #dc2626;
+        }
     }
 
     &--unread &__icon-wrap--warning {
         background: #fef3c7;
-        .material-icons { color: #d97706; }
+
+        .material-icons {
+            color: #d97706;
+        }
     }
 }
 

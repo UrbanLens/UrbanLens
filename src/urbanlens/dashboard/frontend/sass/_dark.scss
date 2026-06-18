@@ -811,3 +811,356 @@
         &:hover { background: rgba(239, 154, 154, .13); }
     }
 }
+
+// ── Trips pages dark mode ─────────────────────────────────────────────────────
+
+[data-theme="dark"] {
+
+    // ── Trips list page ───────────────────────────────────────────────────────
+
+    .trips-title {
+        color: var(--ul-text-1);
+
+        .material-icons { color: #60a5fa; }
+    }
+
+    .trips-subtitle { color: var(--ul-text-2); }
+
+    .trips-empty {
+        color: var(--ul-text-3);
+
+        .trips-empty-icon { color: var(--ul-text-3); }
+    }
+
+    .trip-card {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
+
+        &:hover {
+            border-color: #3b82f6;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+        }
+    }
+
+    .trip-card-icon {
+        background: #1a2540;
+
+        .material-icons { color: #60a5fa; }
+    }
+
+    .trip-card-name { color: var(--ul-text-1); }
+    .trip-card-desc { color: var(--ul-text-2); }
+    .trip-card-meta span { color: var(--ul-text-3); }
+    .trip-card-arrow { color: var(--ul-text-3); }
+
+    // ── Trip detail header ────────────────────────────────────────────────────
+
+    .trip-detail-header { border-bottom-color: var(--ul-border); }
+
+    .trip-back-link {
+        color: var(--ul-text-3);
+        &:hover { color: #60a5fa; }
+    }
+
+    .trip-detail-title { color: var(--ul-text-1); }
+    .trip-detail-description { color: var(--ul-text-2); }
+    .trip-detail-dates { color: var(--ul-text-2); }
+
+    .trip-header-btn {
+        &--edit, &--settings {
+            color: var(--ul-text-3);
+            &:hover, &:focus {
+                background: var(--ul-surface-2);
+                color: #60a5fa;
+                border-color: var(--ul-border);
+            }
+        }
+        &--delete {
+            color: var(--ul-text-3);
+            &:hover, &:focus {
+                background: rgba(220, 38, 38, .12);
+                color: #f87171;
+                border-color: rgba(220, 38, 38, .3);
+            }
+        }
+    }
+
+    .trip-section-grip { color: var(--ul-text-3); }
+    .trip-section--ghost { outline-color: var(--ul-border); }
+
+    // ── Trip panels (card headers, badges) ────────────────────────────────────
+
+    .trip-panel .card-header {
+        border-bottom-color: var(--ul-border);
+
+        .badge {
+            background: var(--ul-surface-3);
+            color: var(--ul-text-2);
+        }
+    }
+
+    .trip-panel-empty { color: var(--ul-text-3); }
+    .trip-panel-loading { color: var(--ul-text-3); }
+
+    // ── View toggles ──────────────────────────────────────────────────────────
+
+    .view-toggle-group { background: var(--ul-surface-3); }
+
+    .view-toggle-btn {
+        color: var(--ul-text-3);
+        &:hover { background: var(--ul-surface-2); color: var(--ul-text-2); }
+        &.view-toggle-btn--active {
+            background: var(--ul-surface-1);
+            color: #60a5fa;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+        }
+    }
+
+    // ── Calendar ─────────────────────────────────────────────────────────────
+
+    .cal-month-label { color: var(--ul-text-1); }
+
+    .cal-nav-btn {
+        color: var(--ul-text-2);
+        &:hover { background: var(--ul-surface-2); color: var(--ul-text-1); }
+    }
+
+    .cal-cell {
+        &--header { color: var(--ul-text-3); }
+        &--empty { background: rgba(255, 255, 255, .025); opacity: .6; }
+        &--has-events { background: #192030; }
+        &--today {
+            background: #1a2540;
+
+            .cal-day-num {
+                background: #3b82f6;
+                color: #fff;
+            }
+        }
+    }
+
+    .cal-day-num { color: var(--ul-text-2); }
+
+    .cal-month-section-label { color: var(--ul-text-3); }
+    .cal-month-section-sep { background: var(--ul-border); }
+
+    // ── Activity list ─────────────────────────────────────────────────────────
+
+    .trip-activity-item {
+        border-bottom-color: var(--ul-border);
+
+        &.trip-activity--highlighted {
+            background: #192030;
+            border-left-color: #3b82f6;
+        }
+    }
+
+    .trip-activity-icon {
+        background: #1a2540;
+
+        .material-icons { color: #60a5fa; }
+    }
+
+    .trip-activity-num { border-color: var(--ul-surface-2); }
+    .trip-activity-name { color: var(--ul-text-1); }
+    .trip-activity-time { color: var(--ul-text-2); }
+    .trip-activity-notes { color: var(--ul-text-2); }
+    .trip-activity-attr { color: var(--ul-text-3); }
+
+    .trip-attr-link {
+        &:hover { color: #a78bfa; }
+    }
+
+    // ── Members ───────────────────────────────────────────────────────────────
+
+    .trip-member-item { border-bottom-color: var(--ul-border); }
+
+    .trip-member-avatar {
+        background: #1a2540;
+    }
+
+    .trip-member-avatar-initial { color: #60a5fa; }
+    .trip-member-name { color: var(--ul-text-1); }
+    .trip-member-username { color: var(--ul-text-3); }
+
+    .trip-member-badge {
+        &--creator {
+            background: rgba(251, 191, 36, .12);
+            color: #fbbf24;
+            border-color: rgba(251, 191, 36, .25);
+        }
+        &--organizer {
+            background: rgba(167, 139, 250, .12);
+            color: #a78bfa;
+            border-color: rgba(167, 139, 250, .25);
+        }
+    }
+
+    .trip-organizer-btn {
+        color: var(--ul-text-3);
+        &--active {
+            color: #a78bfa !important;
+            &:hover { background: rgba(167, 139, 250, .1) !important; }
+        }
+    }
+
+    // ── RSVP popup ────────────────────────────────────────────────────────────
+
+    .rsvp-popup {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+    }
+
+    .rsvp-popup-opt {
+        color: var(--ul-text-1);
+        &:hover { background: var(--ul-surface-2); }
+        &--yes { color: #4ade80; &:hover { background: rgba(34, 197, 94, .1); } }
+        &--no  { color: #f87171; &:hover { background: rgba(220, 38, 38, .1); } }
+        &--maybe { color: #fbbf24; &:hover { background: rgba(245, 158, 11, .1); } }
+        &--clear { color: var(--ul-text-3); }
+    }
+
+    // ── RSVP pill buttons (in the member-list RSVP picker) ────────────────────
+
+    .rsvp-pill-btn {
+        border-color: var(--ul-border);
+        color: var(--ul-text-2);
+        &:hover { background: var(--ul-surface-2); border-color: var(--ul-border-strong); }
+    }
+
+    // ── Trip comment form (.trip-comment-* classes) ───────────────────────────
+
+    .trip-comment-item {
+        border-bottom-color: var(--ul-border);
+        &:hover { background: rgba(255, 255, 255, .03); }
+    }
+
+    .trip-comment-author { color: var(--ul-text-1); }
+    .trip-comment-date { color: var(--ul-text-3); }
+    .trip-comment-text { color: var(--ul-text-2); }
+
+    .trip-comment-form {
+        background: var(--ul-surface-2);
+        border-top-color: var(--ul-border);
+    }
+
+    .trip-comment-input {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
+        color: var(--ul-text-1);
+
+        &::placeholder { color: var(--ul-text-3); }
+        &:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96, 165, 250, .12); }
+    }
+
+    // ── Comments panel (.comment-* classes from _comments.scss) ──────────────
+
+    .comment-item {
+        border-bottom-color: var(--ul-border);
+        &--reply { background: var(--ul-surface-2); }
+    }
+
+    .comment-replies {
+        border-left-color: var(--ul-border);
+        .comment-item { background: var(--ul-surface-2); }
+    }
+
+    .comment-author { color: var(--ul-text-1); }
+    .comment-date { color: var(--ul-text-3); }
+    .comment-text { color: var(--ul-text-2); }
+
+    .comment-avatar-initial {
+        background: #1e1936;
+        color: #7c6fcd;
+    }
+
+    .comment-delete-btn {
+        color: var(--ul-text-3);
+        &:hover { color: #f87171; }
+    }
+
+    .comment-reply-btn {
+        color: var(--ul-text-3);
+        .reply-count { color: var(--ul-text-3); }
+        &:hover { color: #a78bfa; background: rgba(124, 58, 237, .08); }
+    }
+
+    .comment-compose {
+        border-top-color: var(--ul-border);
+        &--reply { border-top: none; }
+    }
+
+    .comment-input {
+        background: var(--ul-surface-2);
+        border-color: var(--ul-border);
+        color: var(--ul-text-1);
+
+        &::placeholder { color: var(--ul-text-3); }
+        &:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, .1); }
+    }
+
+    .reaction-pill {
+        background: var(--ul-surface-3);
+        border-color: var(--ul-border);
+        &:hover { background: var(--ul-surface-2); }
+        &--mine {
+            background: rgba(124, 58, 237, .15);
+            border-color: rgba(124, 58, 237, .4);
+            color: #a78bfa;
+        }
+    }
+
+    .reaction-count { color: var(--ul-text-2); }
+
+    .reaction-add-btn {
+        border-color: var(--ul-border);
+        color: var(--ul-text-3);
+        &:hover { background: var(--ul-surface-2); color: var(--ul-text-2); }
+    }
+
+    .reaction-picker-popup {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+    }
+
+    .reaction-picker-emoji:hover { background: var(--ul-surface-2); }
+
+    .comment-empty { color: var(--ul-text-3); }
+
+    .mention-dropdown {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+    }
+
+    .mention-option {
+        color: var(--ul-text-2);
+        border-bottom-color: var(--ul-border);
+        &:hover, &.is-selected { background: rgba(124, 58, 237, .08); color: #a78bfa; }
+    }
+
+    .comment-image-label {
+        color: var(--ul-text-3);
+        &:hover { color: #6366f1; }
+    }
+
+    // ── Trip settings ─────────────────────────────────────────────────────────
+
+    .trip-setting-desc { color: var(--ul-text-3); }
+
+    .trip-setting-pill {
+        border-color: var(--ul-border);
+        color: var(--ul-text-2);
+        &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
+            background: var(--ul-surface-2);
+            border-color: var(--ul-border-strong);
+        }
+        &--active {
+            background: #1a2540;
+            border-color: #3b82f6;
+            color: #60a5fa;
+        }
+    }
+}

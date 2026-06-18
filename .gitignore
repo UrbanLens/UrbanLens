@@ -16,7 +16,7 @@ package-lock.json
 *.tmp
 *.swp
 .*cache
-.aider*
+docs/prompts.txt
 
 # VSCode stuff per user
 .vscode

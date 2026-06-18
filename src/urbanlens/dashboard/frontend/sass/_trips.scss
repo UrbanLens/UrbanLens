@@ -470,12 +470,14 @@
 
 .cal-grid {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(7, minmax(0, 1fr)); // minmax(0,1fr) prevents any column widening to fit content
     gap: 2px;
 }
 
 .cal-cell {
     min-height: 54px;
+    min-width: 0;    // prevent grid cells from growing beyond 1fr share
+    overflow: hidden;
     border-radius: 5px;
     padding: .25rem .3rem;
 
@@ -1289,6 +1291,11 @@
     gap: 2px;
     z-index: 200;
     min-width: 80px;
+
+    // display:flex overrides the HTML [hidden] attribute by default — be explicit
+    &[hidden] {
+        display: none;
+    }
 }
 
 .rsvp-popup-opt {
