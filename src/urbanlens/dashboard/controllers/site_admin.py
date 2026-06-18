@@ -41,8 +41,14 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         try:
             max_members = int(request.POST.get("max_trip_members", settings.max_trip_members))
-            max_members = max(max_members, 1)
-            settings.max_trip_members = max_members
+            settings.max_trip_members = max(max_members, 1)
+        except (ValueError, TypeError):
+            pass
+
+        try:
+            max_bbox = float(request.POST.get("max_bbox_area_km2", settings.max_bbox_area_km2))
+            if max_bbox > 0:
+                settings.max_bbox_area_km2 = max_bbox
         except (ValueError, TypeError):
             pass
 

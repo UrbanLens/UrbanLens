@@ -1556,6 +1556,14 @@
     padding: 2rem 1rem;
 }
 
+// When .tag-page is used as a panel inside .organize-page, strip its own
+// max-width and padding so all tabs sit flush at the same width.
+.organize-panel.tag-page {
+    max-width: none;
+    padding: 0;
+    margin: 0;
+}
+
 .organize-page-header {
     margin-bottom: 1.5rem;
 

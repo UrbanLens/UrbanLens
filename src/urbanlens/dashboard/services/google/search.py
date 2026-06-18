@@ -62,16 +62,13 @@ class GoogleCustomSearchGateway(Gateway):
         """
         query = self.build_query(terms)
 
-        headers = {
-            "Referer": "http://localhost:8000",
-        }
         params = {
             "key": self.api_key,
             "cx": self.cx,
             "q": query,
             # 'num': min(max_results, 20)
         }
-        response = self.session.get(self.base_url, params=params, headers=headers, timeout=60)
+        response = self.session.get(self.base_url, params=params, timeout=60)
         response.raise_for_status()
         return self.parse_response(response)
 

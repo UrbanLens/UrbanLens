@@ -245,6 +245,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
+        if not pin.has_meaningful_name:
+            return HttpResponse("", status=204)
+
         # Instantiate the GoogleCustomSearchGateway with the API key
         try:
             google_gateway = GoogleCustomSearchGateway()

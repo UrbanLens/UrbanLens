@@ -1177,4 +1177,340 @@
             color: #60a5fa;
         }
     }
+
+    // ── Trip dialogs ──────────────────────────────────────────────────────────
+
+    .trip-create-dialog {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
+        color: var(--ul-text-1);
+
+        .location-suggestions {
+            background: var(--ul-surface-2);
+            border-color: var(--ul-border);
+        }
+
+        .location-suggestion-item {
+            color: var(--ul-text-1);
+            &:hover { background: var(--ul-surface-3); }
+        }
+    }
+
+    // ── Organize page tabs ────────────────────────────────────────────────────
+
+    .organize-title { color: var(--ul-text-1); }
+    .organize-subtitle { color: var(--ul-text-2); }
+
+    .organize-tab-bar { border-bottom-color: var(--ul-border); }
+
+    .organize-tab {
+        color: var(--ul-text-3);
+        &:hover { color: var(--ul-text-1); }
+        &.active {
+            color: lighten($primary-color, 15%);
+            border-bottom-color: lighten($primary-color, 15%);
+        }
+    }
+
+    // ── Selection / checkbox bar ──────────────────────────────────────────────
+
+    .cat-sel-bar {
+        background: var(--ul-surface-2);
+        border-color: var(--ul-border);
+
+        &.cat-sel-bar--active {
+            background: rgba(59, 130, 246, .1);
+            border-color: rgba(59, 130, 246, .35);
+        }
+    }
+
+    .cat-sel-count {
+        background: rgba(59, 130, 246, .15);
+        color: #93c5fd;
+    }
+
+    .cat-sel-btn {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border-strong);
+        color: var(--ul-text-2);
+        &:hover:not(:disabled) {
+            background: var(--ul-surface-2);
+            border-color: var(--ul-border-strong);
+            color: var(--ul-text-1);
+        }
+    }
+
+    .cat-sel-delete-btn {
+        border-color: rgba(220, 38, 38, .45);
+        color: #f87171;
+        &:hover:not(:disabled) {
+            background: rgba(220, 38, 38, .08);
+            border-color: #f87171;
+        }
+    }
+
+    .cat-select-wrap {
+        &:hover { background: var(--ul-surface-2); }
+
+        .cat-select-check {
+            background: var(--ul-surface-1);
+            border-color: var(--ul-border-strong);
+        }
+    }
+
+    .tag-card--selected {
+        border-color: lighten($primary-color, 10%) !important;
+        background: rgba(66, 133, 244, .1) !important;
+    }
+
+    // ── Tag / category edit dialogs ───────────────────────────────────────────
+
+    .tag-edit-dialog {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
+        color: var(--ul-text-1);
+
+        .dialog-header {
+            border-bottom-color: var(--ul-border);
+            color: var(--ul-text-1);
+        }
+
+        .dialog-close {
+            color: var(--ul-text-3);
+            &:hover {
+                background: rgba(255, 255, 255, .06);
+                color: var(--ul-text-1);
+            }
+        }
+
+        .tag-edit-dialog-body { color: var(--ul-text-1); }
+    }
+
+    // ── Priority items ────────────────────────────────────────────────────────
+
+    .priority-item {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
+        &:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, .3); }
+
+        &.priority-item--ghost {
+            background: rgba(66, 133, 244, .1);
+            border-color: $primary-color;
+        }
+    }
+
+    .priority-drag-handle { color: var(--ul-text-3); }
+
+    .priority-item-icon {
+        background: var(--ul-surface-2);
+        i { color: var(--ul-text-2); }
+    }
+
+    .priority-item-name { color: var(--ul-text-1); }
+    .priority-item-desc { color: var(--ul-text-3); }
+
+    .priority-order-badge {
+        background: var(--ul-surface-2);
+        border-color: var(--ul-border);
+        color: var(--ul-text-2);
+    }
+
+    .priority-kind-badge {
+        &--tag {
+            background: rgba(29, 78, 216, .2);
+            color: #93c5fd;
+        }
+        &--category {
+            background: rgba(21, 128, 61, .2);
+            color: #6ee7b7;
+        }
+    }
+
+    // ── Site admin page ───────────────────────────────────────────────────────
+
+    .site-admin-title {
+        color: var(--ul-text-1);
+    }
+
+    .site-admin-subtitle { color: var(--ul-text-2); }
+
+    .site-admin-notice {
+        &--success {
+            background: rgba(22, 163, 74, .15);
+            border-color: rgba(22, 163, 74, .3);
+            color: #86efac;
+        }
+    }
+
+    .site-admin-form {
+        label { color: var(--ul-text-2); }
+        .form-help { color: var(--ul-text-3); }
+
+        input[type="number"] {
+            background: var(--ul-surface-2);
+            border-color: var(--ul-border-strong);
+            color: var(--ul-text-1);
+            &:focus { border-color: lighten($primary-color, 10%); }
+        }
+    }
+
+    // ── Community wiki page ───────────────────────────────────────────────────
+
+    .wiki-page {
+        .wiki-card {
+            background: var(--ul-surface-1);
+            border-color: var(--ul-border);
+        }
+
+        .wiki-card-header {
+            background: var(--ul-surface-2);
+            border-bottom-color: var(--ul-border);
+            h2 { color: var(--ul-text-1); }
+        }
+
+        .wiki-card-desc {
+            color: var(--ul-text-2);
+            border-bottom-color: var(--ul-border);
+        }
+
+        .wiki-dl-row {
+            border-bottom-color: var(--ul-border);
+            dt { color: var(--ul-text-3); }
+            dd { color: var(--ul-text-1); }
+        }
+
+        .wiki-stat-label { color: var(--ul-text-2); }
+
+        .wiki-bbox-controls {
+            background: var(--ul-surface-2);
+            border-top-color: var(--ul-border);
+        }
+
+        .wiki-action-btn {
+            background: var(--ul-surface-1);
+            border-color: var(--ul-border-strong);
+            color: var(--ul-text-1);
+            &:hover {
+                background: var(--ul-surface-2);
+                border-color: var(--ul-border-strong);
+            }
+        }
+
+        .wiki-tabs {
+            background: var(--ul-surface-2);
+            border-bottom-color: var(--ul-border);
+        }
+
+        .wiki-tab {
+            color: var(--ul-text-2);
+            &--active, &:hover {
+                color: #22d3ee;
+                border-bottom-color: #22d3ee;
+            }
+        }
+
+        .wiki-loading { color: var(--ul-text-3); }
+
+        .wiki-history-item {
+            background: var(--ul-surface-1);
+            border-color: var(--ul-border);
+            &--reverted {
+                background: var(--ul-surface-2);
+            }
+        }
+
+        .wiki-history-editor { color: var(--ul-text-1); }
+        .wiki-history-date { color: var(--ul-text-3); }
+
+        .wiki-history-badge--reverted {
+            background: rgba(146, 64, 14, .3);
+            color: #fcd34d;
+        }
+
+        .wiki-change-field { color: var(--ul-text-2); }
+        .wiki-change-arrow { color: var(--ul-text-3); }
+
+        .wiki-change-from {
+            background: rgba(185, 28, 28, .18);
+            color: #fca5a5;
+        }
+
+        .wiki-change-to {
+            background: rgba(21, 128, 61, .18);
+            color: #86efac;
+        }
+
+        .wiki-revert-btn {
+            background: var(--ul-surface-1);
+            border-color: rgba(220, 38, 38, .4);
+            color: #f87171;
+            &:hover {
+                background: rgba(220, 38, 38, .08);
+                border-color: #f87171;
+            }
+        }
+
+        .wiki-history-empty { color: var(--ul-text-3); }
+    }
+
+    // ── Pin detail page — coloured card headers ───────────────────────────────
+
+    body.page-location-details {
+        .pin-notes-panel.card .card-header {
+            background: rgba(146, 64, 14, .15);
+            color: #fcd34d;
+            border-bottom-color: rgba(253, 230, 138, .2);
+            .material-icons { color: #fbbf24; }
+            span { color: #fcd34d; }
+            .badge { background: rgba(146, 64, 14, .25); color: #fcd34d; }
+        }
+
+        .visit-history.card .card-header {
+            background: rgba(13, 148, 136, .12);
+            color: #5eead4;
+            border-bottom-color: rgba(94, 234, 212, .2);
+            .material-icons { color: #2dd4bf; }
+            span { color: #5eead4; }
+        }
+
+        .aliases-panel.card .card-header {
+            background: rgba(234, 88, 12, .12);
+            color: #fdba74;
+            border-bottom-color: rgba(253, 186, 116, .2);
+            .material-icons { color: #fb923c; }
+            span { color: #fdba74; }
+        }
+
+        .location-map.card .card-header {
+            background: var(--ul-surface-2);
+            color: var(--ul-text-1);
+            border-bottom-color: var(--ul-border);
+            .material-icons { color: var(--ul-text-2); }
+            span, h3 { color: var(--ul-text-1); }
+        }
+
+        #tag-panel .tag-panel-header {
+            background: rgba(124, 58, 237, .12);
+            color: #c4b5fd;
+            border-bottom-color: rgba(196, 181, 253, .2);
+            i { color: #a78bfa; }
+            span { color: #c4b5fd; }
+        }
+
+        #category-panel .tag-panel-header {
+            background: rgba(59, 130, 246, .12);
+            color: #93c5fd;
+            border-bottom-color: rgba(147, 197, 253, .2);
+            i { color: #60a5fa; }
+            span { color: #93c5fd; }
+        }
+
+        .pin-comments.card .card-header {
+            background: rgba(22, 163, 74, .12);
+            color: #86efac;
+            border-bottom-color: rgba(134, 239, 172, .2);
+            .material-icons { color: #4ade80; }
+            span { color: #86efac; }
+        }
+    }
 }

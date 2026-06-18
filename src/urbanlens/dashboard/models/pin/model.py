@@ -196,10 +196,19 @@ class Pin(abstract.Model):
                 return tag.color
         return None
 
+    # Names produced by Google Maps when a place has no real identity. A pin
+    # whose effective_name is one of these has no useful search query to build.
+    _MEANINGLESS_NAMES: frozenset[str] = frozenset({"Dropped pin", "No Information Available", ""})
+
     @property
     def effective_name(self) -> str:
         """User's custom name, or the location's canonical name."""
         return self.nickname or (self.location.name if self.location else "")
+
+    @property
+    def has_meaningful_name(self) -> bool:
+        """True when the pin has a real name worth using as a search query."""
+        return self.effective_name not in self._MEANINGLESS_NAMES
 
     @property
     def effective_latitude(self) -> float | None:

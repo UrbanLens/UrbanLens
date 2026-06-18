@@ -186,6 +186,24 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
             logger.exception("Invalid polygon GeoJSON: %s", exc)
             return JsonResponse({"error": "Invalid polygon geometry"}, status=400)
 
+        # Check area against the site-wide limit.  Project to an equal-area CRS
+        # (EPSG:6933) so the area calculation is meaningful globally.
+        from urbanlens.dashboard.models.trips.model import SiteSettings
+
+        max_km2 = SiteSettings.get_current().max_bbox_area_km2
+        try:
+            area_km2 = geom.transform(6933, clone=True).area / 1_000_000
+        except Exception:
+            area_km2 = 0.0
+        if area_km2 > max_km2:
+            return JsonResponse(
+                {
+                    "error": f"Bounding box is too large ({area_km2:,.0f} km²). "
+                    f"Maximum allowed area is {max_km2:,.0f} km²."
+                },
+                status=400,
+            )
+
         old_wkt = location.bounding_box.wkt if location.bounding_box else None
         location.bounding_box = geom
         location.save(update_fields=["bounding_box", "updated"])

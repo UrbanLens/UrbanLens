@@ -314,6 +314,7 @@
     </div>
 
     {# ── Web search results ───────────────────────────────────────────── #}
+    {% if pin.has_meaningful_name %}
     <div id="web-search-section" class="web-search card"
          hx-get="{% url 'pin.web_search' pin.uuid %}"
          hx-trigger="load"
@@ -327,6 +328,7 @@
             Loading…
         </div>
     </div>
+    {% endif %}
 
     {# ── Comments ─────────────────────────────────────────────────────── #}
     <div id="comment-panel"

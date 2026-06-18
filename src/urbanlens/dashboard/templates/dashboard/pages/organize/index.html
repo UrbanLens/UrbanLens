@@ -1542,7 +1542,6 @@ function showTagCustomPreview(input) {
         if (!list) return;
         if (_prioritySortable) { _prioritySortable.destroy(); _prioritySortable = null; }
         _prioritySortable = new Sortable(list, {
-            handle: '.priority-drag-handle',
             animation: 150,
             ghostClass: 'priority-item--ghost',
             onEnd: function() {
