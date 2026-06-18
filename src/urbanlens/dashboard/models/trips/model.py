@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from uuid import uuid4
 
-from django.db.models import CASCADE, JSONField, SET_NULL, FloatField, ForeignKey, ImageField, Index, IntegerField, ManyToManyField, UUIDField
+from django.db.models import CASCADE, SET_NULL, FloatField, ForeignKey, ImageField, Index, IntegerField, JSONField, ManyToManyField, UUIDField
 from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, TextField
 
 from urbanlens.dashboard.models import abstract

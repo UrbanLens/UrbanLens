@@ -701,6 +701,18 @@
     display: inline-flex;
     align-items: center;
     gap: 1px;
+
+    // Fill all stars up to the hovered one (preview the new rating).
+    @for $i from 1 through 5 {
+        &:has(.sr-star-btn:nth-child(#{$i}):hover) {
+            .sr-star-btn:nth-child(-n+#{$i}) {
+                color: #f59e0b;
+            }
+            .sr-star-btn:not(:nth-child(-n+#{$i})) {
+                color: #d1d5db;
+            }
+        }
+    }
 }
 
 .sr-star-btn {
@@ -720,7 +732,6 @@
     }
 
     &:hover {
-        color: #f59e0b;
         transform: scale(1.2);
         outline: none;
     }
@@ -734,9 +745,18 @@
     &--on {
         color: #6366f1;
     }
+}
 
-    &:hover {
-        color: #6366f1;
+.star-rating-interactive--priority {
+    @for $i from 1 through 5 {
+        &:has(.sr-star-btn:nth-child(#{$i}):hover) {
+            .sr-star-btn:nth-child(-n+#{$i}) {
+                color: #6366f1;
+            }
+            .sr-star-btn:not(:nth-child(-n+#{$i})) {
+                color: #d1d5db;
+            }
+        }
     }
 }
 
