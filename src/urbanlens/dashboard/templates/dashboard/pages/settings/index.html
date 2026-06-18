@@ -111,7 +111,7 @@
             <i class="material-icons">palette</i>
             <div>
                 <h2 class="settings-section-title">Style</h2>
-                <p class="settings-section-desc">Site-wide appearance preferences.</p>
+                <p class="settings-section-desc">Site-wide appearance.</p>
             </div>
         </div>
 
@@ -185,6 +185,46 @@
             </div>
 
             <div class="settings-field">
+                <label class="settings-label">Starting Point</label>
+                <div class="settings-map-view-row">
+                    {% for radio in map_center_form.map_center_mode %}
+                    <label class="settings-map-view-option settings-radio-button{% if radio.data.value == map_center_form.instance.map_center_mode %} active{% endif %}"
+                           onclick="selectMapMode('{{ radio.data.value }}')">
+                        {{ radio.tag }}
+                        {% if radio.data.value == 'auto' %}
+                            <i class="material-icons">push_pin</i><span>My Pins</span>
+                        {% elif radio.data.value == 'gps' %}
+                            <i class="material-icons">gps_fixed</i><span>My Location</span>
+                        {% else %}
+                            <i class="material-icons">place</i><span>Custom</span>
+                        {% endif %}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="settings-field" id="custom-location-field" style="display:none">
+                <label class="settings-label">Custom Location</label>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+                    <input type="text" id="map-center-address" class="settings-input" style="flex:1; min-width:200px"
+                           placeholder="e.g. Albany, NY  or  42.6526, -73.7562">
+                    <button type="button" class="settings-reset-btn settings-radio-button" onclick="geocodeAddress()">
+                        <i class="material-icons" style="font-size:16px;vertical-align:middle">search</i> Find
+                    </button>
+                    <button type="button" class="settings-reset-btn settings-radio-button" onclick="useDeviceLocation()">
+                        <i class="material-icons" style="font-size:16px;vertical-align:middle">my_location</i> Use Current
+                    </button>
+                </div>
+                <p id="geocode-error" style="color:var(--color-error,#c00);margin-top:4px;display:none"></p>
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label" title="Drag or zoom to adjust">Preview</label>
+                <div id="map-center-preview" style="height:300px;border-radius:8px;overflow:hidden;border:1px solid var(--color-border,#ddd)"></div>
+                <p class="settings-help" style="margin-top:4px">The zoom level you leave this map at will be used as your default zoom.</p>
+            </div>
+
+            <div class="settings-field">
                 <label class="settings-label" for="{{ map_display_form.cluster_radius.id_for_label }}">
                     {{ map_display_form.cluster_radius.label }}
                 </label>
@@ -221,47 +261,6 @@
                 {% endif %}
             </div>
 
-            <div class="settings-field">
-                <label class="settings-label">Starting Point</label>
-                <div class="settings-map-view-row">
-                    {% for radio in map_center_form.map_center_mode %}
-                    <label class="settings-map-view-option settings-radio-button{% if radio.data.value == map_center_form.instance.map_center_mode %} active{% endif %}"
-                           onclick="selectMapMode('{{ radio.data.value }}')">
-                        {{ radio.tag }}
-                        {% if radio.data.value == 'auto' %}
-                            <i class="material-icons">push_pin</i><span>My Pins</span>
-                        {% elif radio.data.value == 'gps' %}
-                            <i class="material-icons">gps_fixed</i><span>My Location</span>
-                        {% else %}
-                            <i class="material-icons">place</i><span>Custom</span>
-                        {% endif %}
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-
-            <div class="settings-field" id="custom-location-field" style="display:none">
-                <label class="settings-label">Custom Location</label>
-                <p class="settings-help">Enter an address, city name, or GPS coordinates.</p>
-                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
-                    <input type="text" id="map-center-address" class="settings-input" style="flex:1; min-width:200px"
-                           placeholder="e.g. Albany, NY  or  42.6526, -73.7562">
-                    <button type="button" class="settings-reset-btn settings-radio-button" onclick="geocodeAddress()">
-                        <i class="material-icons" style="font-size:16px;vertical-align:middle">search</i> Find
-                    </button>
-                    <button type="button" class="settings-reset-btn settings-radio-button" onclick="useDeviceLocation()">
-                        <i class="material-icons" style="font-size:16px;vertical-align:middle">my_location</i> Use Current
-                    </button>
-                </div>
-                <p id="geocode-error" style="color:var(--color-error,#c00);margin-top:4px;display:none"></p>
-            </div>
-
-            <div class="settings-field">
-                <label class="settings-label" title="Drag or zoom to adjust">Preview</label>
-                <div id="map-center-preview" style="height:300px;border-radius:8px;overflow:hidden;border:1px solid var(--color-border,#ddd)"></div>
-                <p class="settings-help" style="margin-top:4px">The zoom level you leave this map at will be used as your default zoom.</p>
-            </div>
-
             <div class="settings-actions">
                 <button type="submit" class="settings-save-btn">Save</button>
             </div>
@@ -274,7 +273,7 @@
             <i class="material-icons">notifications</i>
             <div>
                 <h2 class="settings-section-title">Notifications</h2>
-                <p class="settings-section-desc">Choose how you receive alerts for each event type.</p>
+                <p class="settings-section-desc">How you receive alerts.</p>
             </div>
         </div>
         <div hx-get="{% url 'notifications.preferences' %}"

@@ -15,12 +15,12 @@ logger = logging.getLogger(__name__)
 
 _PREF_FIELDS = [
     ("trip_updated", "Trip Updated"),
-    ("friend_request", "Friend Request Received"),
-    ("message", "Message Received"),
+    ("friend_request", "New Friend Request"),
+    ("message", "New Message"),
     ("comment_reply", "Reply to Comment"),
-    ("comment_liked", "Comment Liked"),
+    ("comment_liked", "Comment Likes"),
     ("friend_accepted", "Friend Request Accepted"),
-    ("added_to_trip", "Added to Trip"),
+    ("added_to_trip", "Trip Invitation"),
     ("wiki_updated", "Community Wiki Updated"),
 ]
 

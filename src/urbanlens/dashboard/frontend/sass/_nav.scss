@@ -178,14 +178,12 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     top: calc(100% + 8px);
     right: 0;
     min-width: 220px;
-    background: #fff;
-    border: 1px solid $border-color;
+    background: var(--ul-surface-1);
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
-    box-shadow: $nav-dropdown-shadow;
+    box-shadow: var(--ul-shadow-lg);
     padding: 6px 0;
     z-index: 500;
-
-    // Hidden by default
     opacity: 0;
     transform: translateY(-6px);
     pointer-events: none;
@@ -231,7 +229,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
 .nav-dropdown-fullname {
     font-size: 0.875rem;
     font-weight: 600;
-    color: $text-color;
+    color: var(--ul-text-1);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -239,7 +237,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
 
 .nav-dropdown-username {
     font-size: 0.8rem;
-    color: $text-secondary;
+    color: var(--ul-text-2);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -248,7 +246,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
 // Separator
 .nav-dropdown-sep {
     height: 1px;
-    background: $border-color;
+    background: var(--ul-border);
     margin: 4px 0;
 }
 
@@ -261,7 +259,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     padding: 8px 14px;
     font-size: 0.875rem;
     font-weight: 500;
-    color: $text-color;
+    color: var(--ul-text-1);
     text-decoration: none;
     background: none;
     border: none;
@@ -276,14 +274,14 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
 
     i.material-icons {
         font-size: 1.05rem;
-        color: $text-secondary;
+        color: var(--ul-text-2);
         flex-shrink: 0;
         line-height: 1em;
         height: 1em;
     }
 
     &:hover {
-        background: #f5f6f7;
+        background: var(--ul-surface-2);
 
         .material-icons {
             color: $primary-color;
@@ -389,12 +387,17 @@ nav .brand-logo img {
     background: none;
     cursor: pointer;
     border-radius: 8px;
-    color: #6b7280;
+    color: rgba(255, 255, 255, .65); // nav bar is always dark
     transition: background .12s, color .12s;
 
     &:hover {
-        background: rgba(99, 102, 241, .08);
-        color: #4f46e5;
+        background: rgba(255, 255, 255, .12);
+        color: #fff;
+    }
+
+    &[aria-expanded="true"] {
+        background: rgba(255, 255, 255, .14);
+        color: #fff;
     }
 
     .nav-notif-icon {
@@ -430,10 +433,10 @@ nav .brand-logo img {
     width: 340px;
     max-height: 480px;
     overflow-y: auto;
-    background: #fff;
-    border: 1px solid #e5e7eb;
+    background: var(--ul-surface-1);
+    border: 1px solid var(--ul-border);
     border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, .14);
+    box-shadow: var(--ul-shadow-lg);
     z-index: 9000;
     opacity: 0;
     transform: translateY(-6px);
@@ -453,13 +456,13 @@ nav .brand-logo img {
         align-items: center;
         justify-content: space-between;
         padding: .75rem 1rem .5rem;
-        border-bottom: 1px solid #f3f4f6;
+        border-bottom: 1px solid var(--ul-border);
     }
 
     &__title {
         font-size: .9rem;
         font-weight: 600;
-        color: #111827;
+        color: var(--ul-text-1);
     }
 }
 
@@ -468,12 +471,12 @@ nav .brand-logo img {
     border: none;
     cursor: pointer;
     font-size: .78rem;
-    color: #6366f1;
+    color: $primary-color;
     padding: .2rem .4rem;
     border-radius: 4px;
 
     &:hover {
-        background: #f5f3ff;
+        background: var(--ul-hover-bg-primary);
     }
 }
 
@@ -494,7 +497,7 @@ nav .brand-logo img {
     position: relative;
 
     &:hover {
-        background: #f9fafb;
+        background: var(--ul-surface-2);
     }
 
     // ── Read state: deemphasised ─────────────────────────────────────────
@@ -506,12 +509,12 @@ nav .brand-logo img {
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #f3f4f6;
+        background: var(--ul-surface-3);
         margin-top: .1rem;
 
         .material-icons {
             font-size: 1rem;
-            color: #9ca3af;
+            color: var(--ul-text-3);
         }
     }
 
@@ -523,7 +526,7 @@ nav .brand-logo img {
     &__title {
         font-size: .84rem;
         font-weight: 400;
-        color: #6b7280;
+        color: var(--ul-text-2);
         margin: 0 0 .15rem;
         white-space: nowrap;
         overflow: hidden;
@@ -532,7 +535,7 @@ nav .brand-logo img {
 
     &__msg {
         font-size: .79rem;
-        color: #9ca3af;
+        color: var(--ul-text-3);
         margin: 0 0 .2rem;
         white-space: nowrap;
         overflow: hidden;
@@ -541,7 +544,7 @@ nav .brand-logo img {
 
     &__time {
         font-size: .7rem;
-        color: #d1d5db;
+        color: var(--ul-text-3);
         margin: 0;
     }
 
@@ -573,15 +576,15 @@ nav .brand-logo img {
 
         .notif-item__title {
             font-weight: 600;
-            color: #111827;
+            color: var(--ul-text-1);
         }
 
         .notif-item__msg {
-            color: #4b5563;
+            color: var(--ul-text-2);
         }
 
         .notif-item__time {
-            color: #9ca3af;
+            color: var(--ul-text-3);
         }
     }
 
@@ -619,7 +622,7 @@ nav .brand-logo img {
     padding: 1.5rem 1rem;
     text-align: center;
     font-size: .84rem;
-    color: #9ca3af;
+    color: var(--ul-text-3);
     margin: 0;
 }
 

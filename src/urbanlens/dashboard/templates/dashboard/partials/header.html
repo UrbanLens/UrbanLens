@@ -109,49 +109,64 @@
 
 <script>
 (function () {
-    // User menu
-    var menu = document.getElementById('nav-user');
-    var btn  = document.getElementById('nav-user-btn');
-    var drop = document.getElementById('nav-dropdown');
-    if (menu && btn && drop) {
-        function openMenu() { menu.classList.add('is-open'); btn.setAttribute('aria-expanded', 'true'); }
-        function closeMenu() { menu.classList.remove('is-open'); btn.setAttribute('aria-expanded', 'false'); }
-        btn.addEventListener('click', function (e) { e.stopPropagation(); menu.classList.contains('is-open') ? closeMenu() : openMenu(); });
-        document.addEventListener('click', closeMenu);
-        drop.addEventListener('click', function (e) { e.stopPropagation(); });
-        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
+    var menu      = document.getElementById('nav-user');
+    var btn       = document.getElementById('nav-user-btn');
+    var notifWrap = document.getElementById('nav-notif');
+    var notifBtn  = document.getElementById('nav-notif-btn');
+    var _loaded   = false;
+
+    function openMenu() {
+        if (!menu) return;
+        closeNotif();
+        menu.classList.add('is-open');
+        btn.setAttribute('aria-expanded', 'true');
+    }
+    function closeMenu() {
+        if (!menu) return;
+        menu.classList.remove('is-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    function openNotif() {
+        if (!notifWrap) return;
+        closeMenu();
+        notifWrap.classList.add('is-open');
+        notifBtn.setAttribute('aria-expanded', 'true');
+        if (!_loaded) { _loaded = true; document.body.dispatchEvent(new Event('notifOpen')); }
+    }
+    function closeNotif() {
+        if (!notifWrap) return;
+        notifWrap.classList.remove('is-open');
+        notifBtn.setAttribute('aria-expanded', 'false');
     }
 
-    // Notification bell
-    var notifWrap  = document.getElementById('nav-notif');
-    var notifBtn   = document.getElementById('nav-notif-btn');
-    var notifPanel = document.getElementById('notif-dropdown-wrap');
-    if (notifWrap && notifBtn && notifPanel) {
-        var _notifLoaded = false;
-        function openNotif() {
-            notifWrap.classList.add('is-open');
-            notifBtn.setAttribute('aria-expanded', 'true');
-            if (!_notifLoaded) {
-                _notifLoaded = true;
-                document.body.dispatchEvent(new Event('notifOpen'));
-            }
-        }
-        function closeNotif() { notifWrap.classList.remove('is-open'); notifBtn.setAttribute('aria-expanded', 'false'); }
+    if (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            menu.classList.contains('is-open') ? closeMenu() : openMenu();
+        });
+    }
+
+    if (notifBtn) {
         notifBtn.addEventListener('click', function (e) {
             e.stopPropagation();
             notifWrap.classList.contains('is-open') ? closeNotif() : openNotif();
         });
-        // After dropdown loads, refresh the badge count
         document.body.addEventListener('htmx:afterSwap', function (ev) {
             if (ev.detail.target.id === 'notif-dropdown-wrap') {
                 htmx.trigger(document.getElementById('notif-badge-wrap'), 'load');
             }
         });
-        document.addEventListener('click', function (e) {
-            if (!notifWrap.contains(e.target)) closeNotif();
-        });
-        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeNotif(); });
-        notifPanel.addEventListener('click', function (e) { e.stopPropagation(); });
     }
+
+    // Single document click handler — closes whichever dropdown was not clicked in
+    document.addEventListener('click', function (e) {
+        if (menu      && !menu.contains(e.target))      closeMenu();
+        if (notifWrap && !notifWrap.contains(e.target)) closeNotif();
+    });
+
+    // Escape closes both
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { closeMenu(); closeNotif(); }
+    });
 }());
 </script>

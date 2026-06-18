@@ -90,15 +90,14 @@ class MapDisplayForm(forms.ModelForm):
         max_value=500,
         widget=forms.NumberInput(attrs={"class": "settings-input", "placeholder": "Auto (zoom-based)"}),
         label="Cluster Radius",
-        help_text="Pixels within which nearby pins are grouped. Leave blank for automatic zoom-based grouping.",
+        help_text="Group pins within this radius. Leave blank for automatic zoom-based grouping.",
     )
     use_pin_cache = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
         label="Local Storage",
         help_text=(
-            "Caches your pins in the browser for instant map loads on return visits. "
-            "Disabling this re-fetches all pins from the server on every load."
+            "Cache pins in your browser for instant map loads. Disabling this will make the map feel sluggish."
         ),
     )
 
