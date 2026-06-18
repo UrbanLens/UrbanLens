@@ -179,7 +179,7 @@ class Db:
             cmd += ["-o", " ".join(server_opts)]
         cmd.append(command)
         kwargs.setdefault("check", True)
-        return subprocess.run(cmd, **kwargs)
+        return subprocess.run(cmd, **kwargs, check=False)
 
     def execute_sql(self, sql: str, database: str | None = None) -> int:
         """Run a SQL statement via psql and return the exit code.
@@ -618,7 +618,7 @@ def main():
         if not db.is_running():
             print(f"Starting postgres server on port {db_port} ...")
             try:
-                db._pg_ctl("start", with_server_opts=True, pg_wait=True)
+                db._pg_ctl("start", with_server_opts=True, pg_wait=True)  # noqa: SLF001
             except subprocess.CalledProcessError:
                 print(f"Failed to start postgres. Log ({log_path}):")
                 try:

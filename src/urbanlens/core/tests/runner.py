@@ -31,6 +31,7 @@ from typing import Any, TYPE_CHECKING, List, Tuple
 import os
 import unittest
 import logging
+from unittest.mock import patch
 
 from django import conf
 from django.test.runner import DiscoverRunner
@@ -108,16 +109,27 @@ class QuietTestRunner(unittest.TextTestRunner):
 class TestRunner(DiscoverRunner):
 
     def setup_test_environment(self, **kwargs : 'Any') -> None:
-        # Override the DJANGO_SETTINGS_MODULE environment variable
-        os.environ['DJANGO_SETTINGS_MODULE'] = 'UrbanLens.settings.test'
-
-        # Apply the new settings
-        conf.settings._setup()
+        # Set env var first — checked by signals before settings are fully loaded.
+        os.environ['DJANGO_TESTING'] = '1'
 
         super().setup_test_environment(**kwargs)
 
-        generator = MapGenerator()
-        generator.map_generators()
+        # Mark settings as test mode for any code that checks settings.TESTING.
+        conf.settings.TESTING = True
+
+        # Patch the AI gateway so no test ever makes a real external API call.
+        # send_prompt is the single chokepoint shared by all LLMGateway subclasses.
+        self._ai_patcher = patch(
+            'urbanlens.dashboard.services.ai.gateway.LLMGateway.send_prompt',
+            return_value=None,
+        )
+        self._ai_patcher.start()
+
+    def teardown_test_environment(self, **kwargs: 'Any') -> None:
+        patcher = getattr(self, '_ai_patcher', None)
+        if patcher:
+            patcher.stop()
+        super().teardown_test_environment(**kwargs)
 
     def run_suite(self, suite, **kwargs):
         # Run the test suite
@@ -136,75 +148,7 @@ class TestRunner(DiscoverRunner):
         # Teardown the databases
         super().teardown_databases(old_config, **kwargs)
 
-class MapGenerator:
-    models : list[tuple[Any, str]]
-
-    def __init__(self):
-        self.models = [
-            # Lib
-            (BooleanField, 'lib.models.fields.boolean.BooleanField'),
-            (BooleanField, 'lib.models.fields.boolean.ExistsField'),
-            (BigIntegerField, 'lib.models.fields.number.BigIntegerField'),
-            (CharField, 'lib.models.fields.char.CharField'),
-            (DateField, 'lib.models.fields.date.DateField'),
-            (DateTimeField, 'lib.models.fields.date.DateTimeField'),
-            (DateTimeField, 'lib.models.fields.date.InsertedNowField'),
-            (DateTimeField, 'lib.models.fields.date.UpdatedNowField'),
-            (DecimalField, 'lib.models.fields.number.DecimalField'),
-            (DecimalField, 'lib.models.fields.number.CurrencyField'),
-            (FloatField, 'lib.models.fields.number.FloatField'),
-            (ForeignKey, 'lib.models.fields.relationships.ForeignKey'),
-            (IntegerField, 'lib.models.fields.number.IntegerField'),
-            (ManyToManyField, 'lib.models.fields.relationships.ManyToManyField'),
-            (OneToOneField, 'lib.models.fields.relationships.OneToOneField'),
-            (BooleanField, 'dashboard.models.fields.BooleanField'),
-            (BigIntegerField, 'dashboard.models.fields.BigIntegerField'),
-            # Dashboard
-            (CharField, 'dashboard.models.fields.CharField'),
-            (DateField, 'dashboard.models.fields.DateField'),
-            (DateTimeField, 'dashboard.models.fields.DateTimeField'),
-            (DateTimeField, 'dashboard.models.fields.InsertedNowField'),
-            (DateTimeField, 'dashboard.models.fields.UpdatedNowField'),
-            (DecimalField, 'dashboard.models.fields.DecimalField'),
-            (FloatField, 'dashboard.models.fields.FloatField'),
-            (ForeignKey, 'dashboard.models.fields.ForeignKey'),
-            (IntegerField, 'dashboard.models.fields.IntegerField'),
-            (BigIntegerField, 'dashboard.models.fields.BigIntegerField'),
-            (PositiveIntegerField, 'dashboard.models.fields.PositiveIntegerField'),
-            (TextField, 'dashboard.models.fields.TextField'),
-        ]
-
-    def map_generators(self):
-        self.map_models()
-        self.map_fields()
-
-    def map_models(self):
-        """
-        Normal Models:
-
-        Ensure normal fields (that we override) are handled the same way as django models.
-        """
-        for model, path in self.models:
-            baker.generators.add(path, default_mapping[model])
-
-    def map_fields(self):
-        fields = {
-            generate_emplid:        ['lib.models.fields.EmplIdField',      'urbanlens.dashboard.models.fields.EmplIdField'],
-            generate_rowid:         ['lib.models.fields.RowIdField',       'urbanlens.dashboard.models.fields.RowIdField'],
-            generate_guid:          ['lib.models.fields.GuidField',        'urbanlens.dashboard.models.fields.GuidField'],
-            generate_onechar:       ['lib.models.fields.OneCharField',     'urbanlens.dashboard.models.fields.OneCharField'],
-            generate_pickledobject: ['lib.models.fields.PickledObjectField'],
-        }
-
-        for generator, module in fields.items():
-            for field in module:
-                baker.generators.add(field, generator)
-
-def generate_emplid():
-    seq('R', start=int(1e7))
-
-def generate_rowid():
-    return seq('ROWID', start=int(1e7))
+fake = Faker()
 
 def generate_guid():
     prefix = randrange(10000000, 99999999)
@@ -218,11 +162,12 @@ def generate_uniquechar():
 
 def generate_dict():
     total_elements = randrange(1, 10)
-    result = {Faker().word(): Faker().word() for _ in range(total_elements)}
+    result = {fake.word(): fake.word() for _ in range(total_elements)}
+    return result
 
 def generate_list():
     total_elements = randrange(1, 10)
-    return [Faker().word() for _ in range(total_elements)]
+    return [fake.word() for _ in range(total_elements)]
 
 def generate_pickledobject():
     options = [generate_dict, generate_list]

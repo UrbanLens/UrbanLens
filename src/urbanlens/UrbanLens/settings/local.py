@@ -214,3 +214,5 @@ GOOGLE_SEARCH_API_KEY = os.getenv("UL_GOOGLE_SEARCH_API_KEY", "")
 GOOGLE_SEARCH_TENANT = os.getenv("UL_GOOGLE_SEARCH_CX", "")
 OPEN_WEATHER_API_KEY = os.getenv("UL_OPENWEATHERMAP_API_KEY", "")
 NPS_API_KEY = os.getenv("UL_NPS_API_KEY", "")
+
+TEST_RUNNER = 'urbanlens.core.tests.runner.TestRunner'

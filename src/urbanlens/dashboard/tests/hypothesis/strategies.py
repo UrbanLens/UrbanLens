@@ -15,7 +15,10 @@ from urbanlens.dashboard.models.pin.model import PinStatus, PinType
 
 # ── Safe text ──────────────────────────────────────────────────────────────────
 # Restrict to printable ASCII to avoid encoding edge-cases in DB text columns.
-_printable_alphabet = st.characters(whitelist_categories=("Lu", "Ll", "Nd", "Zs", "Po"))
+# max_codepoint=127 enforces the ASCII boundary; without it, Unicode categories
+# like Lu/Ll include non-ASCII characters (e.g. İ, ß) whose Python case-folding
+# diverges from PostgreSQL ILIKE, causing spurious test failures.
+_printable_alphabet = st.characters(max_codepoint=127, whitelist_categories=("Lu", "Ll", "Nd", "Zs", "Po"))
 
 short_text = st.text(alphabet=_printable_alphabet, min_size=1, max_size=255)
 short_text_or_none = st.one_of(st.none(), short_text)

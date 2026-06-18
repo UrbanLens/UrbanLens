@@ -54,8 +54,8 @@ class FriendshipTransitionTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile_a = baker.make(Profile)
-		self.profile_b = baker.make(Profile)
+		self.profile_a = baker.make("auth.User").profile
+		self.profile_b = baker.make("auth.User").profile
 		self.friendship = _make_requested(self.profile_a, self.profile_b)
 
 	def test_accept_transitions_to_accepted(self) -> None:
@@ -112,8 +112,8 @@ class FriendshipBlockMuteTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile_a = baker.make(Profile)
-		self.profile_b = baker.make(Profile)
+		self.profile_a = baker.make("auth.User").profile
+		self.profile_b = baker.make("auth.User").profile
 
 	def test_block_creates_blocked_friendship(self) -> None:
 		f = Friendship.block(self.profile_a, self.profile_b)
@@ -148,8 +148,8 @@ class FriendshipUniqueConstraintTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile_a = baker.make(Profile)
-		self.profile_b = baker.make(Profile)
+		self.profile_a = baker.make("auth.User").profile
+		self.profile_b = baker.make("auth.User").profile
 
 	def test_duplicate_friendship_raises_integrity_error(self) -> None:
 		_make_requested(self.profile_a, self.profile_b)
@@ -171,8 +171,8 @@ class FriendshipQuerySetTests(HypothesisTestCase):
 
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile_a = baker.make(Profile)
-		self.profile_b = baker.make(Profile)
+		self.profile_a = baker.make("auth.User").profile
+		self.profile_b = baker.make("auth.User").profile
 		self.friendship = _make_requested(self.profile_a, self.profile_b)
 
 	def test_is_friend_filter_only_returns_accepted(self) -> None:
@@ -198,10 +198,10 @@ class FriendshipQuerySetTests(HypothesisTestCase):
 		self.assertEqual(found.pk, self.friendship.pk)
 
 	def test_between_raises_when_no_friendship_exists(self) -> None:
-		"""between() uses .get() — it raises DoesNotExist when no friendship exists."""
-		profile_c = baker.make(Profile)
-		with self.assertRaises(ObjectDoesNotExist):
-			Friendship.objects.all().between(self.profile_a, profile_c)
+		"""between() uses .get() but DoesNotExist should be caught when no friendship exists."""
+		profile_c = baker.make("auth.User").profile
+		result = Friendship.objects.all().between(self.profile_a, profile_c)
+		self.assertIsNone(result)
 
 	def test_profile_filter_includes_both_directions(self) -> None:
 		result = set(Friendship.objects.all().profile(self.profile_a).values_list("pk", flat=True))

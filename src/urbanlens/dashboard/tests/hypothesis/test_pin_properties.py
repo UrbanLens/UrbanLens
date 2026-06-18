@@ -11,7 +11,7 @@ import unittest
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -239,25 +239,25 @@ class PinEffectiveIconTests(unittest.TestCase):
 
 	def _make_pin_with_icon(self, icon: str | None, custom_icon: Any = None) -> Pin:
 		pin = _make_pin(icon=icon)
-		# custom_icon is a Django ImageField descriptor; mock the .url attribute.
+		# custom_icon is a Django ImageField; FileDescriptor.__set__ accepts assignment.
 		mock_cf = MagicMock()
 		mock_cf.__bool__ = lambda self: custom_icon is not None
 		mock_cf.url = custom_icon or ""
 		object.__setattr__(pin, "custom_icon", mock_cf if custom_icon else None)
-		# Silence the tags queryset to avoid DB hit.
-		tags_mock = MagicMock()
-		tags_mock.order_by.return_value = iter([])
-		object.__setattr__(pin, "tags", tags_mock)
 		return pin
 
 	@given(st.text(min_size=1, max_size=50, alphabet=st.characters(whitelist_categories=("Ll",))))
 	@settings(max_examples=200)
 	def test_text_icon_field_is_returned_when_set(self, icon_key: str) -> None:
 		"""When only the icon CharField is set, it must be returned."""
+		# effective_icon returns self.icon immediately — tags are never accessed.
 		pin = self._make_pin_with_icon(icon=icon_key, custom_icon=None)
 		self.assertEqual(pin.effective_icon, icon_key)
 
-	def test_none_icon_returns_none_when_no_tags(self) -> None:
+	@patch.object(Pin, "tags")
+	def test_none_icon_returns_none_when_no_tags(self, mock_tags: MagicMock) -> None:
+		# Patch at class level: ManyToManyDescriptor.__set__ rejects instance assignment.
+		mock_tags.order_by.return_value = iter([])
 		pin = self._make_pin_with_icon(icon=None, custom_icon=None)
 		self.assertIsNone(pin.effective_icon)
 
@@ -265,6 +265,7 @@ class PinEffectiveIconTests(unittest.TestCase):
 	@settings(max_examples=100)
 	def test_custom_icon_url_beats_icon_field(self, icon_key: str) -> None:
 		"""A custom uploaded icon takes priority over the text icon key."""
+		# effective_icon returns self.custom_icon.url immediately — tags are never accessed.
 		url = "/media/pin_custom_icons/test.png"
 		pin = _make_pin(icon=icon_key)
 		mock_cf = MagicMock()

@@ -67,8 +67,7 @@ class Friendship(Model):
         Create a new friendship request.
         """
         # Check if a request has already been made
-        friendship = cls.objects.all().between(from_profile, to_profile)
-        if friendship:
+        if friendship := cls.objects.all().between(from_profile, to_profile):
             # Check if we can make another request
             if not FriendshipStatus.can_request(friendship.status):
                 logger.warning("Cannot request another friendship")
@@ -124,8 +123,7 @@ class Friendship(Model):
         """
         Block a profile.
         """
-        friendship = cls.objects.all().between(from_profile, to_profile)
-        if friendship:
+        if friendship := cls.objects.all().between(from_profile, to_profile):
             friendship.status = FriendshipStatus.BLOCKED
             friendship.save()
             return friendship
@@ -151,8 +149,7 @@ class Friendship(Model):
         """
         Mute a profile.
         """
-        friendship = cls.objects.all().between(from_profile, to_profile)
-        if friendship:
+        if friendship := cls.objects.all().between(from_profile, to_profile):
             friendship.status = FriendshipStatus.MUTED
             friendship.save()
             return friendship

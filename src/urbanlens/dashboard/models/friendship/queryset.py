@@ -79,7 +79,10 @@ class QuerySet(abstract.QuerySet):
             q1["to_profile"] = to_profile
             q2["from_profile"] = to_profile
 
-        return self.filter(Q(**q1) | Q(**q2)).get()
+        try:
+            return self.filter(Q(**q1) | Q(**q2)).get()
+        except self.model.DoesNotExist:
+            return None
 
     def user(self, user: User) -> Self:
         """

@@ -25,6 +25,7 @@
 *********************************************************************************************************************"""
 
 import logging
+import os
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -48,6 +49,7 @@ def suggest_and_add_categories(sender, instance: Pin, created, **kwargs):
     """
     if not created:
         return
+    
     # Perform the category suggestion and addition only for new instances.
     # M2M changes from add_category(save=False) are committed by .add() directly;
     # no save() needed here.
