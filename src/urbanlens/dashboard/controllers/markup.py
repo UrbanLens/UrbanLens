@@ -93,7 +93,7 @@ class MarkupView(LoginRequiredMixin, View):
 
         label = (body.get("label") or "").strip()
 
-        fill_opacity   = int(body.get("fill_opacity")   or profile.markup_fill_opacity)
+        fill_opacity = int(body.get("fill_opacity") or profile.markup_fill_opacity)
         border_opacity = int(body.get("border_opacity") or profile.markup_border_opacity)
 
         item = PinMarkup.objects.create(

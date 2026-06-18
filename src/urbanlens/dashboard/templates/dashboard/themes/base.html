@@ -182,7 +182,7 @@
                         return String(p.index).startsWith(q.query);
                     });
                     _showDropdown(ta, pts.map(function (p) {
-                        return { name: '#' + p.index + ' – ' + p.label, actIndex: p.index };
+                        return { name: '#' + p.index + ' - ' + p.label, actIndex: p.index };
                     }), function (item) {
                         _insert(ta, q.start, '@act:' + item.actIndex);
                     });

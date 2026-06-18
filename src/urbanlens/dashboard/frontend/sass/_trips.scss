@@ -332,7 +332,10 @@
     }
 
     &--chosen {
-        .trip-section-grip { opacity: 1; color: #64748b; }
+        .trip-section-grip {
+            opacity: 1;
+            color: #64748b;
+        }
     }
 }
 
@@ -347,10 +350,17 @@
     color: #94a3b8;
     margin-bottom: -4px;
 
-    .material-icons { font-size: 1rem; }
+    .material-icons {
+        font-size: 1rem;
+    }
 
-    &:active { cursor: grabbing; }
-    &:hover { color: #64748b; }
+    &:active {
+        cursor: grabbing;
+    }
+
+    &:hover {
+        color: #64748b;
+    }
 }
 
 // ── Trip panels (shared) ──────────────────────────────────────────────────
@@ -476,7 +486,7 @@
 
 .cal-cell {
     min-height: 54px;
-    min-width: 0;    // prevent grid cells from growing beyond 1fr share
+    min-width: 0; // prevent grid cells from growing beyond 1fr share
     overflow: hidden;
     border-radius: 5px;
     padding: .25rem .3rem;
@@ -1066,7 +1076,9 @@
     gap: 4px;
     pointer-events: none;
 
-    > * { pointer-events: auto; }
+    >* {
+        pointer-events: auto;
+    }
 }
 
 .trip-map-past-btn {
@@ -1083,16 +1095,23 @@
     transition: background .15s, color .15s, border-color .15s;
     padding: 0;
 
-    .material-icons { font-size: 1rem; }
+    .material-icons {
+        font-size: 1rem;
+    }
 
-    &:hover { background: #f8fafc; color: #334155; }
+    &:hover {
+        background: #f8fafc;
+        color: #334155;
+    }
 
     &--active {
         background: #3b82f6;
         border-color: #2563eb;
         color: #fff;
 
-        &:hover { background: #2563eb; }
+        &:hover {
+            background: #2563eb;
+        }
     }
 }
 
@@ -1262,6 +1281,7 @@
             color: $text-muted;
             background: #f1f5f9;
             border: 1px solid #e2e8f0;
+            opacity: 0.2;
         }
 
         &:hover {
@@ -1310,12 +1330,37 @@
     border: none;
     color: $text-primary;
 
-    &:hover { background: #f5f5f5; }
+    &:hover {
+        background: #f5f5f5;
+    }
 
-    &--yes  { color: #16a34a; &:hover { background: #dcfce7; } }
-    &--no   { color: #dc2626; &:hover { background: #fee2e2; } }
-    &--maybe { color: #d97706; &:hover { background: #fef3c7; } }
-    &--clear { color: $text-muted; }
+    &--yes {
+        color: #16a34a;
+
+        &:hover {
+            background: #dcfce7;
+        }
+    }
+
+    &--no {
+        color: #dc2626;
+
+        &:hover {
+            background: #fee2e2;
+        }
+    }
+
+    &--maybe {
+        color: #d97706;
+
+        &:hover {
+            background: #fef3c7;
+        }
+    }
+
+    &--clear {
+        color: $text-muted;
+    }
 }
 
 .trip-member-actions {
@@ -1860,7 +1905,7 @@
     gap: 1rem;
     padding: .65rem .75rem;
 
-    & + & {
+    &+& {
         border-top: 1px solid $border-color;
     }
 

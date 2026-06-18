@@ -293,7 +293,7 @@ def _parse_map_data(request) -> dict | None:
     if not isinstance(data, dict):
         return None
     # Require at least a center coordinate.
-    if not (isinstance(data.get("center_lat"), (int, float)) and isinstance(data.get("center_lng"), (int, float))):
+    if not (isinstance(data.get("center_lat"), int | float) and isinstance(data.get("center_lng"), int | float)):
         return None
     return data
 

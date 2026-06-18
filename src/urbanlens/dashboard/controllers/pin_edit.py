@@ -8,6 +8,7 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -245,3 +246,81 @@ class PinNoteDeleteView(LoginRequiredMixin, View):
         note = get_object_or_404(PinNote, id=note_id, pin=pin)
         note.delete()
         return HttpResponse("", status=200)
+
+
+class PinRelinkView(LoginRequiredMixin, View):
+    """Link a pin to a different Location, or detach it to its own bare Location.
+
+    GET  /map/pin/<uuid>/link/               → HTML picker listing all overlapping Locations
+    POST /map/pin/<uuid>/link/               → Detach: creates a new Location at the pin's point
+    POST /map/pin/<uuid>/link/<loc_uuid>/    → Relink: switches the pin to the given Location
+    """
+
+    def get(self, request, pin_uuid):
+        """Return an HTMX partial listing every Location that covers this pin's point.
+
+        Args:
+            request: The HTTP request.
+            pin_uuid: UUID of the pin.
+
+        Returns:
+            Rendered HTML partial with location choices.
+        """
+        result = _pin_for_user(pin_uuid, request)
+        if isinstance(result, HttpResponse):
+            return result
+        pin = result
+
+        from urbanlens.dashboard.models.location.model import Location
+
+        lat = pin.effective_latitude
+        lng = pin.effective_longitude
+        locations = (
+            Location.objects.get_all_for_point(float(lat), float(lng))
+            if lat is not None and lng is not None
+            else Location.objects.none()
+        )
+        return render(
+            request,
+            "dashboard/partials/pin_location_picker.html",
+            {"pin": pin, "locations": locations},
+        )
+
+    def post(self, request, pin_uuid, location_uuid=None):
+        """Relink or detach the pin.
+
+        Args:
+            request: The HTTP request.
+            pin_uuid: UUID of the pin.
+            location_uuid: Optional UUID of an existing Location to link to.
+                If omitted, detaches the pin (creates a fresh bare Location).
+
+        Returns:
+            Re-rendered pin overview partial.
+        """
+        result = _pin_for_user(pin_uuid, request)
+        if isinstance(result, HttpResponse):
+            return result
+        pin = result
+
+        from urbanlens.dashboard.models.location.model import Location
+
+        if location_uuid:
+            location = get_object_or_404(Location, uuid=location_uuid)
+        else:
+            # Detach: create a new bare Location at this pin's coordinates so
+            # the pin retains its own independent community wiki page.
+            lat = float(pin.effective_latitude or 0)
+            lng = float(pin.effective_longitude or 0)
+            name = (pin.location.name if pin.location else None) or pin.nickname or "Unnamed Location"
+            location = Location.objects.create(
+                name=name,
+                latitude=lat,
+                longitude=lng,
+            )
+
+        pin.location = location
+        pin.save(update_fields=["location"])
+        pin.refresh_from_db()
+
+        return render(request, "dashboard/partials/pin_overview_partial.html", _overview_context(pin))

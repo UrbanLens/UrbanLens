@@ -144,11 +144,11 @@ class Profile(abstract.Model):
     map_default_zoom = IntegerField(default=13)
 
     # Default styling for new pin-detail annotations (lines, arrows, shapes, text).
-    # Opacity is stored as an integer 0–100 (percent).
-    markup_fill_color   = CharField(max_length=20, default="#e53e3e")
+    # Opacity is stored as an integer 0-100 (percent).
+    markup_fill_color = CharField(max_length=20, default="#e53e3e")
     markup_fill_opacity = IntegerField(default=87)
     # Empty string = no border (transparent). Hex string = explicit border color.
-    markup_border_color   = CharField(max_length=20, blank=True, default="")
+    markup_border_color = CharField(max_length=20, blank=True, default="")
     markup_border_opacity = IntegerField(default=100)
 
     user = OneToOneField(

@@ -103,7 +103,7 @@
                         {% endwith %}
                         {% if act.scheduled_end %}
                         {% with te=act.scheduled_end|time:"H:i" %}
-                        – {{ act.scheduled_end|date:"M j, Y" }}{% if te != "00:00" %} at {{ act.scheduled_end|time:"g:i A" }}{% endif %}
+                        - {{ act.scheduled_end|date:"M j, Y" }}{% if te != "00:00" %} at {{ act.scheduled_end|time:"g:i A" }}{% endif %}
                         {% endwith %}
                         {% endif %}
                     </span>

@@ -41,6 +41,22 @@ class LocationWikiView(LoginRequiredMixin, View):
         # The requesting user's own pin for this location (used for the back-link).
         user_pin = location.pins.filter(profile=profile).first()
 
+        # Other Locations whose bounding box also covers the user's pin point.
+        # These are potential alternative associations the user may prefer.
+        if user_pin:
+            lat = user_pin.effective_latitude
+            lng = user_pin.effective_longitude
+            other_locations = (
+                Location.objects
+                .within_bounding_box(float(lat), float(lng))
+                .exclude(pk=location.pk)
+                .order_by("name")
+                if lat is not None and lng is not None
+                else Location.objects.none()
+            )
+        else:
+            other_locations = Location.objects.none()
+
         from urbanlens.dashboard.models.badges.model import COLOR_CHOICES
         from urbanlens.dashboard.models.pin.model import PinType
 
@@ -61,6 +77,7 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "pin_count": pin_count,
                 "first_pinned": first_pinned,
                 "user_pin": user_pin,
+                "other_locations": other_locations,
                 "page_name": "location-wiki",
                 "pin_type_choices": PinType.choices,
                 "detail_pin_icon_choices": detail_pin_icon_choices,
@@ -199,7 +216,7 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
             return JsonResponse(
                 {
                     "error": f"Bounding box is too large ({area_km2:,.0f} km²). "
-                    f"Maximum allowed area is {max_km2:,.0f} km²."
+                    f"Maximum allowed area is {max_km2:,.0f} km².",
                 },
                 status=400,
             )

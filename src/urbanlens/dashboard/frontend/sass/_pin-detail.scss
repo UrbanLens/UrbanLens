@@ -946,6 +946,412 @@ body.page-location-details {
             box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
         }
     }
+}
+
+// ── Pin status chips (overview partial) ───────────────────────────────────────
+
+.pin-status-chips {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+}
+
+.pin-status-chip {
+    font-size: .75rem;
+    font-weight: 600;
+    background: rgba(0, 0, 0, .05);
+    border-radius: 12px;
+    padding: .1rem .5rem;
+}
+
+// ── Pin linked-location panel ─────────────────────────────────────────────────
+
+.pin-location-section {
+    margin-top: .5rem;
+}
+
+.pin-location-panel {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    overflow: visible;
+    background: #f9fafb;
+
+    &--unlinked {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .6rem .85rem;
+        color: #6b7280;
+        font-size: .84rem;
+
+        .material-icons { font-size: 1.05rem; color: #d1d5db; }
+    }
+}
+
+.pin-location-panel-main {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .6rem .85rem;
+}
+
+.pin-location-icon {
+    font-size: 1.2rem;
+    color: #6366f1;
+    flex-shrink: 0;
+}
+
+.pin-location-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .05rem;
+}
+
+.pin-location-label {
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #9ca3af;
+}
+
+.pin-location-name {
+    font-size: .88rem;
+    font-weight: 600;
+    color: #1e40af;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    &:hover { text-decoration: underline; }
+}
+
+.pin-location-name-icon {
+    font-size: .82rem;
+    opacity: .6;
+}
+
+.pin-location-actions {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    flex-shrink: 0;
+}
+
+.pin-loc-change-btn {
+    font-size: .75rem;
+    padding: .2rem .5rem;
+}
+
+.pin-loc-detach-btn {
+    font-size: .75rem;
+    padding: .2rem .5rem;
+    color: #dc2626;
+    border-color: #fca5a5;
+
+    &:hover {
+        background: #fef2f2;
+        border-color: #dc2626;
+    }
+}
+
+// ── Location picker panel (inline in pin overview) ────────────────────────────
+
+.pin-loc-picker {
+    border-top: 1px solid #e5e7eb;
+    background: #fff;
+    border-radius: 0 0 10px 10px;
+}
+
+.pin-loc-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .5rem .85rem .35rem;
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #9ca3af;
+}
+
+.pin-loc-picker-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #9ca3af;
+    padding: 0;
+    display: inline-flex;
+    .material-icons { font-size: .9rem; }
+    &:hover { color: #374151; }
+}
+
+.pin-loc-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .45rem .85rem;
+    border-top: 1px solid #f3f4f6;
+    gap: .5rem;
+
+    &--current { background: #f0f9ff; }
+}
+
+.pin-loc-option-info {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.pin-loc-option-name {
+    font-size: .84rem;
+    font-weight: 500;
+    color: #111827;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pin-loc-option-badge {
+    font-size: .65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: #dbeafe;
+    color: #1d4ed8;
+    border-radius: 8px;
+    padding: .1rem .4rem;
+    white-space: nowrap;
+}
+
+.pin-loc-option-actions {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    flex-shrink: 0;
+}
+
+.pin-loc-picker-empty {
+    padding: .65rem .85rem;
+    font-size: .82rem;
+    color: #9ca3af;
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    .material-icons { font-size: 1rem; }
+}
+
+// ── Location conflict dialog (map page) ───────────────────────────────────────
+
+.loc-conflict-dialog {
+    width: min(90vw, 520px);
+    padding: 0;
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, .25);
+    overflow: hidden;
+
+    .dialog-header {
+        display: flex;
+        align-items: center;
+        gap: .45rem;
+        padding: .75rem 1rem;
+        border-bottom: 1px solid #e5e7eb;
+        font-weight: 600;
+        font-size: .9rem;
+
+        .dialog-close { margin-left: auto; }
+    }
+}
+
+.loc-conflict-body {
+    padding: .85rem 1rem 1rem;
+}
+
+.loc-conflict-intro {
+    font-size: .83rem;
+    color: #4b5563;
+    margin: 0 0 .75rem;
+}
+
+.loc-conflict-list {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.loc-conflict-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: .5rem .75rem;
+    gap: .5rem;
+
+    &--current {
+        background: #f0f9ff;
+        border-color: #bae6fd;
+    }
+}
+
+.loc-conflict-option-name {
+    font-size: .86rem;
+    font-weight: 500;
+    color: #111827;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.loc-conflict-badge {
+    font-size: .65rem;
+    font-weight: 700;
+    background: #dbeafe;
+    color: #1d4ed8;
+    border-radius: 8px;
+    padding: .1rem .4rem;
+    margin-left: .4rem;
+    white-space: nowrap;
+}
+
+.loc-conflict-option-actions {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    flex-shrink: 0;
+}
+
+// ── Wiki "other locations" conflict notice ────────────────────────────────────
+
+.wiki-location-conflict {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    padding: .85rem 1rem;
+    margin-bottom: 1.25rem;
+    position: relative;
+}
+
+.wiki-lcn-icon {
+    font-size: 1.2rem;
+    color: #f59e0b;
+    flex-shrink: 0;
+    margin-top: .05rem;
+}
+
+.wiki-lcn-body {
+    flex: 1;
+    font-size: .84rem;
+    color: #374151;
+
+    strong { color: #92400e; }
+}
+
+.wiki-lcn-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-top: .5rem;
+}
+
+.wiki-lcn-item {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    background: #fff;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    padding: .2rem .55rem;
+}
+
+.wiki-lcn-link {
+    font-size: .82rem;
+    font-weight: 500;
+    color: #1d4ed8;
+    text-decoration: none;
+
+    &:hover { text-decoration: underline; }
+}
+
+.wiki-lcn-switch-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .75rem;
+    font-weight: 600;
+    color: #6d28d9;
+    padding: 0;
+
+    &:hover { text-decoration: underline; }
+}
+
+.wiki-lcn-dismiss {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #9ca3af;
+    padding: 0;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+
+    .material-icons { font-size: 1.05rem; }
+    &:hover { color: #374151; }
+}
+
+// ── Dark mode ─────────────────────────────────────────────────────────────────
+
+[data-theme="dark"] {
+    .pin-status-chip { background: rgba(255, 255, 255, .08); }
+
+    .pin-location-panel {
+        background: var(--ul-surface);
+        border-color: var(--ul-border);
+
+        &--unlinked { color: var(--ul-muted); .material-icons { color: var(--ul-border); } }
+    }
+
+    .pin-location-label { color: var(--ul-muted); }
+    .pin-location-name { color: #93c5fd; }
+    .pin-loc-change-btn { color: var(--ul-text); border-color: var(--ul-border); }
+    .pin-loc-detach-btn { color: #f87171; border-color: rgba(248, 113, 113, .3); &:hover { background: rgba(220, 38, 38, .1); border-color: #f87171; } }
+
+    .pin-loc-picker { background: var(--ul-surface); border-color: var(--ul-border); }
+    .pin-loc-picker-header { color: var(--ul-muted); }
+    .pin-loc-option { border-color: var(--ul-border); &--current { background: rgba(59, 130, 246, .08); } }
+    .pin-loc-option-name { color: var(--ul-text); }
+
+    .loc-conflict-dialog {
+        background: var(--ul-surface);
+        color: var(--ul-text);
+        .dialog-header { border-color: var(--ul-border); background: var(--ul-surface); }
+    }
+    .loc-conflict-intro { color: var(--ul-muted); }
+    .loc-conflict-option { border-color: var(--ul-border); &--current { background: rgba(59, 130, 246, .08); border-color: #3b82f6; } }
+    .loc-conflict-option-name { color: var(--ul-text); }
+
+    .wiki-location-conflict {
+        background: rgba(245, 158, 11, .08);
+        border-color: rgba(245, 158, 11, .35);
+    }
+    .wiki-lcn-body { color: var(--ul-text); strong { color: #fbbf24; } }
+    .wiki-lcn-item { background: var(--ul-surface); border-color: rgba(245, 158, 11, .3); }
+    .wiki-lcn-link { color: #93c5fd; }
+    .wiki-lcn-switch-btn { color: #c4b5fd; }
+    .wiki-lcn-dismiss { color: var(--ul-muted); &:hover { color: var(--ul-text); } }
 
     .form-actions {
         margin-top: .5rem;

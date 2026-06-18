@@ -38,6 +38,44 @@
         </div>
     </div>
 
+    {# ── Other-location conflict notice ─────────────────────────────────── #}
+    {% if other_locations %}
+    <div class="wiki-location-conflict" id="wiki-location-conflict">
+        <i class="material-icons wiki-lcn-icon">info</i>
+        <div class="wiki-lcn-body">
+            <strong>
+                {{ other_locations|length }} other location{{ other_locations|length|pluralize }}
+                {% if other_locations|length == 1 %}covers{% else %}cover{% endif %}
+                the same area as your pin.
+            </strong>
+            Your pin is currently linked here. You may want to browse the alternatives or switch:
+            <div class="wiki-lcn-list">
+                {% for other in other_locations %}
+                <span class="wiki-lcn-item">
+                    <a href="{% url 'location.wiki' other.uuid %}" class="wiki-lcn-link">{{ other.name }}</a>
+                    {% if user_pin %}
+                    <button type="button" class="wiki-lcn-switch-btn"
+                            hx-post="{% url 'pin.link.to' user_pin.uuid other.uuid %}"
+                            hx-target="#pin-overview-stub"
+                            hx-swap="none"
+                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                            hx-on::after-request="if(event.detail.successful){toastr.success('Switched to {{ other.name|escapejs }}');document.getElementById('wiki-location-conflict').remove();}"
+                            title="Switch your pin to {{ other.name }}">
+                        Switch
+                    </button>
+                    {% endif %}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+        <button type="button" class="wiki-lcn-dismiss"
+                onclick="document.getElementById('wiki-location-conflict').remove()"
+                title="Dismiss">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    {% endif %}
+
     {# ── Body grid ───────────────────────────────────────────────────────── #}
     <div class="wiki-body">
 

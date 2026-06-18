@@ -116,9 +116,9 @@ class Pin(abstract.Model):
     color = CharField(max_length=20, null=True, blank=True)
 
     # Detail-pin circle styling: background fill and border around the icon.
-    # Opacity stored as 0–100 integer (percent).
-    detail_bg_color     = CharField(max_length=20, null=True, blank=True)
-    detail_bg_opacity   = IntegerField(default=80)
+    # Opacity stored as 0-100 integer (percent).
+    detail_bg_color = CharField(max_length=20, null=True, blank=True)
+    detail_bg_opacity = IntegerField(default=80)
     detail_border_color = CharField(max_length=20, null=True, blank=True)
     detail_border_opacity = IntegerField(default=100)
 

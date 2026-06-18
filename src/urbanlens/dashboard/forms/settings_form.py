@@ -39,6 +39,7 @@ class MarkupDefaultsForm(forms.ModelForm):
     def clean_markup_border_color(self):
         return (self.cleaned_data.get("markup_border_color") or "").strip()
 
+
 # "Friends only" is circular for friend requests (they're not friends yet), so exclude it.
 _FRIEND_REQUEST_CHOICES = [(k, v) for k, v in VisibilityChoice.choices if k != VisibilityChoice.FRIENDS]
 

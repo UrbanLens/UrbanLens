@@ -946,7 +946,7 @@ function _renderTripCalendar() {
     var lastLabel  = months.length > 1
         ? new Date(months[months.length-1].y, months[months.length-1].m, 1).toLocaleString('default', {month: 'long', year: 'numeric'})
         : null;
-    var navTitle = lastLabel ? firstLabel + ' – ' + lastLabel : firstLabel;
+    var navTitle = lastLabel ? firstLabel + ' - ' + lastLabel : firstLabel;
 
     var html = '<div class="cal-header">' +
         '<button type="button" class="cal-nav-btn" onclick="tripCalNav(-1)" aria-label="Previous">' +
@@ -1206,7 +1206,7 @@ function _clearEditLocation() {
                             var li = document.createElement('li');
                             li.className = 'location-suggestion-item';
                             var dates = '';
-                            if (t.start_date) dates = ' (' + t.start_date + (t.end_date ? ' – ' + t.end_date : '') + ')';
+                            if (t.start_date) dates = ' (' + t.start_date + (t.end_date ? ' - ' + t.end_date : '') + ')';
                             li.textContent = t.name + dates;
                             li.addEventListener('click', function () {
                                 uuidInput.value = t.uuid;

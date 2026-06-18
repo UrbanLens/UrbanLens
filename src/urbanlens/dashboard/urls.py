@@ -218,6 +218,16 @@ urlpatterns = [
                                 name="pin.note.delete",
                             ),
                             path(
+                                "<uuid:pin_uuid>/link/",
+                                pin_edit.PinRelinkView.as_view(),
+                                name="pin.link",
+                            ),
+                            path(
+                                "<uuid:pin_uuid>/link/<uuid:location_uuid>/",
+                                pin_edit.PinRelinkView.as_view(),
+                                name="pin.link.to",
+                            ),
+                            path(
                                 "<uuid:pin_uuid>/aliases/",
                                 aliases.PinAliasView.as_view(),
                                 name="pin.aliases",

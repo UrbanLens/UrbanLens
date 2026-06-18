@@ -10,7 +10,7 @@
         {% if trip.start_date %}
         <div class="trip-detail-dates">
             <i class="material-icons">event</i>
-            {{ trip.start_date|date:"M j, Y" }}{% if trip.end_date %} – {{ trip.end_date|date:"M j, Y" }}{% endif %}
+            {{ trip.start_date|date:"M j, Y" }}{% if trip.end_date %} - {{ trip.end_date|date:"M j, Y" }}{% endif %}
         </div>
         {% endif %}
     </div>

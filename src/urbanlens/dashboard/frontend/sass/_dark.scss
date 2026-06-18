@@ -89,6 +89,10 @@
         border-color: #333;
     }
 
+    .tag-chip {
+        color: #ccc;
+    }
+
     .tag-stat {
         background: #2a2a2a;
         border-color: #444;
@@ -385,7 +389,11 @@
     .settings-reset-btn {
         border-color: #444;
         color: #aaa;
-        &:hover { background: #2a2a2a; border-color: #666; }
+
+        &:hover {
+            background: #2a2a2a;
+            border-color: #666;
+        }
     }
 }
 
@@ -753,15 +761,21 @@
 // few cases that use semantic colours rather than surface tokens.
 
 [data-theme="dark"] {
+
     // Sign-out in user dropdown
     .nav-dropdown-item--signout {
         color: #ef9a9a;
 
-        .material-icons { color: #ef9a9a; }
+        .material-icons {
+            color: #ef9a9a;
+        }
 
         &:hover {
             background: rgba(239, 154, 154, .08);
-            .material-icons { color: #ef9a9a; }
+
+            .material-icons {
+                color: #ef9a9a;
+            }
         }
     }
 
@@ -770,11 +784,16 @@
         background: #1e1a30;
         border-left-color: #7c3aed;
 
-        &:hover { background: #221d38; }
+        &:hover {
+            background: #221d38;
+        }
 
         .notif-item__icon-wrap {
             background: rgba(124, 58, 237, .15);
-            .material-icons { color: #a78bfa; }
+
+            .material-icons {
+                color: #a78bfa;
+            }
         }
     }
 
@@ -782,35 +801,53 @@
     .notif-item--unread .notif-item__icon-wrap--friend_request,
     .notif-item--unread .notif-item__icon-wrap--friend_accepted {
         background: rgba(22, 163, 74, .15);
-        .material-icons { color: #4ade80; }
+
+        .material-icons {
+            color: #4ade80;
+        }
     }
 
     .notif-item--unread .notif-item__icon-wrap--added_to_trip,
     .notif-item--unread .notif-item__icon-wrap--trip_updated {
         background: rgba(37, 99, 235, .15);
-        .material-icons { color: #60a5fa; }
+
+        .material-icons {
+            color: #60a5fa;
+        }
     }
 
     .notif-item--unread .notif-item__icon-wrap--comment_reply,
     .notif-item--unread .notif-item__icon-wrap--comment_liked {
         background: rgba(219, 39, 119, .15);
-        .material-icons { color: #f472b6; }
+
+        .material-icons {
+            color: #f472b6;
+        }
     }
 
     .notif-item--unread .notif-item__icon-wrap--error {
         background: rgba(220, 38, 38, .15);
-        .material-icons { color: #f87171; }
+
+        .material-icons {
+            color: #f87171;
+        }
     }
 
     .notif-item--unread .notif-item__icon-wrap--warning {
         background: rgba(217, 119, 6, .15);
-        .material-icons { color: #fbbf24; }
+
+        .material-icons {
+            color: #fbbf24;
+        }
     }
 
     // "Mark all read" link — lighten primary for legibility on dark surface
     .notif-mark-all-btn {
         color: #7cb9e8;
-        &:hover { background: rgba(66, 165, 245, .1); }
+
+        &:hover {
+            background: rgba(66, 165, 245, .1);
+        }
     }
 }
 
@@ -822,7 +859,9 @@
         background: rgba(239, 154, 154, .07);
         border-color: rgba(239, 154, 154, .25);
 
-        &:hover { background: rgba(239, 154, 154, .13); }
+        &:hover {
+            background: rgba(239, 154, 154, .13);
+        }
     }
 }
 
@@ -835,15 +874,21 @@
     .trips-title {
         color: var(--ul-text-1);
 
-        .material-icons { color: #60a5fa; }
+        .material-icons {
+            color: #60a5fa;
+        }
     }
 
-    .trips-subtitle { color: var(--ul-text-2); }
+    .trips-subtitle {
+        color: var(--ul-text-2);
+    }
 
     .trips-empty {
         color: var(--ul-text-3);
 
-        .trips-empty-icon { color: var(--ul-text-3); }
+        .trips-empty-icon {
+            color: var(--ul-text-3);
+        }
     }
 
     .trip-card {
@@ -859,39 +904,72 @@
     .trip-card-icon {
         background: #1a2540;
 
-        .material-icons { color: #60a5fa; }
+        .material-icons {
+            color: #60a5fa;
+        }
     }
 
-    .trip-card-name { color: var(--ul-text-1); }
-    .trip-card-desc { color: var(--ul-text-2); }
-    .trip-card-meta span { color: var(--ul-text-3); }
-    .trip-card-arrow { color: var(--ul-text-3); }
+    .trip-card-name {
+        color: var(--ul-text-1);
+    }
+
+    .trip-card-desc {
+        color: var(--ul-text-2);
+    }
+
+    .trip-card-meta span {
+        color: var(--ul-text-3);
+    }
+
+    .trip-card-arrow {
+        color: var(--ul-text-3);
+    }
 
     // ── Trip detail header ────────────────────────────────────────────────────
 
-    .trip-detail-header { border-bottom-color: var(--ul-border); }
+    .trip-detail-header {
+        border-bottom-color: var(--ul-border);
+    }
 
     .trip-back-link {
         color: var(--ul-text-3);
-        &:hover { color: #60a5fa; }
+
+        &:hover {
+            color: #60a5fa;
+        }
     }
 
-    .trip-detail-title { color: var(--ul-text-1); }
-    .trip-detail-description { color: var(--ul-text-2); }
-    .trip-detail-dates { color: var(--ul-text-2); }
+    .trip-detail-title {
+        color: var(--ul-text-1);
+    }
+
+    .trip-detail-description {
+        color: var(--ul-text-2);
+    }
+
+    .trip-detail-dates {
+        color: var(--ul-text-2);
+    }
 
     .trip-header-btn {
-        &--edit, &--settings {
+
+        &--edit,
+        &--settings {
             color: var(--ul-text-3);
-            &:hover, &:focus {
+
+            &:hover,
+            &:focus {
                 background: var(--ul-surface-2);
                 color: #60a5fa;
                 border-color: var(--ul-border);
             }
         }
+
         &--delete {
             color: var(--ul-text-3);
-            &:hover, &:focus {
+
+            &:hover,
+            &:focus {
                 background: rgba(220, 38, 38, .12);
                 color: #f87171;
                 border-color: rgba(220, 38, 38, .3);
@@ -899,8 +977,13 @@
         }
     }
 
-    .trip-section-grip { color: var(--ul-text-3); }
-    .trip-section--ghost { outline-color: var(--ul-border); }
+    .trip-section-grip {
+        color: var(--ul-text-3);
+    }
+
+    .trip-section--ghost {
+        outline-color: var(--ul-border);
+    }
 
     // ── Trip panels (card headers, badges) ────────────────────────────────────
 
@@ -913,16 +996,28 @@
         }
     }
 
-    .trip-panel-empty { color: var(--ul-text-3); }
-    .trip-panel-loading { color: var(--ul-text-3); }
+    .trip-panel-empty {
+        color: var(--ul-text-3);
+    }
+
+    .trip-panel-loading {
+        color: var(--ul-text-3);
+    }
 
     // ── View toggles ──────────────────────────────────────────────────────────
 
-    .view-toggle-group { background: var(--ul-surface-3); }
+    .view-toggle-group {
+        background: var(--ul-surface-3);
+    }
 
     .view-toggle-btn {
         color: var(--ul-text-3);
-        &:hover { background: var(--ul-surface-2); color: var(--ul-text-2); }
+
+        &:hover {
+            background: var(--ul-surface-2);
+            color: var(--ul-text-2);
+        }
+
         &.view-toggle-btn--active {
             background: var(--ul-surface-1);
             color: #60a5fa;
@@ -932,17 +1027,33 @@
 
     // ── Calendar ─────────────────────────────────────────────────────────────
 
-    .cal-month-label { color: var(--ul-text-1); }
+    .cal-month-label {
+        color: var(--ul-text-1);
+    }
 
     .cal-nav-btn {
         color: var(--ul-text-2);
-        &:hover { background: var(--ul-surface-2); color: var(--ul-text-1); }
+
+        &:hover {
+            background: var(--ul-surface-2);
+            color: var(--ul-text-1);
+        }
     }
 
     .cal-cell {
-        &--header { color: var(--ul-text-3); }
-        &--empty { background: rgba(255, 255, 255, .025); opacity: .6; }
-        &--has-events { background: #192030; }
+        &--header {
+            color: var(--ul-text-3);
+        }
+
+        &--empty {
+            background: rgba(255, 255, 255, .025);
+            opacity: .6;
+        }
+
+        &--has-events {
+            background: #192030;
+        }
+
         &--today {
             background: #1a2540;
 
@@ -953,10 +1064,17 @@
         }
     }
 
-    .cal-day-num { color: var(--ul-text-2); }
+    .cal-day-num {
+        color: var(--ul-text-2);
+    }
 
-    .cal-month-section-label { color: var(--ul-text-3); }
-    .cal-month-section-sep { background: var(--ul-border); }
+    .cal-month-section-label {
+        color: var(--ul-text-3);
+    }
+
+    .cal-month-section-sep {
+        background: var(--ul-border);
+    }
 
     // ── Activity list ─────────────────────────────────────────────────────────
 
@@ -972,30 +1090,58 @@
     .trip-activity-icon {
         background: #1a2540;
 
-        .material-icons { color: #60a5fa; }
+        .material-icons {
+            color: #60a5fa;
+        }
     }
 
-    .trip-activity-num { border-color: var(--ul-surface-2); }
-    .trip-activity-name { color: var(--ul-text-1); }
-    .trip-activity-time { color: var(--ul-text-2); }
-    .trip-activity-notes { color: var(--ul-text-2); }
-    .trip-activity-attr { color: var(--ul-text-3); }
+    .trip-activity-num {
+        border-color: var(--ul-surface-2);
+    }
+
+    .trip-activity-name {
+        color: var(--ul-text-1);
+    }
+
+    .trip-activity-time {
+        color: var(--ul-text-2);
+    }
+
+    .trip-activity-notes {
+        color: var(--ul-text-2);
+    }
+
+    .trip-activity-attr {
+        color: var(--ul-text-3);
+    }
 
     .trip-attr-link {
-        &:hover { color: #a78bfa; }
+        &:hover {
+            color: #a78bfa;
+        }
     }
 
     // ── Members ───────────────────────────────────────────────────────────────
 
-    .trip-member-item { border-bottom-color: var(--ul-border); }
+    .trip-member-item {
+        border-bottom-color: var(--ul-border);
+    }
 
     .trip-member-avatar {
         background: #1a2540;
     }
 
-    .trip-member-avatar-initial { color: #60a5fa; }
-    .trip-member-name { color: var(--ul-text-1); }
-    .trip-member-username { color: var(--ul-text-3); }
+    .trip-member-avatar-initial {
+        color: #60a5fa;
+    }
+
+    .trip-member-name {
+        color: var(--ul-text-1);
+    }
+
+    .trip-member-username {
+        color: var(--ul-text-3);
+    }
 
     .trip-member-badge {
         &--creator {
@@ -1003,6 +1149,7 @@
             color: #fbbf24;
             border-color: rgba(251, 191, 36, .25);
         }
+
         &--organizer {
             background: rgba(167, 139, 250, .12);
             color: #a78bfa;
@@ -1012,9 +1159,13 @@
 
     .trip-organizer-btn {
         color: var(--ul-text-3);
+
         &--active {
             color: #a78bfa !important;
-            &:hover { background: rgba(167, 139, 250, .1) !important; }
+
+            &:hover {
+                background: rgba(167, 139, 250, .1) !important;
+            }
         }
     }
 
@@ -1028,11 +1179,38 @@
 
     .rsvp-popup-opt {
         color: var(--ul-text-1);
-        &:hover { background: var(--ul-surface-2); }
-        &--yes { color: #4ade80; &:hover { background: rgba(34, 197, 94, .1); } }
-        &--no  { color: #f87171; &:hover { background: rgba(220, 38, 38, .1); } }
-        &--maybe { color: #fbbf24; &:hover { background: rgba(245, 158, 11, .1); } }
-        &--clear { color: var(--ul-text-3); }
+
+        &:hover {
+            background: var(--ul-surface-2);
+        }
+
+        &--yes {
+            color: #4ade80;
+
+            &:hover {
+                background: rgba(34, 197, 94, .1);
+            }
+        }
+
+        &--no {
+            color: #f87171;
+
+            &:hover {
+                background: rgba(220, 38, 38, .1);
+            }
+        }
+
+        &--maybe {
+            color: #fbbf24;
+
+            &:hover {
+                background: rgba(245, 158, 11, .1);
+            }
+        }
+
+        &--clear {
+            color: var(--ul-text-3);
+        }
     }
 
     // ── RSVP pill buttons (in the member-list RSVP picker) ────────────────────
@@ -1040,19 +1218,34 @@
     .rsvp-pill-btn {
         border-color: var(--ul-border);
         color: var(--ul-text-2);
-        &:hover { background: var(--ul-surface-2); border-color: var(--ul-border-strong); }
+
+        &:hover {
+            background: var(--ul-surface-2);
+            border-color: var(--ul-border-strong);
+        }
     }
 
     // ── Trip comment form (.trip-comment-* classes) ───────────────────────────
 
     .trip-comment-item {
         border-bottom-color: var(--ul-border);
-        &:hover { background: rgba(255, 255, 255, .03); }
+
+        &:hover {
+            background: rgba(255, 255, 255, .03);
+        }
     }
 
-    .trip-comment-author { color: var(--ul-text-1); }
-    .trip-comment-date { color: var(--ul-text-3); }
-    .trip-comment-text { color: var(--ul-text-2); }
+    .trip-comment-author {
+        color: var(--ul-text-1);
+    }
+
+    .trip-comment-date {
+        color: var(--ul-text-3);
+    }
+
+    .trip-comment-text {
+        color: var(--ul-text-2);
+    }
 
     .trip-comment-form {
         background: var(--ul-surface-2);
@@ -1064,25 +1257,45 @@
         border-color: var(--ul-border);
         color: var(--ul-text-1);
 
-        &::placeholder { color: var(--ul-text-3); }
-        &:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96, 165, 250, .12); }
+        &::placeholder {
+            color: var(--ul-text-3);
+        }
+
+        &:focus {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 3px rgba(96, 165, 250, .12);
+        }
     }
 
     // ── Comments panel (.comment-* classes from _comments.scss) ──────────────
 
     .comment-item {
         border-bottom-color: var(--ul-border);
-        &--reply { background: var(--ul-surface-2); }
+
+        &--reply {
+            background: var(--ul-surface-2);
+        }
     }
 
     .comment-replies {
         border-left-color: var(--ul-border);
-        .comment-item { background: var(--ul-surface-2); }
+
+        .comment-item {
+            background: var(--ul-surface-2);
+        }
     }
 
-    .comment-author { color: var(--ul-text-1); }
-    .comment-date { color: var(--ul-text-3); }
-    .comment-text { color: var(--ul-text-2); }
+    .comment-author {
+        color: var(--ul-text-1);
+    }
+
+    .comment-date {
+        color: var(--ul-text-3);
+    }
+
+    .comment-text {
+        color: var(--ul-text-2);
+    }
 
     .comment-avatar-initial {
         background: #1e1936;
@@ -1091,18 +1304,31 @@
 
     .comment-delete-btn {
         color: var(--ul-text-3);
-        &:hover { color: #f87171; }
+
+        &:hover {
+            color: #f87171;
+        }
     }
 
     .comment-reply-btn {
         color: var(--ul-text-3);
-        .reply-count { color: var(--ul-text-3); }
-        &:hover { color: #a78bfa; background: rgba(124, 58, 237, .08); }
+
+        .reply-count {
+            color: var(--ul-text-3);
+        }
+
+        &:hover {
+            color: #a78bfa;
+            background: rgba(124, 58, 237, .08);
+        }
     }
 
     .comment-compose {
         border-top-color: var(--ul-border);
-        &--reply { border-top: none; }
+
+        &--reply {
+            border-top: none;
+        }
     }
 
     .comment-input {
@@ -1110,27 +1336,43 @@
         border-color: var(--ul-border);
         color: var(--ul-text-1);
 
-        &::placeholder { color: var(--ul-text-3); }
-        &:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, .1); }
+        &::placeholder {
+            color: var(--ul-text-3);
+        }
+
+        &:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, .1);
+        }
     }
 
     .reaction-pill {
         background: var(--ul-surface-3);
         border-color: var(--ul-border);
-        &:hover { background: var(--ul-surface-2); }
+
+        &:hover {
+            background: var(--ul-surface-2);
+        }
+
         &--mine {
             background: rgba(124, 58, 237, .15);
             border-color: rgba(124, 58, 237, .4);
             color: #a78bfa;
         }
-    }
 
-    .reaction-count { color: var(--ul-text-2); }
+        .reaction-count {
+            color: var(--ul-text-2);
+        }
+    }
 
     .reaction-add-btn {
         border-color: var(--ul-border);
         color: var(--ul-text-3);
-        &:hover { background: var(--ul-surface-2); color: var(--ul-text-2); }
+
+        &:hover {
+            background: var(--ul-surface-2);
+            color: var(--ul-text-2);
+        }
     }
 
     .reaction-picker-popup {
@@ -1139,9 +1381,13 @@
         box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
     }
 
-    .reaction-picker-emoji:hover { background: var(--ul-surface-2); }
+    .reaction-picker-emoji:hover {
+        background: var(--ul-surface-2);
+    }
 
-    .comment-empty { color: var(--ul-text-3); }
+    .comment-empty {
+        color: var(--ul-text-3);
+    }
 
     .mention-dropdown {
         background: var(--ul-surface-1);
@@ -1152,25 +1398,37 @@
     .mention-option {
         color: var(--ul-text-2);
         border-bottom-color: var(--ul-border);
-        &:hover, &.is-selected { background: rgba(124, 58, 237, .08); color: #a78bfa; }
+
+        &:hover,
+        &.is-selected {
+            background: rgba(124, 58, 237, .08);
+            color: #a78bfa;
+        }
     }
 
     .comment-image-label {
         color: var(--ul-text-3);
-        &:hover { color: #6366f1; }
+
+        &:hover {
+            color: #6366f1;
+        }
     }
 
     // ── Trip settings ─────────────────────────────────────────────────────────
 
-    .trip-setting-desc { color: var(--ul-text-3); }
+    .trip-setting-desc {
+        color: var(--ul-text-3);
+    }
 
     .trip-setting-pill {
         border-color: var(--ul-border);
         color: var(--ul-text-2);
+
         &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
             background: var(--ul-surface-2);
             border-color: var(--ul-border-strong);
         }
+
         &--active {
             background: #1a2540;
             border-color: #3b82f6;
@@ -1192,20 +1450,34 @@
 
         .location-suggestion-item {
             color: var(--ul-text-1);
-            &:hover { background: var(--ul-surface-3); }
+
+            &:hover {
+                background: var(--ul-surface-3);
+            }
         }
     }
 
     // ── Organize page tabs ────────────────────────────────────────────────────
 
-    .organize-title { color: var(--ul-text-1); }
-    .organize-subtitle { color: var(--ul-text-2); }
+    .organize-title {
+        color: var(--ul-text-1);
+    }
 
-    .organize-tab-bar { border-bottom-color: var(--ul-border); }
+    .organize-subtitle {
+        color: var(--ul-text-2);
+    }
+
+    .organize-tab-bar {
+        border-bottom-color: var(--ul-border);
+    }
 
     .organize-tab {
         color: var(--ul-text-3);
-        &:hover { color: var(--ul-text-1); }
+
+        &:hover {
+            color: var(--ul-text-1);
+        }
+
         &.active {
             color: lighten($primary-color, 15%);
             border-bottom-color: lighten($primary-color, 15%);
@@ -1233,6 +1505,7 @@
         background: var(--ul-surface-1);
         border-color: var(--ul-border-strong);
         color: var(--ul-text-2);
+
         &:hover:not(:disabled) {
             background: var(--ul-surface-2);
             border-color: var(--ul-border-strong);
@@ -1243,6 +1516,7 @@
     .cat-sel-delete-btn {
         border-color: rgba(220, 38, 38, .45);
         color: #f87171;
+
         &:hover:not(:disabled) {
             background: rgba(220, 38, 38, .08);
             border-color: #f87171;
@@ -1250,7 +1524,9 @@
     }
 
     .cat-select-wrap {
-        &:hover { background: var(--ul-surface-2); }
+        &:hover {
+            background: var(--ul-surface-2);
+        }
 
         .cat-select-check {
             background: var(--ul-surface-1);
@@ -1277,13 +1553,16 @@
 
         .dialog-close {
             color: var(--ul-text-3);
+
             &:hover {
                 background: rgba(255, 255, 255, .06);
                 color: var(--ul-text-1);
             }
         }
 
-        .tag-edit-dialog-body { color: var(--ul-text-1); }
+        .tag-edit-dialog-body {
+            color: var(--ul-text-1);
+        }
     }
 
     // ── Priority items ────────────────────────────────────────────────────────
@@ -1291,7 +1570,10 @@
     .priority-item {
         background: var(--ul-surface-1);
         border-color: var(--ul-border);
-        &:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, .3); }
+
+        &:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+        }
 
         &.priority-item--ghost {
             background: rgba(66, 133, 244, .1);
@@ -1299,15 +1581,25 @@
         }
     }
 
-    .priority-drag-handle { color: var(--ul-text-3); }
+    .priority-drag-handle {
+        color: var(--ul-text-3);
+    }
 
     .priority-item-icon {
         background: var(--ul-surface-2);
-        i { color: var(--ul-text-2); }
+
+        i {
+            color: var(--ul-text-2);
+        }
     }
 
-    .priority-item-name { color: var(--ul-text-1); }
-    .priority-item-desc { color: var(--ul-text-3); }
+    .priority-item-name {
+        color: var(--ul-text-1);
+    }
+
+    .priority-item-desc {
+        color: var(--ul-text-3);
+    }
 
     .priority-order-badge {
         background: var(--ul-surface-2);
@@ -1320,6 +1612,7 @@
             background: rgba(29, 78, 216, .2);
             color: #93c5fd;
         }
+
         &--category {
             background: rgba(21, 128, 61, .2);
             color: #6ee7b7;
@@ -1332,7 +1625,9 @@
         color: var(--ul-text-1);
     }
 
-    .site-admin-subtitle { color: var(--ul-text-2); }
+    .site-admin-subtitle {
+        color: var(--ul-text-2);
+    }
 
     .site-admin-notice {
         &--success {
@@ -1343,14 +1638,22 @@
     }
 
     .site-admin-form {
-        label { color: var(--ul-text-2); }
-        .form-help { color: var(--ul-text-3); }
+        label {
+            color: var(--ul-text-2);
+        }
+
+        .form-help {
+            color: var(--ul-text-3);
+        }
 
         input[type="number"] {
             background: var(--ul-surface-2);
             border-color: var(--ul-border-strong);
             color: var(--ul-text-1);
-            &:focus { border-color: lighten($primary-color, 10%); }
+
+            &:focus {
+                border-color: lighten($primary-color, 10%);
+            }
         }
     }
 
@@ -1365,7 +1668,10 @@
         .wiki-card-header {
             background: var(--ul-surface-2);
             border-bottom-color: var(--ul-border);
-            h2 { color: var(--ul-text-1); }
+
+            h2 {
+                color: var(--ul-text-1);
+            }
         }
 
         .wiki-card-desc {
@@ -1375,11 +1681,19 @@
 
         .wiki-dl-row {
             border-bottom-color: var(--ul-border);
-            dt { color: var(--ul-text-3); }
-            dd { color: var(--ul-text-1); }
+
+            dt {
+                color: var(--ul-text-3);
+            }
+
+            dd {
+                color: var(--ul-text-1);
+            }
         }
 
-        .wiki-stat-label { color: var(--ul-text-2); }
+        .wiki-stat-label {
+            color: var(--ul-text-2);
+        }
 
         .wiki-bbox-controls {
             background: var(--ul-surface-2);
@@ -1390,6 +1704,7 @@
             background: var(--ul-surface-1);
             border-color: var(--ul-border-strong);
             color: var(--ul-text-1);
+
             &:hover {
                 background: var(--ul-surface-2);
                 border-color: var(--ul-border-strong);
@@ -1403,32 +1718,47 @@
 
         .wiki-tab {
             color: var(--ul-text-2);
-            &--active, &:hover {
+
+            &--active,
+            &:hover {
                 color: #22d3ee;
                 border-bottom-color: #22d3ee;
             }
         }
 
-        .wiki-loading { color: var(--ul-text-3); }
+        .wiki-loading {
+            color: var(--ul-text-3);
+        }
 
         .wiki-history-item {
             background: var(--ul-surface-1);
             border-color: var(--ul-border);
+
             &--reverted {
                 background: var(--ul-surface-2);
             }
         }
 
-        .wiki-history-editor { color: var(--ul-text-1); }
-        .wiki-history-date { color: var(--ul-text-3); }
+        .wiki-history-editor {
+            color: var(--ul-text-1);
+        }
+
+        .wiki-history-date {
+            color: var(--ul-text-3);
+        }
 
         .wiki-history-badge--reverted {
             background: rgba(146, 64, 14, .3);
             color: #fcd34d;
         }
 
-        .wiki-change-field { color: var(--ul-text-2); }
-        .wiki-change-arrow { color: var(--ul-text-3); }
+        .wiki-change-field {
+            color: var(--ul-text-2);
+        }
+
+        .wiki-change-arrow {
+            color: var(--ul-text-3);
+        }
 
         .wiki-change-from {
             background: rgba(185, 28, 28, .18);
@@ -1444,73 +1774,125 @@
             background: var(--ul-surface-1);
             border-color: rgba(220, 38, 38, .4);
             color: #f87171;
+
             &:hover {
                 background: rgba(220, 38, 38, .08);
                 border-color: #f87171;
             }
         }
 
-        .wiki-history-empty { color: var(--ul-text-3); }
+        .wiki-history-empty {
+            color: var(--ul-text-3);
+        }
     }
 
     // ── Pin detail page — coloured card headers ───────────────────────────────
 
     body.page-location-details {
+        .location-map.card .card-header {
+            background: var(--ul-surface-2);
+            color: var(--ul-text-1);
+            border-bottom-color: var(--ul-border);
+
+            .material-icons {
+                color: var(--ul-text-2);
+            }
+
+            span,
+            h3 {
+                color: var(--ul-text-1);
+            }
+        }
+
+        /**
         .pin-notes-panel.card .card-header {
             background: rgba(146, 64, 14, .15);
             color: #fcd34d;
             border-bottom-color: rgba(253, 230, 138, .2);
-            .material-icons { color: #fbbf24; }
-            span { color: #fcd34d; }
-            .badge { background: rgba(146, 64, 14, .25); color: #fcd34d; }
+
+            .material-icons {
+                color: #fbbf24;
+            }
+
+            span {
+                color: #fcd34d;
+            }
+
+            .badge {
+                background: rgba(146, 64, 14, .25);
+                color: #fcd34d;
+            }
         }
 
         .visit-history.card .card-header {
             background: rgba(13, 148, 136, .12);
             color: #5eead4;
             border-bottom-color: rgba(94, 234, 212, .2);
-            .material-icons { color: #2dd4bf; }
-            span { color: #5eead4; }
+
+            .material-icons {
+                color: #2dd4bf;
+            }
+
+            span {
+                color: #5eead4;
+            }
         }
 
         .aliases-panel.card .card-header {
             background: rgba(234, 88, 12, .12);
             color: #fdba74;
             border-bottom-color: rgba(253, 186, 116, .2);
-            .material-icons { color: #fb923c; }
-            span { color: #fdba74; }
-        }
 
-        .location-map.card .card-header {
-            background: var(--ul-surface-2);
-            color: var(--ul-text-1);
-            border-bottom-color: var(--ul-border);
-            .material-icons { color: var(--ul-text-2); }
-            span, h3 { color: var(--ul-text-1); }
+            .material-icons {
+                color: #fb923c;
+            }
+
+            span {
+                color: #fdba74;
+            }
         }
 
         #tag-panel .tag-panel-header {
             background: rgba(124, 58, 237, .12);
             color: #c4b5fd;
             border-bottom-color: rgba(196, 181, 253, .2);
-            i { color: #a78bfa; }
-            span { color: #c4b5fd; }
+
+            i {
+                color: #a78bfa;
+            }
+
+            span {
+                color: #c4b5fd;
+            }
         }
 
         #category-panel .tag-panel-header {
             background: rgba(59, 130, 246, .12);
             color: #93c5fd;
             border-bottom-color: rgba(147, 197, 253, .2);
-            i { color: #60a5fa; }
-            span { color: #93c5fd; }
+
+            i {
+                color: #60a5fa;
+            }
+
+            span {
+                color: #93c5fd;
+            }
         }
 
         .pin-comments.card .card-header {
             background: rgba(22, 163, 74, .12);
             color: #86efac;
             border-bottom-color: rgba(134, 239, 172, .2);
-            .material-icons { color: #4ade80; }
-            span { color: #86efac; }
+
+            .material-icons {
+                color: #4ade80;
+            }
+
+            span {
+                color: #86efac;
+            }
         }
+        */
     }
 }

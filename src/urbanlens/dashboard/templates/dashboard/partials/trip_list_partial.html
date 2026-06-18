@@ -15,7 +15,7 @@
                     {% if t.start_date %}
                     <span class="trip-card-dates">
                         <i class="material-icons">event</i>
-                        {{ t.start_date|date:"M j, Y" }}{% if t.end_date %} – {{ t.end_date|date:"M j, Y" }}{% endif %}
+                        {{ t.start_date|date:"M j, Y" }}{% if t.end_date %} - {{ t.end_date|date:"M j, Y" }}{% endif %}
                     </span>
                     {% endif %}
                     <span class="trip-card-creator">

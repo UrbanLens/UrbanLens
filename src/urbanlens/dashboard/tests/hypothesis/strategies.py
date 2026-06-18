@@ -107,7 +107,7 @@ hex_color_or_none = st.one_of(st.none(), hex_color)
 
 # ── Map center ─────────────────────────────────────────────────────────────────
 map_center_mode = st.sampled_from(list(MapCenterMode.values))
-# Zoom levels accepted by MapCenterForm (1–19, matching Leaflet's maxZoom).
+# Zoom levels accepted by MapCenterForm (1-19, matching Leaflet's maxZoom).
 valid_zoom = st.integers(min_value=1, max_value=19)
 
 # ── Misc ───────────────────────────────────────────────────────────────────────

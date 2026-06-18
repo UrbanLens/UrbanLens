@@ -907,7 +907,7 @@
     const _markupEditBase = "{% url 'pin.markup.edit' pin.uuid '00000000-0000-0000-0000-000000000000' %}"
         .replace('00000000-0000-0000-0000-000000000000/', '');
 
-    // Profile defaults (0–100 percent, converted to 0–1 for Leaflet)
+    // Profile defaults (0-100 percent, converted to 0-1 for Leaflet)
     const _markupDefaultFillOpacity   = {{ markup_fill_opacity }}   / 100;
     const _markupDefaultBorderOpacity = {{ markup_border_opacity }} / 100;
 

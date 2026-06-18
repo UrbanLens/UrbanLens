@@ -139,8 +139,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
             # Link to an existing Location whose bounding box contains this point,
             # or create a new one. This keeps all pins for the same place connected.
-            location = Location.objects.get_for_point(lat_f, lon_f)
-            if not location:
+            all_locations = list(Location.objects.get_all_for_point(lat_f, lon_f))
+            if all_locations:
+                location = all_locations[0]
+            else:
                 location = Location.objects.create(
                     name=name or "Unnamed Location",
                     latitude=lat_f,
@@ -160,7 +162,23 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if category_ids:
                 pin.categories.set(Badge.objects.categories().filter(id__in=category_ids))
             pin.save()
-            return HttpResponse(status=200)
+
+            response = {"ok": True, "pin_uuid": str(pin.uuid)}
+            # When a coordinate falls inside multiple bounding boxes, tell the
+            # client so it can offer the user a choice of which location to use.
+            if len(all_locations) > 1:
+                from django.urls import reverse
+                response["conflicting_locations"] = [
+                    {
+                        "uuid": str(loc.uuid),
+                        "name": loc.name,
+                        "is_current": loc.pk == location.pk,
+                        "wiki_url": reverse("location.wiki", kwargs={"location_uuid": loc.uuid}),
+                    }
+                    for loc in all_locations
+                ]
+            from django.http import JsonResponse
+            return JsonResponse(response)
         except Exception as e:
             logger.exception("Failed to create pin: %s", e)
             return HttpResponse(f"Error: {e!s}", status=400)

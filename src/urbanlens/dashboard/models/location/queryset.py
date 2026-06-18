@@ -127,6 +127,30 @@ class LocationManager(abstract.Manager.from_queryset(LocationQuerySet)):
         # Fallback: proximity for legacy rows without bounding_box
         return self.filter(bounding_box__isnull=True, point__distance_lte=(pt, D(m=50))).first()
 
+    def get_all_for_point(self, latitude: float, longitude: float) -> LocationQuerySet:
+        """Return ALL Locations whose bounding_box contains (lat, lon) as a QuerySet.
+
+        Unlike get_for_point, this returns every match so callers can detect when a
+        coordinate falls inside multiple bounding boxes (ambiguous location).  Falls
+        back to 50 m proximity for legacy rows without a bounding_box only when there
+        are no bbox matches at all.
+
+        Args:
+            latitude: WGS-84 latitude of the point to test.
+            longitude: WGS-84 longitude of the point to test.
+
+        Returns:
+            QuerySet of matching Location rows, ordered by name.  May be empty.
+        """
+        from django.contrib.gis.geos import Point as GEOSPoint
+        from django.contrib.gis.measure import D
+
+        pt = GEOSPoint(float(longitude), float(latitude), srid=4326)
+        in_bbox = self.filter(bounding_box__contains=pt).order_by("name")
+        if in_bbox.exists():
+            return in_bbox
+        return self.filter(bounding_box__isnull=True, point__distance_lte=(pt, D(m=50))).order_by("name")
+
     def get_nearby_or_create(self, latitude, longitude, threshold_meters=50, defaults=None):
         """
         Get or create a Location instance, considering two locations the same if they are within a certain distance threshold.

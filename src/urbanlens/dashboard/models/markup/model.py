@@ -50,8 +50,8 @@ class PinMarkup(abstract.Model):
             background colour for text labels. Empty string means use the
             renderer default. The sentinel value ``"none"`` means no border /
             transparent background.
-        fill_opacity: Fill/text opacity as a 0–100 integer (percent).
-        border_opacity: Border/background opacity as a 0–100 integer (percent).
+        fill_opacity: Fill/text opacity as a 0-100 integer (percent).
+        border_opacity: Border/background opacity as a 0-100 integer (percent).
     """
 
     uuid = UUIDField(default=uuid4, unique=True, editable=False)

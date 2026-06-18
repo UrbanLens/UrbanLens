@@ -13,11 +13,11 @@ def create_default_tags(sender, instance, created: bool, **kwargs) -> None:
     from urbanlens.dashboard.models.badges.model import KIND_STATUS, Badge
 
     defaults = [
-        {"name": "Visited",     "icon": "✅", "color": "#4CAF50", "order": 100, "is_protected": True},
-        {"name": "Want to Go",  "icon": "⭐", "color": "#2196F3", "order": 90},
-        {"name": "Active",      "icon": "🟢", "color": "#009688", "order": 80},
-        {"name": "Abandoned",   "icon": "🏚️", "color": "#FF9800", "order": 70},
-        {"name": "Demolished",  "icon": "💀", "color": "#795548", "order": 60},
+        {"name": "Visited", "icon": "✅", "color": "#4CAF50", "order": 100, "is_protected": True},
+        {"name": "Want to Go", "icon": "⭐", "color": "#2196F3", "order": 90},
+        {"name": "Active", "icon": "🟢", "color": "#009688", "order": 80},
+        {"name": "Abandoned", "icon": "🏚️", "color": "#FF9800", "order": 70},
+        {"name": "Demolished", "icon": "💀", "color": "#795548", "order": 60},
     ]
     for d in defaults:
         Badge.objects.get_or_create(
