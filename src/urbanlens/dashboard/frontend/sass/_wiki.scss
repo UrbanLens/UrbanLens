@@ -124,7 +124,7 @@
             grid-column: 2;
         }
 
-        .wiki-bbox {
+        .location-map {
             grid-column: 1 / -1;
         }
 
@@ -137,7 +137,7 @@
 
             .wiki-details,
             .wiki-stats,
-            .wiki-bbox,
+            .location-map,
             .wiki-tabs-card {
                 grid-column: 1;
             }
@@ -269,19 +269,15 @@
         color: #64748b;
     }
 
-    // ── Bounding box map ──────────────────────────────────────────────────
+    // ── Location map card ─────────────────────────────────────────────────
+    .location-map .map-wrapper {
+        position: relative;
+        width: 100%;
+    }
+
     #bbox-map {
         width: 100%;
         height: 320px;
-    }
-
-    .wiki-bbox-controls {
-        padding: .75rem 1rem;
-        display: flex;
-        gap: .5rem;
-        background: #f8fafc;
-        border-top: 1px solid #e2e8f0;
-        flex-wrap: wrap;
     }
 
     // ── Action buttons ────────────────────────────────────────────────────

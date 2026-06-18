@@ -175,44 +175,60 @@
             </div>
         </div>
 
-        {# ── Bounding box editor ─────────────────────────────────────────── #}
-        <div class="wiki-card wiki-bbox">
-            <div class="wiki-card-header">
-                <i class="material-icons">crop_free</i>
-                <h2>Location</h2>
+        {# ── Location map (boundary editor + community detail pins) ──────── #}
+        <div class="location-map pin-map card">
+            <div class="card-header">
+                <i class="material-icons">place</i>
+                <h3>Location</h3>
             </div>
-            <p class="wiki-card-desc">
-                The boundary defines which coordinates are considered part of this location.
-                New pins within this area will automatically link here.
-                The default is a 50 m radius around the centre point; expand it for campuses or multi-building sites.
-            </p>
-            <div id="bbox-map"></div>
-            <div class="wiki-bbox-controls">
-                <button id="bbox-edit-btn" class="wiki-action-btn" onclick="startBboxEdit()">
-                    <i class="material-icons">edit</i> Edit boundary
-                </button>
-                <div id="bbox-save-controls" style="display:none">
-                    <button class="wiki-action-btn wiki-action-btn--primary" onclick="saveBbox()">
-                        <i class="material-icons">save</i> Save
-                    </button>
-                    <button class="wiki-action-btn" onclick="cancelBboxEdit()">
-                        <i class="material-icons">close</i> Cancel
-                    </button>
-                </div>
-            </div>
-        </div>
+            <div class="map-wrapper">
 
-        {# ── Detail pins (community sub-markers) ────────────────────────────── #}
-        <div hx-get="{% url 'location.wiki.detail_pins.panel' location.uuid %}"
-             hx-trigger="load"
-             hx-swap="outerHTML"
-             id="location-detail-pins-panel"
-             class="wiki-card wiki-detail-pins">
-            <div class="wiki-card-header">
-                <i class="material-icons">push_pin</i>
-                <h2>Detail Pins</h2>
+                {# ── Detail pin list overlay (top-left) ── #}
+                <div id="detail-pin-list-panel" class="detail-pin-list-panel" style="display:none">
+                    <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle">
+                        <i class="material-icons">format_list_bulleted</i>
+                        <span id="detail-pin-count-label">0 Pins</span>
+                        <i class="material-icons detail-pin-list-chevron" id="detail-pin-list-chevron">expand_more</i>
+                    </button>
+                    <div id="detail-pin-list-drawer" class="detail-pin-list-drawer" style="display:none">
+                        <ul id="detail-pin-list-ul" class="detail-pin-list-ul"></ul>
+                    </div>
+                </div>
+
+                <div id="bbox-map"></div>
+
+                {# ── Bottom-left overlay controls ── #}
+                <div class="map-bottom-controls">
+                    <button id="bbox-edit-btn" class="map-overlay-btn map-overlay-btn--boundary" onclick="startBboxEdit()">
+                        <i class="material-icons">pentagon</i> Edit Boundary
+                    </button>
+                    <div id="bbox-save-controls" class="map-overlay-btn-group" style="display:none">
+                        <button class="map-overlay-btn map-overlay-btn--save" onclick="saveBbox()">
+                            <i class="material-icons">save</i> Save
+                        </button>
+                        <button class="map-overlay-btn map-overlay-btn--clear" onclick="clearBbox()">
+                            <i class="material-icons">delete_outline</i> Clear
+                        </button>
+                        <button class="map-overlay-btn map-overlay-btn--cancel" onclick="cancelBboxEdit()">
+                            <i class="material-icons">close</i> Cancel
+                        </button>
+                    </div>
+                    {# "Add Detail" dropdown ── #}
+                    <div class="map-add-detail-wrap" id="add-detail-wrap">
+                        <div id="add-detail-menu" class="add-detail-menu" style="display:none">
+                            <button type="button" class="add-detail-item" onclick="openWikiAddPinDialog()">
+                                <i class="material-icons">place</i> Pin
+                            </button>
+                        </div>
+                        <button type="button" class="map-overlay-btn map-overlay-btn--add-detail"
+                                id="add-detail-btn" onclick="toggleAddDetailMenu()">
+                            <i class="material-icons">add_location_alt</i> Add Detail
+                            <i class="material-icons add-detail-chevron">expand_less</i>
+                        </button>
+                    </div>
+                </div>
+
             </div>
-            <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
         </div>
 
         {# ── Aliases ─────────────────────────────────────────────────────── #}
@@ -459,8 +475,7 @@
 
     function saveBbox() {
         const layers = bboxItems.getLayers();
-        if (!layers.length) { toastr.warning('Draw a boundary first.'); return; }
-        const geometry = layers[0].toGeoJSON().geometry;
+        const geometry = layers.length ? layers[0].toGeoJSON().geometry : null;
         fetch(bboxApiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -469,10 +484,15 @@
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(() => {
             _savedBboxGeoJSON = geometry;
-            toastr.success('Boundary saved.');
+            toastr.success(geometry ? 'Boundary saved.' : 'Boundary cleared.');
             _exitBboxEdit();
         })
         .catch(() => toastr.error('Failed to save boundary.'));
+    }
+
+    function clearBbox() {
+        bboxItems.clearLayers();
+        toastr.info('Boundary cleared. Click Save to confirm or Cancel to restore.');
     }
 
     function _exitBboxEdit() {
@@ -486,6 +506,34 @@
         _exitBboxEdit();
         _loadSavedBbox(_savedBboxGeoJSON);
     }
+
+    // ── Add Detail menu ─────────────────────────────────────────────────────
+    function toggleAddDetailMenu() {
+        const menu = document.getElementById('add-detail-menu');
+        const chevron = document.querySelector('.add-detail-chevron');
+        const open = menu.style.display !== 'none';
+        menu.style.display = open ? 'none' : '';
+        if (chevron) chevron.textContent = open ? 'expand_less' : 'expand_more';
+    }
+
+    function openWikiAddPinDialog() {
+        document.getElementById('add-detail-menu').style.display = 'none';
+        const chevron = document.querySelector('.add-detail-chevron');
+        if (chevron) chevron.textContent = 'expand_less';
+        document.getElementById('wiki-detail-pin-dialog').showModal();
+    }
+
+    document.addEventListener('click', function (e) {
+        const wrap = document.getElementById('add-detail-wrap');
+        if (wrap && !wrap.contains(e.target)) {
+            const menu = document.getElementById('add-detail-menu');
+            if (menu && menu.style.display !== 'none') {
+                menu.style.display = 'none';
+                const chevron = document.querySelector('.add-detail-chevron');
+                if (chevron) chevron.textContent = 'expand_less';
+            }
+        }
+    });
 
     // ── Suggest-edits form ──────────────────────────────────────────────────
     document.getElementById('wiki-edit-form').addEventListener('submit', function (e) {
@@ -532,7 +580,9 @@
     };
     const _dpLayer = L.layerGroup().addTo(bboxMap);
     const _wikiDpEditBase = "{% url 'location.wiki.detail_pin.edit' location.uuid '00000000-0000-0000-0000-000000000000' %}"
-        .replace('00000000-0000-0000-0000-000000000000/', '');
+        .replace('/00000000-0000-0000-0000-000000000000/edit/', '/');
+    const _wikiDpDeleteBase = "{% url 'location.wiki.detail_pin.delete' location.uuid '00000000-0000-0000-0000-000000000000' %}"
+        .replace('/00000000-0000-0000-0000-000000000000/delete/', '/');
 
     function _dpMarkerIcon(pinType, customIcon, customColor) {
         const color = customColor || _dpColors[pinType] || '#2563eb';
@@ -544,12 +594,68 @@
         });
     }
 
+    const _dpMarkers = {};  // uuid → Leaflet marker
+
+    function _buildDetailPinList(pins) {
+        const panel = document.getElementById('detail-pin-list-panel');
+        const countLabel = document.getElementById('detail-pin-count-label');
+        const ul = document.getElementById('detail-pin-list-ul');
+        if (!panel || !ul) return;
+        ul.innerHTML = '';
+        if (!pins.length) { panel.style.display = 'none'; return; }
+        panel.style.display = '';
+        countLabel.textContent = pins.length + ' Pin' + (pins.length !== 1 ? 's' : '');
+        pins.forEach(dp => {
+            const li = document.createElement('li');
+            li.className = 'detail-pin-list-item';
+            li.dataset.uuid = dp.uuid;
+            const color = dp.color || _dpColors[dp.pin_type] || '#2563eb';
+            const icon  = dp.icon  || _dpIconNames[dp.pin_type] || 'place';
+            li.innerHTML = `
+                <button type="button" class="detail-pin-list-item-btn" data-uuid="${dp.uuid}">
+                    <span class="detail-pin-list-icon" style="color:${color}">
+                        <i class="material-icons" style="font-size:16px">${icon}</i>
+                    </span>
+                    <span class="detail-pin-list-name">${dp.name || dp.pin_type}</span>
+                    <span class="detail-pin-list-meta">${dp.added_by ? 'by ' + dp.added_by : ''}</span>
+                </button>
+                <button type="button" class="detail-pin-list-delete" data-uuid="${dp.uuid}" title="Delete">
+                    <i class="material-icons" style="font-size:14px">close</i>
+                </button>`;
+            li.querySelector('.detail-pin-list-item-btn').addEventListener('click', () => {
+                const m = _dpMarkers[dp.uuid];
+                if (m) { bboxMap.setView(m.getLatLng(), Math.max(bboxMap.getZoom(), 17)); m.openPopup(); }
+            });
+            li.querySelector('.detail-pin-list-delete').addEventListener('click', () => {
+                if (!confirm('Delete this community detail pin?')) return;
+                fetch(_wikiDpDeleteBase + dp.uuid + '/delete/', {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrfToken },
+                })
+                .then(r => { if (!r.ok) throw new Error(); })
+                .then(() => { toastr.success('Pin deleted.'); loadWikiDetailPinsOnMap(); })
+                .catch(() => toastr.error('Failed to delete pin.'));
+            });
+            ul.appendChild(li);
+        });
+    }
+
+    document.getElementById('detail-pin-list-toggle').addEventListener('click', function () {
+        const drawer = document.getElementById('detail-pin-list-drawer');
+        const chevron = document.getElementById('detail-pin-list-chevron');
+        const open = drawer.style.display !== 'none';
+        drawer.style.display = open ? 'none' : '';
+        chevron.textContent = open ? 'expand_more' : 'expand_less';
+    });
+
     function loadWikiDetailPinsOnMap() {
         fetch("{% url 'location.wiki.detail_pins.json' location.uuid %}")
             .then(r => r.json())
             .then(data => {
                 _dpLayer.clearLayers();
-                (data.detail_pins || []).forEach(dp => {
+                Object.keys(_dpMarkers).forEach(k => delete _dpMarkers[k]);
+                const pins = data.detail_pins || [];
+                pins.forEach(dp => {
                     if (!dp.latitude || !dp.longitude) return;
                     let _dpLat = dp.latitude, _dpLng = dp.longitude;
                     const marker = L.marker([dp.latitude, dp.longitude], {
@@ -559,7 +665,7 @@
                     marker.bindPopup(`<strong>${dp.name || dp.pin_type}</strong> <em>(by ${dp.added_by || '?'})</em>${dp.description ? '<br>' + dp.description : ''}`);
                     marker.on('dragend', function () {
                         const pos = marker.getLatLng();
-                        fetch(_wikiDpEditBase + dp.uuid + '/', {
+                        fetch(_wikiDpEditBase + dp.uuid + '/edit/', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                             body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
@@ -572,7 +678,9 @@
                         });
                     });
                     marker.addTo(_dpLayer);
+                    if (dp.uuid) _dpMarkers[dp.uuid] = marker;
                 });
+                _buildDetailPinList(pins);
             })
             .catch(err => console.warn('Could not load community detail pins:', err));
     }
@@ -671,17 +779,11 @@
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                 body: JSON.stringify(data),
             })
-            .then(r => {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.text();
-            })
-            .then(html => {
-                const panel = document.getElementById('location-detail-pins-panel');
-                if (panel) panel.outerHTML = html;
+            .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); })
+            .then(() => {
                 toastr.success('Community detail pin added.');
                 dlg.close();
                 loadWikiDetailPinsOnMap();
-                htmx.process(document.getElementById('location-detail-pins-panel'));
             })
             .catch(() => {
                 toastr.error('Failed to add detail pin.');
