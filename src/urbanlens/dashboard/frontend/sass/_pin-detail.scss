@@ -708,6 +708,7 @@
             .sr-star-btn:nth-child(-n+#{$i}) {
                 color: #f59e0b;
             }
+
             .sr-star-btn:not(:nth-child(-n+#{$i})) {
                 color: #d1d5db;
             }
@@ -753,6 +754,7 @@
             .sr-star-btn:nth-child(-n+#{$i}) {
                 color: #6366f1;
             }
+
             .sr-star-btn:not(:nth-child(-n+#{$i})) {
                 color: #d1d5db;
             }
@@ -1004,7 +1006,10 @@ body.page-location-details {
         color: #6b7280;
         font-size: .84rem;
 
-        .material-icons { font-size: 1.05rem; color: #d1d5db; }
+        .material-icons {
+            font-size: 1.05rem;
+            color: #d1d5db;
+        }
     }
 }
 
@@ -1049,7 +1054,9 @@ body.page-location-details {
     overflow: hidden;
     text-overflow: ellipsis;
 
-    &:hover { text-decoration: underline; }
+    &:hover {
+        text-decoration: underline;
+    }
 }
 
 .pin-location-name-icon {
@@ -1108,8 +1115,14 @@ body.page-location-details {
     color: #9ca3af;
     padding: 0;
     display: inline-flex;
-    .material-icons { font-size: .9rem; }
-    &:hover { color: #374151; }
+
+    .material-icons {
+        font-size: .9rem;
+    }
+
+    &:hover {
+        color: #374151;
+    }
 }
 
 .pin-loc-option {
@@ -1120,7 +1133,9 @@ body.page-location-details {
     border-top: 1px solid #f3f4f6;
     gap: .5rem;
 
-    &--current { background: #f0f9ff; }
+    &--current {
+        background: #f0f9ff;
+    }
 }
 
 .pin-loc-option-info {
@@ -1165,7 +1180,10 @@ body.page-location-details {
     display: flex;
     align-items: center;
     gap: .35rem;
-    .material-icons { font-size: 1rem; }
+
+    .material-icons {
+        font-size: 1rem;
+    }
 }
 
 // ── Location conflict dialog (map page) ───────────────────────────────────────
@@ -1187,7 +1205,9 @@ body.page-location-details {
         font-weight: 600;
         font-size: .9rem;
 
-        .dialog-close { margin-left: auto; }
+        .dialog-close {
+            margin-left: auto;
+        }
     }
 }
 
@@ -1277,7 +1297,9 @@ body.page-location-details {
     font-size: .84rem;
     color: #374151;
 
-    strong { color: #92400e; }
+    strong {
+        color: #92400e;
+    }
 }
 
 .wiki-lcn-list {
@@ -1303,7 +1325,9 @@ body.page-location-details {
     color: #1d4ed8;
     text-decoration: none;
 
-    &:hover { text-decoration: underline; }
+    &:hover {
+        text-decoration: underline;
+    }
 }
 
 .wiki-lcn-switch-btn {
@@ -1315,7 +1339,9 @@ body.page-location-details {
     color: #6d28d9;
     padding: 0;
 
-    &:hover { text-decoration: underline; }
+    &:hover {
+        text-decoration: underline;
+    }
 }
 
 .wiki-lcn-dismiss {
@@ -1328,50 +1354,139 @@ body.page-location-details {
     display: flex;
     align-items: center;
 
-    .material-icons { font-size: 1.05rem; }
-    &:hover { color: #374151; }
+    .material-icons {
+        font-size: 1.05rem;
+    }
+
+    &:hover {
+        color: #374151;
+    }
 }
 
 // ── Dark mode ─────────────────────────────────────────────────────────────────
 
 [data-theme="dark"] {
-    .pin-status-chip { background: rgba(255, 255, 255, .08); }
+    .pin-status-chip {
+        background: rgba(255, 255, 255, .08);
+    }
 
     .pin-location-panel {
-        background: var(--ul-surface);
+        background: var(--ul-surface-1);
         border-color: var(--ul-border);
 
-        &--unlinked { color: var(--ul-muted); .material-icons { color: var(--ul-border); } }
+        &--unlinked {
+            color: var(--ul-muted);
+
+            .material-icons {
+                color: var(--ul-border);
+            }
+        }
     }
 
-    .pin-location-label { color: var(--ul-muted); }
-    .pin-location-name { color: #93c5fd; }
-    .pin-loc-change-btn { color: var(--ul-text); border-color: var(--ul-border); }
-    .pin-loc-detach-btn { color: #f87171; border-color: rgba(248, 113, 113, .3); &:hover { background: rgba(220, 38, 38, .1); border-color: #f87171; } }
+    .pin-location-label {
+        color: var(--ul-muted);
+    }
 
-    .pin-loc-picker { background: var(--ul-surface); border-color: var(--ul-border); }
-    .pin-loc-picker-header { color: var(--ul-muted); }
-    .pin-loc-option { border-color: var(--ul-border); &--current { background: rgba(59, 130, 246, .08); } }
-    .pin-loc-option-name { color: var(--ul-text); }
+    .pin-location-name {
+        color: #93c5fd;
+    }
+
+    .pin-loc-change-btn {
+        color: var(--ul-text);
+        border-color: var(--ul-border);
+    }
+
+    .pin-loc-detach-btn {
+        color: #f87171;
+        border-color: rgba(248, 113, 113, .3);
+
+        &:hover {
+            background: rgba(220, 38, 38, .1);
+            border-color: #f87171;
+        }
+    }
+
+    .pin-loc-picker {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
+    }
+
+    .pin-loc-picker-header {
+        color: var(--ul-muted);
+    }
+
+    .pin-loc-option {
+        border-color: var(--ul-border);
+
+        &--current {
+            background: rgba(59, 130, 246, .08);
+        }
+    }
+
+    .pin-loc-option-name {
+        color: var(--ul-text);
+    }
 
     .loc-conflict-dialog {
-        background: var(--ul-surface);
+        background: var(--ul-surface-1);
         color: var(--ul-text);
-        .dialog-header { border-color: var(--ul-border); background: var(--ul-surface); }
+
+        .dialog-header {
+            border-color: var(--ul-border);
+            background: var(--ul-surface-1);
+        }
     }
-    .loc-conflict-intro { color: var(--ul-muted); }
-    .loc-conflict-option { border-color: var(--ul-border); &--current { background: rgba(59, 130, 246, .08); border-color: #3b82f6; } }
-    .loc-conflict-option-name { color: var(--ul-text); }
+
+    .loc-conflict-intro {
+        color: var(--ul-muted);
+    }
+
+    .loc-conflict-option {
+        border-color: var(--ul-border);
+
+        &--current {
+            background: rgba(59, 130, 246, .08);
+            border-color: #3b82f6;
+        }
+    }
+
+    .loc-conflict-option-name {
+        color: var(--ul-text);
+    }
 
     .wiki-location-conflict {
         background: rgba(245, 158, 11, .08);
         border-color: rgba(245, 158, 11, .35);
     }
-    .wiki-lcn-body { color: var(--ul-text); strong { color: #fbbf24; } }
-    .wiki-lcn-item { background: var(--ul-surface); border-color: rgba(245, 158, 11, .3); }
-    .wiki-lcn-link { color: #93c5fd; }
-    .wiki-lcn-switch-btn { color: #c4b5fd; }
-    .wiki-lcn-dismiss { color: var(--ul-muted); &:hover { color: var(--ul-text); } }
+
+    .wiki-lcn-body {
+        color: var(--ul-text);
+
+        strong {
+            color: #fbbf24;
+        }
+    }
+
+    .wiki-lcn-item {
+        background: var(--ul-surface-1);
+        border-color: rgba(245, 158, 11, .3);
+    }
+
+    .wiki-lcn-link {
+        color: #93c5fd;
+    }
+
+    .wiki-lcn-switch-btn {
+        color: #c4b5fd;
+    }
+
+    .wiki-lcn-dismiss {
+        color: var(--ul-muted);
+
+        &:hover {
+            color: var(--ul-text);
+        }
+    }
 
     .form-actions {
         margin-top: .5rem;
@@ -1455,7 +1570,8 @@ body.page-location-details {
             opacity: 1;
         }
 
-        span, h3 {
+        span,
+        h3 {
             color: #1e293b;
         }
     }
