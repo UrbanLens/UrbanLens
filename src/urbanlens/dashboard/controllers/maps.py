@@ -213,6 +213,24 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         return JsonResponse({"pins": map_data})
 
+    def map_pins_meta(self, request, *args, **kwargs):
+        """Return the latest pin update timestamp for client-side cache invalidation.
+
+        The client polls this endpoint to detect when the pin collection changed,
+        then calls the full pins endpoint only when necessary.
+
+        Returns:
+            JsonResponse: ``{"last_updated": "<ISO timestamp>" | null}``
+        """
+        from django.db.models import Max
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = Pin.objects.filter(profile=profile).root_pins().aggregate(last_updated=Max('updated'))
+        last_updated = result['last_updated']
+        return JsonResponse({
+            'last_updated': last_updated.isoformat() if last_updated else None,
+        })
+
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data(request)
 

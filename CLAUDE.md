@@ -45,13 +45,6 @@ python -m mypy src/urbanlens              # type check
 
 When examining mypy output, never use cast or similar solutions. Remember that the purpose of mypy is to find real errors and improve code quality, not to silence warnings. This will sometimes require going back to the origin of the call and adjusting types, rather than trying to paper over it at the point of failure. If the code at the origin is making a false assumption, fix the bug. Doing things like implementing generics is needed to address some types of mypy warnings. If you're unsure, mark it as a TODO instead of doing things to silence the warning.
 
-### Testing
-
-```bash
-python src/urbanlens/manage.py test 
-coverage run --source='.' manage.py test && coverage report
-```
-
 > Common development commands should be consolidated into `pyproject.toml` scripts, `package.json`, and/or VSCode tasks - add new ones there rather than leaving them undocumented.
 
 ## Project Structure
@@ -103,7 +96,7 @@ src/urbanlens/
 
 ## Tech Stack
 
-- **Backend**: Django 5.1.6, Django REST Framework 3.15, Channels 4.2 (WebSockets)
+- **Backend**: Django >= 5.1.6, Django REST Framework, Channels (WebSockets)
 - **Database**: PostgreSQL with PostGIS for geospatial queries
 - **Frontend**: SCSS, TypeScript/TSX, Bun bundler, **HTMX** for interactivity
 - **Authentication**: Django auth + social-auth (Google OAuth2, Discord OAuth2)
@@ -117,7 +110,7 @@ src/urbanlens/
 
 These two models are often confused. Keep their responsibilities strictly separate:
 
-**`Location`** - shared, globally recognised data about a physical place.
+**`Location`** - shared, globally recognised data for multiple users about a physical place.
 - Canonical name, description, address components, coordinates, Google Maps CID
 - Not user-specific - many users may pin the same Location
 - The authoritative source for address, place metadata, and geo coordinates

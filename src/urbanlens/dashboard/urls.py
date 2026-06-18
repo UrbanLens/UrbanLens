@@ -84,6 +84,7 @@ urlpatterns = [
                 path("", maps.MapController.as_view({"get": "view_map"}), name="map.view"),
                 path("init/", maps.MapController.as_view({"get": "init_map"}), name="map.init"),
                 path("pins/", maps.MapController.as_view({"get": "map_pins_json"}), name="map.pins"),
+                path("pins/meta/", maps.MapController.as_view({"get": "map_pins_meta"}), name="map.pins.meta"),
                 path(
                     "campus/",
                     campus.CampusController.as_view({"get": "list_campuses"}),

@@ -402,6 +402,20 @@
     flex-shrink: 0;
 }
 @keyframes tfi-pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+/* ── Cache status indicator ─────────────────────────────────────── */
+#cache-status {
+    position: absolute;
+    bottom: 5px;
+    left: 5px;
+    z-index: 999;
+    font-size: 0.58rem;
+    font-family: monospace;
+    color: rgba(255,255,255,0.2);
+    pointer-events: none;
+    letter-spacing: 0.01em;
+}
+#cache-status.refreshing { color: rgba(90,143,255,0.45); }
 </style>
 {% endblock %}
 
@@ -608,6 +622,7 @@
         <span id="pin-counter-value">0</span>
         <span id="pin-counter-label">pins</span>
     </div>
+    <span id="cache-status" aria-hidden="true"></span>
     <div id="map-body"></div>
 
 </div>
@@ -725,9 +740,10 @@
 <script>
     // ── Constants ─────────────────────────────────────────────────────────────
     const _PROFILE_ID  = {{ profile_id|default:0 }};
-    const _CACHE_KEY   = `ul_pins_v2_${_PROFILE_ID}`;
-    const _CACHE_FRESH = 3 * 60 * 1000;        // 3 min: serve from cache + bg refresh
-    const _CACHE_MAX   = 24 * 60 * 60 * 1000;  // 24 h: discard entirely
+    const _CACHE_KEY      = `ul_pins_v3_${_PROFILE_ID}`;
+    const _CACHE_FRESH    = 3 * 60 * 1000;        // 3 min: serve from cache + bg refresh
+    const _CACHE_MAX      = 24 * 60 * 60 * 1000;  // 24 h: discard entirely
+    const _POLL_INTERVAL  = 2 * 60 * 1000;         // 2 min: background poll for pin changes
     const _TILE_SIZE   = 0.5;   // degrees per tile edge (~55 km at mid-latitudes)
     const _TILE_PAD    = 1.0;   // degrees of prefetch padding around the viewport
     const _MAX_TILES   = 200;   // threshold above which we just fetch the whole world
@@ -736,10 +752,11 @@
     const _pinStore     = new Map();   // uuid → pin data
     const _fetchedTiles = new Set();   // tile keys already loaded from server
     const _markerMap    = new Map();   // uuid → L.Marker
-    let   _filterMode   = false;       // true while search/filter results are shown
-    let   _viewportTid  = null;        // debounce timer for viewport changes
-    let   _cacheTid     = null;        // debounce timer for cache writes
-    let   pinsVisible   = true;
+    let   _filterMode        = false;  // true while search/filter results are shown
+    let   _viewportTid       = null;   // debounce timer for viewport changes
+    let   _cacheTid          = null;   // debounce timer for cache writes
+    let   _lastKnownUpdated  = null;   // server last_updated from most recent meta poll
+    let   pinsVisible        = true;
 
     // ── Map ───────────────────────────────────────────────────────────────────
     const map = L.map('map', { maxZoom: 19 }).setView([42.65250213448323, -73.75791867436858], 13);
@@ -833,18 +850,21 @@
             const raw = localStorage.getItem(_CACHE_KEY);
             if (!raw) return null;
             const c = JSON.parse(raw);
-            if (c.v !== 2 || c.profileId !== _PROFILE_ID) return null;
+            if (c.v !== 3 || c.profileId !== _PROFILE_ID) return null;
             if (Date.now() - c.ts > _CACHE_MAX) { localStorage.removeItem(_CACHE_KEY); return null; }
             return c;
         } catch { return null; }
     }
     function _writeCache() {
+        const ts = Date.now();
         try {
             localStorage.setItem(_CACHE_KEY, JSON.stringify({
-                v: 2, ts: Date.now(), profileId: _PROFILE_ID,
+                v: 3, ts, profileId: _PROFILE_ID,
+                lastUpdated: _lastKnownUpdated,
                 tiles: [..._fetchedTiles],
                 pins: Object.fromEntries(_pinStore),
             }));
+            _updateCacheStatus(ts);
         } catch { try { localStorage.removeItem(_CACHE_KEY); } catch {} }
     }
     function _scheduleCache() {
@@ -853,8 +873,97 @@
     }
     // Call after any pin mutation (add/delete) to force a fresh fetch next time
     window.invalidatePinCache = function() {
-        localStorage.removeItem(_CACHE_KEY);
+        try { localStorage.removeItem(_CACHE_KEY); } catch {}
+        _lastKnownUpdated = null;
     };
+
+    // ── Cache status display ──────────────────────────────────────────────────
+    function _updateCacheStatus(ts) {
+        const el = document.getElementById('cache-status');
+        if (!el || !ts) return;
+        const d = new Date(ts);
+        const str = d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        el.textContent = `cache: ${str}`;
+        console.log(`[UrbanLens] Pin cache last refreshed: ${d.toLocaleString()}`);
+    }
+
+    // ── Background pin refresh (non-disruptive) ───────────────────────────────
+    // Fetches all pins, then adds new ones, updates changed markers, removes
+    // deleted ones — without altering map position or zoom.
+    async function _refreshAllPins() {
+        const csi = document.getElementById('cache-status');
+        if (csi) csi.classList.add('refreshing');
+        try {
+            const resp = await fetch('{% url "map.pins" %}', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!resp.ok) return;
+            const data = await resp.json();
+
+            const freshUuids = new Set((data.pins || []).map(p => p.uuid));
+            const batch = [];
+
+            for (const pin of (data.pins || [])) {
+                const existing = _pinStore.get(pin.uuid);
+                _pinStore.set(pin.uuid, pin);
+                if (!_filterMode) {
+                    if (!existing) {
+                        const m = _buildMarker(pin);
+                        if (m) { _markerMap.set(pin.uuid, m); batch.push(m); }
+                    } else {
+                        const changed = existing.icon !== pin.icon || existing.color !== pin.color
+                            || existing.tags !== pin.tags || existing.rating !== pin.rating
+                            || existing.name !== pin.name || existing.status !== pin.status
+                            || existing.latitude !== pin.latitude || existing.longitude !== pin.longitude;
+                        if (changed && _markerMap.has(pin.uuid)) {
+                            clusterGroup.removeLayer(_markerMap.get(pin.uuid));
+                            _markerMap.delete(pin.uuid);
+                            const m = _buildMarker(pin);
+                            if (m) { _markerMap.set(pin.uuid, m); batch.push(m); }
+                        }
+                    }
+                }
+            }
+
+            // Remove markers for pins that no longer exist server-side
+            for (const uuid of [..._pinStore.keys()]) {
+                if (!freshUuids.has(uuid)) {
+                    _pinStore.delete(uuid);
+                    if (_markerMap.has(uuid)) {
+                        clusterGroup.removeLayer(_markerMap.get(uuid));
+                        _markerMap.delete(uuid);
+                    }
+                }
+            }
+
+            if (batch.length) clusterGroup.addLayers(batch);
+            _fetchedTiles.clear();
+            _fetchedTiles.add('*');
+            updatePinCounter();
+            _scheduleCache();
+        } catch (err) {
+            console.warn('[UrbanLens] Background pin refresh failed:', err);
+        } finally {
+            if (csi) csi.classList.remove('refreshing');
+        }
+    }
+
+    // ── Background polling ────────────────────────────────────────────────────
+    // Checks whether any pin has been updated since the cached timestamp.
+    // Only triggers a full refresh when the server signals a change.
+    async function _pollForUpdates() {
+        try {
+            const resp = await fetch('{% url "map.pins.meta" %}', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (data.last_updated) {
+                if (_lastKnownUpdated !== null && data.last_updated !== _lastKnownUpdated) {
+                    _lastKnownUpdated = data.last_updated;
+                    await _refreshAllPins();
+                } else {
+                    _lastKnownUpdated = data.last_updated;
+                }
+            }
+        } catch { /* background poll failures are non-fatal */ }
+    }
 
     // ── Marker builder ────────────────────────────────────────────────────────
     function _buildMarker(pin) {
@@ -1072,6 +1181,8 @@
             if (layers.length) clusterGroup.addLayers(layers);
             updatePinCounter();
             hideLoadingMessage();
+            _lastKnownUpdated = cache.lastUpdated || null;
+            _updateCacheStatus(cache.ts);
 
             // Stale cache? silently refresh the current viewport
             if (Date.now() - cache.ts > _CACHE_FRESH) {
@@ -1084,6 +1195,10 @@
             try { await _loadViewport(); } catch (e) { console.warn('Initial pin load failed:', e); }
             hideLoadingMessage();
         }
+        // Begin background polling — first call sets _lastKnownUpdated without
+        // triggering a refresh; subsequent calls detect real changes.
+        _pollForUpdates();
+        setInterval(_pollForUpdates, _POLL_INTERVAL);
     })();
 
     const standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
