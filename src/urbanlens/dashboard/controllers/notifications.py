@@ -73,30 +73,35 @@ class NotificationMarkAllReadView(LoginRequiredMixin, View):
 class NotificationPreferencesView(LoginRequiredMixin, View):
     """GET/POST /notifications/preferences/ — view or save per-type delivery prefs."""
 
-    def get(self, request):
-        profile = request.user.profile
-        prefs = _get_or_create_prefs(profile)
+    def _render(self, request, prefs, *, saved: bool = False) -> HttpResponse:
         return render(request, "dashboard/partials/notification_preferences.html", {
             "prefs": prefs,
             "pref_fields": _PREF_FIELDS,
-            "delivery_choices": DeliveryPreference.choices,
+            "saved": saved,
         })
+
+    def get(self, request):
+        profile = request.user.profile
+        prefs = _get_or_create_prefs(profile)
+        return self._render(request, prefs)
 
     def post(self, request):
         profile = request.user.profile
         prefs = _get_or_create_prefs(profile)
-        valid = {v for v, _ in DeliveryPreference.choices}
         for field, _ in _PREF_FIELDS:
-            val = request.POST.get(field, "")
-            if val in valid:
-                setattr(prefs, field, val)
+            site = f"{field}__site" in request.POST
+            email = f"{field}__email" in request.POST
+            if site and email:
+                value = DeliveryPreference.BOTH
+            elif site:
+                value = DeliveryPreference.SITE
+            elif email:
+                value = DeliveryPreference.EMAIL
+            else:
+                value = DeliveryPreference.NONE
+            setattr(prefs, field, value)
         prefs.save()
-        return render(request, "dashboard/partials/notification_preferences.html", {
-            "prefs": prefs,
-            "pref_fields": _PREF_FIELDS,
-            "delivery_choices": DeliveryPreference.choices,
-            "saved": True,
-        })
+        return self._render(request, prefs, saved=True)
 
 
 class NotificationUnreadCountView(LoginRequiredMixin, View):
