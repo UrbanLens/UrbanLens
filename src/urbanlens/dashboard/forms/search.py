@@ -1,7 +1,6 @@
 from django import forms
 
 from urbanlens.dashboard.models.badges.model import Badge
-from urbanlens.dashboard.models.pin.model import PinStatus
 
 
 class SearchForm(forms.Form):
@@ -15,11 +14,6 @@ class SearchForm(forms.Form):
     max_rating = forms.IntegerField(required=False, min_value=0, max_value=5)
     tags: forms.ModelMultipleChoiceField = forms.ModelMultipleChoiceField(
         queryset=Badge.objects.all(),
-        widget=forms.CheckboxSelectMultiple,
-        required=False,
-    )
-    status = forms.MultipleChoiceField(
-        choices=PinStatus.choices,
         widget=forms.CheckboxSelectMultiple,
         required=False,
     )

@@ -63,7 +63,6 @@ class PinSerializer(serializers.ModelSerializer):
             "created",
             "updated",
             "profile",
-            "status",
             "tags",
             "rating",
         ]

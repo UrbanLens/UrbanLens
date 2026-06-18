@@ -61,7 +61,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, Badge
         from urbanlens.dashboard.models.location.model import Location
-        from urbanlens.dashboard.models.pin.model import PinStatus, PinType
+        from urbanlens.dashboard.models.pin.model import PinType
 
         pin = Pin.objects.select_related("location").get(uuid=kwargs["pin_uuid"])
 
@@ -100,12 +100,15 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "google_maps_api_key": settings.google_maps_api_key,
                 "openweathermap_api_key": settings.openweathermap_api_key,
                 "page_name": "location-details",
-                "pin_status_choices": PinStatus.choices,
                 "pin_type_choices": PinType.choices,
                 "detail_pin_icon_choices": detail_pin_icon_choices,
                 "color_choices": COLOR_CHOICES,
                 "all_categories": Badge.objects.categories().ordered(),
                 "default_map_view": profile.default_map_view,
+                "markup_fill_color": profile.markup_fill_color,
+                "markup_fill_opacity": profile.markup_fill_opacity,
+                "markup_border_color": profile.markup_border_color,
+                "markup_border_opacity": profile.markup_border_opacity,
                 "today": today.isoformat(),
                 "min_date": min_date.isoformat(),
                 "security_level_choices": SecurityLevel.choices,

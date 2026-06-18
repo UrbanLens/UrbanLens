@@ -141,8 +141,8 @@ class PinQuerySet(abstract.QuerySet):
                 | Q(location__name__icontains=name)
                 | Q(aliases__name__icontains=name),
             )
-        if statuses := criteria.get("status"):
-            qs = qs.filter(status__in=statuses)
+        if badge_statuses := criteria.get("status"):
+            qs = qs.filter(statuses__id__in=[s.id if hasattr(s, "id") else s for s in badge_statuses])
         if tags := criteria.get("tags"):
             from urbanlens.dashboard.models.badges.model import Badge as _Badge
             for tag in tags:

@@ -19,6 +19,10 @@
                 role="tab" data-tab="categories" aria-controls="panel-categories">
             <i class="material-icons">category</i> Categories
         </button>
+        <button type="button" class="organize-tab{% if active_tab == 'status' %} active{% endif %}"
+                role="tab" data-tab="status" aria-controls="panel-status">
+            <i class="material-icons">flag_circle</i> Status
+        </button>
         <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
                 role="tab" data-tab="priority" aria-controls="panel-priority">
             <i class="material-icons">low_priority</i> Priority
@@ -263,6 +267,90 @@
     </div>{# end #panel-categories #}
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
+    {# STATUS PANEL                                                              #}
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    <div class="organize-panel tag-page" id="panel-status" role="tabpanel"
+         {% if active_tab != 'status' %}hidden{% endif %}>
+
+        <div class="tag-header">
+            <div>
+                <h2 class="tag-title">Status Labels</h2>
+                <p class="tag-subtitle">Track the state of locations — visited, active, abandoned, and more.</p>
+            </div>
+            <div class="tag-header-right">
+                <button class="btn-primary" id="new-status-btn" type="button">
+                    <i class="material-icons">add</i> New Status
+                </button>
+            </div>
+        </div>
+
+        <div id="status-sel-bar" class="cat-sel-bar">
+            <div class="cat-sel-bar-left">
+                <span id="status-sel-count" class="cat-sel-count" hidden></span>
+            </div>
+            <div class="cat-sel-bar-actions">
+                <button type="button" id="status-sel-all" class="cat-sel-btn"><i class="material-icons">select_all</i> Select All</button>
+                <button type="button" id="status-sel-deselect" class="cat-sel-btn" disabled><i class="material-icons">deselect</i> Deselect All</button>
+                <button type="button" id="status-sel-delete" class="cat-sel-btn cat-sel-delete-btn" disabled><i class="material-icons">delete</i> Delete</button>
+            </div>
+        </div>
+
+        <div class="tag-create-card" id="new-status-form" style="display:none;">
+            <form hx-post="{% url 'status.create' %}" hx-target="#status-rows" hx-swap="innerHTML"
+                  class="tag-form"
+                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-status-form').style.display='none'; toastr.success('Status created.'); }">
+                {% csrf_token %}
+                <div class="tag-form-grid">
+                    <div class="form-field">
+                        <label class="form-label" for="new-status-name">Status name</label>
+                        <input id="new-status-name" name="name" type="text" class="form-input" placeholder="e.g. Under renovation" required>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="new-status-order">Order</label>
+                        <input id="new-status-order" name="order" type="number" class="form-input" value="0">
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="new-status-desc">Description (optional)</label>
+                    <textarea id="new-status-desc" name="description" class="form-input" rows="2" placeholder="What does this status mean?"></textarea>
+                </div>
+                <div class="tag-icon-color-row">
+                    <div class="form-field">
+                        <label class="form-label">Icon</label>
+                        <div class="icon-picker-wrap">
+                            {% with picker_id="new-status" current_icon="" field_name="icon" %}
+                            {% include 'dashboard/partials/_icon_picker.html' %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label">Color</label>
+                        <div class="color-picker" id="new-status-color-picker">
+                            <input type="hidden" name="color" id="new-status-color-value">
+                            {% for hex, label in color_choices %}
+                            <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
+                                    onclick="pickColor('new-status-color-picker','new-status-color-value','{{ hex }}',this)"></button>
+                            {% endfor %}
+                            <button type="button" class="color-swatch color-clear" title="No color"
+                                    onclick="pickColor('new-status-color-picker','new-status-color-value','',this)">
+                                <i class="material-icons" style="font-size:1rem;">block</i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="tag-form-actions">
+                    <button type="submit" class="btn-primary">Create</button>
+                    <button type="button" class="btn-ghost" onclick="document.getElementById('new-status-form').style.display='none'">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="status-rows">
+            {% include 'dashboard/partials/status_rows.html' %}
+        </div>
+    </div>{# end #panel-status #}
+
+    {# ══════════════════════════════════════════════════════════════════════════ #}
     {# PRIORITY PANEL                                                            #}
     {# ══════════════════════════════════════════════════════════════════════════ #}
     <div class="organize-panel tag-page" id="panel-priority" role="tabpanel"
@@ -412,6 +500,12 @@
 <dialog id="category-edit-dialog" class="tag-edit-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Edit Category" title_id="category-edit-dialog-title" %}
     <div id="category-edit-dialog-body" class="tag-edit-dialog-body"></div>
+</dialog>
+
+{# ── Status edit dialog ────────────────────────────────────────────────────── #}
+<dialog id="status-edit-dialog" class="tag-edit-dialog">
+    {% include "dashboard/partials/_dialog_header.html" with title="Edit Status" title_id="status-edit-dialog-title" %}
+    <div id="status-edit-dialog-body" class="tag-edit-dialog-body"></div>
 </dialog>
 
 {# ── Category multi-merge dialog ───────────────────────────────────────────── #}
@@ -1358,6 +1452,83 @@ function showTagCustomPreview(input) {
 
     // ── Init ──────────────────────────────────────────────────────────────────
     applyCatView();
+})();
+</script>
+
+{# ── Status tab JS ─────────────────────────────────────────────────────────── #}
+<script>
+(function() {
+    // New status toggle
+    var newStatusBtn = document.getElementById('new-status-btn');
+    var newStatusForm = document.getElementById('new-status-form');
+    if (newStatusBtn && newStatusForm) {
+        newStatusBtn.addEventListener('click', function() {
+            newStatusForm.style.display = newStatusForm.style.display === 'none' ? '' : 'none';
+        });
+    }
+
+    // Bulk select for statuses
+    function _updateStatusSelBar() {
+        var checked = document.querySelectorAll('.status-select-cb:checked');
+        var bar = document.getElementById('status-sel-bar');
+        var countEl = document.getElementById('status-sel-count');
+        var deleteBtn = document.getElementById('status-sel-delete');
+        var deselectBtn = document.getElementById('status-sel-deselect');
+        if (!bar) return;
+        if (checked.length) {
+            if (countEl) { countEl.textContent = checked.length + ' selected'; countEl.hidden = false; }
+            if (deleteBtn) deleteBtn.disabled = false;
+            if (deselectBtn) deselectBtn.disabled = false;
+        } else {
+            if (countEl) { countEl.textContent = ''; countEl.hidden = true; }
+            if (deleteBtn) deleteBtn.disabled = true;
+            if (deselectBtn) deselectBtn.disabled = true;
+        }
+    }
+
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.classList.contains('status-select-cb')) _updateStatusSelBar();
+    });
+
+    var selAllBtn = document.getElementById('status-sel-all');
+    if (selAllBtn) {
+        selAllBtn.addEventListener('click', function() {
+            document.querySelectorAll('.status-select-cb:not(:disabled)').forEach(function(cb) { cb.checked = true; });
+            _updateStatusSelBar();
+        });
+    }
+    var deselectBtn = document.getElementById('status-sel-deselect');
+    if (deselectBtn) {
+        deselectBtn.addEventListener('click', function() {
+            document.querySelectorAll('.status-select-cb').forEach(function(cb) { cb.checked = false; });
+            _updateStatusSelBar();
+        });
+    }
+    var deleteBtn = document.getElementById('status-sel-delete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function() {
+            var ids = Array.from(document.querySelectorAll('.status-select-cb:checked')).map(function(cb) { return parseInt(cb.dataset.statusId, 10); });
+            if (!ids.length) return;
+            if (!confirm('Delete ' + ids.length + ' status(es)?')) return;
+            fetch('{% url "status.bulk_delete" %}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                body: JSON.stringify({ ids: ids }),
+            }).then(function(r) { return r.text(); }).then(function(html) {
+                var rows = document.getElementById('status-rows');
+                if (rows) { rows.innerHTML = html; htmx.process(rows); }
+                _updateStatusSelBar();
+            });
+        });
+    }
+
+    // Open edit dialog when HTMX loads form into status-edit-dialog-body
+    document.addEventListener('htmx:afterSwap', function(e) {
+        if (e.detail.target && e.detail.target.id === 'status-edit-dialog-body') {
+            var dlg = document.getElementById('status-edit-dialog');
+            if (dlg && !dlg.open) dlg.showModal();
+        }
+    });
 })();
 </script>
 

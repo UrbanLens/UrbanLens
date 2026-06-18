@@ -52,7 +52,6 @@ logger = logging.getLogger(__name__)
 
 class MapController(LoginRequiredMixin, GenericViewSet):
     def view_map(self, request, *args, **kwargs):
-        from urbanlens.dashboard.models.pin.model import PinStatus
         from urbanlens.dashboard.models.profile.model import MapCenterMode
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -78,7 +77,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "openweathermap_api_key": settings.openweathermap_api_key,
                 "tags": tags,
                 "categories": categories,
-                "status_choices": PinStatus.choices,
                 "profile_id": profile.id,
                 "cluster_radius": profile.cluster_radius,
                 "pin_count": pin_count,

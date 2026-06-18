@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, CharField, ForeignKey, ImageField, Index, IntegerField, ManyToManyField, TextField
+from django.db.models import BooleanField, CASCADE, CharField, ForeignKey, ImageField, Index, IntegerField, ManyToManyField, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.badges.queryset import BadgeManager
 
 KIND_TAG = "tag"
 KIND_CATEGORY = "category"
+KIND_STATUS = "status"
 KIND_CHOICES = [
     (KIND_TAG, "Tag"),
     (KIND_CATEGORY, "Category"),
+    (KIND_STATUS, "Status"),
 ]
 
 if TYPE_CHECKING:
@@ -1404,6 +1406,8 @@ class Badge(abstract.Model):
     kind = CharField(max_length=20, choices=KIND_CHOICES, default=KIND_TAG, db_index=True)
     # Higher order = checked first in the icon priority chain.
     order = IntegerField(default=0)
+    # Protected badges (e.g. the built-in "Visited" status) cannot be deleted or renamed.
+    is_protected = BooleanField(default=False)
     # Hierarchical parents - symmetrical=False so parent→child is one direction.
     parents: ManyToManyField[Badge, Badge] = ManyToManyField(
         "self",

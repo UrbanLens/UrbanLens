@@ -11,7 +11,7 @@ from hypothesis import strategies as st
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
-from urbanlens.dashboard.models.pin.model import PinStatus, PinType
+from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.profile.model import MapCenterMode
 
 # ── Safe text ──────────────────────────────────────────────────────────────────
@@ -78,15 +78,11 @@ invalid_rating_low = st.integers(max_value=-1)
 invalid_rating_high = st.integers(min_value=6)
 
 # ── Choices ────────────────────────────────────────────────────────────────────
-pin_status = st.sampled_from(list(PinStatus.values))
 pin_type = st.sampled_from(list(PinType.values))
 security_level = st.sampled_from(list(SecurityLevel.values))
 friendship_status = st.sampled_from(list(FriendshipStatus.values))
 friendship_type = st.sampled_from(list(FriendshipType.values))
 permission_choice = st.sampled_from(list(Permission.values))
-
-# Subset of PinStatus values (at least one, all unique).
-pin_status_subset = st.lists(pin_status, min_size=1, max_size=len(PinStatus.values), unique=True)
 
 # ── Dates and datetimes ────────────────────────────────────────────────────────
 reasonable_date = st.dates(min_value=date(1900, 1, 1), max_value=date(2100, 12, 31))
@@ -115,6 +111,4 @@ map_center_mode = st.sampled_from(list(MapCenterMode.values))
 valid_zoom = st.integers(min_value=1, max_value=19)
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
-# Any string that is NOT a valid PinStatus value — used for negative tests.
-invalid_pin_status = short_text.filter(lambda s: s not in PinStatus.values)
 invalid_security_level = short_text.filter(lambda s: s not in SecurityLevel.values)

@@ -373,6 +373,20 @@
     .field-status--saved {
         color: #66bb6a;
     }
+
+    .settings-cluster-value {
+        color: var(--ul-text-2);
+    }
+
+    .settings-cluster-slider-wrap input[type="range"] {
+        accent-color: $primary-color;
+    }
+
+    .settings-reset-btn {
+        border-color: #444;
+        color: #aaa;
+        &:hover { background: #2a2a2a; border-color: #666; }
+    }
 }
 
 // ── Trip map context menu dark mode ──────────────────────────────────────────

@@ -15,6 +15,7 @@ from urbanlens.dashboard.forms.settings_form import (
     ContactSettingsForm,
     MapCenterForm,
     MapDisplayForm,
+    MarkupDefaultsForm,
     PrivacySettingsForm,
     StyleSettingsForm,
 )
@@ -35,15 +36,19 @@ class SettingsView(LoginRequiredMixin, View):
         - GPS / AUTO: show the pin-cluster centroid (GPS mode adds live geolocation
           on top of this in the browser).
 
-        We always recompute the centroid here rather than reading the cached value so
-        that any stale cache entry from the old averaging algorithm is replaced with
-        the current clustering result.
+        Uses the cached centroid (map_center_latitude/longitude on the profile) to
+        avoid the expensive O(n²) haversine computation on every page GET.  The cache
+        is refreshed lazily by compute_map_center() only when it is cold (null).
         """
         from urbanlens.dashboard.models.profile.model import MapCenterMode
 
-        pin_centroid = profile.compute_map_center()
-        pin_centroid_lat = pin_centroid[0] if pin_centroid else None
-        pin_centroid_lng = pin_centroid[1] if pin_centroid else None
+        if profile.map_center_latitude is not None and profile.map_center_longitude is not None:
+            pin_centroid_lat = float(profile.map_center_latitude)
+            pin_centroid_lng = float(profile.map_center_longitude)
+        else:
+            centroid = profile.compute_map_center()
+            pin_centroid_lat = centroid[0] if centroid else None
+            pin_centroid_lng = centroid[1] if centroid else None
 
         if profile.map_center_mode == MapCenterMode.CUSTOM:
             preview_lat = float(profile.map_custom_latitude) if profile.map_custom_latitude is not None else None
@@ -69,6 +74,7 @@ class SettingsView(LoginRequiredMixin, View):
             "style_form": StyleSettingsForm(instance=profile),
             "map_display_form": MapDisplayForm(instance=profile),
             "map_center_form": MapCenterForm(instance=profile),
+            "markup_defaults_form": MarkupDefaultsForm(instance=profile),
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),
         }
@@ -85,8 +91,16 @@ class SettingsView(LoginRequiredMixin, View):
         style_form = StyleSettingsForm(instance=profile)
         map_display_form = MapDisplayForm(instance=profile)
         map_center_form = MapCenterForm(instance=profile)
+        markup_defaults_form = MarkupDefaultsForm(instance=profile)
 
-        if section == "privacy":
+        if section == "markup_defaults":
+            markup_defaults_form = MarkupDefaultsForm(request.POST, instance=profile)
+            if markup_defaults_form.is_valid():
+                markup_defaults_form.save()
+                messages.success(request, "Annotation defaults saved.")
+                return redirect("settings.view")
+
+        elif section == "privacy":
             privacy_form = PrivacySettingsForm(request.POST, instance=profile)
             if privacy_form.is_valid():
                 privacy_form.save()
@@ -123,6 +137,7 @@ class SettingsView(LoginRequiredMixin, View):
             "style_form": style_form,
             "map_display_form": map_display_form,
             "map_center_form": map_center_form,
+            "markup_defaults_form": markup_defaults_form,
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),
         }
@@ -153,15 +168,28 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
         except ValueError:
             pass
 
-    # Fall back to Google Geocoding.
+    # Try Google Geocoding.
     try:
         from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
         gateway = GoogleGeocodingGateway()
         result = gateway.geocode_place_name(address)
-        if result and result.get("results"):
-            loc = result["results"][0]["geometry"]["location"]
-            return JsonResponse({"lat": loc["lat"], "lng": loc["lng"]})
-    except (ValueError, KeyError):
-        logger.warning("Geocoding failed for address %r", address)
+        if result:
+            results = result.get("results", [])
+            if results:
+                loc = results[0]["geometry"]["location"]
+                return JsonResponse({"lat": loc["lat"], "lng": loc["lng"]})
+            logger.warning("Google geocoding returned no results for %r (status: %s)", address, result.get("status"))
+    except Exception:
+        logger.warning("Google geocoding unavailable for %r", address, exc_info=True)
+
+    # Fall back to Nominatim (OpenStreetMap) — no API key required.
+    try:
+        from geopy.geocoders import Nominatim
+        geolocator = Nominatim(user_agent="urbanlens-settings/1.0")
+        location = geolocator.geocode(address, timeout=5)
+        if location:
+            return JsonResponse({"lat": location.latitude, "lng": location.longitude})
+    except Exception:
+        logger.warning("Nominatim geocoding failed for %r", address, exc_info=True)
 
     return JsonResponse({"error": "Location not found."}, status=404)

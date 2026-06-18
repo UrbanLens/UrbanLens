@@ -23,9 +23,8 @@ from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.badges.model import Badge, KIND_TAG
-from urbanlens.dashboard.models.pin.model import Pin, PinStatus
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.tests.hypothesis.strategies import pin_status_subset
 
 _DB_SETTINGS = dict(
 	max_examples=30,
@@ -33,43 +32,6 @@ _DB_SETTINGS = dict(
 	suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
 )
 
-
-class FilterByCriteriaStatusTests(HypothesisTestCase):
-	"""status criterion: only pins with one of the given statuses are returned."""
-
-	def setUp(self) -> None:
-		super().setUp()
-		self.profile = baker.make("auth.User").profile
-		# One pin per status — covers all statuses exactly once.
-		self.pins_by_status: dict[str, Pin] = {}
-		for status in PinStatus.values:
-			self.pins_by_status[status] = baker.make(Pin, profile=self.profile, status=status)
-
-	def _base_qs(self):
-		return Pin.objects.filter(profile=self.profile)
-
-	@given(pin_status_subset)
-	@settings(**_DB_SETTINGS)
-	def test_soundness_only_matching_statuses_returned(self, statuses: list[str]) -> None:
-		"""Every pin in the result must have one of the requested statuses."""
-		result = self._base_qs().filter_by_criteria({"status": statuses})
-		for pin in result:
-			self.assertIn(pin.status, statuses, f"Pin {pin.pk} has unexpected status {pin.status!r}")
-
-	@given(pin_status_subset)
-	@settings(**_DB_SETTINGS)
-	def test_completeness_all_matching_pins_returned(self, statuses: list[str]) -> None:
-		"""Every pin whose status is in the list must appear in the result."""
-		result_ids = set(self._base_qs().filter_by_criteria({"status": statuses}).values_list("pk", flat=True))
-		for status in statuses:
-			expected_pin = self.pins_by_status[status]
-			self.assertIn(expected_pin.pk, result_ids, f"Pin with status {status!r} missing from result")
-
-	def test_empty_status_list_returns_all(self) -> None:
-		"""An empty (or absent) status criterion must not filter anything out."""
-		all_count = self._base_qs().count()
-		result = self._base_qs().filter_by_criteria({})
-		self.assertEqual(result.count(), all_count)
 
 
 class FilterByCriteriaHasVisitsTests(HypothesisTestCase):
@@ -281,19 +243,17 @@ class FilterByCriteriaIdempotencyTests(HypothesisTestCase):
 	def setUp(self) -> None:
 		super().setUp()
 		self.profile = baker.make("auth.User").profile
-		for status in PinStatus.values:
-			baker.make(Pin, profile=self.profile, status=status)
+		baker.make(Pin, profile=self.profile, _quantity=5)
 
 	def _base_qs(self):
 		return Pin.objects.filter(profile=self.profile)
 
 	@given(
-		statuses=pin_status_subset,
 		min_prio=st.integers(min_value=0, max_value=100),
 	)
 	@settings(**_DB_SETTINGS)
-	def test_double_application_same_result(self, statuses: list[str], min_prio: int) -> None:
-		criteria: dict[str, Any] = {"status": statuses, "min_priority": min_prio}
+	def test_double_application_same_result(self, min_prio: int) -> None:
+		criteria: dict[str, Any] = {"min_priority": min_prio}
 		first = set(self._base_qs().filter_by_criteria(criteria).values_list("pk", flat=True))
 		second = set(self._base_qs().filter_by_criteria(criteria).values_list("pk", flat=True))
 		self.assertEqual(first, second, "filter_by_criteria must be deterministic")
@@ -305,25 +265,11 @@ class FilterByCriteriaMonotonicityTests(HypothesisTestCase):
 	def setUp(self) -> None:
 		super().setUp()
 		self.profile = baker.make("auth.User").profile
-		for status in PinStatus.values:
-			baker.make(Pin, profile=self.profile, status=status, priority=50)
+		for priority_val in range(1, 6):
+			baker.make(Pin, profile=self.profile, priority=priority_val * 20)
 
 	def _base_qs(self):
 		return Pin.objects.filter(profile=self.profile)
-
-	@given(
-		tight_statuses=st.lists(st.sampled_from(list(PinStatus.values)), min_size=1, max_size=2, unique=True),
-		extra_status=st.sampled_from(list(PinStatus.values)),
-	)
-	@settings(**_DB_SETTINGS)
-	def test_adding_status_never_shrinks_result(self, tight_statuses: list[str], extra_status: str) -> None:
-		loose_statuses = list(set(tight_statuses) | {extra_status})
-		tight_ids = set(self._base_qs().filter_by_criteria({"status": tight_statuses}).values_list("pk", flat=True))
-		loose_ids = set(self._base_qs().filter_by_criteria({"status": loose_statuses}).values_list("pk", flat=True))
-		self.assertTrue(
-			tight_ids.issubset(loose_ids),
-			f"Adding status {extra_status!r} to {tight_statuses} produced a smaller result",
-		)
 
 	@given(
 		high_min=st.integers(min_value=26, max_value=100),

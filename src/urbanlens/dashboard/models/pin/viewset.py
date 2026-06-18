@@ -31,7 +31,7 @@ import logging
 from rest_framework import status, viewsets
 from rest_framework.response import Response
 
-from urbanlens.dashboard.models.pin.model import Pin, PinStatus
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.serializer import PinSerializer
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,6 @@ class PinViewSet(viewsets.ModelViewSet):
         serializer.save(
             user=self.request.user,
             profile=self.request.user.profile,
-            status=self.request.data.get("status", PinStatus.NOT_VISITED),
         )
 
     def update(self, request, *args, **kwargs):

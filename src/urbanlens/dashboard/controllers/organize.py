@@ -49,6 +49,12 @@ class OrganizeIndexView(LoginRequiredMixin, View):
             .with_customizations_for(profile)
             .with_pin_counts()
         )
+        statuses = (
+            Badge.objects.statuses()
+            .for_profile(profile)
+            .ordered()
+            .with_pin_counts()
+        )
         # Priority list: all tags visible to the user + all categories, sorted by order desc then name.
         priority_items = (
             Badge.objects.visible_to(profile)
@@ -64,6 +70,7 @@ class OrganizeIndexView(LoginRequiredMixin, View):
                 **_BASE_CTX,
                 "tags": tags,
                 "categories": categories,
+                "statuses": statuses,
                 "priority_items": priority_items,
                 "active_tab": tab,
                 "can_edit_global": can_edit_global,

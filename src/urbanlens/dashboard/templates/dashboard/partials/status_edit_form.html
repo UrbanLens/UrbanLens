@@ -1,0 +1,57 @@
+{% load dashboard_tags %}
+<form hx-post="{% url 'status.edit' badge.id %}" hx-target="#status-rows" hx-swap="innerHTML"
+      class="tag-form"
+      hx-on::after-request="if(event.detail.successful){ document.getElementById('status-edit-dialog').close(); toastr.success('Status updated.'); }">
+    {% csrf_token %}
+    <div class="tag-form-grid">
+        <div class="form-field">
+            <label class="form-label" for="edit-status-name-{{ badge.id }}">Status name</label>
+            {% if badge.is_protected %}
+            <input id="edit-status-name-{{ badge.id }}" type="text" class="form-input" value="{{ badge.name }}" disabled
+                   title="The Visited status name cannot be changed">
+            {% else %}
+            <input id="edit-status-name-{{ badge.id }}" name="name" type="text" class="form-input"
+                   value="{{ badge.name }}" required>
+            {% endif %}
+        </div>
+        <div class="form-field">
+            <label class="form-label" for="edit-status-order-{{ badge.id }}">Order</label>
+            <input id="edit-status-order-{{ badge.id }}" name="order" type="number" class="form-input"
+                   value="{{ badge.order }}">
+        </div>
+    </div>
+    <div class="form-field">
+        <label class="form-label" for="edit-status-desc-{{ badge.id }}">Description (optional)</label>
+        <textarea id="edit-status-desc-{{ badge.id }}" name="description" class="form-input" rows="2">{{ badge.description|default:'' }}</textarea>
+    </div>
+    <div class="tag-icon-color-row">
+        <div class="form-field">
+            <label class="form-label">Icon</label>
+            <div class="icon-picker-wrap">
+                {% with picker_id="edit-status"|add:badge.id|stringformat:"s" current_icon=badge.icon|default:"" field_name="icon" %}
+                {% include 'dashboard/partials/_icon_picker.html' %}
+                {% endwith %}
+            </div>
+        </div>
+        <div class="form-field">
+            <label class="form-label">Color</label>
+            <div class="color-picker" id="edit-status-color-picker-{{ badge.id }}">
+                <input type="hidden" name="color" id="edit-status-color-value-{{ badge.id }}"
+                       value="{{ badge.color|default:'' }}">
+                {% for hex, label in color_choices %}
+                <button type="button" class="color-swatch{% if badge.color == hex %} selected{% endif %}"
+                        data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
+                        onclick="pickColor('edit-status-color-picker-{{ badge.id }}','edit-status-color-value-{{ badge.id }}','{{ hex }}',this)"></button>
+                {% endfor %}
+                <button type="button" class="color-swatch color-clear{% if not badge.color %} selected{% endif %}" title="No color"
+                        onclick="pickColor('edit-status-color-picker-{{ badge.id }}','edit-status-color-value-{{ badge.id }}','',this)">
+                    <i class="material-icons" style="font-size:1rem;">block</i>
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="tag-form-actions">
+        <button type="submit" class="btn-primary">Save</button>
+        <button type="button" class="btn-ghost" onclick="document.getElementById('status-edit-dialog').close()">Cancel</button>
+    </div>
+</form>

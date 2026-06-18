@@ -23,13 +23,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class PinStatus(TextChoices):
-    NOT_VISITED = "not visited"
-    VISITED = "visited"
-    WISH_TO_VISIT = "wish to visit"
-    DEMOLISHED = "demolished"
-
-
 class PinType(TextChoices):
     LOCATION_MARKER = "location", "Location"
     BUILDING = "building", "Building"
@@ -83,7 +76,6 @@ class Pin(abstract.Model):
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     custom_icon = ImageField(upload_to="pin_custom_icons/", null=True, blank=True)
-    status = CharField(choices=PinStatus.choices, default=PinStatus.WISH_TO_VISIT)
     pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
     point = PointField(geography=True, default=Point(0, 0))
 
@@ -113,9 +105,22 @@ class Pin(abstract.Model):
         related_name="pins",
         limit_choices_to={"kind": "tag"},
     )
+    statuses = ManyToManyField(
+        "dashboard.Badge",
+        blank=True,
+        related_name="status_pins",
+        limit_choices_to={"kind": "status"},
+    )
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
     # when the user explicitly picks a color in the dialog.
     color = CharField(max_length=20, null=True, blank=True)
+
+    # Detail-pin circle styling: background fill and border around the icon.
+    # Opacity stored as 0–100 integer (percent).
+    detail_bg_color     = CharField(max_length=20, null=True, blank=True)
+    detail_bg_opacity   = IntegerField(default=80)
+    detail_border_color = CharField(max_length=20, null=True, blank=True)
+    detail_border_opacity = IntegerField(default=100)
 
     # Security indicators: how prevalent each security feature is, per this user's observation.
     fences = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
@@ -362,12 +367,13 @@ class Pin(abstract.Model):
     # ------------------------------------------------------------------
 
     def __str__(self) -> str:
+        status_labels = ", ".join(s.name for s in self.statuses.all()) or "None"
         return (
             f"Name: {self.effective_name}\n"
             f"Description: {self.description or ''}\n"
             f"Priority: {self.priority}\n"
             f"Last Visited: {self.last_visited}\n"
-            f"Status: {PinStatus(self.status).label}"
+            f"Status: {status_labels}"
         )
 
     def to_json(self) -> dict[str, Any]:
@@ -385,7 +391,7 @@ class Pin(abstract.Model):
             "last_visited": self.last_visited.isoformat() if self.last_visited else "never",
             "latitude": self.effective_latitude,
             "longitude": self.effective_longitude,
-            "status": PinStatus.get_name(self.status) or PinStatus.NOT_VISITED.label,
+            "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.statuses.all()],
             "profile": self.profile.id,
             "rating": self.rating,
             "color": self.effective_color,
@@ -403,6 +409,10 @@ class Pin(abstract.Model):
             "longitude": self.effective_longitude,
             "icon": self.icon or self.effective_icon,
             "color": self.color or self.effective_color,
+            "bg_color": self.detail_bg_color or "",
+            "bg_opacity": self.detail_bg_opacity,
+            "border_color": self.detail_border_color or "",
+            "border_opacity": self.detail_border_opacity,
         }
 
     def save(self, *args, **kwargs) -> None:

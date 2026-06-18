@@ -14,12 +14,11 @@ from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.pin.model import Pin, PinStatus
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.tests.hypothesis.strategies import (
 	lat_float,
 	lon_float,
 	nonempty_name,
-	pin_status,
 	priority,
 	reasonable_datetime,
 	two_distant_coord_pairs,
@@ -260,28 +259,6 @@ class PinQuerySetByNameTests(HypothesisTestCase):
 		qs = Pin.objects.filter(profile=self.profile).by_name(name.upper())
 		self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 
-
-# ── PinQuerySet status filter ─────────────────────────────────────────────────
-
-class PinQuerySetStatusTests(HypothesisTestCase):
-	"""filter(status=...) returns pins with the expected status only."""
-
-	def setUp(self) -> None:
-		super().setUp()
-		self.profile = baker.make("auth.User").profile
-
-	@given(pin_status)
-	@settings(**_DB_SETTINGS)
-	def test_filter_by_status_returns_only_matching_pins(self, status: str) -> None:
-		baker.make(Pin, profile=self.profile, status=status)
-		# Create at least one pin with a different status to confirm exclusion works.
-		other_statuses = [s for s in PinStatus.values if s != status]
-		if other_statuses:
-			baker.make(Pin, profile=self.profile, status=other_statuses[0])
-		qs = Pin.objects.filter(profile=self.profile, status=status)
-		self.assertTrue(qs.exists())
-		# No other status must appear in the result.
-		self.assertFalse(qs.exclude(status=status).exists())
 
 
 # ── PinQuerySet priority filter ───────────────────────────────────────────────

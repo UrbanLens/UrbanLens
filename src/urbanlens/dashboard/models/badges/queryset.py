@@ -43,6 +43,10 @@ class BadgeQuerySet(abstract.QuerySet):
         """Return only items with kind='category'."""
         return self.filter(kind="category")
 
+    def statuses(self) -> Self:
+        """Return only items with kind='status'."""
+        return self.filter(kind="status")
+
     def with_customizations_for(self, profile: Profile | int) -> Self:
         """Prefetch this user's BadgeCustomizations into _user_customizations attr."""
         from urbanlens.dashboard.models.badges.customization import BadgeCustomization
@@ -60,9 +64,10 @@ class BadgeQuerySet(abstract.QuerySet):
         """Annotate pin_count / location_count and prefetch children (with their own pin_count) and parents.
 
         Replaces heavy prefetch_related('pins', 'categorized_pins', ...) with lightweight COUNT annotations.
+        pin_count covers both tag pins (related_name="pins") and status pins (related_name="status_pins").
         """
         return self.annotate(
-            pin_count=Count("pins", distinct=True),
+            pin_count=Count("pins", distinct=True) + Count("status_pins", distinct=True),
             location_count=Count("categorized_locations", distinct=True),
         ).prefetch_related(
             Prefetch(

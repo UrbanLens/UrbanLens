@@ -274,6 +274,13 @@ class SiteSettings(abstract.Model):
         help_text="Maximum number of members allowed per trip.",
     )
 
+    # Chernobyl Exclusion Zone ≈ 2,600 km².  Used as a sanity cap on how large
+    # a user-drawn bounding box for a location can be.
+    max_bbox_area_km2 = FloatField(
+        default=2600.0,
+        help_text="Maximum allowed area (km²) for a location bounding box. Default ≈ Chernobyl Exclusion Zone.",
+    )
+
     def __str__(self) -> str:
         return "Site Settings"
 

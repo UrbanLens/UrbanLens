@@ -11,11 +11,10 @@ from hypothesis import strategies as st
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel, TextChoices
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
-from urbanlens.dashboard.models.pin.model import PinStatus, PinType
+from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.tests.hypothesis.strategies import (
 	friendship_status,
 	invalid_security_level,
-	pin_status,
 	security_level,
 )
 
@@ -105,31 +104,6 @@ class TextChoicesGetNameTests(unittest.TestCase):
 		member = SecurityLevel[name]  # type: ignore[misc]
 		self.assertEqual(member.value, value)
 
-
-class PinStatusTests(unittest.TestCase):
-	"""PinStatus covers the visited-state vocabulary."""
-
-	@given(pin_status)
-	@settings(max_examples=200)
-	def test_all_values_are_valid(self, value: str) -> None:
-		self.assertTrue(PinStatus.valid(value))
-
-	@given(pin_status)
-	@settings(max_examples=200)
-	def test_valid_case_insensitive(self, value: str) -> None:
-		self.assertTrue(PinStatus.valid(value.upper()))
-		self.assertTrue(PinStatus.valid(value.lower()))
-
-	@given(st.sampled_from(list(PinStatus)))
-	@settings(max_examples=200)
-	def test_every_member_has_a_label(self, member: PinStatus) -> None:
-		"""Every member of PinStatus must have a non-empty human-readable label."""
-		self.assertTrue(member.label, f"{member!r} has no label")
-
-	def test_known_values_present(self) -> None:
-		"""Smoke-test: the four expected statuses are all present."""
-		expected = {"not visited", "visited", "wish to visit", "demolished"}
-		self.assertEqual(set(PinStatus.values), expected)
 
 
 class PinTypeTests(unittest.TestCase):

@@ -137,6 +137,15 @@
                         <button type="button" class="add-detail-item" onclick="startTextPlacement()">
                             <i class="material-icons">title</i> Text
                         </button>
+                        <button type="button" class="add-detail-item" onclick="startShapeDraw('square')">
+                            <i class="material-icons">crop_square</i> Square
+                        </button>
+                        <button type="button" class="add-detail-item" onclick="startShapeDraw('circle')">
+                            <i class="material-icons">circle</i> Circle
+                        </button>
+                        <button type="button" class="add-detail-item" onclick="startShapeDraw('polygon')">
+                            <i class="material-icons">format_shapes</i> Polygon
+                        </button>
                     </div>
                     <button type="button" class="map-overlay-btn map-overlay-btn--add-detail"
                             id="add-detail-btn" onclick="toggleAddDetailMenu()">
@@ -146,23 +155,26 @@
                 </div>
             </div>
 
-            {# ── Line / Arrow markup mini-form (shown after drawing) ── #}
+            {# ── Line / Arrow drawing hint panel (shown while drawing) ── #}
             <div id="markup-form-panel" class="markup-form-panel" style="display:none">
                 <div class="markup-form-header">
-                    <span id="markup-form-title">Add Line</span>
+                    <span id="markup-form-title">Draw Arrow</span>
                     <button type="button" class="btn-icon-sm" onclick="cancelMarkupDraw()">
                         <i class="material-icons">close</i>
                     </button>
                 </div>
                 <div class="markup-form-body">
-                    <label class="markup-form-label-row">
-                        Label <small>(optional)</small>
-                        <input type="text" id="markup-form-label" placeholder="e.g. Route in"
-                               class="markup-form-input">
-                    </label>
-                    <label class="markup-form-label-row">Color
+                    <p id="markup-draw-hint" class="markup-place-hint">
+                        <i class="material-icons">touch_app</i>
+                        <span id="markup-hint-text">Drag for a 2-point arrow, or click for multi-point</span>
+                    </p>
+                    <label class="markup-form-label-row">Fill Color
                         <div class="markup-color-swatches" id="markup-color-swatches"></div>
-                        <input type="hidden" id="markup-form-color" value="#e53e3e">
+                        <input type="hidden" id="markup-form-color" value="{{ markup_fill_color }}">
+                    </label>
+                    <label class="markup-form-label-row">Border Color
+                        <div class="markup-color-swatches" id="markup-border-swatches"></div>
+                        <input type="hidden" id="markup-form-border" value="{{ markup_border_color }}">
                     </label>
                     <label class="markup-form-label-row">
                         Width&nbsp;<span id="markup-width-label">3</span>px
@@ -170,11 +182,51 @@
                                oninput="document.getElementById('markup-width-label').textContent=this.value">
                     </label>
                     <div class="form-actions">
-                        <button type="button" class="submit-button" onclick="saveLineMarkup()">Save</button>
-                        <button type="button" class="btn-ghost" onclick="cancelMarkupDraw()">Cancel</button>
+                        <button type="button" class="btn-ghost" onclick="_cancelCurrentDraw()">Cancel</button>
                     </div>
                 </div>
             </div>
+
+            {# ── Markup edit dialog (opens after drawing or clicking a saved item) ── #}
+            <dialog id="markup-edit-dialog" class="trip-create-dialog">
+                {% include "dashboard/partials/_dialog_header.html" with title="Edit Annotation" %}
+                <div class="markup-form-body" style="padding:1rem 1.5rem 1.25rem">
+                    <label class="markup-form-label-row">
+                        Label <small>(optional)</small>
+                        <input type="text" id="markup-edit-label" placeholder="e.g. Route in"
+                               class="markup-form-input">
+                    </label>
+                    <label class="markup-form-label-row">
+                        <span id="markup-edit-color-label">Fill Color</span>
+                        <div class="markup-color-swatches" id="markup-edit-color-swatches"></div>
+                        <input type="hidden" id="markup-edit-color" value="#e53e3e">
+                    </label>
+                    <label class="markup-form-label-row">
+                        <span id="markup-edit-border-label">Border Color</span>
+                        <div class="markup-color-swatches" id="markup-edit-border-swatches"></div>
+                        <input type="hidden" id="markup-edit-border" value="">
+                    </label>
+                    <label class="markup-form-label-row">
+                        <span id="markup-edit-width-label-text">Width</span>&nbsp;<span id="markup-edit-width-label">3</span>px
+                        <input type="range" id="markup-edit-width" min="1" max="48" value="3"
+                               oninput="document.getElementById('markup-edit-width-label').textContent=this.value;_livePreviewTextEdit()">
+                    </label>
+                    <label class="markup-form-label-row">
+                        <span id="markup-edit-fill-opacity-label-text">Fill Opacity</span>&nbsp;<span id="markup-edit-fill-opacity-val">87</span>%
+                        <input type="range" id="markup-edit-fill-opacity" min="0" max="100" value="87"
+                               oninput="document.getElementById('markup-edit-fill-opacity-val').textContent=this.value">
+                    </label>
+                    <label class="markup-form-label-row" id="markup-edit-border-opacity-row">
+                        Border Opacity&nbsp;<span id="markup-edit-border-opacity-val">100</span>%
+                        <input type="range" id="markup-edit-border-opacity" min="0" max="100" value="100"
+                               oninput="document.getElementById('markup-edit-border-opacity-val').textContent=this.value">
+                    </label>
+                    <div class="form-actions" style="margin-top:.5rem">
+                        <button type="button" class="submit-button" onclick="saveMarkupEdit()">Save</button>
+                        <button type="button" class="btn-ghost" onclick="closeMarkupEditDialog()">Cancel</button>
+                    </div>
+                </div>
+            </dialog>
 
             {# ── Text placement form ── #}
             <div id="text-place-panel" class="markup-form-panel" style="display:none">
@@ -185,28 +237,29 @@
                     </button>
                 </div>
                 <div class="markup-form-body">
+                    <p class="markup-place-hint">
+                        <i class="material-icons">touch_app</i>
+                        Click or drag on the map to place
+                    </p>
                     <label class="markup-form-label-row">
-                        Text <span class="required">*</span>
+                        Text <small>(optional — type before or after placing)</small>
                         <input type="text" id="text-form-label" placeholder="Label text"
                                class="markup-form-input">
                     </label>
-                    <label class="markup-form-label-row">Color
+                    <label class="markup-form-label-row">Text Color
                         <div class="markup-color-swatches" id="text-color-swatches"></div>
-                        <input type="hidden" id="text-form-color" value="#1d4ed8">
+                        <input type="hidden" id="text-form-color" value="{{ markup_fill_color }}">
                     </label>
-                    <label class="markup-form-label-row">Size
-                        <select id="text-form-size" class="markup-form-input">
-                            <option value="12">Small (12px)</option>
-                            <option value="16" selected>Medium (16px)</option>
-                            <option value="22">Large (22px)</option>
-                        </select>
+                    <label class="markup-form-label-row">Background
+                        <div class="markup-color-swatches" id="text-bg-swatches"></div>
+                        <input type="hidden" id="text-form-bg" value="{{ markup_border_color }}">
                     </label>
-                    <p id="text-place-hint" class="markup-place-hint" style="display:none">
-                        <i class="material-icons">touch_app</i> Click on the map to place
-                    </p>
+                    <label class="markup-form-label-row">
+                        Size&nbsp;<span id="text-size-label">16</span>px
+                        <input type="range" id="text-form-size" min="10" max="48" value="16"
+                               oninput="document.getElementById('text-size-label').textContent=this.value">
+                    </label>
                     <div class="form-actions">
-                        <button type="button" class="submit-button" id="text-place-btn"
-                                onclick="activateTextPlacement()">Place on Map</button>
                         <button type="button" class="btn-ghost" onclick="cancelTextPlacement()">Cancel</button>
                     </div>
                 </div>
@@ -314,23 +367,13 @@
                       placeholder="Your personal notes about this location…">{{ pin.description|default:'' }}</textarea>
         </div>
 
-        <div class="form-row form-row--two-col">
-            <div>
-                <label for="pe-status">Status</label>
-                <select name="status" id="pe-status">
-                    {% for value, label in pin_status_choices %}
-                    <option value="{{ value }}"{% if pin.status == value %} selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div>
-                <label for="pe-pin-type">Pin Type</label>
-                <select name="pin_type" id="pe-pin-type">
-                    {% for value, label in pin_type_choices %}
-                    <option value="{{ value }}"{% if pin.pin_type == value %} selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+        <div class="form-row">
+            <label for="pe-pin-type">Pin Type</label>
+            <select name="pin_type" id="pe-pin-type">
+                {% for value, label in pin_type_choices %}
+                <option value="{{ value }}"{% if pin.pin_type == value %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
         </div>
 
         <div class="form-row form-row--two-col">
@@ -443,6 +486,28 @@
             <input type="hidden" id="dp-color" name="color" value="">
         </div>
         <div class="form-row">
+            <label>Background Color <span class="form-optional">(optional)</span></label>
+            <div class="dp-color-picker dp-circle-swatches" id="dp-add-bg-swatches"></div>
+            <div class="dp-opacity-row">
+                <span class="dp-opacity-label">Opacity</span>
+                <input type="range" id="dp-add-bg-opacity" min="0" max="100" value="80">
+                <span id="dp-add-bg-opacity-val" class="dp-opacity-val">80</span><span class="cop-pct">%</span>
+            </div>
+            <input type="hidden" id="dp-bg-color" name="bg_color" value="">
+            <input type="hidden" id="dp-bg-opacity" name="bg_opacity" value="80">
+        </div>
+        <div class="form-row">
+            <label>Border Color <span class="form-optional">(optional)</span></label>
+            <div class="dp-color-picker dp-circle-swatches" id="dp-add-border-swatches"></div>
+            <div class="dp-opacity-row">
+                <span class="dp-opacity-label">Opacity</span>
+                <input type="range" id="dp-add-border-opacity" min="0" max="100" value="100">
+                <span id="dp-add-border-opacity-val" class="dp-opacity-val">100</span><span class="cop-pct">%</span>
+            </div>
+            <input type="hidden" id="dp-border-color" name="border_color" value="">
+            <input type="hidden" id="dp-border-opacity" name="border_opacity" value="100">
+        </div>
+        <div class="form-row">
             <label for="dp-name">Name <span class="form-optional">(optional)</span></label>
             <input type="text" id="dp-name" name="name" placeholder="e.g. Main Entrance">
         </div>
@@ -463,6 +528,82 @@
         </div>
     </form>
     </div>{# /detail-pin-add-body #}
+</dialog>
+
+{# ── Edit detail-pin dialog ──────────────────────────────────────────────── #}
+<dialog id="detail-pin-edit-dialog" class="detail-pin-add-dialog">
+    {% include "dashboard/partials/_dialog_header.html" with title="Edit Detail Pin" %}
+    <div class="detail-pin-add-body">
+        <form id="detail-pin-edit-form" class="detail-pin-add-form" novalidate>
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="dp-edit-type">Type</label>
+                <select id="dp-edit-type" name="pin_type">
+                    {% for value, label in pin_type_choices %}
+                    {% if value != "location" %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-row">
+                <label>Icon <span class="form-optional">(optional)</span></label>
+                <div class="dp-icon-picker" id="dp-edit-icon-picker">
+                    {% for icon_val, icon_label in detail_pin_icon_choices %}
+                    <button type="button" class="dp-icon-btn dp-edit-icon-btn" data-icon="{{ icon_val }}" title="{{ icon_label }}">
+                        <i class="material-icons">{{ icon_val }}</i>
+                    </button>
+                    {% endfor %}
+                </div>
+                <input type="hidden" id="dp-edit-icon" name="icon" value="">
+            </div>
+            <div class="form-row">
+                <label>Icon Color <span class="form-optional">(optional)</span></label>
+                <div class="dp-color-picker" id="dp-edit-color-picker">
+                    {% for color_hex, color_name in color_choices %}
+                    <button type="button" class="dp-color-swatch dp-edit-color-swatch" data-color="{{ color_hex }}"
+                            style="background:{{ color_hex }}" title="{{ color_name }}"></button>
+                    {% endfor %}
+                </div>
+                <input type="hidden" id="dp-edit-color" name="color" value="">
+            </div>
+            <div class="form-row">
+                <label>Background Color <span class="form-optional">(optional)</span></label>
+                <div class="dp-color-picker dp-circle-swatches" id="dp-edit-bg-swatches"></div>
+                <div class="dp-opacity-row">
+                    <span class="dp-opacity-label">Opacity</span>
+                    <input type="range" id="dp-edit-bg-opacity" min="0" max="100" value="80">
+                    <span id="dp-edit-bg-opacity-val" class="dp-opacity-val">80</span><span class="cop-pct">%</span>
+                </div>
+                <input type="hidden" id="dp-edit-bg-color" name="bg_color" value="">
+                <input type="hidden" id="dp-edit-bg-opacity-val-hidden" name="bg_opacity" value="80">
+            </div>
+            <div class="form-row">
+                <label>Border Color <span class="form-optional">(optional)</span></label>
+                <div class="dp-color-picker dp-circle-swatches" id="dp-edit-border-swatches"></div>
+                <div class="dp-opacity-row">
+                    <span class="dp-opacity-label">Opacity</span>
+                    <input type="range" id="dp-edit-border-opacity" min="0" max="100" value="100">
+                    <span id="dp-edit-border-opacity-val" class="dp-opacity-val">100</span><span class="cop-pct">%</span>
+                </div>
+                <input type="hidden" id="dp-edit-border-color" name="border_color" value="">
+                <input type="hidden" id="dp-edit-border-opacity-val-hidden" name="border_opacity" value="100">
+            </div>
+            <div class="form-row">
+                <label for="dp-edit-name">Name <span class="form-optional">(optional)</span></label>
+                <input type="text" id="dp-edit-name" name="name" placeholder="e.g. Main Entrance">
+            </div>
+            <div class="form-row">
+                <label for="dp-edit-description">Notes <span class="form-optional">(optional)</span></label>
+                <textarea id="dp-edit-description" name="description" rows="2"
+                          placeholder="Any useful details…"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="submit-button">Save Changes</button>
+                <button type="button" class="btn-ghost" onclick="document.getElementById('detail-pin-edit-dialog').close()">Cancel</button>
+            </div>
+        </form>
+    </div>
 </dialog>
 {% endblock %}
 
@@ -566,19 +707,38 @@
     let _detailPins = []; // { uuid, name, pin_type, icon, color, latitude, longitude, marker }
     let _highlightedDpUuid = null;
 
-    function _detailIcon(pinType, customIcon, customColor, highlighted) {
-        const color = customColor || _detailPinColors[pinType] || '#2563eb';
-        const icon  = customIcon  || _detailPinIcons[pinType]  || 'place';
-        const size  = highlighted ? 32 : 24;
-        const ring  = highlighted
+    function _hexToRgb(hex) {
+        const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+        return `${r},${g},${b}`;
+    }
+
+    function _detailIcon(dp, highlighted) {
+        const pinType = dp.pin_type || 'location';
+        const color   = dp.color || _detailPinColors[pinType] || '#2563eb';
+        const icon    = dp.icon  || _detailPinIcons[pinType]  || 'place';
+        const bgColor = dp.bg_color || null;
+        const bgOp    = bgColor ? ((dp.bg_opacity != null ? dp.bg_opacity : 80) / 100) : 0;
+        const bdColor = dp.border_color || null;
+        const bdOp    = bdColor ? ((dp.border_opacity != null ? dp.border_opacity : 100) / 100) : 0;
+
+        const hasCircle = !!(bgColor || bdColor);
+        const size      = highlighted ? 32 : 24;
+        const pad       = hasCircle ? 5 : 0;
+        const total     = size + pad * 2;
+
+        const bgStyle  = bgColor ? `background:rgba(${_hexToRgb(bgColor)},${bgOp});` : '';
+        const bdStyle  = bdColor ? `border:2px solid rgba(${_hexToRgb(bdColor)},${bdOp});` : '';
+        const ring     = highlighted
             ? `<span style="position:absolute;inset:-5px;border:2.5px solid ${color};border-radius:50%;opacity:.55;pointer-events:none;"></span>`
             : '';
+
         return L.divIcon({
             className: '',
-            html: `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;">${ring}<span class="material-icons detail-map-icon" style="color:${color};font-size:${size}px;line-height:1;">${icon}</span></span>`,
-            iconSize: [size, size],
-            iconAnchor: [size / 2, size],
-            popupAnchor: [0, -size - 2],
+            html: `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;${bgStyle}${bdStyle}padding:${pad}px;">${ring}<span class="material-icons detail-map-icon" style="color:${color};font-size:${size}px;line-height:1;">${icon}</span></span>`,
+            iconSize: [total, total],
+            iconAnchor: [total / 2, total],
+            popupAnchor: [0, -total - 2],
+            tooltipAnchor: [0, -total / 2],
         });
     }
 
@@ -587,7 +747,7 @@
         _highlightedDpUuid = uuid;
         const dp = _detailPins.find(d => d.uuid === uuid);
         if (!dp) return;
-        dp.marker.setIcon(_detailIcon(dp.pin_type, dp.icon, dp.color, true));
+        dp.marker.setIcon(_detailIcon(dp, true));
         map.panTo(dp.marker.getLatLng());
         document.querySelectorAll('.detail-pin-list-item').forEach(li => {
             li.classList.toggle('is-highlighted', li.dataset.uuid === uuid);
@@ -597,7 +757,7 @@
     function _clearDetailPinHighlight() {
         if (_highlightedDpUuid) {
             const dp = _detailPins.find(d => d.uuid === _highlightedDpUuid);
-            if (dp) dp.marker.setIcon(_detailIcon(dp.pin_type, dp.icon, dp.color, false));
+            if (dp) dp.marker.setIcon(_detailIcon(dp, false));
             _highlightedDpUuid = null;
         }
         document.querySelectorAll('.detail-pin-list-item').forEach(li => li.classList.remove('is-highlighted'));
@@ -633,6 +793,7 @@
             li.addEventListener('click', e => {
                 if (e.target.closest('.detail-pin-list-item-delete')) return;
                 _highlightDetailPin(dp.uuid);
+                openDetailPinEditDialog(dp);
             });
             li.querySelector('.detail-pin-list-item-delete').addEventListener('click', async e => {
                 e.stopPropagation();
@@ -649,7 +810,7 @@
         });
 
         // ── Markup items ───────────────────────────────────────────────────
-        const _markupIcon = { line: 'show_chart', arrow: 'arrow_forward', text: 'title' };
+        const _markupIcon = { line: 'show_chart', arrow: 'arrow_forward', text: 'title', square: 'crop_square', circle: 'circle', polygon: 'format_shapes' };
         _markupItems.forEach(item => {
             const li = document.createElement('li');
             li.className = 'detail-pin-list-item';
@@ -664,7 +825,7 @@
                 </button>`;
             li.addEventListener('click', e => {
                 if (e.target.closest('.detail-pin-list-item-delete')) return;
-                _highlightMarkupItem(item);
+                openMarkupEditDialog(item);
             });
             li.querySelector('.detail-pin-list-item-delete').addEventListener('click', async e => {
                 e.stopPropagation();
@@ -702,14 +863,18 @@
                     const entry = {
                         uuid: dp.uuid, name: dp.name, pin_type: dp.pin_type,
                         icon: dp.icon, color: dp.color,
+                        bg_color: dp.bg_color || '', bg_opacity: dp.bg_opacity,
+                        border_color: dp.border_color || '', border_opacity: dp.border_opacity,
+                        description: dp.description || '',
                         latitude: dp.latitude, longitude: dp.longitude,
                         marker: null,
                     };
                     const marker = L.marker([dp.latitude, dp.longitude], {
-                        icon: _detailIcon(dp.pin_type, dp.icon, dp.color),
+                        icon: _detailIcon(entry),
                         draggable: true,
                     });
-                    marker.bindPopup(`<strong>${dp.name}</strong>${dp.description ? '<br>' + dp.description : ''}`);
+                    if (dp.name) marker.bindTooltip(dp.name, { permanent: false, direction: 'top', className: 'detail-pin-tooltip' });
+                    marker.on('click', () => openDetailPinEditDialog(entry));
                     marker.on('dragend', function () {
                         const pos = marker.getLatLng();
                         fetch(_dpEditBase + dp.uuid + '/', {
@@ -739,6 +904,10 @@
     const _markupPostUrl  = "{% url 'pin.markup' pin.uuid %}";
     const _markupEditBase = "{% url 'pin.markup.edit' pin.uuid '00000000-0000-0000-0000-000000000000' %}"
         .replace('00000000-0000-0000-0000-000000000000/', '');
+
+    // Profile defaults (0–100 percent, converted to 0–1 for Leaflet)
+    const _markupDefaultFillOpacity   = {{ markup_fill_opacity }}   / 100;
+    const _markupDefaultBorderOpacity = {{ markup_border_opacity }} / 100;
 
     let _markupItems        = [];
     let _markupDrawType      = null;
@@ -770,38 +939,140 @@
             container.appendChild(btn);
         });
     }
+    // Border/background swatches include a "None" sentinel (empty string = transparent/no border)
+    function _buildBorderSwatches(containerId, inputId) {
+        const container = document.getElementById(containerId);
+        const input     = document.getElementById(inputId);
+        container.innerHTML = '';
+        // "None" option
+        const noneBtn = document.createElement('button');
+        noneBtn.type = 'button';
+        noneBtn.title = 'None';
+        noneBtn.className = 'markup-color-swatch markup-color-swatch--none' + (input.value === '' || input.value === 'none' ? ' markup-color-swatch--active' : '');
+        noneBtn.style.cssText = 'background:transparent;border:1px solid #cbd5e1;position:relative;';
+        noneBtn.innerHTML = '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#9ca3af">∅</span>';
+        noneBtn.addEventListener('click', () => {
+            container.querySelectorAll('.markup-color-swatch').forEach(b => b.classList.remove('markup-color-swatch--active'));
+            noneBtn.classList.add('markup-color-swatch--active');
+            input.value = 'none';
+        });
+        container.appendChild(noneBtn);
+        _markupPalette.forEach(color => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'markup-color-swatch' + (color === input.value ? ' markup-color-swatch--active' : '');
+            btn.style.cssText = `background:${color};${color === '#f8fafc' ? 'border:1px solid #cbd5e1;' : ''}`;
+            btn.addEventListener('click', () => {
+                container.querySelectorAll('.markup-color-swatch').forEach(b => b.classList.remove('markup-color-swatch--active'));
+                btn.classList.add('markup-color-swatch--active');
+                input.value = color;
+            });
+            container.appendChild(btn);
+        });
+    }
+
     _buildColorSwatches('markup-color-swatches', 'markup-form-color');
+    _buildBorderSwatches('markup-border-swatches', 'markup-form-border');
     _buildColorSwatches('text-color-swatches', 'text-form-color');
+    _buildBorderSwatches('text-bg-swatches', 'text-form-bg');
     document.getElementById('markup-form-width').addEventListener('input', () => _updateMarkupPreview && _updateMarkupPreview());
 
     function _markupBearing(from, to) {
         return Math.atan2(to.lng - from.lng, to.lat - from.lat) * (180 / Math.PI);
     }
 
+    function _arrowheadSize() {
+        const z = map.getZoom();
+        if (z >= 16) return 28;
+        if (z >= 13) return 20;
+        if (z >= 10) return 14;
+        return 8;
+    }
+
+    function _textFontSize(item) {
+        // Scale text proportionally to zoom, halving/doubling every 2 zoom levels
+        const base = item.stroke_width || 16;
+        const z    = map.getZoom();
+        const scale = Math.pow(2, (z - 16) * 0.5);
+        return Math.max(8, Math.min(72, Math.round(base * scale)));
+    }
+
+    function _textBackground(item) {
+        if (item.border_color === 'none')  return 'transparent';
+        if (item.border_color)             return item.border_color;
+        return 'rgba(255,255,255,0.94)';   // default
+    }
+
+    function _textLabelHtml(item, overrideLabel) {
+        const label = overrideLabel !== undefined ? overrideLabel : (item.label || '');
+        const sz    = _textFontSize(item);
+        const bg    = _textBackground(item);
+        return `<span class="map-text-label" style="color:${item.color};font-size:${sz}px;background:${bg}">${label || '&nbsp;'}</span>`;
+    }
+
+    function _shapeOptions(item) {
+        const bc = item.border_color;
+        const strokeColor = bc && bc !== 'none' ? bc : 'white';
+        const hasBorder   = bc && bc !== 'none';
+        const fillOp   = (item.fill_opacity   != null ? item.fill_opacity   : 87) / 100;
+        const borderOp = (item.border_opacity != null ? item.border_opacity : 100) / 100;
+        return {
+            color: strokeColor,
+            fillColor: item.color,
+            fillOpacity: fillOp,
+            weight: hasBorder ? (item.stroke_width || 2) : 0,
+            opacity: borderOp,
+        };
+    }
+
     function _renderMarkupItem(item) {
         const layers = [];
-        if (item.markup_type === 'text') {
+        const type   = item.markup_type;
+
+        if (type === 'text') {
             const c = item.geometry.coordinates;
-            layers.push(L.marker([c[1], c[0]], {
-                icon: L.divIcon({
-                    className: '',
-                    html: `<span class="map-text-label" style="color:${item.color};font-size:${item.stroke_width || 16}px">${item.label}</span>`,
-                    iconAnchor: [0, 0],
-                }),
-            }));
-        } else {
+            const textMarker = L.marker([c[1], c[0]], {
+                icon: L.divIcon({ className: '', html: _textLabelHtml(item), iconAnchor: [0, 0] }),
+            });
+            layers.push(textMarker);
+            item._textMarker = textMarker;
+
+        } else if (type === 'line' || type === 'arrow') {
             const latlngs = item.geometry.coordinates.map(c => L.latLng(c[1], c[0]));
-            layers.push(L.polyline(latlngs, { color: item.color, weight: item.stroke_width || 3 }));
-            if (item.markup_type === 'arrow' && latlngs.length >= 2) {
-                const deg = _markupBearing(latlngs[latlngs.length - 2], latlngs[latlngs.length - 1]);
-                layers.push(L.marker(latlngs[latlngs.length - 1], {
-                    icon: L.divIcon({
-                        className: '',
-                        html: _arrowheadSvg(item.color, deg),
-                        iconSize: [28, 28], iconAnchor: [14, 14],
-                    }),
+            const w       = item.stroke_width || 3;
+            const isArrow = type === 'arrow';
+            const fillOp   = (item.fill_opacity   != null ? item.fill_opacity   : 87)  / 100;
+            const borderOp = (item.border_opacity != null ? item.border_opacity : 100) / 100;
+            const outlineColor = item.border_color && item.border_color !== 'none' ? item.border_color : 'white';
+
+            if (isArrow) {
+                layers.push(L.polyline(latlngs, {
+                    color: outlineColor, weight: w + 4, opacity: borderOp * 0.75, interactive: false,
+                }));
+            } else if (item.border_color && item.border_color !== 'none') {
+                layers.push(L.polyline(latlngs, {
+                    color: item.border_color, weight: w + 3, opacity: borderOp * 0.7, interactive: false,
                 }));
             }
+
+            layers.push(L.polyline(latlngs, { color: item.color, weight: isArrow ? w + 2 : w, opacity: fillOp }));
+
+            if (isArrow && latlngs.length >= 2) {
+                const deg = _markupBearing(latlngs[latlngs.length - 2], latlngs[latlngs.length - 1]);
+                const sz  = _arrowheadSize();
+                const arrowMarker = L.marker(latlngs[latlngs.length - 1], {
+                    icon: L.divIcon({
+                        className: '',
+                        html: _arrowheadSvg(item.color, deg, sz, fillOp),
+                        iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2],
+                    }),
+                    interactive: false,
+                });
+                layers.push(arrowMarker);
+                item._arrowheadMarker = arrowMarker;
+                item._arrowheadDeg    = deg;
+            }
+
             if (item.label) {
                 const mid = latlngs[Math.floor(latlngs.length / 2)];
                 layers.push(L.marker(mid, {
@@ -810,35 +1081,58 @@
                         html: `<span class="map-text-label map-text-label--line" style="color:${item.color}">${item.label}</span>`,
                         iconAnchor: [0, 0],
                     }),
+                    interactive: false,
                 }));
             }
+
+        } else if (type === 'square' || type === 'polygon') {
+            const rings   = item.geometry.coordinates.map(ring => ring.map(c => L.latLng(c[1], c[0])));
+            const polygon = L.polygon(rings, _shapeOptions(item));
+            layers.push(polygon);
+            if (item.label) {
+                const center = polygon.getBounds().getCenter();
+                layers.push(L.marker(center, {
+                    icon: L.divIcon({
+                        className: '',
+                        html: `<span class="map-text-label" style="color:${item.color}">${item.label}</span>`,
+                        iconAnchor: [0, 0],
+                    }),
+                    interactive: false,
+                }));
+            }
+
+        } else if (type === 'circle') {
+            const [lng, lat] = item.geometry.coordinates;
+            const circle     = L.circle([lat, lng], { radius: item.geometry.radius, ..._shapeOptions(item) });
+            layers.push(circle);
         }
+
         layers.forEach(l => l.addTo(_markupLayer));
         item._layers = layers;
+
+        // Clicking any interactive layer opens the edit dialog
+        // Also bind a tooltip showing the label (if any) on hover
+        layers.forEach(l => {
+            if (!l.on) return;
+            l.on('click', () => openMarkupEditDialog(item));
+            if (item.label && l.bindTooltip) {
+                l.bindTooltip(item.label, { permanent: false, direction: 'top', className: 'detail-pin-tooltip' });
+            }
+        });
     }
 
-    function _arrowheadSvg(color, deg) {
-        return `<svg class="map-markup-arrowhead-svg" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="-14 -14 28 28" style="transform:rotate(${deg}deg)"><polygon points="0,-12 10,8 -10,8" fill="${color}" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+    function _arrowheadSvg(color, deg, sz, opacity) {
+        sz      = sz      || 28;
+        opacity = opacity != null ? opacity : 0.87;
+        const h   = sz / 2;
+        const tip = -(sz * 0.43);
+        const bx  = sz * 0.36;
+        const by  = sz * 0.29;
+        return `<svg class="map-markup-arrowhead-svg" xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="${-h} ${-h} ${sz} ${sz}" style="transform:rotate(${deg}deg);opacity:${opacity}"><polygon points="0,${tip.toFixed(1)} ${bx.toFixed(1)},${by.toFixed(1)} ${(-bx).toFixed(1)},${by.toFixed(1)}" fill="${color}" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
     }
 
-    function _updateMarkupPreview() {
-        if (!_markupPreviewLayer) return;
-        const color  = document.getElementById('markup-form-color').value;
-        const weight = parseInt(document.getElementById('markup-form-width').value, 10);
-        _markupPreviewLayer.setStyle({ color, weight });
-        if (_previewArrowhead) { map.removeLayer(_previewArrowhead); _previewArrowhead = null; }
-        if (_markupDrawType === 'arrow' && _pendingLatlngs && _pendingLatlngs.length >= 2) {
-            const ll  = _pendingLatlngs;
-            const deg = _markupBearing(ll[ll.length - 2], ll[ll.length - 1]);
-            _previewArrowhead = L.marker(ll[ll.length - 1], {
-                icon: L.divIcon({
-                    className: '',
-                    html: _arrowheadSvg(color, deg),
-                    iconSize: [28, 28], iconAnchor: [14, 14],
-                }),
-            }).addTo(map);
-        }
-    }
+    // Kept as a no-op; the width slider still references it via the input listener
+    function _updateMarkupPreview() {}
 
     function _highlightMarkupItem(item) {
         _clearDetailPinHighlight();
@@ -895,10 +1189,90 @@
     }
 
     // ── Line / Arrow drawing ──────────────────────────────────────────────────
+    let _editingMarkupItem = null;
+    let _dragPreviewLine   = null;
+    let _dragPreviewHead   = null;
+    let _cancelDragDetect  = null;
+
     function startMarkupDraw(type) {
         _closeAddDetailMenu();
         _markupDrawType = type;
-        document.getElementById('markup-form-title').textContent = type === 'arrow' ? 'Add Arrow' : 'Add Line';
+        document.getElementById('markup-form-title').textContent = type === 'arrow' ? 'Draw Arrow' : 'Draw Line';
+        document.getElementById('markup-hint-text').textContent = type === 'arrow'
+            ? 'Drag for a 2-point arrow, or click to switch to multi-point mode'
+            : 'Click on the map to start; double-click to finish';
+        document.getElementById('markup-form-panel').style.display = '';
+        map._container.style.cursor = 'crosshair';
+        _startDragDetect(type);
+    }
+
+    function _startDragDetect(type) {
+        let _startX = 0, _startY = 0, _startLatlng = null, _isDragging = false;
+
+        function onMouseDown(e) {
+            if (e.button !== 0) return;
+            _startX = e.clientX;
+            _startY = e.clientY;
+            _startLatlng = map.mouseEventToLatLng(e);
+            _isDragging = false;
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp, { once: true });
+        }
+
+        function onMouseMove(e) {
+            if (!_startLatlng) return;
+            if (Math.hypot(e.clientX - _startX, e.clientY - _startY) < 5) return;
+            _isDragging = true;
+            const end    = map.mouseEventToLatLng(e);
+            const color  = document.getElementById('markup-form-color').value;
+            const weight = parseInt(document.getElementById('markup-form-width').value, 10);
+            if (_dragPreviewLine) map.removeLayer(_dragPreviewLine);
+            if (_dragPreviewHead) map.removeLayer(_dragPreviewHead);
+            _dragPreviewLine = L.polyline([_startLatlng, end], {
+                color, weight: weight + 2, opacity: 0.87, interactive: false,
+            }).addTo(map);
+            if (type === 'arrow') {
+                const deg = _markupBearing(_startLatlng, end);
+                const sz  = _arrowheadSize();
+                _dragPreviewHead = L.marker(end, {
+                    icon: L.divIcon({ className: '', html: _arrowheadSvg(color, deg, sz), iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }),
+                    interactive: false,
+                }).addTo(map);
+            }
+        }
+
+        function onMouseUp(e) {
+            document.removeEventListener('mousemove', onMouseMove);
+            const startLatlng = _startLatlng;
+            _startLatlng = null;
+
+            if (_isDragging && startLatlng) {
+                _isDragging = false;
+                map._container.removeEventListener('mousedown', onMouseDown);
+                _cancelDragDetect = null;
+                if (_dragPreviewLine) { map.removeLayer(_dragPreviewLine); _dragPreviewLine = null; }
+                if (_dragPreviewHead) { map.removeLayer(_dragPreviewHead); _dragPreviewHead = null; }
+                _immediatelySaveMarkup(type, [startLatlng, map.mouseEventToLatLng(e)]);
+            } else {
+                // Click (no drag) → switch to multi-point L.Draw.Polyline mode
+                _isDragging = false;
+                map._container.removeEventListener('mousedown', onMouseDown);
+                _cancelDragDetect = null;
+                map._container.style.cursor = '';
+                document.getElementById('markup-hint-text').textContent = 'Click to add points; double-click to finish';
+                _startClickDraw(type);
+            }
+        }
+
+        map._container.addEventListener('mousedown', onMouseDown);
+        _cancelDragDetect = () => {
+            map._container.removeEventListener('mousedown', onMouseDown);
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+    }
+
+    function _startClickDraw(type) {
         _markupDrawHandler = new L.Draw.Polyline(map, {
             shapeOptions: {
                 color: document.getElementById('markup-form-color').value,
@@ -906,92 +1280,427 @@
             },
         });
         _markupDrawHandler.enable();
-        toastr.info('Click to add points; double-click to finish.');
-        map.once(L.Draw.Event.CREATED, e => {
+        map.once(L.Draw.Event.CREATED, ev => {
             _markupDrawHandler = null;
-            _pendingLatlngs = e.layer.getLatLngs();
-            _markupPreviewLayer = e.layer;
-            map.addLayer(_markupPreviewLayer);
-            document.getElementById('markup-form-panel').style.display = '';
-            _updateMarkupPreview();
+            const latlngs = ev.layer.getLatLngs();
+            if (ev.layer && map.hasLayer(ev.layer)) map.removeLayer(ev.layer);
+            _immediatelySaveMarkup(type, latlngs);
         });
     }
 
-    function cancelMarkupDraw() {
-        if (_markupDrawHandler) { _markupDrawHandler.disable(); _markupDrawHandler = null; }
-        if (_markupPreviewLayer) { map.removeLayer(_markupPreviewLayer); _markupPreviewLayer = null; }
-        if (_previewArrowhead) { map.removeLayer(_previewArrowhead); _previewArrowhead = null; }
-        _pendingLatlngs = null;
-        _markupDrawType = null;
-        document.getElementById('markup-form-panel').style.display = 'none';
+    function _reloadMarkupAndOpenEdit(newUuid) {
+        return fetch(_markupJsonUrl).then(r => r.json()).then(markupData => {
+            _markupLayer.clearLayers();
+            _markupItems = [];
+            (markupData.markup_items || []).forEach(item => {
+                _renderMarkupItem(item);
+                _markupItems.push(item);
+            });
+            _buildDetailList();
+            const newItem = _markupItems.find(i => i.uuid === newUuid);
+            if (newItem) openMarkupEditDialog(newItem);
+        });
     }
 
-    function saveLineMarkup() {
-        if (!_pendingLatlngs) return;
+    function _immediatelySaveMarkup(type, latlngs) {
+        document.getElementById('markup-form-panel').style.display = 'none';
+        map._container.style.cursor = '';
+        _markupDrawType = null;
+        const color         = document.getElementById('markup-form-color').value;
+        const borderColor   = document.getElementById('markup-form-border').value;
+        const strokeWidth   = parseInt(document.getElementById('markup-form-width').value, 10);
+        const fillOpacity   = Math.round(_markupDefaultFillOpacity * 100);
+        const borderOpacity = Math.round(_markupDefaultBorderOpacity * 100);
         fetch(_markupPostUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
             body: JSON.stringify({
-                markup_type: _markupDrawType,
-                geometry: { type: 'LineString', coordinates: _pendingLatlngs.map(ll => [ll.lng, ll.lat]) },
-                label: document.getElementById('markup-form-label').value.trim(),
-                color: document.getElementById('markup-form-color').value,
-                stroke_width: parseInt(document.getElementById('markup-form-width').value),
+                markup_type: type,
+                geometry: { type: 'LineString', coordinates: latlngs.map(ll => [ll.lng, ll.lat]) },
+                label: '', color, stroke_width: strokeWidth, border_color: borderColor,
+                fill_opacity: fillOpacity, border_opacity: borderOpacity,
             }),
         })
         .then(r => { if (!r.ok) throw new Error(); return r.json(); })
-        .then(() => {
-            toastr.success(`${_markupDrawType === 'arrow' ? 'Arrow' : 'Line'} saved.`);
-            cancelMarkupDraw();
-            document.getElementById('markup-form-label').value = '';
-            loadMarkup();
-        })
+        .then(data => _reloadMarkupAndOpenEdit(data.uuid))
         .catch(() => toastr.error('Failed to save markup.'));
     }
 
+    // ── Shape drawing (square, circle, polygon) ───────────────────────────────
+    let _shapePreview    = null;
+    let _cancelShape     = null;
+    let _shapeDrawHandler = null;
+
+    function startShapeDraw(type) {
+        _closeAddDetailMenu();
+        document.getElementById('markup-form-title').textContent =
+            type === 'square' ? 'Draw Square' : type === 'circle' ? 'Draw Circle' : 'Draw Polygon';
+        document.getElementById('markup-hint-text').textContent =
+            type === 'polygon' ? 'Click to add vertices; double-click to close' : 'Drag to draw';
+        document.getElementById('markup-form-panel').style.display = '';
+        map._container.style.cursor = 'crosshair';
+        _markupDrawType = type;
+
+        if (type === 'polygon') {
+            _shapeDrawHandler = new L.Draw.Polygon(map, {
+                shapeOptions: {
+                    color: document.getElementById('markup-form-color').value,
+                    weight: parseInt(document.getElementById('markup-form-width').value),
+                },
+            });
+            _shapeDrawHandler.enable();
+            map.once(L.Draw.Event.CREATED, ev => {
+                _shapeDrawHandler = null;
+                const coords = ev.layer.getLatLngs();
+                if (ev.layer && map.hasLayer(ev.layer)) map.removeLayer(ev.layer);
+                _immediatelySaveShape('polygon', {
+                    type: 'Polygon',
+                    coordinates: [coords[0].map(ll => [ll.lng, ll.lat]).concat([[coords[0][0].lng, coords[0][0].lat]])],
+                });
+            });
+            _cancelShape = () => {
+                if (_shapeDrawHandler) { _shapeDrawHandler.disable(); _shapeDrawHandler = null; }
+                map.off(L.Draw.Event.CREATED);
+            };
+        } else {
+            // Drag mode for square and circle
+            let _startX = 0, _startY = 0, _startLL = null;
+            function onMouseDown(e) {
+                if (e.button !== 0) return;
+                _startX = e.clientX; _startY = e.clientY;
+                _startLL = map.mouseEventToLatLng(e);
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp, { once: true });
+            }
+            function onMouseMove(e) {
+                if (!_startLL) return;
+                const endLL = map.mouseEventToLatLng(e);
+                if (_shapePreview) map.removeLayer(_shapePreview);
+                const opts = { color: document.getElementById('markup-form-color').value, weight: 2, fillOpacity: 0.3, interactive: false };
+                _shapePreview = type === 'square'
+                    ? L.rectangle([_startLL, endLL], opts).addTo(map)
+                    : L.circle(_startLL, { ...opts, radius: _startLL.distanceTo(endLL) }).addTo(map);
+            }
+            function onMouseUp(e) {
+                document.removeEventListener('mousemove', onMouseMove);
+                map._container.removeEventListener('mousedown', onMouseDown);
+                _cancelShape = null;
+                if (_shapePreview) { map.removeLayer(_shapePreview); _shapePreview = null; }
+                if (!_startLL) return;
+                const endLL = map.mouseEventToLatLng(e);
+                const startLL = _startLL; _startLL = null;
+                if (Math.hypot(e.clientX - _startX, e.clientY - _startY) < 5) {
+                    // Too small; treat as cancelled
+                    cancelShapeDraw();
+                    return;
+                }
+                if (type === 'square') {
+                    const sw = startLL.lng, se = endLL.lng, n = startLL.lat, s = endLL.lat;
+                    _immediatelySaveShape('square', {
+                        type: 'Polygon',
+                        coordinates: [[[sw,n],[se,n],[se,s],[sw,s],[sw,n]]],
+                    });
+                } else {
+                    _immediatelySaveShape('circle', {
+                        type: 'Circle',
+                        coordinates: [startLL.lng, startLL.lat],
+                        radius: startLL.distanceTo(endLL),
+                    });
+                }
+            }
+            map._container.addEventListener('mousedown', onMouseDown);
+            _cancelShape = () => {
+                map._container.removeEventListener('mousedown', onMouseDown);
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+        }
+    }
+
+    function _immediatelySaveShape(type, geometry) {
+        document.getElementById('markup-form-panel').style.display = 'none';
+        map._container.style.cursor = '';
+        _markupDrawType = null;
+        const color         = document.getElementById('markup-form-color').value;
+        const borderColor   = document.getElementById('markup-form-border').value;
+        const strokeWidth   = parseInt(document.getElementById('markup-form-width').value, 10);
+        const fillOpacity   = Math.round(_markupDefaultFillOpacity * 100);
+        const borderOpacity = Math.round(_markupDefaultBorderOpacity * 100);
+        fetch(_markupPostUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({
+                markup_type: type, geometry, label: '', color, stroke_width: strokeWidth, border_color: borderColor,
+                fill_opacity: fillOpacity, border_opacity: borderOpacity,
+            }),
+        })
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(data => _reloadMarkupAndOpenEdit(data.uuid))
+        .catch(() => toastr.error('Failed to save shape.'));
+    }
+
+    function cancelShapeDraw() {
+        if (_cancelShape)     { _cancelShape(); _cancelShape = null; }
+        if (_shapePreview)    { map.removeLayer(_shapePreview); _shapePreview = null; }
+        if (_shapeDrawHandler){ _shapeDrawHandler.disable(); _shapeDrawHandler = null; }
+        _markupDrawType = null;
+        map._container.style.cursor = '';
+        document.getElementById('markup-form-panel').style.display = 'none';
+    }
+
+    function cancelMarkupDraw() {
+        if (_cancelDragDetect)   { _cancelDragDetect(); _cancelDragDetect = null; }
+        if (_markupDrawHandler)  { _markupDrawHandler.disable(); _markupDrawHandler = null; }
+        if (_dragPreviewLine)    { map.removeLayer(_dragPreviewLine); _dragPreviewLine = null; }
+        if (_dragPreviewHead)    { map.removeLayer(_dragPreviewHead); _dragPreviewHead = null; }
+        if (_markupPreviewLayer) { map.removeLayer(_markupPreviewLayer); _markupPreviewLayer = null; }
+        if (_previewArrowhead)   { map.removeLayer(_previewArrowhead); _previewArrowhead = null; }
+        _pendingLatlngs = null;
+        _markupDrawType = null;
+        map._container.style.cursor = '';
+        document.getElementById('markup-form-panel').style.display = 'none';
+    }
+
+    function _cancelCurrentDraw() {
+        // Dispatch to the correct cancel function based on what's active
+        const type = _markupDrawType;
+        if (type === 'square' || type === 'circle' || type === 'polygon') {
+            cancelShapeDraw();
+        } else if (type === 'line' || type === 'arrow') {
+            cancelMarkupDraw();
+        } else {
+            // Fallback — close the panel anyway
+            document.getElementById('markup-form-panel').style.display = 'none';
+            map._container.style.cursor = '';
+        }
+    }
+
+    function _rebuildEditSwatch(containerId, inputId, withNone) {
+        const cont  = document.getElementById(containerId);
+        const input = document.getElementById(inputId);
+        cont.innerHTML = '';
+        if (withNone) {
+            const nb = document.createElement('button');
+            nb.type = 'button'; nb.title = 'None';
+            nb.className = 'markup-color-swatch markup-color-swatch--none' + (!input.value || input.value === 'none' ? ' markup-color-swatch--active' : '');
+            nb.style.cssText = 'background:transparent;border:1px solid #cbd5e1;position:relative;';
+            nb.innerHTML = '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#9ca3af">∅</span>';
+            nb.addEventListener('click', () => {
+                cont.querySelectorAll('.markup-color-swatch').forEach(b => b.classList.remove('markup-color-swatch--active'));
+                nb.classList.add('markup-color-swatch--active'); input.value = 'none';
+                _livePreviewTextEdit();
+            });
+            cont.appendChild(nb);
+        }
+        _markupPalette.forEach(color => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'markup-color-swatch' + (color === input.value ? ' markup-color-swatch--active' : '');
+            btn.style.cssText = `background:${color};${color === '#f8fafc' ? 'border:1px solid #cbd5e1;' : ''}`;
+            btn.addEventListener('click', () => {
+                cont.querySelectorAll('.markup-color-swatch').forEach(b => b.classList.remove('markup-color-swatch--active'));
+                btn.classList.add('markup-color-swatch--active'); input.value = color;
+                _livePreviewTextEdit();
+            });
+            cont.appendChild(btn);
+        });
+    }
+
+    function _livePreviewTextEdit() {
+        if (!_editingMarkupItem || _editingMarkupItem.markup_type !== 'text') return;
+        const item = _editingMarkupItem;
+        const newLabel       = document.getElementById('markup-edit-label').value;
+        const newColor       = document.getElementById('markup-edit-color').value;
+        const newBorderColor = document.getElementById('markup-edit-border').value;
+        const newSize        = parseInt(document.getElementById('markup-edit-width').value, 10);
+        // Temporarily override item fields for _textLabelHtml
+        const snapshot = { ...item, label: newLabel, color: newColor, border_color: newBorderColor, stroke_width: newSize };
+        if (item._textMarker) {
+            item._textMarker.setIcon(L.divIcon({ className: '', html: _textLabelHtml(snapshot), iconAnchor: [0, 0] }));
+        }
+    }
+
+    function openMarkupEditDialog(item) {
+        _editingMarkupItem = item;
+        const isText  = item.markup_type === 'text';
+        const isShape = ['square', 'circle', 'polygon'].includes(item.markup_type);
+
+        document.getElementById('markup-edit-label').value = item.label || '';
+        const widthEl = document.getElementById('markup-edit-width');
+        widthEl.min   = isText ? 10 : 1;
+        widthEl.max   = isText ? 48 : 8;
+        widthEl.value = item.stroke_width || (isText ? 16 : 3);
+        document.getElementById('markup-edit-width-label').textContent = item.stroke_width || (isText ? 16 : 3);
+        document.getElementById('markup-edit-width-label-text').textContent = isText ? 'Font Size' : 'Width';
+        document.getElementById('markup-edit-color-label').textContent  = isText ? 'Text Color' : 'Fill Color';
+        document.getElementById('markup-edit-border-label').textContent = isText ? 'Background' : 'Border Color';
+        document.getElementById('markup-edit-fill-opacity-label-text').textContent = isText ? 'Text Opacity' : 'Fill Opacity';
+        const fillOpEl = document.getElementById('markup-edit-fill-opacity');
+        const fillOpVal = item.fill_opacity != null ? item.fill_opacity : 87;
+        fillOpEl.value = fillOpVal;
+        document.getElementById('markup-edit-fill-opacity-val').textContent = fillOpVal;
+        const borderOpEl = document.getElementById('markup-edit-border-opacity');
+        const borderOpVal = item.border_opacity != null ? item.border_opacity : 100;
+        borderOpEl.value = borderOpVal;
+        document.getElementById('markup-edit-border-opacity-val').textContent = borderOpVal;
+
+        document.getElementById('markup-edit-color').value  = item.color || '#e53e3e';
+        document.getElementById('markup-edit-border').value = item.border_color || (isText ? '' : '');
+        _rebuildEditSwatch('markup-edit-color-swatches',  'markup-edit-color',  false);
+        _rebuildEditSwatch('markup-edit-border-swatches', 'markup-edit-border', true);
+
+        const dialog = document.getElementById('markup-edit-dialog');
+
+        if (isText) {
+            // Wire live preview for text items
+            const labelInput = document.getElementById('markup-edit-label');
+            labelInput.oninput = _livePreviewTextEdit;
+            dialog.addEventListener('close', () => { labelInput.oninput = null; }, { once: true });
+            dialog.addEventListener('cancel', () => { labelInput.oninput = null; }, { once: true });
+        }
+
+        dialog.showModal();
+        if (isText) document.getElementById('markup-edit-label').focus();
+    }
+
+    function closeMarkupEditDialog() {
+        document.getElementById('markup-edit-dialog').close();
+        _editingMarkupItem = null;
+    }
+
+    function saveMarkupEdit() {
+        if (!_editingMarkupItem) return;
+        const label          = document.getElementById('markup-edit-label').value.trim();
+        const color          = document.getElementById('markup-edit-color').value;
+        const border_color   = document.getElementById('markup-edit-border').value;
+        const stroke_width   = parseInt(document.getElementById('markup-edit-width').value, 10);
+        const fill_opacity   = parseInt(document.getElementById('markup-edit-fill-opacity').value, 10);
+        const border_opacity = parseInt(document.getElementById('markup-edit-border-opacity').value, 10);
+        fetch(_markupEditBase + _editingMarkupItem.uuid + '/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({ label, color, border_color, stroke_width, fill_opacity, border_opacity }),
+        })
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(() => { closeMarkupEditDialog(); loadMarkup(); })
+        .catch(() => toastr.error('Failed to update annotation.'));
+    }
+
+    // Rescale arrowheads and text labels when the user zooms in/out
+    map.on('zoomend', () => {
+        const sz = _arrowheadSize();
+        _markupItems.forEach(item => {
+            if (item._arrowheadMarker) {
+                const itemOp = (item.fill_opacity != null ? item.fill_opacity : 87) / 100;
+                item._arrowheadMarker.setIcon(L.divIcon({
+                    className: '',
+                    html: _arrowheadSvg(item.color, item._arrowheadDeg, sz, itemOp),
+                    iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2],
+                }));
+            }
+            if (item._textMarker) {
+                item._textMarker.setIcon(L.divIcon({ className: '', html: _textLabelHtml(item), iconAnchor: [0, 0] }));
+            }
+        });
+    });
+
     // ── Text placement ────────────────────────────────────────────────────────
+    let _textCancelDrag = null;
+
     function startTextPlacement() {
         _closeAddDetailMenu();
         document.getElementById('text-place-panel').style.display = '';
-    }
-
-    function activateTextPlacement() {
-        const label = document.getElementById('text-form-label').value.trim();
-        if (!label) { toastr.warning('Enter text before placing.'); return; }
-        document.getElementById('text-place-btn').style.display = 'none';
-        document.getElementById('text-place-hint').style.display = '';
         _textPlacementActive = true;
         map._container.style.cursor = 'crosshair';
-        _textClickHandler = e => {
-            map.off('click', _textClickHandler);
-            _textClickHandler = null;
+        _beginTextDragDetect();
+    }
+
+    function _beginTextDragDetect() {
+        let _startX = 0, _startY = 0, _startLL = null, _isDragging = false;
+        let _rectPreview = null;
+
+        function onMouseDown(e) {
+            if (e.button !== 0) return;
+            _startX = e.clientX; _startY = e.clientY;
+            _startLL = map.mouseEventToLatLng(e);
+            _isDragging = false;
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp, { once: true });
+        }
+
+        function onMouseMove(e) {
+            if (!_startLL) return;
+            if (Math.hypot(e.clientX - _startX, e.clientY - _startY) < 5) return;
+            _isDragging = true;
+            const end = map.mouseEventToLatLng(e);
+            if (_rectPreview) map.removeLayer(_rectPreview);
+            _rectPreview = L.rectangle([_startLL, end], {
+                color: document.getElementById('text-form-color').value,
+                dashArray: '4 4', weight: 1, fillOpacity: 0.1, interactive: false,
+            }).addTo(map);
+        }
+
+        function onMouseUp(e) {
+            document.removeEventListener('mousemove', onMouseMove);
+            map._container.removeEventListener('mousedown', onMouseDown);
+            _textCancelDrag = null;
+            const startLL = _startLL; _startLL = null;
+            if (_rectPreview) { map.removeLayer(_rectPreview); _rectPreview = null; }
+            if (!startLL) return;
+
+            let strokeWidth = parseInt(document.getElementById('text-form-size').value, 10);
+            if (_isDragging) {
+                // Derive font size from bounding box pixel height
+                const p1 = map.latLngToContainerPoint(startLL);
+                const p2 = { x: e.clientX, y: e.clientY };
+                const boxH = Math.abs(p2.y - p1.y);
+                strokeWidth = Math.max(10, Math.min(48, Math.round(boxH * 0.65)));
+                document.getElementById('text-form-size').value = strokeWidth;
+                document.getElementById('text-size-label').textContent = strokeWidth;
+            }
+            _isDragging = false;
+
+            document.getElementById('text-place-panel').style.display = 'none';
             map._container.style.cursor = '';
             _textPlacementActive = false;
+
             fetch(_markupPostUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
                 body: JSON.stringify({
                     markup_type: 'text',
-                    geometry: { type: 'Point', coordinates: [e.latlng.lng, e.latlng.lat] },
-                    label,
+                    geometry: { type: 'Point', coordinates: [startLL.lng, startLL.lat] },
+                    label: document.getElementById('text-form-label').value.trim(),
                     color: document.getElementById('text-form-color').value,
-                    stroke_width: parseInt(document.getElementById('text-form-size').value),
+                    border_color: document.getElementById('text-form-bg').value,
+                    stroke_width: strokeWidth,
+                    fill_opacity: Math.round(_markupDefaultFillOpacity * 100),
+                    border_opacity: Math.round(_markupDefaultBorderOpacity * 100),
                 }),
             })
             .then(r => { if (!r.ok) throw new Error(); return r.json(); })
-            .then(() => { toastr.success('Text label placed.'); cancelTextPlacement(); loadMarkup(); })
+            .then(data => {
+                document.getElementById('text-form-label').value = '';
+                return _reloadMarkupAndOpenEdit(data.uuid);
+            })
             .catch(() => toastr.error('Failed to save text label.'));
+        }
+
+        map._container.addEventListener('mousedown', onMouseDown);
+        _textCancelDrag = () => {
+            map._container.removeEventListener('mousedown', onMouseDown);
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            if (_rectPreview) { map.removeLayer(_rectPreview); _rectPreview = null; }
         };
-        map.on('click', _textClickHandler);
     }
 
     function cancelTextPlacement() {
+        if (_textCancelDrag)   { _textCancelDrag(); _textCancelDrag = null; }
         if (_textClickHandler) { map.off('click', _textClickHandler); _textClickHandler = null; }
         map._container.style.cursor = '';
         _textPlacementActive = false;
         document.getElementById('text-place-panel').style.display = 'none';
-        document.getElementById('text-place-btn').style.display = '';
-        document.getElementById('text-place-hint').style.display = 'none';
         document.getElementById('text-form-label').value = '';
     }
 
@@ -1039,6 +1748,7 @@
             _setPinMarkerVisible(true);
         }
         map.invalidateSize();
+        if (typeof _attachCampusClickHandlers === 'function') _attachCampusClickHandlers();
     }
 
     fetch(campusApiUrl)
@@ -1123,7 +1833,7 @@
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(() => {
             _savedCampusGeoJSON = geometry;
-            toastr.success(geometry ? 'Campus boundary saved.' : 'Boundary cleared — default radius will be used.');
+            toastr.success(geometry ? 'Boundary saved.' : 'Boundary cleared — default radius will be used.');
             _exitCampusEdit();
         })
         .catch(() => toastr.error('Failed to save campus boundary.'));
@@ -1141,11 +1851,154 @@
         map.off(L.Draw.Event.CREATED);
         document.getElementById('edit-campus-btn').style.display = '';
         document.getElementById('campus-save-controls').style.display = 'none';
+        _attachCampusClickHandlers();
     }
 
     function cancelCampusEdit() {
         _exitCampusEdit();
         _loadSavedCampus(_savedCampusGeoJSON);
+    }
+
+    // ── Circle-style swatch builder (bg/border for detail pins) ──────────────
+    const _circlePalette = ['#e53e3e', '#1d4ed8', '#16a34a', '#d97706', '#7c3aed', '#0f172a', '#f8fafc', '#ffffff'];
+
+    function _buildCircleSwatches(containerId, inputId, currentVal, onChange) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.innerHTML = '';
+        // None option
+        const nb = document.createElement('button');
+        nb.type = 'button'; nb.title = 'None';
+        nb.className = 'dp-color-swatch markup-color-swatch--none' + (!currentVal ? ' dp-color-swatch--active' : '');
+        nb.style.cssText = 'background:transparent;border:1px dashed #cbd5e1;position:relative;';
+        nb.innerHTML = '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#9ca3af">∅</span>';
+        nb.addEventListener('click', () => {
+            container.querySelectorAll('.dp-color-swatch').forEach(b => b.classList.remove('dp-color-swatch--active'));
+            nb.classList.add('dp-color-swatch--active');
+            document.getElementById(inputId).value = '';
+            if (onChange) onChange('');
+        });
+        container.appendChild(nb);
+        _circlePalette.forEach(color => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'dp-color-swatch' + (color === currentVal ? ' dp-color-swatch--active' : '');
+            btn.style.cssText = `background:${color};${color === '#f8fafc' || color === '#ffffff' ? 'border:1px solid #cbd5e1;' : ''}`;
+            btn.addEventListener('click', () => {
+                container.querySelectorAll('.dp-color-swatch').forEach(b => b.classList.remove('dp-color-swatch--active'));
+                btn.classList.add('dp-color-swatch--active');
+                document.getElementById(inputId).value = color;
+                if (onChange) onChange(color);
+            });
+            container.appendChild(btn);
+        });
+    }
+
+    // ── Edit detail-pin dialog ─────────────────────────────────────────────────
+    let _editingDp = null;
+
+    function openDetailPinEditDialog(dp) {
+        _editingDp = dp;
+        const dlg = document.getElementById('detail-pin-edit-dialog');
+
+        document.getElementById('dp-edit-name').value = dp.name || '';
+        document.getElementById('dp-edit-description').value = dp.description || '';
+        document.getElementById('dp-edit-type').value = dp.pin_type || 'poi';
+        document.getElementById('dp-edit-icon').value = dp.icon || '';
+        document.getElementById('dp-edit-color').value = dp.color || '';
+
+        // Icon selection
+        document.querySelectorAll('.dp-edit-icon-btn').forEach(b => {
+            b.classList.toggle('dp-icon-btn--active', b.dataset.icon === dp.icon);
+        });
+
+        // Icon color
+        document.querySelectorAll('.dp-edit-color-swatch').forEach(s => {
+            s.classList.toggle('dp-color-swatch--active', s.dataset.color === dp.color);
+        });
+
+        // Background
+        const bgOpacity = dp.bg_opacity != null ? dp.bg_opacity : 80;
+        document.getElementById('dp-edit-bg-color').value = dp.bg_color || '';
+        document.getElementById('dp-edit-bg-opacity-val-hidden').value = bgOpacity;
+        document.getElementById('dp-edit-bg-opacity').value = bgOpacity;
+        document.getElementById('dp-edit-bg-opacity-val').textContent = bgOpacity;
+        _buildCircleSwatches('dp-edit-bg-swatches', 'dp-edit-bg-color', dp.bg_color || '', () => {});
+
+        // Border
+        const bdOpacity = dp.border_opacity != null ? dp.border_opacity : 100;
+        document.getElementById('dp-edit-border-color').value = dp.border_color || '';
+        document.getElementById('dp-edit-border-opacity-val-hidden').value = bdOpacity;
+        document.getElementById('dp-edit-border-opacity').value = bdOpacity;
+        document.getElementById('dp-edit-border-opacity-val').textContent = bdOpacity;
+        _buildCircleSwatches('dp-edit-border-swatches', 'dp-edit-border-color', dp.border_color || '', () => {});
+
+        dlg.showModal();
+    }
+
+    document.getElementById('dp-edit-bg-opacity').addEventListener('input', function () {
+        const v = this.value;
+        document.getElementById('dp-edit-bg-opacity-val').textContent = v;
+        document.getElementById('dp-edit-bg-opacity-val-hidden').value = v;
+    });
+    document.getElementById('dp-edit-border-opacity').addEventListener('input', function () {
+        const v = this.value;
+        document.getElementById('dp-edit-border-opacity-val').textContent = v;
+        document.getElementById('dp-edit-border-opacity-val-hidden').value = v;
+    });
+
+    document.getElementById('dp-edit-icon-picker').addEventListener('click', function (e) {
+        const btn = e.target.closest('.dp-edit-icon-btn');
+        if (!btn) return;
+        document.querySelectorAll('.dp-edit-icon-btn').forEach(b => b.classList.remove('dp-icon-btn--active'));
+        btn.classList.add('dp-icon-btn--active');
+        document.getElementById('dp-edit-icon').value = btn.dataset.icon;
+    });
+
+    document.getElementById('dp-edit-color-picker').addEventListener('click', function (e) {
+        const sw = e.target.closest('.dp-edit-color-swatch');
+        if (!sw) return;
+        document.querySelectorAll('.dp-edit-color-swatch').forEach(s => s.classList.remove('dp-color-swatch--active'));
+        sw.classList.add('dp-color-swatch--active');
+        document.getElementById('dp-edit-color').value = sw.dataset.color;
+    });
+
+    document.getElementById('detail-pin-edit-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (!_editingDp) return;
+        const data = {
+            name:           document.getElementById('dp-edit-name').value.trim(),
+            description:    document.getElementById('dp-edit-description').value.trim(),
+            pin_type:       document.getElementById('dp-edit-type').value,
+            icon:           document.getElementById('dp-edit-icon').value || null,
+            color:          document.getElementById('dp-edit-color').value || null,
+            bg_color:       document.getElementById('dp-edit-bg-color').value || null,
+            bg_opacity:     parseInt(document.getElementById('dp-edit-bg-opacity-val-hidden').value, 10),
+            border_color:   document.getElementById('dp-edit-border-color').value || null,
+            border_opacity: parseInt(document.getElementById('dp-edit-border-opacity-val-hidden').value, 10),
+        };
+        fetch(_dpEditBase + _editingDp.uuid + '/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify(data),
+        })
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(() => {
+            toastr.success('Detail pin updated.');
+            document.getElementById('detail-pin-edit-dialog').close();
+            loadDetailPins();
+        })
+        .catch(() => toastr.error('Failed to update detail pin.'));
+    });
+
+    // ── Campus boundary: click to open editor ────────────────────────────────
+    function _attachCampusClickHandlers() {
+        campusItems.eachLayer(layer => {
+            layer.off('click.openEditor');
+            layer.on('click.openEditor', () => {
+                if (!campusDrawControl) startEditCampus();
+            });
+        });
     }
 
     // ── Detail-pin add dialog ─────────────────────────────────────────────────
@@ -1205,10 +2058,15 @@
         }
 
         function _currentPickerIcon() {
-            const pinType = document.getElementById('dp-type').value;
-            const icon    = document.getElementById('dp-icon').value || null;
-            const color   = document.getElementById('dp-color').value || null;
-            return _detailIcon(pinType, icon, color);
+            return _detailIcon({
+                pin_type: document.getElementById('dp-type').value,
+                icon:     document.getElementById('dp-icon').value || null,
+                color:    document.getElementById('dp-color').value || null,
+                bg_color: document.getElementById('dp-bg-color').value || null,
+                bg_opacity: parseInt(document.getElementById('dp-bg-opacity').value || '80', 10),
+                border_color: document.getElementById('dp-border-color').value || null,
+                border_opacity: parseInt(document.getElementById('dp-border-opacity').value || '100', 10),
+            });
         }
 
         function _updatePickerMarker() {
@@ -1221,8 +2079,16 @@
             document.getElementById('dp-lon').value = '';
             document.getElementById('dp-icon').value = '';
             document.getElementById('dp-color').value = '';
+            document.getElementById('dp-bg-color').value = '';
+            document.getElementById('dp-border-color').value = '';
+            document.getElementById('dp-bg-opacity').value = '80';
+            document.getElementById('dp-border-opacity').value = '100';
+            document.getElementById('dp-add-bg-opacity-val').textContent = '80';
+            document.getElementById('dp-add-border-opacity-val').textContent = '100';
             document.querySelectorAll('.dp-icon-btn').forEach(b => b.classList.remove('dp-icon-btn--active'));
-            document.querySelectorAll('.dp-color-swatch').forEach(s => s.classList.remove('dp-color-swatch--active'));
+            document.querySelectorAll('.dp-color-swatch:not(.dp-edit-color-swatch)').forEach(s => s.classList.remove('dp-color-swatch--active'));
+            _buildCircleSwatches('dp-add-bg-swatches', 'dp-bg-color', '', () => _updatePickerMarker());
+            _buildCircleSwatches('dp-add-border-swatches', 'dp-border-color', '', () => _updatePickerMarker());
             submitBtn.disabled = true;
             submitBtn.textContent = 'Add Pin';
             _submitting = false;
@@ -1231,21 +2097,34 @@
             if (_pickerMap) { _pickerMap.setView([pinLat, pinLng], 17); setTimeout(() => _pickerMap.invalidateSize(), 100); }
         }
 
-        document.querySelectorAll('.dp-icon-btn').forEach(btn => {
+        const addDlg = document.getElementById('detail-pin-add-dialog');
+        addDlg.querySelectorAll('.dp-icon-btn:not(.dp-edit-icon-btn)').forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('.dp-icon-btn').forEach(b => b.classList.remove('dp-icon-btn--active'));
+                addDlg.querySelectorAll('.dp-icon-btn:not(.dp-edit-icon-btn)').forEach(b => b.classList.remove('dp-icon-btn--active'));
                 btn.classList.add('dp-icon-btn--active');
                 document.getElementById('dp-icon').value = btn.dataset.icon;
                 _updatePickerMarker();
             });
         });
-        document.querySelectorAll('.dp-color-swatch').forEach(swatch => {
-            swatch.addEventListener('click', () => {
-                document.querySelectorAll('.dp-color-swatch').forEach(s => s.classList.remove('dp-color-swatch--active'));
-                swatch.classList.add('dp-color-swatch--active');
-                document.getElementById('dp-color').value = swatch.dataset.color;
-                _updatePickerMarker();
-            });
+        addDlg.querySelectorAll('.dp-color-swatch:not(.dp-edit-color-swatch)').forEach(swatch => {
+            if (!swatch.closest('#dp-add-bg-swatches, #dp-add-border-swatches')) {
+                swatch.addEventListener('click', () => {
+                    addDlg.querySelectorAll('.dp-color-swatch:not(.dp-edit-color-swatch):not([id])').forEach(s => s.classList.remove('dp-color-swatch--active'));
+                    swatch.classList.add('dp-color-swatch--active');
+                    document.getElementById('dp-color').value = swatch.dataset.color;
+                    _updatePickerMarker();
+                });
+            }
+        });
+        document.getElementById('dp-add-bg-opacity').addEventListener('input', function () {
+            document.getElementById('dp-add-bg-opacity-val').textContent = this.value;
+            document.getElementById('dp-bg-opacity').value = this.value;
+            _updatePickerMarker();
+        });
+        document.getElementById('dp-add-border-opacity').addEventListener('input', function () {
+            document.getElementById('dp-add-border-opacity-val').textContent = this.value;
+            document.getElementById('dp-border-opacity').value = this.value;
+            _updatePickerMarker();
         });
         document.getElementById('dp-type').addEventListener('change', _updatePickerMarker);
 

@@ -12,7 +12,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.badges.model import Badge
-from urbanlens.dashboard.models.pin.model import Pin, PinNote, PinStatus, PinType
+from urbanlens.dashboard.models.pin.model import Pin, PinNote, PinType
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,6 @@ def _overview_context(pin: Pin) -> dict:
 
     return {
         "pin": pin,
-        "pin_status_choices": PinStatus.choices,
         "pin_type_choices": PinType.choices,
         "all_categories": Badge.objects.categories().ordered(),
         "detail_pin_icon_choices": detail_pin_icon_choices,
@@ -95,7 +94,6 @@ class PinEditView(LoginRequiredMixin, View):
         # Scalar fields
         nickname = (body.get("nickname") or "").strip() or None
         description = (body.get("description") or "").strip() or None
-        status = body.get("status") or pin.status
         pin_type = body.get("pin_type") or pin.pin_type
         priority_raw = body.get("priority")
         rating_raw = body.get("rating")
@@ -161,16 +159,12 @@ class PinEditView(LoginRequiredMixin, View):
         date_last_active = _parse_date(body.get("date_last_active", "")) if "date_last_active" in body else pin.date_last_active
 
         # Validate choices
-        valid_statuses = {v for v, _ in PinStatus.choices}
         valid_types = {v for v, _ in PinType.choices}
-        if status not in valid_statuses:
-            status = pin.status
         if pin_type not in valid_types:
             pin_type = pin.pin_type
 
         pin.nickname = nickname
         pin.description = description
-        pin.status = status
         pin.pin_type = pin_type
         pin.priority = priority
         pin.rating = rating
@@ -181,7 +175,7 @@ class PinEditView(LoginRequiredMixin, View):
         pin.date_abandoned = date_abandoned
         pin.date_last_active = date_last_active
         pin.save(update_fields=[
-            "nickname", "description", "status", "pin_type", "priority", "rating", "last_visited",
+            "nickname", "description", "pin_type", "priority", "rating", "last_visited",
             "fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked",
             "date_abandoned", "date_last_active", "updated",
         ])

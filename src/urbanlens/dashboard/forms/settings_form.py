@@ -4,6 +4,41 @@ from django import forms
 
 from urbanlens.dashboard.models.profile.model import MapCenterMode, MapViewChoice, Profile, VisibilityChoice
 
+
+class MarkupDefaultsForm(forms.ModelForm):
+    """Default fill/border color and opacity for new pin-detail annotations."""
+
+    markup_fill_color = forms.CharField(
+        max_length=20,
+        widget=forms.HiddenInput(attrs={"id": "id_markup_fill_color"}),
+    )
+    markup_fill_opacity = forms.IntegerField(
+        min_value=0,
+        max_value=100,
+        widget=forms.HiddenInput(attrs={"id": "id_markup_fill_opacity"}),
+    )
+    markup_border_color = forms.CharField(
+        max_length=20,
+        required=False,
+        widget=forms.HiddenInput(attrs={"id": "id_markup_border_color"}),
+    )
+    markup_border_opacity = forms.IntegerField(
+        min_value=0,
+        max_value=100,
+        widget=forms.HiddenInput(attrs={"id": "id_markup_border_opacity"}),
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["markup_fill_color", "markup_fill_opacity", "markup_border_color", "markup_border_opacity"]
+
+    def clean_markup_fill_color(self):
+        color = self.cleaned_data.get("markup_fill_color", "").strip()
+        return color or "#e53e3e"
+
+    def clean_markup_border_color(self):
+        return (self.cleaned_data.get("markup_border_color") or "").strip()
+
 # "Friends only" is circular for friend requests (they're not friends yet), so exclude it.
 _FRIEND_REQUEST_CHOICES = [(k, v) for k, v in VisibilityChoice.choices if k != VisibilityChoice.FRIENDS]
 

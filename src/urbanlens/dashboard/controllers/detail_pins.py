@@ -57,6 +57,10 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             pin_type=body.get("pin_type") or PinType.POINT_OF_INTEREST,
             icon=body.get("icon") or None,
             color=body.get("color") or None,
+            detail_bg_color=body.get("bg_color") or None,
+            detail_bg_opacity=int(body.get("bg_opacity") or 80),
+            detail_border_color=body.get("border_color") or None,
+            detail_border_opacity=int(body.get("border_opacity") or 100),
             parent_pin=parent,
             profile=parent.profile,
             location=parent.location,
@@ -84,9 +88,15 @@ class DetailPinEditView(LoginRequiredMixin, View):
             "pin_type": body.get("pin_type") or None,
             "icon": body.get("icon") or None,
             "color": body.get("color") or None,
+            "detail_bg_color": body.get("bg_color") or None,
+            "detail_border_color": body.get("border_color") or None,
         }.items():
             if value is not None or field in body:
                 setattr(detail_pin, field, value)
+        if "bg_opacity" in body:
+            detail_pin.detail_bg_opacity = int(body["bg_opacity"])
+        if "border_opacity" in body:
+            detail_pin.detail_border_opacity = int(body["border_opacity"])
         if body.get("latitude"):
             detail_pin.latitude = float(body["latitude"])
         if body.get("longitude"):

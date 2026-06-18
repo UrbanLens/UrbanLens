@@ -36,7 +36,7 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import aliases, campus, categories, comments, detail_pins, friendship, location_wiki, maps, markup, notifications, organize, pin, pin_edit, settings, site_admin, tags, trip, userprofile, visits
+from urbanlens.dashboard.controllers import aliases, campus, categories, comments, detail_pins, friendship, location_wiki, maps, markup, notifications, organize, pin, pin_edit, settings, site_admin, statuses, tags, trip, userprofile, visits
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -477,6 +477,19 @@ urlpatterns = [
             [
                 path("", organize.OrganizeIndexView.as_view(), name="organize.index"),
                 path("priority/save/", organize.OrganizePrioritySaveView.as_view(), name="organize.priority.save"),
+            ],
+        ),
+    ),
+    path(
+        "statuses/",
+        include(
+            [
+                path("rows/", statuses.StatusRowsView.as_view(), name="status.rows"),
+                path("create/", statuses.StatusCreateView.as_view(), name="status.create"),
+                path("<int:status_id>/edit/", statuses.StatusEditView.as_view(), name="status.edit"),
+                path("<int:status_id>/delete/", statuses.StatusDeleteView.as_view(), name="status.delete"),
+                path("bulk-delete/", statuses.StatusBulkDeleteView.as_view(), name="status.bulk_delete"),
+                path("pin/<uuid:pin_uuid>/", statuses.StatusMembershipView.as_view(), name="status.membership"),
             ],
         ),
     ),

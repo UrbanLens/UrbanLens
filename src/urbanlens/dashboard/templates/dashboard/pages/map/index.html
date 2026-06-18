@@ -447,7 +447,7 @@
             <button id="weather-button" class="map-btn-icon" title="Weather View" onclick="toggleWeatherView()">
                 <i class="material-icons">cloud</i>
             </button>
-            <button id="campus-button" class="map-btn-icon" title="Campus Boundaries" onclick="toggleCampusBoundaries()">
+            <button id="campus-button" class="map-btn-icon" title="Boundaries" onclick="toggleCampusBoundaries()">
                 <i class="material-icons">hexagon</i>
             </button>
             <button id="import-pins-button" class="map-btn-icon" title="Import Pins"
@@ -486,18 +486,6 @@
             <div class="fp-section">
                 <div class="fp-label">Search Pins</div>
                 <input type="text" name="name" id="fp-search" class="fp-search" placeholder="Name or alias..." autocomplete="off">
-            </div>
-
-            <div class="fp-section">
-                <div class="fp-label">Status</div>
-                <div class="fp-chips">
-                    {% for value, label in status_choices %}
-                    <label class="fp-chip">
-                        <input type="checkbox" name="status" value="{{ value }}">
-                        <span>{{ label }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
             </div>
 
             <div class="fp-section">

@@ -16,6 +16,21 @@ from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 logger = logging.getLogger(__name__)
 
 
+def _add_visited_status(pin: Pin) -> None:
+    """Add the profile's "Visited" status badge to the pin if not already present.
+
+    Args:
+        pin: Pin instance whose statuses should be updated.
+    """
+    from urbanlens.dashboard.models.badges.model import Badge
+
+    visited_badge = (
+        Badge.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
+    )
+    if visited_badge and not pin.statuses.filter(pk=visited_badge.pk).exists():
+        pin.statuses.add(visited_badge)
+
+
 def _sync_last_visited(pin: Pin) -> None:
     """Recompute pin.last_visited from the most recent PinVisit row.
 
@@ -77,6 +92,7 @@ class VisitHistoryView(LoginRequiredMixin, View):
         notes = request.POST.get("notes", "").strip() or None
         PinVisit.objects.create(pin=pin, visited_at=visited_at, notes=notes, source=VisitSource.MANUAL)
         _sync_last_visited(pin)
+        _add_visited_status(pin)
 
         return render(
             request,

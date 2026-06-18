@@ -17,7 +17,14 @@ from urbanlens.dashboard.models.profile.model import Profile
 logger = logging.getLogger(__name__)
 
 _ALLOWED_TYPES = {mt.value for mt in MarkupType}
-_GEOMETRY_TYPES = {"line": "LineString", "arrow": "LineString", "text": "Point"}
+_GEOMETRY_TYPES = {
+    "line": "LineString",
+    "arrow": "LineString",
+    "text": "Point",
+    "square": "Polygon",
+    "circle": "Circle",   # Custom non-GeoJSON type stored as {"type":"Circle","coordinates":[lng,lat],"radius":m}
+    "polygon": "Polygon",
+}
 
 
 def _parse_body(request) -> dict:
@@ -85,8 +92,9 @@ class MarkupView(LoginRequiredMixin, View):
             )
 
         label = (body.get("label") or "").strip()
-        if markup_type == "text" and not label:
-            return JsonResponse({"ok": False, "error": "Text markup requires a label"}, status=400)
+
+        fill_opacity   = int(body.get("fill_opacity")   or profile.markup_fill_opacity)
+        border_opacity = int(body.get("border_opacity") or profile.markup_border_opacity)
 
         item = PinMarkup.objects.create(
             parent_pin=pin,
@@ -96,6 +104,9 @@ class MarkupView(LoginRequiredMixin, View):
             label=label,
             color=body.get("color") or "#e53e3e",
             stroke_width=int(body.get("stroke_width") or 3),
+            border_color=body.get("border_color") or "",
+            fill_opacity=fill_opacity,
+            border_opacity=border_opacity,
         )
         return JsonResponse({"ok": True, "uuid": str(item.uuid)})
 
@@ -134,6 +145,12 @@ class MarkupEditView(LoginRequiredMixin, View):
             item.color = body["color"] or item.color
         if "stroke_width" in body:
             item.stroke_width = int(body["stroke_width"])
+        if "border_color" in body:
+            item.border_color = body["border_color"] or ""
+        if "fill_opacity" in body:
+            item.fill_opacity = int(body["fill_opacity"])
+        if "border_opacity" in body:
+            item.border_opacity = int(body["border_opacity"])
         item.save()
         return JsonResponse({"ok": True})
 
