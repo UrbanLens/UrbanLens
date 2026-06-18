@@ -32,6 +32,7 @@ from django.db.models import (
     BooleanField,
     CharField,
     DateField,
+    DecimalField,
     ImageField,
     Index,
     IntegerField,
@@ -59,6 +60,12 @@ class MapViewChoice(TextChoices):
     STREET = "street", "Street"
     SATELLITE = "satellite", "Satellite"
     TOPOGRAPHIC = "topographic", "Topographic"
+
+
+class MapCenterMode(TextChoices):
+    AUTO = "auto", "Center on my pins"
+    GPS = "gps", "Use my current location"
+    CUSTOM = "custom", "Custom location"
 
 
 class Profile(abstract.Model):
@@ -101,6 +108,24 @@ class Profile(abstract.Model):
     )
     # Marker cluster radius in pixels. Null = use the default zoom-based function.
     cluster_radius = IntegerField(null=True, blank=True)
+    # When False, pins are always fetched from the server on every map load.
+    use_pin_cache = BooleanField(default=True)
+
+    # How the map centers on load.
+    map_center_mode = CharField(
+        max_length=10,
+        choices=MapCenterMode.choices,
+        default=MapCenterMode.AUTO,
+    )
+    # Cached centroid of the user's pins (auto mode). Cleared by post_save signal
+    # on new pin; recomputed lazily on the next map load.
+    map_center_latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    map_center_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    # User-specified center (custom mode).
+    map_custom_latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    map_custom_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    # Default zoom level applied on every map load (all modes).
+    map_default_zoom = IntegerField(default=13)
 
     user = OneToOneField(
         User,
@@ -128,6 +153,55 @@ class Profile(abstract.Model):
     @property
     def full_name(self):
         return self.user.get_full_name()
+
+    def compute_map_center(self) -> tuple[float, float] | None:
+        """Compute the geographic centroid of all user pins and cache it on the profile.
+
+        Returns:
+            (latitude, longitude) tuple, or None if the user has no pins with coordinates.
+        """
+        from django.db.models import Avg, F
+        from django.db.models.functions import Coalesce
+
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        result = Pin.objects.filter(profile=self).aggregate(
+            avg_lat=Avg(Coalesce(F("latitude"), F("location__latitude"))),
+            avg_lng=Avg(Coalesce(F("longitude"), F("location__longitude"))),
+        )
+        lat = result.get("avg_lat")
+        lng = result.get("avg_lng")
+        if lat is None or lng is None:
+            return None
+
+        Profile.objects.filter(pk=self.pk).update(
+            map_center_latitude=lat,
+            map_center_longitude=lng,
+        )
+        self.map_center_latitude = lat
+        self.map_center_longitude = lng
+        return float(lat), float(lng)
+
+    def get_map_center(self) -> tuple[float, float] | None:
+        """Return the map center coordinates to use as the initial view.
+
+        In GPS mode, returns None — the browser handles centering via geolocation.
+        In custom mode, returns the user-stored coordinates.
+        In auto mode, returns the cached pin centroid (computing it if needed).
+
+        Returns:
+            (latitude, longitude) tuple, or None when the caller should defer to JS.
+        """
+        if self.map_center_mode == MapCenterMode.GPS:
+            return None
+        if self.map_center_mode == MapCenterMode.CUSTOM:
+            if self.map_custom_latitude is not None and self.map_custom_longitude is not None:
+                return float(self.map_custom_latitude), float(self.map_custom_longitude)
+            return None
+        # AUTO mode
+        if self.map_center_latitude is not None and self.map_center_longitude is not None:
+            return float(self.map_center_latitude), float(self.map_center_longitude)
+        return self.compute_map_center()
 
     def __str__(self):
         return self.username

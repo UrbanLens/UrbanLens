@@ -272,6 +272,7 @@ urlpatterns = [
         ),
     ),
     path("settings/", settings.SettingsView.as_view(), name="settings.view"),
+    path("settings/geocode/", settings.geocode_address, name="settings.geocode"),
     path(
         "tags/",
         include(

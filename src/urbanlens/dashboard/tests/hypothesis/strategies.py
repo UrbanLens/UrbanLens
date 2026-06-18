@@ -12,6 +12,7 @@ from hypothesis import strategies as st
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.pin.model import PinStatus, PinType
+from urbanlens.dashboard.models.profile.model import MapCenterMode
 
 # ── Safe text ──────────────────────────────────────────────────────────────────
 # Restrict to printable ASCII to avoid encoding edge-cases in DB text columns.
@@ -107,6 +108,11 @@ hex_color = st.builds(
 	st.lists(_hex_digit, min_size=6, max_size=6),
 )
 hex_color_or_none = st.one_of(st.none(), hex_color)
+
+# ── Map center ─────────────────────────────────────────────────────────────────
+map_center_mode = st.sampled_from(list(MapCenterMode.values))
+# Zoom levels accepted by MapCenterForm (1–19, matching Leaflet's maxZoom).
+valid_zoom = st.integers(min_value=1, max_value=19)
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
 # Any string that is NOT a valid PinStatus value — used for negative tests.

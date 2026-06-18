@@ -393,6 +393,13 @@
     margin: 0.25rem 0 0;
 }
 
+.settings-warning {
+    display: block;
+    font-size: 0.8rem;
+    color: #e65100;
+    margin-top: 0.35rem;
+}
+
 .settings-select {
     display: block !important; // override Materialize's select:not(.browser-default) { display:none }
     width: 100%;

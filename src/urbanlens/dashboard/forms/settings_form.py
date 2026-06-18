@@ -2,7 +2,7 @@
 
 from django import forms
 
-from urbanlens.dashboard.models.profile.model import MapViewChoice, Profile, VisibilityChoice
+from urbanlens.dashboard.models.profile.model import MapCenterMode, MapViewChoice, Profile, VisibilityChoice
 
 # "Friends only" is circular for friend requests (they're not friends yet), so exclude it.
 _FRIEND_REQUEST_CHOICES = [(k, v) for k, v in VisibilityChoice.choices if k != VisibilityChoice.FRIENDS]
@@ -83,7 +83,53 @@ class StyleSettingsForm(forms.ModelForm):
         label="Cluster Radius",
         help_text="Pixels within which nearby pins are grouped into a cluster. Leave blank to use the automatic zoom-based value.",
     )
+    use_pin_cache = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
+        label="Cache pins in browser storage",
+        help_text=(
+            "Stores your pins in your browser so the map loads instantly on repeat visits. "
+            "Disabling this means pins must be re-fetched from the server every time you open the map, "
+            "which will noticeably slow down load times — especially if you have many pins."
+        ),
+    )
 
     class Meta:
         model = Profile
-        fields = ["dark_mode", "default_map_view", "cluster_radius"]
+        fields = ["dark_mode", "default_map_view", "cluster_radius", "use_pin_cache"]
+
+
+class MapCenterForm(forms.ModelForm):
+    """Saved map center preference — mode, optional custom coordinates, and default zoom."""
+
+    map_center_mode = forms.ChoiceField(
+        choices=MapCenterMode.choices,
+        widget=forms.RadioSelect(attrs={"class": "settings-radio"}),
+        label="Starting Point",
+    )
+    map_custom_latitude = forms.DecimalField(
+        required=False,
+        max_digits=9,
+        decimal_places=6,
+        widget=forms.HiddenInput(attrs={"id": "id_map_custom_latitude"}),
+    )
+    map_custom_longitude = forms.DecimalField(
+        required=False,
+        max_digits=9,
+        decimal_places=6,
+        widget=forms.HiddenInput(attrs={"id": "id_map_custom_longitude"}),
+    )
+    map_default_zoom = forms.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=19,
+        widget=forms.HiddenInput(attrs={"id": "id_map_default_zoom"}),
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["map_center_mode", "map_custom_latitude", "map_custom_longitude", "map_default_zoom"]
+
+    def clean_map_default_zoom(self):
+        zoom = self.cleaned_data.get("map_default_zoom")
+        return zoom if zoom is not None else 13

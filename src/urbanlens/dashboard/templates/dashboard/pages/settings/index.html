@@ -177,8 +177,91 @@
                 {% endif %}
             </div>
 
+            <div class="settings-field settings-field--checkbox">
+                <label class="settings-checkbox-label" for="{{ style_form.use_pin_cache.id_for_label }}">
+                    <span class="settings-checkbox-wrap">{{ style_form.use_pin_cache }}</span>
+                    <span>
+                        <span class="settings-checkbox-title">{{ style_form.use_pin_cache.label }}</span>
+                        <span class="settings-help">{{ style_form.use_pin_cache.help_text }}</span>
+                        {% if not style_form.use_pin_cache.value %}
+                        <span class="settings-warning">
+                            <i class="material-icons" style="font-size:0.9rem;vertical-align:-0.15em;">warning</i>
+                            Browser caching is currently disabled. Map loads will be slower.
+                        </span>
+                        {% endif %}
+                    </span>
+                </label>
+                {% if style_form.use_pin_cache.errors %}
+                <p class="settings-error">{{ style_form.use_pin_cache.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
             <div class="settings-actions">
                 <button type="submit" class="settings-save-btn">Save Style Settings</button>
+            </div>
+        </form>
+    </section>
+
+    {# ── Map Center ─────────────────────────────────────────────────────────── #}
+    <section class="settings-section">
+        <div class="settings-section-header">
+            <i class="material-icons">my_location</i>
+            <div>
+                <h2 class="settings-section-title">Map Starting Point</h2>
+                <p class="settings-section-desc">Choose where the map centers when you open it.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="map-center-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="map_center">
+            {{ map_center_form.map_custom_latitude }}
+            {{ map_center_form.map_custom_longitude }}
+            {{ map_center_form.map_default_zoom }}
+
+            <div class="settings-field">
+                <label class="settings-label">Starting Point</label>
+                <div class="settings-map-view-row">
+                    {% for radio in map_center_form.map_center_mode %}
+                    <label class="settings-map-view-option{% if radio.data.value == map_center_form.instance.map_center_mode %} active{% endif %}"
+                           onclick="selectMapMode('{{ radio.data.value }}')">
+                        {{ radio.tag }}
+                        {% if radio.data.value == 'auto' %}
+                            <i class="material-icons">push_pin</i><span>My Pins</span>
+                        {% elif radio.data.value == 'gps' %}
+                            <i class="material-icons">gps_fixed</i><span>Current Location</span>
+                        {% else %}
+                            <i class="material-icons">place</i><span>Custom</span>
+                        {% endif %}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="settings-field" id="custom-location-field" style="display:none">
+                <label class="settings-label">Custom Location</label>
+                <p class="settings-help">Enter an address, city name, or GPS coordinates (lat, lng).</p>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+                    <input type="text" id="map-center-address" class="settings-input" style="flex:1; min-width:200px"
+                           placeholder="e.g. Albany, NY  or  42.6526, -73.7562">
+                    <button type="button" class="settings-reset-btn" onclick="geocodeAddress()">
+                        <i class="material-icons" style="font-size:16px;vertical-align:middle">search</i> Find
+                    </button>
+                    <button type="button" class="settings-reset-btn" onclick="useDeviceLocation()">
+                        <i class="material-icons" style="font-size:16px;vertical-align:middle">my_location</i> Use Current
+                    </button>
+                </div>
+                <p id="geocode-error" style="color:var(--color-error,#c00);margin-top:4px;display:none"></p>
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label">Preview <span style="font-weight:400;font-size:.85em;color:var(--color-muted,#888)">(drag or zoom to adjust)</span></label>
+                <div id="map-center-preview" style="height:300px;border-radius:8px;overflow:hidden;border:1px solid var(--color-border,#ddd)"></div>
+                <p class="settings-help" style="margin-top:4px">The zoom level you leave this map at will be used as your default zoom.</p>
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save Map Center</button>
             </div>
         </form>
     </section>
@@ -186,6 +269,8 @@
 {% endblock %}
 
 {% block scripts %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 function applyThemePreview(theme) {
     document.getElementById('html-root').setAttribute('data-theme', theme);
@@ -196,5 +281,131 @@ function applyThemePreview(theme) {
     var chosen = theme === 'dark' ? 1 : 0;
     document.querySelectorAll('.settings-theme-option')[chosen].classList.add('active');
 }
+
+// ── Map Center Preview ────────────────────────────────────────────────────────
+(function () {
+    var GEOCODE_URL = '{% url "settings.geocode" %}';
+    var currentMode = '{{ map_center_form.instance.map_center_mode|default:"auto" }}';
+
+    // Server-provided starting coordinates for the preview.
+    var previewLat = {{ preview_lat|default:"null" }};
+    var previewLng = {{ preview_lng|default:"null" }};
+    var previewZoom = {{ preview_zoom|default:13 }};
+
+    // Fallback when there is no server-provided center yet.
+    if (previewLat === null) { previewLat = 40.7128; previewLng = -74.0060; }
+
+    // Initialise the preview Leaflet map.
+    var previewMap = L.map('map-center-preview').setView([previewLat, previewLng], previewZoom);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+    }).addTo(previewMap);
+
+    // Marker that the user can drag to pick a location.
+    var marker = L.marker([previewLat, previewLng], { draggable: true }).addTo(previewMap);
+
+    function syncHiddenFields(lat, lng) {
+        document.getElementById('id_map_custom_latitude').value  = lat.toFixed(6);
+        document.getElementById('id_map_custom_longitude').value = lng.toFixed(6);
+    }
+
+    function syncZoom() {
+        document.getElementById('id_map_default_zoom').value = previewMap.getZoom();
+    }
+
+    // Keep hidden fields in sync whenever the map or marker changes.
+    marker.on('dragend', function (e) {
+        var pos = e.target.getLatLng();
+        previewMap.setView(pos);
+        syncHiddenFields(pos.lat, pos.lng);
+    });
+    previewMap.on('click', function (e) {
+        if (currentMode !== 'custom') return;
+        marker.setLatLng(e.latlng);
+        previewMap.setView(e.latlng);
+        syncHiddenFields(e.latlng.lat, e.latlng.lng);
+    });
+    previewMap.on('zoomend', syncZoom);
+
+    // Initialise hidden fields from current state.
+    syncHiddenFields(previewLat, previewLng);
+    syncZoom();
+
+    // Show / hide the custom-location input row and enable / disable the marker.
+    function applyMode(mode) {
+        currentMode = mode;
+        var customField = document.getElementById('custom-location-field');
+        var isDraggable = mode === 'custom';
+        if (isDraggable) {
+            marker.dragging.enable();
+            customField.style.display = '';
+        } else {
+            marker.dragging.disable();
+            customField.style.display = 'none';
+        }
+        // Update active pill styling.
+        document.querySelectorAll('.settings-map-view-option').forEach(function (el) {
+            var radio = el.querySelector('input[type=radio]');
+            el.classList.toggle('active', radio && radio.value === mode);
+        });
+    }
+
+    window.selectMapMode = function (mode) {
+        // Select the matching hidden radio input.
+        var radio = document.querySelector('input[name="map_center_mode"][value="' + mode + '"]');
+        if (radio) radio.checked = true;
+        applyMode(mode);
+
+        if (mode === 'gps') {
+            useDeviceLocation();
+        }
+    };
+
+    // Geocode an address string and move the preview map there.
+    window.geocodeAddress = function () {
+        var address = document.getElementById('map-center-address').value.trim();
+        if (!address) return;
+        var errEl = document.getElementById('geocode-error');
+        errEl.style.display = 'none';
+
+        fetch(GEOCODE_URL + '?address=' + encodeURIComponent(address))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.error) {
+                    errEl.textContent = data.error;
+                    errEl.style.display = '';
+                    return;
+                }
+                var latlng = L.latLng(data.lat, data.lng);
+                marker.setLatLng(latlng);
+                previewMap.setView(latlng, previewMap.getZoom());
+                syncHiddenFields(data.lat, data.lng);
+            })
+            .catch(function () {
+                errEl.textContent = 'Geocoding request failed.';
+                errEl.style.display = '';
+            });
+    };
+
+    // Allow pressing Enter to trigger geocode.
+    document.getElementById('map-center-address').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); geocodeAddress(); }
+    });
+
+    // Use the browser's GPS to move the preview.
+    window.useDeviceLocation = function () {
+        if (!navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition(function (pos) {
+            var latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+            marker.setLatLng(latlng);
+            previewMap.setView(latlng, previewMap.getZoom());
+            syncHiddenFields(pos.coords.latitude, pos.coords.longitude);
+        });
+    };
+
+    // Apply the initial mode (show/hide correct fields, etc.).
+    applyMode(currentMode);
+})();
 </script>
 {% endblock %}

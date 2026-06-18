@@ -36,6 +36,25 @@ from urbanlens.dashboard.models.pin import Pin
 logger = logging.getLogger(__name__)
 
 
+@receiver(post_save, sender=Pin, dispatch_uid="pin_invalidate_map_center")
+def invalidate_profile_map_center(_sender, instance: Pin, created: bool, **_kwargs) -> None:
+    """Clear the cached map center so it is recomputed on the next map load.
+
+    Args:
+        sender: The Pin model class.
+        instance: The Pin that was just saved.
+        created: True when a new pin row was inserted.
+        **kwargs: Additional signal arguments.
+    """
+    if not created or not instance.profile_id:
+        return
+    from urbanlens.dashboard.models.profile.model import Profile
+    Profile.objects.filter(pk=instance.profile_id).update(
+        map_center_latitude=None,
+        map_center_longitude=None,
+    )
+
+
 @receiver(post_save, sender=Pin, dispatch_uid="pin_suggest_categories")
 def suggest_and_add_categories(sender, instance: Pin, created, **kwargs):
     """

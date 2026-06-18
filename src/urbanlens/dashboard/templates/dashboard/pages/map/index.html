@@ -485,7 +485,7 @@
 
             <div class="fp-section">
                 <div class="fp-label">Search Pins</div>
-                <input type="text" name="name" class="fp-search" placeholder="Name or alias…" autocomplete="off">
+                <input type="text" name="name" id="fp-search" class="fp-search" placeholder="Name or alias..." autocomplete="off">
             </div>
 
             <div class="fp-section">
@@ -614,9 +614,7 @@
         <span>Loading pins…</span>
     </div>
 
-    <div id="loading-pins-message">
-        <span>Loading...</span>
-    </div>
+    <div id="loading-pins-message" aria-hidden="true"></div>
 
     <div id="pin-counter">
         <span id="pin-counter-value">0</span>
@@ -740,10 +738,10 @@
 <script>
     // ── Constants ─────────────────────────────────────────────────────────────
     const _PROFILE_ID  = {{ profile_id|default:0 }};
+    const _USE_CACHE      = {{ use_pin_cache|yesno:"true,false" }};
     const _CACHE_KEY      = `ul_pins_v3_${_PROFILE_ID}`;
-    const _CACHE_FRESH    = 3 * 60 * 1000;        // 3 min: serve from cache + bg refresh
-    const _CACHE_MAX      = 24 * 60 * 60 * 1000;  // 24 h: discard entirely
-    const _POLL_INTERVAL  = 2 * 60 * 1000;         // 2 min: background poll for pin changes
+    const _CACHE_MAX      = 180 * 24 * 60 * 60 * 1000;  // 6 months: space reclaim for inactive users
+    const _POLL_INTERVAL  = 2 * 60 * 1000;               // 2 min: background poll for pin changes
     const _TILE_SIZE   = 0.5;   // degrees per tile edge (~55 km at mid-latitudes)
     const _TILE_PAD    = 1.0;   // degrees of prefetch padding around the viewport
     const _MAX_TILES   = 200;   // threshold above which we just fetch the whole world
@@ -757,11 +755,30 @@
     let   _cacheTid          = null;   // debounce timer for cache writes
     let   _lastKnownUpdated  = null;   // server last_updated from most recent meta poll
     let   pinsVisible        = true;
+    // Server-authoritative total pin count (updated after a full refresh).
+    let   _totalPins         = {{ pin_count|default:0 }};
 
     // ── Map ───────────────────────────────────────────────────────────────────
-    const map = L.map('map', { maxZoom: 19 }).setView([42.65250213448323, -73.75791867436858], 13);
+    const _MAP_CENTER_MODE = '{{ map_center_mode|default:"auto" }}';
+    const _SERVER_CENTER_LAT = {{ map_center_lat|default:"null" }};
+    const _SERVER_CENTER_LNG = {{ map_center_lng|default:"null" }};
+    const _defaultZoom     = {{ map_default_zoom|default:13 }};
+    const _serverCenter    = (_SERVER_CENTER_LAT !== null && _SERVER_CENTER_LNG !== null)
+        ? [_SERVER_CENTER_LAT, _SERVER_CENTER_LNG]
+        : [40.7128, -74.0060];  // NYC — shown only when user has no pins and GPS denied
+
+    const map = L.map('map', { maxZoom: 19 }).setView(_serverCenter, _defaultZoom);
     window.map = map;
     window.pin = null;
+
+    // GPS mode: always re-center to the user's actual location on load.
+    if (_MAP_CENTER_MODE === 'gps' && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => { map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom); },
+            () => { /* permission denied — server center already applied */ },
+            { timeout: 8000, maximumAge: 300000 },
+        );
+    }
 
     // ── Cluster layer (replaces plain LayerGroup) ─────────────────────────────
     var _userClusterRadius = {% if cluster_radius %}{{ cluster_radius }}{% else %}null{% endif %};
@@ -800,7 +817,11 @@
     function hideLoadingMessage() { $('#loading-pins-message').hide(); }
 
     function updatePinCounter() {
-        const count = pinsVisible ? _markerMap.size : 0;
+        // Show the total pin count for the user, not just what's visible in the current viewport.
+        // _totalPins comes from the server at page load and is updated after a full refresh.
+        // Once _pinStore has been fully populated (after _refreshAllPins or a '*' tile fetch),
+        // _pinStore.size is authoritative.
+        const count = _fetchedTiles.has('*') ? _pinStore.size : _totalPins;
         document.getElementById('pin-counter-value').textContent = count;
         document.getElementById('pin-counter-label').textContent = count === 1 ? 'pin' : 'pins';
     }
@@ -846,6 +867,7 @@
 
     // ── LocalStorage cache ────────────────────────────────────────────────────
     function _readCache() {
+        if (!_USE_CACHE) return null;
         try {
             const raw = localStorage.getItem(_CACHE_KEY);
             if (!raw) return null;
@@ -856,6 +878,7 @@
         } catch { return null; }
     }
     function _writeCache() {
+        if (!_USE_CACHE) return;
         const ts = Date.now();
         try {
             localStorage.setItem(_CACHE_KEY, JSON.stringify({
@@ -868,10 +891,13 @@
         } catch { try { localStorage.removeItem(_CACHE_KEY); } catch {} }
     }
     function _scheduleCache() {
+        if (!_USE_CACHE) return;
         if (_cacheTid) clearTimeout(_cacheTid);
         _cacheTid = setTimeout(_writeCache, 1500);
     }
-    // Call after any pin mutation (add/delete) to force a fresh fetch next time
+    // Call after any pin mutation (add/delete) to force a fresh fetch next time.
+    // Always clears any existing localStorage entry regardless of _USE_CACHE,
+    // so disabling and re-enabling caching starts fresh.
     window.invalidatePinCache = function() {
         try { localStorage.removeItem(_CACHE_KEY); } catch {}
         _lastKnownUpdated = null;
@@ -891,6 +917,7 @@
     // Fetches all pins, then adds new ones, updates changed markers, removes
     // deleted ones — without altering map position or zoom.
     async function _refreshAllPins() {
+        console.log('[UL] Pin data changed on server — running full background refresh');
         const csi = document.getElementById('cache-status');
         if (csi) csi.classList.add('refreshing');
         try {
@@ -937,8 +964,10 @@
             if (batch.length) clusterGroup.addLayers(batch);
             _fetchedTiles.clear();
             _fetchedTiles.add('*');
+            _totalPins = _pinStore.size;
             updatePinCounter();
             _scheduleCache();
+            console.log('[UL] Full refresh complete — %d pins total', _pinStore.size);
         } catch (err) {
             console.warn('[UrbanLens] Background pin refresh failed:', err);
         } finally {
@@ -1084,6 +1113,7 @@
     // ── Fetch tiles from server ───────────────────────────────────────────────
     async function _fetchTiles(tileKeys) {
         if (!tileKeys.length) return 0;
+        console.log('[UL] Fetching %d tile(s) from server: %s', tileKeys.length, tileKeys.join(', '));
         tileKeys.forEach(k => _fetchedTiles.add(k));
         _setFetching(true);
         try {
@@ -1121,6 +1151,7 @@
                 updatePinCounter();
                 _scheduleCache();
             }
+            console.log('[UL] Server returned %d new pin(s) for tile(s): %s', batch.length, tileKeys.join(', '));
             return batch.length;
         } catch (err) {
             tileKeys.forEach(k => _fetchedTiles.delete(k));
@@ -1170,7 +1201,9 @@
     (async () => {
         const cache = _readCache();
         if (cache?.pins && Object.keys(cache.pins).length) {
-            // Restore from cache — O(n) bulk add, no server round-trip
+            // Restore from cache immediately — no server round-trip, no loading indicator.
+            const ageSeconds = Math.round((Date.now() - cache.ts) / 1000);
+            console.log('[UL] Cache HIT — %d pins, age %ds', Object.keys(cache.pins).length, ageSeconds);
             const layers = [];
             for (const [uuid, pin] of Object.entries(cache.pins)) {
                 _pinStore.set(uuid, pin);
@@ -1184,19 +1217,28 @@
             _lastKnownUpdated = cache.lastUpdated || null;
             _updateCacheStatus(cache.ts);
 
-            // Stale cache? silently refresh the current viewport
-            if (Date.now() - cache.ts > _CACHE_FRESH) {
-                const vtiles = _newTilesForBounds(map.getBounds());
-                vtiles.forEach(k => _fetchedTiles.delete(k));
-                _loadViewport().catch(() => {});
+            // Freshness is determined by comparing cache.lastUpdated to the server's
+            // last_updated value — not by cache age.  _pollForUpdates() handles this:
+            //   • If lastUpdated matches → no refresh, no network cost.
+            //   • If lastUpdated differs → silent full refresh via _refreshAllPins().
+            // Edge case: cache has no lastUpdated baseline (old format).  Trigger a
+            // silent refresh so we don't silently serve potentially stale data forever.
+            if (!_lastKnownUpdated) {
+                console.log('[UL] Cache has no lastUpdated baseline — triggering silent refresh');
+                _refreshAllPins().catch(() => {});
             }
         } else {
-            // Cold start: fetch viewport + padding
+            // Cold start: cache disabled, empty, or expired — fetch from server.
+            if (!_USE_CACHE) {
+                console.log('[UL] Pin cache disabled by user preference — fetching from server');
+            } else {
+                console.log('[UL] Cache MISS — fetching pins from server');
+            }
             try { await _loadViewport(); } catch (e) { console.warn('Initial pin load failed:', e); }
             hideLoadingMessage();
         }
-        // Begin background polling — first call sets _lastKnownUpdated without
-        // triggering a refresh; subsequent calls detect real changes.
+        // Begin background polling.  First call compares cache.lastUpdated to the
+        // server's value and triggers _refreshAllPins() only when they differ.
         _pollForUpdates();
         setInterval(_pollForUpdates, _POLL_INTERVAL);
     })();

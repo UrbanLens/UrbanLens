@@ -57,6 +57,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         tags = Badge.objects.tags().visible_to(profile).ordered()
         categories = Badge.objects.categories().ordered()
+        map_center = profile.get_map_center()
+        pin_count = Pin.objects.filter(profile=profile).root_pins().count()
         return render(
             request,
             "dashboard/pages/map/index.html",
@@ -67,6 +69,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "status_choices": PinStatus.choices,
                 "profile_id": profile.id,
                 "cluster_radius": profile.cluster_radius,
+                "pin_count": pin_count,
+                "use_pin_cache": profile.use_pin_cache,
+                "map_center_lat": map_center[0] if map_center else None,
+                "map_center_lng": map_center[1] if map_center else None,
+                "map_center_mode": profile.map_center_mode,
+                "map_default_zoom": profile.map_default_zoom or 13,
             },
         )
 
