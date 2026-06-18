@@ -13,9 +13,11 @@
       {% endif %}
       hx-swap="outerHTML"
       hx-encoding="multipart/form-data"
-      hx-on::after-request="if(event.detail.successful){this.reset();this.closest('.comment-reply-form') && (this.closest('.comment-reply-form').hidden=true)}"
+      hx-on::after-request="if(event.detail.successful){this.reset();_clearCommentMap(this);this.closest('.comment-reply-form') && (this.closest('.comment-reply-form').hidden=true)}"
       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   {% if parent_id %}<input type="hidden" name="parent_id" value="{{ parent_id }}">{% endif %}
+  {# Hidden field that carries the map snapshot — populated by the composer JS #}
+  <input type="hidden" name="map_data" class="comment-map-data-field" value="">
   <div class="comment-compose-inner">
     {% if not is_reply %}
     <div class="comment-avatar comment-avatar--compose">
@@ -37,12 +39,29 @@
         {# @ mention autocomplete container #}
         <div class="mention-dropdown" hidden></div>
       </div>
+
+      {# Map preview chip — shown when a map is attached #}
+      <div class="comment-map-chip" hidden>
+        <i class="material-icons">map</i>
+        <span class="comment-map-chip-label">Map attached</span>
+        <button type="button" class="comment-map-chip-edit" title="Edit map">
+          <i class="material-icons">edit</i>
+        </button>
+        <button type="button" class="comment-map-chip-remove" title="Remove map">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+
       <div class="comment-compose-actions">
         <label class="comment-image-label" title="Attach image">
           <i class="material-icons">image</i>
           <input type="file" name="image" accept="image/*" class="comment-image-input">
         </label>
         <span class="comment-image-preview"></span>
+        <button type="button" class="comment-map-btn" title="Attach map"
+                onclick="_openCommentMapComposer(this.closest('.comment-compose'))">
+          <i class="material-icons">map</i>
+        </button>
         <button type="submit" class="btn-primary {% if is_reply %}btn-sm{% endif %}">
           {% if is_reply %}Reply{% else %}Post{% endif %}
         </button>

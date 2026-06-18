@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import NoReverseMatch, reverse
 from django.views import View
@@ -101,7 +102,8 @@ class PinCommentsView(LoginRequiredMixin, View):
         parent = None
         if parent_id:
             parent = get_object_or_404(Comment, id=parent_id, pin=pin)
-        comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent)
+        map_data = _parse_map_data(request)
+        comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, map_data=map_data)
         if comment.image or request.FILES.get("image"):
             comment.image = request.FILES.get("image")
             comment.save(update_fields=["image"])
@@ -161,7 +163,8 @@ class WikiCommentsView(LoginRequiredMixin, View):
         parent = None
         if parent_id:
             parent = get_object_or_404(Comment, id=parent_id, location=location)
-        comment = Comment.objects.create(location=location, profile=profile, text=text, parent=parent)
+        map_data = _parse_map_data(request)
+        comment = Comment.objects.create(location=location, profile=profile, text=text, parent=parent, map_data=map_data)
         if request.FILES.get("image"):
             comment.image = request.FILES["image"]
             comment.save(update_fields=["image"])
@@ -268,6 +271,67 @@ def _aggregate_reactions(reactions_qs) -> dict[str, dict]:
         result[r.emoji]["count"] += 1
         result[r.emoji]["reacted_by"].append(r.profile_id)
     return result
+
+
+def _parse_map_data(request) -> dict | None:
+    """Extract and validate the map_data JSON blob from a comment POST.
+
+    Args:
+        request: The HTTP request.
+
+    Returns:
+        Parsed dict if valid map_data was submitted, else None.
+    """
+    raw = request.POST.get("map_data", "").strip()
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        logger.warning("Ignoring malformed map_data in comment POST")
+        return None
+    if not isinstance(data, dict):
+        return None
+    # Require at least a center coordinate.
+    if not (isinstance(data.get("center_lat"), (int, float)) and isinstance(data.get("center_lng"), (int, float))):
+        return None
+    return data
+
+
+# ── Comment map pin autocomplete endpoint ────────────────────────────────────
+
+
+class CommentMapPinsView(LoginRequiredMixin, View):
+    """GET /comments/map-pins/?q=… — return user's pins for the comment map center picker."""
+
+    def get(self, request):
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        profile = _profile(request)
+        q = request.GET.get("q", "").strip().lower()
+        qs = (
+            Pin.objects.filter(profile=profile)
+            .exclude(location__isnull=True)
+            .select_related("location")[:80]
+        )
+        results = []
+        for pin in qs:
+            name = pin.effective_name or pin.location.name or ""
+            if q and q not in name.lower():
+                continue
+            lat = pin.effective_latitude
+            lng = pin.effective_longitude
+            if lat is None or lng is None:
+                continue
+            results.append({
+                "uuid": str(pin.uuid),
+                "name": name,
+                "lat": float(lat),
+                "lng": float(lng),
+                "detail_pins_url": f"/map/pin/{pin.uuid}/detail-pins/json/",
+                "markup_url": f"/map/pin/{pin.uuid}/markup/json/",
+            })
+        return JsonResponse({"pins": results})
 
 
 # ── Location autocomplete endpoint ───────────────────────────────────────────

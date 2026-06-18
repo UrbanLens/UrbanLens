@@ -31,6 +31,28 @@
 
   <div class="comment-text">{{ rendered_text }}</div>
 
+  {% if comment.map_data %}
+  {% with _sid="comment-map-data-"|add:comment.id %}{{ comment.map_data|json_script:_sid }}{% endwith %}
+  <div class="comment-map-preview" data-comment-id="{{ comment.id }}">
+    <div class="comment-map-thumb" id="comment-map-thumb-{{ comment.id }}"></div>
+    <button type="button" class="comment-map-expand-btn"
+            onclick="_expandCommentMap({{ comment.id }})">
+      <i class="material-icons">open_in_full</i>
+      Expand map
+    </button>
+  </div>
+  <dialog id="comment-map-dialog-{{ comment.id }}" class="comment-map-view-dialog">
+    <div class="dialog-header">
+      <span>Map</span>
+      <button type="button" class="dialog-close"
+              onclick="document.getElementById('comment-map-dialog-{{ comment.id }}').close()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div id="comment-map-view-{{ comment.id }}" class="comment-map-view-body"></div>
+  </dialog>
+  {% endif %}
+
   {% if comment.image %}
   <a href="{{ comment.image.url }}" target="_blank" class="comment-image-link">
     <img src="{{ comment.image.url }}" alt="Attached" class="comment-image">

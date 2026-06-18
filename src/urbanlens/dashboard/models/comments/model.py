@@ -42,6 +42,9 @@ class Comment(abstract.Model):
     )
     text = models.TextField()
     image = models.ImageField(upload_to="comment_images/", null=True, blank=True)
+    # Snapshot of a Leaflet map attached to this comment.
+    # Schema: {center_lat, center_lng, zoom, detail_pins: [...], markup: [...]}
+    map_data = models.JSONField(null=True, blank=True)
 
     objects = CommentManager()
 

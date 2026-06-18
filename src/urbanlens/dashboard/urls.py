@@ -499,6 +499,7 @@ urlpatterns = [
             [
                 path("<int:comment_id>/react/", comments.CommentReactionView.as_view(), name="comment.react"),
                 path("locations/", comments.PinnedLocationsJsonView.as_view(), name="comment.locations"),
+                path("map-pins/", comments.CommentMapPinsView.as_view(), name="comment.map_pins"),
             ],
         ),
     ),

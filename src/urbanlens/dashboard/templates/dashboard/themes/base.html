@@ -299,6 +299,63 @@
     });
     </script>
 
+    {# ── Comment map composer dialog ──────────────────────────────────────────── #}
+    <dialog id="comment-map-composer" class="comment-map-composer-dialog">
+      <div class="dialog-header">
+        <span>Attach a map to your comment</span>
+        <button type="button" class="dialog-close" id="comment-map-composer-close">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="comment-map-composer-body">
+        <div class="comment-map-composer-controls">
+          <label class="cmcc-label">Center on a pin</label>
+          <div class="cmcc-pin-search-wrap">
+            <input type="text" class="cmcc-pin-search" placeholder="Search your pins…" autocomplete="off">
+            <div class="cmcc-pin-dropdown" hidden></div>
+          </div>
+        </div>
+        <div id="comment-map-composer-map" class="comment-map-composer-map"></div>
+        <div class="comment-map-composer-toolbar">
+          <span class="cmc-toolbar-label">Draw:</span>
+          <button type="button" class="cmc-tool-btn" data-tool="arrow" title="Arrow">
+            <i class="material-icons">arrow_forward</i>
+          </button>
+          <button type="button" class="cmc-tool-btn" data-tool="line" title="Line">
+            <i class="material-icons">timeline</i>
+          </button>
+          <button type="button" class="cmc-tool-btn" data-tool="text" title="Text label">
+            <i class="material-icons">text_fields</i>
+          </button>
+          <button type="button" class="cmc-tool-btn" data-tool="circle" title="Circle">
+            <i class="material-icons">radio_button_unchecked</i>
+          </button>
+          <button type="button" class="cmc-tool-btn" data-tool="rect" title="Rectangle">
+            <i class="material-icons">crop_square</i>
+          </button>
+          <button type="button" class="cmc-tool-btn" data-tool="polygon" title="Polygon">
+            <i class="material-icons">pentagon</i>
+          </button>
+          <span class="cmc-toolbar-sep"></span>
+          <button type="button" class="cmc-undo-btn" id="cmc-undo" title="Undo last shape">
+            <i class="material-icons">undo</i>
+          </button>
+          <button type="button" class="cmc-clear-btn" id="cmc-clear" title="Clear all markup">
+            <i class="material-icons">delete_sweep</i>
+          </button>
+          <span class="cmc-toolbar-sep"></span>
+          <label class="cmc-color-wrap" title="Markup color">
+            <span>Color</span>
+            <input type="color" id="cmc-color" value="#e74c3c">
+          </label>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button type="button" class="btn-ghost" id="comment-map-composer-cancel">Cancel</button>
+        <button type="button" class="btn-primary" id="comment-map-composer-save">Attach map</button>
+      </div>
+    </dialog>
+
     {# ── Global confirm dialog (replaces browser confirm()) ──────────────────── #}
     <dialog id="confirm-dialog" class="confirm-dialog">
         <div class="dialog-header">
@@ -345,6 +402,361 @@
                 dlg.showModal();
             });
         };
+    }());
+    </script>
+
+    {# ── Leaflet global — needed for comment-map composer on any page ─────────── #}
+    {# Already loaded in <head> on map/location pages, but same CDN version so browser deduplicates via cache #}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    {# ── Comment map composer + viewer JS ────────────────────────────────────── #}
+    <script>
+    (function () {
+        // ── Shared tile layers ────────────────────────────────────────────────
+        var _OSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors', maxZoom: 19
+        });
+
+        // ── Composer state ────────────────────────────────────────────────────
+        var _composerMap = null;
+        var _composerMarkupLayer = null;  // L.LayerGroup of drawn shapes
+        var _composerShapes = [];         // raw shape descriptors [{type, latlngs, label, color}]
+        var _activeTool = null;
+        var _drawState = null;            // transient drawing state
+        var _originForm = null;           // the .comment-compose element that opened the dialog
+        var _pinSearchTimer = null;
+        var _pinCache = [];
+
+        var _dialog = document.getElementById('comment-map-composer');
+        var _colorPicker = document.getElementById('cmc-color');
+
+        // ── Open composer ─────────────────────────────────────────────────────
+        window._openCommentMapComposer = function (form) {
+            _originForm = form;
+
+            // Restore existing map_data if the form already has one
+            var existing = null;
+            var hiddenField = form.querySelector('.comment-map-data-field');
+            if (hiddenField && hiddenField.value) {
+                try { existing = JSON.parse(hiddenField.value); } catch (_) {}
+            }
+
+            _dialog.showModal();
+
+            // Init or re-use the Leaflet map
+            var mapEl = document.getElementById('comment-map-composer-map');
+            if (!_composerMap) {
+                _composerMap = L.map(mapEl, { zoomControl: true });
+                _OSM.addTo(_composerMap);
+                _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
+                _attachMapEvents();
+            } else {
+                _composerMap.invalidateSize();
+            }
+
+            if (existing) {
+                _composerMap.setView([existing.center_lat, existing.center_lng], existing.zoom || 14);
+                _composerShapes = existing.markup || [];
+            } else {
+                _composerMap.setView([40.7128, -74.0060], 12);
+                _composerShapes = [];
+            }
+            _redrawMarkup();
+            _setActiveTool(null);
+            _loadPinsForSearch();
+        };
+
+        // ── Close / cancel ────────────────────────────────────────────────────
+        document.getElementById('comment-map-composer-close').addEventListener('click', _closeComposer);
+        document.getElementById('comment-map-composer-cancel').addEventListener('click', _closeComposer);
+
+        function _closeComposer() {
+            if (_dialog.open) _dialog.close();
+            _setActiveTool(null);
+        }
+
+        // ── Save ──────────────────────────────────────────────────────────────
+        document.getElementById('comment-map-composer-save').addEventListener('click', function () {
+            if (!_composerMap || !_originForm) return;
+            var center = _composerMap.getCenter();
+            var snapshot = {
+                center_lat: center.lat,
+                center_lng: center.lng,
+                zoom: _composerMap.getZoom(),
+                detail_pins: [],
+                markup: _composerShapes.slice()
+            };
+            var hiddenField = _originForm.querySelector('.comment-map-data-field');
+            if (hiddenField) hiddenField.value = JSON.stringify(snapshot);
+
+            // Show chip in form
+            var chip = _originForm.querySelector('.comment-map-chip');
+            if (chip) chip.hidden = false;
+
+            _closeComposer();
+        });
+
+        // ── Clear attached map from a form ────────────────────────────────────
+        window._clearCommentMap = function (form) {
+            var hf = form && form.querySelector('.comment-map-data-field');
+            if (hf) hf.value = '';
+            var chip = form && form.querySelector('.comment-map-chip');
+            if (chip) chip.hidden = true;
+        };
+
+        // Wire chip buttons (event delegation — forms are dynamic via HTMX)
+        document.addEventListener('click', function (e) {
+            if (e.target.closest('.comment-map-chip-remove')) {
+                var form = e.target.closest('.comment-compose');
+                if (form) _clearCommentMap(form);
+            }
+            if (e.target.closest('.comment-map-chip-edit')) {
+                var form2 = e.target.closest('.comment-compose');
+                if (form2) _openCommentMapComposer(form2);
+            }
+        });
+
+        // ── Tool selection ────────────────────────────────────────────────────
+        document.querySelectorAll('.cmc-tool-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var tool = btn.dataset.tool;
+                _setActiveTool(_activeTool === tool ? null : tool);
+            });
+        });
+
+        document.getElementById('cmc-undo').addEventListener('click', function () {
+            _composerShapes.pop();
+            _redrawMarkup();
+        });
+
+        document.getElementById('cmc-clear').addEventListener('click', function () {
+            _composerShapes = [];
+            _redrawMarkup();
+        });
+
+        function _setActiveTool(tool) {
+            _activeTool = tool;
+            _drawState = null;
+            document.querySelectorAll('.cmc-tool-btn').forEach(function (b) {
+                b.classList.toggle('is-active', b.dataset.tool === tool);
+            });
+            if (_composerMap) {
+                _composerMap.getContainer().style.cursor = tool ? 'crosshair' : '';
+            }
+        }
+
+        // ── Map drawing events ────────────────────────────────────────────────
+        function _attachMapEvents() {
+            _composerMap.on('click', _onMapClick);
+            _composerMap.on('dblclick', function (e) {
+                if (_activeTool === 'polygon' && _drawState && _drawState.points.length >= 3) {
+                    var color = _colorPicker ? _colorPicker.value : '#e74c3c';
+                    _composerShapes.push({ type: 'polygon', latlngs: _drawState.points, color: color });
+                    _drawState = null;
+                    _redrawMarkup();
+                }
+            });
+        }
+
+        function _onMapClick(e) {
+            if (!_activeTool) return;
+            var ll = e.latlng;
+            var color = _colorPicker ? _colorPicker.value : '#e74c3c';
+
+            if (_activeTool === 'text') {
+                var label = window.prompt('Enter label text:');
+                if (!label) return;
+                _composerShapes.push({ type: 'text', latlngs: [[ll.lat, ll.lng]], label: label, color: color });
+                _redrawMarkup();
+                return;
+            }
+
+            // Two-click tools: first click = start, second click = end
+            var twoClick = { arrow: true, line: true, circle: true, rect: true };
+            if (twoClick[_activeTool]) {
+                if (!_drawState) {
+                    _drawState = { start: ll };
+                } else {
+                    var start = _drawState.start;
+                    _composerShapes.push({
+                        type: _activeTool,
+                        latlngs: [[start.lat, start.lng], [ll.lat, ll.lng]],
+                        color: color
+                    });
+                    _drawState = null;
+                    _redrawMarkup();
+                }
+                return;
+            }
+
+            // Polygon: accumulate clicks; double-click closes (handled in dblclick)
+            if (_activeTool === 'polygon') {
+                if (!_drawState) {
+                    _drawState = { points: [[ll.lat, ll.lng]] };
+                } else {
+                    _drawState.points.push([ll.lat, ll.lng]);
+                }
+                _redrawMarkup();
+                // Preview partial polygon
+                if (_drawState && _drawState.points.length > 1) {
+                    _composerMarkupLayer.eachLayer(function (l) {
+                        if (l._cmcPreview) _composerMarkupLayer.removeLayer(l);
+                    });
+                    var poly = L.polyline(_drawState.points, { color: color, dashArray: '4 4' });
+                    poly._cmcPreview = true;
+                    poly.addTo(_composerMarkupLayer);
+                }
+            }
+        }
+
+        // ── Redraw all markup layers ──────────────────────────────────────────
+        function _redrawMarkup() {
+            if (!_composerMarkupLayer) return;
+            _composerMarkupLayer.clearLayers();
+            _composerShapes.forEach(function (s) { _renderShape(s, _composerMarkupLayer); });
+        }
+
+        function _renderShape(s, group) {
+            var color = s.color || '#e74c3c';
+            switch (s.type) {
+                case 'line':
+                    L.polyline(s.latlngs, { color: color, weight: 3 }).addTo(group);
+                    break;
+                case 'arrow': {
+                    L.polyline(s.latlngs, { color: color, weight: 3 }).addTo(group);
+                    // Arrowhead marker at end point
+                    var end = s.latlngs[1];
+                    L.circleMarker(end, { radius: 6, color: color, fillColor: color, fillOpacity: 1 }).addTo(group);
+                    break;
+                }
+                case 'circle': {
+                    var p1 = L.latLng(s.latlngs[0]), p2 = L.latLng(s.latlngs[1]);
+                    L.circle(p1, { radius: p1.distanceTo(p2), color: color, fillOpacity: 0.15 }).addTo(group);
+                    break;
+                }
+                case 'rect': {
+                    var bounds = L.latLngBounds(s.latlngs[0], s.latlngs[1]);
+                    L.rectangle(bounds, { color: color, fillOpacity: 0.1 }).addTo(group);
+                    break;
+                }
+                case 'polygon':
+                    L.polygon(s.latlngs, { color: color, fillOpacity: 0.15 }).addTo(group);
+                    break;
+                case 'text': {
+                    var icon = L.divIcon({
+                        className: 'cmc-text-label',
+                        html: '<span style="color:' + color + ';font-weight:600">' +
+                              s.label.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>',
+                        iconSize: null
+                    });
+                    L.marker(s.latlngs[0], { icon: icon }).addTo(group);
+                    break;
+                }
+            }
+        }
+
+        // ── Pin search autocomplete ───────────────────────────────────────────
+        function _loadPinsForSearch() {
+            if (_pinCache.length) return;
+            fetch('/dashboard/comments/map-pins/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { return r.json(); })
+                .then(function (d) { _pinCache = d.pins || []; });
+        }
+
+        document.querySelector('.cmcc-pin-search').addEventListener('input', function () {
+            clearTimeout(_pinSearchTimer);
+            var q = this.value.toLowerCase().trim();
+            var dd = document.querySelector('.cmcc-pin-dropdown');
+            if (!q) { dd.hidden = true; dd.innerHTML = ''; return; }
+            _pinSearchTimer = setTimeout(function () {
+                var results = _pinCache.filter(function (p) { return p.name.toLowerCase().includes(q); }).slice(0, 8);
+                dd.innerHTML = '';
+                if (!results.length) { dd.hidden = true; return; }
+                results.forEach(function (p) {
+                    var item = document.createElement('div');
+                    item.className = 'cmcc-pin-option';
+                    item.textContent = p.name;
+                    item.addEventListener('mousedown', function (e) {
+                        e.preventDefault();
+                        if (_composerMap) _composerMap.setView([p.lat, p.lng], 15);
+                        dd.hidden = true;
+                        document.querySelector('.cmcc-pin-search').value = '';
+                    });
+                    dd.appendChild(item);
+                });
+                dd.hidden = false;
+            }, 150);
+        });
+
+        document.querySelector('.cmcc-pin-search').addEventListener('blur', function () {
+            setTimeout(function () {
+                var dd = document.querySelector('.cmcc-pin-dropdown');
+                if (dd) dd.hidden = true;
+            }, 200);
+        });
+
+        // Ensure map resizes when dialog opens (browsers don't fire resize inside dialog)
+        _dialog.addEventListener('transitionend', function () {
+            if (_composerMap && _dialog.open) _composerMap.invalidateSize();
+        });
+
+        // ── Comment map viewer ────────────────────────────────────────────────
+        var _viewerMaps = {};   // commentId → L.Map
+
+        window._expandCommentMap = function (commentId) {
+            var dlg = document.getElementById('comment-map-dialog-' + commentId);
+            if (!dlg) return;
+            dlg.showModal();
+
+            if (_viewerMaps[commentId]) {
+                _viewerMaps[commentId].invalidateSize();
+                return;
+            }
+
+            var script = document.getElementById('comment-map-data-' + commentId);
+            if (!script) return;
+            var data;
+            try { data = JSON.parse(script.textContent); } catch (_) { return; }
+
+            var el = document.getElementById('comment-map-view-' + commentId);
+            var viewMap = L.map(el).setView([data.center_lat, data.center_lng], data.zoom || 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors', maxZoom: 19
+            }).addTo(viewMap);
+
+            var markupGroup = L.layerGroup().addTo(viewMap);
+            (data.markup || []).forEach(function (s) { _renderShape(s, markupGroup); });
+
+            _viewerMaps[commentId] = viewMap;
+            setTimeout(function () { viewMap.invalidateSize(); }, 100);
+        };
+
+        // ── Render thumbnail map inside .comment-map-thumb ────────────────────
+        // Runs on DOMContentLoaded and after HTMX swaps
+        function _initThumbs() {
+            document.querySelectorAll('.comment-map-preview').forEach(function (preview) {
+                var id = preview.dataset.commentId;
+                var thumb = preview.querySelector('.comment-map-thumb');
+                if (!thumb || thumb.dataset.initialized) return;
+                var script = document.getElementById('comment-map-data-' + id);
+                if (!script) return;
+                var data;
+                try { data = JSON.parse(script.textContent); } catch (_) { return; }
+
+                thumb.dataset.initialized = '1';
+                var tmap = L.map(thumb, { zoomControl: false, attributionControl: false, dragging: false,
+                                          scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(tmap);
+                tmap.setView([data.center_lat, data.center_lng], data.zoom || 13);
+                var mg = L.layerGroup().addTo(tmap);
+                (data.markup || []).forEach(function (s) { _renderShape(s, mg); });
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', _initThumbs);
+        document.addEventListener('htmx:afterSettle', _initThumbs);
+
     }());
     </script>
 
