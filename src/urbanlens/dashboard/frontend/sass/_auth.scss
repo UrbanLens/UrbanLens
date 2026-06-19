@@ -100,7 +100,7 @@ body.page-auth {
     input[type="password"] {
         width: 100%;
         padding: .7rem .9rem;
-        border: 1.5px solid #e5e7eb;
+        border: 1.5px solid var(--ul-border);
         border-radius: 9px;
         font-size: .95rem;
         color: #111827;
@@ -476,7 +476,7 @@ body.page-index {
         background: #fff;
         border-radius: 14px;
         padding: 1.75rem 1.5rem;
-        border: 1px solid #e0e7ff;
+        border: 1px solid var(--ul-border);
         text-align: center;
         transition: box-shadow .15s, transform .15s;
 

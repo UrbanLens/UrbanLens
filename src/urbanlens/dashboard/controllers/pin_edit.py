@@ -14,6 +14,7 @@ from django.views import View
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.pin.model import Pin, PinNote, PinType
+from urbanlens.dashboard.models.reviews.model import Review
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +178,6 @@ class PinEditView(LoginRequiredMixin, View):
         pin.description = description
         pin.pin_type = pin_type
         pin.priority = priority
-        pin.rating = rating
         if last_visited is not None:
             pin.last_visited = last_visited
         for sf, val in security_values.items():
@@ -185,10 +185,20 @@ class PinEditView(LoginRequiredMixin, View):
         pin.date_abandoned = date_abandoned
         pin.date_last_active = date_last_active
         pin.save(update_fields=[
-            "nickname", "description", "pin_type", "priority", "rating", "last_visited",
+            "nickname", "description", "pin_type", "priority", "last_visited",
             "fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked",
             "date_abandoned", "date_last_active", "updated",
         ])
+
+        # rating lives on the Review model (one review per user per pin)
+        if rating and 1 <= rating <= 5:
+            Review.objects.update_or_create(
+                user=request.user,
+                pin=pin,
+                defaults={"rating": rating, "review": ""},
+            )
+        elif rating == 0:
+            Review.objects.filter(user=request.user, pin=pin).delete()
 
         # Category update: comma-separated names replace all current categories
         category_raw = (body.get("categories") or "").strip()

@@ -425,10 +425,11 @@
 
         // ── Composer state ────────────────────────────────────────────────────
         var _composerMap = null;
-        var _composerMarkupLayer = null;  // L.LayerGroup of drawn shapes
+        var _composerMarkupLayer = null;  // L.LayerGroup of confirmed shapes
+        var _composerPreviewLayer = null; // L.LayerGroup for in-progress drawing preview
         var _composerShapes = [];         // raw shape descriptors [{type, latlngs, label, color}]
         var _activeTool = null;
-        var _drawState = null;            // transient drawing state
+        var _drawState = null;            // { type, points:[[lat,lng],...] } while drawing
         var _originForm = null;           // the .comment-compose element that opened the dialog
         var _pinSearchTimer = null;
         var _pinCache = [];
@@ -465,6 +466,7 @@
                 _composerMap = L.map(mapEl, { zoomControl: true });
                 _makeTileLayer().addTo(_composerMap);
                 _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
+                _composerPreviewLayer = L.layerGroup().addTo(_composerMap);
                 _attachMapEvents();
             }
 
@@ -555,78 +557,166 @@
         });
 
         function _setActiveTool(tool) {
-            _activeTool = tool;
             _drawState = null;
+            if (_composerPreviewLayer) _composerPreviewLayer.clearLayers();
+            _activeTool = tool;
             document.querySelectorAll('.cmc-tool-btn').forEach(function (b) {
                 b.classList.toggle('is-active', b.dataset.tool === tool);
             });
             if (_composerMap) {
-                _composerMap.getContainer().style.cursor = tool ? 'crosshair' : '';
+                if (tool) {
+                    _composerMap.dragging.disable();
+                    _composerMap.getContainer().style.cursor = 'crosshair';
+                } else {
+                    _composerMap.dragging.enable();
+                    _composerMap.getContainer().style.cursor = '';
+                }
             }
         }
 
         // ── Map drawing events ────────────────────────────────────────────────
         function _attachMapEvents() {
-            _composerMap.on('click', _onMapClick);
+            // Single click — add a point for line/arrow/polygon; place text
+            _composerMap.on('click', function (e) {
+                if (e.originalEvent.detail > 1) return;  // skip the 2nd click of a dblclick
+                if (!_activeTool) return;
+                var ll = e.latlng;
+                var color = _colorPicker ? _colorPicker.value : '#e74c3c';
+
+                if (_activeTool === 'text') {
+                    var label = window.prompt('Enter label text:');
+                    if (!label) return;
+                    _composerShapes.push({ type: 'text', latlngs: [[ll.lat, ll.lng]], label: label, color: color });
+                    _redrawMarkup();
+                    return;
+                }
+
+                if (_activeTool === 'line' || _activeTool === 'arrow') {
+                    if (!_drawState) {
+                        _drawState = { points: [[ll.lat, ll.lng]] };
+                    } else {
+                        _drawState.points.push([ll.lat, ll.lng]);
+                    }
+                    _updateDrawPreview(ll);
+                    return;
+                }
+
+                if (_activeTool === 'polygon') {
+                    if (!_drawState) {
+                        _drawState = { points: [[ll.lat, ll.lng]] };
+                    } else {
+                        _drawState.points.push([ll.lat, ll.lng]);
+                    }
+                    _updateDrawPreview(ll);
+                    return;
+                }
+            });
+
+            // Double-click — commit multi-point line/arrow/polygon
             _composerMap.on('dblclick', function (e) {
-                if (_activeTool === 'polygon' && _drawState && _drawState.points.length >= 3) {
-                    var color = _colorPicker ? _colorPicker.value : '#e74c3c';
-                    _composerShapes.push({ type: 'polygon', latlngs: _drawState.points, color: color });
+                if (!_activeTool || !_drawState) return;
+                var color = _colorPicker ? _colorPicker.value : '#e74c3c';
+
+                if ((_activeTool === 'line' || _activeTool === 'arrow') && _drawState.points.length >= 2) {
+                    _composerShapes.push({ type: _activeTool, latlngs: _drawState.points.slice(), color: color });
                     _drawState = null;
+                    if (_composerPreviewLayer) _composerPreviewLayer.clearLayers();
+                    _redrawMarkup();
+                    return;
+                }
+
+                if (_activeTool === 'polygon' && _drawState.points.length >= 3) {
+                    _composerShapes.push({ type: 'polygon', latlngs: _drawState.points.slice(), color: color });
+                    _drawState = null;
+                    if (_composerPreviewLayer) _composerPreviewLayer.clearLayers();
+                    _redrawMarkup();
+                    return;
+                }
+            });
+
+            // Mouse move — rubber-band preview while drawing line/arrow/polygon
+            _composerMap.on('mousemove', function (e) {
+                if (!_drawState) return;
+                _updateDrawPreview(e.latlng);
+            });
+
+            // Drag-draw for circle and rect (native events; map.dragging is disabled)
+            _composerMap.getContainer().addEventListener('mousedown', function (e) {
+                if (!_activeTool || (_activeTool !== 'circle' && _activeTool !== 'rect')) return;
+                if (e.button !== 0) return;
+                var startLL = _composerMap.mouseEventToLatLng(e);
+                var startX = e.clientX, startY = e.clientY;
+                var _dragPreview = null;
+
+                function onMM(ev) {
+                    var endLL = _composerMap.mouseEventToLatLng(ev);
+                    var color = _colorPicker ? _colorPicker.value : '#e74c3c';
+                    if (_dragPreview) _composerMarkupLayer.removeLayer(_dragPreview);
+                    if (_activeTool === 'circle') {
+                        _dragPreview = L.circle(startLL, { radius: startLL.distanceTo(endLL), color: color, weight: 2, fillOpacity: 0.1, interactive: false }).addTo(_composerMarkupLayer);
+                    } else {
+                        _dragPreview = L.rectangle(L.latLngBounds(startLL, endLL), { color: color, weight: 2, fillOpacity: 0.1, interactive: false }).addTo(_composerMarkupLayer);
+                    }
+                }
+
+                function onMU(ev) {
+                    document.removeEventListener('mousemove', onMM);
+                    if (_dragPreview) { _composerMarkupLayer.removeLayer(_dragPreview); _dragPreview = null; }
+                    if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
+                    var endLL = _composerMap.mouseEventToLatLng(ev);
+                    var color = _colorPicker ? _colorPicker.value : '#e74c3c';
+                    _composerShapes.push({ type: _activeTool, latlngs: [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]], color: color });
                     _redrawMarkup();
                 }
+
+                document.addEventListener('mousemove', onMM);
+                document.addEventListener('mouseup', onMU, { once: true });
             });
         }
 
-        function _onMapClick(e) {
-            if (!_activeTool) return;
-            var ll = e.latlng;
+        // Rubber-band preview line from placed points to cursor
+        function _updateDrawPreview(cursorLL) {
+            if (!_composerPreviewLayer) return;
+            _composerPreviewLayer.clearLayers();
+            if (!_drawState) return;
+            var pts = _drawState.points.slice();
+            pts.push([cursorLL.lat, cursorLL.lng]);
             var color = _colorPicker ? _colorPicker.value : '#e74c3c';
-
-            if (_activeTool === 'text') {
-                var label = window.prompt('Enter label text:');
-                if (!label) return;
-                _composerShapes.push({ type: 'text', latlngs: [[ll.lat, ll.lng]], label: label, color: color });
-                _redrawMarkup();
-                return;
+            L.polyline(pts, { color: color, dashArray: '5 7', weight: 2, opacity: 0.75, interactive: false })
+                .addTo(_composerPreviewLayer);
+            if (_activeTool === 'arrow' && pts.length >= 2) {
+                var n = pts.length;
+                var deg = _markupBearing(pts[n - 2], pts[n - 1]);
+                var sz = 24;
+                L.marker(L.latLng(pts[n - 1][0], pts[n - 1][1]), {
+                    icon: L.divIcon({ className: '', html: _arrowheadSvg(color, deg, sz), iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }),
+                    interactive: false
+                }).addTo(_composerPreviewLayer);
             }
+        }
 
-            // Two-click tools: first click = start, second click = end
-            var twoClick = { arrow: true, line: true, circle: true, rect: true };
-            if (twoClick[_activeTool]) {
-                if (!_drawState) {
-                    _drawState = { start: ll };
-                } else {
-                    var start = _drawState.start;
-                    _composerShapes.push({
-                        type: _activeTool,
-                        latlngs: [[start.lat, start.lng], [ll.lat, ll.lng]],
-                        color: color
-                    });
-                    _drawState = null;
-                    _redrawMarkup();
-                }
-                return;
-            }
+        // ── Geometry helpers ──────────────────────────────────────────────────
+        function _markupBearing(from, to) {
+            var flat = Array.isArray(from) ? from[0] : from.lat;
+            var flng = Array.isArray(from) ? from[1] : from.lng;
+            var tlat = Array.isArray(to)   ? to[0]   : to.lat;
+            var tlng = Array.isArray(to)   ? to[1]   : to.lng;
+            return Math.atan2(tlng - flng, tlat - flat) * (180 / Math.PI);
+        }
 
-            // Polygon: accumulate clicks; double-click closes (handled in dblclick)
-            if (_activeTool === 'polygon') {
-                if (!_drawState) {
-                    _drawState = { points: [[ll.lat, ll.lng]] };
-                } else {
-                    _drawState.points.push([ll.lat, ll.lng]);
-                }
-                _redrawMarkup();
-                // Preview partial polygon
-                if (_drawState && _drawState.points.length > 1) {
-                    _composerMarkupLayer.eachLayer(function (l) {
-                        if (l._cmcPreview) _composerMarkupLayer.removeLayer(l);
-                    });
-                    var poly = L.polyline(_drawState.points, { color: color, dashArray: '4 4' });
-                    poly._cmcPreview = true;
-                    poly.addTo(_composerMarkupLayer);
-                }
-            }
+        function _arrowheadSvg(color, deg, sz) {
+            sz = sz || 28;
+            var h   = sz / 2;
+            var tip = -(sz * 0.43);
+            var bx  = sz * 0.36;
+            var by  = sz * 0.29;
+            return '<svg xmlns="http://www.w3.org/2000/svg" width="' + sz + '" height="' + sz + '"' +
+                ' viewBox="' + (-h) + ' ' + (-h) + ' ' + sz + ' ' + sz + '"' +
+                ' style="transform:rotate(' + deg.toFixed(1) + 'deg)">' +
+                '<polygon points="0,' + tip.toFixed(1) +
+                ' ' + bx.toFixed(1) + ',' + by.toFixed(1) +
+                ' ' + (-bx).toFixed(1) + ',' + by.toFixed(1) + '"' +
+                ' fill="' + color + '" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>';
         }
 
         // ── Redraw all markup layers ──────────────────────────────────────────
@@ -643,10 +733,16 @@
                     L.polyline(s.latlngs, { color: color, weight: 3 }).addTo(group);
                     break;
                 case 'arrow': {
-                    L.polyline(s.latlngs, { color: color, weight: 3 }).addTo(group);
-                    // Arrowhead marker at end point
-                    var end = s.latlngs[1];
-                    L.circleMarker(end, { radius: 6, color: color, fillColor: color, fillOpacity: 1 }).addTo(group);
+                    L.polyline(s.latlngs, { color: color, weight: 4 }).addTo(group);
+                    if (s.latlngs.length >= 2) {
+                        var n = s.latlngs.length;
+                        var deg = _markupBearing(s.latlngs[n - 2], s.latlngs[n - 1]);
+                        var sz = 28;
+                        L.marker(s.latlngs[n - 1], {
+                            icon: L.divIcon({ className: '', html: _arrowheadSvg(color, deg, sz), iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }),
+                            interactive: false
+                        }).addTo(group);
+                    }
                     break;
                 }
                 case 'circle': {
@@ -785,6 +881,9 @@
             var dlg = document.getElementById('comment-map-dialog-' + commentId);
             if (!dlg) return;
             dlg.showModal();
+            // Force synchronous style recalculation so Leaflet reads the correct
+            // container height on the very next access.
+            void dlg.offsetHeight;
 
             if (_viewerMaps[commentId]) {
                 _viewerMaps[commentId].invalidateSize();
@@ -803,8 +902,8 @@
             var markupGroup = L.layerGroup().addTo(viewMap);
             (data.markup || []).forEach(function (s) { _renderShape(s, markupGroup); });
 
+            viewMap.invalidateSize();
             _viewerMaps[commentId] = viewMap;
-            setTimeout(function () { viewMap.invalidateSize(); }, 100);
         };
 
         // ── Render thumbnail map inside .comment-map-thumb ────────────────────
@@ -825,6 +924,7 @@
                                           scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
                 _makeTileLayer().addTo(tmap);
                 tmap.setView([data.center_lat, data.center_lng], data.zoom || 13);
+                tmap.invalidateSize();  // ensure tiles load if container wasn't laid out at map creation
                 var mg = L.layerGroup().addTo(tmap);
                 (data.markup || []).forEach(function (s) { _renderShape(s, mg); });
             });

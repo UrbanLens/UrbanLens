@@ -77,7 +77,8 @@
 
 .trip-card {
     background: #fff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--ul-border);
+    ;
     border-radius: 10px;
     transition: box-shadow .15s, border-color .15s;
 
@@ -670,7 +671,7 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    border: 2px solid #fff;
+    border: 2px solid var(--ul-border);
     box-shadow: 0 1px 4px rgba(59, 130, 246, .4);
 }
 
@@ -952,7 +953,8 @@
 
 .trip-comment-input {
     width: 100%;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--ul-border);
+    ;
     border-radius: 8px;
     padding: .55rem .75rem;
     font-size: .875rem;
@@ -1008,7 +1010,8 @@
     left: 0;
     right: 0;
     background: #fff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--ul-border);
+    ;
     border-top: none;
     border-radius: 0 0 6px 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, .1);
@@ -1049,7 +1052,8 @@
     margin: 0 0 1.5rem;
     border-radius: 10px;
     overflow: hidden;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--ul-border);
+    ;
     position: relative;
 
     #trip-map {
@@ -1264,7 +1268,8 @@
     &--none {
         background: #f1f5f9;
         color: #94a3b8;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--ul-border);
+        ;
     }
 
     &--mine {
@@ -1280,7 +1285,8 @@
             display: inline-flex;
             color: $text-muted;
             background: #f1f5f9;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--ul-border);
+            ;
             opacity: 0.2;
         }
 
@@ -1381,7 +1387,8 @@
 .rsvp-select {
     font-size: .78rem;
     padding: .2rem .5rem;
-    border: 1.5px solid #e2e8f0;
+    border: 1.5px solid var(--ul-border);
+    ;
     border-radius: 6px;
     background: #fff;
     color: #334155;
@@ -1408,7 +1415,8 @@
 
 .status-pill-toggle {
     display: inline-flex;
-    border: 1.5px solid #e2e8f0;
+    border: 1.5px solid var(--ul-border);
+    ;
     border-radius: 8px;
     overflow: hidden;
     background: #f8fafc;
@@ -1601,7 +1609,8 @@
     input[type="number"] {
         width: 120px;
         padding: .5rem .75rem;
-        border: 1.5px solid #e2e8f0;
+        border: 1.5px solid var(--ul-border);
+        ;
         border-radius: 8px;
         font-size: .9rem;
         color: #1e293b;
@@ -1620,7 +1629,7 @@
 
 .trip-map-marker {
     background: #3b82f6;
-    border: 2px solid #fff;
+    border: 2px solid var(--ul-border);
     border-radius: 50%;
     box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
     position: relative;
@@ -1696,7 +1705,8 @@
     border-radius: 999px;
     font-size: .8rem;
     font-weight: 600;
-    border: 1.5px solid #e2e8f0;
+    border: 1.5px solid var(--ul-border);
+    ;
     background: transparent;
     color: #64748b;
     cursor: pointer;
@@ -1774,7 +1784,8 @@
     gap: .3rem;
     padding: .3rem .7rem;
     border-radius: 20px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--ul-border);
+    ;
     font-size: .78rem;
     font-weight: 500;
     color: #64748b;

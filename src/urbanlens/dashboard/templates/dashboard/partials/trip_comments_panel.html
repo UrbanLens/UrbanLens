@@ -180,8 +180,8 @@
               </a>
               {% endif %}
               {% if r.map_data %}
-              {% with _sid="comment-map-data-"|add:r.id %}
-              {{ r.map_data|json_script:_sid }}
+              {% with sid="comment-map-data-"|add:r.id %}
+              {{ r.map_data|json_script:sid }}
               {% endwith %}
               <div class="comment-map-preview" data-comment-id="{{ r.id }}">
                 <div class="comment-map-thumb" id="comment-map-thumb-{{ r.id }}"></div>

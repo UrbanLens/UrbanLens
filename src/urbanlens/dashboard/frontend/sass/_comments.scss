@@ -236,7 +236,7 @@
     padding: .15rem .5rem;
     border-radius: 20px;
     background: #f3f4f6;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--ul-border);
     font-size: .8rem;
     cursor: pointer;
     transition: background .1s, border-color .1s;
@@ -269,7 +269,7 @@
 
 .reaction-add-btn {
     background: none;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--ul-border);
     border-radius: 20px;
     padding: .15rem .4rem;
     cursor: pointer;
@@ -294,7 +294,7 @@
     bottom: calc(100% + 4px);
     left: 0;
     background: #fff;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--ul-border);
     border-radius: 10px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
     display: flex;
@@ -356,7 +356,7 @@
 
 .comment-input {
     width: 100%;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--ul-border);
     border-radius: 8px;
     padding: .5rem .75rem;
     font-size: .85rem;
@@ -383,7 +383,7 @@
 
 .comment-map-btn {
     background: none;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--ul-border);
     border-radius: 6px;
     cursor: pointer;
     padding: .25rem .45rem;
@@ -449,7 +449,7 @@
 
 .comment-map-preview {
     margin: .5rem 0;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--ul-border);
     border-radius: 10px;
     overflow: hidden;
     position: relative;
@@ -466,7 +466,7 @@
     bottom: .5rem;
     right: .5rem;
     background: rgba(255, 255, 255, .9);
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--ul-border);
     border-radius: 6px;
     padding: .2rem .55rem;
     font-size: .75rem;
@@ -587,7 +587,7 @@
 .cmcc-pin-search {
     flex: 1;
     min-width: 0;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--ul-border);
     border-radius: 6px;
     padding: .3rem .65rem;
     font-size: .82rem;
@@ -609,7 +609,7 @@
     align-items: center;
     justify-content: center;
     padding: .3rem .5rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--ul-border);
     border-radius: 6px;
     background: #f9fafb;
     color: #374151;
@@ -635,7 +635,7 @@
     right: 0;
     width: 100%;
     background: #fff;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--ul-border);
     border-radius: 8px;
     box-shadow: 0 6px 24px rgba(0, 0, 0, .1);
     z-index: 600;
@@ -693,7 +693,7 @@
 .cmc-undo-btn,
 .cmc-clear-btn {
     background: none;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--ul-border);
     border-radius: 6px;
     padding: .2rem .45rem;
     cursor: pointer;
@@ -728,7 +728,7 @@
     input[type="color"] {
         width: 28px;
         height: 22px;
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--ul-border);
         border-radius: 4px;
         padding: 1px;
         cursor: pointer;
@@ -913,7 +913,7 @@
     left: 0;
     right: 0;
     background: #fff;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--ul-border);
     border-radius: 8px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .1);
     max-height: 180px;

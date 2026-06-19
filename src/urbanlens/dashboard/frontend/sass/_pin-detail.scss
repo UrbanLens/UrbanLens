@@ -273,7 +273,7 @@
 
 // ── Tag-add dialog specifics ────────────────────────────────────────────────
 .tag-add-dialog {
-    width: min(460px, 95vw);  // slightly wider to accommodate tabs
+    width: min(460px, 95vw); // slightly wider to accommodate tabs
 
     // ── Tab bar ──────────────────────────────────────────────────────────────
     .tad-tabs {
@@ -315,7 +315,7 @@
         width: calc(100% - 1.5rem);
         margin: .6rem .75rem;
         padding: .45rem .7rem;
-        border: 1px solid #ddd;
+        border: 1px solid var(--ul-border);
         border-radius: 8px;
         font-size: .85rem;
         box-sizing: border-box;
@@ -404,6 +404,7 @@
 
 // ── Dark mode: badge dialog ──────────────────────────────────────────────────
 [data-theme="dark"] {
+
     .tag-add-dialog,
     .visit-add-dialog,
     .detail-pin-add-dialog,
@@ -448,8 +449,14 @@
         .tad-tab {
             color: #64748b;
 
-            &:hover { color: #818cf8; }
-            &--active { color: #818cf8; border-bottom-color: #818cf8; }
+            &:hover {
+                color: #818cf8;
+            }
+
+            &--active {
+                color: #818cf8;
+                border-bottom-color: #818cf8;
+            }
         }
 
         .dialog-search {
@@ -462,19 +469,34 @@
                 box-shadow: 0 0 0 3px rgba(129, 140, 248, .15);
             }
 
-            &::placeholder { color: #475569; }
+            &::placeholder {
+                color: #475569;
+            }
         }
 
         .tag-dialog-btn {
             color: #e2e8f0;
 
-            &:hover { background: rgba(129, 140, 248, .12); }
+            &:hover {
+                background: rgba(129, 140, 248, .12);
+            }
         }
 
         .tad-kind-pill {
-            &--tag     { background: #2d2060; color: #a78bfa; }
-            &--category { background: #1e2f5e; color: #93c5fd; }
-            &--status  { background: #14382a; color: #6ee7b7; }
+            &--tag {
+                background: #2d2060;
+                color: #a78bfa;
+            }
+
+            &--category {
+                background: #1e2f5e;
+                color: #93c5fd;
+            }
+
+            &--status {
+                background: #14382a;
+                color: #6ee7b7;
+            }
         }
     }
 }
@@ -584,7 +606,7 @@
         input,
         textarea {
             padding: .45rem .65rem;
-            border: 1px solid #ddd;
+            border: 1px solid var(--ul-border);
             border-radius: 8px;
             font-size: .88rem;
             outline: none;
@@ -792,7 +814,8 @@
 
 // Security field edit section
 .form-section-details {
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--ul-border);
+    ;
     border-radius: 8px;
     padding: 0;
 
@@ -829,7 +852,8 @@
     select {
         font-size: .82rem;
         padding: .3rem .5rem;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--ul-border);
+        ;
         border-radius: 6px;
         background: #fff;
 
@@ -937,7 +961,7 @@
 // ── Pin details card theming (pin overview / location details page) ────────
 body.page-location-details {
     .location-details.card {
-        border: 1px solid #e0e3f0;
+        border: 1px solid var(--ul-border);
         box-shadow: 0 2px 10px rgba(0, 0, 0, .07);
 
         >.card-header {
@@ -1095,11 +1119,11 @@ body.page-location-details {
 
 .pin-note-form {
     padding: .75rem 1rem;
-    border-top: 1px solid #f1f5f9;
+    border-top: 1px solid var(--ul-border);
 
     .pin-note-input {
         width: 100%;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--ul-border);
         border-radius: 6px;
         padding: .5rem .75rem;
         font-size: .88rem;
@@ -1138,7 +1162,7 @@ body.page-location-details {
 }
 
 .pin-location-panel {
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--ul-border);
     border-radius: 10px;
     overflow: visible;
     background: #f9fafb;
@@ -1376,7 +1400,7 @@ body.page-location-details {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--ul-border);
     border-radius: 8px;
     padding: .5rem .75rem;
     gap: .5rem;
@@ -1647,62 +1671,6 @@ body.page-location-details {
         box-shadow: 0 2px 10px rgba(0, 0, 0, .09);
     }
 
-    // Notes section: warm amber
-    .pin-notes-panel.card .card-header {
-        @extend .panel-header;
-        background: #fffbeb;
-        color: #92400e;
-        border-bottom-color: #fde68a;
-
-        .material-icons {
-            color: #d97706;
-            opacity: 1;
-        }
-
-        span {
-            color: #92400e;
-        }
-
-        .badge {
-            background: #fef3c7;
-            color: #92400e;
-        }
-    }
-
-    // Visit history: teal
-    .visit-history.card .card-header {
-        @extend .panel-header;
-        background: #f0fdfb;
-        color: #134e4a;
-        border-bottom-color: #99f6e4;
-
-        .material-icons {
-            color: #0d9488;
-            opacity: 1;
-        }
-
-        span {
-            color: #134e4a;
-        }
-    }
-
-    // Aliases: orange
-    .aliases-panel.card .card-header {
-        @extend .panel-header;
-        background: #fff7ed;
-        color: #9a3412;
-        border-bottom-color: #fed7aa;
-
-        .material-icons {
-            color: #ea580c;
-            opacity: 1;
-        }
-
-        span {
-            color: #9a3412;
-        }
-    }
-
     // Map section: slate
     .location-map.card .card-header {
         @extend .panel-header;
@@ -1718,55 +1686,6 @@ body.page-location-details {
         span,
         h3 {
             color: #1e293b;
-        }
-    }
-
-    // Tag panel: violet
-    #tag-panel .tag-panel-header {
-        @extend .panel-header;
-        background: #f5f3ff;
-        color: #4c1d95;
-        border-bottom-color: #ddd6fe;
-
-        i {
-            color: #7c3aed;
-        }
-
-        span {
-            color: #4c1d95;
-        }
-    }
-
-    // Category panel: blue
-    #category-panel .tag-panel-header {
-        @extend .panel-header;
-        background: #eff6ff;
-        color: #1e3a8a;
-        border-bottom-color: #bfdbfe;
-
-        i {
-            color: #3b82f6;
-        }
-
-        span {
-            color: #1e3a8a;
-        }
-    }
-
-    // Comments section: green
-    .pin-comments.card .card-header {
-        @extend .panel-header;
-        background: #f0fdf4;
-        color: #14532d;
-        border-bottom-color: #bbf7d0;
-
-        .material-icons {
-            color: #16a34a;
-            opacity: 1;
-        }
-
-        span {
-            color: #14532d;
         }
     }
 }
