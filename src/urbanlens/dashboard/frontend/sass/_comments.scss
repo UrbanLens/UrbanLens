@@ -575,11 +575,14 @@
 .cmcc-pin-search-wrap {
     position: relative;
     flex: 1;
-    max-width: 320px;
+    max-width: 400px;
+    display: flex;
+    gap: .35rem;
 }
 
 .cmcc-pin-search {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     border: 1px solid #e5e7eb;
     border-radius: 6px;
     padding: .3rem .65rem;
@@ -590,6 +593,35 @@
         outline: none;
         border-color: #6366f1;
     }
+
+    &:disabled {
+        opacity: .6;
+        cursor: wait;
+    }
+}
+
+.cmcc-go-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: .3rem .5rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #f9fafb;
+    color: #374151;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background .12s, border-color .12s;
+
+    .material-icons {
+        font-size: 1rem;
+    }
+
+    &:hover {
+        background: #6366f1;
+        border-color: #6366f1;
+        color: #fff;
+    }
 }
 
 .cmcc-pin-dropdown {
@@ -597,6 +629,7 @@
     top: calc(100% + 3px);
     left: 0;
     right: 0;
+    width: 100%;
     background: #fff;
     border: 1px solid #e5e7eb;
     border-radius: 8px;

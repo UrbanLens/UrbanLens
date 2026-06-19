@@ -311,17 +311,16 @@ class CommentMapPinsView(LoginRequiredMixin, View):
         q = request.GET.get("q", "").strip().lower()
         qs = (
             Pin.objects.filter(profile=profile)
-            .exclude(location__isnull=True)
-            .select_related("location")[:80]
+            .select_related("location")[:200]
         )
         results = []
         for pin in qs:
-            name = pin.effective_name or pin.location.name or ""
-            if q and q not in name.lower():
-                continue
             lat = pin.effective_latitude
             lng = pin.effective_longitude
             if lat is None or lng is None:
+                continue
+            name = pin.effective_name or ""
+            if q and q not in name.lower():
                 continue
             results.append({
                 "uuid": str(pin.uuid),

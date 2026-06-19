@@ -614,6 +614,9 @@
     // ── Map setup ─────────────────────────────────────────────────────────────
     const pinLat = {{ pin.effective_latitude|default:"42.6525" }};
     const pinLng = {{ pin.effective_longitude|default:"-73.7579" }};
+    // Expose pin coordinates for the comment map composer default center.
+    window._commentMapDefaultLat = pinLat;
+    window._commentMapDefaultLng = pinLng;
     const _defaultMapView = '{{ default_map_view|default:"satellite" }}';
 
     const map = L.map('map', { scrollWheelZoom: false }).setView([pinLat, pinLng], 15);

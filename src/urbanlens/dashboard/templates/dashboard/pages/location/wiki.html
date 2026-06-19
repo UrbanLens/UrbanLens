@@ -412,6 +412,9 @@
 <script>
     const locLat = {{ location.latitude }};
     const locLng = {{ location.longitude }};
+    // Expose page coordinates for the comment map composer default center.
+    window._commentMapDefaultLat = locLat;
+    window._commentMapDefaultLng = locLng;
     const bboxApiUrl = "{% url 'location.wiki.bbox' location.uuid %}";
     const csrfToken = '{{ csrf_token }}';
 
