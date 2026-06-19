@@ -156,3 +156,82 @@ class MapDisplayFormUsePinCacheTests(HypothesisTestCase):
 	def test_new_profile_has_use_pin_cache_true_by_default(self) -> None:
 		profile = _profile()
 		self.assertTrue(profile.use_pin_cache)
+
+
+# ── MapCenterForm.save() ──────────────────────────────────────────────────────
+
+class MapCenterFormSaveTests(HypothesisTestCase):
+	"""MapCenterForm.save() preserves DB custom coordinates when mode is not CUSTOM."""
+
+	def _submit(self, profile, mode: str, lat: str = "", lng: str = "") -> MapCenterForm:
+		data = {"map_center_mode": mode}
+		if lat:
+			data["map_custom_latitude"] = lat
+		if lng:
+			data["map_custom_longitude"] = lng
+		form = MapCenterForm(data=data, instance=profile)
+		self.assertTrue(form.is_valid(), form.errors)
+		return form
+
+	def test_custom_mode_saves_form_coordinates(self) -> None:
+		profile = _profile()
+		form = self._submit(profile, MapCenterMode.CUSTOM, lat="42.123456", lng="-73.654321")
+		form.save()
+		profile.refresh_from_db()
+		self.assertAlmostEqual(float(profile.map_custom_latitude), 42.123456, places=4)
+		self.assertAlmostEqual(float(profile.map_custom_longitude), -73.654321, places=4)
+
+	def test_auto_mode_preserves_db_custom_coordinates(self) -> None:
+		from decimal import Decimal
+		profile = _profile()
+		# Pre-set custom coords in the DB.
+		from urbanlens.dashboard.models.profile.model import Profile
+		Profile.objects.filter(pk=profile.pk).update(
+			map_custom_latitude=Decimal("40.000000"),
+			map_custom_longitude=Decimal("-75.000000"),
+		)
+		# Submit with AUTO mode and different coords in the hidden fields.
+		form = self._submit(profile, MapCenterMode.AUTO, lat="99.000000", lng="99.000000")
+		form.save()
+		profile.refresh_from_db()
+		# The form's fake coords must NOT have overwritten the stored ones.
+		self.assertAlmostEqual(float(profile.map_custom_latitude), 40.0, places=1)
+		self.assertAlmostEqual(float(profile.map_custom_longitude), -75.0, places=1)
+
+	def test_gps_mode_preserves_db_custom_coordinates(self) -> None:
+		from decimal import Decimal
+		profile = _profile()
+		from urbanlens.dashboard.models.profile.model import Profile
+		Profile.objects.filter(pk=profile.pk).update(
+			map_custom_latitude=Decimal("51.500000"),
+			map_custom_longitude=Decimal("-0.120000"),
+		)
+		form = self._submit(profile, MapCenterMode.GPS, lat="0.000000", lng="0.000000")
+		form.save()
+		profile.refresh_from_db()
+		self.assertAlmostEqual(float(profile.map_custom_latitude), 51.5, places=1)
+		self.assertAlmostEqual(float(profile.map_custom_longitude), -0.12, places=1)
+
+	def test_auto_mode_with_no_prior_coords_sets_none(self) -> None:
+		profile = _profile()
+		# Ensure no custom coords stored.
+		from urbanlens.dashboard.models.profile.model import Profile
+		Profile.objects.filter(pk=profile.pk).update(
+			map_custom_latitude=None,
+			map_custom_longitude=None,
+		)
+		form = self._submit(profile, MapCenterMode.AUTO)
+		form.save()
+		profile.refresh_from_db()
+		self.assertIsNone(profile.map_custom_latitude)
+		self.assertIsNone(profile.map_custom_longitude)
+
+	def test_save_with_commit_false_does_not_write_to_db(self) -> None:
+		profile = _profile()
+		from urbanlens.dashboard.models.profile.model import Profile, MapCenterMode as MCM
+		original_mode = profile.map_center_mode
+		form = self._submit(profile, MapCenterMode.GPS)
+		instance = form.save(commit=False)
+		# Reload from DB — it should not have changed.
+		db_profile = Profile.objects.get(pk=profile.pk)
+		self.assertEqual(db_profile.map_center_mode, original_mode)

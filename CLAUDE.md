@@ -194,16 +194,6 @@ Custom runner in `urbanlens.core.tests.runner.TestRunner` (extends DiscoverRunne
 - Uses Model Bakery for fixture generation
 - Suppresses logs on passing tests, surfaces them on failure
 
-## Docker Architecture
-
-| Service | Description |
-|---------|-------------|
-| **app** | Django/gunicorn on port 8000 (→ 21800), health: `GET /health` |
-| **db** | `postgis/postgis:latest`, persistent volume `postgres-data` |
-| **nginx** | Alpine, reverse proxy + static files, port 80 (→ 21080) |
-
-Deployed in production via Portainer on Ubuntu.
-
 ## Roadmap / Known TODOs
 
 These are planned features - treat any missing implementation as a gap to fill, not a deliberate omission:
@@ -216,16 +206,16 @@ These are planned features - treat any missing implementation as a gap to fill, 
 - **Google Search integration**: Surface recent news articles about a location on the pin detail page
 - **API cost tracking**: Log and aggregate cost estimates on every external API call
 - **Celery / async tasks**: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure
-- **Data encryption & access control**: All user data must be encrypted at rest and scoped strictly to the submitting user - this will become a hard requirement
-- **Hypothesis unit tests**: Add property-based tests for critical business logic (e.g., geospatial queries, API response parsing)
+- **Data encryption & access control**: It is desired that all user data be encrypted at rest and scoped strictly to the submitting user - In the future, this may become a hard requirement
+- **Hypothesis unit tests**: Add property-based tests wherever possible.
 
 ## UI & UX Standards
 
-- Any operation that is not near-instant must display a loading/progress indicator while in flight
+- Any operation that is not near-instant must display a loading/progress indicator
 - Results and errors must surface as toast notifications (toastr is already integrated)
 - Prefer HTMX-driven partial page updates over full reloads
 
-## Common Issues & Patterns
+## Common Patterns
 
 1. Use `TYPE_CHECKING` guard for imports that would cause circular references in models
 2. Always `prefetch_related` for M2M, `select_related` for FK to avoid N+1 queries
