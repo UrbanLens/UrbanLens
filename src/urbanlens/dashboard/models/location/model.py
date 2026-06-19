@@ -101,6 +101,12 @@ class Location(abstract.AddressableMixin, abstract.Model):
         related_name="locations",
         limit_choices_to={"kind": "tag"},
     )
+    statuses = ManyToManyField(
+        "dashboard.Badge",
+        blank=True,
+        related_name="status_locations",
+        limit_choices_to={"kind": "status"},
+    )
 
     objects = LocationManager()
 

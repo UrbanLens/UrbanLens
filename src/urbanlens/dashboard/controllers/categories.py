@@ -484,11 +484,56 @@ class CategoryMergeView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
 
 
+def _all_badges():
+    """Return all tag/category/status badges ordered for the badge picker."""
+    return Badge.objects.filter(kind__in=["tag", "category", "status"]).ordered()
+
+
+def _pin_member_ids(pin) -> set[int]:
+    """Return the set of all badge IDs currently assigned to a pin (all kinds)."""
+    return (
+        set(pin.categories.values_list("id", flat=True))
+        | set(pin.tags.values_list("id", flat=True))
+        | set(pin.statuses.values_list("id", flat=True))
+    )
+
+
+def _location_member_ids(location) -> set[int]:
+    """Return the set of all badge IDs currently assigned to a location (all kinds)."""
+    return (
+        set(location.categories.values_list("id", flat=True))
+        | set(location.tags.values_list("id", flat=True))
+        | set(location.statuses.values_list("id", flat=True))
+    )
+
+
+def _apply_badge_to_pin(pin, badge: Badge, action: str) -> None:
+    """Add or remove a badge from the correct M2M field on a pin based on its kind."""
+    m2m = {"category": pin.categories, "tag": pin.tags, "status": pin.statuses}.get(badge.kind)
+    if m2m is None:
+        return
+    if action == "add":
+        m2m.add(badge)
+    elif action == "remove":
+        m2m.remove(badge)
+
+
+def _apply_badge_to_location(location, badge: Badge, action: str) -> None:
+    """Add or remove a badge from the correct M2M field on a location based on its kind."""
+    m2m = {"category": location.categories, "tag": location.tags, "status": location.statuses}.get(badge.kind)
+    if m2m is None:
+        return
+    if action == "add":
+        m2m.add(badge)
+    elif action == "remove":
+        m2m.remove(badge)
+
+
 class CategoryPinMembershipView(LoginRequiredMixin, View):
-    """Add or remove a category from a pin (HTMX panel on pin detail page)."""
+    """Add or remove a badge from a pin (HTMX panel on pin detail page)."""
 
     def get(self, request, pin_uuid, *args, **kwargs):
-        """Render the category panel for a pin.
+        """Render the badge panel for a pin.
 
         Args:
             request: The HTTP request.
@@ -498,20 +543,18 @@ class CategoryPinMembershipView(LoginRequiredMixin, View):
             Rendered category_panel.html partial.
         """
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
-        all_categories = Badge.objects.categories().ordered()
-        member_ids = set(pin.categories.values_list("id", flat=True))
         return render(
             request,
             "dashboard/partials/category_panel.html",
             {
                 "pin": pin,
-                "all_categories": all_categories,
-                "member_ids": member_ids,
+                "all_categories": _all_badges(),
+                "member_ids": _pin_member_ids(pin),
             },
         )
 
     def post(self, request, pin_uuid, *args, **kwargs):
-        """Add or remove a category from a pin.
+        """Add or remove a badge from a pin.
 
         Args:
             request: The HTTP request with POST data (category_id, action).
@@ -521,33 +564,26 @@ class CategoryPinMembershipView(LoginRequiredMixin, View):
             Rendered category_panel.html partial.
         """
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
-        cat_id = request.POST.get("category_id")
+        badge_id = request.POST.get("category_id")
         action = request.POST.get("action")
-
-        category = get_object_or_404(Badge, id=cat_id, kind="category")
-        if action == "add":
-            pin.categories.add(category)
-        elif action == "remove":
-            pin.categories.remove(category)
-
-        all_categories = Badge.objects.categories().ordered()
-        member_ids = set(pin.categories.values_list("id", flat=True))
+        badge = get_object_or_404(Badge, id=badge_id, kind__in=["tag", "category", "status"])
+        _apply_badge_to_pin(pin, badge, action)
         return render(
             request,
             "dashboard/partials/category_panel.html",
             {
                 "pin": pin,
-                "all_categories": all_categories,
-                "member_ids": member_ids,
+                "all_categories": _all_badges(),
+                "member_ids": _pin_member_ids(pin),
             },
         )
 
 
 class CategoryLocationMembershipView(LoginRequiredMixin, View):
-    """Add or remove a category from a location (HTMX panel on wiki page)."""
+    """Add or remove a badge from a location (HTMX panel on wiki page)."""
 
     def get(self, request, location_uuid, *args, **kwargs):
-        """Render the category panel for a location.
+        """Render the badge panel for a location.
 
         Args:
             request: The HTTP request.
@@ -557,20 +593,18 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
             Rendered category_location_panel.html partial.
         """
         location = get_object_or_404(Location, uuid=location_uuid)
-        all_categories = Badge.objects.categories().ordered()
-        member_ids = set(location.categories.values_list("id", flat=True))
         return render(
             request,
             "dashboard/partials/category_location_panel.html",
             {
                 "location": location,
-                "all_categories": all_categories,
-                "member_ids": member_ids,
+                "all_categories": _all_badges(),
+                "member_ids": _location_member_ids(location),
             },
         )
 
     def post(self, request, location_uuid, *args, **kwargs):
-        """Add or remove a category from a location.
+        """Add or remove a badge from a location.
 
         Args:
             request: The HTTP request with POST data (category_id, action).
@@ -580,24 +614,17 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
             Rendered category_location_panel.html partial.
         """
         location = get_object_or_404(Location, uuid=location_uuid)
-        cat_id = request.POST.get("category_id")
+        badge_id = request.POST.get("category_id")
         action = request.POST.get("action")
-
-        category = get_object_or_404(Badge, id=cat_id, kind="category")
-        if action == "add":
-            location.categories.add(category)
-        elif action == "remove":
-            location.categories.remove(category)
-
-        all_categories = Badge.objects.categories().ordered()
-        member_ids = set(location.categories.values_list("id", flat=True))
+        badge = get_object_or_404(Badge, id=badge_id, kind__in=["tag", "category", "status"])
+        _apply_badge_to_location(location, badge, action)
         return render(
             request,
             "dashboard/partials/category_location_panel.html",
             {
                 "location": location,
-                "all_categories": all_categories,
-                "member_ids": member_ids,
+                "all_categories": _all_badges(),
+                "member_ids": _location_member_ids(location),
             },
         )
 

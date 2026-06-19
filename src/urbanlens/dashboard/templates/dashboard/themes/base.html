@@ -454,36 +454,37 @@
             _dialog.showModal();
             _loadPinsForSearch();
 
-            // Defer map init until the dialog has been painted — Leaflet reads
-            // the container's pixel dimensions immediately on creation, so we must
-            // wait for the browser to lay out the dialog first. Double-rAF is the
-            // minimal reliable delay across all modern browsers.
-            requestAnimationFrame(function () {
-                requestAnimationFrame(function () {
-                    var mapEl = document.getElementById('comment-map-composer-map');
-                    if (!_composerMap) {
-                        _composerMap = L.map(mapEl, { zoomControl: true });
-                        _makeTileLayer().addTo(_composerMap);
-                        _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
-                        _attachMapEvents();
-                    } else {
-                        _composerMap.invalidateSize();
-                    }
+            // Defer map init to a new macrotask (setTimeout 0) so the browser has
+            // actually painted the dialog before Leaflet reads mapEl.offsetHeight.
+            // rAF fires before paint; setTimeout(0) fires after — that's the key
+            // difference that makes Leaflet see the correct 400 px container height.
+            setTimeout(function () {
+                var mapEl = document.getElementById('comment-map-composer-map');
+                if (!_composerMap) {
+                    _composerMap = L.map(mapEl, { zoomControl: true });
+                    _makeTileLayer().addTo(_composerMap);
+                    _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
+                    _attachMapEvents();
+                }
 
-                    if (existing) {
-                        _composerMap.setView([existing.center_lat, existing.center_lng], existing.zoom || 14);
-                        _composerShapes = existing.markup || [];
-                    } else {
-                        // Use the current page's location if it exposed one.
-                        var defLat = (window._commentMapDefaultLat != null) ? window._commentMapDefaultLat : 40.7128;
-                        var defLng = (window._commentMapDefaultLng != null) ? window._commentMapDefaultLng : -74.0060;
-                        _composerMap.setView([defLat, defLng], 14);
-                        _composerShapes = [];
-                    }
-                    _redrawMarkup();
-                    _setActiveTool(null);
-                });
-            });
+                if (existing) {
+                    _composerMap.setView([existing.center_lat, existing.center_lng], existing.zoom || 14);
+                    _composerShapes = existing.markup || [];
+                } else {
+                    // Use the current page's location if it exposed one.
+                    var defLat = (window._commentMapDefaultLat != null) ? window._commentMapDefaultLat : 40.7128;
+                    var defLng = (window._commentMapDefaultLng != null) ? window._commentMapDefaultLng : -74.0060;
+                    _composerMap.setView([defLat, defLng], 14);
+                    _composerShapes = [];
+                }
+
+                // Force Leaflet to recalculate the container size — needed on every
+                // open because the dialog may have been hidden since last render.
+                _composerMap.invalidateSize();
+
+                _redrawMarkup();
+                _setActiveTool(null);
+            }, 0);
         };
 
         // ── Close / cancel ────────────────────────────────────────────────────
@@ -772,10 +773,11 @@
 
         document.getElementById('cmcc-go-btn').addEventListener('click', _commitSearch);
 
-        // Ensure map tiles fill correctly after the dialog finishes animating.
+        // Belt-and-suspenders: also invalidate on subsequent toggles (e.g. after
+        // the browser finishes any CSS transition on the dialog).
         _dialog.addEventListener('toggle', function () {
             if (_dialog.open && _composerMap) {
-                requestAnimationFrame(function () { _composerMap.invalidateSize(); });
+                setTimeout(function () { _composerMap.invalidateSize(); }, 0);
             }
         });
 

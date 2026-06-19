@@ -273,6 +273,43 @@
 
 // ── Tag-add dialog specifics ────────────────────────────────────────────────
 .tag-add-dialog {
+    width: min(460px, 95vw);  // slightly wider to accommodate tabs
+
+    // ── Tab bar ──────────────────────────────────────────────────────────────
+    .tad-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid #e5e7eb;
+        padding: 0 .5rem;
+        flex-shrink: 0;
+        background: #fafafa;
+    }
+
+    .tad-tab {
+        flex: 1;
+        padding: .5rem .4rem;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        background: transparent;
+        font-size: .8rem;
+        font-weight: 500;
+        color: #64748b;
+        cursor: pointer;
+        transition: color .12s, border-color .12s;
+        white-space: nowrap;
+
+        &:hover {
+            color: #6366f1;
+        }
+
+        &--active {
+            color: #6366f1;
+            border-bottom-color: #6366f1;
+        }
+    }
+
+    // ── Search ───────────────────────────────────────────────────────────────
     .dialog-search {
         display: block;
         width: calc(100% - 1.5rem);
@@ -284,6 +321,8 @@
         box-sizing: border-box;
         outline: none;
         flex-shrink: 0;
+        background: #fff;
+        color: inherit;
 
         &:focus {
             border-color: #6366f1;
@@ -316,6 +355,7 @@
         font-size: .88rem;
         text-align: left;
         transition: background .12s;
+        color: inherit;
 
         &:hover {
             background: rgba(99, 102, 241, .08);
@@ -331,6 +371,111 @@
     .tag-dialog-name {
         font-weight: 500;
         flex: 1;
+    }
+
+    // ── Kind pill (shown in "All" tab next to badge name) ────────────────────
+    .tad-kind-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: .1rem .45rem;
+        border-radius: 999px;
+        font-size: .7rem;
+        font-weight: 600;
+        letter-spacing: .03em;
+        text-transform: uppercase;
+        flex-shrink: 0;
+
+        &--tag {
+            background: #ede9fe;
+            color: #6d28d9;
+        }
+
+        &--category {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        &--status {
+            background: #dcfce7;
+            color: #15803d;
+        }
+    }
+}
+
+// ── Dark mode: badge dialog ──────────────────────────────────────────────────
+[data-theme="dark"] {
+    .tag-add-dialog,
+    .visit-add-dialog,
+    .detail-pin-add-dialog,
+    .trip-create-dialog,
+    .pin-edit-dialog {
+        background: #1e1e2e;
+        color: #e2e8f0;
+
+        .dialog-header {
+            border-bottom-color: #334155;
+            background: #1e1e2e;
+        }
+
+        .dialog-close {
+            color: #94a3b8;
+
+            &:hover {
+                background: rgba(255, 255, 255, .08);
+                color: #e2e8f0;
+            }
+        }
+
+        .dialog-footer {
+            border-top-color: #334155;
+
+            .dialog-manage-link {
+                color: #64748b;
+
+                &:hover {
+                    color: #94a3b8;
+                }
+            }
+        }
+    }
+
+    .tag-add-dialog {
+        .tad-tabs {
+            background: #181825;
+            border-bottom-color: #334155;
+        }
+
+        .tad-tab {
+            color: #64748b;
+
+            &:hover { color: #818cf8; }
+            &--active { color: #818cf8; border-bottom-color: #818cf8; }
+        }
+
+        .dialog-search {
+            background: #0f0f1a;
+            border-color: #334155;
+            color: #e2e8f0;
+
+            &:focus {
+                border-color: #818cf8;
+                box-shadow: 0 0 0 3px rgba(129, 140, 248, .15);
+            }
+
+            &::placeholder { color: #475569; }
+        }
+
+        .tag-dialog-btn {
+            color: #e2e8f0;
+
+            &:hover { background: rgba(129, 140, 248, .12); }
+        }
+
+        .tad-kind-pill {
+            &--tag     { background: #2d2060; color: #a78bfa; }
+            &--category { background: #1e2f5e; color: #93c5fd; }
+            &--status  { background: #14382a; color: #6ee7b7; }
+        }
     }
 }
 
