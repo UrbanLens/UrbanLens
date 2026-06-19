@@ -454,37 +454,36 @@
             _dialog.showModal();
             _loadPinsForSearch();
 
-            // Defer map init to a new macrotask (setTimeout 0) so the browser has
-            // actually painted the dialog before Leaflet reads mapEl.offsetHeight.
-            // rAF fires before paint; setTimeout(0) fires after — that's the key
-            // difference that makes Leaflet see the correct 400 px container height.
-            setTimeout(function () {
-                var mapEl = document.getElementById('comment-map-composer-map');
-                if (!_composerMap) {
-                    _composerMap = L.map(mapEl, { zoomControl: true });
-                    _makeTileLayer().addTo(_composerMap);
-                    _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
-                    _attachMapEvents();
-                }
+            // showModal() sets [open] synchronously, but the browser hasn't run
+            // style recalculation yet. Reading offsetHeight forces an immediate
+            // synchronous reflow so Leaflet reads the correct container dimensions
+            // on the very next line — no setTimeout/rAF timing tricks needed.
+            void _dialog.offsetHeight;
 
-                if (existing) {
-                    _composerMap.setView([existing.center_lat, existing.center_lng], existing.zoom || 14);
-                    _composerShapes = existing.markup || [];
-                } else {
-                    // Use the current page's location if it exposed one.
-                    var defLat = (window._commentMapDefaultLat != null) ? window._commentMapDefaultLat : 40.7128;
-                    var defLng = (window._commentMapDefaultLng != null) ? window._commentMapDefaultLng : -74.0060;
-                    _composerMap.setView([defLat, defLng], 14);
-                    _composerShapes = [];
-                }
+            var mapEl = document.getElementById('comment-map-composer-map');
+            if (!_composerMap) {
+                _composerMap = L.map(mapEl, { zoomControl: true });
+                _makeTileLayer().addTo(_composerMap);
+                _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
+                _attachMapEvents();
+            }
 
-                // Force Leaflet to recalculate the container size — needed on every
-                // open because the dialog may have been hidden since last render.
-                _composerMap.invalidateSize();
+            if (existing) {
+                _composerMap.setView([existing.center_lat, existing.center_lng], existing.zoom || 14);
+                _composerShapes = existing.markup || [];
+            } else {
+                var defLat = (window._commentMapDefaultLat != null) ? window._commentMapDefaultLat : 40.7128;
+                var defLng = (window._commentMapDefaultLng != null) ? window._commentMapDefaultLng : -74.0060;
+                _composerMap.setView([defLat, defLng], 14);
+                _composerShapes = [];
+            }
 
-                _redrawMarkup();
-                _setActiveTool(null);
-            }, 0);
+            // invalidateSize() tells Leaflet to re-read the container pixel size
+            // and re-request any tiles needed for the current view.
+            _composerMap.invalidateSize();
+
+            _redrawMarkup();
+            _setActiveTool(null);
         };
 
         // ── Close / cancel ────────────────────────────────────────────────────
@@ -773,12 +772,9 @@
 
         document.getElementById('cmcc-go-btn').addEventListener('click', _commitSearch);
 
-        // Belt-and-suspenders: also invalidate on subsequent toggles (e.g. after
-        // the browser finishes any CSS transition on the dialog).
-        _dialog.addEventListener('toggle', function () {
-            if (_dialog.open && _composerMap) {
-                setTimeout(function () { _composerMap.invalidateSize(); }, 0);
-            }
+        // Belt-and-suspenders: re-invalidate after dialog CSS transitions finish.
+        _dialog.addEventListener('transitionend', function () {
+            if (_dialog.open && _composerMap) _composerMap.invalidateSize();
         });
 
         // ── Comment map viewer ────────────────────────────────────────────────
