@@ -955,3 +955,38 @@ disable_error_code = ['misc', 'annotation-unchecked', 'override']
 django_settings_module = "urbanlens.UrbanLens.settings.local"
 ignore_missing_model_attributes = true
 #strict_settings = true
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    "*/test_*.py",
+    "urbanlens/manage.py",
+    "*/settings/*",
+    "*/asgi.py",
+    "*/wsgi.py",
+    ".venv/*",
+    ".venv_windows/*",
+    "*/site-packages/*",
+    "pgsql/*",
+    "docs/*",
+    "downloads/*",
+    ".github/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "def __str__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+show_missing = true
+skip_empty = true
+
+[tool.coverage.html]
+directory = "htmlcov"

@@ -111,4 +111,4 @@ map_center_mode = st.sampled_from(list(MapCenterMode.values))
 valid_zoom = st.integers(min_value=1, max_value=19)
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
-invalid_security_level = short_text.filter(lambda s: s not in SecurityLevel.values)
+invalid_security_level = short_text.filter(lambda s: s.lower() not in SecurityLevel.values)
