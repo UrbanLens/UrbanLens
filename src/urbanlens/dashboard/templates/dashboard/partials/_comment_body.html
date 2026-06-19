@@ -1,6 +1,3 @@
-{# Reusable comment body — used for both top-level comments and replies.
-   Expects: comment, rendered_text, reactions (dict), replies (list of dicts, omit for reply),
-            context_type, pin/location/trip+trip_uuid, profile, allowed_emojis, is_reply #}
 <div class="comment-avatar {% if is_reply %}comment-avatar--sm{% endif %}">
   {% if comment.profile.avatar %}
   <img src="{{ comment.profile.avatar.url }}" alt="" class="comment-avatar-img">
