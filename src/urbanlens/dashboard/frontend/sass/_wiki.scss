@@ -19,7 +19,7 @@
         background: linear-gradient(135deg, #0e7490 0%, #0891b2 50%, #06b6d4 100%);
         border-radius: 16px;
         padding: 1.75rem 2rem;
-        color: #fff;
+        color: var(--ul-text-4);
         margin-bottom: 1.5rem;
         flex-wrap: wrap;
     }
@@ -96,7 +96,7 @@
         padding: .45rem .9rem;
         font-size: .85rem;
         font-weight: 500;
-        color: #fff;
+        color: var(--ul-text-4);
         text-decoration: none;
         transition: background .15s;
 
@@ -147,7 +147,7 @@
 
     // ── Card base ─────────────────────────────────────────────────────────
     .wiki-card {
-        background: #fff;
+        background: var(--ul-surface-1);
         border: 1px solid var(--ul-border);
         ;
         border-radius: 14px;
@@ -198,7 +198,7 @@
 
         &:hover {
             background: #0891b2;
-            color: #fff;
+            color: var(--ul-text-4);
         }
     }
 
@@ -290,7 +290,7 @@
         padding: .45rem .9rem;
         border: 1px solid #cbd5e1;
         border-radius: 8px;
-        background: #fff;
+        background: var(--ul-surface-1);
         color: #475569;
         font-size: .85rem;
         font-weight: 500;
@@ -309,7 +309,7 @@
         &--primary {
             background: #0891b2;
             border-color: #0891b2;
-            color: #fff;
+            color: var(--ul-text-4);
 
             &:hover {
                 background: #0e7490;
@@ -392,7 +392,7 @@
         ;
         border-radius: 10px;
         padding: .75rem 1rem;
-        background: #fff;
+        background: var(--ul-surface-1);
         position: relative;
 
         &--reverted {
@@ -510,7 +510,7 @@
         padding: .3rem .7rem;
         border: 1px solid #fca5a5;
         border-radius: 6px;
-        background: #fff;
+        background: var(--ul-surface-1);
         color: #dc2626;
         font-size: .78rem;
         font-weight: 500;

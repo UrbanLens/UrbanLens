@@ -18,7 +18,7 @@
     padding: 7px 12px;
     border: 1px solid $border-color;
     border-radius: $radius-sm;
-    background: #fff;
+    background: var(--ul-surface-1);
     cursor: pointer;
     font-size: 0.9rem;
     min-width: 130px;
@@ -54,7 +54,7 @@
     top: calc(100% + 4px);
     left: 0;
     z-index: 500;
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-md;
     box-shadow: $shadow-dialog;
@@ -224,7 +224,7 @@
     height: 38px;
     border: 2px solid $border-color;
     border-radius: $radius-sm;
-    background: #fff;
+    background: var(--ul-surface-1);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -257,13 +257,13 @@
     background: $primary-color;
     border: none;
     border-radius: $radius-sm;
-    color: #fff;
+    color: var(--ul-text-4);
     font-size: 0.75rem;
     font-weight: 600;
     cursor: pointer;
 
     i {
-        color: #fff;
+        color: var(--ul-text-4);
         font-size: 1rem !important;
     }
 

@@ -75,7 +75,7 @@ button,
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: #fff;
+    background: var(--ul-surface-1);
     border-radius: $radius-md;
     box-shadow: $shadow-dialog;
     width: calc(100% - 2rem);
@@ -119,7 +119,7 @@ button,
             border: 1.5px solid $border-color !important;
             border-radius: $radius-sm !important;
             border-bottom: 1.5px solid $border-color !important;
-            background: #fff;
+            background: var(--ul-surface-1);
             color: $text-primary;
             outline: none;
             transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -195,7 +195,7 @@ button,
     border-radius: $radius-sm;
     cursor: pointer;
     transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
-    color: #fff;
+    color: var(--ul-text-4);
     background: $primary-color;
     letter-spacing: 0.01em;
     text-decoration: none;
@@ -230,7 +230,7 @@ button,
             width: 13px;
             height: 13px;
             border: 2px solid rgba(255, 255, 255, .4);
-            border-top-color: #fff;
+            border-top-color: var(--ul-text-4);
             border-radius: 50%;
             animation: _btn-spin .65s linear infinite;
             margin-left: .4rem;
@@ -269,21 +269,26 @@ button,
     background: none;
     color: var(--ul-text-1);
 
-    .material-icons { font-size: 1.05em; flex-shrink: 0; }
+    .material-icons {
+        font-size: 1.05em;
+        flex-shrink: 0;
+    }
 
     // ── Variants ──────────────────────────────────────────────────────────
 
     &--primary {
         background: $primary-color;
         border-color: $primary-color;
-        color: #fff;
+        color: var(--ul-text-4);
 
         &:hover {
             background: color.adjust($primary-color, $lightness: -7%);
             border-color: color.adjust($primary-color, $lightness: -7%);
         }
 
-        &:active { background: color.adjust($primary-color, $lightness: -14%); }
+        &:active {
+            background: color.adjust($primary-color, $lightness: -14%);
+        }
     }
 
     &--ghost {
@@ -301,7 +306,9 @@ button,
         color: $primary-color;
         padding-inline: .5rem;
 
-        &:hover { background: var(--ul-hover-bg-primary); }
+        &:hover {
+            background: var(--ul-hover-bg-primary);
+        }
     }
 
     &--danger {
@@ -309,19 +316,32 @@ button,
         border-color: $danger-border;
         background: $danger-bg;
 
-        &:hover { background: color.scale($danger-bg, $lightness: -4%); }
+        &:hover {
+            background: color.scale($danger-bg, $lightness: -4%);
+        }
     }
 
     // ── Sizes ──────────────────────────────────────────────────────────────
 
-    &--sm { padding: .3rem .65rem; font-size: .8rem; }
-    &--lg { padding: .65rem 1.35rem; font-size: 1rem; }
+    &--sm {
+        padding: .3rem .65rem;
+        font-size: .8rem;
+    }
+
+    &--lg {
+        padding: .65rem 1.35rem;
+        font-size: 1rem;
+    }
+
     &--icon {
         padding: .45rem;
         width: 2.2rem;
         height: 2.2rem;
         flex-shrink: 0;
-        .material-icons { font-size: 1.1rem; }
+
+        .material-icons {
+            font-size: 1.1rem;
+        }
     }
 
     // ── States ─────────────────────────────────────────────────────────────

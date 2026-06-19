@@ -3,7 +3,7 @@
 // ── Pin list membership panel (on pin detail page) ───────────────────────────
 
 .pinlist-panel {
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-md;
     overflow: hidden;
@@ -175,7 +175,7 @@
 
 // Create card
 .tag-create-card {
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-md;
     padding: 1.5rem;
@@ -184,7 +184,7 @@
 
 // Tag cards
 .tag-card {
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-md;
     margin-bottom: 0.75rem;
@@ -332,7 +332,7 @@
 .tag-customized-badge {
     font-size: 0.7rem;
     font-weight: 500;
-    color: #fff;
+    color: var(--ul-text-4);
     background: #7c63d4;
     border-radius: 4px;
     padding: 1px 5px;
@@ -659,7 +659,7 @@
 // ── Tag membership panel (on pin detail page) ─────────────────────────────────
 
 .tag-panel {
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-md;
     overflow: hidden;
@@ -897,7 +897,7 @@
 }
 
 .tag-view-btn {
-    background: #fff;
+    background: var(--ul-surface-1);
     border: none;
     padding: 5px 9px;
     cursor: pointer;
@@ -923,7 +923,7 @@
 
     &.active {
         background: $primary-color;
-        color: #fff;
+        color: var(--ul-text-4);
     }
 }
 
@@ -1061,7 +1061,7 @@
         height: 18px;
         border: 2px solid #cbd5e1;
         border-radius: 4px;
-        background: #fff;
+        background: var(--ul-surface-1);
         flex-shrink: 0;
         display: flex;
         align-items: center;
@@ -1152,7 +1152,7 @@
     align-items: center;
     gap: .3rem;
     padding: .4rem .8rem;
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid #cbd5e1;
     border-radius: $radius-sm;
     font-size: .825rem;
@@ -1183,7 +1183,7 @@
     gap: .3rem;
     padding: .4rem .9rem;
     background: $primary-color;
-    color: #fff;
+    color: var(--ul-text-4);
     border: none;
     border-radius: $radius-sm;
     font-size: .875rem;
@@ -1309,7 +1309,7 @@
     align-items: center;
     gap: .75rem;
     padding: .6rem .75rem;
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-sm;
     transition: border-color .12s;
@@ -1407,7 +1407,7 @@
     width: 14px;
     height: 14px;
     border: 2px solid rgba(255, 255, 255, .35);
-    border-top-color: #fff;
+    border-top-color: var(--ul-text-4);
     border-radius: 50%;
     animation: cat-spin .65s linear infinite;
     vertical-align: middle;
@@ -1632,7 +1632,7 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-md;
     padding: .6rem .85rem;

@@ -113,7 +113,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     height: 100%;
     font-size: 0.8rem;
     font-weight: 700;
-    color: #fff;
+    color: var(--ul-text-4);
     text-transform: uppercase;
     user-select: none;
 
@@ -392,12 +392,12 @@ nav .brand-logo img {
 
     &:hover {
         background: rgba(255, 255, 255, .12);
-        color: #fff;
+        color: var(--ul-text-4);
     }
 
     &[aria-expanded="true"] {
         background: rgba(255, 255, 255, .14);
-        color: #fff;
+        color: var(--ul-text-4);
     }
 
     .nav-notif-icon {
@@ -414,7 +414,7 @@ nav .brand-logo img {
     padding: 0 4px;
     border-radius: 8px;
     background: #ef4444;
-    color: #fff;
+    color: var(--ul-text-4);
     font-size: .68rem;
     font-weight: 700;
     line-height: 16px;

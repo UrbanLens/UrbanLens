@@ -14,7 +14,7 @@
 
 // Hero card - avatar + identity side by side
 .profile-hero {
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
@@ -55,7 +55,7 @@
     height: 96px;
     border-radius: 50%;
     background: linear-gradient(135deg, $primary-color 0%, color.adjust($primary-color, $lightness: -15%) 100%);
-    color: #fff;
+    color: var(--ul-text-4);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -73,7 +73,7 @@
     height: 30px;
     border-radius: 50%;
     background: $primary-color;
-    color: #fff;
+    color: var(--ul-text-4);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -192,7 +192,7 @@
 }
 
 .profile-stat {
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
@@ -220,7 +220,7 @@
 
 // Generic profile section card
 .profile-section {
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
@@ -287,7 +287,7 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-sm;
     font-size: 0.95rem;
@@ -324,7 +324,7 @@
 }
 
 .settings-section {
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-md;
     padding: 1.5rem;
@@ -409,7 +409,7 @@
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
-    background: #fff;
+    background: var(--ul-surface-1);
     appearance: auto;
 
     &:focus {
@@ -464,7 +464,7 @@
 
 .settings-save-btn {
     background: $primary-color;
-    color: #fff;
+    color: var(--ul-text-4);
     border: none;
     border-radius: $radius-sm;
     padding: 10px 24px;
@@ -537,7 +537,7 @@
         linear-gradient(-45deg, transparent 75%, #ccc 75%);
     background-size: 10px 10px;
     background-position: 0 0, 0 5px, 5px -5px, -5px 0px;
-    background-color: #fff;
+    background-color: var(--ul-text-4);
 }
 
 .cop-preview {
@@ -643,7 +643,7 @@
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
-    background: #fff;
+    background: var(--ul-surface-1);
 
     &:focus {
         outline: none;
@@ -666,7 +666,7 @@
     padding: 1rem 2rem;
     border: 2px solid $border-color;
     border-radius: $radius-md;
-    background: #fff;
+    background: var(--ul-surface-1);
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
 
@@ -753,7 +753,7 @@
 }
 
 .edit-card {
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-md;
     padding: 1.5rem;
@@ -887,7 +887,7 @@ textarea.edit-textarea {
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
-    background: #fff;
+    background: var(--ul-surface-1);
     box-sizing: border-box;
 
     &:focus {
@@ -920,7 +920,7 @@ textarea.edit-textarea {
 
 .edit-save-btn {
     background: $primary-color;
-    color: #fff;
+    color: var(--ul-text-4);
     border: none;
     border-radius: $radius-sm;
     padding: 10px 24px;
@@ -1027,7 +1027,7 @@ textarea.edit-textarea {
     border-radius: $radius-sm;
     font-size: 0.9rem;
     color: $text-color;
-    background: #fff;
+    background: var(--ul-surface-1);
 
     &::placeholder {
         color: lighten($text-secondary, 15%);
@@ -1050,7 +1050,7 @@ textarea.edit-textarea {
 
 .edit-add-link-btn {
     background: $primary-color;
-    color: #fff;
+    color: var(--ul-text-4);
     border: none;
     border-radius: $radius-sm;
     padding: 9px 20px;
@@ -1209,7 +1209,7 @@ textarea.edit-textarea {
     align-items: center;
     gap: 4px;
     background: $primary-color;
-    color: #fff;
+    color: var(--ul-text-4);
     border: none;
     border-radius: $radius-sm;
     padding: 9px 18px;
@@ -1249,7 +1249,7 @@ textarea.edit-textarea {
     align-items: center;
     gap: 4px;
     background: $danger-color;
-    color: #fff;
+    color: var(--ul-text-4);
     border: none;
     border-radius: $radius-sm;
     padding: 9px 18px;
@@ -1351,7 +1351,7 @@ textarea.edit-textarea {
 
 // Create card
 .pinlist-create-card {
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-md;
     padding: 1.5rem;
@@ -1361,7 +1361,7 @@ textarea.edit-textarea {
 
 // List cards
 .pinlist-card {
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-md;
     margin-bottom: 0.75rem;
@@ -1490,7 +1490,7 @@ textarea.edit-textarea {
     padding: 8px 12px;
     font-size: 0.9rem;
     color: $text-primary;
-    background: #fff;
+    background: var(--ul-surface-1);
     transition: border-color 0.15s;
 
     &:focus {
@@ -1606,7 +1606,7 @@ a.profile-stat--link {
     padding: .5rem .65rem;
     border-radius: 10px;
     border: 1px solid $border-color;
-    background: #fff;
+    background: var(--ul-surface-1);
     transition: border-color .15s, box-shadow .15s;
 
     &:hover {
@@ -1653,7 +1653,7 @@ a.profile-stat--link {
 
 .friend-avatar-placeholder {
     background: $primary-color;
-    color: #fff;
+    color: var(--ul-text-4);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1675,7 +1675,7 @@ a.profile-stat--link {
 
     &.friend-avatar-placeholder {
         background: $primary-color;
-        color: #fff;
+        color: var(--ul-text-4);
     }
 }
 
@@ -1949,7 +1949,7 @@ a.profile-stat--link {
     gap: .4rem;
     padding: .5rem 1.25rem;
     background: $primary-color;
-    color: #fff;
+    color: var(--ul-text-4);
     border: none;
     border-radius: 8px;
     font-size: .88rem;

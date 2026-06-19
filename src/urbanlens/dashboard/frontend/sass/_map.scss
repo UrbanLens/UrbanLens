@@ -34,7 +34,7 @@
     }
 
     &:hover {
-        background: #fff;
+        background: var(--ul-surface-1);
         box-shadow: 0 2px 8px rgba(0, 0, 0, .32);
     }
 
@@ -468,7 +468,7 @@
     top: 100%;
     left: 0;
     right: 0;
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1.5px solid $border-color;
     border-top: none;
     border-radius: 0 0 $radius-sm $radius-sm;
@@ -579,7 +579,7 @@
 .map-context-menu {
     position: fixed;
     z-index: 10000;
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid var(--ul-border);
     ;
     border-radius: 8px;

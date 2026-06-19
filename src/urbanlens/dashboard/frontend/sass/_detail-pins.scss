@@ -25,7 +25,7 @@
     border: none;
     border-radius: 6px;
     background: #2563eb;
-    color: #fff;
+    color: var(--ul-text-4);
     font-size: .8rem;
     cursor: pointer;
     outline: none;
@@ -462,7 +462,7 @@
         justify-content: center;
         padding: .35rem .6rem;
         background: #6366f1;
-        color: #fff;
+        color: var(--ul-text-4);
         border: none;
         border-radius: 6px;
         cursor: pointer;

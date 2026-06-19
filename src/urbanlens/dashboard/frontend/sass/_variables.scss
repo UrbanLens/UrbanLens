@@ -49,7 +49,7 @@ $teal-bg: #e6f7f7;
     box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
     padding: 0;
     max-width: 90vw;
-    background: #fff;
+    background: var(--ul-surface-1);
 
     &::backdrop {
         background: rgba(0, 0, 0, .45);
@@ -63,7 +63,7 @@ $teal-bg: #e6f7f7;
 }
 
 @mixin panel-base {
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid $border-color;
     border-radius: $radius-lg;
     overflow: hidden;

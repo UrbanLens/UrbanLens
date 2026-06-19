@@ -293,7 +293,7 @@
     position: absolute;
     bottom: calc(100% + 4px);
     left: 0;
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid var(--ul-border);
     border-radius: 10px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
@@ -624,7 +624,7 @@
     &:hover {
         background: #6366f1;
         border-color: #6366f1;
-        color: #fff;
+        color: var(--ul-text-4);
     }
 }
 
@@ -634,7 +634,7 @@
     left: 0;
     right: 0;
     width: 100%;
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid var(--ul-border);
     border-radius: 8px;
     box-shadow: 0 6px 24px rgba(0, 0, 0, .1);
@@ -912,7 +912,7 @@
     top: 100%;
     left: 0;
     right: 0;
-    background: #fff;
+    background: var(--ul-surface-1);
     border: 1px solid var(--ul-border);
     border-radius: 8px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .1);
