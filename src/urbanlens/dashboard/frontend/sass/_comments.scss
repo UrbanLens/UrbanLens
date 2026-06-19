@@ -689,6 +689,15 @@
     margin: 0 .1rem;
 }
 
+.cmc-hint-text {
+    margin-left: auto;
+    font-size: .72rem;
+    color: #9ca3af;
+    font-style: italic;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
 .cmc-tool-btn,
 .cmc-undo-btn,
 .cmc-clear-btn {

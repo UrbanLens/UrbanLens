@@ -352,6 +352,7 @@
             <span>Color</span>
             <input type="color" id="cmc-color" value="#e74c3c">
           </label>
+          <span class="cmc-hint-text" id="cmc-hint"></span>
         </div>
       </div>
       <div class="dialog-footer">
@@ -572,6 +573,23 @@
                     _composerMap.getContainer().style.cursor = '';
                 }
             }
+            _updateHint();
+        }
+
+        function _updateHint() {
+            var hintEl = document.getElementById('cmc-hint');
+            if (!hintEl) return;
+            if (!_activeTool) { hintEl.textContent = ''; return; }
+            var nPts = _drawState ? _drawState.points.length : 0;
+            var msgs = {
+                arrow:   nPts ? (nPts + ' pt' + (nPts > 1 ? 's' : '') + ' — double-click to finish') : 'Click to add points — double-click to finish',
+                line:    nPts ? (nPts + ' pt' + (nPts > 1 ? 's' : '') + ' — double-click to finish') : 'Click to add points — double-click to finish',
+                polygon: nPts ? (nPts + ' pt' + (nPts > 1 ? 's' : '') + ' — double-click to close') : 'Click to add vertices — double-click to close',
+                circle:  'Drag to draw a circle',
+                rect:    'Drag to draw a rectangle',
+                text:    'Click to place a text label',
+            };
+            hintEl.textContent = msgs[_activeTool] || '';
         }
 
         // ── Map drawing events ────────────────────────────────────────────────
@@ -598,6 +616,7 @@
                         _drawState.points.push([ll.lat, ll.lng]);
                     }
                     _updateDrawPreview(ll);
+                    _updateHint();
                     return;
                 }
 
@@ -608,6 +627,7 @@
                         _drawState.points.push([ll.lat, ll.lng]);
                     }
                     _updateDrawPreview(ll);
+                    _updateHint();
                     return;
                 }
             });
@@ -622,6 +642,7 @@
                     _drawState = null;
                     if (_composerPreviewLayer) _composerPreviewLayer.clearLayers();
                     _redrawMarkup();
+                    _updateHint();
                     return;
                 }
 
@@ -630,6 +651,7 @@
                     _drawState = null;
                     if (_composerPreviewLayer) _composerPreviewLayer.clearLayers();
                     _redrawMarkup();
+                    _updateHint();
                     return;
                 }
             });
@@ -881,14 +903,16 @@
             var dlg = document.getElementById('comment-map-dialog-' + commentId);
             if (!dlg) return;
             dlg.showModal();
-            // Force synchronous style recalculation so Leaflet reads the correct
-            // container height on the very next access.
             void dlg.offsetHeight;
 
-            if (_viewerMaps[commentId]) {
-                _viewerMaps[commentId].invalidateSize();
+            // Reuse cached map only when its container is still in the live document.
+            // After an HTMX swap the old element is detached, so we must reinitialise.
+            var cached = _viewerMaps[commentId];
+            if (cached && document.body.contains(cached.getContainer())) {
+                cached.invalidateSize();
                 return;
             }
+            delete _viewerMaps[commentId];
 
             var script = document.getElementById('comment-map-data-' + commentId);
             if (!script) return;
@@ -896,14 +920,26 @@
             try { data = JSON.parse(script.textContent); } catch (_) { return; }
 
             var el = document.getElementById('comment-map-view-' + commentId);
-            var viewMap = L.map(el).setView([data.center_lat, data.center_lng], data.zoom || 13);
+            if (!el) return;
+            // Set height inline so Leaflet reads a non-zero size even if the compiled
+            // CSS hasn't picked up the .comment-map-view-body rule yet.
+            el.style.height = Math.round(window.innerHeight * 0.6) + 'px';
+            el.style.minHeight = '300px';
+
+            var viewMap = L.map(el);
             _makeTileLayer().addTo(viewMap);
+            viewMap.setView([data.center_lat, data.center_lng], data.zoom || 13);
 
             var markupGroup = L.layerGroup().addTo(viewMap);
             (data.markup || []).forEach(function (s) { _renderShape(s, markupGroup); });
 
             viewMap.invalidateSize();
             _viewerMaps[commentId] = viewMap;
+
+            // Belt-and-suspenders: re-invalidate after any dialog transition finishes.
+            dlg.addEventListener('transitionend', function () {
+                viewMap.invalidateSize();
+            }, { once: true });
         };
 
         // ── Render thumbnail map inside .comment-map-thumb ────────────────────
@@ -920,11 +956,15 @@
                 try { data = JSON.parse(script.textContent); } catch (_) { return; }
 
                 thumb.dataset.initialized = '1';
+                // Set height inline — guarantees Leaflet reads a non-zero size
+                // regardless of whether the compiled CSS has loaded yet.
+                thumb.style.height = '180px';
+                thumb.style.width = '100%';
                 var tmap = L.map(thumb, { zoomControl: false, attributionControl: false, dragging: false,
                                           scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
                 _makeTileLayer().addTo(tmap);
                 tmap.setView([data.center_lat, data.center_lng], data.zoom || 13);
-                tmap.invalidateSize();  // ensure tiles load if container wasn't laid out at map creation
+                tmap.invalidateSize();
                 var mg = L.layerGroup().addTo(tmap);
                 (data.markup || []).forEach(function (s) { _renderShape(s, mg); });
             });
