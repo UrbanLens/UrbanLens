@@ -15,7 +15,7 @@
 // Hero card - avatar + identity side by side
 .profile-hero {
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
     padding: 2rem;
@@ -46,7 +46,7 @@
     height: 96px;
     border-radius: 50%;
     object-fit: cover;
-    border: 3px solid $border-color;
+    border: 3px solid var(--ul-border);
     display: block;
 }
 
@@ -133,7 +133,7 @@
     align-items: center;
     gap: 4px;
     padding: 6px 14px;
-    border: 1.5px solid $border-color;
+    border: 1.5px solid var(--ul-border);
     border-radius: 20px;
     font-size: 0.85rem;
     color: $text-secondary;
@@ -193,7 +193,7 @@
 
 .profile-stat {
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
     padding: 1.25rem 2rem;
@@ -221,7 +221,7 @@
 // Generic profile section card
 .profile-section {
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
     padding: 1.5rem 2rem;
@@ -249,7 +249,7 @@
     gap: 7px;
     padding: 7px 16px;
     border-radius: 20px;
-    border: 1.5px solid $border-color;
+    border: 1.5px solid var(--ul-border);
     font-size: 0.875rem;
     color: $text-secondary;
     text-decoration: none;
@@ -288,7 +288,7 @@
     gap: 8px;
     padding: 8px 12px;
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
@@ -325,7 +325,7 @@
 
 .settings-section {
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
@@ -341,7 +341,7 @@
     gap: 1rem;
     margin-bottom: 1.5rem;
     padding-bottom: 1rem;
-    border-bottom: 1px solid $border-color;
+    border-bottom: 1px solid var(--ul-border);
 
     >.material-icons {
         font-size: 1.5rem;
@@ -405,7 +405,7 @@
     width: 100%;
     max-width: 360px;
     padding: 8px 12px;
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
@@ -639,7 +639,7 @@
     width: 100%;
     max-width: 360px;
     padding: 8px 12px;
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
@@ -664,7 +664,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 1rem 2rem;
-    border: 2px solid $border-color;
+    border: 2px solid var(--ul-border);
     border-radius: $radius-md;
     background: var(--ul-surface-1);
     cursor: pointer;
@@ -754,7 +754,7 @@
 
 .edit-card {
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
@@ -766,7 +766,7 @@
     color: $text-color;
     margin: 0 0 1.25rem;
     padding-bottom: 0.75rem;
-    border-bottom: 1px solid $border-color;
+    border-bottom: 1px solid var(--ul-border);
 }
 
 .edit-card-desc {
@@ -836,15 +836,15 @@
     height: 80px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid $border-color;
+    border: 2px solid var(--ul-border);
 }
 
 .edit-avatar-placeholder {
     width: 80px;
     height: 80px;
     border-radius: 50%;
-    background: #e9ecef;
-    border: 2px solid $border-color;
+    background: var(--ul-surface-3);
+    border: 2px solid var(--ul-border);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -883,7 +883,7 @@ input.edit-input,
 textarea.edit-textarea {
     width: 100%;
     padding: 9px 12px;
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
@@ -915,7 +915,7 @@ textarea.edit-textarea {
 .edit-actions {
     margin-top: 1.5rem;
     padding-top: 1rem;
-    border-top: 1px solid $border-color;
+    border-top: 1px solid var(--ul-border);
 }
 
 .edit-save-btn {
@@ -949,8 +949,8 @@ textarea.edit-textarea {
     align-items: center;
     gap: 10px;
     padding: 9px 12px;
-    background: #f8f9fa;
-    border: 1px solid $border-color;
+    background: var(--ul-surface-2);
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
 }
 
@@ -1023,7 +1023,7 @@ textarea.edit-textarea {
 .edit-add-link-input {
     flex: 1;
     padding: 9px 12px;
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     font-size: 0.9rem;
     color: $text-color;
@@ -1141,8 +1141,8 @@ textarea.edit-textarea {
 .ext-warn-url {
     font-size: 0.85rem;
     color: $text-color;
-    background: #f8f9fa;
-    border: 1px solid $border-color;
+    background: var(--ul-surface-2);
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     padding: 8px 12px;
     word-break: break-all;
@@ -1160,7 +1160,7 @@ textarea.edit-textarea {
 
 .ext-warn-cancel-btn {
     background: none;
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     padding: 9px 20px;
     font-size: 0.875rem;
@@ -1170,8 +1170,8 @@ textarea.edit-textarea {
     transition: background 0.15s, color 0.15s;
 
     &:hover {
-        background: #f0f0f0;
-        color: $text-color;
+        background: var(--ul-hover-bg);
+        color: var(--ul-text-1);
     }
 }
 
@@ -1203,7 +1203,7 @@ textarea.edit-textarea {
     }
 }
 
-// shared button helpers
+// shared button helpers — kept for template compatibility; mirror .btn system in _base.scss
 .btn-primary {
     display: inline-flex;
     align-items: center;
@@ -1229,18 +1229,18 @@ textarea.edit-textarea {
 
 .btn-ghost {
     background: none;
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     padding: 9px 18px;
     font-size: 0.875rem;
     font-weight: 500;
-    color: $text-secondary;
+    color: var(--ul-text-2);
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
 
     &:hover {
-        background: #f5f5f5;
-        color: $text-primary;
+        background: var(--ul-surface-3);
+        color: var(--ul-text-1);
     }
 }
 
@@ -1273,7 +1273,7 @@ textarea.edit-textarea {
     border-radius: $radius-sm;
     padding: 6px;
     cursor: pointer;
-    color: $text-secondary;
+    color: var(--ul-text-2);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1282,8 +1282,8 @@ textarea.edit-textarea {
 
     &:hover,
     &:focus {
-        background: #f0f0f0;
-        color: $text-primary;
+        background: var(--ul-hover-bg);
+        color: var(--ul-text-1);
         outline: none;
     }
 
@@ -1291,8 +1291,8 @@ textarea.edit-textarea {
 
         &:hover,
         &:focus {
-            background: #fee2e2;
-            color: #dc2626;
+            background: $danger-bg;
+            color: $danger-color;
             outline: none;
         }
     }
@@ -1352,7 +1352,7 @@ textarea.edit-textarea {
 // Create card
 .pinlist-create-card {
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
@@ -1362,7 +1362,7 @@ textarea.edit-textarea {
 // List cards
 .pinlist-card {
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     margin-bottom: 0.75rem;
     transition: box-shadow 0.15s;
@@ -1446,7 +1446,7 @@ textarea.edit-textarea {
 }
 
 .pinlist-order-badge {
-    background: #f5f5f5;
+    background: var(--ul-surface-3);
     border-radius: 20px;
     padding: 1px 8px;
 }
@@ -1485,7 +1485,7 @@ textarea.edit-textarea {
 }
 
 .form-input {
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     padding: 8px 12px;
     font-size: 0.9rem;
@@ -1605,12 +1605,12 @@ a.profile-stat--link {
     gap: .65rem;
     padding: .5rem .65rem;
     border-radius: 10px;
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     background: var(--ul-surface-1);
     transition: border-color .15s, box-shadow .15s;
 
     &:hover {
-        border-color: darken($border-color, 10%);
+        border-color: var(--ul-border-strong);
         box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
     }
 
@@ -1789,7 +1789,7 @@ a.profile-stat--link {
 
 .friend-request-list--page .friend-request-item {
     padding: .65rem 0;
-    border-bottom: 1px solid $border-color;
+    border-bottom: 1px solid var(--ul-border);
 }
 
 .friend-request-info {
@@ -1872,7 +1872,7 @@ a.profile-stat--link {
 
     &--remove {
         background: none;
-        border-color: $border-color;
+        border-color: var(--ul-border);
         color: #64748b;
         padding: .25rem .5rem;
 

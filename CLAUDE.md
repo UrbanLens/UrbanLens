@@ -194,13 +194,14 @@ Custom runner in `urbanlens.core.tests.runner.TestRunner` (extends DiscoverRunne
 - Uses Model Bakery for fixture generation
 - Suppresses logs on passing tests, surfaces them on failure
 
+Do not create unit tests for trivial code, such as __init__.py, or to test that a logging message precisely matches a string, especially when it will cause extremely minor changes to result in tests failing. Make sure to mock and patch appropriately, especially when testing anything that contacts an external service. Add hypothesis property-based unit tests whenever possible.
+
 ## Roadmap / Known TODOs
 
 These are planned features - treat any missing implementation as a gap to fill, not a deliberate omission:
 
 - **AI support**: Add AI-assisted suggestions and customization throughout the application (OpenAI integration exists, extend it)
 - **UI modernization**: Current UI is functional but dated. Move toward a sleek, professional, modern aesthetic
-- **Bounding box / radius for locations**: Locations should support a polygon bounding box (not just a point) to cover campuses or multi-building sites; this should be configurable in the map UI
 - **Photo upload with GPS extraction**: Drag-and-drop photo upload; extract GPS coordinates from EXIF metadata, auto-associate with the nearest pin; allow the user to adjust by dragging a mini-pin on the map
 - **Paperless-ngx integration**: Connect via API to show related documents and photos for each location
 - **Google Search integration**: Surface recent news articles about a location on the pin detail page

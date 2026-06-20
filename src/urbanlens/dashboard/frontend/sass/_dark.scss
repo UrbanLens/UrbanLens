@@ -80,15 +80,10 @@
         background: transparent;
     }
 
-    // Cards / panels
-    .settings-section,
-    .tag-card,
-    .tag-create-card,
-    .tag-inline-edit,
-    .tag-panel,
+    // Legacy positioned .dialog still needs explicit theming
     .dialog {
-        background: #1e1e1e;
-        border-color: #333;
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
     }
 
     .tag-chip {
@@ -145,10 +140,8 @@
         color: var(--ul-text-4);
     }
 
-    .settings-section-header,
-    .tag-panel-header {
-        border-color: #333;
-        //background: #252525;
+    .settings-section-header {
+        border-color: var(--ul-border);
     }
 
     .settings-section-title,
@@ -876,9 +869,6 @@
     }
 
     .trip-card {
-        background: var(--ul-surface-1);
-        border-color: var(--ul-border);
-
         &:hover {
             border-color: #3b82f6;
             box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
@@ -893,46 +883,12 @@
         }
     }
 
-    .trip-card-name {
-        color: var(--ul-text-1);
-    }
-
-    .trip-card-desc {
-        color: var(--ul-text-2);
-    }
-
-    .trip-card-meta span {
-        color: var(--ul-text-3);
-    }
-
-    .trip-card-arrow {
-        color: var(--ul-text-3);
-    }
-
     // ── Trip detail header ────────────────────────────────────────────────────
 
-    .trip-detail-header {
-        border-bottom-color: var(--ul-border);
-    }
-
     .trip-back-link {
-        color: var(--ul-text-3);
-
         &:hover {
             color: #60a5fa;
         }
-    }
-
-    .trip-detail-title {
-        color: var(--ul-text-1);
-    }
-
-    .trip-detail-description {
-        color: var(--ul-text-2);
-    }
-
-    .trip-detail-dates {
-        color: var(--ul-text-2);
     }
 
     .trip-header-btn {
@@ -1451,17 +1407,7 @@
         color: var(--ul-text-2);
     }
 
-    .organize-tab-bar {
-        border-bottom-color: var(--ul-border);
-    }
-
     .organize-tab {
-        color: var(--ul-text-3);
-
-        &:hover {
-            color: var(--ul-text-1);
-        }
-
         &.active {
             color: lighten($primary-color, 15%);
             border-bottom-color: lighten($primary-color, 15%);
@@ -1471,9 +1417,6 @@
     // ── Selection / checkbox bar ──────────────────────────────────────────────
 
     .cat-sel-bar {
-        background: var(--ul-surface-2);
-        border-color: var(--ul-border);
-
         &.cat-sel-bar--active {
             background: rgba(59, 130, 246, .1);
             border-color: rgba(59, 130, 246, .35);
@@ -1526,24 +1469,6 @@
     // ── Tag / category edit dialogs ───────────────────────────────────────────
 
     .tag-edit-dialog {
-        background: var(--ul-surface-1);
-        border-color: var(--ul-border);
-        color: var(--ul-text-1);
-
-        .dialog-header {
-            border-bottom-color: var(--ul-border);
-            color: var(--ul-text-1);
-        }
-
-        .dialog-close {
-            color: var(--ul-text-3);
-
-            &:hover {
-                background: rgba(255, 255, 255, .06);
-                color: var(--ul-text-1);
-            }
-        }
-
         .tag-edit-dialog-body {
             color: var(--ul-text-1);
         }
@@ -1552,9 +1477,6 @@
     // ── Priority items ────────────────────────────────────────────────────────
 
     .priority-item {
-        background: var(--ul-surface-1);
-        border-color: var(--ul-border);
-
         &:hover {
             box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
         }

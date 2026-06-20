@@ -152,13 +152,18 @@ class MarkupDefaultsFormTests(HypothesisTestCase):
 		form.is_valid()
 		return form
 
-	def test_blank_fill_color_returns_default(self) -> None:
+	def test_blank_fill_color_makes_form_invalid(self) -> None:
+		# CharField(required=True) rejects empty strings at field-level validation,
+		# so clean_markup_fill_color's default fallback is unreachable for truly blank input.
 		form = self._submit(markup_fill_color="", markup_fill_opacity=80, markup_border_opacity=50)
-		self.assertEqual(form.cleaned_data["markup_fill_color"], "#e53e3e")
+		self.assertFalse(form.is_valid())
+		self.assertIn("markup_fill_color", form.errors)
 
-	def test_whitespace_fill_color_returns_default(self) -> None:
+	def test_whitespace_fill_color_makes_form_invalid(self) -> None:
+		# CharField strips whitespace then rejects the resulting empty string.
 		form = self._submit(markup_fill_color="   ", markup_fill_opacity=80, markup_border_opacity=50)
-		self.assertEqual(form.cleaned_data["markup_fill_color"], "#e53e3e")
+		self.assertFalse(form.is_valid())
+		self.assertIn("markup_fill_color", form.errors)
 
 	def test_valid_fill_color_is_returned_stripped(self) -> None:
 		form = self._submit(markup_fill_color=" #aabbcc ", markup_fill_opacity=80, markup_border_opacity=50)

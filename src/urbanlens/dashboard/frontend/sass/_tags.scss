@@ -4,7 +4,7 @@
 
 .pinlist-panel {
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     overflow: hidden;
 }
@@ -14,11 +14,11 @@
     align-items: center;
     gap: 8px;
     padding: 0.75rem 1rem;
-    background: #f8f9fa;
-    border-bottom: 1px solid $border-color;
+    background: var(--ul-surface-2);
+    border-bottom: 1px solid var(--ul-border);
     font-weight: 600;
     font-size: 0.9rem;
-    color: $text-primary;
+    color: var(--ul-text-1);
 
     i {
         font-size: 1.1rem;
@@ -37,7 +37,7 @@
     align-items: center;
     gap: 10px;
     padding: 0.6rem 1rem;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--ul-border);
     transition: background 0.1s;
 
     &:last-child {
@@ -45,7 +45,7 @@
     }
 
     &:hover {
-        background: #f8f9fa;
+        background: var(--ul-hover-bg);
     }
 
     &.is-member {
@@ -130,8 +130,8 @@
     font-size: 0.8rem;
     color: $text-secondary;
     text-decoration: none;
-    border-top: 1px solid $border-color;
-    background: #fafafa;
+    border-top: 1px solid var(--ul-border);
+    background: var(--ul-surface-2);
     transition: color 0.12s;
 
     i {
@@ -176,7 +176,7 @@
 // Create card
 .tag-create-card {
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
@@ -185,7 +185,7 @@
 // Tag cards
 .tag-card {
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     margin-bottom: 0.75rem;
     overflow: hidden;
@@ -203,7 +203,7 @@
     height: 44px;
     flex-shrink: 0;
     border-radius: 50%;
-    border: 2px solid $border-color;
+    border: 2px solid var(--ul-border);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -275,10 +275,10 @@
     font-size: 0.78rem;
     font-weight: 500;
     color: $text-secondary;
-    background: #f3f4f6;
+    background: var(--ul-surface-3);
     border-radius: 999px;
     padding: 2px 7px 2px 5px;
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
 
     i {
         font-size: 0.82rem;
@@ -296,9 +296,9 @@
     }
 
     &.tag-stat--total {
-        color: #6b7280;
-        background: #f9fafb;
-        border-color: #e5e7eb;
+        color: $text-secondary;
+        background: var(--ul-surface-2);
+        border-color: var(--ul-border);
         font-style: italic;
     }
 }
@@ -358,7 +358,7 @@
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    background: $border-color;
+    background: var(--ul-border);
     color: $text-secondary;
     font-size: 0.7rem;
     font-weight: 700;
@@ -453,7 +453,7 @@
     margin-top: 0.4rem;
     max-height: 140px;
     overflow-y: auto;
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     padding: 0.5rem;
 }
@@ -473,7 +473,7 @@
     cursor: pointer;
     padding: 3px 8px;
     border-radius: 20px;
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     background: #fafafa;
     transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
 
@@ -504,7 +504,7 @@
     justify-content: space-between;
     gap: .5rem;
     padding: .75rem 1rem;
-    border-bottom: 1px solid $border-color;
+    border-bottom: 1px solid var(--ul-border);
     font-weight: 600;
     font-size: .95rem;
     flex-shrink: 0;
@@ -520,7 +520,7 @@
     border: none;
     background: transparent;
     cursor: pointer;
-    color: #888;
+    color: var(--ul-text-3);
     transition: background .15s, color .15s;
     flex-shrink: 0;
 
@@ -529,8 +529,8 @@
     }
 
     &:hover {
-        background: rgba(0, 0, 0, .07);
-        color: #333;
+        background: var(--ul-hover-bg);
+        color: var(--ul-text-1);
     }
 }
 
@@ -539,50 +539,15 @@
     width: min(52em, calc(100vw - 2rem));
     max-height: 90vh;
     border-radius: $radius-md;
-    border: 1px solid $border-color;
+    border: none;
     padding: 0;
-    box-shadow: 0 8px 40px rgba(0, 0, 0, .18);
+    box-shadow: $shadow-dialog;
     overflow: hidden; // prevent dialog-level scrollbar
 
     // Flex column so header stays fixed and body scrolls
     &[open] {
         display: flex;
         flex-direction: column;
-    }
-
-    .dialog-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: .75rem 1rem;
-        border-bottom: 1px solid $border-color;
-        font-weight: 600;
-        font-size: .95rem;
-        flex-shrink: 0;
-    }
-
-    .dialog-close {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 28px;
-        height: 28px;
-        border-radius: 6px;
-        border: none;
-        background: transparent;
-        cursor: pointer;
-        color: #888;
-        transition: background .15s, color .15s;
-        margin-left: auto;
-
-        .material-icons {
-            font-size: 1.1rem;
-        }
-
-        &:hover {
-            background: rgba(0, 0, 0, .07);
-            color: #333;
-        }
     }
 
     &::backdrop {
@@ -605,8 +570,8 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: #f9fafb;
-    border: 1px solid $border-color;
+    background: var(--ul-surface-2);
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     padding: .75rem 1rem;
     margin-bottom: 1rem;
@@ -660,7 +625,7 @@
 
 .tag-panel {
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     overflow: hidden;
 }
@@ -672,8 +637,8 @@
     padding: 0.75rem 1rem;
     font-weight: 600;
     font-size: 0.9rem;
-    border-bottom: 1px solid $border-color;
-    background: #fafafa;
+    border-bottom: 1px solid var(--ul-border);
+    background: var(--ul-surface-2);
 
     i {
         color: $primary-color;
@@ -691,7 +656,7 @@
     align-items: center;
     gap: 0.6rem;
     padding: 0.5rem 1rem;
-    border-bottom: 1px solid $border-color;
+    border-bottom: 1px solid var(--ul-border);
 
     &:last-child {
         border-bottom: none;
@@ -777,8 +742,8 @@
     font-size: 0.8rem;
     color: $text-secondary;
     text-decoration: none;
-    border-top: 1px solid $border-color;
-    background: #fafafa;
+    border-top: 1px solid var(--ul-border);
+    background: var(--ul-surface-2);
     transition: color 0.12s;
 
     i {
@@ -795,7 +760,7 @@
 .import-tag-section {
     margin-top: 1rem;
     padding-top: 1rem;
-    border-top: 1px solid $border-color;
+    border-top: 1px solid var(--ul-border);
 }
 
 .import-tag-grid {
@@ -810,8 +775,8 @@
     gap: 5px;
     padding: 4px 10px;
     border-radius: 20px;
-    border: 2px solid $border-color;
-    background: #fafafa;
+    border: 2px solid var(--ul-border);
+    background: var(--ul-surface-2);
     font-size: 0.82rem;
     cursor: pointer;
     transition: border-color 0.12s, background 0.12s;
@@ -835,7 +800,7 @@
 
     &:hover {
         border-color: var(--tag-color, #{$primary-color});
-        background: #f0f0f0;
+        background: var(--ul-surface-3);
     }
 
     &:has(.import-tag-checkbox:checked) {
@@ -891,7 +856,7 @@
 
 .tag-view-toggle {
     display: flex;
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     overflow: hidden;
 }
@@ -906,7 +871,7 @@
     align-items: center;
     justify-content: center;
     transition: background .12s, color .12s;
-    border-right: 1px solid $border-color;
+    border-right: 1px solid var(--ul-border);
 
     &:last-child {
         border-right: none;
@@ -917,8 +882,8 @@
     }
 
     &:hover {
-        background: #f5f5f5;
-        color: $text-primary;
+        background: var(--ul-surface-3);
+        color: var(--ul-text-1);
     }
 
     &.active {
@@ -998,7 +963,7 @@
     >.tag-tree-children {
         margin-left: 1.5rem;
         padding-left: 1rem;
-        border-left: 2px solid $border-color;
+        border-left: 2px solid var(--ul-border);
         margin-top: 0;
 
         >.tag-tree-item {
@@ -1019,7 +984,7 @@
     top: 1.25rem;
     width: .65rem;
     height: 2px;
-    background: $border-color;
+    background: var(--ul-border);
 }
 
 #tag-rows.tag-view--tree,
@@ -1045,7 +1010,7 @@
     transition: background .1s;
 
     &:hover {
-        background: #f1f5f9;
+        background: var(--ul-surface-3);
 
         .cat-select-check {
             border-color: $primary-color;
@@ -1116,8 +1081,8 @@
     border-radius: $radius-md;
     border: 1px solid transparent;
     margin-bottom: 1rem;
-    background: #f8fafc;
-    border-color: $border-color;
+    background: var(--ul-surface-2);
+    border-color: var(--ul-border);
     transition: background .18s, border-color .18s;
 
     &.cat-sel-bar--active {
@@ -1153,11 +1118,11 @@
     gap: .3rem;
     padding: .4rem .8rem;
     background: var(--ul-surface-1);
-    border: 1px solid #cbd5e1;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     font-size: .825rem;
     font-weight: 500;
-    color: #475569;
+    color: var(--ul-text-2);
     cursor: pointer;
     transition: background .12s, border-color .12s, color .12s, opacity .12s;
 
@@ -1166,9 +1131,9 @@
     }
 
     &:hover:not(:disabled) {
-        background: #f1f5f9;
-        border-color: #94a3b8;
-        color: #1e293b;
+        background: var(--ul-surface-3);
+        border-color: var(--ul-border-strong);
+        color: var(--ul-text-1);
     }
 
     &:disabled {
@@ -1288,7 +1253,7 @@
         content: '';
         flex: 1;
         height: 1px;
-        background: $border-color;
+        background: var(--ul-border);
     }
 
     i {
@@ -1310,7 +1275,7 @@
     gap: .75rem;
     padding: .6rem .75rem;
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     transition: border-color .12s;
 
@@ -1393,7 +1358,7 @@
     gap: .75rem;
     align-items: center;
     padding: 1rem 1.5rem 1.25rem;
-    border-top: 1px solid $border-color;
+    border-top: 1px solid var(--ul-border);
 }
 
 @keyframes cat-spin {
@@ -1487,7 +1452,7 @@
     gap: .75rem;
     align-items: center;
     padding: 1rem 1.5rem 1.25rem;
-    border-top: 1px solid $border-color;
+    border-top: 1px solid var(--ul-border);
     flex-shrink: 0;
 }
 
@@ -1585,7 +1550,7 @@
 
 .organize-tab-bar {
     display: flex;
-    border-bottom: 2px solid $border-color;
+    border-bottom: 2px solid var(--ul-border);
     margin-bottom: 1.75rem;
     gap: 0;
 }
@@ -1594,7 +1559,7 @@
     padding: .6rem 1.25rem;
     font-size: .9rem;
     font-weight: 500;
-    color: $text-muted;
+    color: var(--ul-text-3);
     border: none;
     background: none;
     cursor: pointer;
@@ -1610,7 +1575,7 @@
     }
 
     &:hover {
-        color: $text-primary;
+        color: var(--ul-text-1);
     }
 
     &.active {
@@ -1633,7 +1598,7 @@
     align-items: center;
     gap: .75rem;
     background: var(--ul-surface-1);
-    border: 1px solid $border-color;
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     padding: .6rem .85rem;
     cursor: grab;
@@ -1655,7 +1620,7 @@
 }
 
 .priority-drag-handle {
-    color: #94a3b8;
+    color: $text-muted;
     display: flex;
     align-items: center;
     flex-shrink: 0;
@@ -1669,7 +1634,7 @@
     width: 34px;
     height: 34px;
     border-radius: $radius-sm;
-    background: #f1f5f9;
+    background: var(--ul-surface-3);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1678,7 +1643,7 @@
 
     i {
         font-size: 1.15rem;
-        color: #64748b;
+        color: $text-secondary;
     }
 
     .tag-icon-img {
@@ -1744,9 +1709,9 @@
 .priority-order-badge {
     font-size: .78rem;
     font-weight: 600;
-    color: #64748b;
-    background: #f1f5f9;
-    border: 1px solid $border-color;
+    color: $text-secondary;
+    background: var(--ul-surface-3);
+    border: 1px solid var(--ul-border);
     border-radius: 20px;
     padding: 1px 9px;
     min-width: 32px;
@@ -1776,12 +1741,12 @@
             align-items: center;
             gap: .35rem;
             padding: .45rem 1rem;
-            border: 2px solid $border-color;
+            border: 2px solid var(--ul-border);
             border-radius: $radius-sm;
             font-size: .875rem;
             font-weight: 500;
             color: $text-secondary;
-            background: #fafafa;
+            background: var(--ul-surface-2);
             transition: border-color .13s, background .13s, color .13s;
             height: 2.5em;
 
@@ -1806,8 +1771,8 @@
         }
 
         &:hover span {
-            border-color: darken($border-color, 10%);
-            background: #f0f0f0;
+            border-color: var(--ul-border-strong);
+            background: var(--ul-surface-3);
         }
     }
 }

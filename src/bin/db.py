@@ -179,7 +179,7 @@ class Db:
             cmd += ["-o", " ".join(server_opts)]
         cmd.append(command)
         kwargs.setdefault("check", True)
-        return subprocess.run(cmd, **kwargs)
+        return subprocess.run(cmd, **kwargs, check=False)
 
     def execute_sql(self, sql: str, database: str | None = None) -> int:
         """Run a SQL statement via psql and return the exit code.

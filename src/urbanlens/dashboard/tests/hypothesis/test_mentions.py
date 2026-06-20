@@ -182,13 +182,14 @@ class RenderCommentTextTests(unittest.TestCase):
 		self.assertIn("mention--activity", html)
 
 	def test_act_mention_with_location_renders_link(self) -> None:
+		# reverse is imported inside the function body so must be patched at its source.
 		loc = MagicMock()
 		loc.uuid = uuid.uuid4()
 		activity = MagicMock()
 		activity.display_name = "Location Activity"
 		activity.id = 42
 		activity.location = loc
-		with patch("urbanlens.dashboard.services.mentions.reverse", return_value="/wiki/test/"):
+		with patch("django.urls.reverse", return_value="/wiki/test/"):
 			result = self._render("@act:2", set(), {2: activity})
 		self.assertIsNotNone(result)
 		html = str(result)

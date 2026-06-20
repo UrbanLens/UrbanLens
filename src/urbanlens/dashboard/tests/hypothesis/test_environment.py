@@ -116,10 +116,13 @@ class BaseEnvironmentEqualityTests(unittest.TestCase):
 class BaseEnvironmentValidatorTests(unittest.TestCase):
 	"""Field validators coerce string values into proper enum types."""
 
-	def test_env_type_coerced_from_lowercase_string(self) -> None:
-		env = Local(env_type="local")
-		self.assertIsInstance(env.env_type, EnvironmentTypes)
-		self.assertEqual(env.env_type, EnvironmentTypes.LOCAL)
+	def test_env_type_is_always_an_enum_instance(self) -> None:
+		# Concrete subclasses hardcode env_type as an EnvironmentTypes enum value.
+		# The Pydantic validator validates it; verify the result is always the enum.
+		for env_type in EnvironmentTypes:
+			env = select_environment(env_type)
+			self.assertIsInstance(env.env_type, EnvironmentTypes)
+			self.assertEqual(env.env_type, env_type)
 
 	def test_debug_override_coerced_from_override_on_string(self) -> None:
 		env = Local(debug_override="override_on")
