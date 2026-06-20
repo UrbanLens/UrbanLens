@@ -16,7 +16,8 @@ import re
 from typing import TYPE_CHECKING
 import uuid
 
-from django.utils.html import conditional_escape, format_html, mark_safe
+from django.utils.html import conditional_escape, format_html
+from django.utils.safestring import SafeString, mark_safe
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -55,7 +56,7 @@ def render_comment_text(
     last_end = 0
 
     # Collect and sort all mention spans
-    mentions: list[tuple[int, int, str]] = []  # (start, end, html)
+    mentions: list[tuple[int, int, SafeString]] = []
 
     for m in _LOC_RE.finditer(text):
         display = m.group(1)
@@ -78,7 +79,7 @@ def render_comment_text(
             if activity is None:
                 mentions.append((m.start(), m.end(), conditional_escape(m.group(0))))
                 continue
-            act_name = conditional_escape(activity.display_name)
+            act_name = conditional_escape(activity.title or str(activity))
             if activity.location:
                 try:
                     wiki_url = reverse("location.wiki", args=[str(activity.location.uuid)])

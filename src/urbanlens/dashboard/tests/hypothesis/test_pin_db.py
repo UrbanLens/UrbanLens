@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 
+from django.contrib.auth.models import User
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
@@ -15,6 +16,7 @@ from model_bakery import baker
 
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.tests.hypothesis.strategies import (
 	lat_float,
 	lon_float,
@@ -24,7 +26,7 @@ from urbanlens.dashboard.tests.hypothesis.strategies import (
 	two_distant_coord_pairs,
 )
 
-_DB_SETTINGS = dict(
+_db_settings = settings(
 	max_examples=40,
 	deadline=None,
 	suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
@@ -41,9 +43,11 @@ def _make_location(lat: float = 40.0, lon: float = -74.0) -> Location:
 class GetNearbyOrCreateNullGuardsTests(HypothesisTestCase):
 	"""get_nearby_or_create must return (None, False) for degenerate inputs."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 
 	def test_none_lat_none_lon(self) -> None:
 		pin, created = Pin.objects.get_nearby_or_create(None, None, self.profile)
@@ -68,7 +72,7 @@ class GetNearbyOrCreateNullGuardsTests(HypothesisTestCase):
 		),
 		lon=lon_float,
 	)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_nan_or_inf_latitude_returns_none(self, lat: float, lon: float) -> None:
 		pin, created = Pin.objects.get_nearby_or_create(lat, lon, self.profile)
 		self.assertIsNone(pin)
@@ -82,14 +86,14 @@ class GetNearbyOrCreateNullGuardsTests(HypothesisTestCase):
 			st.just(float("-inf")),
 		),
 	)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_nan_or_inf_longitude_returns_none(self, lat: float, lon: float) -> None:
 		pin, created = Pin.objects.get_nearby_or_create(lat, lon, self.profile)
 		self.assertIsNone(pin)
 		self.assertFalse(created)
 
 	@given(lat=st.text(min_size=1, max_size=10), lon=st.text(min_size=1, max_size=10))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_non_numeric_string_coordinates_return_none(self, lat: str, lon: str) -> None:
 		assume(not _is_numeric(lat) or not _is_numeric(lon))
 		pin, created = Pin.objects.get_nearby_or_create(lat, lon, self.profile)
@@ -108,12 +112,14 @@ def _is_numeric(s: str) -> bool:
 class GetNearbyOrCreateCreationTests(HypothesisTestCase):
 	"""get_nearby_or_create creates a valid pin for well-formed coordinates."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 
 	@given(lat=lat_float, lon=lon_float)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_creates_new_pin_for_fresh_coordinates(self, lat: float, lon: float) -> None:
 		pin, created = Pin.objects.get_nearby_or_create(lat, lon, self.profile)
 		self.assertIsNotNone(pin)
@@ -121,7 +127,7 @@ class GetNearbyOrCreateCreationTests(HypothesisTestCase):
 		self.assertEqual(pin.profile, self.profile)
 
 	@given(lat=lat_float, lon=lon_float)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_created_pin_has_correct_coordinates(self, lat: float, lon: float) -> None:
 		pin, created = Pin.objects.get_nearby_or_create(lat, lon, self.profile)
 		self.assertTrue(created)
@@ -129,7 +135,7 @@ class GetNearbyOrCreateCreationTests(HypothesisTestCase):
 		self.assertAlmostEqual(float(pin.longitude), lon, places=4)
 
 	@given(lat=lat_float, lon=lon_float)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_second_call_same_coords_returns_existing(self, lat: float, lon: float) -> None:
 		"""Calling again at exactly the same coordinates must NOT create a second pin."""
 		first_pin, first_created = Pin.objects.get_nearby_or_create(lat, lon, self.profile)
@@ -139,7 +145,7 @@ class GetNearbyOrCreateCreationTests(HypothesisTestCase):
 		self.assertEqual(first_pin.pk, second_pin.pk)
 
 	@given(two_distinct=two_distant_coord_pairs())
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_distant_coordinates_create_independent_pins(
 		self,
 		two_distinct: tuple[tuple[float, float], tuple[float, float]],
@@ -158,12 +164,14 @@ class GetNearbyOrCreateCreationTests(HypothesisTestCase):
 class PinQuerySetRootPinsTests(HypothesisTestCase):
 	"""root_pins() must exclude all sub-pin variants."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 
 	@given(n_root=st.integers(min_value=0, max_value=5), n_child=st.integers(min_value=0, max_value=5))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_root_pins_count_excludes_detail_pins(self, n_root: int, n_child: int) -> None:
 		"""root_pins() count must equal exactly the number of top-level pins."""
 		roots = [baker.make(Pin, profile=self.profile, parent_pin=None, parent_location=None) for _ in range(n_root)]
@@ -173,7 +181,7 @@ class PinQuerySetRootPinsTests(HypothesisTestCase):
 		self.assertEqual(root_count, n_root)
 
 	@given(n=st.integers(min_value=1, max_value=5))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_detail_pins_are_excluded_from_root_pins(self, n: int) -> None:
 		parent = baker.make(Pin, profile=self.profile, parent_pin=None, parent_location=None)
 		children = [baker.make(Pin, profile=self.profile, parent_pin=parent) for _ in range(n)]
@@ -183,7 +191,7 @@ class PinQuerySetRootPinsTests(HypothesisTestCase):
 		self.assertTrue(child_ids.isdisjoint(root_ids), "Detail pins must not appear in root_pins()")
 
 	@given(n=st.integers(min_value=1, max_value=5))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_detail_pins_queryset_excludes_roots(self, n: int) -> None:
 		parent = baker.make(Pin, profile=self.profile, parent_pin=None, parent_location=None)
 		children = {baker.make(Pin, profile=self.profile, parent_pin=parent).pk for _ in range(n)}
@@ -196,15 +204,17 @@ class PinQuerySetRootPinsTests(HypothesisTestCase):
 class PinQuerySetVisitFiltersTests(HypothesisTestCase):
 	"""never_visited() and related visit filters."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 
 	@given(
 		n_visited=st.integers(min_value=0, max_value=5),
 		n_unvisited=st.integers(min_value=0, max_value=5),
 	)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_never_visited_returns_only_unvisited_pins(
 		self,
 		n_visited: int,
@@ -218,7 +228,7 @@ class PinQuerySetVisitFiltersTests(HypothesisTestCase):
 		self.assertEqual(returned_ids, unvisited_ids)
 
 	@given(n=st.integers(min_value=1, max_value=6))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_never_visited_has_no_last_visited_date(self, n: int) -> None:
 		for _ in range(n):
 			baker.make(Pin, profile=self.profile, last_visited=None)
@@ -231,12 +241,14 @@ class PinQuerySetVisitFiltersTests(HypothesisTestCase):
 class PinQuerySetByNameTests(HypothesisTestCase):
 	"""by_name() performs a case-insensitive substring search on nickname."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 
 	@given(nonempty_name)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_pin_is_found_by_exact_nickname(self, name: str) -> None:
 		assume(len(name.strip()) >= 1)
 		pin = baker.make(Pin, profile=self.profile, nickname=name)
@@ -244,7 +256,7 @@ class PinQuerySetByNameTests(HypothesisTestCase):
 		self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 
 	@given(nonempty_name)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_pin_is_found_by_lowercase_nickname(self, name: str) -> None:
 		assume(len(name.strip()) >= 1)
 		pin = baker.make(Pin, profile=self.profile, nickname=name)
@@ -252,7 +264,7 @@ class PinQuerySetByNameTests(HypothesisTestCase):
 		self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 
 	@given(nonempty_name)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_pin_is_found_by_uppercase_nickname(self, name: str) -> None:
 		assume(len(name.strip()) >= 1)
 		pin = baker.make(Pin, profile=self.profile, nickname=name)
@@ -266,12 +278,14 @@ class PinQuerySetByNameTests(HypothesisTestCase):
 class PinQuerySetPriorityTests(HypothesisTestCase):
 	"""by_priority() is an exact-match filter."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 
 	@given(priority)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_by_priority_returns_only_matching_pins(self, prio: int) -> None:
 		target = baker.make(Pin, profile=self.profile, priority=prio)
 		# Decoy with a different priority value.

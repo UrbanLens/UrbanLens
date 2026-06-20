@@ -9,17 +9,18 @@ Classes under test:
 """
 from __future__ import annotations
 
-import unittest
 from unittest.mock import MagicMock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils.datastructures import MultiValueDict
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile, _MultipleFileField, _MultipleFileInput
 
 
 # ── _MultipleFileInput ────────────────────────────────────────────────────────
 
-class MultipleFileInputValueFromDatadictTests(unittest.TestCase):
+class MultipleFileInputValueFromDatadictTests(TestCase):
 	"""value_from_datadict calls files.getlist(name) and returns the result."""
 
 	def _widget(self) -> _MultipleFileInput:
@@ -49,7 +50,7 @@ class MultipleFileInputValueFromDatadictTests(unittest.TestCase):
 
 # ── _MultipleFileField ────────────────────────────────────────────────────────
 
-class MultipleFileFieldCleanTests(unittest.TestCase):
+class MultipleFileFieldCleanTests(TestCase):
 	"""_MultipleFileField.clean validates each file individually."""
 
 	def _field(self) -> _MultipleFileField:
@@ -89,14 +90,15 @@ class MultipleFileFieldCleanTests(unittest.TestCase):
 
 # ── UploadDataFile ────────────────────────────────────────────────────────────
 
-class UploadDataFileFormTests(unittest.TestCase):
+class UploadDataFileFormTests(TestCase):
 	"""UploadDataFile validates that at least one file is provided."""
 
 	def _file(self, name: str = "import.kml", content: bytes = b"<kml/>") -> SimpleUploadedFile:
 		return SimpleUploadedFile(name, content)
 
 	def test_valid_with_one_file(self) -> None:
-		form = UploadDataFile(data={}, files={"upload_files": [self._file()]})
+		files: MultiValueDict = MultiValueDict({"upload_files": [self._file()]})
+		form = UploadDataFile(data={}, files=files)
 		# Manually call clean so we can check without full Django multi-value upload infra.
 		field = form.fields["upload_files"]
 		result = field.clean([self._file()])

@@ -5,10 +5,10 @@ DB-backed tests (viewer_pinned_uuids, filter_visible_comments) use django.test.T
 """
 from __future__ import annotations
 
-import unittest
 import uuid
 from unittest.mock import MagicMock, patch
 
+from urbanlens.core.tests.testcase import TestCase
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -24,8 +24,8 @@ from urbanlens.dashboard.services.mentions import (
 # ── Strategies ─────────────────────────────────────────────────────────────────
 
 _uuid_st = st.uuids()
-_HYP = dict(max_examples=100, deadline=None)
-_HYP_LIGHT = dict(max_examples=50, deadline=None)
+_hyp = settings(max_examples=100, deadline=None)
+_hyp_light = settings(max_examples=50, deadline=None)
 
 
 def _loc_mention(display: str, uid: uuid.UUID) -> str:
@@ -35,7 +35,7 @@ def _loc_mention(display: str, uid: uuid.UUID) -> str:
 
 # ── extract_location_uuids ────────────────────────────────────────────────────
 
-class ExtractLocationUuidsTests(unittest.TestCase):
+class ExtractLocationUuidsTests(TestCase):
 	"""extract_location_uuids parses @[…](loc:UUID) tokens."""
 
 	def test_empty_string_returns_empty_list(self) -> None:
@@ -71,7 +71,7 @@ class ExtractLocationUuidsTests(unittest.TestCase):
 		self.assertEqual(extract_location_uuids(text), [uid])
 
 	@given(uid=_uuid_st)
-	@settings(**_HYP)
+	@_hyp
 	def test_single_mention_round_trips(self, uid: uuid.UUID) -> None:
 		text = _loc_mention("Place", uid)
 		result = extract_location_uuids(text)
@@ -79,7 +79,7 @@ class ExtractLocationUuidsTests(unittest.TestCase):
 		self.assertEqual(result[0], uid)
 
 	@given(uids=st.lists(_uuid_st, min_size=0, max_size=5))
-	@settings(**_HYP_LIGHT)
+	@_hyp_light
 	def test_count_matches_number_of_mentions(self, uids: list[uuid.UUID]) -> None:
 		text = " ".join(_loc_mention(f"Place{i}", u) for i, u in enumerate(uids))
 		result = extract_location_uuids(text)
@@ -88,7 +88,7 @@ class ExtractLocationUuidsTests(unittest.TestCase):
 
 # ── is_visible_to ─────────────────────────────────────────────────────────────
 
-class IsVisibleToTests(unittest.TestCase):
+class IsVisibleToTests(TestCase):
 	"""is_visible_to hides comments when any mentioned location is not pinned."""
 
 	def test_no_mentions_is_always_visible(self) -> None:
@@ -117,7 +117,7 @@ class IsVisibleToTests(unittest.TestCase):
 		self.assertTrue(is_visible_to(text, {uid, extra}))
 
 	@given(uid=_uuid_st, extra_uuids=st.frozensets(_uuid_st, max_size=5))
-	@settings(**_HYP)
+	@_hyp
 	def test_visible_iff_mentioned_uuid_in_pinned(
 		self, uid: uuid.UUID, extra_uuids: frozenset[uuid.UUID]
 	) -> None:
@@ -130,7 +130,7 @@ class IsVisibleToTests(unittest.TestCase):
 
 # ── render_comment_text ───────────────────────────────────────────────────────
 
-class RenderCommentTextTests(unittest.TestCase):
+class RenderCommentTextTests(TestCase):
 	"""render_comment_text returns None for hidden comments and HTML for visible ones."""
 
 	def _render(self, text: str, pinned: set | None = None, activity_index: dict | None = None):
@@ -172,7 +172,7 @@ class RenderCommentTextTests(unittest.TestCase):
 
 	def test_act_mention_resolved_from_index(self) -> None:
 		activity = MagicMock()
-		activity.display_name = "Activity Alpha"
+		activity.title ="Activity Alpha"
 		activity.id = 7
 		activity.location = None
 		result = self._render("@act:1", set(), {1: activity})
@@ -186,7 +186,7 @@ class RenderCommentTextTests(unittest.TestCase):
 		loc = MagicMock()
 		loc.uuid = uuid.uuid4()
 		activity = MagicMock()
-		activity.display_name = "Location Activity"
+		activity.title ="Location Activity"
 		activity.id = 42
 		activity.location = loc
 		with patch("django.urls.reverse", return_value="/wiki/test/"):
@@ -205,35 +205,39 @@ class RenderCommentTextTests(unittest.TestCase):
 # ── viewer_pinned_uuids and filter_visible_comments ───────────────────────────
 
 try:
+	from django.contrib.auth.models import User as _User
 	from django.test import TestCase as DjangoTestCase
 	from model_bakery import baker
+
+	from urbanlens.dashboard.models.location.model import Location as _Location
+	from urbanlens.dashboard.models.profile.model import Profile as _Profile
 
 	class ViewerPinnedUuidsTests(DjangoTestCase):
 		"""viewer_pinned_uuids queries the Pin model for a profile's pinned locations."""
 
 		def test_returns_empty_set_for_profile_with_no_pins(self) -> None:
-			profile = baker.make("auth.User").profile
+			profile: _Profile = baker.make(_User).profile
 			result = viewer_pinned_uuids(profile)
 			self.assertIsInstance(result, set)
 			self.assertEqual(len(result), 0)
 
 		def test_returns_uuid_for_pinned_location(self) -> None:
-			user = baker.make("auth.User")
-			location = baker.make("dashboard.Location", latitude=40.0, longitude=-74.0)
+			user: _User = baker.make(_User)
+			location: _Location = baker.make(_Location, latitude=40.0, longitude=-74.0)
 			baker.make("dashboard.Pin", profile=user.profile, location=location)
 			result = viewer_pinned_uuids(user.profile)
 			self.assertIn(location.uuid, result)
 
 		def test_does_not_include_other_users_pins(self) -> None:
-			user1 = baker.make("auth.User")
-			user2 = baker.make("auth.User")
-			location = baker.make("dashboard.Location", latitude=41.0, longitude=-75.0)
+			user1: _User = baker.make(_User)
+			user2: _User = baker.make(_User)
+			location: _Location = baker.make(_Location, latitude=41.0, longitude=-75.0)
 			baker.make("dashboard.Pin", profile=user2.profile, location=location)
 			result = viewer_pinned_uuids(user1.profile)
 			self.assertNotIn(location.uuid, result)
 
 		def test_pin_without_location_is_excluded(self) -> None:
-			user = baker.make("auth.User")
+			user: _User = baker.make(_User)
 			baker.make("dashboard.Pin", profile=user.profile, location=None)
 			result = viewer_pinned_uuids(user.profile)
 			self.assertEqual(len(result), 0)
@@ -241,31 +245,31 @@ try:
 	class FilterVisibleCommentsTests(DjangoTestCase):
 		"""filter_visible_comments returns only comments visible to the profile."""
 
-		def _make_comment(self, text: str):
+		def _make_comment(self, text: str) -> MagicMock:
 			comment = MagicMock()
 			comment.text = text
 			return comment
 
 		def test_empty_list_returns_empty(self) -> None:
-			profile = baker.make("auth.User").profile
+			profile: _Profile = baker.make(_User).profile
 			self.assertEqual(filter_visible_comments([], profile), [])
 
 		def test_comment_without_mentions_is_always_visible(self) -> None:
-			profile = baker.make("auth.User").profile
+			profile: _Profile = baker.make(_User).profile
 			comment = self._make_comment("No mentions here")
 			result = filter_visible_comments([comment], profile)
 			self.assertEqual(result, [comment])
 
 		def test_comment_with_pinned_location_is_visible(self) -> None:
-			user = baker.make("auth.User")
-			location = baker.make("dashboard.Location", latitude=42.0, longitude=-76.0)
+			user: _User = baker.make(_User)
+			location: _Location = baker.make(_Location, latitude=42.0, longitude=-76.0)
 			baker.make("dashboard.Pin", profile=user.profile, location=location)
 			comment = self._make_comment(_loc_mention("Place", location.uuid))
 			result = filter_visible_comments([comment], user.profile)
 			self.assertEqual(result, [comment])
 
 		def test_comment_with_unpinned_location_is_hidden(self) -> None:
-			user = baker.make("auth.User")
+			user: _User = baker.make(_User)
 			uid = uuid.uuid4()
 			comment = self._make_comment(_loc_mention("Secret", uid))
 			result = filter_visible_comments([comment], user.profile)

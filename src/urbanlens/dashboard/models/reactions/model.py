@@ -34,8 +34,6 @@ class Reaction(abstract.Model):
         blank=True,
     )
 
-    objects = models.Manager()
-
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_reactions"
         constraints = [

@@ -5,19 +5,16 @@ Queryset and Manager tests use baker and require PostGIS.
 """
 from __future__ import annotations
 
-import unittest
 from datetime import date, timedelta
 from unittest.mock import patch
 
-from django.test import TestCase
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from model_bakery import baker
-
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 
-
-_HYP = dict(max_examples=50, deadline=None)
+_hyp = settings(max_examples=50, deadline=None)
 _date_st = st.dates(min_value=date(1900, 1, 1), max_value=date(2100, 12, 31))
 
 
@@ -34,7 +31,7 @@ def _loc(**kwargs) -> Location:
 
 # ── effective_date_last_active ────────────────────────────────────────────────
 
-class LocationEffectiveDateLastActiveTests(unittest.TestCase):
+class LocationEffectiveDateLastActiveTests(TestCase):
 	"""effective_date_last_active returns date_last_active, infers from abandoned, or None."""
 
 	def test_returns_date_last_active_when_set(self) -> None:
@@ -56,13 +53,13 @@ class LocationEffectiveDateLastActiveTests(unittest.TestCase):
 		self.assertEqual(loc.effective_date_last_active, date(2020, 1, 10))
 
 	@given(_date_st)
-	@settings(**_HYP)
+	@_hyp
 	def test_date_last_active_always_returned_when_set(self, d: date) -> None:
 		loc = _loc(date_last_active=d, date_abandoned=None)
 		self.assertEqual(loc.effective_date_last_active, d)
 
 	@given(_date_st)
-	@settings(**_HYP)
+	@_hyp
 	def test_abandoned_only_returns_one_day_before(self, d: date) -> None:
 		loc = _loc(date_last_active=None, date_abandoned=d)
 		self.assertEqual(loc.effective_date_last_active, d - timedelta(days=1))
@@ -74,11 +71,11 @@ class LocationStrTests(TestCase):
 	"""__str__ returns the name when set, or 'Location(<pk>)' as a fallback."""
 
 	def test_named_location_returns_name(self) -> None:
-		loc = baker.make("dashboard.Location", name="Old Factory", latitude="40.0", longitude="-74.0")
+		loc: Location = baker.make(Location, name="Old Factory", latitude="40.0", longitude="-74.0")
 		self.assertEqual(str(loc), "Old Factory")
 
 	def test_empty_name_falls_back_to_pk(self) -> None:
-		loc = baker.make("dashboard.Location", name="", latitude="40.0", longitude="-74.0")
+		loc: Location = baker.make(Location, name="", latitude="40.0", longitude="-74.0")
 		self.assertEqual(str(loc), f"Location({loc.pk})")
 
 
@@ -130,20 +127,24 @@ class LocationHasPlaceNameTests(TestCase):
 	"""has_place_name() is True only when a meaningful place name is available."""
 
 	def test_meaningful_cached_name_returns_true(self) -> None:
-		loc = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0", cached_place_name="Steel Factory")
+		loc: Location = baker.make(Location, latitude="40.0", longitude="-74.0", cached_place_name="Steel Factory")
 		self.assertTrue(loc.has_place_name())
 
 	def test_no_information_available_returns_false(self) -> None:
-		loc = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0", cached_place_name="No Information Available")
+		loc: Location = baker.make(Location, latitude="40.0", longitude="-74.0", cached_place_name="No Information Available")
 		self.assertFalse(loc.has_place_name())
 
 	def test_mocked_fallback_no_information_returns_false(self) -> None:
-		loc = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0", cached_place_name=None)
+		loc: Location = baker.make(Location, latitude="40.0", longitude="-74.0", cached_place_name=None)
+		# post_save signal may populate cached_place_name as a side effect; reset so the mock is exercised
+		loc.cached_place_name = None
 		with patch.object(Location, "get_place_name", return_value="No Information Available"):
 			self.assertFalse(loc.has_place_name())
 
 	def test_mocked_fallback_real_name_returns_true(self) -> None:
-		loc = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0", cached_place_name=None)
+		loc: Location = baker.make(Location, latitude="40.0", longitude="-74.0", cached_place_name=None)
+		# post_save signal may populate cached_place_name as a side effect; reset so the mock is exercised
+		loc.cached_place_name = None
 		with patch.object(Location, "get_place_name", return_value="Abandoned Power Plant"):
 			self.assertTrue(loc.has_place_name())
 

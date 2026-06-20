@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from django.test import TestCase
+from django.contrib.auth.models import User
+from urbanlens.core.tests.testcase import TestCase
 from django.utils import timezone
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
@@ -19,13 +20,13 @@ class EmailVerificationStrTests(TestCase):
 	"""__str__ returns 'EmailVerification(<username>)'."""
 
 	def test_str_returns_expected_format(self) -> None:
-		user = baker.make("auth.User", username="alice")
-		ev = baker.make("dashboard.EmailVerification", user=user)
+		user: User = baker.make(User, username="alice")
+		ev: EmailVerification = baker.make(EmailVerification, user=user)
 		self.assertEqual(str(ev), "EmailVerification(alice)")
 
 	def test_str_reflects_actual_username(self) -> None:
-		user = baker.make("auth.User", username="urbexer99")
-		ev = baker.make("dashboard.EmailVerification", user=user)
+		user: User = baker.make(User, username="urbexer99")
+		ev: EmailVerification = baker.make(EmailVerification, user=user)
 		self.assertIn("urbexer99", str(ev))
 
 
@@ -33,8 +34,8 @@ class EmailVerificationIsValidTests(TestCase):
 	"""is_valid() returns True only for unverified tokens within the 48-hour window."""
 
 	def _make_ev(self, **kwargs) -> EmailVerification:
-		user = baker.make("auth.User")
-		return baker.make("dashboard.EmailVerification", user=user, **kwargs)
+		user: User = baker.make(User)
+		return baker.make(EmailVerification, user=user, **kwargs)
 
 	def _backdate(self, ev: EmailVerification, hours: float) -> EmailVerification:
 		EmailVerification.objects.filter(pk=ev.pk).update(
@@ -75,8 +76,8 @@ class EmailVerificationMarkVerifiedTests(TestCase):
 	"""mark_verified() sets verified_at and persists to the database."""
 
 	def _fresh_ev(self) -> EmailVerification:
-		user = baker.make("auth.User")
-		return baker.make("dashboard.EmailVerification", user=user, verified_at=None)
+		user: User = baker.make(User)
+		return baker.make(EmailVerification, user=user, verified_at=None)
 
 	def test_mark_verified_sets_verified_at_in_memory(self) -> None:
 		ev = self._fresh_ev()
@@ -95,6 +96,7 @@ class EmailVerificationMarkVerifiedTests(TestCase):
 		before = timezone.now()
 		ev.mark_verified()
 		after = timezone.now()
+		assert ev.verified_at is not None
 		self.assertGreaterEqual(ev.verified_at, before)
 		self.assertLessEqual(ev.verified_at, after)
 

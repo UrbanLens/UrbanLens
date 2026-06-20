@@ -15,19 +15,19 @@ by that known limitation.
 """
 from __future__ import annotations
 
+from django.contrib.auth.models import User
+from django.core.exceptions import ObjectDoesNotExist
+from django.db import IntegrityError, transaction
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
-from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError, transaction
-
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile
 
-_DB_SETTINGS = dict(
+_db_settings = settings(
 	max_examples=30,
 	deadline=None,
 	suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
@@ -52,10 +52,13 @@ def _make_requested(profile_a: Profile, profile_b: Profile) -> Friendship:
 class FriendshipTransitionTests(HypothesisTestCase):
 	"""Each instance-method transition must land on the correct status."""
 
+	profile_a: Profile
+	profile_b: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile_a = baker.make("auth.User").profile
-		self.profile_b = baker.make("auth.User").profile
+		self.profile_a = baker.make(User).profile
+		self.profile_b = baker.make(User).profile
 		self.friendship = _make_requested(self.profile_a, self.profile_b)
 
 	def test_accept_transitions_to_accepted(self) -> None:
@@ -110,10 +113,13 @@ class FriendshipTransitionTests(HypothesisTestCase):
 class FriendshipBlockMuteTests(HypothesisTestCase):
 	"""block() and mute() classmethods create new friendship rows when none exist."""
 
+	profile_a: Profile
+	profile_b: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile_a = baker.make("auth.User").profile
-		self.profile_b = baker.make("auth.User").profile
+		self.profile_a = baker.make(User).profile
+		self.profile_b = baker.make(User).profile
 
 	def test_block_creates_blocked_friendship(self) -> None:
 		f = Friendship.block(self.profile_a, self.profile_b)
@@ -138,18 +144,22 @@ class FriendshipBlockMuteTests(HypothesisTestCase):
 	def test_block_existing_friendship_updates_status(self) -> None:
 		existing = _make_requested(self.profile_a, self.profile_b)
 		f = Friendship.block(self.profile_a, self.profile_b)
-		f.refresh_from_db()  # type: ignore[union-attr]
+		assert f is not None
+		f.refresh_from_db()
 		self.assertEqual(f.pk, existing.pk)  # same row, updated
-		self.assertEqual(f.status, FriendshipStatus.BLOCKED)  # type: ignore[union-attr]
+		self.assertEqual(f.status, FriendshipStatus.BLOCKED)
 
 
 class FriendshipUniqueConstraintTests(HypothesisTestCase):
 	"""Duplicate (from_profile, to_profile) pairs must raise IntegrityError."""
 
+	profile_a: Profile
+	profile_b: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile_a = baker.make("auth.User").profile
-		self.profile_b = baker.make("auth.User").profile
+		self.profile_a = baker.make(User).profile
+		self.profile_b = baker.make(User).profile
 
 	def test_duplicate_friendship_raises_integrity_error(self) -> None:
 		_make_requested(self.profile_a, self.profile_b)
@@ -169,10 +179,13 @@ class FriendshipUniqueConstraintTests(HypothesisTestCase):
 class FriendshipQuerySetTests(HypothesisTestCase):
 	"""Queryset filters: is_friend, not_friend, profile, between."""
 
+	profile_a: Profile
+	profile_b: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile_a = baker.make("auth.User").profile
-		self.profile_b = baker.make("auth.User").profile
+		self.profile_a = baker.make(User).profile
+		self.profile_b = baker.make(User).profile
 		self.friendship = _make_requested(self.profile_a, self.profile_b)
 
 	def test_is_friend_filter_only_returns_accepted(self) -> None:
@@ -199,7 +212,7 @@ class FriendshipQuerySetTests(HypothesisTestCase):
 
 	def test_between_raises_when_no_friendship_exists(self) -> None:
 		"""between() uses .get() but DoesNotExist should be caught when no friendship exists."""
-		profile_c = baker.make("auth.User").profile
+		profile_c: Profile = baker.make(User).profile
 		result = Friendship.objects.all().between(self.profile_a, profile_c)
 		self.assertIsNone(result)
 
@@ -217,7 +230,7 @@ class FriendshipQuerySetTests(HypothesisTestCase):
 			FriendshipStatus.BLOCKED,
 		])
 	)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_rejected_statuses_absent_from_is_friend_queryset(self, status: str) -> None:
 		self.friendship.status = status
 		self.friendship.save()

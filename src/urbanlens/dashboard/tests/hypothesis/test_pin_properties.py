@@ -7,7 +7,6 @@ depends on.
 """
 from __future__ import annotations
 
-import unittest
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
@@ -16,6 +15,7 @@ from unittest.mock import MagicMock, patch
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.tests.hypothesis.strategies import (
 	latitude,
@@ -67,7 +67,7 @@ def _make_location(name: str, lat: Decimal | None = None, lon: Decimal | None = 
 
 # ── effective_name ─────────────────────────────────────────────────────────────
 
-class PinEffectiveNameTests(unittest.TestCase):
+class PinEffectiveNameTests(TestCase):
 
 	@given(nonempty_name)
 	@settings(max_examples=300)
@@ -108,35 +108,43 @@ class PinEffectiveNameTests(unittest.TestCase):
 
 # ── effective_latitude / effective_longitude ───────────────────────────────────
 
-class PinEffectiveCoordinateTests(unittest.TestCase):
+class PinEffectiveCoordinateTests(TestCase):
 
 	@given(latitude, longitude)
 	@settings(max_examples=300)
 	def test_pin_override_latitude_takes_precedence(self, lat: Decimal, lon: Decimal) -> None:
 		loc = _make_location("Place", lat=Decimal("0"), lon=Decimal("0"))
 		pin = _make_pin(latitude=lat, longitude=lon, location=loc)
-		self.assertAlmostEqual(pin.effective_latitude, float(lat), places=6)
+		result = pin.effective_latitude
+		assert result is not None
+		self.assertAlmostEqual(result, float(lat), places=6)
 
 	@given(latitude, longitude)
 	@settings(max_examples=300)
 	def test_pin_override_longitude_takes_precedence(self, lat: Decimal, lon: Decimal) -> None:
 		loc = _make_location("Place", lat=Decimal("0"), lon=Decimal("0"))
 		pin = _make_pin(latitude=lat, longitude=lon, location=loc)
-		self.assertAlmostEqual(pin.effective_longitude, float(lon), places=6)
+		result = pin.effective_longitude
+		assert result is not None
+		self.assertAlmostEqual(result, float(lon), places=6)
 
 	@given(latitude, longitude)
 	@settings(max_examples=300)
 	def test_location_latitude_used_when_pin_has_no_override(self, lat: Decimal, lon: Decimal) -> None:
 		loc = _make_location("Place", lat=lat, lon=lon)
 		pin = _make_pin(latitude=None, longitude=None, location=loc)
-		self.assertAlmostEqual(pin.effective_latitude, float(lat), places=6)
+		result = pin.effective_latitude
+		assert result is not None
+		self.assertAlmostEqual(result, float(lat), places=6)
 
 	@given(latitude, longitude)
 	@settings(max_examples=300)
 	def test_location_longitude_used_when_pin_has_no_override(self, lat: Decimal, lon: Decimal) -> None:
 		loc = _make_location("Place", lat=lat, lon=lon)
 		pin = _make_pin(latitude=None, longitude=None, location=loc)
-		self.assertAlmostEqual(pin.effective_longitude, float(lon), places=6)
+		result = pin.effective_longitude
+		assert result is not None
+		self.assertAlmostEqual(result, float(lon), places=6)
 
 	def test_effective_latitude_is_none_when_no_override_and_no_location(self) -> None:
 		pin = _make_pin(latitude=None, location=None)
@@ -158,8 +166,12 @@ class PinEffectiveCoordinateTests(unittest.TestCase):
 		"""As long as the pin has its own coordinates, location coords are irrelevant."""
 		loc = _make_location("Place", lat=loc_lat, lon=loc_lon)
 		pin = _make_pin(latitude=pin_lat, longitude=pin_lon, location=loc)
-		self.assertAlmostEqual(pin.effective_latitude, float(pin_lat), places=6)
-		self.assertAlmostEqual(pin.effective_longitude, float(pin_lon), places=6)
+		eff_lat = pin.effective_latitude
+		eff_lon = pin.effective_longitude
+		assert eff_lat is not None
+		assert eff_lon is not None
+		self.assertAlmostEqual(eff_lat, float(pin_lat), places=6)
+		self.assertAlmostEqual(eff_lon, float(pin_lon), places=6)
 
 	@given(latitude)
 	@settings(max_examples=200)
@@ -179,7 +191,7 @@ class PinEffectiveCoordinateTests(unittest.TestCase):
 
 # ── effective_date_last_active ─────────────────────────────────────────────────
 
-class PinEffectiveDateLastActiveTests(unittest.TestCase):
+class PinEffectiveDateLastActiveTests(TestCase):
 
 	@given(reasonable_date)
 	@settings(max_examples=300)
@@ -225,12 +237,13 @@ class PinEffectiveDateLastActiveTests(unittest.TestCase):
 	def test_inferred_date_difference_is_exactly_one_day(self, abandoned: date) -> None:
 		pin = _make_pin(date_last_active=None, date_abandoned=abandoned)
 		inferred = pin.effective_date_last_active
-		self.assertEqual((abandoned - inferred).days, 1)  # type: ignore[operator]
+		assert inferred is not None
+		self.assertEqual((abandoned - inferred).days, 1)
 
 
 # ── effective_icon ─────────────────────────────────────────────────────────────
 
-class PinEffectiveIconTests(unittest.TestCase):
+class PinEffectiveIconTests(TestCase):
 	"""effective_icon follows a defined priority chain.
 
 	The DB-backed tag-lookup branch is not tested here (it requires a live ORM
@@ -246,7 +259,7 @@ class PinEffectiveIconTests(unittest.TestCase):
 		object.__setattr__(pin, "custom_icon", mock_cf if custom_icon else None)
 		return pin
 
-	@given(st.text(min_size=1, max_size=50, alphabet=st.characters(whitelist_categories=("Ll",))))
+	@given(st.text(min_size=1, max_size=50, alphabet=st.characters(min_codepoint=ord('a'), max_codepoint=ord('z'))))
 	@settings(max_examples=200)
 	def test_text_icon_field_is_returned_when_set(self, icon_key: str) -> None:
 		"""When only the icon CharField is set, it must be returned."""
@@ -261,7 +274,7 @@ class PinEffectiveIconTests(unittest.TestCase):
 		pin = self._make_pin_with_icon(icon=None, custom_icon=None)
 		self.assertIsNone(pin.effective_icon)
 
-	@given(st.text(min_size=1, max_size=50, alphabet=st.characters(whitelist_categories=("Ll",))))
+	@given(st.text(min_size=1, max_size=50, alphabet=st.characters(min_codepoint=ord('a'), max_codepoint=ord('z'))))
 	@settings(max_examples=100)
 	def test_custom_icon_url_beats_icon_field(self, icon_key: str) -> None:
 		"""A custom uploaded icon takes priority over the text icon key."""
@@ -277,7 +290,7 @@ class PinEffectiveIconTests(unittest.TestCase):
 
 # ── location proxy properties ──────────────────────────────────────────────────
 
-class PinLocationProxyTests(unittest.TestCase):
+class PinLocationProxyTests(TestCase):
 	"""The address proxy properties simply delegate to the linked Location."""
 
 	_PROXY_ATTRS = ("place_name", "address", "address_basic", "address_extended",

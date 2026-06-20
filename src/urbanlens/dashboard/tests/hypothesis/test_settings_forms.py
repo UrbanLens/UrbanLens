@@ -17,7 +17,7 @@ from urbanlens.dashboard.forms.settings_form import MapCenterForm, MapDisplayFor
 from urbanlens.dashboard.models.profile.model import MapCenterMode, Profile
 from urbanlens.dashboard.tests.hypothesis.strategies import valid_zoom
 
-_DB_SETTINGS = dict(
+_db_settings = settings(
 	max_examples=30,
 	deadline=None,
 	suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
@@ -59,7 +59,7 @@ class MapCenterFormZoomCleanTests(HypothesisTestCase):
 		self.assertEqual(form.cleaned_data["map_default_zoom"], 13)
 
 	@given(zoom=valid_zoom)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_any_valid_zoom_passes_through_unchanged(self, zoom: int) -> None:
 		form = self._submit(str(zoom))
 		self.assertTrue(form.is_valid(), form.errors)

@@ -11,10 +11,11 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from rest_framework import serializers as drf_serializers
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.abstract.serializer import Serializer
 
 
-_HYP = dict(max_examples=50, deadline=None)
+_hyp = settings(max_examples=50, deadline=None)
 
 
 # ── Concrete test serializer subclass ─────────────────────────────────────────
@@ -47,7 +48,7 @@ class _GeneratedSerializer(Serializer):
 
 # ── No-context: all fields present ────────────────────────────────────────────
 
-class SerializerNoContextTests(unittest.TestCase):
+class SerializerNoContextTests(TestCase):
 	"""Without context, all declared fields are included."""
 
 	def test_all_fields_present_with_no_context(self) -> None:
@@ -61,7 +62,7 @@ class SerializerNoContextTests(unittest.TestCase):
 
 # ── exclude_fields ─────────────────────────────────────────────────────────────
 
-class SerializerExcludeFieldsTests(unittest.TestCase):
+class SerializerExcludeFieldsTests(TestCase):
 	"""context['exclude_fields'] removes the named fields from the serializer."""
 
 	def test_single_field_excluded(self) -> None:
@@ -91,14 +92,14 @@ class SerializerExcludeFieldsTests(unittest.TestCase):
 		self.assertSetEqual(set(s.fields.keys()), {"id", "name", "score", "tag"})
 
 	@given(st.lists(st.sampled_from(["name", "score", "tag"]), min_size=0, max_size=3, unique=True))
-	@settings(**_HYP)
+	@_hyp
 	def test_excluded_fields_are_absent(self, excluded: list[str]) -> None:
 		s = _TestSerializer(context={"exclude_fields": excluded})
 		for field in excluded:
 			self.assertNotIn(field, s.fields)
 
 	@given(st.lists(st.sampled_from(["name", "score", "tag"]), min_size=0, max_size=3, unique=True))
-	@settings(**_HYP)
+	@_hyp
 	def test_non_excluded_fields_remain(self, excluded: list[str]) -> None:
 		all_fields = {"id", "name", "score", "tag"}
 		s = _TestSerializer(context={"exclude_fields": excluded})
@@ -108,7 +109,7 @@ class SerializerExcludeFieldsTests(unittest.TestCase):
 
 # ── include_fields ─────────────────────────────────────────────────────────────
 
-class SerializerIncludeFieldsTests(unittest.TestCase):
+class SerializerIncludeFieldsTests(TestCase):
 	"""context['include_fields'] restricts the serializer to only those fields."""
 
 	def test_single_field_included(self) -> None:
@@ -130,7 +131,7 @@ class SerializerIncludeFieldsTests(unittest.TestCase):
 		self.assertSetEqual(set(s.fields.keys()), {"id", "name", "score", "tag"})
 
 	@given(st.lists(st.sampled_from(["id", "name", "score", "tag"]), min_size=1, max_size=4, unique=True))
-	@settings(**_HYP)
+	@_hyp
 	def test_only_included_fields_are_present(self, included: list[str]) -> None:
 		s = _TestSerializer(context={"include_fields": included})
 		self.assertSetEqual(set(s.fields.keys()), set(included))
@@ -138,7 +139,7 @@ class SerializerIncludeFieldsTests(unittest.TestCase):
 	@given(
 		st.lists(st.sampled_from(["id", "name", "score", "tag"]), min_size=1, max_size=4, unique=True),
 	)
-	@settings(**_HYP)
+	@_hyp
 	def test_included_count_matches_input(self, included: list[str]) -> None:
 		s = _TestSerializer(context={"include_fields": included})
 		self.assertEqual(len(s.fields), len(included))
@@ -146,7 +147,7 @@ class SerializerIncludeFieldsTests(unittest.TestCase):
 
 # ── get_fieldnames and get_native_fields ───────────────────────────────────────
 
-class SerializerClassMethodTests(unittest.TestCase):
+class SerializerClassMethodTests(TestCase):
 	"""get_fieldnames() and get_native_fields() return the expected field lists."""
 
 	def test_get_fieldnames_returns_meta_fields(self) -> None:
@@ -172,7 +173,7 @@ class SerializerClassMethodTests(unittest.TestCase):
 
 # ── TDD: get_native_fields has a mutation bug ─────────────────────────────────
 
-class SerializerGetNativeFieldsMutationBugTests(unittest.TestCase):
+class SerializerGetNativeFieldsMutationBugTests(TestCase):
 	"""TDD: get_native_fields() must be idempotent — repeated calls should return the same result.
 
 	Currently it calls get_fieldnames() which returns the actual Meta.fields list by

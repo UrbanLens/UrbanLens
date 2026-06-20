@@ -18,6 +18,7 @@ from __future__ import annotations
 import decimal
 import json
 
+from django.contrib.auth.models import User
 from django.urls import reverse
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
@@ -27,7 +28,7 @@ from model_bakery import baker
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import MapCenterMode, Profile
 
-_DB_SETTINGS = dict(
+_db_settings = settings(
 	max_examples=20,
 	deadline=None,
 	suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
@@ -45,7 +46,7 @@ class ViewMapAuthTests(HypothesisTestCase):
 		self.assertIn(resp.status_code, (301, 302))
 
 	def test_authenticated_request_returns_200(self) -> None:
-		user = baker.make("auth.User")
+		user: User = baker.make(User)
 		self.client.force_login(user)
 		resp = self.client.get(_MAP_URL)
 		self.assertEqual(resp.status_code, 200)
@@ -54,9 +55,11 @@ class ViewMapAuthTests(HypothesisTestCase):
 class ViewMapContextTests(HypothesisTestCase):
 	"""view_map must include correct values for profile-driven context variables."""
 
+	user: User
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.user = baker.make("auth.User")
+		self.user = baker.make(User)
 		self.profile = self.user.profile
 		self.client.force_login(self.user)
 
@@ -159,7 +162,7 @@ class ViewMapContextTests(HypothesisTestCase):
 		self.assertIsNone(resp.context["map_center_lng"])
 
 	@given(n=st.integers(min_value=0, max_value=6))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_pin_count_equals_root_pin_count_for_n_pins(self, n: int) -> None:
 		# hypothesis.extra.django flushes the DB session between examples via
 		# _pre_setup/_post_teardown even though setUp data survives in the outer
@@ -176,9 +179,11 @@ class ViewMapContextTests(HypothesisTestCase):
 class MapPinsMetaTests(HypothesisTestCase):
 	"""map_pins_meta must return the latest pin update timestamp or null."""
 
+	user: User
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.user = baker.make("auth.User")
+		self.user = baker.make(User)
 		self.client.force_login(self.user)
 
 	def test_returns_null_last_updated_when_no_pins(self) -> None:

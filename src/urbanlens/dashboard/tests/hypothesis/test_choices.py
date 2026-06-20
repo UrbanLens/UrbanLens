@@ -4,11 +4,10 @@ No database access — these are pure logic tests.
 """
 from __future__ import annotations
 
-import unittest
-
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel, TextChoices
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
 from urbanlens.dashboard.models.pin.model import PinType
@@ -19,7 +18,7 @@ from urbanlens.dashboard.tests.hypothesis.strategies import (
 )
 
 
-class SecurityLevelValidTests(unittest.TestCase):
+class SecurityLevelValidTests(TestCase):
 	"""SecurityLevel.valid() and .invalid() are complementary predicates."""
 
 	@given(security_level)
@@ -61,7 +60,7 @@ class SecurityLevelValidTests(unittest.TestCase):
 		self.assertFalse(SecurityLevel.valid(value))
 
 
-class TextChoicesGetNameTests(unittest.TestCase):
+class TextChoicesGetNameTests(TestCase):
 	"""TextChoices.get_name() returns the attribute name for any known value."""
 
 	@given(security_level)
@@ -78,6 +77,7 @@ class TextChoicesGetNameTests(unittest.TestCase):
 		"""The returned name should correspond to a real attribute (upper-case convention)."""
 		name = SecurityLevel.get_name(value)
 		self.assertIsNotNone(name)
+		assert name is not None
 		self.assertTrue(hasattr(SecurityLevel, name), f"SecurityLevel has no attribute {name!r}")
 
 	@given(security_level)
@@ -101,12 +101,12 @@ class TextChoicesGetNameTests(unittest.TestCase):
 		"""get_name(value) → name; SecurityLevel[name].value == value."""
 		name = SecurityLevel.get_name(value)
 		self.assertIsNotNone(name)
-		member = SecurityLevel[name]  # type: ignore[misc]
+		member = SecurityLevel[name]
 		self.assertEqual(member.value, value)
 
 
 
-class PinTypeTests(unittest.TestCase):
+class PinTypeTests(TestCase):
 	"""PinType covers the structural vocabulary of a pin."""
 
 	@given(st.sampled_from(list(PinType.values)))
@@ -124,7 +124,7 @@ class PinTypeTests(unittest.TestCase):
 		self.assertEqual(PinType.LOCATION_MARKER.value, "location")
 
 
-class FriendshipStatusPredicateTests(unittest.TestCase):
+class FriendshipStatusPredicateTests(TestCase):
 	"""State-predicate methods on FriendshipStatus."""
 
 	def test_is_friend_only_true_for_accepted(self) -> None:
@@ -201,7 +201,7 @@ class FriendshipStatusPredicateTests(unittest.TestCase):
 			self.assertFalse(FriendshipStatus.can_request(status))
 
 
-class FriendshipTypeTests(unittest.TestCase):
+class FriendshipTypeTests(TestCase):
 	"""Smoke tests for FriendshipType values."""
 
 	def test_all_types_present(self) -> None:

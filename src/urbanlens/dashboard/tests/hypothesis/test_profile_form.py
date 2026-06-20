@@ -5,7 +5,6 @@ ModelForm tests use HypothesisTestCase / django.test.TestCase (DB).
 """
 from __future__ import annotations
 
-import unittest
 from datetime import UTC, date, datetime, timedelta
 
 from hypothesis import given, settings
@@ -13,13 +12,16 @@ from hypothesis import strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
+from django import forms as django_forms
+
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.profile_form import validate_birth_date, validate_started_exploring
 from urbanlens.dashboard.forms.settings_form import MarkupDefaultsForm, PrivacySettingsForm
 from urbanlens.dashboard.models.profile.model import VisibilityChoice
 
 
-_HYP = dict(max_examples=100, deadline=None)
-_HYP_DB = dict(max_examples=30, deadline=None)
+_hyp = settings(max_examples=100, deadline=None)
+_hyp_db = settings(max_examples=30, deadline=None)
 
 _MIN_AGE_YEARS = 13
 
@@ -38,7 +40,7 @@ def _past_date(years_ago: int) -> date:
 
 # ── validate_birth_date ───────────────────────────────────────────────────────
 
-class ValidateBirthDateTests(unittest.TestCase):
+class ValidateBirthDateTests(TestCase):
 	"""validate_birth_date returns None for valid dates and an error string otherwise."""
 
 	def test_none_input_returns_none(self) -> None:
@@ -54,17 +56,20 @@ class ValidateBirthDateTests(unittest.TestCase):
 		future = _today() + timedelta(days=1)
 		error = validate_birth_date(future)
 		self.assertIsNotNone(error)
+		assert error is not None
 		self.assertIn("future", error.lower())
 
 	def test_today_returns_age_error(self) -> None:
 		error = validate_birth_date(_today())
 		self.assertIsNotNone(error)
+		assert error is not None
 		self.assertIn(str(_MIN_AGE_YEARS), error)
 
 	def test_twelve_years_ago_returns_age_error(self) -> None:
 		too_young = _past_date(_MIN_AGE_YEARS - 1)
 		error = validate_birth_date(too_young)
 		self.assertIsNotNone(error)
+		assert error is not None
 		self.assertIn(str(_MIN_AGE_YEARS), error)
 
 	def test_exactly_min_age_years_ago_returns_none(self) -> None:
@@ -75,13 +80,13 @@ class ValidateBirthDateTests(unittest.TestCase):
 		self.assertIsNone(validate_birth_date(date(1900, 6, 15)))
 
 	@given(st.dates(min_value=date(1900, 1, 1), max_value=date(2100, 12, 31)))
-	@settings(**_HYP)
+	@_hyp
 	def test_returns_string_or_none(self, value: date) -> None:
 		result = validate_birth_date(value)
 		self.assertIn(type(result), (str, type(None)))
 
 	@given(st.dates(min_value=date(1900, 1, 1)))
-	@settings(**_HYP)
+	@_hyp
 	def test_valid_birth_date_in_far_past_returns_none(self, value: date) -> None:
 		# Dates > 13 years before today must always be valid.
 		cutoff = _past_date(_MIN_AGE_YEARS)
@@ -89,18 +94,19 @@ class ValidateBirthDateTests(unittest.TestCase):
 			self.assertIsNone(validate_birth_date(value))
 
 	@given(st.dates(min_value=date(2025, 1, 1), max_value=date(2100, 12, 31)))
-	@settings(**_HYP)
+	@_hyp
 	def test_future_dates_always_return_error(self, value: date) -> None:
 		today = _today()
 		if value > today:
 			error = validate_birth_date(value)
 			self.assertIsNotNone(error)
+			assert error is not None
 			self.assertIn("future", error.lower())
 
 
 # ── validate_started_exploring ────────────────────────────────────────────────
 
-class ValidateStartedExploringTests(unittest.TestCase):
+class ValidateStartedExploringTests(TestCase):
 	"""validate_started_exploring returns None for past/present dates and an error for future."""
 
 	def test_none_input_returns_none(self) -> None:
@@ -116,6 +122,7 @@ class ValidateStartedExploringTests(unittest.TestCase):
 		future = _today() + timedelta(days=1)
 		error = validate_started_exploring(future)
 		self.assertIsNotNone(error)
+		assert error is not None
 		self.assertIn("future", error.lower())
 
 	def test_far_future_returns_error(self) -> None:
@@ -123,14 +130,14 @@ class ValidateStartedExploringTests(unittest.TestCase):
 		self.assertIsNotNone(error)
 
 	@given(st.dates(min_value=date(1900, 1, 1)))
-	@settings(**_HYP)
+	@_hyp
 	def test_past_dates_always_return_none(self, value: date) -> None:
 		today = _today()
 		if value <= today:
 			self.assertIsNone(validate_started_exploring(value))
 
 	@given(st.dates(min_value=date(2025, 1, 1), max_value=date(2100, 12, 31)))
-	@settings(**_HYP)
+	@_hyp
 	def test_future_dates_always_return_error(self, value: date) -> None:
 		today = _today()
 		if value > today:
@@ -200,7 +207,7 @@ class MarkupDefaultsFormTests(HypothesisTestCase):
 		self.assertIn("markup_fill_opacity", form.errors)
 
 	@given(opacity=st.integers(min_value=0, max_value=100))
-	@settings(**_HYP_DB)
+	@_hyp_db
 	def test_any_valid_opacity_is_accepted(self, opacity: int) -> None:
 		form = self._submit(markup_fill_color="#ff0000", markup_fill_opacity=opacity, markup_border_opacity=opacity)
 		self.assertTrue(form.is_valid(), form.errors)
@@ -230,7 +237,9 @@ class PrivacySettingsFormTests(HypothesisTestCase):
 
 	def test_friends_is_excluded_from_request_visibility_choices(self) -> None:
 		form = PrivacySettingsForm()
-		request_choice_values = [k for k, _ in form.fields["friend_request_visibility"].choices]
+		field = form.fields["friend_request_visibility"]
+		assert isinstance(field, django_forms.ChoiceField)
+		request_choice_values = [k for k, _ in field.choices]
 		self.assertNotIn(VisibilityChoice.FRIENDS, request_choice_values)
 
 	def test_friends_is_allowed_in_profile_visibility(self) -> None:
@@ -265,7 +274,7 @@ class PrivacySettingsFormTests(HypothesisTestCase):
 		self.assertTrue(form.cleaned_data["hide_pin_locations_in_trips"])
 
 	@given(choice=st.sampled_from([c for c in VisibilityChoice.values if c != VisibilityChoice.FRIENDS]))
-	@settings(**_HYP_DB)
+	@_hyp_db
 	def test_non_friends_choices_are_valid_for_request_visibility(self, choice: str) -> None:
 		form = self._submit(**self._default_data(friend_request_visibility=choice))
 		self.assertNotIn("friend_request_visibility", form.errors)

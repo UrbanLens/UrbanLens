@@ -65,7 +65,5 @@ class NotificationPreference(abstract.Model):
     added_to_trip = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
     wiki_updated = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
 
-    objects = models.Manager()
-
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_notification_preferences"

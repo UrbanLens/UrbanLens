@@ -17,6 +17,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
+from django.contrib.auth.models import User
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
@@ -24,9 +25,10 @@ from model_bakery import baker
 
 from urbanlens.dashboard.models.badges.model import Badge, KIND_TAG
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reviews.model import Review
 
-_DB_SETTINGS = dict(
+_db_settings = settings(
 	max_examples=30,
 	deadline=None,
 	suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
@@ -37,9 +39,11 @@ _DB_SETTINGS = dict(
 class FilterByCriteriaHasVisitsTests(HypothesisTestCase):
 	"""has_visits criterion: 'yes' returns visited; 'no' returns unvisited."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 		self.visited = baker.make(Pin, profile=self.profile, last_visited=baker.random_gen.gen_datetime())
 		self.unvisited = baker.make(Pin, profile=self.profile, last_visited=None)
 
@@ -74,9 +78,11 @@ class FilterByCriteriaHasVisitsTests(HypothesisTestCase):
 class FilterByCriteriaPriorityTests(HypothesisTestCase):
 	"""min_priority criterion: result contains only pins at or above the threshold."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 		# Pins at fixed priority levels.
 		self.priorities = [0, 25, 50, 75, 100]
 		self.pins_by_priority: dict[int, Pin] = {
@@ -88,14 +94,14 @@ class FilterByCriteriaPriorityTests(HypothesisTestCase):
 		return Pin.objects.filter(profile=self.profile)
 
 	@given(min_prio=st.sampled_from([0, 25, 50, 75, 100]))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_soundness_all_results_meet_threshold(self, min_prio: int) -> None:
 		qs = self._base_qs().filter_by_criteria({"min_priority": min_prio})
 		for pin in qs:
 			self.assertGreaterEqual(pin.priority, min_prio)
 
 	@given(min_prio=st.sampled_from([0, 25, 50, 75, 100]))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_completeness_all_qualifying_pins_present(self, min_prio: int) -> None:
 		result_ids = set(self._base_qs().filter_by_criteria({"min_priority": min_prio}).values_list("pk", flat=True))
 		for p, pin in self.pins_by_priority.items():
@@ -103,7 +109,7 @@ class FilterByCriteriaPriorityTests(HypothesisTestCase):
 				self.assertIn(pin.pk, result_ids, f"Pin with priority {p} should be in result (min={min_prio})")
 
 	@given(min_prio=st.sampled_from([25, 50, 75, 100]))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_below_threshold_pins_excluded(self, min_prio: int) -> None:
 		result_ids = set(self._base_qs().filter_by_criteria({"min_priority": min_prio}).values_list("pk", flat=True))
 		for p, pin in self.pins_by_priority.items():
@@ -114,9 +120,11 @@ class FilterByCriteriaPriorityTests(HypothesisTestCase):
 class FilterByCriteriaDateTests(HypothesisTestCase):
 	"""created_after / created_before criteria."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 
 	def _base_qs(self):
 		return Pin.objects.filter(profile=self.profile)
@@ -146,9 +154,12 @@ class FilterByCriteriaDateTests(HypothesisTestCase):
 class FilterByCriteriaRatingTests(HypothesisTestCase):
 	"""min_rating / max_rating criteria filter by review score."""
 
+	user: User
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.user = baker.make("auth.User")
+		self.user = baker.make(User)
 		self.profile = self.user.profile  # auto-created by post_save signal
 		# One pin per rating 1-5 (rating 0 = no review).
 		self.pins_by_rating: dict[int, Pin] = {}
@@ -161,7 +172,7 @@ class FilterByCriteriaRatingTests(HypothesisTestCase):
 		return Pin.objects.filter(profile=self.profile)
 
 	@given(min_r=st.integers(min_value=1, max_value=5))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_min_rating_soundness(self, min_r: int) -> None:
 		qs = self._base_qs().filter_by_criteria({"min_rating": min_r})
 		for pk, rating_val in qs.values_list("pk", "reviews__rating"):
@@ -169,7 +180,7 @@ class FilterByCriteriaRatingTests(HypothesisTestCase):
 				self.assertGreaterEqual(rating_val, min_r)
 
 	@given(max_r=st.integers(min_value=1, max_value=5))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_max_rating_soundness(self, max_r: int) -> None:
 		qs = self._base_qs().filter_by_criteria({"max_rating": max_r})
 		for pk, rating_val in qs.values_list("pk", "reviews__rating"):
@@ -181,7 +192,7 @@ class FilterByCriteriaRatingTests(HypothesisTestCase):
 			lambda t: (min(t), max(t))
 		)
 	)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_rating_band_returns_only_pins_in_range(self, bounds: tuple[int, int]) -> None:
 		min_r, max_r = bounds
 		qs = self._base_qs().filter_by_criteria({"min_rating": min_r, "max_rating": max_r})
@@ -194,9 +205,11 @@ class FilterByCriteriaRatingTests(HypothesisTestCase):
 class FilterByCriteriaNameTests(HypothesisTestCase):
 	"""name criterion: case-insensitive substring match against nickname."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 		self.target = baker.make(Pin, profile=self.profile, nickname="Urbex Hospital")
 		self.decoy = baker.make(Pin, profile=self.profile, nickname="Mountain Trail")
 
@@ -240,9 +253,11 @@ class FilterByCriteriaNameTests(HypothesisTestCase):
 class FilterByCriteriaIdempotencyTests(HypothesisTestCase):
 	"""Applying the same criteria object twice must yield an identical result."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 		baker.make(Pin, profile=self.profile, _quantity=5)
 
 	def _base_qs(self):
@@ -251,7 +266,7 @@ class FilterByCriteriaIdempotencyTests(HypothesisTestCase):
 	@given(
 		min_prio=st.integers(min_value=0, max_value=100),
 	)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_double_application_same_result(self, min_prio: int) -> None:
 		criteria: dict[str, Any] = {"min_priority": min_prio}
 		first = set(self._base_qs().filter_by_criteria(criteria).values_list("pk", flat=True))
@@ -262,9 +277,11 @@ class FilterByCriteriaIdempotencyTests(HypothesisTestCase):
 class FilterByCriteriaMonotonicityTests(HypothesisTestCase):
 	"""Loosening a criterion must never produce a strictly smaller result set."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 		for priority_val in range(1, 6):
 			baker.make(Pin, profile=self.profile, priority=priority_val * 20)
 
@@ -274,7 +291,7 @@ class FilterByCriteriaMonotonicityTests(HypothesisTestCase):
 	@given(
 		high_min=st.integers(min_value=26, max_value=100),
 	)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_lowering_min_priority_never_shrinks_result(self, high_min: int) -> None:
 		low_min = high_min - 25
 		tight_ids = set(self._base_qs().filter_by_criteria({"min_priority": high_min}).values_list("pk", flat=True))
@@ -288,9 +305,11 @@ class FilterByCriteriaMonotonicityTests(HypothesisTestCase):
 class FilterByCriteriaTagTests(HypothesisTestCase):
 	"""Tag criterion filters via Badge.get_badge_and_descendants."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 		self.tag = baker.make(Badge, kind=KIND_TAG, profile=None, name="urban-exploration")
 		self.tagged_pin = baker.make(Pin, profile=self.profile)
 		self.tagged_pin.tags.add(self.tag)

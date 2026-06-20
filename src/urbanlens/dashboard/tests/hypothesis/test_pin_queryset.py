@@ -11,10 +11,13 @@ from __future__ import annotations
 import math
 from datetime import date
 
-from django.test import TestCase
+from django.contrib.auth.models import User
+from urbanlens.core.tests.testcase import TestCase
 from model_bakery import baker
 
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reviews.model import Review
 
 
@@ -225,7 +228,7 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
 		self.assertEqual(pin.pk, self.existing.pk)
 
 	def test_distant_point_creates_new_pin(self) -> None:
-		loc = baker.make("dashboard.Location", latitude="51.5", longitude="-0.1")
+		loc: Location = baker.make(Location, latitude="51.5", longitude="-0.1")
 		pin, created = Pin.objects.get_nearby_or_create(
 			51.5, -0.1, self.profile, defaults={"location": loc}
 		)
@@ -233,7 +236,7 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
 		self.assertNotEqual(pin.pk, self.existing.pk)
 
 	def test_created_pin_is_persisted(self) -> None:
-		loc = baker.make("dashboard.Location", latitude="51.5", longitude="-0.1")
+		loc: Location = baker.make(Location, latitude="51.5", longitude="-0.1")
 		pin, created = Pin.objects.get_nearby_or_create(
 			51.5, -0.1, self.profile, defaults={"location": loc}
 		)
@@ -242,7 +245,7 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
 
 	def test_pin_is_scoped_to_requesting_profile(self) -> None:
 		# A pin for a different profile at the same location should not be returned.
-		other_profile = baker.make("auth.User").profile
+		other_profile: Profile = baker.make(User).profile
 		pin, created = Pin.objects.get_nearby_or_create(40.0, -74.0, other_profile)
 		self.assertTrue(created)
 		self.assertNotEqual(pin.pk, self.existing.pk)

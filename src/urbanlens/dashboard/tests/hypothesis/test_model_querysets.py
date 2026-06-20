@@ -11,7 +11,8 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from django.test import TestCase
+from django.contrib.auth.models import User
+from urbanlens.core.tests.testcase import TestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.comments.queryset import CommentQuerySet
@@ -143,8 +144,8 @@ class PinMarkupQuerySetTests(TestCase):
 
 	def test_for_profile_returns_markup_for_that_profile(self) -> None:
 		from urbanlens.dashboard.models.markup.model import PinMarkup
-		other_user = baker.make("auth.User")
-		other_markup = baker.make(
+		other_user: User = baker.make(User)
+		other_markup: PinMarkup = baker.make(
 			"dashboard.PinMarkup",
 			parent_pin=self.pin,
 			profile=other_user.profile,
@@ -335,7 +336,7 @@ class SiteSettingsSingletonTests(TestCase):
 
 # ── TDD: Status enum values are swapped (bug demonstration) ───────────────────
 
-class NotificationStatusBugTests(unittest.TestCase):
+class NotificationStatusBugTests(TestCase):
 	"""TDD: Status enum member names and stored values are inconsistent.
 
 	Status.UNREAD has value "read" and Status.READ has value "unread".

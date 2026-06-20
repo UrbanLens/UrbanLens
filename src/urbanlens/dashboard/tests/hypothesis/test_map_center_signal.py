@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import decimal
 
+from django.contrib.auth.models import User
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
@@ -17,7 +18,7 @@ from model_bakery import baker
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 
-_DB_SETTINGS = dict(
+_db_settings = settings(
 	max_examples=20,
 	deadline=None,
 	suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
@@ -37,9 +38,11 @@ def _set_cached_centroid(profile: Profile) -> None:
 class InvalidateMapCenterOnCreateTests(HypothesisTestCase):
 	"""Creating a new pin must clear the profile's cached centroid."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 		_set_cached_centroid(self.profile)
 
 	def test_new_pin_clears_cached_latitude(self) -> None:
@@ -62,7 +65,7 @@ class InvalidateMapCenterOnCreateTests(HypothesisTestCase):
 		self.assertIsNone(self.profile.map_center_latitude)
 
 	@given(n=st.integers(min_value=1, max_value=5))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_creating_n_pins_always_clears_centroid_cache(self, n: int) -> None:
 		_set_cached_centroid(self.profile)
 		for _ in range(n):
@@ -78,9 +81,11 @@ class InvalidateMapCenterOnCreateTests(HypothesisTestCase):
 class InvalidateMapCenterOnUpdateTests(HypothesisTestCase):
 	"""Updating an existing pin must NOT clear the cached centroid."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 		self.pin = baker.make(Pin, profile=self.profile)
 		_set_cached_centroid(self.profile)
 
@@ -105,15 +110,15 @@ class InvalidateMapCenterNoProfileTests(HypothesisTestCase):
 	def test_pin_without_profile_does_not_raise(self) -> None:
 		# baker.make sets profile; we test the signal guard by calling it directly.
 		from urbanlens.dashboard.models.pin.signals import invalidate_profile_map_center
-		other_profile = baker.make("auth.User").profile
+		other_profile: Profile = baker.make(User).profile
 		_set_cached_centroid(other_profile)
 
-		# Construct a minimal fake Pin-like object with no profile_id.
-		class _FakePin:
-			profile_id = None
+		# Construct an unsaved Pin with no profile_id to test the guard.
+		fake_pin = Pin()
+		fake_pin.profile_id = None
 
 		# Must not raise.
-		invalidate_profile_map_center(sender=Pin, instance=_FakePin(), created=True)
+		invalidate_profile_map_center(sender=Pin, instance=fake_pin, created=True)
 
 		# No side-effects on other profiles.
 		other_profile.refresh_from_db()

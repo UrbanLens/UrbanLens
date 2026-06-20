@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
@@ -19,10 +19,24 @@ from urbanlens.dashboard.models.trips.model import SiteSettings, Trip, TripActiv
 if TYPE_CHECKING:
     from django.db.models import QuerySet
 
+    from urbanlens.dashboard.controllers.comments import _ReactionData
     from urbanlens.dashboard.models.trips.model import TripActivityVote as _TripActivityVote
     from urbanlens.dashboard.services.openweather.gateway import WeatherForecastGateway
 
 logger = logging.getLogger(__name__)
+
+
+class _ReplyData(TypedDict):
+    comment: TripComment
+    rendered_text: str
+    reactions: dict[str, _ReactionData]
+
+
+class _CommentData(TypedDict):
+    comment: TripComment
+    rendered_text: str
+    reactions: dict[str, _ReactionData]
+    replies: list[_ReplyData]
 
 
 def _trip_or_403(request, trip_uuid, profile: Profile) -> Trip | HttpResponse:
@@ -602,13 +616,13 @@ def _render_trip_comments(request, trip: Trip, profile: Profile) -> HttpResponse
         .order_by("created")
     )
 
-    rendered = []
+    rendered: list[_CommentData] = []
     for c in top_comments:
         html = render_comment_text(c.text, pinned, act_index_for_render)
         if html is None:
             continue
         reactions = _aggregate_reactions(c.reactions.all())
-        replies_rendered = []
+        replies_rendered: list[_ReplyData] = []
         for r in c.replies.all():
             r_html = render_comment_text(r.text, pinned, act_index_for_render)
             if r_html is None:
@@ -629,7 +643,7 @@ def _render_trip_comments(request, trip: Trip, profile: Profile) -> HttpResponse
             },
         )
 
-    comment_count = sum(1 + len(item.get("replies", [])) for item in rendered)
+    comment_count = sum(1 + len(item["replies"]) for item in rendered)
     return render(
         request,
         "dashboard/partials/trip_comments_panel.html",

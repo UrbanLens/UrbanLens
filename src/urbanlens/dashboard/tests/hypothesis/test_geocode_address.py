@@ -20,7 +20,7 @@ from hypothesis import strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
-_DB_SETTINGS = dict(
+_db_settings = settings(
 	max_examples=40,
 	deadline=None,
 	suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
@@ -118,7 +118,7 @@ class GeocodeAddressCoordParsingTests(HypothesisTestCase):
 		self.assertEqual(resp.status_code, 404)
 
 	@given(lat=_valid_lat, lng=_valid_lng)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_any_valid_coord_pair_is_parsed_and_returned(
 		self, lat: float, lng: float
 	) -> None:

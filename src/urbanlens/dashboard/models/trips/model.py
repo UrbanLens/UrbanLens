@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from django.db.models import CASCADE, SET_NULL, FloatField, ForeignKey, ImageField, Index, IntegerField, JSONField, ManyToManyField, UUIDField
 from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, TextField
 
 from urbanlens.dashboard.models import abstract
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +38,7 @@ class Trip(abstract.Model):
         related_name="created_trips",
     )
     # All participants including the creator — through TripMembership for RSVP tracking.
-    profiles = ManyToManyField(
+    profiles: ManyToManyField[Profile, Profile] = ManyToManyField(
         "dashboard.Profile",
         blank=True,
         related_name="trips",

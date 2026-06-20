@@ -18,6 +18,7 @@ from __future__ import annotations
 import decimal
 from unittest.mock import patch
 
+from django.contrib.auth.models import User
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
@@ -29,7 +30,7 @@ from urbanlens.dashboard.models.profile.model import MapCenterMode, Profile
 from urbanlens.dashboard.models.profile.model import _CLUSTER_RADIUS_KM, _haversine_km
 from urbanlens.dashboard.tests.hypothesis.strategies import latitude, longitude, valid_zoom
 
-_DB_SETTINGS = dict(
+_db_settings = settings(
 	max_examples=30,
 	deadline=None,
 	suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
@@ -37,7 +38,7 @@ _DB_SETTINGS = dict(
 
 
 def _profile_with_mode(mode: str, **extra) -> Profile:
-	profile = baker.make("auth.User").profile
+	profile: Profile = baker.make(User).profile
 	Profile.objects.filter(pk=profile.pk).update(map_center_mode=mode, **extra)
 	profile.refresh_from_db()
 	return profile
@@ -69,7 +70,7 @@ class GetMapCenterGpsModeTests(HypothesisTestCase):
 		self.assertIsNone(profile.get_map_center())
 
 	@given(lat=latitude, lng=longitude)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_gps_mode_returns_none_for_any_stored_custom_coords(
 		self, lat: decimal.Decimal, lng: decimal.Decimal
 	) -> None:
@@ -94,6 +95,7 @@ class GetMapCenterCustomModeTests(HypothesisTestCase):
 		)
 		result = profile.get_map_center()
 		self.assertIsNotNone(result)
+		assert result is not None
 		self.assertAlmostEqual(result[0], 42.65, places=4)
 		self.assertAlmostEqual(result[1], -73.75, places=4)
 
@@ -104,6 +106,7 @@ class GetMapCenterCustomModeTests(HypothesisTestCase):
 			map_custom_longitude=decimal.Decimal("20.000000"),
 		)
 		result = profile.get_map_center()
+		assert result is not None
 		self.assertIsInstance(result[0], float)
 		self.assertIsInstance(result[1], float)
 
@@ -128,7 +131,7 @@ class GetMapCenterCustomModeTests(HypothesisTestCase):
 		self.assertIsNone(profile.get_map_center())
 
 	@given(lat=latitude, lng=longitude)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_custom_mode_returns_stored_values_exactly(
 		self, lat: decimal.Decimal, lng: decimal.Decimal
 	) -> None:
@@ -139,6 +142,7 @@ class GetMapCenterCustomModeTests(HypothesisTestCase):
 		)
 		result = profile.get_map_center()
 		self.assertIsNotNone(result)
+		assert result is not None
 		self.assertAlmostEqual(result[0], float(lat), places=5)
 		self.assertAlmostEqual(result[1], float(lng), places=5)
 
@@ -156,6 +160,7 @@ class GetMapCenterAutoCachedTests(HypothesisTestCase):
 		)
 		result = profile.get_map_center()
 		self.assertIsNotNone(result)
+		assert result is not None
 		self.assertAlmostEqual(result[0], 42.65, places=4)
 		self.assertAlmostEqual(result[1], -73.75, places=4)
 
@@ -166,6 +171,7 @@ class GetMapCenterAutoCachedTests(HypothesisTestCase):
 			map_center_longitude=decimal.Decimal("20.000000"),
 		)
 		result = profile.get_map_center()
+		assert result is not None
 		self.assertIsInstance(result[0], float)
 		self.assertIsInstance(result[1], float)
 
@@ -201,6 +207,7 @@ class GetMapCenterAutoColdTests(HypothesisTestCase):
 		baker.make(Pin, profile=profile, location=location, latitude=40.0, longitude=-74.0)
 		result = profile.get_map_center()
 		self.assertIsNotNone(result)
+		assert result is not None
 		self.assertAlmostEqual(result[0], 40.0, places=2)
 		self.assertAlmostEqual(result[1], -74.0, places=2)
 
@@ -210,9 +217,11 @@ class GetMapCenterAutoColdTests(HypothesisTestCase):
 class ComputeMapCenterTests(HypothesisTestCase):
 	"""compute_map_center() averages pin coordinates and persists the result."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 
 	def test_returns_none_when_profile_has_no_pins(self) -> None:
 		self.assertIsNone(self.profile.compute_map_center())
@@ -268,7 +277,7 @@ class ComputeMapCenterTests(HypothesisTestCase):
 		lng1=st.floats(min_value=-170.0, max_value=170.0, allow_nan=False, allow_infinity=False),
 		dlng=st.floats(min_value=0.01, max_value=2.0, allow_nan=False, allow_infinity=False),
 	)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_two_nearby_pins_result_is_their_midpoint_hypothesis(
 		self, lat1: float, dlat: float, lng1: float, dlng: float,
 	) -> None:
@@ -288,9 +297,11 @@ class ComputeMapCenterTests(HypothesisTestCase):
 class ComputeMapCenterClusteringTests(HypothesisTestCase):
 	"""The largest geographic cluster wins over intercontinental spreads."""
 
+	profile: Profile
+
 	def setUp(self) -> None:
 		super().setUp()
-		self.profile = baker.make("auth.User").profile
+		self.profile = baker.make(User).profile
 
 	def test_larger_cluster_wins_over_isolated_pin(self) -> None:
 		# Three pins near NYC (~40°N 74°W) vs one pin near London (51°N 0°W).
@@ -336,7 +347,7 @@ class ComputeMapCenterClusteringTests(HypothesisTestCase):
 		self.assertLess(result[1], 25.0)      # west of Turkey
 
 	@given(n=st.integers(min_value=1, max_value=8))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_result_is_always_within_bounding_box_of_all_pins(self, n: int) -> None:
 		"""The cluster centroid must never fall outside the geographic extent of all pins."""
 		lats = [40.0 + i * 0.1 for i in range(n)]
@@ -357,13 +368,13 @@ class MapDefaultZoomTests(HypothesisTestCase):
 	"""map_default_zoom defaults to 13 for new profiles."""
 
 	def test_new_profile_has_default_zoom_of_13(self) -> None:
-		profile = baker.make("auth.User").profile
+		profile: Profile = baker.make(User).profile
 		self.assertEqual(profile.map_default_zoom, 13)
 
 	@given(zoom=valid_zoom)
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_stored_zoom_is_returned_unchanged(self, zoom: int) -> None:
-		profile = baker.make("auth.User").profile
+		profile: Profile = baker.make(User).profile
 		Profile.objects.filter(pk=profile.pk).update(map_default_zoom=zoom)
 		profile.refresh_from_db()
 		self.assertEqual(profile.map_default_zoom, zoom)

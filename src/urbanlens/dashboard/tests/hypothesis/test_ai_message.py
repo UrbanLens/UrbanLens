@@ -4,18 +4,17 @@ No database access — all tests exercise pure Python logic.
 """
 from __future__ import annotations
 
-import unittest
-
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.ai.functions import estimate_combined_tokens, estimate_tokens
-from urbanlens.dashboard.services.ai.message import MessageQueue
+from urbanlens.dashboard.services.ai.message import AssistantMessage, MessageQueue, SystemMessage, UserMessage
 from urbanlens.dashboard.services.ai.meta import MAX_TOKENS, SHORTEST_MESSAGE
 
 
-_HYP = dict(max_examples=100, deadline=None)
-_HYP_LIGHT = dict(max_examples=50, deadline=None)
+_hyp = settings(max_examples=100, deadline=None)
+_hyp_light = settings(max_examples=50, deadline=None)
 
 # Strategy: ASCII printable text without leading/trailing whitespace
 _word = st.text(
@@ -28,7 +27,7 @@ _sentence = st.lists(_word, min_size=1, max_size=20).map(" ".join)
 
 # ── estimate_tokens ────────────────────────────────────────────────────────────
 
-class EstimateTokensTests(unittest.TestCase):
+class EstimateTokensTests(TestCase):
 	"""estimate_tokens produces a non-negative integer approximation."""
 
 	def test_empty_string_returns_zero(self) -> None:
@@ -59,19 +58,19 @@ class EstimateTokensTests(unittest.TestCase):
 		self.assertIsInstance(result, int)
 
 	@given(_sentence)
-	@settings(**_HYP)
+	@_hyp
 	def test_always_non_negative(self, text: str) -> None:
 		self.assertGreaterEqual(estimate_tokens(text), 0)
 
 	@given(st.text(alphabet=st.characters(min_codepoint=65, max_codepoint=90), min_size=1, max_size=200))
-	@settings(**_HYP)
+	@_hyp
 	def test_returns_non_negative_for_any_text(self, text: str) -> None:
 		result = estimate_tokens(text)
 		self.assertIsInstance(result, int)
 		self.assertGreaterEqual(result, 0)
 
 	@given(st.lists(_word, min_size=2, max_size=10))
-	@settings(**_HYP)
+	@_hyp
 	def test_more_words_means_more_or_equal_tokens(self, words: list[str]) -> None:
 		shorter = " ".join(words[:-1])
 		longer = " ".join(words)
@@ -80,18 +79,18 @@ class EstimateTokensTests(unittest.TestCase):
 
 # ── estimate_combined_tokens ───────────────────────────────────────────────────
 
-class EstimateCombinedTokensTests(unittest.TestCase):
+class EstimateCombinedTokensTests(TestCase):
 	"""estimate_combined_tokens sums token counts across all messages."""
 
 	def test_empty_list_returns_zero(self) -> None:
 		self.assertEqual(estimate_combined_tokens([]), 0)
 
 	def test_single_message_matches_individual_estimate(self) -> None:
-		msg = {"role": "user", "content": "hello world"}
+		msg: UserMessage = {"role": "user", "content": "hello world"}
 		self.assertEqual(estimate_combined_tokens([msg]), estimate_tokens("hello world"))
 
 	def test_two_messages_sums_their_tokens(self) -> None:
-		msgs = [
+		msgs: list[UserMessage | AssistantMessage] = [
 			{"role": "user", "content": "hello world"},
 			{"role": "assistant", "content": "goodbye world"},
 		]
@@ -100,21 +99,21 @@ class EstimateCombinedTokensTests(unittest.TestCase):
 
 	def test_roles_do_not_affect_count(self) -> None:
 		content = "same content here"
-		user_msg = [{"role": "user", "content": content}]
-		sys_msg = [{"role": "system", "content": content}]
+		user_msg: list[UserMessage] = [{"role": "user", "content": content}]
+		sys_msg: list[SystemMessage] = [{"role": "system", "content": content}]
 		self.assertEqual(estimate_combined_tokens(user_msg), estimate_combined_tokens(sys_msg))
 
 	@given(st.lists(_sentence, min_size=0, max_size=5))
-	@settings(**_HYP_LIGHT)
+	@_hyp_light
 	def test_total_is_sum_of_individual_estimates(self, contents: list[str]) -> None:
-		msgs = [{"role": "user", "content": c} for c in contents]
+		msgs: list[UserMessage] = [{"role": "user", "content": c} for c in contents]
 		expected = sum(estimate_tokens(c) for c in contents)
 		self.assertEqual(estimate_combined_tokens(msgs), expected)
 
 
 # ── MessageQueue.__init__ and add_message ──────────────────────────────────────
 
-class MessageQueueInitTests(unittest.TestCase):
+class MessageQueueInitTests(TestCase):
 	"""MessageQueue initialises with an empty list and the given max_tokens."""
 
 	def test_starts_empty(self) -> None:
@@ -130,7 +129,7 @@ class MessageQueueInitTests(unittest.TestCase):
 		self.assertEqual(q.max_tokens, 500)
 
 
-class MessageQueueAddMessageTests(unittest.TestCase):
+class MessageQueueAddMessageTests(TestCase):
 	"""add_message stores typed dicts with the correct role."""
 
 	def test_user_role_is_default(self) -> None:
@@ -174,7 +173,7 @@ class MessageQueueAddMessageTests(unittest.TestCase):
 		self.assertIn(str(SHORTEST_MESSAGE), str(ctx.exception))
 
 	@given(st.sampled_from(["user", "system", "assistant"]))
-	@settings(**_HYP)
+	@_hyp
 	def test_any_valid_role_is_accepted(self, role: str) -> None:
 		q = MessageQueue()
 		q.add_message("test", role=role)  # type: ignore[arg-type]
@@ -183,7 +182,7 @@ class MessageQueueAddMessageTests(unittest.TestCase):
 
 # ── MessageQueue sequence protocol ────────────────────────────────────────────
 
-class MessageQueueSequenceTests(unittest.TestCase):
+class MessageQueueSequenceTests(TestCase):
 	"""MessageQueue supports __iter__, __len__, __getitem__, __setitem__, __delitem__."""
 
 	def _filled(self) -> MessageQueue:
@@ -206,7 +205,7 @@ class MessageQueueSequenceTests(unittest.TestCase):
 
 	def test_setitem_replaces_message(self) -> None:
 		q = self._filled()
-		replacement = {"role": "system", "content": "replaced"}
+		replacement: SystemMessage = {"role": "system", "content": "replaced"}
 		q[0] = replacement
 		self.assertEqual(q.messages[0]["content"], "replaced")
 
@@ -232,7 +231,7 @@ class MessageQueueSequenceTests(unittest.TestCase):
 
 # ── MessageQueue.estimate_tokens ───────────────────────────────────────────────
 
-class MessageQueueEstimateTokensTests(unittest.TestCase):
+class MessageQueueEstimateTokensTests(TestCase):
 	"""estimate_tokens on the queue returns the combined token count."""
 
 	def test_empty_queue_returns_zero(self) -> None:
@@ -256,7 +255,7 @@ class MessageQueueEstimateTokensTests(unittest.TestCase):
 		self.assertEqual(q.estimate_tokens(), q.estimate_tokens(None))
 
 	@given(_sentence)
-	@settings(**_HYP)
+	@_hyp
 	def test_additional_prompt_is_always_non_negative_increment(self, prompt: str) -> None:
 		q = MessageQueue()
 		base = q.estimate_tokens()

@@ -947,7 +947,19 @@ show_error_code_links = true
 pretty = true
 plugins = ["mypy_django_plugin.main"]
 ignore_missing_imports = true
-exclude = []
+exclude = [
+    "migrations/",
+    "tests/",
+    "test_.*.py",
+    ".venv/",
+    ".venv_windows/",
+    "site-packages/",
+    "pgsql/",
+    "docs/",
+    "downloads/",
+    ".github/",
+    "/__init__.py",
+]
 implicit_optional = true
 disable_error_code = ['misc', 'annotation-unchecked', 'override']
 

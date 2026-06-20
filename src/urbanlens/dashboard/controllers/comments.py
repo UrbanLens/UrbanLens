@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
@@ -262,9 +263,14 @@ def _render_trip_reaction_row(request, comment, profile: Profile) -> HttpRespons
     )
 
 
-def _aggregate_reactions(reactions_qs) -> dict[str, dict]:
-    """Group reactions by emoji → {count, has_mine: bool}."""
-    result: dict[str, dict] = {}
+class _ReactionData(TypedDict):
+    count: int
+    reacted_by: list[int]
+
+
+def _aggregate_reactions(reactions_qs) -> dict[str, _ReactionData]:
+    """Group reactions by emoji → {count, reacted_by: list of profile_ids}."""
+    result: dict[str, _ReactionData] = {}
     for r in reactions_qs.select_related("profile"):
         if r.emoji not in result:
             result[r.emoji] = {"count": 0, "reacted_by": []}

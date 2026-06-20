@@ -44,7 +44,7 @@ class TestCases(Iterable):
         self.output_callback = callback
 
     def items(self):
-        # Return key : value pairs. Ensure callback is triggered.
+        # Return (key, value) pairs. Ensure callback is triggered.
         for entry in self:
             yield entry.params, entry.expected_output
 

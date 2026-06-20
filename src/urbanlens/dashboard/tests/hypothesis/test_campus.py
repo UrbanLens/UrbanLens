@@ -7,18 +7,17 @@ Campus defines the spatial boundary for a Location.
 """
 from __future__ import annotations
 
-import unittest
-
 from django.contrib.gis.geos import MultiPolygon, Polygon
-from django.test import TestCase
+from urbanlens.core.tests.testcase import TestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.campus.model import Campus
+from urbanlens.dashboard.models.location.model import Location
 
 
 # ── is_default ────────────────────────────────────────────────────────────────
 
-class CampusIsDefaultTests(unittest.TestCase):
+class CampusIsDefaultTests(TestCase):
 	"""is_default is True when profile_id is None (admin-owned campus)."""
 
 	def _campus(self, profile_id) -> Campus:
@@ -39,7 +38,7 @@ class CampusIsDefaultTests(unittest.TestCase):
 
 # ── __str__ ───────────────────────────────────────────────────────────────────
 
-class CampusStrTests(unittest.TestCase):
+class CampusStrTests(TestCase):
 	"""__str__ encodes location_id and either 'default' or 'profile <id>'."""
 
 	def _campus(self, location_id, profile_id) -> Campus:
@@ -191,6 +190,6 @@ class CampusManagerEffectiveForTests(TestCase):
 		self.assertEqual(result.pk, self.admin_campus.pk)
 
 	def test_returns_none_when_no_campus_exists(self) -> None:
-		empty_loc = baker.make("dashboard.Location", latitude="50.0", longitude="-80.0")
+		empty_loc: Location = baker.make(Location, latitude="50.0", longitude="-80.0")
 		result = Campus.objects.effective_for(empty_loc)
 		self.assertIsNone(result)

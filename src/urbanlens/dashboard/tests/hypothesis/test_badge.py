@@ -18,7 +18,7 @@ from model_bakery import baker
 
 from urbanlens.dashboard.models.badges.model import Badge, KIND_TAG
 
-_DB_SETTINGS = dict(
+_db_settings = settings(
 	max_examples=30,
 	deadline=None,
 	suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
@@ -44,7 +44,7 @@ class BadgeDescendantSeedTests(HypothesisTestCase):
 		self.assertEqual(result, {tag.pk})
 
 	@given(n_children=st.integers(min_value=1, max_value=6))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_all_direct_children_included(self, n_children: int) -> None:
 		parent = _make_tag(name="parent")
 		children = [_make_tag(name=f"child_{i}") for i in range(n_children)]
@@ -55,7 +55,7 @@ class BadgeDescendantSeedTests(HypothesisTestCase):
 		self.assertTrue(child_ids.issubset(result), f"Missing children: {child_ids - result}")
 
 	@given(n_children=st.integers(min_value=1, max_value=4))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_parent_is_always_in_result(self, n_children: int) -> None:
 		parent = _make_tag(name="parent")
 		for i in range(n_children):
@@ -65,7 +65,7 @@ class BadgeDescendantSeedTests(HypothesisTestCase):
 		self.assertIn(parent.pk, result)
 
 	@given(depth=st.integers(min_value=2, max_value=5))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_multi_level_chain_all_included(self, depth: int) -> None:
 		"""A linear chain root → child → grandchild → … must all appear."""
 		nodes = [_make_tag(name=f"node_{i}") for i in range(depth)]
@@ -113,7 +113,7 @@ class BadgeDescendantMonotonicityTests(HypothesisTestCase):
 	"""Adding more children must never shrink the descendant set."""
 
 	@given(n_extra=st.integers(min_value=1, max_value=5))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_adding_child_never_reduces_result_size(self, n_extra: int) -> None:
 		parent = _make_tag(name="parent")
 		initial = Badge.get_badge_and_descendants(parent.pk)
@@ -125,7 +125,7 @@ class BadgeDescendantMonotonicityTests(HypothesisTestCase):
 		self.assertTrue(initial.issubset(after))
 
 	@given(n_children=st.integers(min_value=1, max_value=5))
-	@settings(**_DB_SETTINGS)
+	@_db_settings
 	def test_result_is_exactly_seed_plus_descendants(self, n_children: int) -> None:
 		"""Every ID in the result must be either the seed or a genuine descendant."""
 		parent = _make_tag(name="root")

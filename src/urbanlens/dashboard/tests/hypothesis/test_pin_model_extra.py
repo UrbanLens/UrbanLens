@@ -9,10 +9,9 @@ Covers:
 """
 from __future__ import annotations
 
-import unittest
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from urbanlens.core.tests.testcase import TestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.pin.model import Pin
@@ -20,7 +19,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 
 # ── effective_color ────────────────────────────────────────────────────────────
 
-class PinEffectiveColorTests(unittest.TestCase):
+class PinEffectiveColorTests(TestCase):
 	"""effective_color returns the color of the highest-order tag that has one."""
 
 	def _make_pin(self) -> Pin:
@@ -70,7 +69,7 @@ class PinEffectiveColorTests(unittest.TestCase):
 
 # ── has_meaningful_name ────────────────────────────────────────────────────────
 
-class PinHasMeaningfulNameTests(unittest.TestCase):
+class PinHasMeaningfulNameTests(TestCase):
 	"""has_meaningful_name is False for Google placeholder names."""
 
 	def _pin_with_name(self, nickname: str | None, loc_name: str = "") -> Pin:

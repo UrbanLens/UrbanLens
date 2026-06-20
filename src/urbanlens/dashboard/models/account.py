@@ -1,6 +1,7 @@
 """Email verification token model for new user registrations."""
 from __future__ import annotations
 
+from datetime import timedelta
 import uuid
 
 from django.contrib.auth.models import User
@@ -30,7 +31,7 @@ class EmailVerification(models.Model):
         """True if not yet verified and within the 48-hour window."""
         if self.verified_at:
             return False
-        return timezone.now() < self.created + timezone.timedelta(hours=48)
+        return timezone.now() < self.created + timedelta(hours=48)
 
     def mark_verified(self) -> None:
         """Record the verification timestamp."""

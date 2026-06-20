@@ -42,6 +42,8 @@ class SettingsView(LoginRequiredMixin, View):
         """
         from urbanlens.dashboard.models.profile.model import MapCenterMode
 
+        pin_centroid_lat: float | None
+        pin_centroid_lng: float | None
         if profile.map_center_latitude is not None and profile.map_center_longitude is not None:
             pin_centroid_lat = float(profile.map_center_latitude)
             pin_centroid_lng = float(profile.map_center_longitude)

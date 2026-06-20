@@ -8,10 +8,10 @@ directly — no DB access required.  Queryset tests use baker.
 """
 from __future__ import annotations
 
-import unittest
 from types import SimpleNamespace
 
-from django.test import TestCase
+from django.contrib.auth.models import User
+from urbanlens.core.tests.testcase import TestCase
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from model_bakery import baker
@@ -24,7 +24,7 @@ from urbanlens.dashboard.models.badges.model import (
 )
 
 
-_HYP = dict(max_examples=50, deadline=None)
+_hyp = settings(max_examples=50, deadline=None)
 _text = st.text(min_size=1, max_size=30, alphabet=st.characters(whitelist_categories=("L", "N")))
 
 
@@ -34,7 +34,7 @@ def _badge(name: str = "test-badge", icon: str | None = None, color: str | None 
 	b.name = name
 	b.icon = icon
 	b.color = color
-	b._user_customizations = []
+	b.__dict__["_user_customizations"] = []
 	return b
 
 
@@ -45,7 +45,7 @@ def _custom(name: str | None = None, icon: str | None = None, color: str | None 
 
 # ── _get_customization ────────────────────────────────────────────────────────
 
-class BadgeGetCustomizationTests(unittest.TestCase):
+class BadgeGetCustomizationTests(TestCase):
 	"""_get_customization() returns the first prefetched item or None."""
 
 	def test_returns_none_with_empty_list(self) -> None:
@@ -55,13 +55,13 @@ class BadgeGetCustomizationTests(unittest.TestCase):
 	def test_returns_first_prefetched_item(self) -> None:
 		b = _badge()
 		c = _custom(name="Override")
-		b._user_customizations = [c]
+		b.__dict__["_user_customizations"] = [c]
 		self.assertIs(b._get_customization(), c)
 
 
 # ── effective_name ────────────────────────────────────────────────────────────
 
-class BadgeEffectiveNameTests(unittest.TestCase):
+class BadgeEffectiveNameTests(TestCase):
 	"""effective_name returns the user's override or falls back to the badge name."""
 
 	def test_no_customization_returns_badge_name(self) -> None:
@@ -69,30 +69,30 @@ class BadgeEffectiveNameTests(unittest.TestCase):
 
 	def test_customization_with_name_overrides(self) -> None:
 		b = _badge(name="Global Tag")
-		b._user_customizations = [_custom(name="My Name")]
+		b.__dict__["_user_customizations"] = [_custom(name="My Name")]
 		self.assertEqual(b.effective_name, "My Name")
 
 	def test_customization_with_none_name_falls_back(self) -> None:
 		b = _badge(name="Global Tag")
-		b._user_customizations = [_custom(name=None)]
+		b.__dict__["_user_customizations"] = [_custom(name=None)]
 		self.assertEqual(b.effective_name, "Global Tag")
 
 	def test_customization_with_empty_string_falls_back(self) -> None:
 		b = _badge(name="Global Tag")
-		b._user_customizations = [_custom(name="")]
+		b.__dict__["_user_customizations"] = [_custom(name="")]
 		self.assertEqual(b.effective_name, "Global Tag")
 
 	@given(_text)
-	@settings(**_HYP)
+	@_hyp
 	def test_override_name_is_always_returned_when_truthy(self, name: str) -> None:
 		b = _badge(name="Fallback")
-		b._user_customizations = [_custom(name=name)]
+		b.__dict__["_user_customizations"] = [_custom(name=name)]
 		self.assertEqual(b.effective_name, name)
 
 
 # ── effective_icon ────────────────────────────────────────────────────────────
 
-class BadgeEffectiveIconTests(unittest.TestCase):
+class BadgeEffectiveIconTests(TestCase):
 	"""effective_icon returns the user's override or falls back to the badge icon."""
 
 	def test_no_customization_returns_badge_icon(self) -> None:
@@ -100,12 +100,12 @@ class BadgeEffectiveIconTests(unittest.TestCase):
 
 	def test_customization_with_icon_overrides(self) -> None:
 		b = _badge(icon="star")
-		b._user_customizations = [_custom(icon="heart")]
+		b.__dict__["_user_customizations"] = [_custom(icon="heart")]
 		self.assertEqual(b.effective_icon, "heart")
 
 	def test_customization_with_none_icon_falls_back(self) -> None:
 		b = _badge(icon="star")
-		b._user_customizations = [_custom(icon=None)]
+		b.__dict__["_user_customizations"] = [_custom(icon=None)]
 		self.assertEqual(b.effective_icon, "star")
 
 	def test_no_icon_anywhere_returns_none(self) -> None:
@@ -115,7 +115,7 @@ class BadgeEffectiveIconTests(unittest.TestCase):
 
 # ── effective_color ───────────────────────────────────────────────────────────
 
-class BadgeEffectiveColorTests(unittest.TestCase):
+class BadgeEffectiveColorTests(TestCase):
 	"""effective_color returns the user's override or falls back to the badge color."""
 
 	def test_no_customization_returns_badge_color(self) -> None:
@@ -123,12 +123,12 @@ class BadgeEffectiveColorTests(unittest.TestCase):
 
 	def test_customization_with_color_overrides(self) -> None:
 		b = _badge(color="#ff0000")
-		b._user_customizations = [_custom(color="#00ff00")]
+		b.__dict__["_user_customizations"] = [_custom(color="#00ff00")]
 		self.assertEqual(b.effective_color, "#00ff00")
 
 	def test_customization_with_none_color_falls_back(self) -> None:
 		b = _badge(color="#ff0000")
-		b._user_customizations = [_custom(color=None)]
+		b.__dict__["_user_customizations"] = [_custom(color=None)]
 		self.assertEqual(b.effective_color, "#ff0000")
 
 	def test_no_color_anywhere_returns_none(self) -> None:
@@ -138,7 +138,7 @@ class BadgeEffectiveColorTests(unittest.TestCase):
 
 # ── is_customized ─────────────────────────────────────────────────────────────
 
-class BadgeIsCustomizedTests(unittest.TestCase):
+class BadgeIsCustomizedTests(TestCase):
 	"""is_customized is True when the prefetched customization has any non-None field."""
 
 	def test_no_customization_is_false(self) -> None:
@@ -146,28 +146,28 @@ class BadgeIsCustomizedTests(unittest.TestCase):
 
 	def test_customization_with_name_is_true(self) -> None:
 		b = _badge()
-		b._user_customizations = [_custom(name="X")]
+		b.__dict__["_user_customizations"] = [_custom(name="X")]
 		self.assertTrue(b.is_customized)
 
 	def test_customization_with_icon_is_true(self) -> None:
 		b = _badge()
-		b._user_customizations = [_custom(icon="🏭")]
+		b.__dict__["_user_customizations"] = [_custom(icon="🏭")]
 		self.assertTrue(b.is_customized)
 
 	def test_customization_with_color_is_true(self) -> None:
 		b = _badge()
-		b._user_customizations = [_custom(color="#abc")]
+		b.__dict__["_user_customizations"] = [_custom(color="#abc")]
 		self.assertTrue(b.is_customized)
 
 	def test_all_none_customization_is_false(self) -> None:
 		b = _badge()
-		b._user_customizations = [_custom(name=None, icon=None, color=None)]
+		b.__dict__["_user_customizations"] = [_custom(name=None, icon=None, color=None)]
 		self.assertFalse(b.is_customized)
 
 
 # ── icon_is_overridden ────────────────────────────────────────────────────────
 
-class BadgeIconIsOverriddenTests(unittest.TestCase):
+class BadgeIconIsOverriddenTests(TestCase):
 	"""icon_is_overridden is True only when customization.icon is not None."""
 
 	def test_no_customization_is_false(self) -> None:
@@ -175,12 +175,12 @@ class BadgeIconIsOverriddenTests(unittest.TestCase):
 
 	def test_customization_with_icon_is_true(self) -> None:
 		b = _badge(icon="star")
-		b._user_customizations = [_custom(icon="heart")]
+		b.__dict__["_user_customizations"] = [_custom(icon="heart")]
 		self.assertTrue(b.icon_is_overridden)
 
 	def test_customization_with_none_icon_is_false(self) -> None:
 		b = _badge(icon="star")
-		b._user_customizations = [_custom(icon=None, name="Override")]
+		b.__dict__["_user_customizations"] = [_custom(icon=None, name="Override")]
 		self.assertFalse(b.icon_is_overridden)
 
 
@@ -190,13 +190,13 @@ class BadgeStrTests(TestCase):
 	"""__str__ includes [global] for shared badges and (profile) for user-owned ones."""
 
 	def test_global_badge_has_global_label(self) -> None:
-		b = baker.make("dashboard.Badge", name="Urban Ruin", profile=None, kind=KIND_TAG)
+		b: Badge = baker.make(Badge, name="Urban Ruin", profile=None, kind=KIND_TAG)
 		self.assertIn("[global]", str(b))
 		self.assertIn("Urban Ruin", str(b))
 
 	def test_user_badge_excludes_global_label(self) -> None:
-		user = baker.make("auth.User")
-		b = baker.make("dashboard.Badge", name="Mine", profile=user.profile, kind=KIND_TAG)
+		user: User = baker.make(User)
+		b: Badge = baker.make(Badge, name="Mine", profile=user.profile, kind=KIND_TAG)
 		self.assertIn("Mine", str(b))
 		self.assertNotIn("[global]", str(b))
 
@@ -306,7 +306,7 @@ class BadgeQuerySetOrderedTests(TestCase):
 		self.assertGreater(qs.count(), 0)
 
 	def test_ordered_higher_order_comes_first(self) -> None:
-		b_low = baker.make("dashboard.Badge", name="low", order=1, profile=None, kind=KIND_TAG)
-		b_high = baker.make("dashboard.Badge", name="high", order=10, profile=None, kind=KIND_TAG)
+		b_low: Badge = baker.make(Badge, name="low", order=1, profile=None, kind=KIND_TAG)
+		b_high: Badge = baker.make(Badge, name="high", order=10, profile=None, kind=KIND_TAG)
 		pks = list(Badge.objects.filter(pk__in=[b_low.pk, b_high.pk]).ordered().values_list("pk", flat=True))
 		self.assertEqual(pks[0], b_high.pk)

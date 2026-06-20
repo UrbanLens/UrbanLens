@@ -10,11 +10,10 @@ property/display tests use unittest.TestCase with unsaved instances.
 """
 from __future__ import annotations
 
-import unittest
 from datetime import datetime, timezone
 
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from urbanlens.core.tests.testcase import TestCase
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from model_bakery import baker
@@ -30,7 +29,7 @@ _VISIT_SOURCES = list(VisitSource.values)
 
 # ── PinVisit ──────────────────────────────────────────────────────────────────
 
-class PinVisitStrTests(unittest.TestCase):
+class PinVisitStrTests(TestCase):
 	"""PinVisit.__str__ contains the pin_id and a YYYY-MM-DD date."""
 
 	def _visit(self, pin_id: int, year: int, month: int, day: int) -> PinVisit:
@@ -64,7 +63,7 @@ class PinVisitStrTests(unittest.TestCase):
 		self.assertIn(f"{d.year:04d}-{d.month:02d}-{d.day:02d}", s)
 
 
-class VisitSourceEnumTests(unittest.TestCase):
+class VisitSourceEnumTests(TestCase):
 	"""VisitSource has exactly two expected members."""
 
 	def test_manual_value(self) -> None:
@@ -171,7 +170,7 @@ class PinMarkupToJsonTests(TestCase):
 		self.assertEqual(required, set(self.markup.to_json()))
 
 
-class MarkupTypeEnumTests(unittest.TestCase):
+class MarkupTypeEnumTests(TestCase):
 	"""MarkupType has the expected set of visual annotation kinds."""
 
 	def test_has_line(self) -> None:

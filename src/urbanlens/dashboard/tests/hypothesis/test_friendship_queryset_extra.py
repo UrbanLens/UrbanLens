@@ -5,7 +5,7 @@ This file adds: user, status, relationship_type, has_permission.
 """
 from __future__ import annotations
 
-from django.test import TestCase
+from urbanlens.core.tests.testcase import TestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.friendship.meta import (

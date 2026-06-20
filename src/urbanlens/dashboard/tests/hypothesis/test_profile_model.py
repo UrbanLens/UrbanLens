@@ -5,14 +5,14 @@ DB-backed tests use django.test.TestCase with baker.
 """
 from __future__ import annotations
 
-import math
-import unittest
-
+from django.contrib.auth.models import User
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import (
 	MapCenterMode,
 	Profile,
@@ -21,13 +21,13 @@ from urbanlens.dashboard.models.profile.model import (
 from urbanlens.dashboard.tests.hypothesis.strategies import lat_float, lon_float
 
 
-_HYP = dict(max_examples=100, deadline=None)
-_HYP_DB = dict(max_examples=20, deadline=None)
+_hyp = settings(max_examples=100, deadline=None)
+_hyp_db = settings(max_examples=20, deadline=None)
 
 
 # ── _haversine_km ─────────────────────────────────────────────────────────────
 
-class HaversineTests(unittest.TestCase):
+class HaversineTests(TestCase):
 	"""_haversine_km computes great-circle distances in kilometres."""
 
 	def test_same_point_returns_zero(self) -> None:
@@ -56,18 +56,18 @@ class HaversineTests(unittest.TestCase):
 		self.assertIsInstance(result, float)
 
 	@given(lat_float, lon_float)
-	@settings(**_HYP)
+	@_hyp
 	def test_self_distance_is_zero(self, lat: float, lon: float) -> None:
 		dist = _haversine_km((lat, lon), (lat, lon))
 		self.assertAlmostEqual(dist, 0.0, places=5)
 
 	@given(lat_float, lon_float, lat_float, lon_float)
-	@settings(**_HYP)
+	@_hyp
 	def test_non_negative(self, lat1: float, lon1: float, lat2: float, lon2: float) -> None:
 		self.assertGreaterEqual(_haversine_km((lat1, lon1), (lat2, lon2)), 0.0)
 
 	@given(lat_float, lon_float, lat_float, lon_float)
-	@settings(**_HYP)
+	@_hyp
 	def test_symmetric(self, lat1: float, lon1: float, lat2: float, lon2: float) -> None:
 		d1 = _haversine_km((lat1, lon1), (lat2, lon2))
 		d2 = _haversine_km((lat2, lon2), (lat1, lon1))
@@ -88,7 +88,7 @@ class HaversineTests(unittest.TestCase):
 		self.assertLessEqual(d13, d12 + d23 + 1e-6)
 
 	@given(lat_float, lon_float, lat_float, lon_float)
-	@settings(**_HYP)
+	@_hyp
 	def test_bounded_by_half_earth_circumference(
 		self, lat1: float, lon1: float, lat2: float, lon2: float
 	) -> None:
@@ -137,7 +137,7 @@ class ProfileGetMapCenterTests(HypothesisTestCase):
 	"""get_map_center() returns coordinates based on the mode setting."""
 
 	def _profile_with_mode(self, mode: str, **extra) -> Profile:
-		user = baker.make("auth.User")
+		user: User = baker.make(User)
 		Profile.objects.filter(pk=user.profile.pk).update(map_center_mode=mode, **extra)
 		user.profile.refresh_from_db()
 		return user.profile
@@ -154,6 +154,7 @@ class ProfileGetMapCenterTests(HypothesisTestCase):
 		)
 		result = profile.get_map_center()
 		self.assertIsNotNone(result)
+		assert result is not None
 		self.assertAlmostEqual(result[0], 42.5, places=3)
 		self.assertAlmostEqual(result[1], -73.5, places=3)
 
@@ -173,6 +174,7 @@ class ProfileGetMapCenterTests(HypothesisTestCase):
 		)
 		result = profile.get_map_center()
 		self.assertIsNotNone(result)
+		assert result is not None
 		self.assertAlmostEqual(result[0], 40.0, places=3)
 		self.assertAlmostEqual(result[1], -75.0, places=3)
 
@@ -194,6 +196,7 @@ class ProfileGetMapCenterTests(HypothesisTestCase):
 		)
 		result = profile.get_map_center()
 		self.assertIsNotNone(result)
+		assert result is not None
 		self.assertIsInstance(result[0], float)
 		self.assertIsInstance(result[1], float)
 
@@ -204,23 +207,24 @@ class ProfileComputeMapCenterTests(HypothesisTestCase):
 	"""compute_map_center() returns the centroid of the user's pins."""
 
 	def test_no_pins_returns_none(self) -> None:
-		user = baker.make("auth.User")
+		user: User = baker.make(User)
 		result = user.profile.compute_map_center()
 		self.assertIsNone(result)
 
 	def test_single_pin_returns_its_coords(self) -> None:
-		user = baker.make("auth.User")
-		location = baker.make("dashboard.Location", latitude="41.000000", longitude="-74.000000")
+		user: User = baker.make(User)
+		location: Location = baker.make(Location, latitude="41.000000", longitude="-74.000000")
 		baker.make("dashboard.Pin", profile=user.profile, location=location, latitude=None, longitude=None)
 		result = user.profile.compute_map_center()
 		self.assertIsNotNone(result)
+		assert result is not None
 		self.assertAlmostEqual(result[0], 41.0, places=2)
 		self.assertAlmostEqual(result[1], -74.0, places=2)
 
 	def test_two_nearby_pins_centroid_is_between_them(self) -> None:
-		user = baker.make("auth.User")
-		loc1 = baker.make("dashboard.Location", latitude="40.000000", longitude="-74.000000")
-		loc2 = baker.make("dashboard.Location", latitude="42.000000", longitude="-72.000000")
+		user: User = baker.make(User)
+		loc1: Location = baker.make(Location, latitude="40.000000", longitude="-74.000000")
+		loc2: Location = baker.make(Location, latitude="42.000000", longitude="-72.000000")
 		baker.make("dashboard.Pin", profile=user.profile, location=loc1, latitude=None, longitude=None)
 		baker.make("dashboard.Pin", profile=user.profile, location=loc2, latitude=None, longitude=None)
 		result = user.profile.compute_map_center()
@@ -232,8 +236,8 @@ class ProfileComputeMapCenterTests(HypothesisTestCase):
 		self.assertLess(lng, -72.0)
 
 	def test_result_is_cached_on_profile(self) -> None:
-		user = baker.make("auth.User")
-		location = baker.make("dashboard.Location", latitude="39.000000", longitude="-77.000000")
+		user: User = baker.make(User)
+		location: Location = baker.make(Location, latitude="39.000000", longitude="-77.000000")
 		baker.make("dashboard.Pin", profile=user.profile, location=location, latitude=None, longitude=None)
 		user.profile.compute_map_center()
 		user.profile.refresh_from_db()

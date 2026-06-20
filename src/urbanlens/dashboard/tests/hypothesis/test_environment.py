@@ -5,7 +5,6 @@ No database access — pure Pydantic model logic.
 from __future__ import annotations
 
 import os
-import unittest
 from unittest.mock import patch
 
 from hypothesis import given, settings
@@ -19,12 +18,13 @@ from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes
 from urbanlens.UrbanLens.environments.prod import Production
 from urbanlens.UrbanLens.environments.staging import Staging
 from urbanlens.UrbanLens.environments.test import Testing
+from urbanlens.core.tests.testcase import TestCase
 
 
-_HYP = dict(max_examples=50, deadline=None)
+_hyp = settings(max_examples=50, deadline=None)
 
 
-class DebugResolutionTests(unittest.TestCase):
+class DebugResolutionTests(TestCase):
 	"""BaseEnvironment.debug resolves correctly from override and default."""
 
 	def test_override_on_forces_debug_true_despite_true_default(self) -> None:
@@ -55,19 +55,19 @@ class DebugResolutionTests(unittest.TestCase):
 		self.assertFalse(Production().debug)
 
 	@given(st.booleans())
-	@settings(**_HYP)
+	@_hyp
 	def test_override_on_dominates_any_default(self, use_true_default: bool) -> None:
 		env = Local(debug_override=DebugTypes.OVERRIDE_ON) if use_true_default else Staging(debug_override=DebugTypes.OVERRIDE_ON)
 		self.assertTrue(env.debug)
 
 	@given(st.booleans())
-	@settings(**_HYP)
+	@_hyp
 	def test_override_off_dominates_any_default(self, use_true_default: bool) -> None:
 		env = Local(debug_override=DebugTypes.OVERRIDE_OFF) if use_true_default else Staging(debug_override=DebugTypes.OVERRIDE_OFF)
 		self.assertFalse(env.debug)
 
 
-class BaseEnvironmentEqualityTests(unittest.TestCase):
+class BaseEnvironmentEqualityTests(TestCase):
 	"""BaseEnvironment.__eq__ compares against EnvironmentTypes, str, and other BaseEnvironment."""
 
 	def test_eq_with_matching_env_type_enum(self) -> None:
@@ -101,19 +101,19 @@ class BaseEnvironmentEqualityTests(unittest.TestCase):
 		self.assertEqual(Local().__eq__(None), NotImplemented)
 
 	@given(st.sampled_from(list(EnvironmentTypes)))
-	@settings(**_HYP)
+	@_hyp
 	def test_env_equals_its_own_env_type(self, env_type: EnvironmentTypes) -> None:
 		env = select_environment(env_type)
 		self.assertEqual(env, env_type)
 
 	@given(st.sampled_from(list(EnvironmentTypes)))
-	@settings(**_HYP)
+	@_hyp
 	def test_env_equals_its_own_string_value(self, env_type: EnvironmentTypes) -> None:
 		env = select_environment(env_type)
 		self.assertEqual(env, env_type.value)
 
 
-class BaseEnvironmentValidatorTests(unittest.TestCase):
+class BaseEnvironmentValidatorTests(TestCase):
 	"""Field validators coerce string values into proper enum types."""
 
 	def test_env_type_is_always_an_enum_instance(self) -> None:
@@ -138,13 +138,13 @@ class BaseEnvironmentValidatorTests(unittest.TestCase):
 		self.assertEqual(env.debug_override, DebugTypes.DEFAULT)
 
 	@given(st.sampled_from(list(DebugTypes)))
-	@settings(**_HYP)
+	@_hyp
 	def test_debug_override_enum_values_accepted_as_strings(self, debug_type: DebugTypes) -> None:
 		env = Local(debug_override=debug_type.value)
 		self.assertEqual(env.debug_override, debug_type)
 
 
-class BaseEnvironmentReprTests(unittest.TestCase):
+class BaseEnvironmentReprTests(TestCase):
 	"""__str__ and __repr__ include usable information."""
 
 	def test_str_contains_environment_name(self) -> None:
@@ -160,13 +160,13 @@ class BaseEnvironmentReprTests(unittest.TestCase):
 		self.assertIn("local", repr(env).lower())
 
 	@given(st.sampled_from(list(EnvironmentTypes)))
-	@settings(**_HYP)
+	@_hyp
 	def test_str_is_non_empty_for_all_env_types(self, env_type: EnvironmentTypes) -> None:
 		env = select_environment(env_type)
 		self.assertTrue(str(env))
 
 
-class ProductionEnvironmentTests(unittest.TestCase):
+class ProductionEnvironmentTests(TestCase):
 	"""Production always has debug=False and the correct metadata."""
 
 	def test_debug_is_false(self) -> None:
@@ -188,7 +188,7 @@ class ProductionEnvironmentTests(unittest.TestCase):
 		self.assertIn("Production", Production().name)
 
 
-class SelectEnvironmentTests(unittest.TestCase):
+class SelectEnvironmentTests(TestCase):
 	"""select_environment returns the correct subclass for each EnvironmentTypes."""
 
 	def test_local_returns_local(self) -> None:
@@ -227,13 +227,13 @@ class SelectEnvironmentTests(unittest.TestCase):
 			self.assertIsInstance(select_environment(None), Staging)
 
 	@given(st.sampled_from(list(EnvironmentTypes)))
-	@settings(**_HYP)
+	@_hyp
 	def test_every_env_type_produces_a_base_environment(self, env_type: EnvironmentTypes) -> None:
 		result = select_environment(env_type)
 		self.assertIsInstance(result, BaseEnvironment)
 
 	@given(st.sampled_from(list(EnvironmentTypes)))
-	@settings(**_HYP)
+	@_hyp
 	def test_result_env_type_matches_input(self, env_type: EnvironmentTypes) -> None:
 		result = select_environment(env_type)
 		self.assertEqual(result.env_type, env_type)
