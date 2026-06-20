@@ -1,4 +1,4 @@
-"""Tests for MapCenterForm, StyleSettingsForm, and MapDisplayForm.
+﻿"""Tests for MapCenterForm, StyleSettingsForm, and MapDisplayForm.
 
 Invariants verified:
   - MapCenterForm.clean_map_default_zoom returns 13 when the field is omitted,
@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -37,7 +36,7 @@ def _profile() -> Profile:
 
 # ── MapCenterForm.clean_map_default_zoom ──────────────────────────────────────
 
-class MapCenterFormZoomCleanTests(HypothesisTestCase):
+class MapCenterFormZoomCleanTests(TestCase):
 	"""clean_map_default_zoom must default to 13 when the field is blank."""
 
 	def _submit(self, zoom_value: str, mode: str = MapCenterMode.AUTO) -> MapCenterForm:
@@ -85,7 +84,7 @@ class MapCenterFormZoomCleanTests(HypothesisTestCase):
 
 # ── MapCenterForm — mode choices ──────────────────────────────────────────────
 
-class MapCenterFormModeTests(HypothesisTestCase):
+class MapCenterFormModeTests(TestCase):
 	"""All three MapCenterMode values must be accepted by the form."""
 
 	def test_auto_mode_is_valid(self) -> None:
@@ -119,7 +118,7 @@ class MapCenterFormModeTests(HypothesisTestCase):
 
 # ── MapDisplayForm.use_pin_cache ──────────────────────────────────────────────
 
-class MapDisplayFormUsePinCacheTests(HypothesisTestCase):
+class MapDisplayFormUsePinCacheTests(TestCase):
 	"""use_pin_cache is optional; omitting it (unchecked) must be valid and produce False."""
 
 	def _map_data(self, **extra) -> dict:
@@ -167,7 +166,7 @@ class MapDisplayFormUsePinCacheTests(HypothesisTestCase):
 
 # ── MapCenterForm.save() ──────────────────────────────────────────────────────
 
-class MapCenterFormSaveTests(HypothesisTestCase):
+class MapCenterFormSaveTests(TestCase):
 	"""MapCenterForm.save() preserves DB custom coordinates when mode is not CUSTOM."""
 
 	def _submit(self, profile, mode: str, lat: str = "", lng: str = "") -> MapCenterForm:
@@ -246,7 +245,7 @@ class MapCenterFormSaveTests(HypothesisTestCase):
 
 # ── StyleSettingsForm ─────────────────────────────────────────────────────────
 
-class StyleSettingsFormTests(HypothesisTestCase):
+class StyleSettingsFormTests(TestCase):
 	"""StyleSettingsForm persists dark_mode to the Profile."""
 
 	def _profile(self):
@@ -323,7 +322,7 @@ class ContactSettingsFormTests(TestCase):
 
 # ── MapDisplayForm — cluster_radius and default_map_view ─────────────────────
 
-class MapDisplayFormClusterRadiusTests(HypothesisTestCase):
+class MapDisplayFormClusterRadiusTests(TestCase):
 	"""MapDisplayForm.cluster_radius is optional and bounded 1-500."""
 
 	def _map_data(self, **extra) -> dict:

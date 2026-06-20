@@ -1,4 +1,4 @@
-"""Property-based database tests for the Pin model.
+﻿"""Property-based database tests for the Pin model.
 
 Covers PinManager.get_nearby_or_create and the major PinQuerySet filters.
 Each @given example runs inside its own atomic savepoint (rolled back
@@ -9,9 +9,9 @@ from __future__ import annotations
 import math
 
 from django.contrib.auth.models import User
+from urbanlens.core.tests.testcase import TestCase
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.location.model import Location
@@ -40,7 +40,7 @@ def _make_location(lat: float = 40.0, lon: float = -74.0) -> Location:
 
 # ── PinManager.get_nearby_or_create ───────────────────────────────────────────
 
-class GetNearbyOrCreateNullGuardsTests(HypothesisTestCase):
+class GetNearbyOrCreateNullGuardsTests(TestCase):
 	"""get_nearby_or_create must return (None, False) for degenerate inputs."""
 
 	profile: Profile
@@ -109,7 +109,7 @@ def _is_numeric(s: str) -> bool:
 		return False
 
 
-class GetNearbyOrCreateCreationTests(HypothesisTestCase):
+class GetNearbyOrCreateCreationTests(TestCase):
 	"""get_nearby_or_create creates a valid pin for well-formed coordinates."""
 
 	profile: Profile
@@ -161,7 +161,7 @@ class GetNearbyOrCreateCreationTests(HypothesisTestCase):
 
 # ── PinQuerySet structural filters ────────────────────────────────────────────
 
-class PinQuerySetRootPinsTests(HypothesisTestCase):
+class PinQuerySetRootPinsTests(TestCase):
 	"""root_pins() must exclude all sub-pin variants."""
 
 	profile: Profile
@@ -201,7 +201,7 @@ class PinQuerySetRootPinsTests(HypothesisTestCase):
 
 # ── PinQuerySet visit filters ─────────────────────────────────────────────────
 
-class PinQuerySetVisitFiltersTests(HypothesisTestCase):
+class PinQuerySetVisitFiltersTests(TestCase):
 	"""never_visited() and related visit filters."""
 
 	profile: Profile
@@ -238,7 +238,7 @@ class PinQuerySetVisitFiltersTests(HypothesisTestCase):
 
 # ── PinQuerySet name filter ───────────────────────────────────────────────────
 
-class PinQuerySetByNameTests(HypothesisTestCase):
+class PinQuerySetByNameTests(TestCase):
 	"""by_name() performs a case-insensitive substring search on nickname."""
 
 	profile: Profile
@@ -275,7 +275,7 @@ class PinQuerySetByNameTests(HypothesisTestCase):
 
 # ── PinQuerySet priority filter ───────────────────────────────────────────────
 
-class PinQuerySetPriorityTests(HypothesisTestCase):
+class PinQuerySetPriorityTests(TestCase):
 	"""by_priority() is an exact-match filter."""
 
 	profile: Profile

@@ -1,4 +1,4 @@
-"""Property-based tests for the Friendship state machine.
+﻿"""Property-based tests for the Friendship state machine.
 
 Friendship transitions follow strict rules:
   accept  → ACCEPTED
@@ -18,9 +18,9 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
+from urbanlens.core.tests.testcase import TestCase
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
@@ -49,7 +49,7 @@ def _make_requested(profile_a: Profile, profile_b: Profile) -> Friendship:
 	)
 
 
-class FriendshipTransitionTests(HypothesisTestCase):
+class FriendshipTransitionTests(TestCase):
 	"""Each instance-method transition must land on the correct status."""
 
 	profile_a: Profile
@@ -110,7 +110,7 @@ class FriendshipTransitionTests(HypothesisTestCase):
 		self.assertEqual(self.friendship.status, FriendshipStatus.REQUESTED)
 
 
-class FriendshipBlockMuteTests(HypothesisTestCase):
+class FriendshipBlockMuteTests(TestCase):
 	"""block() and mute() classmethods create new friendship rows when none exist."""
 
 	profile_a: Profile
@@ -150,7 +150,7 @@ class FriendshipBlockMuteTests(HypothesisTestCase):
 		self.assertEqual(f.status, FriendshipStatus.BLOCKED)
 
 
-class FriendshipUniqueConstraintTests(HypothesisTestCase):
+class FriendshipUniqueConstraintTests(TestCase):
 	"""Duplicate (from_profile, to_profile) pairs must raise IntegrityError."""
 
 	profile_a: Profile
@@ -176,7 +176,7 @@ class FriendshipUniqueConstraintTests(HypothesisTestCase):
 			self.fail(f"Reversed pair should not raise IntegrityError: {exc}")
 
 
-class FriendshipQuerySetTests(HypothesisTestCase):
+class FriendshipQuerySetTests(TestCase):
 	"""Queryset filters: is_friend, not_friend, profile, between."""
 
 	profile_a: Profile
@@ -238,7 +238,7 @@ class FriendshipQuerySetTests(HypothesisTestCase):
 		self.assertFalse(qs.exists(), f"Status {status!r} must not appear in is_friend()")
 
 
-class FriendshipPredicateInvariantTests(HypothesisTestCase):
+class FriendshipPredicateInvariantTests(TestCase):
 	"""Class-level predicate invariants (no DB required)."""
 
 	def test_only_accepted_is_friend(self) -> None:

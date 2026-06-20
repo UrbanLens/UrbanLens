@@ -1,4 +1,4 @@
-"""Property-based tests for Badge hierarchy.
+﻿"""Property-based tests for Badge hierarchy.
 
 Badge.get_badge_and_descendants performs a BFS over the self-referential
 parents M2M.  Key invariants:
@@ -11,9 +11,9 @@ parents M2M.  Key invariants:
 """
 from __future__ import annotations
 
+from urbanlens.core.tests.testcase import TestCase
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.badges.model import Badge, KIND_TAG
@@ -29,7 +29,7 @@ def _make_tag(name: str = "tag", **kwargs) -> Badge:
 	return baker.make(Badge, name=name, kind=KIND_TAG, profile=None, **kwargs)
 
 
-class BadgeDescendantSeedTests(HypothesisTestCase):
+class BadgeDescendantSeedTests(TestCase):
 	"""get_badge_and_descendants always includes the seed."""
 
 	def test_seed_id_always_in_result(self) -> None:
@@ -76,7 +76,7 @@ class BadgeDescendantSeedTests(HypothesisTestCase):
 		self.assertEqual(result, {n.pk for n in nodes})
 
 
-class BadgeCycleTests(HypothesisTestCase):
+class BadgeCycleTests(TestCase):
 	"""The BFS must terminate even when cycles are present in the parents M2M."""
 
 	def test_direct_self_reference_terminates(self) -> None:
@@ -109,7 +109,7 @@ class BadgeCycleTests(HypothesisTestCase):
 			self.assertEqual(result, {n.pk for n in nodes})
 
 
-class BadgeDescendantMonotonicityTests(HypothesisTestCase):
+class BadgeDescendantMonotonicityTests(TestCase):
 	"""Adding more children must never shrink the descendant set."""
 
 	@given(n_extra=st.integers(min_value=1, max_value=5))
@@ -140,7 +140,7 @@ class BadgeDescendantMonotonicityTests(HypothesisTestCase):
 		self.assertFalse(extra, f"Unexpected IDs in result: {extra}")
 
 
-class BadgeResultTypeTests(HypothesisTestCase):
+class BadgeResultTypeTests(TestCase):
 	"""get_badge_and_descendants must always return a set of ints."""
 
 	def test_return_type_is_set(self) -> None:

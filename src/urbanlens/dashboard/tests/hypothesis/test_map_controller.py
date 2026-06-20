@@ -1,4 +1,4 @@
-"""Tests for MapController.view_map and MapController.map_pins_meta.
+﻿"""Tests for MapController.view_map and MapController.map_pins_meta.
 
 Invariants verified:
   - view_map requires authentication; unauthenticated requests are redirected.
@@ -20,9 +20,9 @@ import json
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from urbanlens.core.tests.testcase import TestCase
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.pin.model import Pin
@@ -38,7 +38,7 @@ _MAP_URL      = "/dashboard/map/"
 _MAP_META_URL = "/dashboard/map/pins/meta/"
 
 
-class ViewMapAuthTests(HypothesisTestCase):
+class ViewMapAuthTests(TestCase):
 	"""view_map must redirect anonymous users to the login page."""
 
 	def test_unauthenticated_request_redirects(self) -> None:
@@ -52,7 +52,7 @@ class ViewMapAuthTests(HypothesisTestCase):
 		self.assertEqual(resp.status_code, 200)
 
 
-class ViewMapContextTests(HypothesisTestCase):
+class ViewMapContextTests(TestCase):
 	"""view_map must include correct values for profile-driven context variables."""
 
 	user: User
@@ -176,7 +176,7 @@ class ViewMapContextTests(HypothesisTestCase):
 
 # ── map_pins_meta ─────────────────────────────────────────────────────────────
 
-class MapPinsMetaTests(HypothesisTestCase):
+class MapPinsMetaTests(TestCase):
 	"""map_pins_meta must return the latest pin update timestamp or null."""
 
 	user: User

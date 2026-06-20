@@ -1,4 +1,4 @@
-"""Tests for Profile model properties and helper functions.
+﻿"""Tests for Profile model properties and helper functions.
 
 Pure-function tests use unittest.TestCase (no DB).
 DB-backed tests use django.test.TestCase with baker.
@@ -8,7 +8,6 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -101,7 +100,7 @@ class HaversineTests(TestCase):
 
 # ── Profile proxy properties ──────────────────────────────────────────────────
 
-class ProfileProxyPropertyTests(HypothesisTestCase):
+class ProfileProxyPropertyTests(TestCase):
 	"""Profile proxies user.username, email, first_name, last_name, full_name."""
 
 	def _make_user(self, username="testuser", first="First", last="Last", email="a@b.com"):
@@ -135,7 +134,7 @@ class ProfileProxyPropertyTests(HypothesisTestCase):
 
 # ── Profile.get_map_center ────────────────────────────────────────────────────
 
-class ProfileGetMapCenterTests(HypothesisTestCase):
+class ProfileGetMapCenterTests(TestCase):
 	"""get_map_center() returns coordinates based on the mode setting."""
 
 	def _profile_with_mode(self, mode: str, **extra) -> Profile:
@@ -205,7 +204,7 @@ class ProfileGetMapCenterTests(HypothesisTestCase):
 
 # ── Profile.compute_map_center ────────────────────────────────────────────────
 
-class ProfileComputeMapCenterTests(HypothesisTestCase):
+class ProfileComputeMapCenterTests(TestCase):
 	"""compute_map_center() returns the centroid of the user's pins."""
 
 	def test_no_pins_returns_none(self) -> None:

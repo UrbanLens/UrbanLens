@@ -1,4 +1,4 @@
-"""Tests for the pin_invalidate_map_center post_save signal.
+﻿"""Tests for the pin_invalidate_map_center post_save signal.
 
 Invariants verified:
   - Creating a new Pin clears the profile's cached centroid (lat/lng → None).
@@ -10,9 +10,9 @@ from __future__ import annotations
 import decimal
 
 from django.contrib.auth.models import User
+from urbanlens.core.tests.testcase import TestCase
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.pin.model import Pin
@@ -35,7 +35,7 @@ def _set_cached_centroid(profile: Profile) -> None:
 	)
 
 
-class InvalidateMapCenterOnCreateTests(HypothesisTestCase):
+class InvalidateMapCenterOnCreateTests(TestCase):
 	"""Creating a new pin must clear the profile's cached centroid."""
 
 	profile: Profile
@@ -78,7 +78,7 @@ class InvalidateMapCenterOnCreateTests(HypothesisTestCase):
 		self.assertIsNone(self.profile.map_center_longitude)
 
 
-class InvalidateMapCenterOnUpdateTests(HypothesisTestCase):
+class InvalidateMapCenterOnUpdateTests(TestCase):
 	"""Updating an existing pin must NOT clear the cached centroid."""
 
 	profile: Profile
@@ -104,7 +104,7 @@ class InvalidateMapCenterOnUpdateTests(HypothesisTestCase):
 		self.assertIsNotNone(self.profile.map_center_latitude)
 
 
-class InvalidateMapCenterNoProfileTests(HypothesisTestCase):
+class InvalidateMapCenterNoProfileTests(TestCase):
 	"""A pin saved without a profile_id must not raise and must not touch any profile."""
 
 	def test_pin_without_profile_does_not_raise(self) -> None:

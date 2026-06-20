@@ -1,4 +1,4 @@
-"""Tests for EmailVerification model (dashboard/models/account.py).
+﻿"""Tests for EmailVerification model (dashboard/models/account.py).
 
 All tests are DB-backed; EmailVerification.created is auto_now_add so we
 back-date it via queryset.update() where time-sensitivity matters.
@@ -10,7 +10,6 @@ from datetime import timedelta
 from django.contrib.auth.models import User
 from urbanlens.core.tests.testcase import TestCase
 from django.utils import timezone
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.account import EmailVerification

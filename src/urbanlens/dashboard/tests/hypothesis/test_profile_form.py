@@ -9,7 +9,6 @@ from datetime import UTC, date, datetime, timedelta
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from django import forms as django_forms
@@ -152,7 +151,7 @@ class ValidateStartedExploringTests(TestCase):
 
 # ── MarkupDefaultsForm ────────────────────────────────────────────────────────
 
-class MarkupDefaultsFormTests(HypothesisTestCase):
+class MarkupDefaultsFormTests(TestCase):
 	"""MarkupDefaultsForm clean methods apply defaults and strip whitespace."""
 
 	def _profile(self):
@@ -220,7 +219,7 @@ class MarkupDefaultsFormTests(HypothesisTestCase):
 
 # ── PrivacySettingsForm ───────────────────────────────────────────────────────
 
-class PrivacySettingsFormTests(HypothesisTestCase):
+class PrivacySettingsFormTests(TestCase):
 	"""PrivacySettingsForm excludes FRIENDS from friend_request_visibility."""
 
 	def _profile(self):
@@ -237,6 +236,8 @@ class PrivacySettingsFormTests(HypothesisTestCase):
 			"profile_visibility": VisibilityChoice.ANYONE,
 			"comment_visibility": VisibilityChoice.ANYONE,
 			"friend_request_visibility": VisibilityChoice.ANYONE,
+			"photo_upload_visibility": VisibilityChoice.ANYONE,
+			"viewer_photo_filter": VisibilityChoice.ANYONE,
 			**overrides,
 		}
 
@@ -287,7 +288,7 @@ class PrivacySettingsFormTests(HypothesisTestCase):
 
 # ── ProfileForm ───────────────────────────────────────────────────────────────
 
-class ProfileFormTests(HypothesisTestCase):
+class ProfileFormTests(TestCase):
 	"""ProfileForm.clean_birth_date and clean_started_exploring raise ValidationError for bad values."""
 
 	def _profile(self):
