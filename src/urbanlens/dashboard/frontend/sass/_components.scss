@@ -92,12 +92,16 @@
     padding: 0;
     background: var(--ul-surface-1);
     color: var(--ul-text-1);
-    width: min(400px, 95vw);
+    width: min(55rem, 90vw);
     max-width: 90vw;
-    overflow: hidden;
+    // visible so absolutely-positioned children (icon picker panel) are not clipped
+    overflow: visible;
+    max-height: 90vh;
 
     &::backdrop {
-        background: rgba(0, 0, 0, .45);
+        background: rgba(0, 0, 0, .55);
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
     }
 
     &[open] {

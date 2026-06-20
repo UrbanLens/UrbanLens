@@ -187,6 +187,29 @@
     flex-wrap: wrap;
 }
 
+.icon-custom-clear-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--ul-border, #e2e8f0);
+    background: transparent;
+    cursor: pointer;
+    color: var(--ul-text-muted, #94a3b8);
+    transition: background .12s, border-color .12s, color .12s;
+    flex-shrink: 0;
+
+    .material-icons { font-size: 1rem !important; }
+
+    &:hover {
+        background: #fef2f2;
+        border-color: #fca5a5;
+        color: #dc2626;
+    }
+}
+
 .icon-custom-upload-btn {
     display: inline-flex;
     align-items: center;

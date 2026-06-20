@@ -30,11 +30,8 @@
             <label class="form-label">Name</label>
             <input name="name" type="text" class="form-input" value="{{ category.name }}" required>
         </div>
-        <div class="form-field">
-            <label class="form-label">Order</label>
-            <input name="order" type="number" class="form-input" value="{{ category.order }}">
-        </div>
     </div>
+    <input type="hidden" name="order" value="{{ category.order }}">
 
     <div class="form-field">
         <label class="form-label">Description</label>

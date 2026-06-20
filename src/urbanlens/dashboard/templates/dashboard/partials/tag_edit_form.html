@@ -32,11 +32,8 @@
             <label class="form-label">Name</label>
             <input name="name" type="text" class="form-input" value="{{ tag.name }}" required>
         </div>
-        <div class="form-field">
-            <label class="form-label">Order</label>
-            <input name="order" type="number" class="form-input" value="{{ tag.order }}">
-        </div>
     </div>
+    <input type="hidden" name="order" value="{{ tag.order }}">
 
     <div class="form-field">
         <label class="form-label">Description</label>
@@ -46,20 +43,24 @@
     <div class="tag-icon-color-row">
         <div class="form-field">
             <label class="form-label">Icon</label>
-            <div class="icon-picker-wrap">
-                {% with picker_id=tag.id|stringformat:"d" current_icon=tag.icon|default:"" field_name="icon" %}
-                {% include 'dashboard/partials/_icon_picker.html' %}
-                {% endwith %}
-            </div>
 
-            <div class="icon-custom-upload-area" style="margin-top:8px;">
+            <div class="icon-custom-upload-area" style="margin-top:4px;">
+                <img {% if tag.custom_icon %}src="{{ tag.custom_icon.url }}"{% else %}style="display:none"{% endif %}
+                     class="icon-custom-preview-thumb" id="edit-custom-preview-{{ tag.id }}" alt="Custom icon">
                 {% if tag.custom_icon %}
-                <img src="{{ tag.custom_icon.url }}" class="icon-custom-preview-thumb"
-                     id="edit-custom-preview-{{ tag.id }}" alt="Custom icon">
-                {% else %}
-                <img id="edit-custom-preview-{{ tag.id }}" class="icon-custom-preview-thumb" style="display:none" alt="">
+                <button type="button" class="icon-custom-clear-btn" id="edit-clear-btn-{{ tag.id }}" title="Remove custom icon"
+                        onclick="(function(id){
+                            document.getElementById('edit-clear-custom-'+id).value='1';
+                            document.getElementById('edit-custom-preview-'+id).style.display='none';
+                            document.getElementById('edit-clear-btn-'+id).style.display='none';
+                            document.getElementById('edit-upload-btn-'+id).style.removeProperty('display');
+                            document.getElementById('edit-icon-picker-wrap-'+id).style.removeProperty('display');
+                        })('{{ tag.id }}')">
+                    <i class="material-icons">close</i>
+                </button>
                 {% endif %}
-                <label class="icon-custom-upload-btn" title="Upload a custom image icon">
+                <input type="hidden" name="clear_custom_icon" id="edit-clear-custom-{{ tag.id }}" value="">
+                <label class="icon-custom-upload-btn" id="edit-upload-btn-{{ tag.id }}" {% if tag.custom_icon %}style="display:none"{% endif %} title="Upload a custom image icon">
                     <i class="material-icons">upload</i>
                     Upload custom
                     <input type="file" name="custom_icon" id="edit-custom-input-{{ tag.id }}"
@@ -67,12 +68,13 @@
                            onchange="showCustomPreview('{{ tag.id }}', this)">
                 </label>
             </div>
-            {% if tag.custom_icon %}
-            <label class="checkbox-label" style="margin-top:6px;font-size:.82rem;color:#888;">
-                <input type="checkbox" name="clear_custom_icon" value="1"
-                       id="edit-clear-custom-{{ tag.id }}"> Remove custom icon
-            </label>
-            {% endif %}
+
+            {# Built-in icon picker: hidden when custom icon is active #}
+            <div class="icon-picker-wrap" id="edit-icon-picker-wrap-{{ tag.id }}" {% if tag.custom_icon %}style="display:none"{% endif %}>
+                {% with picker_id=tag.id|stringformat:"d" current_icon=tag.icon|default:"" field_name="icon" %}
+                {% include 'dashboard/partials/_icon_picker.html' %}
+                {% endwith %}
+            </div>
         </div>
 
         <div class="form-field">
@@ -135,7 +137,15 @@ function showCustomPreview(tagId, input) {
     var preview = document.getElementById('edit-custom-preview-' + tagId);
     if (!preview) return;
     var reader = new FileReader();
-    reader.onload = function(e) { preview.src = e.target.result; preview.style.display = 'block'; };
+    reader.onload = function(e) {
+        preview.src = e.target.result;
+        preview.style.removeProperty('display');
+        // Hide picker and upload button; ensure clear icon is present
+        var pickerWrap = document.getElementById('edit-icon-picker-wrap-' + tagId);
+        if (pickerWrap) pickerWrap.style.display = 'none';
+        var uploadBtn = document.getElementById('edit-upload-btn-' + tagId);
+        if (uploadBtn) uploadBtn.style.display = 'none';
+    };
     reader.readAsDataURL(input.files[0]);
 }
 // pickColor and filterParentOptions are defined in tags/index.html and available globally.

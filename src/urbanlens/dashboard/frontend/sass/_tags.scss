@@ -542,7 +542,8 @@
     border: none;
     padding: 0;
     box-shadow: $shadow-dialog;
-    overflow: hidden; // prevent dialog-level scrollbar
+    // visible so icon picker panel (position:absolute) is not clipped by the dialog
+    overflow: visible;
 
     // Flex column so header stays fixed and body scrolls
     &[open] {
@@ -551,14 +552,18 @@
     }
 
     &::backdrop {
-        background: rgba(0, 0, 0, .4);
+        background: rgba(0, 0, 0, .55);
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
     }
 }
 
 .tag-edit-dialog-body {
     padding: 1rem 1.25rem 1.25rem;
     overflow-y: auto;
+    overflow-x: hidden;
     flex: 1; // fills remaining height within the flex dialog
+    border-radius: 0 0 $radius-md $radius-md; // clips child content at rounded corners
 }
 
 // ── Tag merge dialog form ─────────────────────────────────────────────────────

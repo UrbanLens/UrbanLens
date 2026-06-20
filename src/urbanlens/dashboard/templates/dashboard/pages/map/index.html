@@ -874,7 +874,10 @@
     function _setFetching(on, message) {
         _fetching += on ? 1 : -1;
         if (!_tfi) return;
-        _tfi.classList.toggle('visible', _fetching > 0);
+        // Suppress the small indicator while the full-screen cold-start overlay is active
+        const overlay = document.getElementById('pin-load-overlay');
+        const overlayActive = overlay && !overlay.classList.contains('hidden');
+        _tfi.classList.toggle('visible', _fetching > 0 && !overlayActive);
         if (on && message) {
             const txt = document.getElementById('tfi-text');
             if (txt) txt.textContent = message;
@@ -959,22 +962,30 @@
     }
     function _writeCache() {
         if (!_USE_CACHE) return;
+        if (!_pinStore.size) return;   // nothing to cache yet
         const ts = Date.now();
         try {
-            localStorage.setItem(_CACHE_KEY, JSON.stringify({
+            const payload = JSON.stringify({
                 v: 3, ts, profileId: _PROFILE_ID,
                 lastUpdated: _lastKnownUpdated,
                 tiles: [..._fetchedTiles],
                 pins: Object.fromEntries(_pinStore),
-            }));
+            });
+            localStorage.setItem(_CACHE_KEY, payload);
             _updateCacheStatus(ts);
-        } catch { try { localStorage.removeItem(_CACHE_KEY); } catch {} }
+            console.log('[UL] Cache written — %d pins, %dKB', _pinStore.size, Math.round(payload.length / 1024));
+        } catch (err) {
+            console.warn('[UL] Cache write failed (%s) — pins will reload next visit', err && err.name || err);
+            try { localStorage.removeItem(_CACHE_KEY); } catch {}
+        }
     }
     function _scheduleCache() {
         if (!_USE_CACHE) return;
         if (_cacheTid) clearTimeout(_cacheTid);
         _cacheTid = setTimeout(_writeCache, 1500);
     }
+    // Flush the cache when the user navigates away so it's always saved
+    window.addEventListener('beforeunload', _writeCache);
     // Call after any pin mutation (add/delete) to force a fresh fetch next time.
     // Always clears any existing localStorage entry regardless of _USE_CACHE,
     // so disabling and re-enabling caching starts fresh.
