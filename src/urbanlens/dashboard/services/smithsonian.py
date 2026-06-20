@@ -75,18 +75,17 @@ class SmithsonianGateway(Gateway):
     def parse_response(self, data: dict) -> list[dict]:
         images = []
         for record in data.get("response", {}).get("rows", []):
+            media_list = (
+                record.get("content", {})
+                .get("descriptiveNonRepeating", {})
+                .get("online_media", {})
+                .get("media") or [{}]
+            )
+            first_media = media_list[0]
             image_data = {
                 "title": record.get("title"),
-                "url": record.get("content", {})
-                .get("descriptiveNonRepeating", {})
-                .get("online_media", {})
-                .get("media", [{}])[0]
-                .get("content"),
-                "thumbnail": record.get("content", {})
-                .get("descriptiveNonRepeating", {})
-                .get("online_media", {})
-                .get("media", [{}])[0]
-                .get("thumbnail"),
+                "url": first_media.get("content"),
+                "thumbnail": first_media.get("thumbnail"),
             }
             images.append(image_data)
         return images

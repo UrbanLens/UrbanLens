@@ -231,8 +231,8 @@ class SmithsonianGetImagesByCoordinatesTests(TestCase):
 
     def test_uses_google_geocoding_to_resolve_place_name(self):
         with (
-            patch("urbanlens.dashboard.services.smithsonian.GoogleGeocodingGateway") as MockGeocoder,
-            patch.object(self.gw, "get_data", return_value=self.expected_images),
+            patch("urbanlens.dashboard.services.google.geocoding.GoogleGeocodingGateway") as MockGeocoder,
+            patch.object(SmithsonianGateway, "get_data", return_value=self.expected_images),
         ):
             mock_geo_instance = MockGeocoder.return_value
             mock_geo_instance.get_place_name.return_value = "Old Factory, NY"
@@ -244,8 +244,8 @@ class SmithsonianGetImagesByCoordinatesTests(TestCase):
 
     def test_passes_resolved_place_name_to_get_data(self):
         with (
-            patch("urbanlens.dashboard.services.smithsonian.GoogleGeocodingGateway") as MockGeocoder,
-            patch.object(self.gw, "get_data", return_value=self.expected_images) as mock_get_data,
+            patch("urbanlens.dashboard.services.google.geocoding.GoogleGeocodingGateway") as MockGeocoder,
+            patch.object(SmithsonianGateway, "get_data", return_value=self.expected_images) as mock_get_data,
         ):
             mock_geo_instance = MockGeocoder.return_value
             mock_geo_instance.get_place_name.return_value = "Old Factory, NY"
@@ -256,8 +256,8 @@ class SmithsonianGetImagesByCoordinatesTests(TestCase):
 
     def test_when_place_name_is_none_passes_empty_string(self):
         with (
-            patch("urbanlens.dashboard.services.smithsonian.GoogleGeocodingGateway") as MockGeocoder,
-            patch.object(self.gw, "get_data", return_value=[]) as mock_get_data,
+            patch("urbanlens.dashboard.services.google.geocoding.GoogleGeocodingGateway") as MockGeocoder,
+            patch.object(SmithsonianGateway, "get_data", return_value=[]) as mock_get_data,
         ):
             mock_geo_instance = MockGeocoder.return_value
             mock_geo_instance.get_place_name.return_value = None
@@ -268,8 +268,8 @@ class SmithsonianGetImagesByCoordinatesTests(TestCase):
 
     def test_returns_list_from_get_data(self):
         with (
-            patch("urbanlens.dashboard.services.smithsonian.GoogleGeocodingGateway") as MockGeocoder,
-            patch.object(self.gw, "get_data", return_value=self.expected_images),
+            patch("urbanlens.dashboard.services.google.geocoding.GoogleGeocodingGateway") as MockGeocoder,
+            patch.object(SmithsonianGateway, "get_data", return_value=self.expected_images),
         ):
             mock_geo_instance = MockGeocoder.return_value
             mock_geo_instance.get_place_name.return_value = "Some Place"
@@ -280,9 +280,9 @@ class SmithsonianGetImagesByCoordinatesTests(TestCase):
 
     def test_geocoder_instantiated_with_google_api_key(self):
         with (
-            patch("urbanlens.dashboard.services.smithsonian.GoogleGeocodingGateway") as MockGeocoder,
+            patch("urbanlens.dashboard.services.google.geocoding.GoogleGeocodingGateway") as MockGeocoder,
             patch("urbanlens.dashboard.services.smithsonian.settings") as mock_settings,
-            patch.object(self.gw, "get_data", return_value=[]),
+            patch.object(SmithsonianGateway, "get_data", return_value=[]),
         ):
             mock_settings.google_maps_api_key = "google-key-xyz"
             mock_geo_instance = MockGeocoder.return_value

@@ -21,6 +21,7 @@ its own User/Profile and avoiding OneToOneField constraint violations.
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from django.contrib.auth.models import User
 from model_bakery import baker as _baker
@@ -52,7 +53,7 @@ user = Recipe(
 # latitude/longitude have a unique_together constraint; seq() ensures each
 # recipe call produces a distinct coordinate pair.
 
-location = Recipe(
+location: Recipe[Any] = Recipe(
     "dashboard.Location",
     name=seq("Location "),
     latitude=seq(Decimal("40.001"), increment_by=Decimal("0.001")),
@@ -61,12 +62,12 @@ location = Recipe(
 
 # ── Badges ────────────────────────────────────────────────────────────────────
 
-badge = Recipe("dashboard.Badge", name=seq("Badge "), kind="tag")
-tag_badge = Recipe("dashboard.Badge", name=seq("Tag "), kind="tag")
-category_badge = Recipe("dashboard.Badge", name=seq("Category "), kind="category")
-status_badge = Recipe("dashboard.Badge", name=seq("Status "), kind="status")
+badge: Recipe[Any] = Recipe("dashboard.Badge", name=seq("Badge "), kind="tag")
+tag_badge: Recipe[Any] = Recipe("dashboard.Badge", name=seq("Tag "), kind="tag")
+category_badge: Recipe[Any] = Recipe("dashboard.Badge", name=seq("Category "), kind="category")
+status_badge: Recipe[Any] = Recipe("dashboard.Badge", name=seq("Status "), kind="status")
 
-badge_customization = Recipe(
+badge_customization: Recipe[Any] = Recipe(
     "dashboard.BadgeCustomization",
     profile=_make_profile,
     badge=foreign_key("dashboard.badge"),
@@ -74,7 +75,7 @@ badge_customization = Recipe(
 
 # ── Campus ────────────────────────────────────────────────────────────────────
 
-campus = Recipe(
+campus: Recipe[Any] = Recipe(
     "dashboard.Campus",
     location=foreign_key("dashboard.location"),
     profile=_make_profile,
@@ -82,7 +83,7 @@ campus = Recipe(
 )
 
 # Admin campus: profile=None means this is the site-wide default for the location.
-admin_campus = Recipe(
+admin_campus: Recipe[Any] = Recipe(
     "dashboard.Campus",
     location=foreign_key("dashboard.location"),
     profile=None,
@@ -91,7 +92,7 @@ admin_campus = Recipe(
 
 # ── Pin ───────────────────────────────────────────────────────────────────────
 
-pin = Recipe(
+pin: Recipe[Any] = Recipe(
     "dashboard.Pin",
     profile=_make_profile,
     location=foreign_key("dashboard.location"),
@@ -100,14 +101,14 @@ pin = Recipe(
 )
 
 # A pin nested under another pin (detail/sub-pin).
-detail_pin = Recipe(
+detail_pin: Recipe[Any] = Recipe(
     "dashboard.Pin",
     profile=_make_profile,
     location=foreign_key("dashboard.location"),
     parent_pin=foreign_key("dashboard.pin"),
 )
 
-pin_note = Recipe(
+pin_note: Recipe[Any] = Recipe(
     "dashboard.PinNote",
     pin=foreign_key("dashboard.pin"),
     text="A test note.",
@@ -115,13 +116,13 @@ pin_note = Recipe(
 
 # ── Visits ────────────────────────────────────────────────────────────────────
 
-pin_visit = Recipe(
+pin_visit: Recipe[Any] = Recipe(
     "dashboard.PinVisit",
     pin=foreign_key("dashboard.pin"),
     source=VisitSource.MANUAL,
 )
 
-takeout_visit = Recipe(
+takeout_visit: Recipe[Any] = Recipe(
     "dashboard.PinVisit",
     pin=foreign_key("dashboard.pin"),
     source="takeout",
@@ -129,13 +130,13 @@ takeout_visit = Recipe(
 
 # ── Aliases ───────────────────────────────────────────────────────────────────
 
-pin_alias = Recipe(
+pin_alias: Recipe[Any] = Recipe(
     "dashboard.PinAlias",
     pin=foreign_key("dashboard.pin"),
     name=seq("alias_"),
 )
 
-location_alias = Recipe(
+location_alias: Recipe[Any] = Recipe(
     "dashboard.LocationAlias",
     location=foreign_key("dashboard.location"),
     name=seq("loc_alias_"),
@@ -144,14 +145,14 @@ location_alias = Recipe(
 
 # ── Images ────────────────────────────────────────────────────────────────────
 
-image = Recipe(
+image: Recipe[Any] = Recipe(
     "dashboard.Image",
     pin=foreign_key("dashboard.pin"),
 )
 
 # ── Markup ────────────────────────────────────────────────────────────────────
 
-pin_markup = Recipe(
+pin_markup: Recipe[Any] = Recipe(
     "dashboard.PinMarkup",
     parent_pin=foreign_key("dashboard.pin"),
     profile=_make_profile,
@@ -167,7 +168,7 @@ pin_markup = Recipe(
 # ── Comments & Reactions ──────────────────────────────────────────────────────
 
 # Pin comment — exactly one of (pin, location) must be set.
-comment = Recipe(
+comment: Recipe[Any] = Recipe(
     "dashboard.Comment",
     profile=_make_profile,
     pin=foreign_key("dashboard.pin"),
@@ -177,7 +178,7 @@ comment = Recipe(
 )
 
 # Location / wiki comment.
-location_comment = Recipe(
+location_comment: Recipe[Any] = Recipe(
     "dashboard.Comment",
     profile=_make_profile,
     pin=None,
@@ -186,7 +187,7 @@ location_comment = Recipe(
     text="A test location comment.",
 )
 
-reaction = Recipe(
+reaction: Recipe[Any] = Recipe(
     "dashboard.Reaction",
     profile=_make_profile,
     comment=foreign_key("dashboard.comment"),
@@ -194,7 +195,7 @@ reaction = Recipe(
     emoji="👍",
 )
 
-trip_comment_reaction = Recipe(
+trip_comment_reaction: Recipe[Any] = Recipe(
     "dashboard.Reaction",
     profile=_make_profile,
     comment=None,
@@ -204,7 +205,7 @@ trip_comment_reaction = Recipe(
 
 # ── Reviews ───────────────────────────────────────────────────────────────────
 
-review = Recipe(
+review: Recipe[Any] = Recipe(
     "dashboard.Review",
     user=foreign_key("dashboard.user"),
     pin=foreign_key("dashboard.pin"),
@@ -214,7 +215,7 @@ review = Recipe(
 
 # ── Friendships ───────────────────────────────────────────────────────────────
 
-friendship = Recipe(
+friendship: Recipe[Any] = Recipe(
     "dashboard.Friendship",
     from_profile=_make_profile,
     to_profile=_make_profile,
@@ -223,7 +224,7 @@ friendship = Recipe(
     permissions=Permission.VIEW_PROFILE,
 )
 
-accepted_friendship = Recipe(
+accepted_friendship: Recipe[Any] = Recipe(
     "dashboard.Friendship",
     from_profile=_make_profile,
     to_profile=_make_profile,
@@ -234,27 +235,27 @@ accepted_friendship = Recipe(
 
 # ── Trips ────────────────────────────────────────────────────────────────────
 
-trip = Recipe(
+trip: Recipe[Any] = Recipe(
     "dashboard.Trip",
     name=seq("Trip "),
     creator=_make_profile,
 )
 
-trip_membership = Recipe(
+trip_membership: Recipe[Any] = Recipe(
     "dashboard.TripMembership",
     trip=foreign_key("dashboard.trip"),
     profile=_make_profile,
     is_organizer=False,
 )
 
-organizer_membership = Recipe(
+organizer_membership: Recipe[Any] = Recipe(
     "dashboard.TripMembership",
     trip=foreign_key("dashboard.trip"),
     profile=_make_profile,
     is_organizer=True,
 )
 
-trip_activity = Recipe(
+trip_activity: Recipe[Any] = Recipe(
     "dashboard.TripActivity",
     trip=foreign_key("dashboard.trip"),
     title=seq("Activity "),
@@ -265,7 +266,7 @@ trip_activity = Recipe(
     pin=None,
 )
 
-trip_comment = Recipe(
+trip_comment: Recipe[Any] = Recipe(
     "dashboard.TripComment",
     trip=foreign_key("dashboard.trip"),
     author=_make_profile,
@@ -273,7 +274,7 @@ trip_comment = Recipe(
     parent=None,
 )
 
-trip_activity_vote = Recipe(
+trip_activity_vote: Recipe[Any] = Recipe(
     "dashboard.TripActivityVote",
     activity=foreign_key("dashboard.trip_activity"),
     profile=_make_profile,
@@ -282,7 +283,7 @@ trip_activity_vote = Recipe(
 
 # ── Notifications ─────────────────────────────────────────────────────────────
 
-notification_log = Recipe(
+notification_log: Recipe[Any] = Recipe(
     "dashboard.NotificationLog",
     profile=_make_profile,
     status=Status.UNREAD,
@@ -297,7 +298,7 @@ notification_log = Recipe(
 # Note: a NotificationPreference may be auto-created by a post_save signal
 # when a Profile is created.  In that case, access it via profile.notification_preferences
 # rather than using this recipe directly.
-notification_preference = Recipe(
+notification_preference: Recipe[Any] = Recipe(
     "dashboard.NotificationPreference",
     profile=_make_profile,
     trip_updated=DeliveryPreference.SITE,
@@ -312,7 +313,7 @@ notification_preference = Recipe(
 
 # ── Social Links ──────────────────────────────────────────────────────────────
 
-social_link = Recipe(
+social_link: Recipe[Any] = Recipe(
     "dashboard.SocialLink",
     profile=_make_profile,
     platform=seq("platform_"),
@@ -321,7 +322,7 @@ social_link = Recipe(
 
 # ── Location Edit History ─────────────────────────────────────────────────────
 
-location_edit = Recipe(
+location_edit: Recipe[Any] = Recipe(
     "dashboard.LocationEdit",
     location=foreign_key("dashboard.location"),
     editor=_make_profile,
@@ -332,7 +333,7 @@ location_edit = Recipe(
 
 # ── Authentication ────────────────────────────────────────────────────────────
 
-email_verification = Recipe(
+email_verification: Recipe[Any] = Recipe(
     "dashboard.EmailVerification",
     user=foreign_key("dashboard.user"),
     verified_at=None,
@@ -340,7 +341,7 @@ email_verification = Recipe(
 
 # ── Geocoding Cache ───────────────────────────────────────────────────────────
 
-geocoded_location = Recipe(
+geocoded_location: Recipe[Any] = Recipe(
     "dashboard.GeocodedLocation",
     latitude=Decimal("40.000"),
     longitude=Decimal("-74.000"),

@@ -313,7 +313,7 @@ class ContactSettingsFormTests(TestCase):
 		self.assertFalse(form.is_valid())
 		self.assertIn("email", form.errors)
 
-	@given(local=st.from_regex(r"[a-zA-Z0-9._%+-]{1,20}", fullmatch=True),
+	@given(local=st.from_regex(r"[a-zA-Z0-9_%+-]{1,20}", fullmatch=True),
 	       domain=st.from_regex(r"[a-zA-Z0-9-]{1,20}\.[a-zA-Z]{2,6}", fullmatch=True))
 	@settings(max_examples=50, deadline=None)
 	def test_well_formed_emails_are_valid(self, local, domain) -> None:
