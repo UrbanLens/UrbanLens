@@ -45,8 +45,8 @@ class OrganizeIndexView(LoginRequiredMixin, View):
         )
         categories = (
             Badge.objects.categories()
+            .for_profile(profile)
             .ordered()
-            .with_customizations_for(profile)
             .with_pin_counts()
         )
         statuses = (
@@ -62,7 +62,6 @@ class OrganizeIndexView(LoginRequiredMixin, View):
             .with_pin_counts()
         )
 
-        can_edit_global = request.user.has_perm("dashboard.edit_global_badge")
         return render(
             request,
             "dashboard/pages/organize/index.html",
@@ -73,7 +72,6 @@ class OrganizeIndexView(LoginRequiredMixin, View):
                 "statuses": statuses,
                 "priority_items": priority_items,
                 "active_tab": tab,
-                "can_edit_global": can_edit_global,
             },
         )
 

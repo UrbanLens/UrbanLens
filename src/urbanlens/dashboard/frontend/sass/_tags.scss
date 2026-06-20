@@ -1073,7 +1073,7 @@
 
 .tag-card--selected {
     border-color: $primary-color !important;
-    background: #eff6ff !important;
+    background: rgba(59, 130, 246, .08) !important;
 
     .cat-select-check {
         background: $primary-color;

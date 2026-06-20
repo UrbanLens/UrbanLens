@@ -1,6 +1,7 @@
 """Category controller - CRUD, hierarchy management, and pin/location membership.
 
-Categories are Badge rows with kind='category'.
+Categories are Badge rows with kind='category'. They are user-owned — every
+category belongs to a specific profile (no global/shared categories).
 """
 
 from __future__ import annotations
@@ -26,19 +27,14 @@ _CTX_BASE = {
 }
 
 
-def _all_categories(profile=None):
-    """Return all category-kind tags ordered for display with count annotations."""
-    qs = Badge.objects.categories().ordered().with_pin_counts()
-    if profile is not None:
-        qs = qs.with_customizations_for(profile)
-    return qs
+def _all_categories(profile):
+    """Return categories belonging to *profile*, ordered for display with count annotations."""
+    return Badge.objects.categories().for_profile(profile).ordered().with_pin_counts()
 
 
-_PERM = "dashboard.edit_global_badge"
-
-
-def _rows_ctx(profile=None, can_edit_global: bool = False, extra: dict | None = None) -> dict:
-    ctx = {**_CTX_BASE, "categories": _all_categories(profile), "can_edit_global": can_edit_global}
+def _rows_ctx(profile, extra: dict | None = None) -> dict:
+    """Build template context for category rows partial."""
+    ctx = {**_CTX_BASE, "categories": _all_categories(profile)}
     if extra:
         ctx.update(extra)
     return ctx
@@ -56,11 +52,11 @@ class CategoryIndexView(LoginRequiredMixin, View):
         Returns:
             Rendered categories/index.html.
         """
-        return render(request, "dashboard/pages/categories/index.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
+        return render(request, "dashboard/pages/categories/index.html", _rows_ctx(request.user.profile))
 
 
 class CategoryCreateView(LoginRequiredMixin, View):
-    """Create a new global category (HTMX)."""
+    """Create a new user-owned category (HTMX)."""
 
     def post(self, request, *args, **kwargs):
         """Create a category and return the refreshed rows partial.
@@ -71,9 +67,7 @@ class CategoryCreateView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial.
         """
-        if not request.user.has_perm(_PERM):
-            return HttpResponseForbidden()
-
+        profile = request.user.profile
         name = request.POST.get("name", "").strip()
         if not name:
             return HttpResponse("Name is required.", status=400)
@@ -86,7 +80,7 @@ class CategoryCreateView(LoginRequiredMixin, View):
 
         category = Badge.objects.create(
             kind="category",
-            profile=None,
+            profile=profile,
             name=name,
             description=description,
             icon=icon,
@@ -94,14 +88,14 @@ class CategoryCreateView(LoginRequiredMixin, View):
             order=order,
         )
         if parent_ids:
-            valid_parents = Badge.objects.categories().filter(id__in=parent_ids)
+            valid_parents = Badge.objects.categories().for_profile(profile).filter(id__in=parent_ids)
             category.parents.set(valid_parents)
 
-        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM), {"new_category_id": category.id}))
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile, {"new_category_id": category.id}))
 
 
 class CategoryEditView(LoginRequiredMixin, View):
-    """Edit an existing category (HTMX)."""
+    """Edit an existing user-owned category (HTMX)."""
 
     def get(self, request, cat_id, *args, **kwargs):
         """Return the edit form partial.
@@ -113,10 +107,9 @@ class CategoryEditView(LoginRequiredMixin, View):
         Returns:
             Rendered category_edit_form.html partial.
         """
-        if not request.user.has_perm(_PERM):
-            return HttpResponseForbidden()
-        category = get_object_or_404(Badge, id=cat_id, kind="category")
-        available_parents = Badge.objects.categories().ordered().exclude(id=cat_id)
+        profile = request.user.profile
+        category = get_object_or_404(Badge, id=cat_id, kind="category", profile=profile)
+        available_parents = Badge.objects.categories().for_profile(profile).ordered().exclude(id=cat_id)
         parent_ids = set(category.parents.values_list("id", flat=True))
         return render(
             request,
@@ -139,9 +132,8 @@ class CategoryEditView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial (X-Kind-Changed header set on conversion).
         """
-        if not request.user.has_perm(_PERM):
-            return HttpResponseForbidden()
-        category = get_object_or_404(Badge, id=cat_id, kind="category")
+        profile = request.user.profile
+        category = get_object_or_404(Badge, id=cat_id, kind="category", profile=profile)
 
         name = request.POST.get("name", "").strip()
         if not name:
@@ -158,8 +150,6 @@ class CategoryEditView(LoginRequiredMixin, View):
         category.color = request.POST.get("color") or None
         category.order = int(request.POST.get("order", category.order))
 
-        profile = request.user.profile
-
         if kind_changed and new_kind == "tag":
             # Migrate category → tag: move pin.categories → pin.tags and
             # location.categories → location.tags.
@@ -170,7 +160,6 @@ class CategoryEditView(LoginRequiredMixin, View):
                 loc.tags.add(category)
                 loc.categories.remove(category)
             category.kind = "tag"
-            category.profile = profile
 
         elif kind_changed and new_kind == "status":
             # Migrate category → status: remove from pin.categories, add to pin.statuses.
@@ -179,29 +168,27 @@ class CategoryEditView(LoginRequiredMixin, View):
                 pin.statuses.add(category)
                 pin.categories.remove(category)
             category.kind = "status"
-            category.profile = profile
 
         category.save()
 
         if kind_changed:
-            # Parent IDs from the form belong to the old kind — clear and let the user re-set them.
             category.parents.clear()
         else:
             parent_ids = request.POST.getlist("parent_ids")
             if parent_ids:
-                valid_parents = Badge.objects.categories().filter(id__in=parent_ids).exclude(id=cat_id)
+                valid_parents = Badge.objects.categories().for_profile(profile).filter(id__in=parent_ids).exclude(id=cat_id)
                 category.parents.set(valid_parents)
             else:
                 category.parents.clear()
 
-        response = render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
+        response = render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
         if kind_changed:
             response["X-Kind-Changed"] = new_kind
         return response
 
 
 class CategoryDeleteView(LoginRequiredMixin, View):
-    """Delete a category (HTMX). Pins and locations keep their other categories."""
+    """Delete a user-owned category (HTMX). Pins and locations keep their other categories."""
 
     def post(self, request, cat_id, *args, **kwargs):
         """Delete the category and return the refreshed rows partial.
@@ -213,11 +200,10 @@ class CategoryDeleteView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial.
         """
-        if not request.user.has_perm(_PERM):
-            return HttpResponseForbidden()
-        category = get_object_or_404(Badge, id=cat_id, kind="category")
+        profile = request.user.profile
+        category = get_object_or_404(Badge, id=cat_id, kind="category", profile=profile)
         category.delete()
-        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
 
 
 class CategoryReorderView(LoginRequiredMixin, View):
@@ -238,9 +224,10 @@ class CategoryReorderView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError, AttributeError):
             return JsonResponse({"error": "Invalid data"}, status=400)
 
+        profile = request.user.profile
         total = len(cat_ids)
         for i, cat_id in enumerate(cat_ids):
-            Badge.objects.filter(id=cat_id, kind="category").update(order=total - i)
+            Badge.objects.filter(id=cat_id, kind="category", profile=profile).update(order=total - i)
 
         return JsonResponse({"ok": True})
 
@@ -257,11 +244,11 @@ class CategoryRowsView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial.
         """
-        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile))
 
 
 class CategoryBulkDeleteView(LoginRequiredMixin, View):
-    """Bulk-delete categories (JSON POST). Pins and locations keep their other categories."""
+    """Bulk-delete user-owned categories (JSON POST). Pins and locations keep their other categories."""
 
     def post(self, request, *args, **kwargs):
         """Delete the specified categories and return the refreshed rows partial.
@@ -272,8 +259,6 @@ class CategoryBulkDeleteView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial.
         """
-        if not request.user.has_perm(_PERM):
-            return HttpResponseForbidden()
         try:
             data = json.loads(request.body)
             ids = [int(x) for x in data.get("ids", [])]
@@ -283,12 +268,13 @@ class CategoryBulkDeleteView(LoginRequiredMixin, View):
         if not ids:
             return HttpResponse("No categories specified.", status=400)
 
-        Badge.objects.filter(id__in=ids, kind="category").delete()
-        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
+        profile = request.user.profile
+        Badge.objects.filter(id__in=ids, kind="category", profile=profile).delete()
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
 
 
 class CategoryBulkEditView(LoginRequiredMixin, View):
-    """Bulk-edit icon, color, and/or parents for multiple categories (JSON POST).
+    """Bulk-edit icon, color, and/or parents for multiple user-owned categories (JSON POST).
 
     Key-absent = no change; null/empty string = clear; string value = set.
     add_parent_ids is additive — existing parents are never removed.
@@ -303,8 +289,6 @@ class CategoryBulkEditView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial.
         """
-        if not request.user.has_perm(_PERM):
-            return HttpResponseForbidden()
         try:
             data = json.loads(request.body)
             ids = [int(x) for x in data.get("ids", [])]
@@ -314,13 +298,14 @@ class CategoryBulkEditView(LoginRequiredMixin, View):
         if not ids:
             return HttpResponse("No categories specified.", status=400)
 
+        profile = request.user.profile
         has_icon = "icon" in data
         has_color = "color" in data
         icon = data.get("icon") or None
         color = data.get("color") or None
         add_parent_ids = [int(x) for x in data.get("add_parent_ids", [])]
 
-        categories = list(Badge.objects.filter(id__in=ids, kind="category"))
+        categories = list(Badge.objects.filter(id__in=ids, kind="category", profile=profile))
         for cat in categories:
             update_fields = []
             if has_icon:
@@ -333,15 +318,15 @@ class CategoryBulkEditView(LoginRequiredMixin, View):
                 cat.save(update_fields=update_fields)
 
         if add_parent_ids:
-            valid_parents = list(Badge.objects.categories().filter(id__in=add_parent_ids))
+            valid_parents = list(Badge.objects.categories().for_profile(profile).filter(id__in=add_parent_ids))
             for cat in categories:
                 cat.parents.add(*[p for p in valid_parents if p.id != cat.id])
 
-        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
 
 
 class CategoryBulkConvertView(LoginRequiredMixin, View):
-    """Convert multiple categories to user-owned tags (JSON POST)."""
+    """Convert multiple user-owned categories to tags (JSON POST)."""
 
     def post(self, request, *args, **kwargs):
         """Convert categories to tags, migrating all pin and location memberships.
@@ -352,8 +337,6 @@ class CategoryBulkConvertView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial (converted categories will be absent).
         """
-        if not request.user.has_perm(_PERM):
-            return HttpResponseForbidden()
         try:
             data = json.loads(request.body)
             ids = [int(x) for x in data.get("ids", [])]
@@ -364,7 +347,7 @@ class CategoryBulkConvertView(LoginRequiredMixin, View):
             return HttpResponse("No categories specified.", status=400)
 
         profile = request.user.profile
-        cats_to_convert = list(Badge.objects.filter(id__in=ids, kind="category"))
+        cats_to_convert = list(Badge.objects.filter(id__in=ids, kind="category", profile=profile))
         for category in cats_to_convert:
             for pin in Pin.objects.filter(categories=category):
                 pin.tags.add(category)
@@ -373,15 +356,14 @@ class CategoryBulkConvertView(LoginRequiredMixin, View):
                 loc.tags.add(category)
                 loc.categories.remove(category)
             category.kind = "tag"
-            category.profile = profile
             category.parents.clear()
             category.save()
 
-        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
 
 
 class CategoryBulkConvertToStatusView(LoginRequiredMixin, View):
-    """Convert multiple categories to personal status badges (JSON POST)."""
+    """Convert multiple user-owned categories to personal status badges (JSON POST)."""
 
     def post(self, request, *args, **kwargs):
         """Convert categories to statuses, migrating pin memberships.
@@ -392,8 +374,6 @@ class CategoryBulkConvertToStatusView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial (converted categories will be absent).
         """
-        if not request.user.has_perm(_PERM):
-            return HttpResponseForbidden()
         try:
             data = json.loads(request.body)
             ids = [int(x) for x in data.get("ids", [])]
@@ -404,21 +384,20 @@ class CategoryBulkConvertToStatusView(LoginRequiredMixin, View):
             return HttpResponse("No categories specified.", status=400)
 
         profile = request.user.profile
-        cats_to_convert = list(Badge.objects.filter(id__in=ids, kind="category"))
+        cats_to_convert = list(Badge.objects.filter(id__in=ids, kind="category", profile=profile))
         for category in cats_to_convert:
             for pin in Pin.objects.filter(categories=category, profile=profile):
                 pin.statuses.add(category)
                 pin.categories.remove(category)
             category.kind = "status"
-            category.profile = profile
             category.parents.clear()
             category.save()
 
-        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
 
 
 class CategoryMultiMergeView(LoginRequiredMixin, View):
-    """Merge multiple categories into a single target (JSON POST)."""
+    """Merge multiple user-owned categories into a single target (JSON POST)."""
 
     def post(self, request, *args, **kwargs):
         """Merge source categories into the target, then delete sources.
@@ -429,8 +408,6 @@ class CategoryMultiMergeView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial on success, or an error response.
         """
-        if not request.user.has_perm(_PERM):
-            return HttpResponseForbidden()
         try:
             data = json.loads(request.body)
             target_id = int(data.get("target_id", 0))
@@ -443,8 +420,9 @@ class CategoryMultiMergeView(LoginRequiredMixin, View):
         if not source_ids:
             return HttpResponse("At least one source_id is required.", status=400)
 
-        target = get_object_or_404(Badge, id=target_id, kind="category")
-        sources = Badge.objects.filter(id__in=source_ids, kind="category").exclude(id=target_id)
+        profile = request.user.profile
+        target = get_object_or_404(Badge, id=target_id, kind="category", profile=profile)
+        sources = Badge.objects.filter(id__in=source_ids, kind="category", profile=profile).exclude(id=target_id)
         if not sources.exists():
             return HttpResponse("No valid source categories.", status=400)
 
@@ -453,7 +431,7 @@ class CategoryMultiMergeView(LoginRequiredMixin, View):
             target.categorized_locations.add(*source.categorized_locations.all())
             source.delete()
 
-        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
 
 
 class CategoryMergeView(LoginRequiredMixin, View):
@@ -469,10 +447,9 @@ class CategoryMergeView(LoginRequiredMixin, View):
         Returns:
             Rendered category_merge_form.html partial.
         """
-        if not request.user.has_perm(_PERM):
-            return HttpResponseForbidden()
-        category = get_object_or_404(Badge, id=cat_id, kind="category")
-        candidates = Badge.objects.categories().ordered().exclude(id=cat_id)
+        profile = request.user.profile
+        category = get_object_or_404(Badge, id=cat_id, kind="category", profile=profile)
+        candidates = Badge.objects.categories().for_profile(profile).ordered().exclude(id=cat_id)
         return render(
             request,
             "dashboard/partials/category_merge_form.html",
@@ -492,15 +469,14 @@ class CategoryMergeView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial.
         """
-        if not request.user.has_perm(_PERM):
-            return HttpResponseForbidden()
-        source = get_object_or_404(Badge, id=cat_id, kind="category")
+        profile = request.user.profile
+        source = get_object_or_404(Badge, id=cat_id, kind="category", profile=profile)
 
         target_id = request.POST.get("target_category_id", "").strip()
         if not target_id:
             return HttpResponse("Target category is required.", status=400)
 
-        target = get_object_or_404(Badge, id=target_id, kind="category")
+        target = get_object_or_404(Badge, id=target_id, kind="category", profile=profile)
         if target.id == source.id:
             return HttpResponse("Cannot merge a category into itself.", status=400)
 
@@ -508,12 +484,12 @@ class CategoryMergeView(LoginRequiredMixin, View):
         target.categorized_locations.add(*source.categorized_locations.all())
         source.delete()
 
-        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
 
 
-def _all_badges():
-    """Return all tag/category/status badges ordered for the badge picker."""
-    return Badge.objects.filter(kind__in=["tag", "category", "status"]).ordered()
+def _all_badges(profile):
+    """Return all tag/category/status badges visible to *profile*, ordered for the badge picker."""
+    return Badge.objects.visible_to(profile).ordered()
 
 
 def _pin_member_ids(pin) -> set[int]:
@@ -570,12 +546,13 @@ class CategoryPinMembershipView(LoginRequiredMixin, View):
             Rendered category_panel.html partial.
         """
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        profile = request.user.profile
         return render(
             request,
             "dashboard/partials/category_panel.html",
             {
                 "pin": pin,
-                "all_categories": _all_badges(),
+                "all_categories": _all_badges(profile),
                 "member_ids": _pin_member_ids(pin),
             },
         )
@@ -591,6 +568,7 @@ class CategoryPinMembershipView(LoginRequiredMixin, View):
             Rendered category_panel.html partial.
         """
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        profile = request.user.profile
         badge_id = request.POST.get("category_id")
         action = request.POST.get("action")
         badge = get_object_or_404(Badge, id=badge_id, kind__in=["tag", "category", "status"])
@@ -600,7 +578,7 @@ class CategoryPinMembershipView(LoginRequiredMixin, View):
             "dashboard/partials/category_panel.html",
             {
                 "pin": pin,
-                "all_categories": _all_badges(),
+                "all_categories": _all_badges(profile),
                 "member_ids": _pin_member_ids(pin),
             },
         )
@@ -620,12 +598,13 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
             Rendered category_location_panel.html partial.
         """
         location = get_object_or_404(Location, uuid=location_uuid)
+        profile = request.user.profile
         return render(
             request,
             "dashboard/partials/category_location_panel.html",
             {
                 "location": location,
-                "all_categories": _all_badges(),
+                "all_categories": _all_badges(profile),
                 "member_ids": _location_member_ids(location),
             },
         )
@@ -641,6 +620,7 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
             Rendered category_location_panel.html partial.
         """
         location = get_object_or_404(Location, uuid=location_uuid)
+        profile = request.user.profile
         badge_id = request.POST.get("category_id")
         action = request.POST.get("action")
         badge = get_object_or_404(Badge, id=badge_id, kind__in=["tag", "category", "status"])
@@ -650,37 +630,46 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
             "dashboard/partials/category_location_panel.html",
             {
                 "location": location,
-                "all_categories": _all_badges(),
+                "all_categories": _all_badges(profile),
                 "member_ids": _location_member_ids(location),
             },
         )
 
 
 class CategoryCustomizeView(LoginRequiredMixin, View):
-    """Show and save per-user display overrides for a global category."""
+    """Redirect customize requests to the standard edit view.
+
+    CategoryCustomize was used for per-user overrides of global categories.
+    Now that all categories are user-owned, edit directly.
+    """
 
     def get(self, request, cat_id, *args, **kwargs):
-        """Render the customization form partial.
+        """Return the standard edit form partial.
 
         Args:
             request: The HTTP request.
             cat_id: The category PK.
 
         Returns:
-            Rendered category_customize_form.html partial.
+            Rendered category_edit_form.html partial.
         """
-        category = get_object_or_404(Badge, id=cat_id, kind="category")
         profile = request.user.profile
-        from urbanlens.dashboard.models.badges.customization import BadgeCustomization
-        customization = BadgeCustomization.objects.filter(profile=profile, badge=category).first()
-        return render(request, "dashboard/partials/category_customize_form.html", {
-            **_CTX_BASE,
-            "category": category,
-            "customization": customization,
-        })
+        category = get_object_or_404(Badge, id=cat_id, kind="category", profile=profile)
+        available_parents = Badge.objects.categories().for_profile(profile).ordered().exclude(id=cat_id)
+        parent_ids = set(category.parents.values_list("id", flat=True))
+        return render(
+            request,
+            "dashboard/partials/category_edit_form.html",
+            {
+                **_CTX_BASE,
+                "category": category,
+                "available_parents": available_parents,
+                "parent_ids": parent_ids,
+            },
+        )
 
     def post(self, request, cat_id, *args, **kwargs):
-        """Save or clear the customization and return the refreshed rows partial.
+        """Delegate to CategoryEditView.post.
 
         Args:
             request: The HTTP request with POST data.
@@ -689,24 +678,4 @@ class CategoryCustomizeView(LoginRequiredMixin, View):
         Returns:
             Rendered category_rows.html partial.
         """
-        category = get_object_or_404(Badge, id=cat_id, kind="category")
-        profile = request.user.profile
-
-        from urbanlens.dashboard.models.badges.customization import BadgeCustomization
-
-        if request.POST.get("action") == "clear":
-            BadgeCustomization.objects.filter(profile=profile, badge=category).delete()
-        else:
-            name = request.POST.get("name", "").strip() or None
-            icon = request.POST.get("icon") or None
-            color = request.POST.get("color") or None
-            if name is None and icon is None and color is None:
-                BadgeCustomization.objects.filter(profile=profile, badge=category).delete()
-            else:
-                BadgeCustomization.objects.update_or_create(
-                    profile=profile,
-                    badge=category,
-                    defaults={"name": name, "icon": icon, "color": color},
-                )
-
-        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
+        return CategoryEditView().post(request, cat_id)

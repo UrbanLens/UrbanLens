@@ -21,7 +21,7 @@
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'status' %} active{% endif %}"
                 role="tab" data-tab="status" aria-controls="panel-status">
-            <i class="material-icons">flag_circle</i> Status
+            <i class="material-icons">flag_circle</i> Statuses
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
                 role="tab" data-tab="priority" aria-controls="panel-priority">
@@ -173,7 +173,7 @@
         <div class="tag-header">
             <div>
                 <h2 class="tag-title">Categories</h2>
-                <p class="tag-subtitle">Global labels shared by all users — organize pins and locations by type.</p>
+                <p class="tag-subtitle">Your personal categories — organize pins and locations by type.</p>
             </div>
             <div class="tag-header-right">
                 <div class="tag-view-toggle" role="group" aria-label="Category view mode">
@@ -187,22 +187,18 @@
                         <i class="material-icons">account_tree</i>
                     </button>
                 </div>
-                {% if can_edit_global %}
                 <div class="tag-view-toggle--sel">
                     <button type="button" class="tag-view-btn--sel" id="cat-sel-all" title="Select all categories">
                         <i class="material-icons">checklist</i>
                     </button>
                 </div>
-                {% endif %}
                 <button type="button" class="btn-ghost btn-sm" id="cat-filter-btn" title="Filter categories" onclick="toggleOrgFilter('cat')">
                     <i class="material-icons">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
                 </button>
-                {% if can_edit_global %}
                 <button class="btn-primary" id="new-category-btn" type="button" title="New Category" style="padding:.4rem .55rem;min-width:0;">
                     <i class="material-icons" style="font-size:1.2rem;">add</i>
                 </button>
-                {% endif %}
             </div>
         </div>
 
@@ -225,7 +221,6 @@
             </div>
         </div>
 
-        {% if can_edit_global %}
         <div class="tag-create-card" id="new-category-form" style="display:none;">
             <form hx-post="{% url 'category.create' %}" hx-target="#category-rows" hx-swap="innerHTML"
                   class="tag-form"
@@ -289,7 +284,6 @@
                 </div>
             </form>
         </div>
-        {% endif %}{# can_edit_global #}
 
         <div id="category-rows">
             {% include 'dashboard/partials/category_rows.html' %}
@@ -530,7 +524,7 @@
                 <button type="button" class="org-convert-btn" id="tag-bulk-convert-to-cat" onclick="_setTagBulkConvert('category')">
                     <i class="material-icons">category</i>
                     <span class="org-convert-btn-label">To Categories</span>
-                    <span class="org-convert-btn-desc">Global labels shared by all users</span>
+                    <span class="org-convert-btn-desc">Personal labels for organizing by type</span>
                 </button>
                 <button type="button" class="org-convert-btn" id="tag-bulk-convert-to-status" onclick="_setTagBulkConvert('status')">
                     <i class="material-icons">flag_circle</i>
@@ -1921,26 +1915,38 @@ window._orgBulkSync = function(n, opts) {
         return { id: id, name: c.dataset.statusName || '', color: c.dataset.statusColor || '', icon: c.dataset.statusIcon || '', pinCount: c.dataset.statusPinCount || '0' };
     }
 
-    function _statusMiniCardHtml(d, isTarget) {
+    function _statusMiniCardHtml(d, isTarget, hideSwap) {
         var cs = d.color ? 'background:' + d.color + '22;border-color:' + d.color + '44;' : '';
         var ics = d.color ? 'color:' + d.color : '';
         var ih = d.icon
             ? (/^[a-z_]+$/.test(d.icon) ? '<i class="material-icons" style="' + ics + '">' + _escHtml(d.icon) + '</i>' : '<span class="tag-icon-emoji">' + _escHtml(d.icon) + '</span>')
             : '<i class="material-icons tag-icon-empty">flag</i>';
-        var sb = isTarget ? '' : '<button type="button" class="cat-merge-swap-btn" data-swap-id="' + d.id + '" title="Make this the surviving status"><i class="material-icons">swap_vert</i></button>';
+        var sb = (isTarget || hideSwap) ? '' : '<button type="button" class="cat-merge-swap-btn" data-swap-id="' + d.id + '" title="Make this the surviving status"><i class="material-icons">swap_vert</i></button>';
         return '<div class="cat-merge-mini-card' + (isTarget ? ' cat-merge-mini-card--target' : '') + '" data-merge-id="' + d.id + '">'
             + '<div class="tag-card-icon cat-merge-mini-icon" style="' + cs + '">' + ih + '</div>'
             + '<div class="cat-merge-mini-info"><div class="cat-merge-mini-name">' + _escHtml(d.name) + '</div>'
             + '<div class="cat-merge-mini-meta">' + d.pinCount + ' pins</div></div>' + sb + '</div>';
     }
 
+    function _isStatusProtected(id) {
+        var c = document.querySelector('[data-status-id="' + id + '"]');
+        return c && (c.dataset.statusProtected === 'true' || c.dataset.statusProtected === '1');
+    }
+
     function _renderStatusMergeDialog() {
         var ids = Array.from(_statusSelected);
-        if (!_statusMergeTargetId || !_statusSelected.has(_statusMergeTargetId)) _statusMergeTargetId = ids[0];
+        // A protected badge must always be the merge target, not a source.
+        var protectedId = ids.find(_isStatusProtected);
+        if (protectedId) {
+            _statusMergeTargetId = protectedId;
+        } else if (!_statusMergeTargetId || !_statusSelected.has(_statusMergeTargetId)) {
+            _statusMergeTargetId = ids[0];
+        }
+        var targetIsProtected = _isStatusProtected(_statusMergeTargetId);
         var src = ids.filter(function(id) { return id !== _statusMergeTargetId; });
         document.getElementById('status-merge-dialog-title').textContent = 'Merge ' + ids.length + ' Statuses';
-        document.getElementById('status-merge-target-card').innerHTML = _statusMiniCardHtml(_getStatusCardData(_statusMergeTargetId), true);
-        document.getElementById('status-merge-sources-list').innerHTML = src.map(function(id) { return _statusMiniCardHtml(_getStatusCardData(id), false); }).join('');
+        document.getElementById('status-merge-target-card').innerHTML = _statusMiniCardHtml(_getStatusCardData(_statusMergeTargetId), true, false);
+        document.getElementById('status-merge-sources-list').innerHTML = src.map(function(id) { return _statusMiniCardHtml(_getStatusCardData(id), false, targetIsProtected); }).join('');
         var cb = document.getElementById('status-merge-confirm-btn');
         cb.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge into ' + _escHtml(_getStatusCardData(_statusMergeTargetId).name);
         cb.disabled = false;
@@ -1979,8 +1985,7 @@ window._orgBulkSync = function(n, opts) {
         var cards = _statusCards();
         var idx = cards.indexOf(card);
         var id = parseInt(card.dataset.statusId, 10);
-        var isProtected = card.dataset.statusProtected === 'true' || card.dataset.statusProtected === '1';
-        if (isProtected) return;
+        var isProtected = _isStatusProtected(id);
 
         if (e.shiftKey && _lastStatusClickIdx >= 0) {
             var lo = Math.min(idx, _lastStatusClickIdx);
@@ -1988,9 +1993,10 @@ window._orgBulkSync = function(n, opts) {
             var targetState = !_statusSelected.has(id);
             for (var i = lo; i <= hi; i++) {
                 var cid = parseInt(cards[i].dataset.statusId, 10);
-                var cprot = cards[i].dataset.statusProtected === 'true' || cards[i].dataset.statusProtected === '1';
-                if (!cprot) { if (targetState) _statusSelected.add(cid); else _statusSelected.delete(cid); }
+                // Protected badges are not included in shift-range selection
+                if (!_isStatusProtected(cid)) { if (targetState) _statusSelected.add(cid); else _statusSelected.delete(cid); }
             }
+            if (isProtected) { if (targetState) _statusSelected.add(id); else _statusSelected.delete(id); }
         } else {
             if (_statusSelected.has(id)) _statusSelected.delete(id);
             else _statusSelected.add(id);

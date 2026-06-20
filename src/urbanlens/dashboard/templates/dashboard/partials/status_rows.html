@@ -9,11 +9,10 @@
      data-status-protected="{{ badge.is_protected|yesno:'true,false' }}">
 
     <div class="tag-card-view" id="status-view-{{ badge.id }}">
-        <label class="cat-select-wrap" title="Select">
-            <input type="checkbox" class="status-select-cb" data-status-id="{{ badge.id }}"
-                   {% if badge.is_protected %}disabled title="The Visited status cannot be selected for bulk actions"{% endif %}>
+        <div class="cat-select-wrap" title="{% if badge.is_protected %}Select (will be forced as merge target){% else %}Select{% endif %}">
+            <input type="checkbox" class="status-select-cb" data-status-id="{{ badge.id }}">
             <span class="cat-select-check"></span>
-        </label>
+        </div>
 
         <div class="tag-card-icon" {% if badge.color %}style="background:{{ badge.color }}22; border-color:{{ badge.color }}44;"{% endif %}>
             {% if badge.icon %}

@@ -182,7 +182,7 @@ class StatusDeleteView(LoginRequiredMixin, View):
         if badge.profile is None or badge.profile.user != request.user:
             return HttpResponseForbidden()
         if badge.is_protected:
-            return HttpResponse("The 'Visited' status cannot be deleted.", status=403)
+            return HttpResponse(f"'{badge.name}' is a protected status and cannot be deleted.", status=403)
         badge.delete()
         return render(request, "dashboard/partials/status_rows.html", _rows_ctx(request.user.profile))
 
