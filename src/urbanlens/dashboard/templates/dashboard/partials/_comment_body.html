@@ -8,7 +8,7 @@
 
 <div class="comment-body">
   <div class="comment-meta">
-    <a href="{% url 'profile.view_user' comment.profile.id %}" class="comment-author comment-author--link">{{ comment.profile.username }}</a>
+    <a href="{% url 'profile.view_user' comment.profile.uuid %}" class="comment-author comment-author--link">{{ comment.profile.username }}</a>
     <span class="comment-date">{{ comment.created|timesince }} ago</span>
     {% if comment.profile == profile %}
     <button type="button" class="comment-delete-btn" title="Delete"

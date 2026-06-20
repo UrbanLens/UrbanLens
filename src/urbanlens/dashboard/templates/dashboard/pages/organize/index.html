@@ -61,8 +61,8 @@
                     <i class="material-icons">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
                 </button>
-                <button class="btn-primary" id="new-tag-btn" type="button">
-                    <i class="material-icons">add</i> New Tag
+                <button class="btn-primary" id="new-tag-btn" type="button" title="New Tag" style="padding:.4rem .55rem;min-width:0;">
+                    <i class="material-icons" style="font-size:1.2rem;">add</i>
                 </button>
             </div>
         </div>
@@ -199,8 +199,8 @@
                     <span class="org-filter-active-dot"></span>
                 </button>
                 {% if can_edit_global %}
-                <button class="btn-primary" id="new-category-btn" type="button">
-                    <i class="material-icons">add</i> New Category
+                <button class="btn-primary" id="new-category-btn" type="button" title="New Category" style="padding:.4rem .55rem;min-width:0;">
+                    <i class="material-icons" style="font-size:1.2rem;">add</i>
                 </button>
                 {% endif %}
             </div>
@@ -308,6 +308,14 @@
                 <p class="tag-subtitle">Track the state of locations — visited, active, abandoned, and more.</p>
             </div>
             <div class="tag-header-right">
+                <div class="tag-view-toggle" role="group" aria-label="Status view mode">
+                    <button type="button" class="tag-view-btn tag-view-btn--status active" data-view="list" title="List view">
+                        <i class="material-icons">view_list</i>
+                    </button>
+                    <button type="button" class="tag-view-btn tag-view-btn--status" data-view="gallery" title="Gallery view">
+                        <i class="material-icons">grid_view</i>
+                    </button>
+                </div>
                 <div class="tag-view-toggle--sel">
                     <button type="button" class="tag-view-btn--sel" id="status-sel-all" title="Select all statuses">
                         <i class="material-icons">checklist</i>
@@ -317,8 +325,8 @@
                     <i class="material-icons">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
                 </button>
-                <button class="btn-primary" id="new-status-btn" type="button">
-                    <i class="material-icons">add</i> New Status
+                <button class="btn-primary" id="new-status-btn" type="button" title="New Status" style="padding:.4rem .55rem;min-width:0;">
+                    <i class="material-icons" style="font-size:1.2rem;">add</i>
                 </button>
             </div>
         </div>
@@ -692,6 +700,29 @@
     </div>
     <div class="cat-bulk-edit-footer">
         <button type="button" id="cat-bulk-edit-confirm" class="btn-primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
+        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>
+
+{# ── Status multi-merge dialog ─────────────────────────────────────────────── #}
+<dialog id="status-merge-dialog" class="cat-merge-dialog ul-dialog">
+    {% include "dashboard/partials/_dialog_header.html" with title="Merge Statuses" title_id="status-merge-dialog-title" %}
+    <div class="cat-merge-dialog-body">
+        <div class="cat-merge-section">
+            <div class="cat-merge-section-label"><i class="material-icons">check_circle</i> Surviving status</div>
+            <div id="status-merge-target-card" class="cat-merge-target-card"></div>
+        </div>
+        <div class="cat-merge-divider"><i class="material-icons">merge</i><span>Merge these into it</span></div>
+        <div class="cat-merge-section">
+            <div class="cat-merge-section-label"><i class="material-icons">delete_sweep</i> Will be deleted after merge
+                <span class="cat-merge-hint">— click <i class="material-icons" style="font-size:.85rem;vertical-align:middle">swap_vert</i> to swap</span>
+            </div>
+            <div id="status-merge-sources-list" class="cat-merge-sources-list"></div>
+        </div>
+        <p class="cat-merge-warning"><i class="material-icons">warning</i> All pin status assignments will be transferred to the surviving status. This cannot be undone.</p>
+    </div>
+    <div class="cat-merge-dialog-footer">
+        <button type="button" id="status-merge-confirm-btn" class="btn-primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
         <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </dialog>
@@ -1784,7 +1815,9 @@ window._orgBulkSync = function(n, opts) {
 <script>
 (function() {
     var _statusSelected = new Set();
+    var _statusMergeTargetId = null;
     var _lastStatusClickIdx = -1;
+    var _statusCurrentView = localStorage.getItem('status_view') || 'list';
 
     // New status toggle
     var newStatusBtn = document.getElementById('new-status-btn');
@@ -1793,6 +1826,10 @@ window._orgBulkSync = function(n, opts) {
         newStatusBtn.addEventListener('click', function() {
             newStatusForm.style.display = newStatusForm.style.display === 'none' ? '' : 'none';
         });
+    }
+
+    function _escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     function _statusCards() {
@@ -1842,18 +1879,98 @@ window._orgBulkSync = function(n, opts) {
         var n = _statusSelected.size;
         window._orgBulk.deselect = _statusBulkDeselect;
         window._orgBulk.edit = null;
-        window._orgBulk.merge = null;
+        window._orgBulk.merge = function() {
+            if (_statusSelected.size < 2) return;
+            _statusMergeTargetId = Array.from(_statusSelected)[0];
+            _renderStatusMergeDialog();
+            document.getElementById('status-merge-dialog').showModal();
+        };
         window._orgBulk.del = _statusBulkDelete;
-        _orgBulkSync(n, { hasEdit: false, hasMerge: false, hasDel: true });
+        _orgBulkSync(n, { hasEdit: false, hasMerge: true, hasDel: true });
         _statusCards().forEach(function(card) {
             var id = parseInt(card.dataset.statusId, 10);
-            card.classList.toggle('is-selected', _statusSelected.has(id));
+            card.classList.toggle('tag-card--selected', _statusSelected.has(id));
             var cb = card.querySelector('.status-select-cb');
             if (cb) cb.checked = _statusSelected.has(id);
         });
         _updateStatusSelAllBtn();
     }
 
+    // ── View toggle ───────────────────────────────────────────────────────────
+    function _applyStatusView() {
+        var rows = document.getElementById('status-rows'); if (!rows) return;
+        rows.classList.remove('tag-view--list', 'tag-view--gallery');
+        rows.classList.add('tag-view--' + _statusCurrentView);
+        document.querySelectorAll('.tag-view-btn--status').forEach(function(btn) {
+            btn.classList.toggle('active', btn.dataset.view === _statusCurrentView);
+        });
+    }
+
+    document.querySelectorAll('.tag-view-btn--status').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            _statusCurrentView = btn.dataset.view;
+            localStorage.setItem('status_view', _statusCurrentView);
+            _applyStatusView();
+        });
+    });
+
+    // ── Merge dialog ──────────────────────────────────────────────────────────
+    function _getStatusCardData(id) {
+        var c = document.querySelector('[data-status-id="' + id + '"]');
+        if (!c) return { id: id, name: '?', color: '', icon: '', pinCount: '0' };
+        return { id: id, name: c.dataset.statusName || '', color: c.dataset.statusColor || '', icon: c.dataset.statusIcon || '', pinCount: c.dataset.statusPinCount || '0' };
+    }
+
+    function _statusMiniCardHtml(d, isTarget) {
+        var cs = d.color ? 'background:' + d.color + '22;border-color:' + d.color + '44;' : '';
+        var ics = d.color ? 'color:' + d.color : '';
+        var ih = d.icon
+            ? (/^[a-z_]+$/.test(d.icon) ? '<i class="material-icons" style="' + ics + '">' + _escHtml(d.icon) + '</i>' : '<span class="tag-icon-emoji">' + _escHtml(d.icon) + '</span>')
+            : '<i class="material-icons tag-icon-empty">flag</i>';
+        var sb = isTarget ? '' : '<button type="button" class="cat-merge-swap-btn" data-swap-id="' + d.id + '" title="Make this the surviving status"><i class="material-icons">swap_vert</i></button>';
+        return '<div class="cat-merge-mini-card' + (isTarget ? ' cat-merge-mini-card--target' : '') + '" data-merge-id="' + d.id + '">'
+            + '<div class="tag-card-icon cat-merge-mini-icon" style="' + cs + '">' + ih + '</div>'
+            + '<div class="cat-merge-mini-info"><div class="cat-merge-mini-name">' + _escHtml(d.name) + '</div>'
+            + '<div class="cat-merge-mini-meta">' + d.pinCount + ' pins</div></div>' + sb + '</div>';
+    }
+
+    function _renderStatusMergeDialog() {
+        var ids = Array.from(_statusSelected);
+        if (!_statusMergeTargetId || !_statusSelected.has(_statusMergeTargetId)) _statusMergeTargetId = ids[0];
+        var src = ids.filter(function(id) { return id !== _statusMergeTargetId; });
+        document.getElementById('status-merge-dialog-title').textContent = 'Merge ' + ids.length + ' Statuses';
+        document.getElementById('status-merge-target-card').innerHTML = _statusMiniCardHtml(_getStatusCardData(_statusMergeTargetId), true);
+        document.getElementById('status-merge-sources-list').innerHTML = src.map(function(id) { return _statusMiniCardHtml(_getStatusCardData(id), false); }).join('');
+        var cb = document.getElementById('status-merge-confirm-btn');
+        cb.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge into ' + _escHtml(_getStatusCardData(_statusMergeTargetId).name);
+        cb.disabled = false;
+    }
+
+    var _statusMergeSrcList = document.getElementById('status-merge-sources-list');
+    if (_statusMergeSrcList) _statusMergeSrcList.addEventListener('click', function(e) {
+        var btn = e.target.closest('.cat-merge-swap-btn'); if (!btn) return;
+        _statusMergeTargetId = parseInt(btn.dataset.swapId, 10); _renderStatusMergeDialog();
+    });
+
+    var _statusMergeConfirmBtn = document.getElementById('status-merge-confirm-btn');
+    if (_statusMergeConfirmBtn) _statusMergeConfirmBtn.addEventListener('click', function() {
+        var ids = Array.from(_statusSelected);
+        var src = ids.filter(function(id) { return id !== _statusMergeTargetId; });
+        var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging…';
+        fetch('{% url "status.multi_merge" %}', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({ target_id: parseInt(_statusMergeTargetId, 10), source_ids: src.map(function(id) { return parseInt(id, 10); }) }),
+        }).then(function(r) { if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); }); return r.text(); })
+        .then(function(html) {
+            document.getElementById('status-merge-dialog').close();
+            document.getElementById('status-rows').innerHTML = html;
+            _statusMergeTargetId = null; _statusSelected.clear(); _lastStatusClickIdx = -1; _syncStatusSelBar();
+            applyOrgFilter('status');
+            toastr.success('Statuses merged successfully.');
+        }).catch(function(err) { toastr.error('Merge failed: ' + err.message); btn.disabled = false; btn.innerHTML = saved; });
+    });
+
+    // ── Selection ─────────────────────────────────────────────────────────────
     document.getElementById('status-rows').addEventListener('click', function(e) {
         var card = e.target.closest('.tag-card[data-status-id]');
         if (!card) return;
@@ -1893,6 +2010,7 @@ window._orgBulkSync = function(n, opts) {
             _syncStatusSelBar();
         });
     }
+
     // ── HTMX hooks ────────────────────────────────────────────────────────────
     document.getElementById('status-rows').addEventListener('htmx:afterSwap', function() {
         _statusSelected.clear(); _lastStatusClickIdx = -1; _syncStatusSelBar();
@@ -1903,6 +2021,9 @@ window._orgBulkSync = function(n, opts) {
     document.addEventListener('org:filter-applied', function(e) {
         if (e.detail.ns === 'status') _updateStatusSelAllBtn();
     });
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    _applyStatusView();
 })();
 </script>
 

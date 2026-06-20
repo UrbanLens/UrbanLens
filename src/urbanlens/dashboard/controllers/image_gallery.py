@@ -1,6 +1,7 @@
 """Image gallery controller — upload, list, reposition, and delete photos."""
 from __future__ import annotations
 
+import contextlib
 from decimal import Decimal
 import json
 import logging

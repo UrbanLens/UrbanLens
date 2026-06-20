@@ -241,6 +241,41 @@ class StatusMembershipView(LoginRequiredMixin, View):
         )
 
 
+class StatusMultiMergeView(LoginRequiredMixin, View):
+    """Merge multiple personal status badges into one (JSON POST)."""
+
+    def post(self, request, *args, **kwargs):
+        """Transfer all pin memberships from source statuses to target, then delete sources.
+
+        Args:
+            request: The HTTP request with JSON body containing target_id and source_ids.
+
+        Returns:
+            Rendered status_rows.html partial, or 400/403 on error.
+        """
+        try:
+            data = json.loads(request.body)
+            target_id = int(data["target_id"])
+            source_ids = [int(x) for x in data.get("source_ids", [])]
+        except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+            return JsonResponse({"error": "Invalid data"}, status=400)
+
+        if not source_ids:
+            return HttpResponse("No source statuses specified.", status=400)
+
+        profile = request.user.profile
+        target = get_object_or_404(Badge, id=target_id, kind="status", profile=profile)
+        sources = Badge.objects.filter(id__in=source_ids, kind="status", profile=profile, is_protected=False)
+
+        for src in sources:
+            for pin in Pin.objects.filter(statuses=src, profile=profile):
+                pin.statuses.add(target)
+                pin.statuses.remove(src)
+            src.delete()
+
+        return render(request, "dashboard/partials/status_rows.html", _rows_ctx(profile))
+
+
 class StatusBulkDeleteView(LoginRequiredMixin, View):
     """Bulk-delete personal status badges (JSON POST)."""
 

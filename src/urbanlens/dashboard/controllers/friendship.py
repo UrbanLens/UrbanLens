@@ -166,7 +166,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             notification_type=NotificationType.FRIEND_ACCEPTED,
             title="Friend request accepted",
             message=f"{request.user.profile.username} accepted your friend request.",
-            url=reverse("profile.view_user", kwargs={"profile_id": request.user.profile.pk}),
+            url=reverse("profile.view_user", kwargs={"profile_uuid": request.user.profile.uuid}),
         )
 
         to_profile = Profile.objects.filter(pk=profile_id).first()

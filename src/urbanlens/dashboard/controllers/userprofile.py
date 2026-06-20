@@ -23,13 +23,15 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from django.http import HttpRequest, HttpResponse
 
 
 class ViewProfileView(LoginRequiredMixin, View):
-    def get(self, request: HttpRequest, profile_id: int | None = None) -> HttpResponse:
-        if profile_id is not None:
-            profile = get_object_or_404(Profile, id=profile_id)
+    def get(self, request: HttpRequest, profile_uuid: UUID | None = None) -> HttpResponse:
+        if profile_uuid is not None:
+            profile = get_object_or_404(Profile, uuid=profile_uuid)
             if not self._can_view_profile(request, profile):
                 raise Http404
         else:
@@ -147,8 +149,8 @@ class ViewProfileView(LoginRequiredMixin, View):
         )
         common_ids = their_loc_ids & my_loc_ids
 
-        # Visited by both (status="visited" or last_visited set)
-        visited_filter = Q(status="visited") | Q(last_visited__isnull=False)
+        # Visited by both — has the protected "Visited" status badge, or has a last_visited date
+        visited_filter = Q(statuses__name="Visited") | Q(last_visited__isnull=False)
         their_visited_ids = set(
             Pin.objects.filter(profile=profile, location__isnull=False)
             .filter(visited_filter)

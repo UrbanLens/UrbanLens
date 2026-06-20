@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import math
+from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.db import models
@@ -42,6 +43,7 @@ from django.db.models import (
     OneToOneField,
     TextChoices,
     TextField,
+    UUIDField,
 )
 
 from urbanlens.dashboard.models import abstract
@@ -86,6 +88,7 @@ class MapCenterMode(TextChoices):
 
 
 class Profile(abstract.Model):
+    uuid = UUIDField(default=uuid4, unique=True, editable=False)
     avatar = ImageField(upload_to="avatars/", null=True, blank=True)
     bio = TextField(null=True, blank=True)
     area = CharField(max_length=255, null=True, blank=True)

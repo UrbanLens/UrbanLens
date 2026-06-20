@@ -24,7 +24,7 @@
                 {% endif %}
             </div>
             <div class="trip-member-info">
-                <a href="{% url 'profile.view_user' member.id %}" class="trip-member-name trip-member-name--link">{{ member.user.get_full_name|default:member.user.username }}</a>
+                <a href="{% url 'profile.view_user' member.uuid %}" class="trip-member-name trip-member-name--link">{{ member.user.get_full_name|default:member.user.username }}</a>
                 <span class="trip-member-username">@{{ member.user.username }}</span>
             </div>
 

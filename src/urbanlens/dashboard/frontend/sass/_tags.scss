@@ -908,7 +908,8 @@
 
 // ── Gallery view ──────────────────────────────────────────────────────────────
 #tag-rows.tag-view--gallery,
-#category-rows.tag-view--gallery {
+#category-rows.tag-view--gallery,
+#status-rows.tag-view--gallery {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: .75rem;
