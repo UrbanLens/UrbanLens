@@ -5,7 +5,7 @@
       hx-swap="innerHTML"
       enctype="multipart/form-data"
       class="tag-inline-edit{% if is_global %} tag-global-edit-form{% endif %}"
-      hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); toastr.success('Tag saved.'); }">
+      hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); var kc=event.detail.xhr&&event.detail.xhr.getResponseHeader('X-Kind-Changed'); toastr.success(kc?'Converted to '+kc+'.':'Tag saved.'); }">
     {% csrf_token %}
 
     <div class="form-field" style="margin-bottom:1rem;">

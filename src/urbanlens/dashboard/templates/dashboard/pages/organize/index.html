@@ -1,12 +1,168 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load dashboard_tags %}
 
+{% block header %}
+<style>
+/* ── Organize: filter bar ─────────────────────────────────────────── */
+.org-filter-bar {
+    display: none;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px 12px;
+    background: var(--ul-surface-2, #f8fafc);
+    border-bottom: 1px solid var(--ul-border, #e2e8f0);
+    flex-wrap: wrap;
+}
+.org-filter-bar.open { display: flex; }
+.org-filter-search {
+    flex: 1 1 220px;
+    min-width: 180px;
+    padding: 6px 10px;
+    border: 1px solid var(--ul-border, #cbd5e1);
+    border-radius: 7px;
+    font-size: .82rem;
+    background: var(--ul-surface, #fff);
+    color: inherit;
+    outline: none;
+}
+.org-filter-search:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,.15); }
+.org-filter-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.org-filter-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 20px;
+    background: var(--ul-surface, #fff);
+    border: 1.5px solid var(--ul-border, #cbd5e1);
+    font-size: .76rem; font-weight: 500; cursor: pointer;
+    color: var(--ul-text-muted, #64748b);
+    transition: background .13s, border-color .13s, color .13s;
+    user-select: none; white-space: nowrap;
+}
+.org-filter-chip:hover { border-color: #6366f1; color: #4f46e5; background: #eef2ff; }
+.org-filter-chip.active { background: #eef2ff; border-color: #6366f1; color: #4f46e5; font-weight: 600; }
+.org-filter-chip .material-icons { font-size: .9rem; }
+.org-filter-clear { font-size: .73rem; color: var(--ul-text-muted, #94a3b8); cursor: pointer; padding: 4px 6px; border-radius: 5px; border: none; background: none; }
+.org-filter-clear:hover { color: #ef4444; }
+.org-filter-active-dot { display: none; width: 7px; height: 7px; background: #6366f1; border-radius: 50%; position: absolute; top: 4px; right: 4px; }
+#tag-filter-btn, #cat-filter-btn, #status-filter-btn { position: relative; }
+#tag-filter-btn.has-filter .org-filter-active-dot,
+#cat-filter-btn.has-filter .org-filter-active-dot,
+#status-filter-btn.has-filter .org-filter-active-dot { display: block; }
+
+/* ── Organize: convert-type action buttons ───────────────────────── */
+.org-convert-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 6px;
+}
+.org-convert-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 5px; padding: 12px 10px; border-radius: 10px;
+    border: 2px solid var(--ul-border, #e2e8f0);
+    background: var(--ul-surface, #fff);
+    cursor: pointer; text-align: center;
+    transition: border-color .15s, background .15s, box-shadow .15s, transform .1s;
+    color: var(--ul-text, #1e293b);
+    min-height: 78px;
+}
+.org-convert-btn:hover { border-color: #6366f1; background: #eef2ff; box-shadow: 0 2px 8px rgba(99,102,241,.12); }
+.org-convert-btn.active { border-color: #6366f1; background: #eef2ff; box-shadow: 0 0 0 3px rgba(99,102,241,.18); transform: scale(1.02); }
+.org-convert-btn .material-icons { font-size: 1.5rem; color: #6366f1; }
+.org-convert-btn--active .material-icons { color: #4f46e5; }
+.org-convert-btn-label { font-size: .82rem; font-weight: 600; line-height: 1.2; }
+.org-convert-btn-desc { font-size: .7rem; color: var(--ul-text-muted, #64748b); line-height: 1.3; }
+.org-convert-btn.active .org-convert-btn-desc { color: #6366f1; }
+
+/* ── Priority tab: edit button ───────────────────────────────────── */
+.priority-edit-btn {
+    margin-left: auto; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 7px;
+    border: 1px solid transparent;
+    background: transparent; cursor: pointer;
+    color: var(--ul-text-muted, #94a3b8);
+    transition: background .13s, border-color .13s, color .13s;
+    opacity: 0; pointer-events: none;
+}
+.priority-item:hover .priority-edit-btn { opacity: 1; pointer-events: auto; }
+.priority-edit-btn:hover { background: #eef2ff; border-color: #a5b4fc; color: #4f46e5; }
+.priority-edit-btn .material-icons { font-size: 1.05rem; pointer-events: none; }
+
+/* ── Organize: floating bulk action bar ──────────────────────────── */
+.org-bulk-bar {
+    position: fixed; left: 50%; bottom: 24px;
+    transform: translateX(-50%) translateY(100px);
+    z-index: 900;
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 10px 8px 14px;
+    background: var(--ul-surface-1, #fff);
+    border: 1px solid var(--ul-border, #e2e8f0);
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.15), 0 2px 8px rgba(0,0,0,.08);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform .25s cubic-bezier(.34,1.56,.64,1), opacity .2s ease;
+    white-space: nowrap;
+    max-width: calc(100vw - 40px);
+}
+.org-bulk-bar.visible {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+.org-bulk-count {
+    font-size: .825rem; font-weight: 600;
+    color: var(--ul-text-1, #1e293b);
+    padding: 3px 10px;
+    background: #eff6ff;
+    border-radius: 20px;
+    border: 1px solid #bfdbfe;
+    margin-right: 2px;
+}
+.org-bulk-deselect-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 50%;
+    border: none; background: transparent; cursor: pointer;
+    color: var(--ul-text-muted, #94a3b8);
+    transition: background .12s, color .12s;
+    flex-shrink: 0;
+}
+.org-bulk-deselect-btn:hover { background: #fee2e2; color: #dc2626; }
+.org-bulk-deselect-btn .material-icons { font-size: 1rem; }
+.org-bulk-sep {
+    width: 1px; align-self: stretch;
+    background: var(--ul-border, #e2e8f0);
+    margin: 0 4px;
+}
+.org-bulk-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 12px; border-radius: 8px;
+    font-size: .8rem; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--ul-border, #e2e8f0);
+    background: var(--ul-surface, #fff); color: var(--ul-text-2, #475569);
+    transition: background .12s, border-color .12s, color .12s, opacity .12s;
+}
+.org-bulk-btn .material-icons { font-size: .95rem; }
+.org-bulk-btn:hover { background: var(--ul-surface-2, #f8fafc); border-color: #94a3b8; color: var(--ul-text-1, #1e293b); }
+.org-bulk-btn:disabled { opacity: .35; cursor: not-allowed; }
+.org-bulk-btn--edit:hover { background: #eff6ff; border-color: #60a5fa; color: #2563eb; }
+.org-bulk-btn--merge { background: #6366f1; color: #fff; border-color: #6366f1; }
+.org-bulk-btn--merge:hover:not(:disabled) { background: #4f46e5; border-color: #4f46e5; }
+.org-bulk-btn--merge:disabled { background: #a5b4fc; border-color: #a5b4fc; opacity: 1; cursor: not-allowed; }
+.org-bulk-btn--delete { border-color: #fca5a5; color: #dc2626; }
+.org-bulk-btn--delete:hover { background: #fef2f2; border-color: #dc2626; color: #b91c1c; }
+
+/* ── Hide per-row actions when anything is selected ─────────────── */
+.org-page--has-selection .tag-card-actions { opacity: 0; pointer-events: none; transition: opacity .15s; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="organize-page">
 
     <div class="organize-page-header">
         <h1 class="organize-page-title">Organize</h1>
-        <p class="organize-page-subtitle">Manage tags, categories, and display priority.</p>
+        <p class="organize-page-subtitle">Manage badges, including tags, categories, statuses, and display priority.</p>
     </div>
 
     {# ── Tab bar ──────────────────────────────────────────────────────────────── #}
@@ -52,22 +208,29 @@
                         <i class="material-icons">account_tree</i>
                     </button>
                 </div>
+                <button type="button" class="btn-ghost btn-sm" id="tag-sel-all" title="Select all tags">
+                    <i class="material-icons">checklist</i>
+                </button>
+                <button type="button" class="btn-ghost btn-sm" id="tag-filter-btn" title="Filter tags" onclick="toggleOrgFilter('tag')">
+                    <i class="material-icons">filter_list</i> Filter
+                    <span class="org-filter-active-dot"></span>
+                </button>
                 <button class="btn-primary" id="new-tag-btn" type="button">
                     <i class="material-icons">add</i> New Tag
                 </button>
             </div>
         </div>
 
-        <div id="tag-sel-bar" class="cat-sel-bar">
-            <div class="cat-sel-bar-left">
-                <span id="tag-sel-count" class="cat-sel-count" hidden></span>
-            </div>
-            <div class="cat-sel-bar-actions">
-                <button type="button" id="tag-sel-all" class="cat-sel-btn"><i class="material-icons">select_all</i> Select All</button>
-                <button type="button" id="tag-sel-deselect" class="cat-sel-btn" disabled><i class="material-icons">deselect</i> Deselect All</button>
-                <button type="button" id="tag-sel-edit" class="cat-sel-btn cat-sel-edit-btn" disabled><i class="material-icons">edit</i> Edit</button>
-                <button type="button" id="tag-sel-delete" class="cat-sel-btn cat-sel-delete-btn" disabled><i class="material-icons">delete</i> Delete</button>
-                <button type="button" id="tag-sel-merge" class="cat-sel-merge-btn" disabled><i class="material-icons">merge</i> Merge</button>
+        <div id="tag-filter-bar" class="org-filter-bar">
+            <input type="search" id="tag-filter-search" class="org-filter-search" placeholder="Search tags…" oninput="applyOrgFilter('tag')" autocomplete="off">
+            <div class="org-filter-chips">
+                <button type="button" class="org-filter-chip" data-filter="has-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">image</i> Has icon</button>
+                <button type="button" class="org-filter-chip" data-filter="no-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">hide_image</i> No icon</button>
+                <button type="button" class="org-filter-chip" data-filter="has-color" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">palette</i> Has color</button>
+                <button type="button" class="org-filter-chip" data-filter="no-color" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">format_color_reset</i> No color</button>
+                <button type="button" class="org-filter-chip" data-filter="has-children" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">account_tree</i> Has children</button>
+                <button type="button" class="org-filter-chip" data-filter="has-parents" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">call_merge</i> Has parents</button>
+                <button type="button" class="org-filter-clear" onclick="clearOrgFilter('tag')">✕ Clear</button>
             </div>
         </div>
 
@@ -173,6 +336,15 @@
                     </button>
                 </div>
                 {% if can_edit_global %}
+                <button type="button" class="btn-ghost btn-sm" id="cat-sel-all" title="Select all categories">
+                    <i class="material-icons">checklist</i>
+                </button>
+                {% endif %}
+                <button type="button" class="btn-ghost btn-sm" id="cat-filter-btn" title="Filter categories" onclick="toggleOrgFilter('cat')">
+                    <i class="material-icons">filter_list</i> Filter
+                    <span class="org-filter-active-dot"></span>
+                </button>
+                {% if can_edit_global %}
                 <button class="btn-primary" id="new-category-btn" type="button">
                     <i class="material-icons">add</i> New Category
                 </button>
@@ -180,20 +352,18 @@
             </div>
         </div>
 
-        {% if can_edit_global %}
-        <div id="cat-sel-bar" class="cat-sel-bar">
-            <div class="cat-sel-bar-left">
-                <span id="cat-sel-count" class="cat-sel-count" hidden></span>
-            </div>
-            <div class="cat-sel-bar-actions">
-                <button type="button" id="cat-sel-all" class="cat-sel-btn"><i class="material-icons">select_all</i> Select All</button>
-                <button type="button" id="cat-sel-deselect" class="cat-sel-btn" disabled><i class="material-icons">deselect</i> Deselect All</button>
-                <button type="button" id="cat-sel-edit" class="cat-sel-btn cat-sel-edit-btn" disabled><i class="material-icons">edit</i> Edit</button>
-                <button type="button" id="cat-sel-delete" class="cat-sel-btn cat-sel-delete-btn" disabled><i class="material-icons">delete</i> Delete</button>
-                <button type="button" id="cat-sel-merge" class="cat-sel-merge-btn" disabled><i class="material-icons">merge</i> Merge</button>
+        <div id="cat-filter-bar" class="org-filter-bar">
+            <input type="search" id="cat-filter-search" class="org-filter-search" placeholder="Search categories…" oninput="applyOrgFilter('cat')" autocomplete="off">
+            <div class="org-filter-chips">
+                <button type="button" class="org-filter-chip" data-filter="has-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">image</i> Has icon</button>
+                <button type="button" class="org-filter-chip" data-filter="no-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">hide_image</i> No icon</button>
+                <button type="button" class="org-filter-chip" data-filter="has-color" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">palette</i> Has color</button>
+                <button type="button" class="org-filter-chip" data-filter="no-color" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">format_color_reset</i> No color</button>
+                <button type="button" class="org-filter-chip" data-filter="has-children" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">account_tree</i> Has children</button>
+                <button type="button" class="org-filter-chip" data-filter="has-parents" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">call_merge</i> Has parents</button>
+                <button type="button" class="org-filter-clear" onclick="clearOrgFilter('cat')">✕ Clear</button>
             </div>
         </div>
-        {% endif %}{# can_edit_global #}
 
         {% if can_edit_global %}
         <div class="tag-create-card" id="new-category-form" style="display:none;">
@@ -278,20 +448,27 @@
                 <p class="tag-subtitle">Track the state of locations — visited, active, abandoned, and more.</p>
             </div>
             <div class="tag-header-right">
+                <button type="button" class="btn-ghost btn-sm" id="status-sel-all" title="Select all statuses">
+                    <i class="material-icons">checklist</i>
+                </button>
+                <button type="button" class="btn-ghost btn-sm" id="status-filter-btn" title="Filter statuses" onclick="toggleOrgFilter('status')">
+                    <i class="material-icons">filter_list</i> Filter
+                    <span class="org-filter-active-dot"></span>
+                </button>
                 <button class="btn-primary" id="new-status-btn" type="button">
                     <i class="material-icons">add</i> New Status
                 </button>
             </div>
         </div>
 
-        <div id="status-sel-bar" class="cat-sel-bar">
-            <div class="cat-sel-bar-left">
-                <span id="status-sel-count" class="cat-sel-count" hidden></span>
-            </div>
-            <div class="cat-sel-bar-actions">
-                <button type="button" id="status-sel-all" class="cat-sel-btn"><i class="material-icons">select_all</i> Select All</button>
-                <button type="button" id="status-sel-deselect" class="cat-sel-btn" disabled><i class="material-icons">deselect</i> Deselect All</button>
-                <button type="button" id="status-sel-delete" class="cat-sel-btn cat-sel-delete-btn" disabled><i class="material-icons">delete</i> Delete</button>
+        <div id="status-filter-bar" class="org-filter-bar">
+            <input type="search" id="status-filter-search" class="org-filter-search" placeholder="Search statuses…" oninput="applyOrgFilter('status')" autocomplete="off">
+            <div class="org-filter-chips">
+                <button type="button" class="org-filter-chip" data-filter="has-icon" onclick="toggleOrgChip(this,'status')"><i class="material-icons">image</i> Has icon</button>
+                <button type="button" class="org-filter-chip" data-filter="no-icon" onclick="toggleOrgChip(this,'status')"><i class="material-icons">hide_image</i> No icon</button>
+                <button type="button" class="org-filter-chip" data-filter="has-color" onclick="toggleOrgChip(this,'status')"><i class="material-icons">palette</i> Has color</button>
+                <button type="button" class="org-filter-chip" data-filter="no-color" onclick="toggleOrgChip(this,'status')"><i class="material-icons">format_color_reset</i> No color</button>
+                <button type="button" class="org-filter-clear" onclick="clearOrgFilter('status')">✕ Clear</button>
             </div>
         </div>
 
@@ -388,6 +565,22 @@
                     {% if not item.profile %}<span class="tag-global-badge">global</span>{% endif %}
                 </div>
                 <span class="priority-order-badge">{{ forloop.counter }}</span>
+                {% if item.kind == 'tag' %}
+                <button type="button" class="priority-edit-btn" title="Edit tag"
+                        hx-get="{% url 'tag.edit' item.id %}" hx-target="#tag-edit-dialog-body" hx-swap="innerHTML">
+                    <i class="material-icons">edit</i>
+                </button>
+                {% elif item.kind == 'category' %}
+                <button type="button" class="priority-edit-btn" title="Edit category"
+                        hx-get="{% url 'category.edit' item.id %}" hx-target="#category-edit-dialog-body" hx-swap="innerHTML">
+                    <i class="material-icons">edit</i>
+                </button>
+                {% elif item.kind == 'status' and item.profile %}
+                <button type="button" class="priority-edit-btn" title="Edit status"
+                        hx-get="{% url 'status.edit' item.id %}" hx-target="#status-edit-dialog-body" hx-swap="innerHTML">
+                    <i class="material-icons">edit</i>
+                </button>
+                {% endif %}
             </div>
             {% empty %}
             <div class="tag-empty">
@@ -400,14 +593,36 @@
 
 </div>{# end .organize-page #}
 
+{# ── Floating bulk action toolbar ─────────────────────────────────────────── #}
+<div id="org-bulk-bar" class="org-bulk-bar" aria-live="polite">
+    <span id="org-bulk-count" class="org-bulk-count"></span>
+    <button type="button" class="org-bulk-deselect-btn" id="org-bulk-deselect-btn" title="Clear selection"
+            onclick="window._orgBulk&&window._orgBulk.deselect&&window._orgBulk.deselect()">
+        <i class="material-icons">close</i>
+    </button>
+    <div class="org-bulk-sep"></div>
+    <button type="button" class="org-bulk-btn org-bulk-btn--edit" id="org-bulk-edit-btn"
+            onclick="window._orgBulk&&window._orgBulk.edit&&window._orgBulk.edit()">
+        <i class="material-icons">edit</i> Edit
+    </button>
+    <button type="button" class="org-bulk-btn org-bulk-btn--merge" id="org-bulk-merge-btn"
+            onclick="window._orgBulk&&window._orgBulk.merge&&window._orgBulk.merge()">
+        <i class="material-icons">merge</i> Merge
+    </button>
+    <button type="button" class="org-bulk-btn org-bulk-btn--delete" id="org-bulk-delete-btn"
+            onclick="window._orgBulk&&window._orgBulk.del&&window._orgBulk.del()">
+        <i class="material-icons">delete</i> Delete
+    </button>
+</div>
+
 {# ── Tag edit dialog ──────────────────────────────────────────────────────── #}
-<dialog id="tag-edit-dialog" class="tag-edit-dialog">
+<dialog id="tag-edit-dialog" class="tag-edit-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Edit Tag" title_id="tag-edit-dialog-title" %}
     <div id="tag-edit-dialog-body" class="tag-edit-dialog-body"></div>
 </dialog>
 
 {# ── Tag multi-merge dialog ────────────────────────────────────────────────── #}
-<dialog id="tag-merge-dialog" class="cat-merge-dialog">
+<dialog id="tag-merge-dialog" class="cat-merge-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Merge Tags" title_id="tag-merge-dialog-title" %}
     <div class="cat-merge-dialog-body">
         <div class="cat-merge-section">
@@ -430,16 +645,24 @@
 </dialog>
 
 {# ── Tag bulk-edit dialog ──────────────────────────────────────────────────── #}
-<dialog id="tag-bulk-edit-dialog" class="cat-bulk-edit-dialog">
+<dialog id="tag-bulk-edit-dialog" class="cat-bulk-edit-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Edit Tags" title_id="tag-bulk-edit-title" %}
     <div class="cat-bulk-edit-body">
         <div class="cat-bulk-field">
             <label class="form-label">Convert type</label>
-            <label class="cat-bulk-nochange-label" style="margin-top:.35rem;">
-                <input type="checkbox" id="tag-bulk-convert-cb">
-                <span>Convert selected tags to <strong>categories</strong></span>
-            </label>
-            <p class="form-hint" id="tag-bulk-convert-hint" hidden>All pin and location memberships will be migrated. Parent links will be cleared. You will be redirected to the categories tab.</p>
+            <div class="org-convert-grid">
+                <button type="button" class="org-convert-btn" id="tag-bulk-convert-to-cat" onclick="_setTagBulkConvert('category')">
+                    <i class="material-icons">category</i>
+                    <span class="org-convert-btn-label">To Categories</span>
+                    <span class="org-convert-btn-desc">Global labels shared by all users</span>
+                </button>
+                <button type="button" class="org-convert-btn" id="tag-bulk-convert-to-status" onclick="_setTagBulkConvert('status')">
+                    <i class="material-icons">flag_circle</i>
+                    <span class="org-convert-btn-label">To Statuses</span>
+                    <span class="org-convert-btn-desc">Track pin state (visited, active…)</span>
+                </button>
+            </div>
+            <p class="form-hint" id="tag-bulk-convert-hint" hidden></p>
         </div>
         <div id="tag-bulk-main-fields">
         <div class="cat-bulk-field">
@@ -497,19 +720,19 @@
 </dialog>
 
 {# ── Category edit dialog ──────────────────────────────────────────────────── #}
-<dialog id="category-edit-dialog" class="tag-edit-dialog">
+<dialog id="category-edit-dialog" class="tag-edit-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Edit Category" title_id="category-edit-dialog-title" %}
     <div id="category-edit-dialog-body" class="tag-edit-dialog-body"></div>
 </dialog>
 
 {# ── Status edit dialog ────────────────────────────────────────────────────── #}
-<dialog id="status-edit-dialog" class="tag-edit-dialog">
+<dialog id="status-edit-dialog" class="tag-edit-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Edit Status" title_id="status-edit-dialog-title" %}
     <div id="status-edit-dialog-body" class="tag-edit-dialog-body"></div>
 </dialog>
 
 {# ── Category multi-merge dialog ───────────────────────────────────────────── #}
-<dialog id="cat-merge-dialog" class="cat-merge-dialog">
+<dialog id="cat-merge-dialog" class="cat-merge-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Merge Categories" title_id="cat-merge-dialog-title" %}
     <div class="cat-merge-dialog-body">
         <div class="cat-merge-section">
@@ -532,16 +755,24 @@
 </dialog>
 
 {# ── Category bulk-edit dialog ─────────────────────────────────────────────── #}
-<dialog id="cat-bulk-edit-dialog" class="cat-bulk-edit-dialog">
+<dialog id="cat-bulk-edit-dialog" class="cat-bulk-edit-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Edit Categories" title_id="cat-bulk-edit-title" %}
     <div class="cat-bulk-edit-body">
         <div class="cat-bulk-field">
             <label class="form-label">Convert type</label>
-            <label class="cat-bulk-nochange-label" style="margin-top:.35rem;">
-                <input type="checkbox" id="cat-bulk-convert-cb">
-                <span>Convert selected categories to <strong>tags</strong></span>
-            </label>
-            <p class="form-hint" id="cat-bulk-convert-hint" hidden>All pin and location memberships will be migrated. Parent links will be cleared. You will be redirected to the tags tab.</p>
+            <div class="org-convert-grid">
+                <button type="button" class="org-convert-btn" id="cat-bulk-convert-to-tag" onclick="_setCatBulkConvert('tag')">
+                    <i class="material-icons">label</i>
+                    <span class="org-convert-btn-label">To Tags</span>
+                    <span class="org-convert-btn-desc">Personal labels on your pins</span>
+                </button>
+                <button type="button" class="org-convert-btn" id="cat-bulk-convert-to-status" onclick="_setCatBulkConvert('status')">
+                    <i class="material-icons">flag_circle</i>
+                    <span class="org-convert-btn-label">To Statuses</span>
+                    <span class="org-convert-btn-desc">Track pin state (visited, active…)</span>
+                </button>
+            </div>
+            <p class="form-hint" id="cat-bulk-convert-hint" hidden></p>
         </div>
         <div id="cat-bulk-main-fields">
         <div class="cat-bulk-field">
@@ -706,6 +937,105 @@ function showTagCustomPreview(input) {
     reader.onload = function(e) { preview.src = e.target.result; preview.style.display = 'block'; };
     reader.readAsDataURL(input.files[0]);
 }
+
+// ── Filter panel shared engine ──────────────────────────────────────────────
+// ns: 'tag' | 'cat' | 'status'
+// Cards must carry: data-{ns}-name, data-{ns}-icon, data-{ns}-color,
+//   data-{ns}-children (count), data-{ns}-parents (csv or count).
+var _orgFilters = {}; // ns → { search, chips: Set }
+
+function toggleOrgFilter(ns) {
+    var bar = document.getElementById(ns + '-filter-bar');
+    if (!bar) return;
+    bar.classList.toggle('open');
+}
+
+function toggleOrgChip(btn, ns) {
+    btn.classList.toggle('active');
+    applyOrgFilter(ns);
+}
+
+function clearOrgFilter(ns) {
+    var bar = document.getElementById(ns + '-filter-bar');
+    if (!bar) return;
+    bar.querySelectorAll('.org-filter-chip.active').forEach(function(c) { c.classList.remove('active'); });
+    var si = document.getElementById(ns + '-filter-search');
+    if (si) si.value = '';
+    applyOrgFilter(ns);
+}
+
+function applyOrgFilter(ns) {
+    var bar = document.getElementById(ns + '-filter-bar');
+    var filterBtn = document.getElementById(ns + '-filter-btn');
+    var rowsId = ns === 'cat' ? 'category-rows' : (ns + '-rows');
+    var rows = document.getElementById(rowsId);
+    if (!rows) return;
+
+    var search = '';
+    var si = document.getElementById(ns + '-filter-search');
+    if (si) search = si.value.toLowerCase().trim();
+
+    var activeChips = new Set();
+    if (bar) bar.querySelectorAll('.org-filter-chip.active').forEach(function(c) { activeChips.add(c.dataset.filter); });
+
+    var hasActive = search || activeChips.size > 0;
+    if (filterBtn) filterBtn.classList.toggle('has-filter', hasActive);
+
+    // Determine the card selector and data attribute prefix
+    var cardSel, idAttr;
+    if (ns === 'tag') { cardSel = '.tag-card[data-tag-id]'; idAttr = 'tagId'; }
+    else if (ns === 'cat') { cardSel = '.tag-card[data-category-id]'; idAttr = 'categoryId'; }
+    else { cardSel = '.tag-card[data-status-id]'; idAttr = 'statusId'; }
+
+    rows.querySelectorAll(cardSel).forEach(function(card) {
+        var name = (card.dataset[ns === 'cat' ? 'categoryName' : (ns + 'Name')] || '').toLowerCase();
+        var icon = card.dataset[ns === 'cat' ? 'categoryIcon' : (ns + 'Icon')] || '';
+        var color = card.dataset[ns === 'cat' ? 'categoryColor' : (ns + 'Color')] || '';
+        var children = parseInt(card.dataset[ns === 'cat' ? 'categoryChildren' : (ns + 'Children')] || '0', 10);
+        var parents = card.dataset[ns === 'cat' ? 'categoryParents' : (ns + 'Parents')] || '';
+        var hasParents = parents && parents.replace(/,/g,'').trim() !== '';
+
+        var show = true;
+        if (search && !name.includes(search)) show = false;
+        if (activeChips.has('has-icon') && !icon) show = false;
+        if (activeChips.has('no-icon') && icon) show = false;
+        if (activeChips.has('has-color') && !color) show = false;
+        if (activeChips.has('no-color') && color) show = false;
+        if (activeChips.has('has-children') && !children) show = false;
+        if (activeChips.has('has-parents') && !hasParents) show = false;
+
+        card.style.display = show ? '' : 'none';
+    });
+}
+
+// ── Consolidated HTMX dialog opener (tag, category, status, priority) ────────
+document.body.addEventListener('htmx:afterSwap', function(e) {
+    var id = e.detail.target && e.detail.target.id;
+    if (!id) return;
+    if (id === 'tag-edit-dialog-body') {
+        var titleEl = document.getElementById('tag-edit-dialog-title');
+        if (titleEl) {
+            var body = e.detail.target;
+            if (body.querySelector('.tag-merge-form')) titleEl.textContent = 'Merge Tag';
+            else if (body.querySelector('.tag-customize-form')) titleEl.textContent = 'Customize Display';
+            else if (body.querySelector('.tag-global-edit-form')) titleEl.textContent = 'Edit Global Tag';
+            else titleEl.textContent = 'Edit Tag';
+        }
+        var dlg = document.getElementById('tag-edit-dialog'); if (dlg && !dlg.open) dlg.showModal();
+    } else if (id === 'category-edit-dialog-body') {
+        var catTitleEl = document.getElementById('category-edit-dialog-title');
+        if (catTitleEl) {
+            var catBody = e.detail.target;
+            if (catBody.querySelector('.category-merge-form')) catTitleEl.textContent = 'Merge Category';
+            else if (catBody.querySelector('.category-customize-form')) catTitleEl.textContent = 'Customize Display';
+            else if (catBody.querySelector('.category-global-edit-form')) catTitleEl.textContent = 'Edit Global Category';
+            else catTitleEl.textContent = 'Edit Category';
+        }
+        var cdlg = document.getElementById('category-edit-dialog'); if (cdlg && !cdlg.open) cdlg.showModal();
+    } else if (id === 'status-edit-dialog-body') {
+        var sdlg = document.getElementById('status-edit-dialog'); if (sdlg && !sdlg.open) sdlg.showModal();
+    }
+});
 </script>
 
 {# ── Tab switching ─────────────────────────────────────────────────────────── #}
@@ -725,9 +1055,41 @@ function showTagCustomPreview(input) {
             if (target === 'priority') {
                 if (window._initPrioritySortable) _initPrioritySortable();
             }
+            // Clear any active selection when switching tabs
+            if (window._orgBulkClear) window._orgBulkClear();
         });
     });
 })();
+</script>
+
+{# ── Shared bulk-action toolbar JS ────────────────────────────────────────── #}
+<script>
+window._orgBulk = { deselect: null, edit: null, merge: null, del: null };
+
+window._orgBulkClear = function() {
+    var bar = document.getElementById('org-bulk-bar');
+    if (bar) bar.classList.remove('visible');
+    document.querySelector('.organize-page').classList.remove('org-page--has-selection');
+    window._orgBulk = { deselect: null, edit: null, merge: null, del: null };
+};
+
+window._orgBulkSync = function(n, opts) {
+    var bar = document.getElementById('org-bulk-bar');
+    var countEl = document.getElementById('org-bulk-count');
+    var editBtn = document.getElementById('org-bulk-edit-btn');
+    var mergeBtn = document.getElementById('org-bulk-merge-btn');
+    var deleteBtn = document.getElementById('org-bulk-delete-btn');
+
+    bar.classList.toggle('visible', n > 0);
+    document.querySelector('.organize-page').classList.toggle('org-page--has-selection', n > 0);
+
+    if (n > 0) {
+        countEl.textContent = n === 1 ? '1 selected' : n + ' selected';
+    }
+    if (editBtn) editBtn.hidden = !opts.hasEdit;
+    if (mergeBtn) { mergeBtn.hidden = !opts.hasMerge; mergeBtn.disabled = n < 2; }
+    if (deleteBtn) deleteBtn.hidden = !opts.hasDel;
+};
 </script>
 
 {# ── Tags tab JS ───────────────────────────────────────────────────────────── #}
@@ -759,30 +1121,22 @@ function showTagCustomPreview(input) {
         });
     }
 
+    function _tagBulkDeselect() {
+        _tagSelected.clear(); _syncTagCheckboxes(); _updateTagBar();
+    }
+
     function _updateTagBar() {
         var n = _tagSelected.size;
-        var bar = document.getElementById('tag-sel-bar');
-        var countEl = document.getElementById('tag-sel-count');
-        var deselectBtn = document.getElementById('tag-sel-deselect');
-        var editBtn = document.getElementById('tag-sel-edit');
-        var deleteBtn = document.getElementById('tag-sel-delete');
-        var mergeBtn = document.getElementById('tag-sel-merge');
-        if (n > 0) {
-            bar.classList.add('cat-sel-bar--active');
-            countEl.textContent = n === 1 ? '1 selected' : n + ' selected';
-            countEl.hidden = false;
-            deselectBtn.disabled = false;
-            editBtn.disabled = false;
-            deleteBtn.disabled = false;
-            mergeBtn.disabled = n < 2;
-        } else {
-            bar.classList.remove('cat-sel-bar--active');
-            countEl.hidden = true;
-            deselectBtn.disabled = true;
-            editBtn.disabled = true;
-            deleteBtn.disabled = true;
-            mergeBtn.disabled = true;
-        }
+        window._orgBulk.deselect = _tagBulkDeselect;
+        window._orgBulk.edit = function() { if (_tagSelected.size) _openTagBulkEditDialog(); };
+        window._orgBulk.merge = function() {
+            if (_tagSelected.size < 2) return;
+            _tagMergeTargetId = Array.from(_tagSelected)[0];
+            _renderTagMergeDialog();
+            document.getElementById('tag-merge-dialog').showModal();
+        };
+        window._orgBulk.del = _tagBulkDelete;
+        _orgBulkSync(n, { hasEdit: true, hasMerge: true, hasDel: true });
     }
 
     function applyTagView() {
@@ -856,6 +1210,7 @@ function showTagCustomPreview(input) {
     function _onTagRowsUpdated() {
         _tagSelected.clear(); _updateTagBar(); _syncTagCheckboxes();
         applyTagView();
+        applyOrgFilter('tag');
     }
 
     // ── New tag form ──────────────────────────────────────────────────────────
@@ -915,15 +1270,6 @@ function showTagCustomPreview(input) {
         _getAllTagIds().forEach(function(id) { _tagSelected.add(id); });
         _syncTagCheckboxes(); _updateTagBar();
     });
-    document.getElementById('tag-sel-deselect').addEventListener('click', function() {
-        _tagSelected.clear(); _syncTagCheckboxes(); _updateTagBar();
-    });
-    document.getElementById('tag-sel-merge').addEventListener('click', function() {
-        if (_tagSelected.size < 2) return;
-        _tagMergeTargetId = Array.from(_tagSelected)[0];
-        _renderTagMergeDialog();
-        document.getElementById('tag-merge-dialog').showModal();
-    });
 
     // ── Multi-merge dialog ────────────────────────────────────────────────────
     function _getTagCardData(id) {
@@ -974,7 +1320,7 @@ function showTagCustomPreview(input) {
     });
 
     // ── Bulk delete ───────────────────────────────────────────────────────────
-    document.getElementById('tag-sel-delete').addEventListener('click', async function() {
+    async function _tagBulkDelete() {
         var n = _tagSelected.size; if (!n) return;
         if (!await confirmDialog({title:'Delete Tags',message:(n===1?'Delete 1 tag?':'Delete '+n+' tags?')+'\nPins will keep their other tags.',confirmLabel:'Delete'})) return;
         var ids = Array.from(_tagSelected).map(function(id){return parseInt(id,10);});
@@ -986,18 +1332,40 @@ function showTagCustomPreview(input) {
             document.getElementById('tag-rows').innerHTML=html; _onTagRowsUpdated();
             toastr.success(n===1?'1 tag deleted.':n+' tags deleted.');
         }).catch(function(err){toastr.error('Delete failed: '+err.message);});
-    });
+    }
 
     // ── Bulk edit dialog ──────────────────────────────────────────────────────
+    var _tagBulkConvertTarget = null; // null | 'category' | 'status'
+
+    window._setTagBulkConvert = function(target) {
+        var btns = document.querySelectorAll('#tag-bulk-edit-dialog .org-convert-btn');
+        if (_tagBulkConvertTarget === target) {
+            // Toggle off
+            _tagBulkConvertTarget = null;
+            btns.forEach(function(b) { b.classList.remove('active'); });
+        } else {
+            _tagBulkConvertTarget = target;
+            btns.forEach(function(b) { b.classList.remove('active'); });
+            var active = document.getElementById('tag-bulk-convert-to-' + target);
+            if (active) active.classList.add('active');
+        }
+        _updateTagBulkState();
+    };
+
     function _updateTagBulkState() {
-        var converting = !!document.getElementById('tag-bulk-convert-cb').checked;
+        var converting = !!_tagBulkConvertTarget;
         var hint = document.getElementById('tag-bulk-convert-hint');
-        if (hint) hint.hidden = !converting;
+        if (hint) {
+            hint.hidden = !converting;
+            if (converting) hint.textContent = _tagBulkConvertTarget === 'category'
+                ? 'All pin memberships will be migrated. Parent links will be cleared. You will be redirected to the categories tab.'
+                : 'All pin memberships will be migrated. Parent links will be cleared. You will be redirected to the status tab.';
+        }
         var mainFields = document.getElementById('tag-bulk-main-fields');
         if (mainFields) { mainFields.style.opacity = converting ? '0.4' : ''; mainFields.style.pointerEvents = converting ? 'none' : ''; }
         var btn = document.getElementById('tag-bulk-edit-confirm');
         if (btn && !btn.disabled) btn.innerHTML = converting
-            ? '<i class="material-icons" style="font-size:1rem;vertical-align:middle">swap_horiz</i> Convert to Categories'
+            ? '<i class="material-icons" style="font-size:1rem;vertical-align:middle">swap_horiz</i> Convert to ' + (_tagBulkConvertTarget === 'category' ? 'Categories' : 'Statuses')
             : '<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
         var iw = document.getElementById('tag-bulk-icon-wrap');
         var cp = document.getElementById('tag-bulk-color-picker');
@@ -1041,14 +1409,15 @@ function showTagCustomPreview(input) {
             if (sc&&cp2) { var sw=cp2.querySelector('[data-color="'+sc+'"]'); if(sw) sw.classList.add('selected'); }
         } else { cnn.checked=true; if(cv) cv.value=''; }
         document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb').forEach(function(cb){cb.checked=false;});
-        document.getElementById('tag-bulk-convert-cb').checked = false;
+        _tagBulkConvertTarget = null;
+        document.querySelectorAll('#tag-bulk-edit-dialog .org-convert-btn').forEach(function(b){b.classList.remove('active');});
         document.getElementById('tag-bulk-edit-title').textContent='Edit '+ids.length+' '+(ids.length===1?'Tag':'Tags');
         var cbtn=document.getElementById('tag-bulk-edit-confirm'); cbtn.disabled=false;
         cbtn.innerHTML='<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
         _updateTagBulkState();
         document.getElementById('tag-bulk-edit-dialog').showModal();
     }
-    document.getElementById('tag-sel-edit').addEventListener('click', function() { if (_tagSelected.size) _openTagBulkEditDialog(); });
+
     document.getElementById('tag-bulk-icon-nochange').addEventListener('change', function() {
         if (this.checked) {
             var iv=document.getElementById('icon-value-tag-bulk-edit');
@@ -1066,18 +1435,22 @@ function showTagCustomPreview(input) {
     document.getElementById('icon-grid-tag-bulk-edit').addEventListener('click', function(e) {
         if (e.target.closest('.icon-picker-item')) { document.getElementById('tag-bulk-icon-nochange').checked=false; _updateTagBulkState(); }
     });
-    document.getElementById('tag-bulk-convert-cb').addEventListener('change', function() { _updateTagBulkState(); });
     document.getElementById('tag-bulk-edit-confirm').addEventListener('click', function() {
         var ids = Array.from(_tagSelected).map(function(id){return parseInt(id,10);});
-        var converting = !!document.getElementById('tag-bulk-convert-cb').checked;
+        var converting = !!_tagBulkConvertTarget;
         var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> '+(converting?'Converting…':'Saving…');
         if (converting) {
-            fetch('{% url "tag.bulk_convert" %}', {
+            var convertUrl = _tagBulkConvertTarget === 'status' ? '{% url "tag.bulk_convert_status" %}' : '{% url "tag.bulk_convert" %}';
+            fetch(convertUrl, {
                 method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
                 body:JSON.stringify({ids:ids}),
             }).then(function(r){
-                if(r.status===204){var redir=r.headers.get('HX-Redirect'); if(redir){document.getElementById('tag-bulk-edit-dialog').close(); window.location.href=redir; return;}}
                 if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);});
+                return r.text();
+            }).then(function(html){
+                document.getElementById('tag-bulk-edit-dialog').close();
+                document.getElementById('tag-rows').innerHTML=html; _onTagRowsUpdated();
+                toastr.success(ids.length===1?'1 tag converted.':ids.length+' tags converted.');
             }).catch(function(err){toastr.error('Convert failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
         } else {
             var body = {ids:ids};
@@ -1098,19 +1471,6 @@ function showTagCustomPreview(input) {
 
     // ── HTMX hooks ────────────────────────────────────────────────────────────
     document.getElementById('tag-rows').addEventListener('htmx:afterSwap', _onTagRowsUpdated);
-    document.body.addEventListener('htmx:afterSwap', function(e) {
-        if (e.detail.target && e.detail.target.id === 'tag-edit-dialog-body') {
-            var titleEl = document.getElementById('tag-edit-dialog-title');
-            if (titleEl) {
-                var body = e.detail.target;
-                if (body.querySelector('.tag-merge-form')) titleEl.textContent = 'Merge Tag';
-                else if (body.querySelector('.tag-customize-form')) titleEl.textContent = 'Customize Display';
-                else if (body.querySelector('.tag-global-edit-form')) titleEl.textContent = 'Edit Global Tag';
-                else titleEl.textContent = 'Edit Tag';
-            }
-            var dlg = document.getElementById('tag-edit-dialog'); if (!dlg.open) dlg.showModal();
-        }
-    });
 
     // ── Init ──────────────────────────────────────────────────────────────────
     applyTagView();
@@ -1146,22 +1506,21 @@ function showTagCustomPreview(input) {
         });
     }
 
+    function _catBulkDeselect() {
+        _catSelected.clear(); _syncCatCheckboxes(); _updateCatBar();
+    }
+
     function _updateCatBar() {
         var n = _catSelected.size;
-        var bar = document.getElementById('cat-sel-bar');
-        var countEl = document.getElementById('cat-sel-count');
-        var deselectBtn = document.getElementById('cat-sel-deselect');
-        var editBtn = document.getElementById('cat-sel-edit');
-        var deleteBtn = document.getElementById('cat-sel-delete');
-        var mergeBtn = document.getElementById('cat-sel-merge');
-        if (n > 0) {
-            bar.classList.add('cat-sel-bar--active');
-            countEl.textContent = n===1?'1 selected':n+' selected';
-            countEl.hidden=false; deselectBtn.disabled=false; editBtn.disabled=false; deleteBtn.disabled=false; mergeBtn.disabled=n<2;
-        } else {
-            bar.classList.remove('cat-sel-bar--active');
-            countEl.hidden=true; deselectBtn.disabled=true; editBtn.disabled=true; deleteBtn.disabled=true; mergeBtn.disabled=true;
-        }
+        window._orgBulk.deselect = _catBulkDeselect;
+        window._orgBulk.edit = function() { if (_catSelected.size) _openCatBulkEditDialog(); };
+        window._orgBulk.merge = function() {
+            if (_catSelected.size < 2) return;
+            _catMergeTargetId = Array.from(_catSelected)[0]; _renderCatMergeDialog();
+            document.getElementById('cat-merge-dialog').showModal();
+        };
+        window._orgBulk.del = _catBulkDelete;
+        _orgBulkSync(n, { hasEdit: true, hasMerge: true, hasDel: true });
     }
 
     function applyCatView() {
@@ -1220,6 +1579,7 @@ function showTagCustomPreview(input) {
     function _onCatRowsUpdated() {
         _catSelected.clear(); _updateCatBar(); _syncCatCheckboxes();
         applyCatView();
+        applyOrgFilter('cat');
     }
 
     // ── New category form ─────────────────────────────────────────────────────
@@ -1269,16 +1629,9 @@ function showTagCustomPreview(input) {
         if(cb.checked)_catSelected.add(id); else _catSelected.delete(id);
         _syncCatCheckboxes(); _updateCatBar();
     });
-    document.getElementById('cat-sel-all').addEventListener('click', function(){
+    var catSelAll = document.getElementById('cat-sel-all');
+    if (catSelAll) catSelAll.addEventListener('click', function(){
         _getAllCatIds().forEach(function(id){_catSelected.add(id);}); _syncCatCheckboxes(); _updateCatBar();
-    });
-    document.getElementById('cat-sel-deselect').addEventListener('click', function(){
-        _catSelected.clear(); _syncCatCheckboxes(); _updateCatBar();
-    });
-    document.getElementById('cat-sel-merge').addEventListener('click', function(){
-        if(_catSelected.size<2)return;
-        _catMergeTargetId=Array.from(_catSelected)[0]; _renderCatMergeDialog();
-        document.getElementById('cat-merge-dialog').showModal();
     });
 
     // ── Multi-merge dialog ────────────────────────────────────────────────────
@@ -1328,7 +1681,7 @@ function showTagCustomPreview(input) {
     });
 
     // ── Bulk delete ───────────────────────────────────────────────────────────
-    document.getElementById('cat-sel-delete').addEventListener('click', async function(){
+    async function _catBulkDelete() {
         var n=_catSelected.size; if(!n)return;
         if(!await confirmDialog({title:'Delete Categories',message:(n===1?'Delete 1 category?':'Delete '+n+' categories?')+'\nPins and locations will keep their other categories.',confirmLabel:'Delete'}))return;
         var ids=Array.from(_catSelected).map(function(id){return parseInt(id,10);});
@@ -1340,18 +1693,39 @@ function showTagCustomPreview(input) {
             document.getElementById('category-rows').innerHTML=html; _onCatRowsUpdated();
             toastr.success(n===1?'1 category deleted.':n+' categories deleted.');
         }).catch(function(err){toastr.error('Delete failed: '+err.message);});
-    });
+    }
 
     // ── Bulk edit dialog ──────────────────────────────────────────────────────
+    var _catBulkConvertTarget = null; // null | 'tag' | 'status'
+
+    window._setCatBulkConvert = function(target) {
+        var btns = document.querySelectorAll('#cat-bulk-edit-dialog .org-convert-btn');
+        if (_catBulkConvertTarget === target) {
+            _catBulkConvertTarget = null;
+            btns.forEach(function(b) { b.classList.remove('active'); });
+        } else {
+            _catBulkConvertTarget = target;
+            btns.forEach(function(b) { b.classList.remove('active'); });
+            var active = document.getElementById('cat-bulk-convert-to-' + target);
+            if (active) active.classList.add('active');
+        }
+        _updateCatBulkState();
+    };
+
     function _updateCatBulkState(){
-        var converting=!!document.getElementById('cat-bulk-convert-cb').checked;
+        var converting=!!_catBulkConvertTarget;
         var hint=document.getElementById('cat-bulk-convert-hint');
-        if(hint)hint.hidden=!converting;
+        if(hint){
+            hint.hidden=!converting;
+            if(converting) hint.textContent = _catBulkConvertTarget === 'tag'
+                ? 'All pin memberships will be migrated. Parent links will be cleared. You will be redirected to the tags tab.'
+                : 'All pin memberships will be migrated. Parent links will be cleared. You will be redirected to the status tab.';
+        }
         var mainFields=document.getElementById('cat-bulk-main-fields');
         if(mainFields){mainFields.style.opacity=converting?'0.4':''; mainFields.style.pointerEvents=converting?'none':'';}
         var btn=document.getElementById('cat-bulk-edit-confirm');
         if(btn&&!btn.disabled)btn.innerHTML=converting
-            ?'<i class="material-icons" style="font-size:1rem;vertical-align:middle">swap_horiz</i> Convert to Tags'
+            ?'<i class="material-icons" style="font-size:1rem;vertical-align:middle">swap_horiz</i> Convert to ' + (_catBulkConvertTarget === 'tag' ? 'Tags' : 'Statuses')
             :'<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
         var iw=document.getElementById('cat-bulk-icon-wrap');
         var cp=document.getElementById('cat-bulk-color-picker');
@@ -1385,14 +1759,14 @@ function showTagCustomPreview(input) {
         if(sc!==null){cnn.checked=false; if(cv)cv.value=sc; if(sc&&cp2){var sw=cp2.querySelector('[data-color="'+sc+'"]'); if(sw)sw.classList.add('selected');}}
         else{cnn.checked=true; if(cv)cv.value='';}
         document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb').forEach(function(cb){cb.checked=false;});
-        document.getElementById('cat-bulk-convert-cb').checked=false;
+        _catBulkConvertTarget = null;
+        document.querySelectorAll('#cat-bulk-edit-dialog .org-convert-btn').forEach(function(b){b.classList.remove('active');});
         document.getElementById('cat-bulk-edit-title').textContent='Edit '+ids.length+' '+(ids.length===1?'Category':'Categories');
         var cbtn=document.getElementById('cat-bulk-edit-confirm'); cbtn.disabled=false;
         cbtn.innerHTML='<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
         _updateCatBulkState();
         document.getElementById('cat-bulk-edit-dialog').showModal();
     }
-    document.getElementById('cat-sel-edit').addEventListener('click', function(){if(_catSelected.size)_openCatBulkEditDialog();});
     document.getElementById('cat-bulk-icon-nochange').addEventListener('change', function(){
         if(this.checked){var iv=document.getElementById('icon-value-cat-bulk-edit'); var ic=document.getElementById('icon-current-cat-bulk-edit'); var ig=document.getElementById('icon-grid-cat-bulk-edit'); if(iv)iv.value=''; if(ic)ic.innerHTML='<span class="icon-picker-none-label">No icon</span>'; if(ig){ig.querySelectorAll('.icon-picker-item').forEach(function(b){b.classList.remove('selected');}); var nb=ig.querySelector('.icon-picker-none'); if(nb)nb.classList.add('selected');}}
         _updateCatBulkState();
@@ -1404,18 +1778,22 @@ function showTagCustomPreview(input) {
     document.getElementById('icon-grid-cat-bulk-edit').addEventListener('click', function(e){
         if(e.target.closest('.icon-picker-item')){document.getElementById('cat-bulk-icon-nochange').checked=false; _updateCatBulkState();}
     });
-    document.getElementById('cat-bulk-convert-cb').addEventListener('change', function(){_updateCatBulkState();});
     document.getElementById('cat-bulk-edit-confirm').addEventListener('click', function(){
         var ids=Array.from(_catSelected).map(function(id){return parseInt(id,10);});
-        var converting=!!document.getElementById('cat-bulk-convert-cb').checked;
+        var converting=!!_catBulkConvertTarget;
         var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> '+(converting?'Converting…':'Saving…');
         if(converting){
-            fetch('{% url "category.bulk_convert" %}', {
+            var convertUrl = _catBulkConvertTarget === 'status' ? '{% url "category.bulk_convert_status" %}' : '{% url "category.bulk_convert" %}';
+            fetch(convertUrl, {
                 method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
                 body:JSON.stringify({ids:ids}),
             }).then(function(r){
-                if(r.status===204){var redir=r.headers.get('HX-Redirect'); if(redir){document.getElementById('cat-bulk-edit-dialog').close(); window.location.href=redir; return;}}
                 if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);});
+                return r.text();
+            }).then(function(html){
+                document.getElementById('cat-bulk-edit-dialog').close();
+                document.getElementById('category-rows').innerHTML=html; _onCatRowsUpdated();
+                toastr.success(ids.length===1?'1 category converted.':ids.length+' categories converted.');
             }).catch(function(err){toastr.error('Convert failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
         } else {
             var body={ids:ids};
@@ -1436,19 +1814,6 @@ function showTagCustomPreview(input) {
 
     // ── HTMX hooks ────────────────────────────────────────────────────────────
     document.getElementById('category-rows').addEventListener('htmx:afterSwap', _onCatRowsUpdated);
-    document.body.addEventListener('htmx:afterSwap', function(e){
-        if(e.detail.target&&e.detail.target.id==='category-edit-dialog-body'){
-            var titleEl=document.getElementById('category-edit-dialog-title');
-            if(titleEl){
-                var body=e.detail.target;
-                if(body.querySelector('.category-merge-form'))titleEl.textContent='Merge Category';
-                else if(body.querySelector('.category-customize-form'))titleEl.textContent='Customize Display';
-                else if(body.querySelector('.category-global-edit-form'))titleEl.textContent='Edit Global Category';
-                else titleEl.textContent='Edit Category';
-            }
-            var dlg=document.getElementById('category-edit-dialog'); if(!dlg.open)dlg.showModal();
-        }
-    });
 
     // ── Init ──────────────────────────────────────────────────────────────────
     applyCatView();
@@ -1458,6 +1823,9 @@ function showTagCustomPreview(input) {
 {# ── Status tab JS ─────────────────────────────────────────────────────────── #}
 <script>
 (function() {
+    var _statusSelected = new Set();
+    var _lastStatusClickIdx = -1;
+
     // New status toggle
     var newStatusBtn = document.getElementById('new-status-btn');
     var newStatusForm = document.getElementById('new-status-form');
@@ -1467,67 +1835,88 @@ function showTagCustomPreview(input) {
         });
     }
 
-    // Bulk select for statuses
-    function _updateStatusSelBar() {
-        var checked = document.querySelectorAll('.status-select-cb:checked');
-        var bar = document.getElementById('status-sel-bar');
-        var countEl = document.getElementById('status-sel-count');
-        var deleteBtn = document.getElementById('status-sel-delete');
-        var deselectBtn = document.getElementById('status-sel-deselect');
-        if (!bar) return;
-        if (checked.length) {
-            if (countEl) { countEl.textContent = checked.length + ' selected'; countEl.hidden = false; }
-            if (deleteBtn) deleteBtn.disabled = false;
-            if (deselectBtn) deselectBtn.disabled = false;
-        } else {
-            if (countEl) { countEl.textContent = ''; countEl.hidden = true; }
-            if (deleteBtn) deleteBtn.disabled = true;
-            if (deselectBtn) deselectBtn.disabled = true;
-        }
+    function _statusCards() {
+        return Array.from(document.querySelectorAll('#status-rows .tag-card[data-status-id]'));
     }
 
-    document.addEventListener('change', function(e) {
-        if (e.target && e.target.classList.contains('status-select-cb')) _updateStatusSelBar();
+    function _statusBulkDeselect() {
+        _statusSelected.clear(); _lastStatusClickIdx = -1; _syncStatusSelBar();
+    }
+
+    async function _statusBulkDelete() {
+        var ids = Array.from(_statusSelected);
+        if (!ids.length) return;
+        if (!await confirmDialog({title:'Delete Statuses',message:'Delete '+ids.length+' status'+(ids.length===1?'':'es')+'?',confirmLabel:'Delete'})) return;
+        fetch('{% url "status.bulk_delete" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({ ids: ids }),
+        }).then(function(r) { return r.text(); }).then(function(html) {
+            var rows = document.getElementById('status-rows');
+            if (rows) { rows.innerHTML = html; htmx.process(rows); }
+            _statusSelected.clear(); _lastStatusClickIdx = -1; _syncStatusSelBar();
+            applyOrgFilter('status');
+        });
+    }
+
+    function _syncStatusSelBar() {
+        var n = _statusSelected.size;
+        window._orgBulk.deselect = _statusBulkDeselect;
+        window._orgBulk.edit = null;
+        window._orgBulk.merge = null;
+        window._orgBulk.del = _statusBulkDelete;
+        _orgBulkSync(n, { hasEdit: false, hasMerge: false, hasDel: true });
+        _statusCards().forEach(function(card) {
+            var id = parseInt(card.dataset.statusId, 10);
+            card.classList.toggle('is-selected', _statusSelected.has(id));
+            var cb = card.querySelector('.status-select-cb');
+            if (cb) cb.checked = _statusSelected.has(id);
+        });
+    }
+
+    document.getElementById('status-rows').addEventListener('click', function(e) {
+        var card = e.target.closest('.tag-card[data-status-id]');
+        if (!card) return;
+        // Ignore clicks on interactive elements
+        if (e.target.closest('a,button,input,select,textarea')) return;
+        var cards = _statusCards();
+        var idx = cards.indexOf(card);
+        var id = parseInt(card.dataset.statusId, 10);
+        var isProtected = card.dataset.statusProtected === 'true' || card.dataset.statusProtected === '1';
+        if (isProtected) return;
+
+        if (e.shiftKey && _lastStatusClickIdx >= 0) {
+            var lo = Math.min(idx, _lastStatusClickIdx);
+            var hi = Math.max(idx, _lastStatusClickIdx);
+            var targetState = !_statusSelected.has(id);
+            for (var i = lo; i <= hi; i++) {
+                var cid = parseInt(cards[i].dataset.statusId, 10);
+                var cprot = cards[i].dataset.statusProtected === 'true' || cards[i].dataset.statusProtected === '1';
+                if (!cprot) { if (targetState) _statusSelected.add(cid); else _statusSelected.delete(cid); }
+            }
+        } else {
+            if (_statusSelected.has(id)) _statusSelected.delete(id);
+            else _statusSelected.add(id);
+            _lastStatusClickIdx = idx;
+        }
+        _syncStatusSelBar();
     });
 
     var selAllBtn = document.getElementById('status-sel-all');
     if (selAllBtn) {
         selAllBtn.addEventListener('click', function() {
-            document.querySelectorAll('.status-select-cb:not(:disabled)').forEach(function(cb) { cb.checked = true; });
-            _updateStatusSelBar();
-        });
-    }
-    var deselectBtn = document.getElementById('status-sel-deselect');
-    if (deselectBtn) {
-        deselectBtn.addEventListener('click', function() {
-            document.querySelectorAll('.status-select-cb').forEach(function(cb) { cb.checked = false; });
-            _updateStatusSelBar();
-        });
-    }
-    var deleteBtn = document.getElementById('status-sel-delete');
-    if (deleteBtn) {
-        deleteBtn.addEventListener('click', function() {
-            var ids = Array.from(document.querySelectorAll('.status-select-cb:checked')).map(function(cb) { return parseInt(cb.dataset.statusId, 10); });
-            if (!ids.length) return;
-            if (!confirm('Delete ' + ids.length + ' status(es)?')) return;
-            fetch('{% url "status.bulk_delete" %}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-                body: JSON.stringify({ ids: ids }),
-            }).then(function(r) { return r.text(); }).then(function(html) {
-                var rows = document.getElementById('status-rows');
-                if (rows) { rows.innerHTML = html; htmx.process(rows); }
-                _updateStatusSelBar();
+            _statusCards().forEach(function(card) {
+                var prot = card.dataset.statusProtected === 'true' || card.dataset.statusProtected === '1';
+                if (!prot) _statusSelected.add(parseInt(card.dataset.statusId, 10));
             });
+            _lastStatusClickIdx = -1;
+            _syncStatusSelBar();
         });
     }
-
-    // Open edit dialog when HTMX loads form into status-edit-dialog-body
-    document.addEventListener('htmx:afterSwap', function(e) {
-        if (e.detail.target && e.detail.target.id === 'status-edit-dialog-body') {
-            var dlg = document.getElementById('status-edit-dialog');
-            if (dlg && !dlg.open) dlg.showModal();
-        }
+    // ── HTMX hooks ────────────────────────────────────────────────────────────
+    document.getElementById('status-rows').addEventListener('htmx:afterSwap', function() {
+        _statusSelected.clear(); _lastStatusClickIdx = -1; _syncStatusSelBar();
+        applyOrgFilter('status');
     });
 })();
 </script>

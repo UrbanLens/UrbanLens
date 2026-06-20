@@ -1,7 +1,7 @@
 {% load dashboard_tags %}
 <form hx-post="{% url 'status.edit' badge.id %}" hx-target="#status-rows" hx-swap="innerHTML"
       class="tag-form"
-      hx-on::after-request="if(event.detail.successful){ document.getElementById('status-edit-dialog').close(); toastr.success('Status updated.'); }">
+      hx-on::after-request="if(event.detail.successful){ document.getElementById('status-edit-dialog').close(); var kc=event.detail.xhr&&event.detail.xhr.getResponseHeader('X-Kind-Changed'); toastr.success(kc?'Converted to '+kc+'.':'Status saved.'); }">
     {% csrf_token %}
     <div class="form-field" style="margin-bottom:1rem;">
         <label class="form-label">Type</label>

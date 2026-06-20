@@ -160,19 +160,10 @@ class StatusEditView(LoginRequiredMixin, View):
 
         badge.save()
 
-        if kind_changed and new_kind == "tag":
-            from django.urls import reverse
-            response = HttpResponse(status=204)
-            response["HX-Redirect"] = reverse("organize.index") + "?tab=tags"
-            return response
-
-        if kind_changed and new_kind == "category":
-            from django.urls import reverse
-            response = HttpResponse(status=204)
-            response["HX-Redirect"] = reverse("organize.index") + "?tab=categories"
-            return response
-
-        return render(request, "dashboard/partials/status_rows.html", _rows_ctx(request.user.profile))
+        response = render(request, "dashboard/partials/status_rows.html", _rows_ctx(request.user.profile))
+        if kind_changed:
+            response["X-Kind-Changed"] = new_kind
+        return response
 
 
 class StatusDeleteView(LoginRequiredMixin, View):

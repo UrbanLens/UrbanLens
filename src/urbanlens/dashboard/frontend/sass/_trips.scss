@@ -1622,7 +1622,7 @@
     border: 2px solid var(--ul-border);
     border-radius: 50%;
     box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
-    position: relative;
+    position: absolute; // must match Leaflet's .leaflet-marker-icon so transform-based positioning works
     transition: background .15s, transform .15s;
 
     // Absolute centering avoids fighting Leaflet's .leaflet-marker-icon { display: block }

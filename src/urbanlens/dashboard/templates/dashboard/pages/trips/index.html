@@ -28,7 +28,7 @@
 </div>
 
 {# ── Create trip dialog ─────────────────────────────────────────────────── #}
-<dialog id="create-trip-dialog" class="trip-create-dialog">
+<dialog id="create-trip-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="New Trip" %}
     <form hx-post="{% url 'trips.create' %}"
           hx-target="#trip-list"

@@ -38,7 +38,7 @@
     </div>
 
     {# ── Add-badge dialog ─────────────────────────────────────────────────── #}
-    <dialog id="category-add-dialog-{{ pin.uuid }}" class="tag-add-dialog">
+    <dialog id="category-add-dialog-{{ pin.uuid }}" class="tag-add-dialog ul-dialog">
         {% include "dashboard/partials/_dialog_header.html" with title="Add Badges" %}
 
         {# Tab bar #}
@@ -46,7 +46,7 @@
             <button class="tad-tab tad-tab--active" data-tab="all" role="tab">All</button>
             <button class="tad-tab" data-tab="tag" role="tab">Tags</button>
             <button class="tad-tab" data-tab="category" role="tab">Categories</button>
-            <button class="tad-tab" data-tab="status" role="tab">Status</button>
+            <button class="tad-tab" data-tab="status" role="tab">Statuses</button>
         </div>
 
         <input type="search" class="dialog-search" placeholder="Search badges…" autocomplete="off">

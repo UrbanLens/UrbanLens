@@ -11,7 +11,6 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
-from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Badge
@@ -138,7 +137,7 @@ class CategoryEditView(LoginRequiredMixin, View):
             cat_id: The category PK.
 
         Returns:
-            Rendered category_rows.html partial, or an HX-Redirect on kind conversion.
+            Rendered category_rows.html partial (X-Kind-Changed header set on conversion).
         """
         if not request.user.has_perm(_PERM):
             return HttpResponseForbidden()
@@ -195,17 +194,10 @@ class CategoryEditView(LoginRequiredMixin, View):
             else:
                 category.parents.clear()
 
-        if kind_changed and new_kind == "tag":
-            response = HttpResponse(status=204)
-            response["HX-Redirect"] = reverse("organize.index") + "?tab=tags"
-            return response
-
-        if kind_changed and new_kind == "status":
-            response = HttpResponse(status=204)
-            response["HX-Redirect"] = reverse("organize.index") + "?tab=statuses"
-            return response
-
-        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
+        response = render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
+        if kind_changed:
+            response["X-Kind-Changed"] = new_kind
+        return response
 
 
 class CategoryDeleteView(LoginRequiredMixin, View):
@@ -358,7 +350,7 @@ class CategoryBulkConvertView(LoginRequiredMixin, View):
             request: The HTTP request with JSON body containing ids list.
 
         Returns:
-            204 with HX-Redirect header pointing to the tags tab.
+            Rendered category_rows.html partial (converted categories will be absent).
         """
         if not request.user.has_perm(_PERM):
             return HttpResponseForbidden()
@@ -385,9 +377,44 @@ class CategoryBulkConvertView(LoginRequiredMixin, View):
             category.parents.clear()
             category.save()
 
-        response = HttpResponse(status=204)
-        response["HX-Redirect"] = reverse("organize.index") + "?tab=tags"
-        return response
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
+
+
+class CategoryBulkConvertToStatusView(LoginRequiredMixin, View):
+    """Convert multiple categories to personal status badges (JSON POST)."""
+
+    def post(self, request, *args, **kwargs):
+        """Convert categories to statuses, migrating pin memberships.
+
+        Args:
+            request: The HTTP request with JSON body containing ids list.
+
+        Returns:
+            Rendered category_rows.html partial (converted categories will be absent).
+        """
+        if not request.user.has_perm(_PERM):
+            return HttpResponseForbidden()
+        try:
+            data = json.loads(request.body)
+            ids = [int(x) for x in data.get("ids", [])]
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return JsonResponse({"error": "Invalid data"}, status=400)
+
+        if not ids:
+            return HttpResponse("No categories specified.", status=400)
+
+        profile = request.user.profile
+        cats_to_convert = list(Badge.objects.filter(id__in=ids, kind="category"))
+        for category in cats_to_convert:
+            for pin in Pin.objects.filter(categories=category, profile=profile):
+                pin.statuses.add(category)
+                pin.categories.remove(category)
+            category.kind = "status"
+            category.profile = profile
+            category.parents.clear()
+            category.save()
+
+        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(request.user.profile, request.user.has_perm(_PERM)))
 
 
 class CategoryMultiMergeView(LoginRequiredMixin, View):

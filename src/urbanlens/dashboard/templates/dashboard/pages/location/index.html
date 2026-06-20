@@ -176,7 +176,7 @@
             </div>
 
             {# ── Markup edit dialog (opens after drawing or clicking a saved item) ── #}
-            <dialog id="markup-edit-dialog" class="trip-create-dialog">
+            <dialog id="markup-edit-dialog" class="trip-create-dialog ul-dialog">
                 {% include "dashboard/partials/_dialog_header.html" with title="Edit Annotation" %}
                 <div class="markup-form-body" style="padding:1rem 1.5rem 1.25rem">
                     <label class="markup-form-label-row">
@@ -335,7 +335,7 @@
 </div>
 
 {# ── Pin edit dialog ────────────────────────────────────────────────────── #}
-<dialog id="pin-edit-dialog" class="pin-edit-dialog">
+<dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Edit Pin" %}
     <form hx-post="{% url 'pin.edit' pin.uuid %}"
           hx-target="#pin-overview"
@@ -431,7 +431,7 @@
 </dialog>
 
 {# ── Add detail-pin dialog ──────────────────────────────────────────────── #}
-<dialog id="detail-pin-add-dialog" class="detail-pin-add-dialog">
+<dialog id="detail-pin-add-dialog" class="detail-pin-add-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Add Detail Pin" %}
     <div class="detail-pin-add-body">
     <p class="detail-pin-add-hint">
@@ -521,7 +521,7 @@
 </dialog>
 
 {# ── Edit detail-pin dialog ──────────────────────────────────────────────── #}
-<dialog id="detail-pin-edit-dialog" class="detail-pin-add-dialog">
+<dialog id="detail-pin-edit-dialog" class="detail-pin-add-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Edit Detail Pin" %}
     <div class="detail-pin-add-body">
         <form id="detail-pin-edit-form" class="detail-pin-add-form" novalidate>
