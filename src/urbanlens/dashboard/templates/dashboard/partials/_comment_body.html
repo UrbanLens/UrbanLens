@@ -51,9 +51,18 @@
   {% endif %}
 
   {% if comment.image %}
+  {% if comment.profile.pk in blurred_profiles %}
+  <div class="comment-image-blurred" title="Photo hidden by your privacy settings">
+    <img src="{{ comment.image.url }}" alt="Attached" class="comment-image comment-image--blurred">
+    <span class="comment-image-blur-label">
+      <i class="material-icons">visibility_off</i> Photo hidden
+    </span>
+  </div>
+  {% else %}
   <a href="{{ comment.image.url }}" target="_blank" class="comment-image-link">
     <img src="{{ comment.image.url }}" alt="Attached" class="comment-image">
   </a>
+  {% endif %}
   {% endif %}
 
   {# ── Reactions ── #}
@@ -117,7 +126,7 @@
     {% for reply_item in replies %}
     {% with r=reply_item.comment %}
     <li class="comment-item comment-item--reply" id="comment-{{ r.id }}">
-      {% include "dashboard/partials/_comment_body.html" with comment=r rendered_text=reply_item.rendered_text reactions=reply_item.reactions replies=None context_type=context_type pin=pin location=location trip=trip trip_uuid=trip_uuid profile=profile allowed_emojis=allowed_emojis is_reply=True %}
+      {% include "dashboard/partials/_comment_body.html" with comment=r rendered_text=reply_item.rendered_text reactions=reply_item.reactions replies=None context_type=context_type pin=pin location=location trip=trip trip_uuid=trip_uuid profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=True %}
     </li>
     {% endwith %}
     {% endfor %}

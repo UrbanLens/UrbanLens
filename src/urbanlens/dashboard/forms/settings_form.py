@@ -45,7 +45,7 @@ _FRIEND_REQUEST_CHOICES = [(k, v) for k, v in VisibilityChoice.choices if k != V
 
 
 class PrivacySettingsForm(forms.ModelForm):
-    """Controls who can see this user's profile and comments, and whether they accept friend requests."""
+    """Controls who can see this user's profile, comments, photos, and friend requests."""
 
     profile_visibility = forms.ChoiceField(
         choices=VisibilityChoice.choices,
@@ -65,6 +65,18 @@ class PrivacySettingsForm(forms.ModelForm):
         label="Friend Requests",
         help_text="Which users are allowed to send you friend requests.",
     )
+    photo_upload_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="My Photo Visibility",
+        help_text="Who can see the photos you upload to pins and locations.",
+    )
+    viewer_photo_filter = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Show Me Photos From",
+        help_text="Whose photos you want to see. Photos from users outside this setting will be blurred.",
+    )
     hide_pin_locations_in_trips = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
@@ -77,7 +89,14 @@ class PrivacySettingsForm(forms.ModelForm):
 
     class Meta:
         model = Profile
-        fields = ["profile_visibility", "comment_visibility", "friend_request_visibility", "hide_pin_locations_in_trips"]
+        fields = [
+            "profile_visibility",
+            "comment_visibility",
+            "friend_request_visibility",
+            "photo_upload_visibility",
+            "viewer_photo_filter",
+            "hide_pin_locations_in_trips",
+        ]
 
 
 class ContactSettingsForm(forms.Form):

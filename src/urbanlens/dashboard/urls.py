@@ -36,7 +36,29 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import aliases, campus, categories, comments, detail_pins, friendship, location_wiki, maps, markup, notifications, organize, pin, pin_edit, settings, site_admin, statuses, tags, trip, userprofile, visits
+from urbanlens.dashboard.controllers import (
+    aliases,
+    campus,
+    categories,
+    comments,
+    detail_pins,
+    friendship,
+    image_gallery,
+    location_wiki,
+    maps,
+    markup,
+    notifications,
+    organize,
+    pin,
+    pin_edit,
+    settings,
+    site_admin,
+    statuses,
+    tags,
+    trip,
+    userprofile,
+    visits,
+)
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -248,6 +270,21 @@ urlpatterns = [
                                 name="pin.comment.delete",
                             ),
                             path(
+                                "<uuid:pin_uuid>/gallery/",
+                                image_gallery.PinGalleryView.as_view(),
+                                name="pin.gallery",
+                            ),
+                            path(
+                                "<uuid:pin_uuid>/gallery/json/",
+                                image_gallery.PinGalleryJsonView.as_view(),
+                                name="pin.gallery.json",
+                            ),
+                            path(
+                                "<uuid:pin_uuid>/gallery/<int:image_id>/",
+                                image_gallery.PinImageView.as_view(),
+                                name="pin.gallery.image",
+                            ),
+                            path(
                                 "import/",
                                 include(
                                     [
@@ -424,6 +461,21 @@ urlpatterns = [
                     "<uuid:location_uuid>/wiki/aliases/<int:alias_id>/delete/",
                     aliases.LocationAliasDeleteView.as_view(),
                     name="location.wiki.alias.delete",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/gallery/",
+                    image_gallery.WikiGalleryView.as_view(),
+                    name="location.wiki.gallery",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/gallery/json/",
+                    image_gallery.WikiGalleryJsonView.as_view(),
+                    name="location.wiki.gallery.json",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/gallery/<int:image_id>/",
+                    image_gallery.WikiImageView.as_view(),
+                    name="location.wiki.gallery.image",
                 ),
             ],
         ),

@@ -318,6 +318,20 @@
     </div>
     {% endif %}
 
+    {# ── Photo gallery ────────────────────────────────────────────────── #}
+    <div id="pin-gallery-panel"
+         hx-get="{% url 'pin.gallery' pin.uuid %}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+        <div class="card">
+            <div class="card-header">
+                <i class="material-icons">photo_library</i>
+                <span>Photos</span>
+            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+        </div>
+    </div>
+
     {# ── Comments ─────────────────────────────────────────────────────── #}
     <div id="comment-panel"
          hx-get="{% url 'pin.comments' pin.uuid %}"
@@ -690,6 +704,9 @@
     const _markupLayer    = L.layerGroup();
     const _detailsLayer   = L.layerGroup([_detailPinLayer, _markupLayer]).addTo(map);
     _overlays['Details'] = _detailsLayer;
+
+    const _photoLayer   = L.layerGroup().addTo(map);
+    _overlays['Photos'] = _photoLayer;
 
     L.control.layers(_baseLayers, _overlays, { position: 'topright', collapsed: true }).addTo(map);
 
@@ -2187,5 +2204,58 @@
             });
         });
     }());
+
+    // ── Photo map layer ───────────────────────────────────────────────────────
+    const _photoMarkers   = {};  // id → { marker, img }
+    const _photoJsonUrl   = "{% url 'pin.gallery.json' pin.uuid %}";
+
+    function _photoMarkerHtml(img, size) {
+        return `<div class="photo-map-marker" style="width:${size}px;height:${size}px">` +
+               `<img src="${img.url}" style="width:100%;height:100%;object-fit:cover;border-radius:4px">` +
+               `</div>`;
+    }
+
+    function _loadPhotoLayer() {
+        fetch(_photoJsonUrl)
+            .then(r => r.json())
+            .then(data => {
+                _photoLayer.clearLayers();
+                Object.keys(_photoMarkers).forEach(k => delete _photoMarkers[k]);
+                (data.images || []).forEach(img => {
+                    if (img.latitude === null || img.longitude === null) return;
+                    const sz = 48;
+                    const icon = L.divIcon({ html: _photoMarkerHtml(img, sz), className: '', iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] });
+                    const marker = L.marker([img.latitude, img.longitude], { icon, draggable: !!img.is_mine });
+                    marker.bindTooltip(img.caption || img.uploader || 'Photo', { direction: 'top' });
+                    marker.on('click', () => { if (window.galleryOpenLightbox) galleryOpenLightbox(img.id); });
+                    if (img.is_mine) {
+                        marker.on('dragend', function () {
+                            const pos = marker.getLatLng();
+                            if (window.galleryRepositionImage) galleryRepositionImage(img.id, pos.lat, pos.lng);
+                        });
+                    }
+                    marker.addTo(_photoLayer);
+                    _photoMarkers[img.id] = { marker, img };
+                });
+            })
+            .catch(err => console.warn('Could not load photo layer:', err));
+    }
+    _loadPhotoLayer();
+
+    // Callbacks used by _photo_gallery.html
+    window._galleryAddMarker = function (img) {
+        if (img.latitude === null || img.longitude === null) return;
+        _loadPhotoLayer();
+    };
+    window._galleryRemoveMarker = function (imgId) {
+        const entry = _photoMarkers[imgId];
+        if (entry) { _photoLayer.removeLayer(entry.marker); delete _photoMarkers[imgId]; }
+    };
+    window._galleryHighlightMarker = function (imgId, on) {
+        const entry = _photoMarkers[imgId];
+        if (!entry) return;
+        const sz = on ? 64 : 48;
+        entry.marker.setIcon(L.divIcon({ html: _photoMarkerHtml(entry.img, sz), className: '', iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }));
+    };
 </script>
 {% endblock %}

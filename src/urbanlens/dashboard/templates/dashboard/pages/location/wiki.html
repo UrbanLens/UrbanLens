@@ -244,6 +244,20 @@
             <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
         </div>
 
+        {# ── Photo gallery ────────────────────────────────────────────────── #}
+        <div id="wiki-gallery-panel"
+             hx-get="{% url 'location.wiki.gallery' location.uuid %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-icons">photo_library</i>
+                    <span>Photos</span>
+                </div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            </div>
+        </div>
+
         {# ── Comments ─────────────────────────────────────────────────────── #}
         <div id="comment-panel"
              hx-get="{% url 'location.wiki.comments' location.uuid %}"
@@ -796,5 +810,55 @@
             });
         });
     }());
+
+    // ── Photo map layer ───────────────────────────────────────────────────────
+    const _wikiPhotoLayer   = L.layerGroup().addTo(bboxMap);
+    const _wikiPhotoMarkers = {};  // id → { marker, img }
+    const _wikiPhotoJsonUrl = "{% url 'location.wiki.gallery.json' location.uuid %}";
+
+    function _wikiPhotoMarkerHtml(img, size) {
+        return `<div class="photo-map-marker" style="width:${size}px;height:${size}px">` +
+               `<img src="${img.url}" style="width:100%;height:100%;object-fit:cover;border-radius:4px">` +
+               `</div>`;
+    }
+
+    function _loadWikiPhotoLayer() {
+        fetch(_wikiPhotoJsonUrl)
+            .then(r => r.json())
+            .then(data => {
+                _wikiPhotoLayer.clearLayers();
+                Object.keys(_wikiPhotoMarkers).forEach(k => delete _wikiPhotoMarkers[k]);
+                (data.images || []).forEach(img => {
+                    if (img.latitude === null || img.longitude === null) return;
+                    const sz = 48;
+                    const icon = L.divIcon({ html: _wikiPhotoMarkerHtml(img, sz), className: '', iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] });
+                    const marker = L.marker([img.latitude, img.longitude], { icon, draggable: !!img.is_mine });
+                    marker.bindTooltip(img.caption || img.uploader || 'Photo', { direction: 'top' });
+                    marker.on('click', () => { if (window.galleryOpenLightbox) galleryOpenLightbox(img.id); });
+                    if (img.is_mine) {
+                        marker.on('dragend', function () {
+                            const pos = marker.getLatLng();
+                            if (window.galleryRepositionImage) galleryRepositionImage(img.id, pos.lat, pos.lng);
+                        });
+                    }
+                    marker.addTo(_wikiPhotoLayer);
+                    _wikiPhotoMarkers[img.id] = { marker, img };
+                });
+            })
+            .catch(err => console.warn('Could not load wiki photo layer:', err));
+    }
+    _loadWikiPhotoLayer();
+
+    window._galleryAddMarker = function (img) { _loadWikiPhotoLayer(); };
+    window._galleryRemoveMarker = function (imgId) {
+        const entry = _wikiPhotoMarkers[imgId];
+        if (entry) { _wikiPhotoLayer.removeLayer(entry.marker); delete _wikiPhotoMarkers[imgId]; }
+    };
+    window._galleryHighlightMarker = function (imgId, on) {
+        const entry = _wikiPhotoMarkers[imgId];
+        if (!entry) return;
+        const sz = on ? 64 : 48;
+        entry.marker.setIcon(L.divIcon({ html: _wikiPhotoMarkerHtml(entry.img, sz), className: '', iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }));
+    };
 </script>
 {% endblock %}

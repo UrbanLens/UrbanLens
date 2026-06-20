@@ -44,6 +44,17 @@ def _build_context(comments_qs, profile: Profile, **extra) -> dict:
             "replies__profile__user",
         ),
     )
+    # Collect all unique commenter profiles so we can check photo visibility once.
+    all_commenters: set[Profile] = set()
+    for c in top_level:
+        all_commenters.add(c.profile)
+        all_commenters.update(r.profile for r in c.replies.all())
+    # Set of profile IDs whose images should be blurred for this viewer.
+    blurred_profiles: set[int] = {
+        p.pk for p in all_commenters
+        if p != profile and not profile.can_view_photos_from(p)
+    }
+
     rendered = []
     for c in top_level:
         html = render_comment_text(c.text, pinned)
@@ -72,6 +83,7 @@ def _build_context(comments_qs, profile: Profile, **extra) -> dict:
     return {
         "rendered_comments": rendered,
         "profile": profile,
+        "blurred_profiles": blurred_profiles,
         "allowed_emojis": sorted(_ALLOWED_EMOJIS),
         **extra,
     }

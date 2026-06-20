@@ -29,6 +29,7 @@ from __future__ import annotations
 import math
 
 from django.contrib.auth.models import User
+from django.db import models
 from django.db.models import (
     CASCADE,
     BooleanField,
@@ -106,6 +107,18 @@ class Profile(abstract.Model):
         max_length=20,
         choices=VisibilityChoice.choices,
         default=VisibilityChoice.ANYONE,
+    )
+    photo_upload_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.ANYONE,
+        help_text="Who can see the photos you upload to pins and locations.",
+    )
+    viewer_photo_filter = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.ANYONE,
+        help_text="Whose photos you want to see. Photos from users outside this setting will be blurred.",
     )
     hide_pin_locations_in_trips = BooleanField(
         default=False,
@@ -254,6 +267,58 @@ class Profile(abstract.Model):
         if self.map_center_latitude is not None and self.map_center_longitude is not None:
             return float(self.map_center_latitude), float(self.map_center_longitude)
         return self.compute_map_center()
+
+    def can_view_photos_from(self, uploader: Profile) -> bool:
+        """Return True if this profile is allowed to see photos uploaded by ``uploader``.
+
+        Both directions are enforced:
+        - The uploader's ``photo_upload_visibility`` must permit this viewer.
+        - This viewer's ``viewer_photo_filter`` must permit photos from the uploader.
+        """
+        if self == uploader:
+            return True
+
+        def _check(visibility: str, subject: Profile, other: Profile) -> bool:
+            """Return True if ``subject``'s ``visibility`` setting permits ``other``."""
+            if visibility == VisibilityChoice.ANYONE:
+                return True
+            if visibility == VisibilityChoice.NO_ONE:
+                return False
+            if visibility == VisibilityChoice.FRIENDS:
+                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+                return Friendship.objects.filter(
+                    models.Q(from_profile=subject, to_profile=other) | models.Q(from_profile=other, to_profile=subject),
+                    status=FriendshipStatus.ACCEPTED,
+                ).exists()
+            if visibility == VisibilityChoice.COMMON_PIN:
+                from urbanlens.dashboard.models.pin.model import Pin
+                my_locs = set(Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True))
+                their_locs = set(Pin.objects.filter(profile=other, location__isnull=False).values_list("location_id", flat=True))
+                return bool(my_locs & their_locs)
+            if visibility == VisibilityChoice.COMMON_FRIEND:
+                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+                accepted = FriendshipStatus.ACCEPTED
+                my_friends = (
+                    set(Friendship.objects.filter(from_profile=subject, status=accepted).values_list("to_profile_id", flat=True))
+                    | set(Friendship.objects.filter(to_profile=subject, status=accepted).values_list("from_profile_id", flat=True))
+                )
+                their_friends = (
+                    set(Friendship.objects.filter(from_profile=other, status=accepted).values_list("to_profile_id", flat=True))
+                    | set(Friendship.objects.filter(to_profile=other, status=accepted).values_list("from_profile_id", flat=True))
+                )
+                return bool(my_friends & their_friends)
+            if visibility == VisibilityChoice.COMMON_TRIP:
+                from urbanlens.dashboard.models.trips.model import TripMembership
+                my_trips = set(TripMembership.objects.filter(profile=subject).values_list("trip_id", flat=True))
+                their_trips = set(TripMembership.objects.filter(profile=other).values_list("trip_id", flat=True))
+                return bool(my_trips & their_trips)
+            return False
+
+        # Uploader must allow this viewer.
+        if not _check(uploader.photo_upload_visibility, uploader, self):
+            return False
+        # This viewer's filter must allow the uploader.
+        return _check(self.viewer_photo_filter, self, uploader)
 
     def __str__(self):
         return self.username
