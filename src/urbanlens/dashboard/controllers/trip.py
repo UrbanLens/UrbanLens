@@ -1360,8 +1360,7 @@ class TripWeatherView(LoginRequiredMixin, View):
                 and (act.scheduled_at is None or act.scheduled_at.date() >= today)
             ]
             if not activities:
-                error = "This trip has no activities yet."
-                # TODO: Hide the section
+                pass  # no upcoming activities — leave error/grouped empty to hide the section
             else:
                 try:
                     gateway = WeatherForecastGateway()
