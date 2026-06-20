@@ -1305,8 +1305,8 @@
     transition: border-color .12s;
 
     &.cat-merge-mini-card--target {
-        border-color: #86efac;
-        background: #f0fdf4;
+        border-color: var(--ul-color-success-border);
+        background: var(--ul-color-success-bg);
         border-width: 2px;
     }
 }
@@ -1352,7 +1352,7 @@
     }
 
     &:hover {
-        background: #eff6ff;
+        background: var(--ul-color-accent-bg);
         border-color: $primary-color;
         color: $primary-color;
     }
@@ -1363,18 +1363,88 @@
     align-items: flex-start;
     gap: .4rem;
     font-size: .82rem;
-    color: #92400e;
-    background: #fffbeb;
-    border: 1px solid #fde68a;
+    color: var(--ul-color-warning-text);
+    background: var(--ul-color-warning-bg);
+    border: 1px solid var(--ul-color-warning-border);
     border-radius: $radius-sm;
     padding: .6rem .75rem;
     margin: 0;
 
     i {
         font-size: 1rem;
-        color: #d97706;
+        color: var(--ul-color-warning-icon);
         flex-shrink: 0;
         margin-top: 1px;
+    }
+}
+
+.cat-merge-edit-section {
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+    padding: .75rem;
+    background: var(--ul-surface-2);
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-sm;
+
+    .form-input {
+        padding: 5px 9px;
+        font-size: .85rem;
+    }
+}
+
+.cat-merge-edit-row {
+    display: flex;
+    gap: .75rem;
+    flex-wrap: wrap;
+
+    > .form-field {
+        flex: 1;
+        min-width: 100px;
+    }
+}
+
+.cat-merge-edit-icon-field {
+    flex: 1.2;
+}
+
+.cat-merge-edit-icon-wrap {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+.cat-merge-edit-icon-preview {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.cat-merge-edit-label {
+    font-size: .75rem;
+    margin-bottom: 3px;
+}
+
+.cat-merge-edit-section input[readonly] {
+    opacity: .6;
+    cursor: not-allowed;
+}
+
+.cat-merge-edit-hint {
+    font-weight: 400;
+    opacity: .65;
+    font-size: .7rem;
+}
+
+.cat-merge-color-picker {
+    margin-top: .25rem;
+
+    .color-swatch {
+        width: 22px;
+        height: 22px;
     }
 }
 

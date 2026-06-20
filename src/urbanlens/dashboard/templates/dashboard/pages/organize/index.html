@@ -72,15 +72,21 @@
             <div class="org-filter-chips">
                 <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">image</i> Has icon</button>
                 <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">hide_image</i> No icon</button>
-                <button type="button" class="org-filter-chip" data-filter="has-color" data-mutex="no-color" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">palette</i> Has color</button>
-                <button type="button" class="org-filter-chip" data-filter="no-color" data-mutex="has-color" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">format_color_reset</i> No color</button>
                 <button type="button" class="org-filter-chip" data-filter="has-children" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">account_tree</i> Has children</button>
                 <button type="button" class="org-filter-chip" data-filter="has-parents" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">call_merge</i> Has parents</button>
                 <div class="org-filter-color-row">
+                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color" data-mutex="no-color"
+                            title="Show only items with a color" onclick="toggleOrgChip(this,'tag')">
+                        <i class="material-icons">palette</i>
+                    </button>
                     {% for hex, label in color_choices %}
                     <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
                             style="background:{{ hex }};" onclick="toggleOrgChip(this,'tag')"></button>
                     {% endfor %}
+                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color" data-mutex="has-color"
+                            title="Show only items without a color" onclick="toggleOrgChip(this,'tag')">
+                        <i class="material-icons">block</i>
+                    </button>
                 </div>
                 <button type="button" class="org-filter-clear" onclick="clearOrgFilter('tag')">✕ Clear</button>
             </div>
@@ -207,15 +213,21 @@
             <div class="org-filter-chips">
                 <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">image</i> Has icon</button>
                 <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">hide_image</i> No icon</button>
-                <button type="button" class="org-filter-chip" data-filter="has-color" data-mutex="no-color" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">palette</i> Has color</button>
-                <button type="button" class="org-filter-chip" data-filter="no-color" data-mutex="has-color" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">format_color_reset</i> No color</button>
                 <button type="button" class="org-filter-chip" data-filter="has-children" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">account_tree</i> Has children</button>
                 <button type="button" class="org-filter-chip" data-filter="has-parents" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">call_merge</i> Has parents</button>
                 <div class="org-filter-color-row">
+                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color" data-mutex="no-color"
+                            title="Show only items with a color" onclick="toggleOrgChip(this,'cat')">
+                        <i class="material-icons">palette</i>
+                    </button>
                     {% for hex, label in color_choices %}
                     <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
                             style="background:{{ hex }};" onclick="toggleOrgChip(this,'cat')"></button>
                     {% endfor %}
+                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color" data-mutex="has-color"
+                            title="Show only items without a color" onclick="toggleOrgChip(this,'cat')">
+                        <i class="material-icons">block</i>
+                    </button>
                 </div>
                 <button type="button" class="org-filter-clear" onclick="clearOrgFilter('cat')">✕ Clear</button>
             </div>
@@ -330,13 +342,19 @@
             <div class="org-filter-chips">
                 <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'status')"><i class="material-icons">image</i> Has icon</button>
                 <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'status')"><i class="material-icons">hide_image</i> No icon</button>
-                <button type="button" class="org-filter-chip" data-filter="has-color" data-mutex="no-color" onclick="toggleOrgChip(this,'status')"><i class="material-icons">palette</i> Has color</button>
-                <button type="button" class="org-filter-chip" data-filter="no-color" data-mutex="has-color" onclick="toggleOrgChip(this,'status')"><i class="material-icons">format_color_reset</i> No color</button>
                 <div class="org-filter-color-row">
+                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color" data-mutex="no-color"
+                            title="Show only items with a color" onclick="toggleOrgChip(this,'status')">
+                        <i class="material-icons">palette</i>
+                    </button>
                     {% for hex, label in color_choices %}
                     <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
                             style="background:{{ hex }};" onclick="toggleOrgChip(this,'status')"></button>
                     {% endfor %}
+                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color" data-mutex="has-color"
+                            title="Show only items without a color" onclick="toggleOrgChip(this,'status')">
+                        <i class="material-icons">block</i>
+                    </button>
                 </div>
                 <button type="button" class="org-filter-clear" onclick="clearOrgFilter('status')">✕ Clear</button>
             </div>
@@ -499,6 +517,35 @@
             <div class="cat-merge-section-label"><i class="material-icons">check_circle</i> Surviving tag</div>
             <div id="tag-merge-target-card" class="cat-merge-target-card"></div>
         </div>
+        <div class="cat-merge-edit-section">
+            <div class="cat-merge-edit-row">
+                <div class="form-field" style="flex:1;min-width:0">
+                    <label class="form-label cat-merge-edit-label" for="tag-merge-edit-name">Name</label>
+                    <input type="text" class="form-input" id="tag-merge-edit-name" placeholder="Tag name">
+                </div>
+                <div class="form-field cat-merge-edit-icon-field">
+                    <label class="form-label cat-merge-edit-label">Icon <span class="cat-merge-edit-hint">(emoji or icon name)</span></label>
+                    <div class="cat-merge-edit-icon-wrap">
+                        <div id="tag-merge-edit-icon-preview" class="cat-merge-edit-icon-preview"></div>
+                        <input type="text" class="form-input" id="tag-merge-edit-icon" placeholder="e.g. ⭐ or label" oninput="updateMergeIconPreview('tag')">
+                    </div>
+                </div>
+            </div>
+            <div class="form-field">
+                <label class="form-label cat-merge-edit-label">Color</label>
+                <div class="color-picker cat-merge-color-picker" id="tag-merge-color-picker">
+                    <input type="hidden" id="tag-merge-edit-color">
+                    {% for hex, label in color_choices %}
+                    <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
+                            onclick="pickColor('tag-merge-color-picker','tag-merge-edit-color','{{ hex }}',this); updateMergeIconPreview('tag')"></button>
+                    {% endfor %}
+                    <button type="button" class="color-swatch color-clear" title="No color"
+                            onclick="pickColor('tag-merge-color-picker','tag-merge-edit-color','',this); updateMergeIconPreview('tag')">
+                        <i class="material-icons" style="font-size:.85rem;">block</i>
+                    </button>
+                </div>
+            </div>
+        </div>
         <div class="cat-merge-divider"><i class="material-icons">merge</i><span>Merge these into it</span></div>
         <div class="cat-merge-section">
             <div class="cat-merge-section-label"><i class="material-icons">delete_sweep</i> Will be deleted after merge
@@ -609,6 +656,35 @@
             <div class="cat-merge-section-label"><i class="material-icons">check_circle</i> Surviving category</div>
             <div id="cat-merge-target-card" class="cat-merge-target-card"></div>
         </div>
+        <div class="cat-merge-edit-section">
+            <div class="cat-merge-edit-row">
+                <div class="form-field" style="flex:1;min-width:0">
+                    <label class="form-label cat-merge-edit-label" for="cat-merge-edit-name">Name</label>
+                    <input type="text" class="form-input" id="cat-merge-edit-name" placeholder="Category name">
+                </div>
+                <div class="form-field cat-merge-edit-icon-field">
+                    <label class="form-label cat-merge-edit-label">Icon <span class="cat-merge-edit-hint">(emoji or icon name)</span></label>
+                    <div class="cat-merge-edit-icon-wrap">
+                        <div id="cat-merge-edit-icon-preview" class="cat-merge-edit-icon-preview"></div>
+                        <input type="text" class="form-input" id="cat-merge-edit-icon" placeholder="e.g. 🏥 or category" oninput="updateMergeIconPreview('cat')">
+                    </div>
+                </div>
+            </div>
+            <div class="form-field">
+                <label class="form-label cat-merge-edit-label">Color</label>
+                <div class="color-picker cat-merge-color-picker" id="cat-merge-color-picker">
+                    <input type="hidden" id="cat-merge-edit-color">
+                    {% for hex, label in color_choices %}
+                    <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
+                            onclick="pickColor('cat-merge-color-picker','cat-merge-edit-color','{{ hex }}',this); updateMergeIconPreview('cat')"></button>
+                    {% endfor %}
+                    <button type="button" class="color-swatch color-clear" title="No color"
+                            onclick="pickColor('cat-merge-color-picker','cat-merge-edit-color','',this); updateMergeIconPreview('cat')">
+                        <i class="material-icons" style="font-size:.85rem;">block</i>
+                    </button>
+                </div>
+            </div>
+        </div>
         <div class="cat-merge-divider"><i class="material-icons">merge</i><span>Merge these into it</span></div>
         <div class="cat-merge-section">
             <div class="cat-merge-section-label"><i class="material-icons">delete_sweep</i> Will be deleted after merge
@@ -705,6 +781,35 @@
         <div class="cat-merge-section">
             <div class="cat-merge-section-label"><i class="material-icons">check_circle</i> Surviving status</div>
             <div id="status-merge-target-card" class="cat-merge-target-card"></div>
+        </div>
+        <div class="cat-merge-edit-section" id="status-merge-edit-section">
+            <div class="cat-merge-edit-row">
+                <div class="form-field" style="flex:1;min-width:0">
+                    <label class="form-label cat-merge-edit-label" for="status-merge-edit-name">Name</label>
+                    <input type="text" class="form-input" id="status-merge-edit-name" placeholder="Status name">
+                </div>
+                <div class="form-field cat-merge-edit-icon-field">
+                    <label class="form-label cat-merge-edit-label">Icon <span class="cat-merge-edit-hint">(emoji or icon name)</span></label>
+                    <div class="cat-merge-edit-icon-wrap">
+                        <div id="status-merge-edit-icon-preview" class="cat-merge-edit-icon-preview"></div>
+                        <input type="text" class="form-input" id="status-merge-edit-icon" placeholder="e.g. ✅ or flag" oninput="updateMergeIconPreview('status')">
+                    </div>
+                </div>
+            </div>
+            <div class="form-field">
+                <label class="form-label cat-merge-edit-label">Color</label>
+                <div class="color-picker cat-merge-color-picker" id="status-merge-color-picker">
+                    <input type="hidden" id="status-merge-edit-color">
+                    {% for hex, label in color_choices %}
+                    <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
+                            onclick="pickColor('status-merge-color-picker','status-merge-edit-color','{{ hex }}',this); updateMergeIconPreview('status')"></button>
+                    {% endfor %}
+                    <button type="button" class="color-swatch color-clear" title="No color"
+                            onclick="pickColor('status-merge-color-picker','status-merge-edit-color','',this); updateMergeIconPreview('status')">
+                        <i class="material-icons" style="font-size:.85rem;">block</i>
+                    </button>
+                </div>
+            </div>
         </div>
         <div class="cat-merge-divider"><i class="material-icons">merge</i><span>Merge these into it</span></div>
         <div class="cat-merge-section">
@@ -818,9 +923,49 @@ document.addEventListener('click', function(e) {
 function pickColor(pickerId, valueId, colorHex, btn) {
     var picker = document.getElementById(pickerId);
     if (picker) picker.querySelectorAll('.color-swatch').forEach(function(b) { b.classList.remove('selected'); });
-    btn.classList.add('selected');
-    document.getElementById(valueId).value = colorHex;
+    if (btn) btn.classList.add('selected');
+    var input = document.getElementById(valueId);
+    if (input) input.value = colorHex;
 }
+
+function _setMergeColorPicker(ns, color) {
+    var pickerId = ns + '-merge-color-picker';
+    var inputId = ns + '-merge-edit-color';
+    var picker = document.getElementById(pickerId);
+    var input = document.getElementById(inputId);
+    if (!picker || !input) return;
+    picker.querySelectorAll('.color-swatch').forEach(function(s) { s.classList.remove('selected'); });
+    input.value = color || '';
+    if (color) {
+        var match = picker.querySelector('[data-color="' + color + '"]');
+        if (match) match.classList.add('selected');
+    } else {
+        var clear = picker.querySelector('.color-clear');
+        if (clear) clear.classList.add('selected');
+    }
+}
+
+function updateMergeIconPreview(ns) {
+    var icon = (document.getElementById(ns + '-merge-edit-icon') || {}).value || '';
+    var color = (document.getElementById(ns + '-merge-edit-color') || {}).value || '';
+    var preview = document.getElementById(ns + '-merge-edit-icon-preview');
+    if (!preview) return;
+    var ics = color ? 'color:' + color + ';' : '';
+    if (!icon) {
+        preview.innerHTML = '<i class="material-icons tag-icon-empty" style="font-size:1.2rem">label</i>';
+    } else if (/^[a-z_]+$/.test(icon)) {
+        preview.innerHTML = '<i class="material-icons" style="font-size:1.2rem;' + ics + '">' + icon.replace(/[<>&"]/g, function(c) { return {'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]; }) + '</i>';
+    } else {
+        preview.innerHTML = '<span style="font-size:1.2rem">' + icon.replace(/[<>&"]/g, function(c) { return {'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]; }) + '</span>';
+    }
+}
+
+var _mergeEditUrlTpl = {
+    tag: '{% url "tag.edit" 99999 %}',
+    cat: '{% url "category.edit" 99999 %}',
+    status: '{% url "status.edit" 99999 %}'
+};
+function _mergeEditUrl(ns, id) { return _mergeEditUrlTpl[ns].replace('99999', id); }
 
 function showTagCustomPreview(input) {
     if (!input.files || !input.files[0]) return;
@@ -1201,9 +1346,13 @@ window._orgBulkSync = function(n, opts) {
         var idx = allWraps.indexOf(wrap);
         var cb = wrap.querySelector('.tag-select-cb'); if (!cb) return;
         var newChecked = !cb.checked;
-        var lo = _lastTagClickIdx >= 0 ? Math.min(idx, _lastTagClickIdx) : idx;
-        var hi = _lastTagClickIdx >= 0 ? Math.max(idx, _lastTagClickIdx) : idx;
-        allWraps.slice(lo, hi + 1).forEach(function(w) {
+        var visWraps = allWraps.filter(function(w) { var c = w.closest('.tag-card'); return !c || c.style.display !== 'none'; });
+        var lastWrap = _lastTagClickIdx >= 0 ? allWraps[_lastTagClickIdx] : null;
+        var visIdx = visWraps.indexOf(wrap);
+        var lastVisIdx = lastWrap ? visWraps.indexOf(lastWrap) : -1;
+        var lo = lastVisIdx >= 0 ? Math.min(visIdx, lastVisIdx) : visIdx;
+        var hi = lastVisIdx >= 0 ? Math.max(visIdx, lastVisIdx) : visIdx;
+        visWraps.slice(lo, hi + 1).forEach(function(w) {
             var c = w.querySelector('.tag-select-cb'); if (!c) return;
             c.checked = newChecked;
             if (newChecked) _tagSelected.add(c.dataset.tagId); else _tagSelected.delete(c.dataset.tagId);
@@ -1251,11 +1400,18 @@ window._orgBulkSync = function(n, opts) {
         var ids = Array.from(_tagSelected);
         if (!_tagMergeTargetId || !_tagSelected.has(_tagMergeTargetId)) _tagMergeTargetId = ids[0];
         var src = ids.filter(function(id){return id!==_tagMergeTargetId;});
+        var d = _getTagCardData(_tagMergeTargetId);
         document.getElementById('tag-merge-dialog-title').textContent = 'Merge '+ids.length+' Tags';
-        document.getElementById('tag-merge-target-card').innerHTML = _tagMiniCardHtml(_getTagCardData(_tagMergeTargetId), true);
+        document.getElementById('tag-merge-target-card').innerHTML = _tagMiniCardHtml(d, true);
         document.getElementById('tag-merge-sources-list').innerHTML = src.map(function(id){return _tagMiniCardHtml(_getTagCardData(id),false);}).join('');
+        var nameEl = document.getElementById('tag-merge-edit-name');
+        var iconEl = document.getElementById('tag-merge-edit-icon');
+        if (nameEl) nameEl.value = d.name || '';
+        if (iconEl) iconEl.value = d.icon || '';
+        _setMergeColorPicker('tag', d.color || '');
+        updateMergeIconPreview('tag');
         var cb = document.getElementById('tag-merge-confirm-btn');
-        cb.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge into '+_escHtml(_getTagCardData(_tagMergeTargetId).name);
+        cb.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge into '+_escHtml(d.name);
         cb.disabled = false;
     }
     document.getElementById('tag-merge-sources-list').addEventListener('click', function(e) {
@@ -1266,10 +1422,24 @@ window._orgBulkSync = function(n, opts) {
         var ids = Array.from(_tagSelected);
         var src = ids.filter(function(id){return id!==_tagMergeTargetId;});
         var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging…';
+        var editName = ((document.getElementById('tag-merge-edit-name')||{}).value||'').trim();
+        var editIcon = (document.getElementById('tag-merge-edit-icon')||{}).value||'';
+        var editColor = (document.getElementById('tag-merge-edit-color')||{}).value||'';
+        var origData = _getTagCardData(_tagMergeTargetId);
+        var capturedId = _tagMergeTargetId;
+        if (!editName) editName = origData.name;
+        var hasEdits = editName !== origData.name || editIcon !== origData.icon || editColor !== origData.color;
         fetch('{% url "tag.multi_merge" %}', {
             method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
-            body:JSON.stringify({target_id:parseInt(_tagMergeTargetId,10),source_ids:src.map(function(id){return parseInt(id,10);})}),
+            body:JSON.stringify({target_id:parseInt(capturedId,10),source_ids:src.map(function(id){return parseInt(id,10);})}),
         }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
+        .then(function(mergeHtml){
+            if (!hasEdits) return mergeHtml;
+            var fd = new FormData();
+            fd.append('name', editName); fd.append('icon', editIcon); fd.append('color', editColor);
+            return fetch(_mergeEditUrl('tag', capturedId), {method:'POST', headers:{'X-CSRFToken':csrftoken}, body:fd})
+                .then(function(r2){ return r2.ok ? r2.text() : (toastr.warning('Merged, but could not save property changes.'), mergeHtml); });
+        })
         .then(function(html){
             document.getElementById('tag-merge-dialog').close();
             document.getElementById('tag-rows').innerHTML=html;
@@ -1585,9 +1755,13 @@ window._orgBulkSync = function(n, opts) {
         var idx = allWraps.indexOf(wrap);
         var cb = wrap.querySelector('.cat-select-cb'); if (!cb) return;
         var newChecked = !cb.checked;
-        var lo = _lastCatClickIdx >= 0 ? Math.min(idx, _lastCatClickIdx) : idx;
-        var hi = _lastCatClickIdx >= 0 ? Math.max(idx, _lastCatClickIdx) : idx;
-        allWraps.slice(lo, hi + 1).forEach(function(w) {
+        var visWraps = allWraps.filter(function(w) { var c = w.closest('.tag-card'); return !c || c.style.display !== 'none'; });
+        var lastWrap = _lastCatClickIdx >= 0 ? allWraps[_lastCatClickIdx] : null;
+        var visIdx = visWraps.indexOf(wrap);
+        var lastVisIdx = lastWrap ? visWraps.indexOf(lastWrap) : -1;
+        var lo = lastVisIdx >= 0 ? Math.min(visIdx, lastVisIdx) : visIdx;
+        var hi = lastVisIdx >= 0 ? Math.max(visIdx, lastVisIdx) : visIdx;
+        visWraps.slice(lo, hi + 1).forEach(function(w) {
             var c = w.querySelector('.cat-select-cb'); if (!c) return;
             c.checked = newChecked;
             if (newChecked) _catSelected.add(c.dataset.catId); else _catSelected.delete(c.dataset.catId);
@@ -1634,11 +1808,18 @@ window._orgBulkSync = function(n, opts) {
         var ids=Array.from(_catSelected);
         if(!_catMergeTargetId||!_catSelected.has(_catMergeTargetId))_catMergeTargetId=ids[0];
         var src=ids.filter(function(id){return id!==_catMergeTargetId;});
+        var d=_getCatCardData(_catMergeTargetId);
         document.getElementById('cat-merge-dialog-title').textContent='Merge '+ids.length+' Categories';
-        document.getElementById('cat-merge-target-card').innerHTML=_catMiniCardHtml(_getCatCardData(_catMergeTargetId),true);
+        document.getElementById('cat-merge-target-card').innerHTML=_catMiniCardHtml(d,true);
         document.getElementById('cat-merge-sources-list').innerHTML=src.map(function(id){return _catMiniCardHtml(_getCatCardData(id),false);}).join('');
+        var nameEl=document.getElementById('cat-merge-edit-name');
+        var iconEl=document.getElementById('cat-merge-edit-icon');
+        if(nameEl)nameEl.value=d.name||'';
+        if(iconEl)iconEl.value=d.icon||'';
+        _setMergeColorPicker('cat', d.color||'');
+        updateMergeIconPreview('cat');
         var cb=document.getElementById('cat-merge-confirm-btn');
-        cb.innerHTML='<i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge into '+_escHtml(_getCatCardData(_catMergeTargetId).name);
+        cb.innerHTML='<i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge into '+_escHtml(d.name);
         cb.disabled=false;
     }
     document.getElementById('cat-merge-sources-list').addEventListener('click', function(e){
@@ -1649,10 +1830,24 @@ window._orgBulkSync = function(n, opts) {
         var ids=Array.from(_catSelected);
         var src=ids.filter(function(id){return id!==_catMergeTargetId;});
         var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> Merging…';
+        var editName=((document.getElementById('cat-merge-edit-name')||{}).value||'').trim();
+        var editIcon=(document.getElementById('cat-merge-edit-icon')||{}).value||'';
+        var editColor=(document.getElementById('cat-merge-edit-color')||{}).value||'';
+        var origData=_getCatCardData(_catMergeTargetId);
+        var capturedId=_catMergeTargetId;
+        if(!editName)editName=origData.name;
+        var hasEdits=editName!==origData.name||editIcon!==origData.icon||editColor!==origData.color;
         fetch('{% url "category.multi_merge" %}', {
             method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
-            body:JSON.stringify({target_id:parseInt(_catMergeTargetId,10),source_ids:src.map(function(id){return parseInt(id,10);})}),
+            body:JSON.stringify({target_id:parseInt(capturedId,10),source_ids:src.map(function(id){return parseInt(id,10);})}),
         }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
+        .then(function(mergeHtml){
+            if(!hasEdits)return mergeHtml;
+            var fd=new FormData();
+            fd.append('name',editName); fd.append('icon',editIcon); fd.append('color',editColor);
+            return fetch(_mergeEditUrl('cat', capturedId), {method:'POST', headers:{'X-CSRFToken':csrftoken}, body:fd})
+                .then(function(r2){ return r2.ok ? r2.text() : (toastr.warning('Merged, but could not save property changes.'), mergeHtml); });
+        })
         .then(function(html){
             document.getElementById('cat-merge-dialog').close();
             document.getElementById('category-rows').innerHTML=html;
@@ -1944,11 +2139,18 @@ window._orgBulkSync = function(n, opts) {
         }
         var targetIsProtected = _isStatusProtected(_statusMergeTargetId);
         var src = ids.filter(function(id) { return id !== _statusMergeTargetId; });
+        var d = _getStatusCardData(_statusMergeTargetId);
         document.getElementById('status-merge-dialog-title').textContent = 'Merge ' + ids.length + ' Statuses';
-        document.getElementById('status-merge-target-card').innerHTML = _statusMiniCardHtml(_getStatusCardData(_statusMergeTargetId), true, false);
+        document.getElementById('status-merge-target-card').innerHTML = _statusMiniCardHtml(d, true, false);
         document.getElementById('status-merge-sources-list').innerHTML = src.map(function(id) { return _statusMiniCardHtml(_getStatusCardData(id), false, targetIsProtected); }).join('');
+        var nameEl = document.getElementById('status-merge-edit-name');
+        var iconEl = document.getElementById('status-merge-edit-icon');
+        if (nameEl) { nameEl.value = d.name || ''; nameEl.readOnly = !!targetIsProtected; nameEl.title = targetIsProtected ? 'Protected status names cannot be changed' : ''; }
+        if (iconEl) iconEl.value = d.icon || '';
+        _setMergeColorPicker('status', d.color || '');
+        updateMergeIconPreview('status');
         var cb = document.getElementById('status-merge-confirm-btn');
-        cb.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge into ' + _escHtml(_getStatusCardData(_statusMergeTargetId).name);
+        cb.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge into ' + _escHtml(d.name);
         cb.disabled = false;
     }
 
@@ -1963,10 +2165,24 @@ window._orgBulkSync = function(n, opts) {
         var ids = Array.from(_statusSelected);
         var src = ids.filter(function(id) { return id !== _statusMergeTargetId; });
         var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging…';
+        var editName = ((document.getElementById('status-merge-edit-name')||{}).value||'').trim();
+        var editIcon = (document.getElementById('status-merge-edit-icon')||{}).value||'';
+        var editColor = (document.getElementById('status-merge-edit-color')||{}).value||'';
+        var origData = _getStatusCardData(_statusMergeTargetId);
+        var capturedId = _statusMergeTargetId;
+        if (!editName) editName = origData.name;
+        var hasEdits = editName !== origData.name || editIcon !== origData.icon || editColor !== origData.color;
         fetch('{% url "status.multi_merge" %}', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-            body: JSON.stringify({ target_id: parseInt(_statusMergeTargetId, 10), source_ids: src.map(function(id) { return parseInt(id, 10); }) }),
+            body: JSON.stringify({ target_id: parseInt(capturedId, 10), source_ids: src.map(function(id) { return parseInt(id, 10); }) }),
         }).then(function(r) { if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); }); return r.text(); })
+        .then(function(mergeHtml) {
+            if (!hasEdits) return mergeHtml;
+            var fd = new FormData();
+            fd.append('name', editName); fd.append('icon', editIcon); fd.append('color', editColor);
+            return fetch(_mergeEditUrl('status', capturedId), {method:'POST', headers:{'X-CSRFToken':csrftoken}, body:fd})
+                .then(function(r2){ return r2.ok ? r2.text() : (toastr.warning('Merged, but could not save property changes.'), mergeHtml); });
+        })
         .then(function(html) {
             document.getElementById('status-merge-dialog').close();
             document.getElementById('status-rows').innerHTML = html;
@@ -1988,11 +2204,15 @@ window._orgBulkSync = function(n, opts) {
         var isProtected = _isStatusProtected(id);
 
         if (e.shiftKey && _lastStatusClickIdx >= 0) {
-            var lo = Math.min(idx, _lastStatusClickIdx);
-            var hi = Math.max(idx, _lastStatusClickIdx);
+            var visCards = cards.filter(function(c) { return c.style.display !== 'none'; });
+            var lastCard = cards[_lastStatusClickIdx];
+            var visIdx = visCards.indexOf(card);
+            var lastVisIdx = lastCard ? visCards.indexOf(lastCard) : -1;
+            var lo = lastVisIdx >= 0 ? Math.min(visIdx, lastVisIdx) : visIdx;
+            var hi = lastVisIdx >= 0 ? Math.max(visIdx, lastVisIdx) : visIdx;
             var targetState = !_statusSelected.has(id);
             for (var i = lo; i <= hi; i++) {
-                var cid = parseInt(cards[i].dataset.statusId, 10);
+                var cid = parseInt(visCards[i].dataset.statusId, 10);
                 // Protected badges are not included in shift-range selection
                 if (!_isStatusProtected(cid)) { if (targetState) _statusSelected.add(cid); else _statusSelected.delete(cid); }
             }

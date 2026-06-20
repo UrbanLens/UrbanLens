@@ -628,8 +628,8 @@ body.page-location-details div.section {
     }
 
     .org-filter-search:focus {
-        border-color: #6366f1;
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, .1);
+        border-color: var(--ul-color-accent);
+        box-shadow: 0 0 0 3px var(--ul-color-accent-ring);
     }
 
     .org-filter-chips {
@@ -659,18 +659,18 @@ body.page-location-details div.section {
     }
 
     .org-filter-chip:hover {
-        border-color: #6366f1;
-        color: #4f46e5;
-        background: #eef2ff;
-        box-shadow: 0 1px 4px rgba(99,102,241,.15);
+        border-color: var(--ul-color-accent);
+        color: var(--ul-color-accent-fg);
+        background: var(--ul-color-accent-bg);
+        box-shadow: 0 1px 4px var(--ul-color-accent-ring);
     }
 
     .org-filter-chip.active {
-        background: #eef2ff;
-        border-color: #6366f1;
-        color: #4f46e5;
+        background: var(--ul-color-accent-bg);
+        border-color: var(--ul-color-accent);
+        color: var(--ul-color-accent-fg);
         font-weight: 600;
-        box-shadow: 0 0 0 2px rgba(99,102,241,.15);
+        box-shadow: 0 0 0 2px var(--ul-color-accent-ring);
     }
 
     .org-filter-chip .material-icons {
@@ -702,8 +702,8 @@ body.page-location-details div.section {
         }
 
         &.active {
-            border-color: #1e293b;
-            box-shadow: 0 0 0 2px rgba(255,255,255,.7), 0 0 0 4px #6366f1;
+            border-color: var(--ul-text-1);
+            box-shadow: 0 0 0 2px rgba(255,255,255,.7), 0 0 0 4px var(--ul-color-accent);
             transform: scale(1.15);
         }
     }
@@ -723,9 +723,9 @@ body.page-location-details div.section {
         white-space: nowrap;
 
         &:hover {
-            color: #ef4444;
-            border-color: #fca5a5;
-            background: #fef2f2;
+            color: var(--ul-color-danger-text);
+            border-color: var(--ul-color-danger-border);
+            background: var(--ul-color-danger-bg);
         }
     }
 
@@ -733,11 +733,24 @@ body.page-location-details div.section {
         display: none;
         width: 7px;
         height: 7px;
-        background: #6366f1;
+        background: var(--ul-color-accent);
         border-radius: 50%;
         position: absolute;
         top: 4px;
         right: 4px;
+    }
+
+    .org-filter-color-side-btn {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        padding: 0;
+        justify-content: center;
+        flex-shrink: 0;
+
+        .material-icons {
+            font-size: 1rem;
+        }
     }
 
     #tag-filter-btn,
