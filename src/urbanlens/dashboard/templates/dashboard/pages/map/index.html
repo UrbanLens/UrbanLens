@@ -793,7 +793,7 @@
     // ── Constants ─────────────────────────────────────────────────────────────
     const _PROFILE_ID  = {{ profile_id|default:0 }};
     const _USE_CACHE      = {{ use_pin_cache|yesno:"true,false" }};
-    const _CACHE_KEY      = `ul_pins_v3_${_PROFILE_ID}`;
+    const _CACHE_KEY      = `ul_pins_v4_${_PROFILE_ID}`;
     const _CACHE_MAX      = 180 * 24 * 60 * 60 * 1000;  // 6 months: space reclaim for inactive users
     const _POLL_INTERVAL  = 2 * 60 * 1000;               // 2 min: background poll for pin changes
     const _TILE_SIZE   = 0.5;   // degrees per tile edge (~55 km at mid-latitudes)
@@ -949,13 +949,28 @@
     }
 
     // ── LocalStorage cache ────────────────────────────────────────────────────
+    // Only the fields needed for marker rendering and popup display are cached.
+    // Dropping address/city/state/country/priority/profile/statuses/tags_data_json
+    // cuts the stored payload by ~40%, keeping it under the 5 MB quota.
+    const _CACHE_FIELDS = new Set([
+        'uuid', 'id', 'name', 'icon', 'color',
+        'latitude', 'longitude',
+        'description', 'status', 'last_visited', 'rating',
+        'tags', 'tags_data', 'viewLocationUrl',
+    ]);
+    function _slimPin(pin) {
+        const slim = {};
+        for (const k of _CACHE_FIELDS) { if (k in pin) slim[k] = pin[k]; }
+        return slim;
+    }
+
     function _readCache() {
         if (!_USE_CACHE) return null;
         try {
             const raw = localStorage.getItem(_CACHE_KEY);
             if (!raw) return null;
             const c = JSON.parse(raw);
-            if (c.v !== 3 || c.profileId !== _PROFILE_ID) return null;
+            if (c.v !== 4 || c.profileId !== _PROFILE_ID) return null;
             if (Date.now() - c.ts > _CACHE_MAX) { localStorage.removeItem(_CACHE_KEY); return null; }
             return c;
         } catch { return null; }
@@ -966,10 +981,10 @@
         const ts = Date.now();
         try {
             const payload = JSON.stringify({
-                v: 3, ts, profileId: _PROFILE_ID,
+                v: 4, ts, profileId: _PROFILE_ID,
                 lastUpdated: _lastKnownUpdated,
                 tiles: [..._fetchedTiles],
-                pins: Object.fromEntries(_pinStore),
+                pins: Object.fromEntries([..._pinStore.entries()].map(([k, v]) => [k, _slimPin(v)])),
             });
             localStorage.setItem(_CACHE_KEY, payload);
             _updateCacheStatus(ts);
@@ -986,6 +1001,8 @@
     }
     // Flush the cache when the user navigates away so it's always saved
     window.addEventListener('beforeunload', _writeCache);
+    // Purge any leftover oversized v3 entry from the old key
+    try { localStorage.removeItem(`ul_pins_v3_${_PROFILE_ID}`); } catch {}
     // Call after any pin mutation (add/delete) to force a fresh fetch next time.
     // Always clears any existing localStorage entry regardless of _USE_CACHE,
     // so disabling and re-enabling caching starts fresh.

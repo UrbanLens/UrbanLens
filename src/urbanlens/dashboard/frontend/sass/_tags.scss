@@ -1205,15 +1205,17 @@
     border-radius: $radius-md;
     box-shadow: 0 8px 40px rgba(0, 0, 0, .2);
     padding: 0;
-    display: flex;
-    flex-direction: column;
+    // do NOT set display here — the browser hides dialog:not([open]) via UA stylesheet
 
     &[open] {
         display: flex;
+        flex-direction: column;
     }
 
     &::backdrop {
-        background: rgba(0, 0, 0, .45);
+        background: rgba(0, 0, 0, .55);
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
     }
 }
 
