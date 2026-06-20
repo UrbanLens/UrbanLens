@@ -183,7 +183,7 @@ class TagEditView(LoginRequiredMixin, View):
 
         if kind_changed and new_kind == "category":
             # Migrate tag → category: move pin.tags → pin.categories and
-            # location.tags → location.categories, then make it a global category.
+            # location.tags → location.categories.
             from urbanlens.dashboard.models.location.model import Location
             from urbanlens.dashboard.models.pin.model import Pin
 
@@ -194,7 +194,6 @@ class TagEditView(LoginRequiredMixin, View):
                 loc.categories.add(tag)
                 loc.tags.remove(tag)
             tag.kind = "category"
-            tag.profile = None
 
         elif kind_changed and new_kind == "status":
             # Migrate tag → status: remove from pin.tags, add to pin.statuses.
@@ -453,7 +452,7 @@ class TagBulkEditView(LoginRequiredMixin, View):
 
 
 class TagBulkConvertView(LoginRequiredMixin, View):
-    """Convert multiple user-owned tags to global categories (JSON POST)."""
+    """Convert multiple user-owned tags to categories (JSON POST)."""
 
     def post(self, request, *args, **kwargs):
         """Convert tags to categories, migrating all pin and location memberships.
@@ -485,7 +484,6 @@ class TagBulkConvertView(LoginRequiredMixin, View):
                 loc.categories.add(tag)
                 loc.tags.remove(tag)
             tag.kind = "category"
-            tag.profile = None
             tag.parents.clear()
             tag.save()
 

@@ -151,12 +151,11 @@ class StatusEditView(LoginRequiredMixin, View):
             badge.profile = profile
 
         elif kind_changed and new_kind == "category":
-            # Migrate status → category: remove from pin.statuses, add to pin.categories. Make global.
+            # Migrate status → category: remove from pin.statuses, add to pin.categories.
             for pin in Pin.objects.filter(statuses=badge, profile=profile):
                 pin.categories.add(badge)
                 pin.statuses.remove(badge)
             badge.kind = "category"
-            badge.profile = None
 
         badge.save()
 

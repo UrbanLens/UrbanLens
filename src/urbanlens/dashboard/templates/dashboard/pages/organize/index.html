@@ -15,21 +15,16 @@
 }
 .org-filter-bar.open { display: flex; }
 .org-filter-search {
-    flex: 1 1 220px;
-    min-width: 180px;
-    padding: 6px 10px;
-    border: 1px solid var(--ul-border, #cbd5e1);
-    border-radius: 7px;
-    font-size: .82rem;
-    background: var(--ul-surface, #fff);
-    color: inherit;
-    outline: none;
+    flex: 1 1 220px; min-width: 180px; padding: 6px 10px;
+    border: 1px solid var(--ul-border, #cbd5e1); border-radius: 7px;
+    font-size: .82rem; background: var(--ul-surface, #fff);
+    color: inherit; outline: none;
 }
 .org-filter-search:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,.15); }
-.org-filter-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.org-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .org-filter-chip {
     display: inline-flex; align-items: center; gap: 4px;
-    padding: 4px 10px; border-radius: 20px;
+    padding: 4px 10px; border-radius: 8px;
     background: var(--ul-surface, #fff);
     border: 1.5px solid var(--ul-border, #cbd5e1);
     font-size: .76rem; font-weight: 500; cursor: pointer;
@@ -38,7 +33,8 @@
     user-select: none; white-space: nowrap;
 }
 .org-filter-chip:hover { border-color: #6366f1; color: #4f46e5; background: #eef2ff; }
-.org-filter-chip.active { background: #eef2ff; border-color: #6366f1; color: #4f46e5; font-weight: 600; }
+.org-filter-chip.active { background: #6366f1; border-color: #6366f1; color: #fff; font-weight: 600; }
+.org-filter-chip.active .material-icons { color: #fff; }
 .org-filter-chip .material-icons { font-size: .9rem; }
 .org-filter-clear { font-size: .73rem; color: var(--ul-text-muted, #94a3b8); cursor: pointer; padding: 4px 6px; border-radius: 5px; border: none; background: none; }
 .org-filter-clear:hover { color: #ef4444; }
@@ -48,22 +44,27 @@
 #cat-filter-btn.has-filter .org-filter-active-dot,
 #status-filter-btn.has-filter .org-filter-active-dot { display: block; }
 
-/* ── Organize: convert-type action buttons ───────────────────────── */
-.org-convert-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-top: 6px;
+/* ── Filter: color dot swatches ─────────────────────────────────── */
+.org-filter-color-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
+.org-filter-color-dot {
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 2px solid transparent; cursor: pointer; padding: 0;
+    flex-shrink: 0;
+    transition: transform .1s, border-color .1s;
+    outline: none; box-shadow: 0 1px 3px rgba(0,0,0,.2);
 }
+.org-filter-color-dot:hover { transform: scale(1.18); }
+.org-filter-color-dot.active { border-color: #6366f1; transform: scale(1.18); box-shadow: 0 0 0 2px #c7d2fe; }
+
+/* ── Organize: convert-type action buttons ───────────────────────── */
+.org-convert-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
 .org-convert-btn {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 5px; padding: 12px 10px; border-radius: 10px;
     border: 2px solid var(--ul-border, #e2e8f0);
-    background: var(--ul-surface, #fff);
-    cursor: pointer; text-align: center;
+    background: var(--ul-surface, #fff); cursor: pointer; text-align: center;
     transition: border-color .15s, background .15s, box-shadow .15s, transform .1s;
-    color: var(--ul-text, #1e293b);
-    min-height: 78px;
+    color: var(--ul-text, #1e293b); min-height: 78px;
 }
 .org-convert-btn:hover { border-color: #6366f1; background: #eef2ff; box-shadow: 0 2px 8px rgba(99,102,241,.12); }
 .org-convert-btn.active { border-color: #6366f1; background: #eef2ff; box-shadow: 0 0 0 3px rgba(99,102,241,.18); transform: scale(1.02); }
@@ -99,41 +100,26 @@
     border: 1px solid var(--ul-border, #e2e8f0);
     border-radius: 14px;
     box-shadow: 0 8px 32px rgba(0,0,0,.15), 0 2px 8px rgba(0,0,0,.08);
-    opacity: 0;
-    pointer-events: none;
+    opacity: 0; pointer-events: none;
     transition: transform .25s cubic-bezier(.34,1.56,.64,1), opacity .2s ease;
-    white-space: nowrap;
-    max-width: calc(100vw - 40px);
+    white-space: nowrap; max-width: calc(100vw - 40px);
 }
-.org-bulk-bar.visible {
-    transform: translateX(-50%) translateY(0);
-    opacity: 1;
-    pointer-events: auto;
-}
+.org-bulk-bar.visible { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
 .org-bulk-count {
-    font-size: .825rem; font-weight: 600;
-    color: var(--ul-text-1, #1e293b);
-    padding: 3px 10px;
-    background: #eff6ff;
-    border-radius: 20px;
-    border: 1px solid #bfdbfe;
-    margin-right: 2px;
+    font-size: .825rem; font-weight: 600; color: var(--ul-text-1, #1e293b);
+    padding: 3px 10px; background: #eff6ff; border-radius: 20px;
+    border: 1px solid #bfdbfe; margin-right: 2px;
 }
 .org-bulk-deselect-btn {
     display: flex; align-items: center; justify-content: center;
     width: 26px; height: 26px; border-radius: 50%;
     border: none; background: transparent; cursor: pointer;
     color: var(--ul-text-muted, #94a3b8);
-    transition: background .12s, color .12s;
-    flex-shrink: 0;
+    transition: background .12s, color .12s; flex-shrink: 0;
 }
 .org-bulk-deselect-btn:hover { background: #fee2e2; color: #dc2626; }
 .org-bulk-deselect-btn .material-icons { font-size: 1rem; }
-.org-bulk-sep {
-    width: 1px; align-self: stretch;
-    background: var(--ul-border, #e2e8f0);
-    margin: 0 4px;
-}
+.org-bulk-sep { width: 1px; align-self: stretch; background: var(--ul-border, #e2e8f0); margin: 0 4px; }
 .org-bulk-btn {
     display: inline-flex; align-items: center; gap: 5px;
     padding: 6px 12px; border-radius: 8px;
@@ -154,6 +140,37 @@
 
 /* ── Hide per-row actions when anything is selected ─────────────── */
 .org-page--has-selection .tag-card-actions { opacity: 0; pointer-events: none; transition: opacity .15s; }
+
+/* ── Header: filter button + select-all alignment ───────────────── */
+.tag-header-right { align-items: center; }
+.tag-header-right > button { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ── Select-all button group (same look as view toggle) ─────────── */
+.tag-view-toggle--sel {
+    display: inline-flex; align-items: center;
+    border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--ul-border);
+}
+.tag-view-btn--sel {
+    background: var(--ul-surface-1); border: none; padding: 5px 9px;
+    cursor: pointer; color: var(--ul-text-3);
+    display: flex; align-items: center; justify-content: center;
+    transition: background .12s, color .12s;
+    font-size: .8rem; font-weight: 500; gap: 4px; white-space: nowrap;
+    min-height: 32px;
+}
+.tag-view-btn--sel i { font-size: 1.05rem; }
+.tag-view-btn--sel:hover { background: var(--ul-surface-3); color: var(--ul-text-1); }
+.tag-view-btn--sel.deselect-mode { background: #eff6ff; color: #2563eb; }
+
+/* ── Merge dialog: sticky footer ────────────────────────────────── */
+.cat-merge-dialog { overflow: hidden !important; display: flex !important; flex-direction: column !important; }
+.cat-merge-dialog[open] { display: flex !important; }
+.cat-merge-dialog-body { overflow-y: auto !important; flex: 1 !important; }
+.cat-merge-dialog-footer { flex-shrink: 0 !important; }
+
+/* ── Status checkbox: suppress browser default ───────────────────── */
+#status-rows .cat-select-wrap input[type="checkbox"] { display: none !important; }
 </style>
 {% endblock %}
 
@@ -208,9 +225,11 @@
                         <i class="material-icons">account_tree</i>
                     </button>
                 </div>
-                <button type="button" class="btn-ghost btn-sm" id="tag-sel-all" title="Select all tags">
-                    <i class="material-icons">checklist</i>
-                </button>
+                <div class="tag-view-toggle--sel">
+                    <button type="button" class="tag-view-btn--sel" id="tag-sel-all" title="Select all tags">
+                        <i class="material-icons">checklist</i>
+                    </button>
+                </div>
                 <button type="button" class="btn-ghost btn-sm" id="tag-filter-btn" title="Filter tags" onclick="toggleOrgFilter('tag')">
                     <i class="material-icons">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
@@ -224,12 +243,18 @@
         <div id="tag-filter-bar" class="org-filter-bar">
             <input type="search" id="tag-filter-search" class="org-filter-search" placeholder="Search tags…" oninput="applyOrgFilter('tag')" autocomplete="off">
             <div class="org-filter-chips">
-                <button type="button" class="org-filter-chip" data-filter="has-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">image</i> Has icon</button>
-                <button type="button" class="org-filter-chip" data-filter="no-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">hide_image</i> No icon</button>
-                <button type="button" class="org-filter-chip" data-filter="has-color" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">palette</i> Has color</button>
-                <button type="button" class="org-filter-chip" data-filter="no-color" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">format_color_reset</i> No color</button>
+                <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">image</i> Has icon</button>
+                <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">hide_image</i> No icon</button>
+                <button type="button" class="org-filter-chip" data-filter="has-color" data-mutex="no-color" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">palette</i> Has color</button>
+                <button type="button" class="org-filter-chip" data-filter="no-color" data-mutex="has-color" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">format_color_reset</i> No color</button>
                 <button type="button" class="org-filter-chip" data-filter="has-children" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">account_tree</i> Has children</button>
                 <button type="button" class="org-filter-chip" data-filter="has-parents" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">call_merge</i> Has parents</button>
+                <div class="org-filter-color-row">
+                    {% for hex, label in color_choices %}
+                    <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
+                            style="background:{{ hex }};" onclick="toggleOrgChip(this,'tag')"></button>
+                    {% endfor %}
+                </div>
                 <button type="button" class="org-filter-clear" onclick="clearOrgFilter('tag')">✕ Clear</button>
             </div>
         </div>
@@ -336,9 +361,11 @@
                     </button>
                 </div>
                 {% if can_edit_global %}
-                <button type="button" class="btn-ghost btn-sm" id="cat-sel-all" title="Select all categories">
-                    <i class="material-icons">checklist</i>
-                </button>
+                <div class="tag-view-toggle--sel">
+                    <button type="button" class="tag-view-btn--sel" id="cat-sel-all" title="Select all categories">
+                        <i class="material-icons">checklist</i>
+                    </button>
+                </div>
                 {% endif %}
                 <button type="button" class="btn-ghost btn-sm" id="cat-filter-btn" title="Filter categories" onclick="toggleOrgFilter('cat')">
                     <i class="material-icons">filter_list</i> Filter
@@ -355,12 +382,18 @@
         <div id="cat-filter-bar" class="org-filter-bar">
             <input type="search" id="cat-filter-search" class="org-filter-search" placeholder="Search categories…" oninput="applyOrgFilter('cat')" autocomplete="off">
             <div class="org-filter-chips">
-                <button type="button" class="org-filter-chip" data-filter="has-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">image</i> Has icon</button>
-                <button type="button" class="org-filter-chip" data-filter="no-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">hide_image</i> No icon</button>
-                <button type="button" class="org-filter-chip" data-filter="has-color" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">palette</i> Has color</button>
-                <button type="button" class="org-filter-chip" data-filter="no-color" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">format_color_reset</i> No color</button>
+                <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">image</i> Has icon</button>
+                <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">hide_image</i> No icon</button>
+                <button type="button" class="org-filter-chip" data-filter="has-color" data-mutex="no-color" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">palette</i> Has color</button>
+                <button type="button" class="org-filter-chip" data-filter="no-color" data-mutex="has-color" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">format_color_reset</i> No color</button>
                 <button type="button" class="org-filter-chip" data-filter="has-children" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">account_tree</i> Has children</button>
                 <button type="button" class="org-filter-chip" data-filter="has-parents" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">call_merge</i> Has parents</button>
+                <div class="org-filter-color-row">
+                    {% for hex, label in color_choices %}
+                    <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
+                            style="background:{{ hex }};" onclick="toggleOrgChip(this,'cat')"></button>
+                    {% endfor %}
+                </div>
                 <button type="button" class="org-filter-clear" onclick="clearOrgFilter('cat')">✕ Clear</button>
             </div>
         </div>
@@ -448,9 +481,11 @@
                 <p class="tag-subtitle">Track the state of locations — visited, active, abandoned, and more.</p>
             </div>
             <div class="tag-header-right">
-                <button type="button" class="btn-ghost btn-sm" id="status-sel-all" title="Select all statuses">
-                    <i class="material-icons">checklist</i>
-                </button>
+                <div class="tag-view-toggle--sel">
+                    <button type="button" class="tag-view-btn--sel" id="status-sel-all" title="Select all statuses">
+                        <i class="material-icons">checklist</i>
+                    </button>
+                </div>
                 <button type="button" class="btn-ghost btn-sm" id="status-filter-btn" title="Filter statuses" onclick="toggleOrgFilter('status')">
                     <i class="material-icons">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
@@ -464,10 +499,16 @@
         <div id="status-filter-bar" class="org-filter-bar">
             <input type="search" id="status-filter-search" class="org-filter-search" placeholder="Search statuses…" oninput="applyOrgFilter('status')" autocomplete="off">
             <div class="org-filter-chips">
-                <button type="button" class="org-filter-chip" data-filter="has-icon" onclick="toggleOrgChip(this,'status')"><i class="material-icons">image</i> Has icon</button>
-                <button type="button" class="org-filter-chip" data-filter="no-icon" onclick="toggleOrgChip(this,'status')"><i class="material-icons">hide_image</i> No icon</button>
-                <button type="button" class="org-filter-chip" data-filter="has-color" onclick="toggleOrgChip(this,'status')"><i class="material-icons">palette</i> Has color</button>
-                <button type="button" class="org-filter-chip" data-filter="no-color" onclick="toggleOrgChip(this,'status')"><i class="material-icons">format_color_reset</i> No color</button>
+                <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'status')"><i class="material-icons">image</i> Has icon</button>
+                <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'status')"><i class="material-icons">hide_image</i> No icon</button>
+                <button type="button" class="org-filter-chip" data-filter="has-color" data-mutex="no-color" onclick="toggleOrgChip(this,'status')"><i class="material-icons">palette</i> Has color</button>
+                <button type="button" class="org-filter-chip" data-filter="no-color" data-mutex="has-color" onclick="toggleOrgChip(this,'status')"><i class="material-icons">format_color_reset</i> No color</button>
+                <div class="org-filter-color-row">
+                    {% for hex, label in color_choices %}
+                    <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
+                            style="background:{{ hex }};" onclick="toggleOrgChip(this,'status')"></button>
+                    {% endfor %}
+                </div>
                 <button type="button" class="org-filter-clear" onclick="clearOrgFilter('status')">✕ Clear</button>
             </div>
         </div>
@@ -564,7 +605,6 @@
                     <span class="priority-kind-badge priority-kind-badge--{{ item.kind }}">{{ item.kind }}</span>
                     {% if not item.profile %}<span class="tag-global-badge">global</span>{% endif %}
                 </div>
-                <span class="priority-order-badge">{{ forloop.counter }}</span>
                 {% if item.kind == 'tag' %}
                 <button type="button" class="priority-edit-btn" title="Edit tag"
                         hx-get="{% url 'tag.edit' item.id %}" hx-target="#tag-edit-dialog-body" hx-swap="innerHTML">
@@ -581,6 +621,7 @@
                     <i class="material-icons">edit</i>
                 </button>
                 {% endif %}
+                <span class="priority-order-badge">{{ forloop.counter }}</span>
             </div>
             {% empty %}
             <div class="tag-empty">
@@ -952,13 +993,26 @@ function toggleOrgFilter(ns) {
 
 function toggleOrgChip(btn, ns) {
     btn.classList.toggle('active');
+    // Deactivate mutex pair
+    var mutex = btn.dataset.mutex;
+    if (mutex && btn.classList.contains('active')) {
+        var bar = document.getElementById(ns + '-filter-bar');
+        if (bar) bar.querySelectorAll('[data-filter="' + mutex + '"]').forEach(function(m) { m.classList.remove('active'); });
+    }
+    // Color dot: deactivate other color dots when activating one
+    if (btn.dataset.filter && btn.dataset.filter.startsWith('color:') && btn.classList.contains('active')) {
+        var colorBar = document.getElementById(ns + '-filter-bar');
+        if (colorBar) colorBar.querySelectorAll('.org-filter-color-dot.active').forEach(function(d) {
+            if (d !== btn) d.classList.remove('active');
+        });
+    }
     applyOrgFilter(ns);
 }
 
 function clearOrgFilter(ns) {
     var bar = document.getElementById(ns + '-filter-bar');
     if (!bar) return;
-    bar.querySelectorAll('.org-filter-chip.active').forEach(function(c) { c.classList.remove('active'); });
+    bar.querySelectorAll('.org-filter-chip.active, .org-filter-color-dot.active').forEach(function(c) { c.classList.remove('active'); });
     var si = document.getElementById(ns + '-filter-search');
     if (si) si.value = '';
     applyOrgFilter(ns);
@@ -976,36 +1030,56 @@ function applyOrgFilter(ns) {
     if (si) search = si.value.toLowerCase().trim();
 
     var activeChips = new Set();
-    if (bar) bar.querySelectorAll('.org-filter-chip.active').forEach(function(c) { activeChips.add(c.dataset.filter); });
+    var activeColor = '';
+    if (bar) {
+        bar.querySelectorAll('.org-filter-chip.active').forEach(function(c) { activeChips.add(c.dataset.filter); });
+        var colorDot = bar.querySelector('.org-filter-color-dot.active');
+        if (colorDot) activeColor = (colorDot.dataset.filter || '').replace('color:', '').toLowerCase();
+    }
 
-    var hasActive = search || activeChips.size > 0;
+    var hasActive = search || activeChips.size > 0 || activeColor;
     if (filterBtn) filterBtn.classList.toggle('has-filter', hasActive);
 
-    // Determine the card selector and data attribute prefix
-    var cardSel, idAttr;
-    if (ns === 'tag') { cardSel = '.tag-card[data-tag-id]'; idAttr = 'tagId'; }
-    else if (ns === 'cat') { cardSel = '.tag-card[data-category-id]'; idAttr = 'categoryId'; }
-    else { cardSel = '.tag-card[data-status-id]'; idAttr = 'statusId'; }
+    // Build a set of card ids that have children (from parents data on sibling cards)
+    var cardSel;
+    if (ns === 'tag') { cardSel = '.tag-card[data-tag-id]'; }
+    else if (ns === 'cat') { cardSel = '.tag-card[data-category-id]'; }
+    else { cardSel = '.tag-card[data-status-id]'; }
 
-    rows.querySelectorAll(cardSel).forEach(function(card) {
+    var allCards = Array.from(rows.querySelectorAll(cardSel));
+    var hasChildrenSet = new Set();
+    if (activeChips.has('has-children')) {
+        allCards.forEach(function(c) {
+            var pAttr = ns === 'cat' ? 'categoryParents' : (ns + 'Parents');
+            var parents = (c.dataset[pAttr] || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+            parents.forEach(function(pid) { hasChildrenSet.add(pid); });
+        });
+    }
+
+    allCards.forEach(function(card) {
+        var idVal = ns === 'cat' ? card.dataset.categoryId : card.dataset[ns + 'Id'];
         var name = (card.dataset[ns === 'cat' ? 'categoryName' : (ns + 'Name')] || '').toLowerCase();
         var icon = card.dataset[ns === 'cat' ? 'categoryIcon' : (ns + 'Icon')] || '';
-        var color = card.dataset[ns === 'cat' ? 'categoryColor' : (ns + 'Color')] || '';
-        var children = parseInt(card.dataset[ns === 'cat' ? 'categoryChildren' : (ns + 'Children')] || '0', 10);
+        var customIcon = card.dataset[ns === 'cat' ? 'categoryCustomIcon' : (ns + 'CustomIcon')] || '';
+        var anyIcon = icon || customIcon;
+        var color = (card.dataset[ns === 'cat' ? 'categoryColor' : (ns + 'Color')] || '').toLowerCase();
         var parents = card.dataset[ns === 'cat' ? 'categoryParents' : (ns + 'Parents')] || '';
-        var hasParents = parents && parents.replace(/,/g,'').trim() !== '';
+        var hasParents = parents.split(',').some(function(p) { return p.trim() !== ''; });
 
         var show = true;
         if (search && !name.includes(search)) show = false;
-        if (activeChips.has('has-icon') && !icon) show = false;
-        if (activeChips.has('no-icon') && icon) show = false;
+        if (activeChips.has('has-icon') && !anyIcon) show = false;
+        if (activeChips.has('no-icon') && anyIcon) show = false;
         if (activeChips.has('has-color') && !color) show = false;
         if (activeChips.has('no-color') && color) show = false;
-        if (activeChips.has('has-children') && !children) show = false;
+        if (activeChips.has('has-children') && !hasChildrenSet.has(String(idVal))) show = false;
         if (activeChips.has('has-parents') && !hasParents) show = false;
+        if (activeColor && color !== activeColor) show = false;
 
         card.style.display = show ? '' : 'none';
     });
+    // Notify tabs that visibility changed (for select-all button state)
+    document.dispatchEvent(new CustomEvent('org:filter-applied', { detail: { ns: ns } }));
 }
 
 // ── Consolidated HTMX dialog opener (tag, category, status, priority) ────────
@@ -1055,9 +1129,25 @@ document.body.addEventListener('htmx:afterSwap', function(e) {
             if (target === 'priority') {
                 if (window._initPrioritySortable) _initPrioritySortable();
             }
-            // Clear any active selection when switching tabs
+            // Clear selection and close all filter bars when switching tabs
             if (window._orgBulkClear) window._orgBulkClear();
+            document.querySelectorAll('.org-filter-bar.open').forEach(function(bar) { bar.classList.remove('open'); });
+            document.querySelectorAll('#tag-filter-btn, #cat-filter-btn, #status-filter-btn').forEach(function(btn) { btn.classList.remove('has-filter'); });
         });
+    });
+
+    // ESC closes filter bars and deselects all
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        var anyOpen = document.querySelector('.org-filter-bar.open');
+        if (anyOpen) {
+            document.querySelectorAll('.org-filter-bar.open').forEach(function(bar) { bar.classList.remove('open'); });
+            return;
+        }
+        // Deselect first (tab-specific handler clears its own Set + updates buttons),
+        // then clear the toolbar UI
+        if (window._orgBulk && window._orgBulk.deselect) window._orgBulk.deselect();
+        else if (window._orgBulkClear) window._orgBulkClear();
     });
 })();
 </script>
@@ -1104,12 +1194,10 @@ window._orgBulkSync = function(n, opts) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    function _getAllTagIds() {
-        var seen = new Set();
-        document.querySelectorAll('#tag-rows .tag-card[data-tag-id]').forEach(function(c) {
-            if (c.querySelector('.tag-select-cb')) seen.add(c.dataset.tagId);
-        });
-        return Array.from(seen);
+    function _getVisibleTagIds() {
+        return Array.from(document.querySelectorAll('#tag-rows .tag-card[data-tag-id]'))
+            .filter(function(c) { return c.style.display !== 'none' && c.querySelector('.tag-select-cb'); })
+            .map(function(c) { return c.dataset.tagId; });
     }
 
     function _syncTagCheckboxes() {
@@ -1125,6 +1213,15 @@ window._orgBulkSync = function(n, opts) {
         _tagSelected.clear(); _syncTagCheckboxes(); _updateTagBar();
     }
 
+    function _updateTagSelAllBtn() {
+        var btn = document.getElementById('tag-sel-all'); if (!btn) return;
+        var visIds = _getVisibleTagIds();
+        var allSel = visIds.length > 0 && visIds.every(function(id) { return _tagSelected.has(id); });
+        btn.classList.toggle('deselect-mode', allSel);
+        btn.title = allSel ? 'Deselect all' : 'Select all';
+        btn.innerHTML = allSel ? '<i class="material-icons">remove_done</i>' : '<i class="material-icons">checklist</i>';
+    }
+
     function _updateTagBar() {
         var n = _tagSelected.size;
         window._orgBulk.deselect = _tagBulkDeselect;
@@ -1137,6 +1234,7 @@ window._orgBulkSync = function(n, opts) {
         };
         window._orgBulk.del = _tagBulkDelete;
         _orgBulkSync(n, { hasEdit: true, hasMerge: true, hasDel: true });
+        _updateTagSelAllBtn();
     }
 
     function applyTagView() {
@@ -1244,30 +1342,38 @@ window._orgBulkSync = function(n, opts) {
 
     // ── Selection ─────────────────────────────────────────────────────────────
     document.getElementById('tag-rows').addEventListener('click', function(e) {
-        var cb = e.target; if (!cb.classList.contains('tag-select-cb')) return;
-        var allCbs = Array.from(document.querySelectorAll('#tag-rows .tag-select-cb'));
-        var idx = allCbs.indexOf(cb);
-        if (e.shiftKey && _lastTagClickIdx >= 0 && idx >= 0) {
-            e.preventDefault();
-            var newChecked = !cb.checked;
-            var lo = Math.min(idx, _lastTagClickIdx), hi = Math.max(idx, _lastTagClickIdx);
-            for (var i = lo; i <= hi; i++) {
-                allCbs[i].checked = newChecked;
-                if (newChecked) _tagSelected.add(allCbs[i].dataset.tagId);
-                else _tagSelected.delete(allCbs[i].dataset.tagId);
-            }
-            _syncTagCheckboxes(); _updateTagBar();
-        }
-        if (idx >= 0) _lastTagClickIdx = idx;
+        if (!e.shiftKey) return;
+        var wrap = e.target.closest('.cat-select-wrap'); if (!wrap) return;
+        e.preventDefault();
+        var allWraps = Array.from(document.querySelectorAll('#tag-rows .cat-select-wrap'));
+        var idx = allWraps.indexOf(wrap);
+        var cb = wrap.querySelector('.tag-select-cb'); if (!cb) return;
+        var newChecked = !cb.checked;
+        var lo = _lastTagClickIdx >= 0 ? Math.min(idx, _lastTagClickIdx) : idx;
+        var hi = _lastTagClickIdx >= 0 ? Math.max(idx, _lastTagClickIdx) : idx;
+        allWraps.slice(lo, hi + 1).forEach(function(w) {
+            var c = w.querySelector('.tag-select-cb'); if (!c) return;
+            c.checked = newChecked;
+            if (newChecked) _tagSelected.add(c.dataset.tagId); else _tagSelected.delete(c.dataset.tagId);
+        });
+        _lastTagClickIdx = idx;
+        _syncTagCheckboxes(); _updateTagBar();
     });
     document.getElementById('tag-rows').addEventListener('change', function(e) {
         var cb = e.target; if (!cb.classList.contains('tag-select-cb')) return;
         var id = cb.dataset.tagId;
         if (cb.checked) _tagSelected.add(id); else _tagSelected.delete(id);
+        var allWraps = Array.from(document.querySelectorAll('#tag-rows .cat-select-wrap'));
+        var wrap = cb.closest('.cat-select-wrap');
+        var idx = wrap ? allWraps.indexOf(wrap) : -1;
+        if (idx >= 0) _lastTagClickIdx = idx;
         _syncTagCheckboxes(); _updateTagBar();
     });
     document.getElementById('tag-sel-all').addEventListener('click', function() {
-        _getAllTagIds().forEach(function(id) { _tagSelected.add(id); });
+        var visIds = _getVisibleTagIds();
+        var allSel = visIds.length > 0 && visIds.every(function(id) { return _tagSelected.has(id); });
+        if (allSel) { visIds.forEach(function(id) { _tagSelected.delete(id); }); }
+        else { visIds.forEach(function(id) { _tagSelected.add(id); }); }
         _syncTagCheckboxes(); _updateTagBar();
     });
 
@@ -1472,6 +1578,11 @@ window._orgBulkSync = function(n, opts) {
     // ── HTMX hooks ────────────────────────────────────────────────────────────
     document.getElementById('tag-rows').addEventListener('htmx:afterSwap', _onTagRowsUpdated);
 
+    // Update select-all button when filters change visible items
+    document.addEventListener('org:filter-applied', function(e) {
+        if (e.detail.ns === 'tag') _updateTagSelAllBtn();
+    });
+
     // ── Init ──────────────────────────────────────────────────────────────────
     applyTagView();
 })();
@@ -1489,12 +1600,10 @@ window._orgBulkSync = function(n, opts) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    function _getAllCatIds() {
-        var seen = new Set();
-        document.querySelectorAll('#category-rows .tag-card[data-category-id]').forEach(function(c) {
-            if (c.querySelector('.cat-select-cb')) seen.add(c.dataset.categoryId);
-        });
-        return Array.from(seen);
+    function _getVisibleCatIds() {
+        return Array.from(document.querySelectorAll('#category-rows .tag-card[data-category-id]'))
+            .filter(function(c) { return c.style.display !== 'none' && c.querySelector('.cat-select-cb'); })
+            .map(function(c) { return c.dataset.categoryId; });
     }
 
     function _syncCatCheckboxes() {
@@ -1510,6 +1619,15 @@ window._orgBulkSync = function(n, opts) {
         _catSelected.clear(); _syncCatCheckboxes(); _updateCatBar();
     }
 
+    function _updateCatSelAllBtn() {
+        var btn = document.getElementById('cat-sel-all'); if (!btn) return;
+        var visIds = _getVisibleCatIds();
+        var allSel = visIds.length > 0 && visIds.every(function(id) { return _catSelected.has(id); });
+        btn.classList.toggle('deselect-mode', allSel);
+        btn.title = allSel ? 'Deselect all' : 'Select all';
+        btn.innerHTML = allSel ? '<i class="material-icons">remove_done</i>' : '<i class="material-icons">checklist</i>';
+    }
+
     function _updateCatBar() {
         var n = _catSelected.size;
         window._orgBulk.deselect = _catBulkDeselect;
@@ -1521,6 +1639,7 @@ window._orgBulkSync = function(n, opts) {
         };
         window._orgBulk.del = _catBulkDelete;
         _orgBulkSync(n, { hasEdit: true, hasMerge: true, hasDel: true });
+        _updateCatSelAllBtn();
     }
 
     function applyCatView() {
@@ -1607,31 +1726,40 @@ window._orgBulkSync = function(n, opts) {
 
     // ── Selection ─────────────────────────────────────────────────────────────
     document.getElementById('category-rows').addEventListener('click', function(e) {
-        var cb=e.target; if(!cb.classList.contains('cat-select-cb'))return;
-        var allCbs=Array.from(document.querySelectorAll('#category-rows .cat-select-cb'));
-        var idx=allCbs.indexOf(cb);
-        if(e.shiftKey && _lastCatClickIdx>=0 && idx>=0){
-            e.preventDefault();
-            var newChecked=!cb.checked;
-            var lo=Math.min(idx,_lastCatClickIdx), hi=Math.max(idx,_lastCatClickIdx);
-            for(var i=lo;i<=hi;i++){
-                allCbs[i].checked=newChecked;
-                if(newChecked)_catSelected.add(allCbs[i].dataset.catId);
-                else _catSelected.delete(allCbs[i].dataset.catId);
-            }
-            _syncCatCheckboxes(); _updateCatBar();
-        }
-        if(idx>=0)_lastCatClickIdx=idx;
+        if (!e.shiftKey) return;
+        var wrap = e.target.closest('.cat-select-wrap'); if (!wrap) return;
+        e.preventDefault();
+        var allWraps = Array.from(document.querySelectorAll('#category-rows .cat-select-wrap'));
+        var idx = allWraps.indexOf(wrap);
+        var cb = wrap.querySelector('.cat-select-cb'); if (!cb) return;
+        var newChecked = !cb.checked;
+        var lo = _lastCatClickIdx >= 0 ? Math.min(idx, _lastCatClickIdx) : idx;
+        var hi = _lastCatClickIdx >= 0 ? Math.max(idx, _lastCatClickIdx) : idx;
+        allWraps.slice(lo, hi + 1).forEach(function(w) {
+            var c = w.querySelector('.cat-select-cb'); if (!c) return;
+            c.checked = newChecked;
+            if (newChecked) _catSelected.add(c.dataset.catId); else _catSelected.delete(c.dataset.catId);
+        });
+        _lastCatClickIdx = idx;
+        _syncCatCheckboxes(); _updateCatBar();
     });
     document.getElementById('category-rows').addEventListener('change', function(e) {
-        var cb=e.target; if(!cb.classList.contains('cat-select-cb'))return;
-        var id=cb.dataset.catId;
-        if(cb.checked)_catSelected.add(id); else _catSelected.delete(id);
+        var cb = e.target; if (!cb.classList.contains('cat-select-cb')) return;
+        var id = cb.dataset.catId;
+        if (cb.checked) _catSelected.add(id); else _catSelected.delete(id);
+        var allWraps = Array.from(document.querySelectorAll('#category-rows .cat-select-wrap'));
+        var wrap = cb.closest('.cat-select-wrap');
+        var idx = wrap ? allWraps.indexOf(wrap) : -1;
+        if (idx >= 0) _lastCatClickIdx = idx;
         _syncCatCheckboxes(); _updateCatBar();
     });
     var catSelAll = document.getElementById('cat-sel-all');
-    if (catSelAll) catSelAll.addEventListener('click', function(){
-        _getAllCatIds().forEach(function(id){_catSelected.add(id);}); _syncCatCheckboxes(); _updateCatBar();
+    if (catSelAll) catSelAll.addEventListener('click', function() {
+        var visIds = _getVisibleCatIds();
+        var allSel = visIds.length > 0 && visIds.every(function(id) { return _catSelected.has(id); });
+        if (allSel) { visIds.forEach(function(id) { _catSelected.delete(id); }); }
+        else { visIds.forEach(function(id) { _catSelected.add(id); }); }
+        _syncCatCheckboxes(); _updateCatBar();
     });
 
     // ── Multi-merge dialog ────────────────────────────────────────────────────
@@ -1815,6 +1943,11 @@ window._orgBulkSync = function(n, opts) {
     // ── HTMX hooks ────────────────────────────────────────────────────────────
     document.getElementById('category-rows').addEventListener('htmx:afterSwap', _onCatRowsUpdated);
 
+    // Update select-all button when filters change visible items
+    document.addEventListener('org:filter-applied', function(e) {
+        if (e.detail.ns === 'cat') _updateCatSelAllBtn();
+    });
+
     // ── Init ──────────────────────────────────────────────────────────────────
     applyCatView();
 })();
@@ -1859,6 +1992,25 @@ window._orgBulkSync = function(n, opts) {
         });
     }
 
+    function _getVisibleStatusIds() {
+        return _statusCards()
+            .filter(function(c) {
+                return c.style.display !== 'none'
+                    && c.dataset.statusProtected !== 'true'
+                    && c.dataset.statusProtected !== '1';
+            })
+            .map(function(c) { return parseInt(c.dataset.statusId, 10); });
+    }
+
+    function _updateStatusSelAllBtn() {
+        var btn = document.getElementById('status-sel-all'); if (!btn) return;
+        var visIds = _getVisibleStatusIds();
+        var allSel = visIds.length > 0 && visIds.every(function(id) { return _statusSelected.has(id); });
+        btn.classList.toggle('deselect-mode', allSel);
+        btn.title = allSel ? 'Deselect all' : 'Select all';
+        btn.innerHTML = allSel ? '<i class="material-icons">remove_done</i>' : '<i class="material-icons">checklist</i>';
+    }
+
     function _syncStatusSelBar() {
         var n = _statusSelected.size;
         window._orgBulk.deselect = _statusBulkDeselect;
@@ -1872,6 +2024,7 @@ window._orgBulkSync = function(n, opts) {
             var cb = card.querySelector('.status-select-cb');
             if (cb) cb.checked = _statusSelected.has(id);
         });
+        _updateStatusSelAllBtn();
     }
 
     document.getElementById('status-rows').addEventListener('click', function(e) {
@@ -1905,10 +2058,10 @@ window._orgBulkSync = function(n, opts) {
     var selAllBtn = document.getElementById('status-sel-all');
     if (selAllBtn) {
         selAllBtn.addEventListener('click', function() {
-            _statusCards().forEach(function(card) {
-                var prot = card.dataset.statusProtected === 'true' || card.dataset.statusProtected === '1';
-                if (!prot) _statusSelected.add(parseInt(card.dataset.statusId, 10));
-            });
+            var visIds = _getVisibleStatusIds();
+            var allSel = visIds.length > 0 && visIds.every(function(id) { return _statusSelected.has(id); });
+            if (allSel) { visIds.forEach(function(id) { _statusSelected.delete(id); }); }
+            else { visIds.forEach(function(id) { _statusSelected.add(id); }); }
             _lastStatusClickIdx = -1;
             _syncStatusSelBar();
         });
@@ -1917,6 +2070,11 @@ window._orgBulkSync = function(n, opts) {
     document.getElementById('status-rows').addEventListener('htmx:afterSwap', function() {
         _statusSelected.clear(); _lastStatusClickIdx = -1; _syncStatusSelBar();
         applyOrgFilter('status');
+    });
+
+    // Update select-all button when filters change visible items
+    document.addEventListener('org:filter-applied', function(e) {
+        if (e.detail.ns === 'status') _updateStatusSelAllBtn();
     });
 })();
 </script>
