@@ -33,6 +33,7 @@ import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from django import test
+from hypothesis.extra.django._impl import HypothesisTestCase as _HypothesisMixin
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,7 @@ class TestEntry(NamedTuple):
     message: str | None = None
 
 
-class TestCase(test.TestCase):
+class TestCase(_HypothesisMixin, test.TestCase):
     '''
     Provides additional functionality to the django unittest TestCase. 
     
