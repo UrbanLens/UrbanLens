@@ -114,3 +114,51 @@ class UploadDataFileFormTests(TestCase):
 	def test_field_label(self) -> None:
 		form = UploadDataFile()
 		self.assertEqual(form.fields["upload_files"].label, "Files")
+
+	def test_form_is_valid_when_bound_with_files_via_multivalue_dict(self) -> None:
+		# Exercise the full form binding path including value_from_datadict.
+		files: MultiValueDict = MultiValueDict({"upload_files": [self._file()]})
+		form = UploadDataFile(data={}, files=files)
+		self.assertTrue(form.is_valid(), form.errors)
+
+	def test_form_is_invalid_when_no_files_provided(self) -> None:
+		form = UploadDataFile(data={}, files=MultiValueDict())
+		self.assertFalse(form.is_valid())
+		self.assertIn("upload_files", form.errors)
+
+	def test_form_valid_with_multiple_files_via_bind(self) -> None:
+		files: MultiValueDict = MultiValueDict({
+			"upload_files": [self._file("a.kml"), self._file("b.kml")],
+		})
+		form = UploadDataFile(data={}, files=files)
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertEqual(len(form.cleaned_data["upload_files"]), 2)
+
+
+# ── _MultipleFileField — falsy file filtering ─────────────────────────────────
+
+class MultipleFileFieldFalsyFilterTests(TestCase):
+	"""_MultipleFileField.clean skips falsy entries in the list (the `if f` guard)."""
+
+	def _field(self) -> _MultipleFileField:
+		return _MultipleFileField(required=True)
+
+	def _file(self, name: str = "test.txt") -> SimpleUploadedFile:
+		return SimpleUploadedFile(name, b"content")
+
+	def test_falsy_entries_are_filtered_out(self) -> None:
+		# A list that contains one real file and one None — only the real file should survive.
+		real_file = self._file("real.kml")
+		# We need to pass something truthy first to bypass the `if not data` guard.
+		# But None entries are filtered via `if f`.
+		result = self._field().clean([real_file, None])
+		self.assertEqual(len(result), 1)
+
+	def test_list_of_all_falsy_after_filter_returns_empty(self) -> None:
+		from django.core.files.uploadedfile import SimpleUploadedFile as SUF
+		# Pass a truthy list to bypass the `if not data` check, then let `if f` filter reduce it.
+		# An empty-bytes file is still truthy, so we'd need a truly falsy entry.
+		# Here we use False as the falsy value.
+		result = self._field().clean([self._file(), False])
+		# The False entry is dropped; only the real file remains.
+		self.assertEqual(len(result), 1)

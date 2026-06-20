@@ -210,7 +210,7 @@ class FriendshipQuerySetTests(HypothesisTestCase):
 		self.assertIsNotNone(found)
 		self.assertEqual(found.pk, self.friendship.pk)
 
-	def test_between_raises_when_no_friendship_exists(self) -> None:
+	def test_between_returns_none_when_no_friendship_exists(self) -> None:
 		"""between() uses .get() but DoesNotExist should be caught when no friendship exists."""
 		profile_c: Profile = baker.make(User).profile
 		result = Friendship.objects.all().between(self.profile_a, profile_c)

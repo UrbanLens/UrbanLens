@@ -193,3 +193,51 @@ class CampusManagerEffectiveForTests(TestCase):
 		empty_loc: Location = baker.make(Location, latitude="50.0", longitude="-80.0")
 		result = Campus.objects.effective_for(empty_loc)
 		self.assertIsNone(result)
+
+
+# ── CampusQuerySet.with_location ──────────────────────────────────────────────
+
+class CampusQuerySetWithLocationTests(TestCase):
+	"""with_location() select_relates location so effective_polygon avoids extra queries."""
+
+	def setUp(self):
+		self.location = baker.make("dashboard.Location", latitude="42.0", longitude="-71.0")
+		self.campus = baker.make("dashboard.Campus", location=self.location, profile=None)
+
+	def test_with_location_returns_campus_queryset(self) -> None:
+		qs = Campus.objects.filter(pk=self.campus.pk).with_location()
+		self.assertEqual(qs.count(), 1)
+
+	def test_with_location_select_relates_location(self) -> None:
+		# After with_location the location is cached — accessing it should not hit DB.
+		campus = Campus.objects.filter(pk=self.campus.pk).with_location().get()
+		# location should be in _state.fields_cache (select_related sets this)
+		self.assertIsNotNone(campus.location)
+		self.assertEqual(campus.location.pk, self.location.pk)
+
+	def test_with_location_allows_effective_polygon_without_extra_query(self) -> None:
+		# effective_polygon accesses self.location; this must not raise when
+		# location is prefetched via with_location().
+		campus = Campus.objects.filter(pk=self.campus.pk).with_location().get()
+		result = campus.effective_polygon
+		self.assertIsNotNone(result)
+
+
+# ── CampusManager.effective_for with profile=None branch ─────────────────────
+
+class CampusManagerEffectiveForProfileNoneTests(TestCase):
+	"""effective_for() returns admin default when profile=None (anonymous access)."""
+
+	def setUp(self):
+		self.location = baker.make("dashboard.Location", latitude="35.0", longitude="-90.0")
+		self.admin_campus = baker.make("dashboard.Campus", location=self.location, profile=None)
+
+	def test_returns_admin_default_for_anonymous(self) -> None:
+		result = Campus.objects.effective_for(self.location, profile=None)
+		self.assertIsNotNone(result)
+		self.assertEqual(result.pk, self.admin_campus.pk)
+
+	def test_returns_none_for_anonymous_when_no_campus(self) -> None:
+		empty_loc = baker.make("dashboard.Location", latitude="36.0", longitude="-91.0")
+		result = Campus.objects.effective_for(empty_loc, profile=None)
+		self.assertIsNone(result)

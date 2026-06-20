@@ -15,7 +15,9 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import (
 	MapCenterMode,
+	MapViewChoice,
 	Profile,
+	VisibilityChoice,
 	_haversine_km,
 )
 from urbanlens.dashboard.tests.hypothesis.strategies import lat_float, lon_float
@@ -243,3 +245,118 @@ class ProfileComputeMapCenterTests(HypothesisTestCase):
 		user.profile.refresh_from_db()
 		self.assertIsNotNone(user.profile.map_center_latitude)
 		self.assertIsNotNone(user.profile.map_center_longitude)
+
+	def test_intercontinental_pins_picks_largest_cluster(self) -> None:
+		# Four pins in Europe and one in North America — the European cluster should win.
+		user: User = baker.make(User)
+		europe_coords = [
+			("48.850000", "2.350000"),    # Paris
+			("51.500000", "-0.120000"),   # London
+			("52.370000", "4.890000"),    # Amsterdam
+			("48.200000", "16.370000"),   # Vienna
+		]
+		for lat, lng in europe_coords:
+			loc = baker.make(Location, latitude=lat, longitude=lng)
+			baker.make("dashboard.Pin", profile=user.profile, location=loc, latitude=None, longitude=None)
+		# One outlier in North America.
+		na_loc = baker.make(Location, latitude="40.710000", longitude="-74.000000")
+		baker.make("dashboard.Pin", profile=user.profile, location=na_loc, latitude=None, longitude=None)
+
+		result = user.profile.compute_map_center()
+		self.assertIsNotNone(result)
+		lat, lng = result
+		# European cluster centroid should be in Europe (positive longitude, lat ~48-52).
+		self.assertGreater(lat, 40.0)
+		self.assertLess(lat, 60.0)
+		# Longitude should be in Europe, not near -74.
+		self.assertGreater(lng, -10.0)
+		self.assertLess(lng, 20.0)
+
+	def test_pin_with_coordinate_override_uses_override(self) -> None:
+		# Pin.latitude/longitude override the location coords in compute_map_center.
+		user: User = baker.make(User)
+		loc = baker.make(Location, latitude="0.000000", longitude="0.000000")
+		baker.make(
+			"dashboard.Pin",
+			profile=user.profile,
+			location=loc,
+			latitude="50.000000",
+			longitude="10.000000",
+		)
+		result = user.profile.compute_map_center()
+		self.assertIsNotNone(result)
+		lat, lng = result
+		self.assertAlmostEqual(lat, 50.0, places=1)
+		self.assertAlmostEqual(lng, 10.0, places=1)
+
+	def test_compute_map_center_returns_tuple_of_two_floats(self) -> None:
+		user: User = baker.make(User)
+		loc = baker.make(Location, latitude="45.000000", longitude="9.000000")
+		baker.make("dashboard.Pin", profile=user.profile, location=loc, latitude=None, longitude=None)
+		result = user.profile.compute_map_center()
+		self.assertIsNotNone(result)
+		self.assertIsInstance(result, tuple)
+		self.assertEqual(len(result), 2)
+		self.assertIsInstance(result[0], float)
+		self.assertIsInstance(result[1], float)
+
+
+# ── VisibilityChoice / MapViewChoice / MapCenterMode ──────────────────────────
+
+class ProfileChoiceTests(TestCase):
+	"""Choice enumerations have expected values."""
+
+	def test_visibility_choice_includes_anyone(self) -> None:
+		self.assertIn("anyone", VisibilityChoice.values)
+
+	def test_visibility_choice_includes_friends(self) -> None:
+		self.assertIn("friends", VisibilityChoice.values)
+
+	def test_visibility_choice_includes_no_one(self) -> None:
+		self.assertIn("no_one", VisibilityChoice.values)
+
+	def test_map_view_choice_includes_satellite(self) -> None:
+		self.assertIn("satellite", MapViewChoice.values)
+
+	def test_map_view_choice_includes_street(self) -> None:
+		self.assertIn("street", MapViewChoice.values)
+
+	def test_map_view_choice_includes_topographic(self) -> None:
+		self.assertIn("topographic", MapViewChoice.values)
+
+	def test_map_center_mode_includes_auto(self) -> None:
+		self.assertIn("auto", MapCenterMode.values)
+
+	def test_map_center_mode_includes_gps(self) -> None:
+		self.assertIn("gps", MapCenterMode.values)
+
+	def test_map_center_mode_includes_custom(self) -> None:
+		self.assertIn("custom", MapCenterMode.values)
+
+
+# ── Profile.get_map_center – custom mode with only one coord None ─────────────
+
+class ProfileGetMapCenterEdgeCaseTests(TestCase):
+	"""get_map_center() edge: CUSTOM mode with only one coordinate set returns None."""
+
+	def _profile_with_mode(self, mode, **extra) -> Profile:
+		user = baker.make(User)
+		Profile.objects.filter(pk=user.profile.pk).update(map_center_mode=mode, **extra)
+		user.profile.refresh_from_db()
+		return user.profile
+
+	def test_custom_mode_lat_set_but_lng_none_returns_none(self) -> None:
+		profile = self._profile_with_mode(
+			MapCenterMode.CUSTOM,
+			map_custom_latitude="48.000000",
+			map_custom_longitude=None,
+		)
+		self.assertIsNone(profile.get_map_center())
+
+	def test_custom_mode_lng_set_but_lat_none_returns_none(self) -> None:
+		profile = self._profile_with_mode(
+			MapCenterMode.CUSTOM,
+			map_custom_latitude=None,
+			map_custom_longitude="2.000000",
+		)
+		self.assertIsNone(profile.get_map_center())

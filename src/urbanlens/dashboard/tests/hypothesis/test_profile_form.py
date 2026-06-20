@@ -15,7 +15,12 @@ from model_bakery import baker
 from django import forms as django_forms
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.forms.profile_form import validate_birth_date, validate_started_exploring
+from urbanlens.dashboard.forms.profile_form import (
+	DiscordHandleForm,
+	ProfileForm,
+	validate_birth_date,
+	validate_started_exploring,
+)
 from urbanlens.dashboard.forms.settings_form import MarkupDefaultsForm, PrivacySettingsForm
 from urbanlens.dashboard.models.profile.model import VisibilityChoice
 
@@ -278,3 +283,121 @@ class PrivacySettingsFormTests(HypothesisTestCase):
 	def test_non_friends_choices_are_valid_for_request_visibility(self, choice: str) -> None:
 		form = self._submit(**self._default_data(friend_request_visibility=choice))
 		self.assertNotIn("friend_request_visibility", form.errors)
+
+
+# ── ProfileForm ───────────────────────────────────────────────────────────────
+
+class ProfileFormTests(HypothesisTestCase):
+	"""ProfileForm.clean_birth_date and clean_started_exploring raise ValidationError for bad values."""
+
+	def _profile(self):
+		return baker.make("auth.User").profile
+
+	def _submit(self, **data):
+		profile = self._profile()
+		form = ProfileForm(data=data, instance=profile)
+		form.is_valid()
+		return form
+
+	# ── clean_birth_date ──────────────────────────────────────────────────────
+
+	def test_blank_birth_date_is_valid(self) -> None:
+		form = self._submit(birth_date="")
+		self.assertNotIn("birth_date", form.errors)
+
+	def test_valid_adult_birth_date_passes_clean(self) -> None:
+		form = self._submit(birth_date="1990-06-15")
+		self.assertNotIn("birth_date", form.errors)
+		self.assertEqual(form.cleaned_data["birth_date"], date(1990, 6, 15))
+
+	def test_future_birth_date_raises_validation_error(self) -> None:
+		future = (_today() + timedelta(days=10)).isoformat()
+		form = self._submit(birth_date=future)
+		self.assertFalse(form.is_valid())
+		self.assertIn("birth_date", form.errors)
+
+	def test_too_young_birth_date_raises_validation_error(self) -> None:
+		# 5 years ago — under the 13-year minimum
+		too_young = (_today() - timedelta(days=365 * 5)).isoformat()
+		form = self._submit(birth_date=too_young)
+		self.assertFalse(form.is_valid())
+		self.assertIn("birth_date", form.errors)
+
+	def test_exactly_min_age_birth_date_passes_clean(self) -> None:
+		today = _today()
+		try:
+			min_age_date = today.replace(year=today.year - _MIN_AGE_YEARS)
+		except ValueError:
+			min_age_date = today.replace(year=today.year - _MIN_AGE_YEARS, day=28)
+		form = self._submit(birth_date=min_age_date.isoformat())
+		self.assertNotIn("birth_date", form.errors)
+
+	# ── clean_started_exploring ───────────────────────────────────────────────
+
+	def test_blank_started_exploring_is_valid(self) -> None:
+		form = self._submit(started_exploring="")
+		self.assertNotIn("started_exploring", form.errors)
+
+	def test_past_started_exploring_passes_clean(self) -> None:
+		form = self._submit(started_exploring="2010-03-01")
+		self.assertNotIn("started_exploring", form.errors)
+		self.assertEqual(form.cleaned_data["started_exploring"], date(2010, 3, 1))
+
+	def test_today_started_exploring_passes_clean(self) -> None:
+		form = self._submit(started_exploring=_today().isoformat())
+		self.assertNotIn("started_exploring", form.errors)
+
+	def test_future_started_exploring_raises_validation_error(self) -> None:
+		future = (_today() + timedelta(days=1)).isoformat()
+		form = self._submit(started_exploring=future)
+		self.assertFalse(form.is_valid())
+		self.assertIn("started_exploring", form.errors)
+
+	@given(
+		birth=st.dates(min_value=date(1900, 1, 1), max_value=date(2013, 1, 1)),
+		exploring=st.dates(min_value=date(1900, 1, 1), max_value=date(2026, 6, 20)),
+	)
+	@_hyp_db
+	def test_valid_past_dates_produce_valid_form(self, birth, exploring) -> None:
+		today = _today()
+		cutoff = _past_date(_MIN_AGE_YEARS)
+		# Only submit dates that should actually pass validation.
+		if birth > cutoff or exploring > today:
+			return
+		form = self._submit(birth_date=birth.isoformat(), started_exploring=exploring.isoformat())
+		self.assertNotIn("birth_date", form.errors)
+		self.assertNotIn("started_exploring", form.errors)
+
+
+# ── DiscordHandleForm ─────────────────────────────────────────────────────────
+
+class DiscordHandleFormTests(TestCase):
+	"""DiscordHandleForm accepts an optional Discord username."""
+
+	def test_empty_discord_is_valid(self) -> None:
+		form = DiscordHandleForm(data={"discord": ""})
+		self.assertTrue(form.is_valid(), form.errors)
+
+	def test_valid_discord_handle_is_accepted(self) -> None:
+		form = DiscordHandleForm(data={"discord": "urbanlens_explorer"})
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertEqual(form.cleaned_data["discord"], "urbanlens_explorer")
+
+	def test_discord_is_not_required(self) -> None:
+		form = DiscordHandleForm(data={})
+		self.assertTrue(form.is_valid(), form.errors)
+
+	def test_discord_too_long_is_invalid(self) -> None:
+		form = DiscordHandleForm(data={"discord": "x" * 101})
+		self.assertFalse(form.is_valid())
+		self.assertIn("discord", form.errors)
+
+	def test_discord_max_length_is_valid(self) -> None:
+		form = DiscordHandleForm(data={"discord": "x" * 100})
+		self.assertTrue(form.is_valid(), form.errors)
+
+	@given(handle=st.text(max_size=100))
+	@_hyp
+	def test_any_string_up_to_100_chars_is_valid(self, handle) -> None:
+		form = DiscordHandleForm(data={"discord": handle})
+		self.assertTrue(form.is_valid(), form.errors)

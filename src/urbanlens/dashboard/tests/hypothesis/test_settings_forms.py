@@ -10,11 +10,18 @@ Invariants verified:
 from __future__ import annotations
 
 from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
-from urbanlens.dashboard.forms.settings_form import MapCenterForm, MapDisplayForm, StyleSettingsForm
-from urbanlens.dashboard.models.profile.model import MapCenterMode, Profile
+from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.forms.settings_form import (
+	ContactSettingsForm,
+	MapCenterForm,
+	MapDisplayForm,
+	StyleSettingsForm,
+)
+from urbanlens.dashboard.models.profile.model import MapCenterMode, MapViewChoice, Profile
 from urbanlens.dashboard.tests.hypothesis.strategies import valid_zoom
 
 _db_settings = settings(
@@ -235,3 +242,137 @@ class MapCenterFormSaveTests(HypothesisTestCase):
 		# Reload from DB — it should not have changed.
 		db_profile = Profile.objects.get(pk=profile.pk)
 		self.assertEqual(db_profile.map_center_mode, original_mode)
+
+
+# ── StyleSettingsForm ─────────────────────────────────────────────────────────
+
+class StyleSettingsFormTests(HypothesisTestCase):
+	"""StyleSettingsForm persists dark_mode to the Profile."""
+
+	def _profile(self):
+		return baker.make("auth.User").profile
+
+	def test_dark_mode_off_is_valid(self) -> None:
+		profile = self._profile()
+		form = StyleSettingsForm(data={}, instance=profile)
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertFalse(form.cleaned_data["dark_mode"])
+
+	def test_dark_mode_on_is_valid(self) -> None:
+		profile = self._profile()
+		form = StyleSettingsForm(data={"dark_mode": "on"}, instance=profile)
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertTrue(form.cleaned_data["dark_mode"])
+
+	def test_saving_dark_mode_true_persists_to_db(self) -> None:
+		profile = self._profile()
+		form = StyleSettingsForm(data={"dark_mode": "on"}, instance=profile)
+		self.assertTrue(form.is_valid(), form.errors)
+		form.save()
+		profile.refresh_from_db()
+		self.assertTrue(profile.dark_mode)
+
+	def test_saving_dark_mode_false_persists_to_db(self) -> None:
+		profile = self._profile()
+		Profile.objects.filter(pk=profile.pk).update(dark_mode=True)
+		profile.refresh_from_db()
+		form = StyleSettingsForm(data={}, instance=profile)
+		self.assertTrue(form.is_valid(), form.errors)
+		form.save()
+		profile.refresh_from_db()
+		self.assertFalse(profile.dark_mode)
+
+
+# ── ContactSettingsForm ───────────────────────────────────────────────────────
+
+class ContactSettingsFormTests(TestCase):
+	"""ContactSettingsForm validates an email address field (no DB access needed)."""
+
+	def test_valid_email_is_accepted(self) -> None:
+		form = ContactSettingsForm(data={"email": "test@example.com"})
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertEqual(form.cleaned_data["email"], "test@example.com")
+
+	def test_missing_email_is_invalid(self) -> None:
+		form = ContactSettingsForm(data={})
+		self.assertFalse(form.is_valid())
+		self.assertIn("email", form.errors)
+
+	def test_blank_email_is_invalid(self) -> None:
+		form = ContactSettingsForm(data={"email": ""})
+		self.assertFalse(form.is_valid())
+		self.assertIn("email", form.errors)
+
+	def test_malformed_email_is_invalid(self) -> None:
+		form = ContactSettingsForm(data={"email": "not-an-email"})
+		self.assertFalse(form.is_valid())
+		self.assertIn("email", form.errors)
+
+	def test_email_without_domain_is_invalid(self) -> None:
+		form = ContactSettingsForm(data={"email": "user@"})
+		self.assertFalse(form.is_valid())
+		self.assertIn("email", form.errors)
+
+	@given(local=st.from_regex(r"[a-zA-Z0-9._%+-]{1,20}", fullmatch=True),
+	       domain=st.from_regex(r"[a-zA-Z0-9-]{1,20}\.[a-zA-Z]{2,6}", fullmatch=True))
+	@settings(max_examples=50, deadline=None)
+	def test_well_formed_emails_are_valid(self, local, domain) -> None:
+		form = ContactSettingsForm(data={"email": f"{local}@{domain}"})
+		self.assertTrue(form.is_valid(), form.errors)
+
+
+# ── MapDisplayForm — cluster_radius and default_map_view ─────────────────────
+
+class MapDisplayFormClusterRadiusTests(HypothesisTestCase):
+	"""MapDisplayForm.cluster_radius is optional and bounded 1-500."""
+
+	def _map_data(self, **extra) -> dict:
+		return {"default_map_view": MapViewChoice.SATELLITE, **extra}
+
+	def test_omitting_cluster_radius_is_valid(self) -> None:
+		profile = _profile()
+		form = MapDisplayForm(data=self._map_data(), instance=profile)
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertIsNone(form.cleaned_data["cluster_radius"])
+
+	def test_cluster_radius_1_is_valid(self) -> None:
+		profile = _profile()
+		form = MapDisplayForm(data=self._map_data(cluster_radius="1"), instance=profile)
+		self.assertTrue(form.is_valid(), form.errors)
+
+	def test_cluster_radius_500_is_valid(self) -> None:
+		profile = _profile()
+		form = MapDisplayForm(data=self._map_data(cluster_radius="500"), instance=profile)
+		self.assertTrue(form.is_valid(), form.errors)
+
+	def test_cluster_radius_0_is_invalid(self) -> None:
+		profile = _profile()
+		form = MapDisplayForm(data=self._map_data(cluster_radius="0"), instance=profile)
+		self.assertFalse(form.is_valid())
+		self.assertIn("cluster_radius", form.errors)
+
+	def test_cluster_radius_501_is_invalid(self) -> None:
+		profile = _profile()
+		form = MapDisplayForm(data=self._map_data(cluster_radius="501"), instance=profile)
+		self.assertFalse(form.is_valid())
+		self.assertIn("cluster_radius", form.errors)
+
+	@given(radius=st.integers(min_value=1, max_value=500))
+	@_db_settings
+	def test_valid_cluster_radius_is_accepted(self, radius) -> None:
+		profile = _profile()
+		form = MapDisplayForm(data=self._map_data(cluster_radius=str(radius)), instance=profile)
+		self.assertTrue(form.is_valid(), form.errors)
+
+	def test_all_map_view_choices_are_valid(self) -> None:
+		for choice in MapViewChoice.values:
+			with self.subTest(choice=choice):
+				profile = _profile()
+				form = MapDisplayForm(data={"default_map_view": choice}, instance=profile)
+				self.assertTrue(form.is_valid(), form.errors)
+
+	def test_invalid_map_view_is_rejected(self) -> None:
+		profile = _profile()
+		form = MapDisplayForm(data={"default_map_view": "not_a_view"}, instance=profile)
+		self.assertFalse(form.is_valid())
+		self.assertIn("default_map_view", form.errors)

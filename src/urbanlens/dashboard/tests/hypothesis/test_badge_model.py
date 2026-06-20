@@ -310,3 +310,135 @@ class BadgeQuerySetOrderedTests(TestCase):
 		b_high: Badge = baker.make(Badge, name="high", order=10, profile=None, kind=KIND_TAG)
 		pks = list(Badge.objects.filter(pk__in=[b_low.pk, b_high.pk]).ordered().values_list("pk", flat=True))
 		self.assertEqual(pks[0], b_high.pk)
+
+
+# ── BadgeQuerySet.with_customizations_for ────────────────────────────────────
+
+class BadgeQuerySetWithCustomizationsForTests(TestCase):
+	"""with_customizations_for() prefetches BadgeCustomization rows into _user_customizations."""
+
+	def setUp(self):
+		from urbanlens.dashboard.models.badges.customization import BadgeCustomization
+		self.BadgeCustomization = BadgeCustomization
+		self.user = baker.make("auth.User")
+		self.other = baker.make("auth.User")
+		self.badge = baker.make(Badge, name="Global", profile=None, kind=KIND_TAG)
+
+	def test_prefetch_populates_user_customizations_attr(self) -> None:
+		# Create a customization for this user.
+		baker.make(
+			self.BadgeCustomization,
+			profile=self.user.profile,
+			badge=self.badge,
+			name="My Override",
+		)
+		qs = Badge.objects.filter(pk=self.badge.pk).with_customizations_for(self.user.profile)
+		result = qs.get()
+		customizations = getattr(result, "_user_customizations", [])
+		self.assertEqual(len(customizations), 1)
+		self.assertEqual(customizations[0].name, "My Override")
+
+	def test_prefetch_empty_when_no_customization_exists(self) -> None:
+		qs = Badge.objects.filter(pk=self.badge.pk).with_customizations_for(self.user.profile)
+		result = qs.get()
+		customizations = getattr(result, "_user_customizations", [])
+		self.assertEqual(len(customizations), 0)
+
+	def test_prefetch_excludes_other_users_customizations(self) -> None:
+		# Only the other user has a customization — our user should see empty list.
+		baker.make(
+			self.BadgeCustomization,
+			profile=self.other.profile,
+			badge=self.badge,
+			name="Other Override",
+		)
+		qs = Badge.objects.filter(pk=self.badge.pk).with_customizations_for(self.user.profile)
+		result = qs.get()
+		customizations = getattr(result, "_user_customizations", [])
+		self.assertEqual(len(customizations), 0)
+
+	def test_accepts_int_profile_pk(self) -> None:
+		qs = Badge.objects.filter(pk=self.badge.pk).with_customizations_for(self.user.profile.pk)
+		result = qs.get()
+		self.assertTrue(hasattr(result, "_user_customizations"))
+
+
+# ── BadgeQuerySet.with_pin_counts ─────────────────────────────────────────────
+
+class BadgeQuerySetWithPinCountsTests(TestCase):
+	"""with_pin_counts() annotates pin_count and location_count on each badge."""
+
+	def setUp(self):
+		self.user = baker.make("auth.User")
+		self.badge = baker.make(Badge, name="Pinned", profile=None, kind=KIND_TAG)
+
+	def test_annotates_pin_count_attribute(self) -> None:
+		qs = Badge.objects.filter(pk=self.badge.pk).with_pin_counts()
+		result = qs.get()
+		self.assertTrue(hasattr(result, "pin_count"))
+
+	def test_annotates_location_count_attribute(self) -> None:
+		qs = Badge.objects.filter(pk=self.badge.pk).with_pin_counts()
+		result = qs.get()
+		self.assertTrue(hasattr(result, "location_count"))
+
+	def test_pin_count_is_zero_when_no_pins(self) -> None:
+		qs = Badge.objects.filter(pk=self.badge.pk).with_pin_counts()
+		result = qs.get()
+		self.assertEqual(result.pin_count, 0)
+
+	def test_location_count_is_zero_when_no_locations(self) -> None:
+		qs = Badge.objects.filter(pk=self.badge.pk).with_pin_counts()
+		result = qs.get()
+		self.assertEqual(result.location_count, 0)
+
+
+# ── Badge.get_badge_and_descendants ──────────────────────────────────────────
+
+class BadgeGetBadgeAndDescendantsTests(TestCase):
+	"""get_badge_and_descendants() BFS returns a badge and all its descendants."""
+
+	def test_single_badge_with_no_children_returns_itself(self) -> None:
+		b = baker.make(Badge, name="leaf", profile=None, kind=KIND_TAG)
+		result = Badge.get_badge_and_descendants(b.pk)
+		self.assertEqual(result, {b.pk})
+
+	def test_returns_parent_and_direct_child(self) -> None:
+		parent = baker.make(Badge, name="parent", profile=None, kind=KIND_TAG)
+		child = baker.make(Badge, name="child", profile=None, kind=KIND_TAG)
+		child.parents.add(parent)
+		result = Badge.get_badge_and_descendants(parent.pk)
+		self.assertIn(parent.pk, result)
+		self.assertIn(child.pk, result)
+
+	def test_returns_multi_level_descendants(self) -> None:
+		grandparent = baker.make(Badge, name="gp", profile=None, kind=KIND_TAG)
+		parent = baker.make(Badge, name="p", profile=None, kind=KIND_TAG)
+		child = baker.make(Badge, name="c", profile=None, kind=KIND_TAG)
+		parent.parents.add(grandparent)
+		child.parents.add(parent)
+		result = Badge.get_badge_and_descendants(grandparent.pk)
+		self.assertIn(grandparent.pk, result)
+		self.assertIn(parent.pk, result)
+		self.assertIn(child.pk, result)
+
+	def test_does_not_include_unrelated_badge(self) -> None:
+		b1 = baker.make(Badge, name="b1", profile=None, kind=KIND_TAG)
+		unrelated = baker.make(Badge, name="unrelated", profile=None, kind=KIND_TAG)
+		result = Badge.get_badge_and_descendants(b1.pk)
+		self.assertNotIn(unrelated.pk, result)
+
+	def test_cycle_safe(self) -> None:
+		# A -> B -> A (cycle) should not loop infinitely.
+		a = baker.make(Badge, name="a", profile=None, kind=KIND_TAG)
+		b = baker.make(Badge, name="b", profile=None, kind=KIND_TAG)
+		b.parents.add(a)
+		a.parents.add(b)
+		result = Badge.get_badge_and_descendants(a.pk)
+		self.assertIn(a.pk, result)
+		self.assertIn(b.pk, result)
+
+	def test_returns_set_not_list(self) -> None:
+		b = baker.make(Badge, name="s", profile=None, kind=KIND_TAG)
+		result = Badge.get_badge_and_descendants(b.pk)
+		self.assertIsInstance(result, set)
