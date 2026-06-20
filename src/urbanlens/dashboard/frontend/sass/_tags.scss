@@ -344,11 +344,20 @@
     padding: 0 4px;
 }
 
-.tag-card-actions {
-    display: flex;
-    gap: 4px;
-    flex-shrink: 0;
-    align-items: center;
+.tag-card-view {
+    .tag-card-actions {
+        display: flex;
+        gap: 4px;
+        flex-shrink: 0;
+        align-items: center;
+        opacity: 0.25;
+    }
+
+    &:hover {
+        .tag-card-actions {
+            opacity: 1;
+        }
+    }
 }
 
 .tag-order-badge {
