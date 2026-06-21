@@ -113,7 +113,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     openai_api_key : str | None = Field(default=None, description = "The openai key")
     google_places_api_key : str | None = Field(default=None, description = "The google places key")
     google_maps_api_key : str | None = Field(default=None, description = "The google maps key")
-    street_view_api_key : str | None = Field(default=None, description = "The google street view api key")
+    google_street_view_api_key : str | None = Field(default=None, description = "The google street view api key")
     google_search_api_key : str | None = Field(default=None, description = "The google search key")
     google_search_tenant : str | None = Field(default=None, description = "The google search tenant")
     brave_search_api_key : str | None = Field(default=None, description = "The Brave Search API key")

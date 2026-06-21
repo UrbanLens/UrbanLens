@@ -382,7 +382,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return render(request, "dashboard/pages/location/street_view.html", {"error": "No coordinates available."})
 
         try:
-            google_maps_gateway = GoogleMapsGateway(api_key=settings.street_view_api_key or "")
+            google_maps_gateway = GoogleMapsGateway(api_key=settings.google_street_view_api_key or "")
             image_bytes = google_maps_gateway.get_street_view(lat, lng)
             image_b64 = base64.b64encode(image_bytes).decode("ascii")
         except Exception as exc:
