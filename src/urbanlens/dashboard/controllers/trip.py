@@ -684,19 +684,20 @@ class TripCommentsView(LoginRequiredMixin, View):
             return HttpResponse("You don't have permission to comment on this trip.", status=403)
 
         text = request.POST.get("text", "").strip()
-        if not text:
-            return HttpResponse("Comment text is required.", status=400)
+        image = request.FILES.get("image")
+        from urbanlens.dashboard.controllers.comments import _parse_map_data
+        map_data = _parse_map_data(request)
+        if not text and not image and not map_data:
+            return HttpResponse("Please add some text, a photo, or a map.", status=400)
 
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
             parent = get_object_or_404(TripComment, id=parent_id, trip=trip)
 
-        from urbanlens.dashboard.controllers.comments import _parse_map_data
-        map_data = _parse_map_data(request)
         comment = TripComment.objects.create(trip=trip, author=profile, text=text, parent=parent, map_data=map_data)
-        if request.FILES.get("image"):
-            comment.image = request.FILES["image"]
+        if image:
+            comment.image = image
             comment.save(update_fields=["image"])
 
         if parent and parent.author and parent.author != profile:

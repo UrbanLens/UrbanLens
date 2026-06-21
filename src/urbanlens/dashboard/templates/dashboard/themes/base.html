@@ -895,6 +895,53 @@
             if (_dialog.open && _composerMap) _composerMap.invalidateSize();
         });
 
+        // ── Markup bounds helpers ─────────────────────────────────────────────
+        // Returns an L.LatLngBounds covering all points in the shapes array,
+        // or null when there are no shapes with computable bounds.
+        function _computeMarkupBounds(shapes) {
+            var pts = [];
+            (shapes || []).forEach(function (s) {
+                if (!s.latlngs || !s.latlngs.length) return;
+                if (s.type === 'circle' && s.latlngs.length >= 2) {
+                    // Approximate circle extent using radius in metres → degrees
+                    var ctr = L.latLng(s.latlngs[0][0] != null ? s.latlngs[0][0] : s.latlngs[0],
+                                       s.latlngs[0][1] != null ? s.latlngs[0][1] : 0);
+                    var edge = L.latLng(s.latlngs[1][0] != null ? s.latlngs[1][0] : s.latlngs[1],
+                                        s.latlngs[1][1] != null ? s.latlngs[1][1] : 0);
+                    var r = ctr.distanceTo(edge);
+                    var dLat = r / 111320;
+                    var dLng = r / (111320 * Math.cos(ctr.lat * Math.PI / 180));
+                    pts.push([ctr.lat + dLat, ctr.lng + dLng]);
+                    pts.push([ctr.lat - dLat, ctr.lng - dLng]);
+                } else {
+                    s.latlngs.forEach(function (ll) {
+                        if (Array.isArray(ll)) { pts.push([ll[0], ll[1]]); }
+                        else if (ll && ll.lat != null) { pts.push([ll.lat, ll.lng]); }
+                    });
+                }
+            });
+            if (!pts.length) return null;
+            try { var b = L.latLngBounds(pts); return b.isValid() ? b : null; }
+            catch (_) { return null; }
+        }
+
+        // Sets the map view: respects the user's saved center/zoom but zooms out
+        // if any markup would be hidden at that zoom level.
+        function _fitMapToMarkup(lmap, data) {
+            var lat  = data.center_lat;
+            var lng  = data.center_lng;
+            var zoom = data.zoom || 13;
+            var markup = data.markup || [];
+            if (!markup.length) { lmap.setView([lat, lng], zoom); return; }
+            var bounds = _computeMarkupBounds(markup);
+            if (!bounds) { lmap.setView([lat, lng], zoom); return; }
+            lmap.setView([lat, lng], zoom);
+            // If the saved view already contains all markup, keep it exactly.
+            if (lmap.getBounds().contains(bounds)) return;
+            // Otherwise zoom out enough to show all markup, with a little padding.
+            lmap.fitBounds(bounds.pad(0.15));
+        }
+
         // ── Comment map viewer ────────────────────────────────────────────────
         var _viewerMaps = {};   // commentId → L.Map
 
@@ -928,7 +975,7 @@
 
             var viewMap = L.map(el);
             _makeTileLayer().addTo(viewMap);
-            viewMap.setView([data.center_lat, data.center_lng], data.zoom || 13);
+            _fitMapToMarkup(viewMap, data);
 
             var markupGroup = L.layerGroup().addTo(viewMap);
             (data.markup || []).forEach(function (s) { _renderShape(s, markupGroup); });
@@ -963,7 +1010,7 @@
                 var tmap = L.map(thumb, { zoomControl: false, attributionControl: false, dragging: false,
                                           scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
                 _makeTileLayer().addTo(tmap);
-                tmap.setView([data.center_lat, data.center_lng], data.zoom || 13);
+                _fitMapToMarkup(tmap, data);
                 tmap.invalidateSize();
                 var mg = L.layerGroup().addTo(tmap);
                 (data.markup || []).forEach(function (s) { _renderShape(s, mg); });
@@ -972,6 +1019,16 @@
 
         document.addEventListener('DOMContentLoaded', _initThumbs);
         document.addEventListener('htmx:afterSettle', _initThumbs);
+
+        // ── Comment form validation (text optional if photo or map attached) ─
+        window._validateCommentForm = function (form) {
+            var text = ((form.querySelector('[name=text]') || {}).value || '').trim();
+            var imgInput = form.querySelector('[name=image]');
+            var hasImage = !!(imgInput && imgInput.files && imgInput.files.length > 0);
+            var mapField = form.querySelector('.comment-map-data-field');
+            var hasMap = !!(mapField && mapField.value);
+            return !!(text || hasImage || hasMap);
+        };
 
     }());
     </script>

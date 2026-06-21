@@ -6,15 +6,12 @@
       {% else %}
       hx-post="{% url 'trips.comments' trip.uuid %}"
       {% endif %}
-      {% if is_reply %}
       hx-target="#comment-panel"
-      {% else %}
-      hx-target="#comment-panel"
-      {% endif %}
       hx-swap="outerHTML"
       hx-encoding="multipart/form-data"
       hx-on::after-request="if(event.detail.successful){this.reset();_clearCommentMap(this);this.closest('.comment-reply-form') && (this.closest('.comment-reply-form').hidden=true)}"
-      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+      hx-on:submit="if(!window._validateCommentForm||!_validateCommentForm(this)){event.preventDefault();if(window.toastr)toastr.warning('Please add some text, a photo, or a map.');return false;}">
   {% if parent_id %}<input type="hidden" name="parent_id" value="{{ parent_id }}">{% endif %}
   {# Hidden field that carries the map snapshot — populated by the composer JS #}
   <input type="hidden" name="map_data" class="comment-map-data-field" value="">
@@ -34,8 +31,7 @@
                   placeholder="{% if is_reply %}Write a reply…{% else %}Add a comment…{% endif %}"
                   class="comment-input mention-input"
                   data-context-type="{{ context_type }}"
-                  {% if trip_uuid %}data-trip-uuid="{{ trip_uuid }}"{% elif trip %}data-trip-uuid="{{ trip.uuid }}"{% endif %}
-                  required></textarea>
+                  {% if trip_uuid %}data-trip-uuid="{{ trip_uuid }}"{% elif trip %}data-trip-uuid="{{ trip.uuid }}"{% endif %}></textarea>
         {# @ mention autocomplete container #}
         <div class="mention-dropdown" hidden></div>
       </div>
