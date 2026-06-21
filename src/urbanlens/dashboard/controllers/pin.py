@@ -282,6 +282,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.exception("Unable to contact web search API: %s", e)
             return render(request, "dashboard/pages/location/web_search.html", {"error": "Search unavailable. Please try again later."})
 
+        from urllib.parse import urlparse
+        for r in search_results:
+            try:
+                r["domain"] = urlparse(r.get("link", "")).netloc.removeprefix("www.")
+            except Exception:
+                r["domain"] = ""
+
         return render(request, "dashboard/pages/location/web_search.html", {"search_results": search_results})
 
     def satellite_view_google_image(self, request: HttpRequest, **kwargs):

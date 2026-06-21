@@ -535,10 +535,16 @@
     padding: 0;
     width: min(480px, 95vw);
     max-height: 90vh;
-    overflow-y: auto;
+    overflow: hidden;
 
     &[open] {
         display: flex;
         flex-direction: column;
+    }
+
+    .wiki-edit-form {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
     }
 }

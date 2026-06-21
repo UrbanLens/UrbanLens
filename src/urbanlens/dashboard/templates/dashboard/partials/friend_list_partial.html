@@ -8,9 +8,9 @@
             {% if is_own_profile and friends %}<span class="profile-section-count">{{ friends|length }}</span>{% endif %}
             {% if not is_own_profile and mutual_friends %}<span class="profile-section-count">{{ mutual_friends|length }}</span>{% endif %}
         </h3>
-        {% if is_own_profile and friends %}
+        {% if is_own_profile and friends|length > 8 %}
         <a href="{% url 'friend.page' viewer.id %}" class="profile-section-link">
-            View all <i class="material-icons">arrow_forward</i>
+            View all {{ friends|length }} <i class="material-icons">arrow_forward</i>
         </a>
         {% endif %}
     </div>
@@ -69,7 +69,7 @@
     {% if is_own_profile %}
     {% if friends %}
     <ul class="friend-grid">
-        {% for friend in friends %}
+        {% for friend in friends|slice:":8" %}
         <li class="friend-card">
             <a href="{% url 'profile.view_user' friend.uuid %}" class="friend-card-link">
                 {% if friend.avatar %}

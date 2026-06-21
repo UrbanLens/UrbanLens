@@ -1,9 +1,9 @@
+{% if images %}
 <div class="smithsonian-images card" id="smithsonian-section">
     <div class="card-header">
         <i class="material-icons">collections</i>
         <h3>Smithsonian Archives</h3>
     </div>
-    {% if images %}
     <div class="smithsonian-grid">
         {% for image in images %}
         {% if image.url %}
@@ -16,10 +16,7 @@
         {% endif %}
         {% endfor %}
     </div>
-    {% else %}
-    <div class="view-unavailable">
-        <i class="material-icons">image_search</i>
-        <span>No historical images found.</span>
-    </div>
-    {% endif %}
 </div>
+{% else %}
+<span hidden id="smithsonian-section"></span>
+{% endif %}

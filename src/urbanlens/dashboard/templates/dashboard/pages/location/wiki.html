@@ -30,11 +30,18 @@
                 <i class="material-icons">info_outline</i>
                 <span>Everything on this page is <strong>shared with all users</strong> who have this location pinned.</span>
             </div>
-            {% if user_pin %}
-            <a href="{% url 'pin.details' user_pin.uuid %}" class="wiki-back-link">
-                <i class="material-icons">arrow_back</i> Back to my pin
-            </a>
-            {% endif %}
+            <div class="wiki-banner-actions">
+                <button type="button" class="wiki-edit-btn"
+                        onclick="document.getElementById('wiki-edit-dialog').showModal()">
+                    <i class="material-icons">edit_note</i>
+                    Suggest edits
+                </button>
+                {% if user_pin %}
+                <a href="{% url 'pin.details' user_pin.uuid %}" class="wiki-back-link">
+                    <i class="material-icons">arrow_back</i> Back to my pin
+                </a>
+                {% endif %}
+            </div>
         </div>
     </div>
 
@@ -79,52 +86,22 @@
     {# ── Body grid ───────────────────────────────────────────────────────── #}
     <div class="wiki-body">
 
-        {# ── Main details card ───────────────────────────────────────────── #}
-        <div class="wiki-card wiki-details">
-            <div class="wiki-card-header">
-                <i class="material-icons">info</i>
-                <h2>Location Details</h2>
-                <button type="button" class="wiki-edit-btn"
-                        onclick="document.getElementById('wiki-edit-dialog').showModal()">
-                    <i class="material-icons">edit_note</i>
-                    Suggest edits
-                </button>
-            </div>
-            <dl class="wiki-dl">
-                <div class="wiki-dl-row">
-                    <dt>Name</dt>
-                    <dd id="wiki-field-name">{{ location.name }}</dd>
-                </div>
-                {% if location.description %}
-                <div class="wiki-dl-row full">
-                    <dt>Description</dt>
-                    <dd id="wiki-field-description">{{ location.description }}</dd>
-                </div>
-                {% endif %}
-                <div class="wiki-dl-row">
-                    <dt>Coordinates</dt>
-                    <dd>{{ location.latitude }}, {{ location.longitude }}</dd>
-                </div>
-                {% if location.address %}
-                <div class="wiki-dl-row">
-                    <dt>Address</dt>
-                    <dd>{{ location.address_extended }}</dd>
-                </div>
-                {% endif %}
-                {# Categories shown via HTMX panel below - not repeated here #}
+        {# ── Description / dates (if any) ───────────────────────────────── #}
+        {% if location.description or location.date_abandoned or location.effective_date_last_active %}
+        <div class="wiki-card wiki-meta">
+            {% if location.description %}
+            <p id="wiki-field-description" class="wiki-description">{{ location.description }}</p>
+            {% endif %}
+            {% if location.date_abandoned or location.effective_date_last_active %}
+            <div class="wiki-meta-dates">
                 {% if location.date_abandoned %}
-                <div class="wiki-dl-row">
-                    <dt>Abandoned</dt>
-                    <dd>{{ location.date_abandoned|date:"M j, Y" }}</dd>
-                </div>
+                <span class="wiki-meta-date"><i class="material-icons">event_busy</i> Abandoned {{ location.date_abandoned|date:"M j, Y" }}</span>
                 {% endif %}
                 {% if location.effective_date_last_active %}
-                <div class="wiki-dl-row">
-                    <dt>Last Active</dt>
-                    <dd>{{ location.effective_date_last_active|date:"M j, Y" }}</dd>
-                </div>
+                <span class="wiki-meta-date"><i class="material-icons">history</i> Last active {{ location.effective_date_last_active|date:"M j, Y" }}</span>
                 {% endif %}
-            </dl>
+            </div>
+            {% endif %}
             {# Security indicators - only shown when at least one is non-unknown #}
             {% if location.fences != "unknown" or location.alarms != "unknown" or location.cameras != "unknown" or location.security != "unknown" or location.signs != "unknown" or location.vps != "unknown" or location.plywood != "unknown" or location.locked != "unknown" %}
             <div class="security-indicators">
@@ -142,18 +119,7 @@
             </div>
             {% endif %}
         </div>
-
-        {# ── Categories panel ────────────────────────────────────────────── #}
-        <div hx-get="{% url 'category.location' location.uuid %}"
-             hx-trigger="load"
-             hx-swap="outerHTML"
-             class="tag-panel">
-            <div class="tag-panel-header">
-                <i class="material-icons">category</i>
-                <span>Categories</span>
-            </div>
-            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
-        </div>
+        {% endif %}
 
         {# ── Community stats card ────────────────────────────────────────── #}
         <div class="wiki-card wiki-stats">
@@ -243,6 +209,8 @@
 
             </div>
         </div>
+
+        {# Badges/categories hidden: global categories no longer exist #}
 
         {# ── Aliases ─────────────────────────────────────────────────────── #}
         <div hx-get="{% url 'location.wiki.aliases' location.uuid %}"
@@ -343,8 +311,8 @@
                            value="{{ location.date_last_active|date:'Y-m-d'|default:'' }}">
                 </div>
             </div>
-            <div class="form-section-details">
-                <span class="form-section-summary">Security Indicators</span>
+            <details class="form-section-details" open>
+                <summary class="form-section-summary">Security Indicators</summary>
                 <div class="security-edit-grid">
                     {% for sf_key, sf_label, sf_val in location_security_values %}
                     <div class="security-edit-row">
@@ -357,7 +325,7 @@
                     </div>
                     {% endfor %}
                 </div>
-            </div>
+            </details>
             <div class="form-actions">
                 <button type="submit" class="wiki-action-btn wiki-action-btn--primary">Save changes</button>
                 <button type="button" class="wiki-action-btn" onclick="this.closest('dialog').close()">Cancel</button>
@@ -448,7 +416,7 @@
     // ── Bounding-box map ────────────────────────────────────────────────────
     const bboxMap = L.map('bbox-map').setView([locLat, locLng], 16);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(bboxMap);
-    L.marker([locLat, locLng]).addTo(bboxMap);
+    const _centerMarker = L.marker([locLat, locLng]).addTo(bboxMap);
 
     const bboxItems = new L.FeatureGroup().addTo(bboxMap);
     const bboxStyle = { color: '#0ea5e9', fillColor: '#38bdf8', fillOpacity: 0.15, weight: 2 };
@@ -473,6 +441,7 @@
         .then(data => {
             _savedBboxGeoJSON = data.polygon || null;
             _loadSavedBbox(_savedBboxGeoJSON);
+            if (_savedBboxGeoJSON) _centerMarker.remove();
         })
         .catch(err => console.warn('Could not load boundary:', err));
 
@@ -514,6 +483,7 @@
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(() => {
             _savedBboxGeoJSON = geometry;
+            if (_savedBboxGeoJSON) { _centerMarker.remove(); } else { _centerMarker.addTo(bboxMap); }
             toastr.success(geometry ? 'Boundary saved.' : 'Boundary cleared.');
             _exitBboxEdit();
         })

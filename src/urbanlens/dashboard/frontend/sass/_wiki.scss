@@ -85,11 +85,18 @@
         }
     }
 
+    .wiki-banner-actions {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        margin-top: .75rem;
+        flex-wrap: wrap;
+    }
+
     .wiki-back-link {
         display: inline-flex;
         align-items: center;
         gap: .35rem;
-        margin-top: .75rem;
         background: rgba(255, 255, 255, .2);
         border: 1px solid rgba(255, 255, 255, .4);
         border-radius: 8px;
@@ -109,6 +116,34 @@
         }
     }
 
+    .wiki-meta {
+        grid-column: 1;
+        padding: .9rem 1.1rem;
+
+        .wiki-description {
+            font-size: .9rem;
+            color: var(--ul-text-1);
+            margin: 0 0 .6rem;
+            line-height: 1.55;
+        }
+
+        .wiki-meta-dates {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .4rem .9rem;
+        }
+
+        .wiki-meta-date {
+            display: inline-flex;
+            align-items: center;
+            gap: .3rem;
+            font-size: .78rem;
+            color: var(--ul-text-2);
+
+            .material-icons { font-size: .9rem; }
+        }
+    }
+
     // ── Body grid ─────────────────────────────────────────────────────────
     .wiki-body {
         display: grid;
@@ -117,7 +152,7 @@
         gap: 1rem;
         align-items: start;
 
-        .wiki-details {
+        .wiki-meta {
             grid-column: 1;
         }
 
@@ -136,7 +171,7 @@
         @media (max-width: 700px) {
             grid-template-columns: 1fr;
 
-            .wiki-details,
+            .wiki-meta,
             .wiki-stats,
             .location-map,
             .wiki-tabs-card {
@@ -181,24 +216,23 @@
         display: inline-flex;
         align-items: center;
         gap: .35rem;
-        margin-left: auto;
-        padding: .35rem .75rem;
-        border: 1px solid #0891b2;
+        padding: .45rem .9rem;
+        border: 1px solid rgba(255, 255, 255, .5);
         border-radius: 8px;
-        background: transparent;
-        color: #0891b2;
-        font-size: .8rem;
-        font-weight: 600;
+        background: rgba(255, 255, 255, .15);
+        color: #fff;
+        font-size: .85rem;
+        font-weight: 500;
         cursor: pointer;
-        transition: background .15s, color .15s;
+        transition: background .15s, border-color .15s;
 
         .material-icons {
-            font-size: .95rem;
+            font-size: 1rem;
         }
 
         &:hover {
-            background: #0891b2;
-            color: var(--ul-text-4);
+            background: rgba(255, 255, 255, .28);
+            border-color: rgba(255, 255, 255, .7);
         }
     }
 

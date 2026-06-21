@@ -1297,21 +1297,21 @@
     }
 
     // Drop photo onto map → assign coordinates
-    const _mapEl = document.getElementById('map');
-    _mapEl.addEventListener('dragover', e => {
+    const _photoDragMapEl = _mapEl;
+    _photoDragMapEl.addEventListener('dragover', e => {
         if (!e.dataTransfer.types.includes('text/photoid')) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        _mapEl.classList.add('photo-drop-target');
+        _photoDragMapEl.classList.add('photo-drop-target');
     });
-    _mapEl.addEventListener('dragleave', () => _mapEl.classList.remove('photo-drop-target'));
-    _mapEl.addEventListener('drop', e => {
-        _mapEl.classList.remove('photo-drop-target');
+    _photoDragMapEl.addEventListener('dragleave', () => _photoDragMapEl.classList.remove('photo-drop-target'));
+    _photoDragMapEl.addEventListener('drop', e => {
+        _photoDragMapEl.classList.remove('photo-drop-target');
         const idStr = e.dataTransfer.getData('text/photoid');
         if (!idStr) return;
         e.preventDefault();
         const imgId = parseInt(idStr, 10);
-        const rect  = _mapEl.getBoundingClientRect();
+        const rect  = _photoDragMapEl.getBoundingClientRect();
         const latlng = map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]);
         const item = _photoPanelItems.find(p => p.id === imgId);
         if (!item) return;

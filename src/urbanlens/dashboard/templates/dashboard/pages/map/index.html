@@ -623,7 +623,7 @@
             </div>
 
             <div class="fp-section">
-                <div class="fp-label">Created Date</div>
+                <div class="fp-label">Pinned</div>
                 <div class="fp-date-row">
                     <span class="fp-date-label">After</span>
                     <input type="date" name="created_after" class="fp-date-input">
@@ -2047,7 +2047,7 @@
             toastr.success('Pin added!');
             closeAddPinDialog();
             if (typeof window.invalidatePinCache === 'function') window.invalidatePinCache();
-            if (typeof _loadVisibleTiles === 'function') _loadVisibleTiles();
+            _refreshAllPins();
             // When multiple locations cover the same coordinates, prompt the user to choose.
             if (data && data.conflicting_locations && data.conflicting_locations.length > 1) {
                 _showLocationConflictPicker(data.pin_uuid, data.conflicting_locations);

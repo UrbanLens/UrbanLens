@@ -1,17 +1,30 @@
 <div class="web-search card" id="web-search-section">
     <div class="card-header">
-        <i class="material-icons">search</i>
+        <i class="material-icons">travel_explore</i>
         <h3>Web Results</h3>
     </div>
     {% if search_results %}
-    <div class="search-results-list">
+    <ul class="search-results-list">
         {% for result in search_results %}
-        <div class="search-result">
-            <a href="{{ result.link }}" target="_blank" rel="noopener" class="search-result-title">{{ result.title }}</a>
+        {% if result.title or result.link %}
+        <li class="search-result">
+            {% if result.domain %}
+            <span class="search-result-domain">
+                <i class="material-icons">language</i>
+                {{ result.domain }}
+            </span>
+            {% endif %}
+            <a href="{{ result.link }}" target="_blank" rel="noopener noreferrer" class="search-result-title">
+                {{ result.title }}
+                <i class="material-icons search-result-ext-icon">open_in_new</i>
+            </a>
+            {% if result.snippet %}
             <p class="search-result-snippet">{{ result.snippet }}</p>
-        </div>
+            {% endif %}
+        </li>
+        {% endif %}
         {% endfor %}
-    </div>
+    </ul>
     {% elif error %}
     <div class="view-unavailable">
         <i class="material-icons">wifi_off</i>
