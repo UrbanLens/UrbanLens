@@ -265,7 +265,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         Returns the web search results for a pin.
         """
-        # Get the pin
+        from urllib.parse import urlparse
+
+        from django.core.cache import cache
+
+        from urbanlens.dashboard.models.trips.model import SiteSettings
+
         try:
             pin: Pin = Pin.objects.get(uuid=pin_uuid)
         except Pin.DoesNotExist:
@@ -273,6 +278,15 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         if not pin.has_meaningful_name:
             return HttpResponse("", status=204)
+
+        cache_key = f"web_search_{pin_uuid}"
+        site_settings = SiteSettings.get_current()
+        cache_hours = site_settings.search_cache_hours
+
+        if cache_hours > 0:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return render(request, "dashboard/pages/location/web_search.html", {"search_results": cached})
 
         try:
             search_gateway = get_search_gateway()
@@ -282,12 +296,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.exception("Unable to contact web search API: %s", e)
             return render(request, "dashboard/pages/location/web_search.html", {"error": "Search unavailable. Please try again later."})
 
-        from urllib.parse import urlparse
         for r in search_results:
             try:
                 r["domain"] = urlparse(r.get("link", "")).netloc.removeprefix("www.")
             except Exception:
                 r["domain"] = ""
+
+        if cache_hours > 0:
+            cache.set(cache_key, search_results, cache_hours * 3600)
 
         return render(request, "dashboard/pages/location/web_search.html", {"search_results": search_results})
 

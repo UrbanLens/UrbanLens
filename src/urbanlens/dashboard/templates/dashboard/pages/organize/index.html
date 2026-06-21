@@ -491,10 +491,19 @@
 
         <div class="tag-header">
             <div>
-                <h2 class="tag-title">People</h2>
+                <h2 class="tag-title">People Labels</h2>
                 <p class="tag-subtitle">Labels you apply privately to other users. Only visible to you.</p>
             </div>
             <div class="tag-header-right">
+                <div class="tag-view-toggle--sel">
+                    <button type="button" class="tag-view-btn--sel" id="people-sel-all" title="Select all labels">
+                        <i class="material-icons">checklist</i>
+                    </button>
+                </div>
+                <button type="button" class="btn-ghost btn-sm" id="people-filter-btn" title="Filter labels" onclick="toggleOrgFilter('people')">
+                    <i class="material-icons">filter_list</i> Filter
+                    <span class="org-filter-active-dot"></span>
+                </button>
                 <button type="button" class="btn-primary btn-sm" id="people-badge-create-btn"
                         hx-get="{% url 'tag.create' %}?kind=user"
                         hx-target="#people-badge-edit-dialog-body"
@@ -505,9 +514,47 @@
             </div>
         </div>
 
-        <div class="tag-list" id="people-badge-list">
+        <div id="people-filter-bar" class="org-filter-bar">
+            <input type="search" id="people-filter-search" class="org-filter-search"
+                   placeholder="Search labels…" oninput="applyOrgFilter('people')" autocomplete="off">
+            <div class="org-filter-chips">
+                <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon"
+                        onclick="toggleOrgChip(this,'people')"><i class="material-icons">image</i> Has icon</button>
+                <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon"
+                        onclick="toggleOrgChip(this,'people')"><i class="material-icons">hide_image</i> No icon</button>
+                <div class="org-filter-color-row">
+                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color"
+                            data-mutex="no-color" title="Show only items with a color"
+                            onclick="toggleOrgChip(this,'people')">
+                        <i class="material-icons">palette</i>
+                    </button>
+                    {% for hex, label in color_choices %}
+                    <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
+                            style="background:{{ hex }};" onclick="toggleOrgChip(this,'people')"></button>
+                    {% endfor %}
+                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color"
+                            data-mutex="has-color" title="Show only items without a color"
+                            onclick="toggleOrgChip(this,'people')">
+                        <i class="material-icons">block</i>
+                    </button>
+                </div>
+                <button type="button" class="org-filter-clear" onclick="clearOrgFilter('people')">✕ Clear</button>
+            </div>
+        </div>
+
+        <div class="tag-list" id="people-badge-rows">
             {% for badge in user_badges %}
-            <div class="tag-row" id="pbd-{{ badge.id }}">
+            {% if badge.profile %}
+            <div class="tag-row org-selectable" id="pbd-{{ badge.id }}"
+                 data-id="{{ badge.id }}"
+                 data-name="{{ badge.name|lower }}"
+                 data-has-icon="{% if badge.icon %}true{% else %}false{% endif %}"
+                 data-has-color="{% if badge.color %}true{% else %}false{% endif %}"
+                 data-color="{{ badge.color|default:'' }}"
+                 data-kind="people">
+                <label class="org-sel-label" title="Select">
+                    <input type="checkbox" class="org-sel-cb people-sel-cb" data-id="{{ badge.id }}" data-name="{{ badge.name }}">
+                </label>
                 <div class="tag-row-icon" {% if badge.color %}style="background:{{ badge.color }}22;border-color:{{ badge.color }}44;"{% endif %}>
                     {% if badge.icon %}
                         {% if badge.icon|is_material_icon %}
@@ -521,38 +568,103 @@
                 </div>
                 <div class="tag-row-info">
                     <span class="tag-row-name">{{ badge.name }}</span>
-                    {% if not badge.profile %}<span class="tag-global-badge">global</span>{% endif %}
                 </div>
-                {% if badge.profile %}
-                <button type="button" class="tag-row-action" title="Edit"
-                        hx-get="{% url 'tag.edit' badge.id %}"
-                        hx-target="#people-badge-edit-dialog-body"
-                        hx-swap="innerHTML"
-                        onclick="document.getElementById('people-badge-edit-dialog').showModal()">
-                    <i class="material-icons">edit</i>
-                </button>
-                <button type="button" class="tag-row-action tag-row-action--danger" title="Delete"
-                        hx-post="{% url 'tag.delete' badge.id %}"
-                        hx-confirm="Delete label '{{ badge.name }}'?"
-                        hx-target="#pbd-{{ badge.id }}"
-                        hx-swap="outerHTML">
-                    <i class="material-icons">delete</i>
-                </button>
-                {% endif %}
+                <div class="tag-row-actions">
+                    <button type="button" class="tag-row-action" title="Edit"
+                            hx-get="{% url 'tag.edit' badge.id %}"
+                            hx-target="#people-badge-edit-dialog-body"
+                            hx-swap="innerHTML"
+                            onclick="document.getElementById('people-badge-edit-dialog').showModal()">
+                        <i class="material-icons">edit</i>
+                    </button>
+                    <button type="button" class="tag-row-action" title="Merge into another label"
+                            onclick="peopleMergeSingle({{ badge.id }}, '{{ badge.name|escapejs }}')">
+                        <i class="material-icons">merge</i>
+                    </button>
+                    <button type="button" class="tag-row-action tag-row-action--danger" title="Delete"
+                            hx-post="{% url 'tag.delete' badge.id %}"
+                            hx-confirm="Delete label '{{ badge.name }}'?"
+                            hx-target="#pbd-{{ badge.id }}"
+                            hx-swap="outerHTML">
+                        <i class="material-icons">delete</i>
+                    </button>
+                </div>
             </div>
+            {% endif %}
             {% empty %}
-            <div class="tag-empty">
-                <i class="material-icons">people_outline</i>
-                <p>No custom people labels yet. The global defaults (Preservation, Vandalism, Photography, Influencer) are always available.</p>
-            </div>
             {% endfor %}
+
+            {# Empty state: shown by JS when no custom badges exist #}
+            {% with custom_count=user_badges|length %}
+            {% if not custom_count %}
+            <div class="tag-empty" id="people-badge-empty">
+                <i class="material-icons">people_outline</i>
+                <p>No custom people labels yet. Click <strong>+ New Label</strong> to create one.</p>
+            </div>
+            {% endif %}
+            {% endwith %}
         </div>
+
+        {# Built-in (global) labels — read-only, collapsed by default #}
+        {% with global_badges=user_badges %}
+        {% for badge in global_badges %}{% if not badge.profile %}
+        {% if forloop.first %}
+        <details class="people-builtins" id="people-builtins">
+            <summary class="people-builtins-summary">
+                <i class="material-icons">lock</i> Built-in labels (read-only)
+            </summary>
+            <div class="tag-list people-builtins-list">
+        {% endif %}
+                <div class="tag-row tag-row--readonly" id="pbd-{{ badge.id }}">
+                    <div class="tag-row-icon" {% if badge.color %}style="background:{{ badge.color }}22;border-color:{{ badge.color }}44;"{% endif %}>
+                        {% if badge.icon %}
+                            {% if badge.icon|is_material_icon %}
+                                <i class="material-icons" {% if badge.color %}style="color:{{ badge.color }}"{% endif %}>{{ badge.icon }}</i>
+                            {% else %}<span class="tag-icon-emoji">{{ badge.icon }}</span>{% endif %}
+                        {% else %}<i class="material-icons">person</i>{% endif %}
+                    </div>
+                    <div class="tag-row-info">
+                        <span class="tag-row-name">{{ badge.name }}</span>
+                        <span class="tag-global-badge">built-in</span>
+                    </div>
+                </div>
+        {% if forloop.last %}
+            </div>
+        </details>
+        {% endif %}
+        {% endif %}{% endfor %}
+        {% endwith %}
 
     </div>{# end #panel-people #}
 
     {# People-badge edit dialog #}
-    <dialog id="people-badge-edit-dialog" class="dialog tag-edit-dialog">
-        <div id="people-badge-edit-dialog-body"></div>
+    <dialog id="people-badge-edit-dialog" class="ul-dialog">
+        {% include "dashboard/partials/_dialog_header.html" with title="Edit Label" title_id="people-badge-edit-dialog-title" %}
+        <div id="people-badge-edit-dialog-body" class="ul-dialog-body"></div>
+    </dialog>
+
+    {# People-badge merge dialog #}
+    <dialog id="people-merge-dialog" class="cat-merge-dialog ul-dialog">
+        {% include "dashboard/partials/_dialog_header.html" with title="Merge Labels" title_id="people-merge-dialog-title" %}
+        <div class="cat-merge-dialog-body">
+            <div class="cat-merge-section">
+                <div class="cat-merge-section-label"><i class="material-icons">check_circle</i> Surviving label</div>
+                <div id="people-merge-target-card" class="cat-merge-target-card"></div>
+            </div>
+            <div class="cat-merge-divider"><i class="material-icons">merge</i><span>Merge these into it</span></div>
+            <div class="cat-merge-section">
+                <div class="cat-merge-section-label"><i class="material-icons">delete_sweep</i> Will be deleted after merge</div>
+                <div id="people-merge-sources-list" class="cat-merge-sources-list"></div>
+            </div>
+            <p class="cat-merge-warning"><i class="material-icons">warning</i>
+               Assignments to the merged labels will transfer to the surviving label. This cannot be undone.</p>
+        </div>
+        <div class="cat-merge-dialog-footer">
+            <button type="button" id="people-merge-confirm-btn" class="btn-primary">
+                <i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge
+            </button>
+            <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
     </dialog>
 
 </div>{# end .organize-page #}
@@ -2366,5 +2478,167 @@ window._orgBulkSync = function(n, opts) {
     _initPrioritySortable();
     {% endif %}
 })();
+</script>
+
+{# ── People-label tab JS ───────────────────────────────────────────────────── #}
+<script>
+(function () {
+    var _peopleSelected = new Set();
+    var _peopleMergeTargetId = null;
+    var _mergeUrl = '{% url "tag.multi_merge" %}';
+
+    function _getCsrf() { var m = document.cookie.match(/csrftoken=([^;]+)/); return m ? m[1] : ''; }
+
+    function _getRows() {
+        return Array.from(document.querySelectorAll('#people-badge-rows .org-selectable'));
+    }
+
+    function _syncPeopleSelBar() {
+        var n = _peopleSelected.size;
+        // Reuse the shared bulk bar
+        var bar = document.getElementById('org-bulk-bar');
+        var cnt = document.getElementById('org-bulk-count');
+        if (!bar) return;
+        if (n === 0) { bar.classList.remove('active'); bar.dataset.scope = ''; return; }
+        bar.classList.add('active');
+        bar.dataset.scope = 'people';
+        cnt.textContent = n + ' label' + (n === 1 ? '' : 's') + ' selected';
+        window._orgBulk = {
+            deselect: function () { _peopleSelected.clear(); _syncPeopleSelBar(); _applyPeopleCheck(); },
+            edit: function () { if (_peopleSelected.size === 1) { var id = Array.from(_peopleSelected)[0]; document.querySelector('[data-id="' + id + '"] .tag-row-action').click(); } },
+            merge: function () { _openPeopleMergeDialog(); },
+            del: function () { if (confirm('Delete ' + _peopleSelected.size + ' label(s)?')) _bulkDeletePeople(); },
+        };
+    }
+
+    function _applyPeopleCheck() {
+        _getRows().forEach(function (row) {
+            var cb = row.querySelector('.people-sel-cb');
+            if (cb) cb.checked = _peopleSelected.has(parseInt(row.dataset.id, 10));
+        });
+    }
+
+    document.querySelectorAll('.people-sel-cb').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var id = parseInt(this.dataset.id, 10);
+            if (this.checked) _peopleSelected.add(id); else _peopleSelected.delete(id);
+            _syncPeopleSelBar();
+        });
+    });
+
+    var peopleSelAllBtn = document.getElementById('people-sel-all');
+    if (peopleSelAllBtn) {
+        peopleSelAllBtn.addEventListener('click', function () {
+            var rows = _getRows().filter(function (r) { return r.style.display !== 'none'; });
+            var ids = rows.map(function (r) { return parseInt(r.dataset.id, 10); });
+            var allSel = ids.length > 0 && ids.every(function (id) { return _peopleSelected.has(id); });
+            ids.forEach(function (id) { if (allSel) _peopleSelected.delete(id); else _peopleSelected.add(id); });
+            _syncPeopleSelBar();
+            _applyPeopleCheck();
+        });
+    }
+
+    // ── Filter ────────────────────────────────────────────────────────────────
+    // Wrap applyOrgFilter to handle the 'people' namespace, which uses .org-selectable
+    // rows (not .tag-card elements that the global implementation expects).
+    var _origApplyFilter = window.applyOrgFilter;
+    window.applyOrgFilter = function (ns) {
+        if (ns !== 'people') { if (_origApplyFilter) _origApplyFilter(ns); return; }
+        var bar = document.getElementById('people-filter-bar');
+        var filterBtn = document.getElementById('people-filter-btn');
+        var q = (document.getElementById('people-filter-search') || {}).value || '';
+        q = q.toLowerCase().trim();
+        var activeChips = new Set();
+        var activeColor = '';
+        if (bar) {
+            bar.querySelectorAll('.org-filter-chip.active').forEach(function (c) { activeChips.add(c.dataset.filter); });
+            var colorDot = bar.querySelector('.org-filter-color-dot.active');
+            if (colorDot) activeColor = (colorDot.dataset.filter || '').replace('color:', '').toLowerCase();
+        }
+        var hasActive = q || activeChips.size > 0 || activeColor;
+        if (filterBtn) filterBtn.classList.toggle('has-filter', !!hasActive);
+        _getRows().forEach(function (row) {
+            var name = row.dataset.name || '';
+            if (q && !name.includes(q)) { row.style.display = 'none'; return; }
+            var hasIcon = row.dataset.hasIcon === 'true';
+            var hasColor = row.dataset.hasColor === 'true';
+            var color = (row.dataset.color || '').toLowerCase();
+            var show = true;
+            if (activeChips.has('has-icon') && !hasIcon) show = false;
+            if (activeChips.has('no-icon') && hasIcon) show = false;
+            if (activeChips.has('has-color') && !hasColor) show = false;
+            if (activeChips.has('no-color') && hasColor) show = false;
+            if (activeColor && color !== activeColor) show = false;
+            row.style.display = show ? '' : 'none';
+        });
+        document.dispatchEvent(new CustomEvent('org:filter-applied', { detail: { ns: 'people' } }));
+    };
+
+    // ── Merge ──────────────────────────────────────────────────────────────────
+    function _miniCard(name) {
+        return '<div class="cat-merge-mini-card"><div class="cat-merge-mini-info"><div class="cat-merge-mini-name">' + name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div></div></div>';
+    }
+
+    function _openPeopleMergeDialog() {
+        var ids = Array.from(_peopleSelected);
+        if (ids.length < 2) { toastr.warning('Select at least 2 labels to merge.'); return; }
+        _peopleMergeTargetId = ids[0];
+        var rows = _getRows();
+        var targetRow = rows.find(function (r) { return parseInt(r.dataset.id, 10) === _peopleMergeTargetId; });
+        document.getElementById('people-merge-target-card').innerHTML = targetRow ? _miniCard(targetRow.dataset.name) : '';
+        var srcNames = ids.filter(function (id) { return id !== _peopleMergeTargetId; });
+        document.getElementById('people-merge-sources-list').innerHTML = srcNames.map(function (id) {
+            var r = rows.find(function (row) { return parseInt(row.dataset.id, 10) === id; });
+            return r ? _miniCard(r.dataset.name) : '';
+        }).join('');
+        document.getElementById('people-merge-dialog').showModal();
+    }
+
+    window.peopleMergeSingle = function (id, name) {
+        _peopleSelected.clear();
+        _getRows().forEach(function (r) {
+            var rid = parseInt(r.dataset.id, 10);
+            if (rid === id) _peopleSelected.add(rid);
+        });
+        _syncPeopleSelBar();
+        _applyPeopleCheck();
+        toastr.info('Label "' + name + '" ready to merge. Select another label and click Merge.');
+    };
+
+    var _peopleMergeConfirmBtn = document.getElementById('people-merge-confirm-btn');
+    if (_peopleMergeConfirmBtn) {
+        _peopleMergeConfirmBtn.addEventListener('click', function () {
+            var ids = Array.from(_peopleSelected);
+            var src = ids.filter(function (id) { return id !== _peopleMergeTargetId; });
+            var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging…';
+            fetch(_mergeUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf() },
+                body: JSON.stringify({ target_id: parseInt(_peopleMergeTargetId, 10), source_ids: src.map(function (id) { return parseInt(id, 10); }) }),
+            }).then(function (r) { if (!r.ok) return r.text().then(function (t) { throw new Error(t || r.statusText); }); return r.text(); })
+            .then(function (html) {
+                document.getElementById('people-merge-dialog').close();
+                document.getElementById('people-badge-rows').innerHTML = html;
+                _peopleSelected.clear(); _peopleMergeTargetId = null; _syncPeopleSelBar();
+                toastr.success('Labels merged.');
+            }).catch(function (err) { toastr.error('Merge failed: ' + err.message); btn.disabled = false; btn.innerHTML = saved; });
+        });
+    }
+
+    function _bulkDeletePeople() {
+        var ids = Array.from(_peopleSelected);
+        var csrfVal = _getCsrf();
+        Promise.all(ids.map(function (id) {
+            return fetch('/dashboard/tag/' + id + '/delete/', { method: 'POST', headers: { 'X-CSRFToken': csrfVal } });
+        })).then(function () {
+            ids.forEach(function (id) {
+                var row = document.getElementById('pbd-' + id);
+                if (row) row.remove();
+            });
+            _peopleSelected.clear(); _syncPeopleSelBar();
+            toastr.success('Labels deleted.');
+        }).catch(function (err) { toastr.error('Delete failed: ' + err.message); });
+    }
+}());
 </script>
 {% endblock %}

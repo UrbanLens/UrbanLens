@@ -1885,3 +1885,146 @@
     color: $text-muted;
     margin: .35rem 0 0;
 }
+
+// ── People-label tab (Organize page) ──────────────────────────────────────────
+
+.tag-list {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.tag-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    background: var(--ul-surface-1);
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-md;
+    padding: .6rem .85rem;
+    transition: box-shadow .12s;
+
+    &:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .07);
+    }
+
+    &.tag-row--readonly {
+        opacity: .75;
+        cursor: default;
+    }
+}
+
+.tag-row-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: $radius-sm;
+    background: var(--ul-surface-3);
+    border: 1px solid var(--ul-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    i { font-size: 1.25rem; color: $text-secondary; }
+}
+
+.tag-row-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.tag-row-name {
+    font-size: .95rem;
+    font-weight: 500;
+    color: var(--ul-text-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tag-row-actions {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity .13s;
+
+    .tag-row:hover & { opacity: 1; }
+}
+
+.tag-row-action {
+    width: 30px;
+    height: 30px;
+    border-radius: $radius-sm;
+    border: none;
+    background: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: $text-muted;
+    transition: background .12s, color .12s;
+
+    i { font-size: 1rem; }
+
+    &:hover {
+        background: var(--ul-surface-3);
+        color: var(--ul-text-1);
+    }
+
+    &.tag-row-action--danger:hover {
+        background: #fee2e2;
+        color: #dc2626;
+    }
+}
+
+// Selection checkbox
+.org-sel-label {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    flex-shrink: 0;
+    cursor: pointer;
+
+    .org-selectable & { display: flex; }
+}
+
+.org-sel-cb {
+    width: 16px;
+    height: 16px;
+    accent-color: $primary-color;
+    cursor: pointer;
+}
+
+// Built-in labels collapsible section
+.people-builtins {
+    margin-top: 1.25rem;
+
+    &-summary {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        font-size: .85rem;
+        font-weight: 500;
+        color: $text-muted;
+        cursor: pointer;
+        list-style: none;
+        padding: .35rem 0;
+
+        i { font-size: 1rem; }
+
+        &::-webkit-details-marker { display: none; }
+
+        &:hover { color: var(--ul-text-1); }
+    }
+
+    &-list {
+        margin-top: .5rem;
+        opacity: .8;
+    }
+}

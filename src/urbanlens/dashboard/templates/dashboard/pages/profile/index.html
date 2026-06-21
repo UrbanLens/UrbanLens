@@ -34,6 +34,104 @@
                     </h1>
                     <p class="profile-username">@{{ profile.username }}</p>
                 </div>
+
+                {# ── Friendship actions (only when viewing another user) ── #}
+                {% if user.is_authenticated and profile.user != request.user %}
+                <div class="profile-friendship-actions">
+                    {% if friendship_status == 'accepted' %}
+                        <div class="friendship-chip friendship-chip--friend">
+                            <i class="material-icons">people</i>
+                            Friends
+                            {% if friends_since %}
+                            <span class="friendship-since">since {{ friends_since|date:"M Y" }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="friendship-btn-group">
+                            <form method="post" action="{% url 'friend.remove' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="friendship-btn friendship-btn--ghost" title="Remove friend">
+                                    <i class="material-icons">person_remove</i> Remove
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'friend.mute' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="friendship-btn friendship-btn--ghost" title="Mute this user">
+                                    <i class="material-icons">volume_off</i> Mute
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'friend.block' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="friendship-btn friendship-btn--danger" title="Block this user"
+                                        onclick="return confirm('Block {{ profile.username }}? They will not be able to see your profile.')">
+                                    <i class="material-icons">block</i> Block
+                                </button>
+                            </form>
+                        </div>
+                    {% elif friendship_status == 'requested' and friendship and friendship.from_profile.user == request.user %}
+                        <div class="friendship-chip friendship-chip--pending">
+                            <i class="material-icons">hourglass_top</i> Request sent
+                        </div>
+                        <form method="post" action="{% url 'friend.remove' profile.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="friendship-btn friendship-btn--ghost">
+                                <i class="material-icons">cancel</i> Cancel request
+                            </button>
+                        </form>
+                    {% elif friendship_status == 'requested' and friendship and friendship.to_profile.user == request.user %}
+                        <div class="friendship-chip friendship-chip--pending">
+                            <i class="material-icons">person_add</i> Wants to connect
+                        </div>
+                        <div class="friendship-btn-group">
+                            <form method="post" action="{% url 'friend.accept' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="friendship-btn friendship-btn--primary">
+                                    <i class="material-icons">check</i> Accept
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'friend.reject' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="friendship-btn friendship-btn--ghost">
+                                    <i class="material-icons">close</i> Decline
+                                </button>
+                            </form>
+                        </div>
+                    {% elif friendship_status == 'muted' %}
+                        <div class="friendship-chip friendship-chip--muted">
+                            <i class="material-icons">volume_off</i> Muted
+                        </div>
+                        <form method="post" action="{% url 'friend.request' profile.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="friendship-btn friendship-btn--ghost">
+                                <i class="material-icons">volume_up</i> Unmute
+                            </button>
+                        </form>
+                    {% elif friendship_status == 'blocked' %}
+                        <div class="friendship-chip friendship-chip--blocked">
+                            <i class="material-icons">block</i> Blocked
+                        </div>
+                        <form method="post" action="{% url 'friend.remove' profile.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="friendship-btn friendship-btn--ghost">
+                                <i class="material-icons">lock_open</i> Unblock
+                            </button>
+                        </form>
+                    {% else %}
+                        <form method="post" action="{% url 'friend.request' profile.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="friendship-btn friendship-btn--primary">
+                                <i class="material-icons">person_add</i> Add Friend
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'friend.block' profile.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="friendship-btn friendship-btn--ghost" title="Block this user">
+                                <i class="material-icons">block</i> Block
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
+                {% endif %}
+
                 {% if profile.user == request.user %}
                 <a href="{% url 'profile.edit' %}" class="edit-profile-btn">
                     <i class="material-icons">edit</i> Edit Profile
@@ -69,20 +167,31 @@
 
     {# ── Stats row ─────────────────────────────────────────────────────────── #}
     <div class="profile-stats-row">
+        {% if profile.user == request.user or not common_pin_count %}
         <div class="profile-stat">
             <span class="stat-value">{{ profile.pins.count }}</span>
             <span class="stat-label">Pins</span>
         </div>
+        {% else %}
+        <div class="profile-stat profile-stat--highlight" title="Locations you both have pinned">
+            <span class="stat-value">{{ common_pin_count }}</span>
+            <span class="stat-label">In Common</span>
+        </div>
+        <div class="profile-stat" title="Total pins (their map)">
+            <span class="stat-value">{{ profile.pins.count }}</span>
+            <span class="stat-label">Their Pins</span>
+        </div>
+        {% endif %}
         {% if profile.started_exploring %}
         <div class="profile-stat">
             <span class="stat-value">{{ profile.started_exploring|date:"Y" }}</span>
             <span class="stat-label">Exploring Since</span>
         </div>
         {% endif %}
-        {% if common_pin_count is not None %}
-        <div class="profile-stat">
-            <span class="stat-value">{{ common_pin_count }}</span>
-            <span class="stat-label">In Common</span>
+        {% if trips_in_common %}
+        <div class="profile-stat" title="Trips you're both members of">
+            <span class="stat-value">{{ trips_in_common|length }}</span>
+            <span class="stat-label">Trips in Common</span>
         </div>
         {% endif %}
     </div>
@@ -123,6 +232,21 @@
             <li class="shared-visited-item">
                 <i class="material-icons">location_on</i>
                 <span>{{ location.name }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {# ── Trips in common ─────────────────────────────────────────────────── #}
+    {% if trips_in_common %}
+    <div class="profile-section">
+        <h3 class="profile-section-title">Trips in Common</h3>
+        <ul class="shared-visited-list">
+            {% for trip in trips_in_common %}
+            <li class="shared-visited-item">
+                <i class="material-icons">map</i>
+                <span>{{ trip.name }}</span>
             </li>
             {% endfor %}
         </ul>

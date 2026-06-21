@@ -17,10 +17,18 @@ class SearchForm(forms.Form):
         widget=forms.CheckboxSelectMultiple,
         required=False,
     )
+    exclude_tags: forms.ModelMultipleChoiceField = forms.ModelMultipleChoiceField(
+        queryset=Badge.objects.all(),
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+    )
     has_visits = forms.ChoiceField(
         choices=[("", ""), ("yes", "yes"), ("no", "no")],
         required=False,
     )
+    visited_after = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+    visited_before = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
     min_priority = forms.IntegerField(required=False, min_value=0)
+    max_priority = forms.IntegerField(required=False, min_value=0)
     created_after = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
     created_before = forms.DateField(required=False, input_formats=["%Y-%m-%d"])

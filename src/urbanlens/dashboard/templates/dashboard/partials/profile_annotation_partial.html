@@ -11,18 +11,52 @@
     <div class="profile-annotation-badges">
         <p class="profile-annotation-label">Labels</p>
         <div class="profile-annotation-chips" id="pab-chips">
+            {# Assigned badges shown prominently #}
             {% for badge in user_badges %}
+            {% if badge.id in assigned_badge_ids %}
             <button type="button"
-                    class="profile-badge-chip {% if badge.id in assigned_badge_ids %}profile-badge-chip--on{% endif %}"
+                    class="profile-badge-chip profile-badge-chip--on"
                     style="--badge-color: {{ badge.color|default:'#6b7280' }}"
                     hx-post="{% url 'profile.badge_toggle' subject.uuid badge.id %}"
                     hx-target="#profile-annotation-panel"
                     hx-swap="outerHTML"
-                    title="{% if badge.id in assigned_badge_ids %}Remove {% else %}Add {% endif %}{{ badge.name }}">
+                    title="Remove {{ badge.name }}">
                 {% if badge.icon %}<span class="profile-badge-chip-icon">{{ badge.icon }}</span>{% endif %}
                 {{ badge.name }}
+                <i class="material-icons profile-badge-chip-remove">close</i>
             </button>
+            {% endif %}
             {% endfor %}
+
+            {# Unassigned badges: shown in a collapsed picker #}
+            {% with has_unassigned=False %}
+            {% for badge in user_badges %}{% if badge.id not in assigned_badge_ids %}{% if forloop.first %}
+            <details class="pab-add-picker">
+                <summary class="pab-add-btn" title="Add a label">
+                    <i class="material-icons">add</i> Add label
+                </summary>
+                <div class="pab-add-list">
+            {% endif %}
+                    <button type="button"
+                            class="profile-badge-chip"
+                            style="--badge-color: {{ badge.color|default:'#6b7280' }}"
+                            hx-post="{% url 'profile.badge_toggle' subject.uuid badge.id %}"
+                            hx-target="#profile-annotation-panel"
+                            hx-swap="outerHTML"
+                            title="Add {{ badge.name }}">
+                        {% if badge.icon %}<span class="profile-badge-chip-icon">{{ badge.icon }}</span>{% endif %}
+                        {{ badge.name }}
+                    </button>
+            {% if forloop.last %}
+                </div>
+            </details>
+            {% endif %}
+            {% endif %}{% endfor %}
+            {% endwith %}
+
+            {% if not user_badges %}
+            <span class="profile-annotation-empty">No labels yet — create some in Organize → People</span>
+            {% endif %}
         </div>
     </div>
 

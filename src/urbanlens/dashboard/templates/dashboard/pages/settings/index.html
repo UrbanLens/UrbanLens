@@ -731,5 +731,74 @@ window.updateClusterRadius = function (value) {
     updateSliderGradient('cop-border-opacity', borderColor);
     updatePreview('cop-border-preview', borderColor, initBorderOpacity);
 })();
+
+// ── Auto-save settings forms ──────────────────────────────────────────────────
+(function () {
+    function getCsrf() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    var _timers = {};
+    var _indicators = {};
+
+    function showSaved(formId) {
+        var el = _indicators[formId];
+        if (!el) return;
+        el.textContent = '✓ Saved';
+        el.style.opacity = '1';
+        clearTimeout(el._t);
+        el._t = setTimeout(function () { el.style.opacity = '0'; }, 2500);
+    }
+
+    function doSave(form) {
+        fetch(form.action || window.location.href, {
+            method: 'POST',
+            body: new FormData(form),
+            headers: { 'X-CSRFToken': getCsrf() },
+        }).then(function () { showSaved(form.id); }).catch(function () {});
+    }
+
+    function schedule(form, delay) {
+        clearTimeout(_timers[form.id]);
+        _timers[form.id] = setTimeout(function () { doSave(form); }, delay !== undefined ? delay : 0);
+    }
+
+    document.querySelectorAll('.settings-form').forEach(function (form) {
+        // Build per-form saved indicator
+        var actions = form.querySelector('.settings-actions');
+        if (actions) {
+            var ind = document.createElement('span');
+            ind.className = 'settings-autosave-indicator';
+            actions.appendChild(ind);
+            _indicators[form.id] = ind;
+            // Hide the save button — auto-save replaces it
+            actions.querySelectorAll('.settings-save-btn').forEach(function (b) { b.style.display = 'none'; });
+        }
+
+        form.addEventListener('change', function (e) {
+            var t = e.target;
+            // Ignore hidden fields (updated programmatically — handled via copUpdate hook)
+            if (t.type === 'hidden') return;
+            var delay = (t.type === 'text' || t.type === 'email' || t.type === 'number') ? 1200 : 0;
+            schedule(form, delay);
+        });
+
+        form.addEventListener('input', function (e) {
+            var t = e.target;
+            if (t.type === 'range' || t.type === 'text' || t.type === 'email') {
+                schedule(form, 600);
+            }
+        });
+    });
+
+    // Hook into the color/opacity picker — it updates hidden fields with no DOM event
+    var _orig = window.copUpdate;
+    window.copUpdate = function (which) {
+        if (_orig) _orig(which);
+        var form = document.getElementById('markup-defaults-form');
+        if (form) schedule(form, 600);
+    };
+}());
 </script>
 {% endblock %}

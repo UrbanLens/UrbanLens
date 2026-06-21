@@ -54,6 +54,14 @@
                     {% endfor %}
                 </select>
             </div>
+            <div class="form-row">
+                <label for="search-cache-hours">Search result cache duration (hours)</label>
+                <p class="form-help">
+                    How long to cache web search results per pin before re-fetching. Set to 0 to disable caching.
+                </p>
+                <input type="number" name="search_cache_hours" id="search-cache-hours"
+                       value="{{ settings.search_cache_hours }}" min="0" max="8760" step="1">
+            </div>
             <div class="form-actions">
                 <button type="submit" class="submit-button">Save Settings</button>
             </div>
@@ -82,4 +90,67 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    function getCsrf() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    var _timers = {};
+
+    function showSaved(card) {
+        var ind = card.querySelector('.admin-autosave-indicator');
+        if (!ind) return;
+        ind.textContent = '✓ Saved';
+        ind.style.opacity = '1';
+        clearTimeout(ind._t);
+        ind._t = setTimeout(function () { ind.style.opacity = '0'; }, 2500);
+    }
+
+    function doSave(form, card) {
+        fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            headers: { 'X-CSRFToken': getCsrf() },
+        }).then(function () { showSaved(card); }).catch(function () {});
+    }
+
+    document.querySelectorAll('.site-admin-card').forEach(function (card) {
+        var form = card.querySelector('.site-admin-form');
+        if (!form) return;
+
+        // Insert saved indicator and hide save button
+        var actions = form.querySelector('.form-actions');
+        if (actions) {
+            var ind = document.createElement('span');
+            ind.className = 'admin-autosave-indicator';
+            ind.style.cssText = 'font-size:.8rem;color:var(--ul-accent,#0891b2);opacity:0;transition:opacity .3s;margin-left:.75rem;vertical-align:middle;';
+            actions.appendChild(ind);
+            actions.querySelectorAll('.submit-button').forEach(function (b) { b.style.display = 'none'; });
+        }
+
+        form.addEventListener('change', function (e) {
+            var t = e.target;
+            if (t.type === 'hidden') return;
+            var delay = (t.type === 'text' || t.type === 'number') ? 1200 : 0;
+            var key = form.id || Math.random();
+            clearTimeout(_timers[key]);
+            _timers[key] = setTimeout(function () { doSave(form, card); }, delay);
+        });
+
+        form.addEventListener('input', function (e) {
+            var t = e.target;
+            if (t.type === 'number' || t.type === 'text') {
+                var key = form.id || Math.random();
+                clearTimeout(_timers[key]);
+                _timers[key] = setTimeout(function () { doSave(form, card); }, 1200);
+            }
+        });
+    });
+}());
+</script>
 {% endblock %}

@@ -375,6 +375,12 @@ class SiteSettings(abstract.Model):
         verbose_name="Search provider",
     )
 
+    search_cache_hours = IntegerField(
+        default=24,
+        help_text="How many hours to cache web search results per pin before re-fetching. Set to 0 to disable caching.",
+        verbose_name="Search cache duration (hours)",
+    )
+
     def __str__(self) -> str:
         return "Site Settings"
 

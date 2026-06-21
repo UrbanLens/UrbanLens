@@ -128,8 +128,10 @@ class PinQuerySet(abstract.QuerySet):
 
         Args:
             criteria: Dict with optional keys: name, status (list), tags (QuerySet),
-                min_rating (int), max_rating (int), has_visits ('yes'|'no'|''),
-                min_priority (int), created_after (date), created_before (date).
+                exclude_tags (QuerySet), min_rating (int), max_rating (int),
+                has_visits ('yes'|'no'|''), min_priority (int), max_priority (int),
+                created_after (date), created_before (date),
+                visited_after (date), visited_before (date).
 
         Returns:
             Filtered QuerySet (distinct).
@@ -148,6 +150,12 @@ class PinQuerySet(abstract.QuerySet):
             for tag in tags:
                 tag_ids = _Badge.get_badge_and_descendants(tag.id)
                 qs = qs.filter(tags__id__in=tag_ids)
+        if exclude_tags := criteria.get("exclude_tags"):
+            from urbanlens.dashboard.models.badges.model import Badge as _Badge
+            excluded_ids: list[int] = []
+            for tag in exclude_tags:
+                excluded_ids.extend(_Badge.get_badge_and_descendants(tag.id))
+            qs = qs.exclude(tags__id__in=excluded_ids)
         if min_rating := criteria.get("min_rating"):
             with contextlib.suppress(ValueError, TypeError):
                 qs = qs.filter(reviews__rating__gte=int(min_rating))
@@ -159,9 +167,16 @@ class PinQuerySet(abstract.QuerySet):
                 qs = qs.filter(last_visited__isnull=False)
             elif has_visits == "no":
                 qs = qs.filter(last_visited__isnull=True)
+        if visited_after := criteria.get("visited_after"):
+            qs = qs.filter(last_visited__date__gte=visited_after)
+        if visited_before := criteria.get("visited_before"):
+            qs = qs.filter(last_visited__date__lte=visited_before)
         if (min_priority := criteria.get("min_priority")) is not None:
             with contextlib.suppress(ValueError, TypeError):
                 qs = qs.filter(priority__gte=int(min_priority))
+        if (max_priority := criteria.get("max_priority")) is not None:
+            with contextlib.suppress(ValueError, TypeError):
+                qs = qs.filter(priority__lte=int(max_priority))
         if created_after := criteria.get("created_after"):
             qs = qs.filter(created__date__gte=created_after)
         if created_before := criteria.get("created_before"):

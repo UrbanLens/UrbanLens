@@ -62,6 +62,12 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if provider in valid_providers:
             settings.search_provider = provider
 
+        try:
+            cache_hours = int(request.POST.get("search_cache_hours", settings.search_cache_hours))
+            settings.search_cache_hours = max(0, cache_hours)
+        except (ValueError, TypeError):
+            pass
+
         settings.save()
 
         return HttpResponseRedirect(reverse("site_admin") + "?saved=1")

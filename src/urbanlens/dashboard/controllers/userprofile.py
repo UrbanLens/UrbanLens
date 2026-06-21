@@ -130,7 +130,7 @@ class ViewProfileView(LoginRequiredMixin, View):
         return False
 
     def _add_common_context(self, request: HttpRequest, profile: Profile, context: dict) -> None:
-        """Populate common-pins stats when the viewer is looking at someone else's profile."""
+        """Populate cross-user stats and friendship context when viewing another user's profile."""
         if not request.user.is_authenticated or profile.user == request.user:
             return
 
@@ -170,8 +170,30 @@ class ViewProfileView(LoginRequiredMixin, View):
             else Location.objects.none()
         )
 
+        # Friendship relationship
+        from urbanlens.dashboard.models.friendship.model import Friendship
+
+        friendship = Friendship.objects.all().between(my_profile, profile)
+        context["friendship"] = friendship
+        context["friendship_status"] = friendship.status if friendship else None
+        context["friends_since"] = (
+            friendship.updated if friendship and friendship.status == FriendshipStatus.ACCEPTED else None
+        )
+
+        # Trips in common
+        from urbanlens.dashboard.models.trips.model import TripMembership
+        my_trip_ids = set(TripMembership.objects.filter(profile=my_profile).values_list("trip_id", flat=True))
+        their_trip_ids = set(TripMembership.objects.filter(profile=profile).values_list("trip_id", flat=True))
+        common_trip_ids = my_trip_ids & their_trip_ids
+        if common_trip_ids:
+            from urbanlens.dashboard.models.trips.model import Trip
+            context["trips_in_common"] = Trip.objects.filter(id__in=common_trip_ids).order_by("name")
+        else:
+            from urbanlens.dashboard.models.trips.model import Trip
+            context["trips_in_common"] = Trip.objects.none()
+
         # Private annotations (notes + user badges) - only when viewing someone else
-        from urbanlens.dashboard.models.badges.model import KIND_USER, Badge
+        from urbanlens.dashboard.models.badges.model import Badge
         from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
@@ -182,6 +204,7 @@ class ViewProfileView(LoginRequiredMixin, View):
                 "badge_id", flat=True,
             ),
         )
+        context["my_profile"] = my_profile
 
 
 class ProfileFieldUpdateView(LoginRequiredMixin, View):
