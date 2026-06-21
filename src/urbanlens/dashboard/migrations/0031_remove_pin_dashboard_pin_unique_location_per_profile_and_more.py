@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
             model_name="pin",
             constraint=models.UniqueConstraint(
                 condition=models.Q(
-                    ("parent_location__isnull", True), ("parent_pin__isnull", True)
+                    ("parent_location__isnull", True), ("parent_pin__isnull", True),
                 ),
                 fields=("latitude", "longitude", "profile"),
                 name="dashboard_pin_unique_location_per_profile",

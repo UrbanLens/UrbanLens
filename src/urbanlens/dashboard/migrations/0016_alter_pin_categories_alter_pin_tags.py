@@ -14,14 +14,14 @@ class Migration(migrations.Migration):
             model_name="pin",
             name="categories",
             field=models.ManyToManyField(
-                blank=True, default=list, related_name="pins", to="dashboard.category"
+                blank=True, default=list, related_name="pins", to="dashboard.category",
             ),
         ),
         migrations.AlterField(
             model_name="pin",
             name="tags",
             field=models.ManyToManyField(
-                blank=True, default=list, related_name="pins", to="dashboard.tag"
+                blank=True, default=list, related_name="pins", to="dashboard.tag",
             ),
         ),
     ]

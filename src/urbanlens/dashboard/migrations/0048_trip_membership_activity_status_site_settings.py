@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import django.db.models.deletion
 from django.db import migrations, models
+import django.db.models.deletion
 
 
 def copy_memberships(apps, schema_editor):
@@ -17,7 +17,7 @@ def copy_memberships(apps, schema_editor):
         rows = cursor.fetchall()
 
     existing = set(
-        TripMembership.objects.using(db).values_list("trip_id", "profile_id")
+        TripMembership.objects.using(db).values_list("trip_id", "profile_id"),
     )
     to_create = []
     for trip_id, profile_id in rows:
@@ -30,7 +30,7 @@ def copy_memberships(apps, schema_editor):
     # Set creator RSVP to "going"
     for trip in Trip.objects.using(db).select_related("creator").filter(creator__isnull=False):
         TripMembership.objects.using(db).filter(
-            trip=trip, profile=trip.creator
+            trip=trip, profile=trip.creator,
         ).update(rsvp="yes")
 
 
