@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("dashboard", "0100_notificationlog_source_profile"),
+        ("dashboard", "0101_alter_profile_photo_upload_visibility"),
     ]
 
     operations = [
