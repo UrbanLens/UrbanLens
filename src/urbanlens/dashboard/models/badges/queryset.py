@@ -47,6 +47,10 @@ class BadgeQuerySet(abstract.QuerySet):
         """Return only items with kind='status'."""
         return self.filter(kind="status")
 
+    def user_badges(self) -> Self:
+        """Return only items with kind='user' (for annotating profiles privately)."""
+        return self.filter(kind="user")
+
     def with_customizations_for(self, profile: Profile | int) -> Self:
         """Prefetch this user's BadgeCustomizations into _user_customizations attr."""
         from urbanlens.dashboard.models.badges.customization import BadgeCustomization

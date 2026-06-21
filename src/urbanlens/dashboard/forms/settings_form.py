@@ -69,22 +69,22 @@ class PrivacySettingsForm(forms.ModelForm):
         choices=VisibilityChoice.choices,
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Photo Visibility",
-        help_text="Who can see the photos you upload to pins and locations.",
-    )
-    viewer_photo_filter = forms.ChoiceField(
-        choices=VisibilityChoice.choices,
-        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
-        label="Show Me Photos From",
-        help_text="Whose photos you want to see. Photos from users outside this setting will be blurred.",
+        help_text="Who can see the photos you upload to locations.",
     )
     trip_pin_location_visibility = forms.ChoiceField(
         choices=VisibilityChoice.choices,
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
-        label="Pin Locations in Trips",
+        label="Trip Pins",
         help_text=(
             "When you share one of your pins as a trip activity, who can see the "
             "actual location? Members outside this setting will only see the pin name."
         ),
+    )
+    viewer_photo_filter = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Show Photos From",
+        help_text="Whose photos you want to see. Photos from users outside this setting will be blurred.",
     )
 
     class Meta:

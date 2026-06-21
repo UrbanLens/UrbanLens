@@ -1086,6 +1086,214 @@ textarea.edit-textarea {
     }
 }
 
+// ── Private profile annotation panel ─────────────────────────────────────────
+
+.profile-annotation-panel {
+    background: var(--ul-surface-1);
+    border: 1px dashed var(--ul-border);
+    border-radius: $radius-md;
+    padding: 1.1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.profile-annotation-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: $text-secondary;
+
+    .material-icons { font-size: 1rem; }
+}
+
+.profile-annotation-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.profile-annotation-badge {
+    margin-left: auto;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: $text-secondary;
+    background: var(--ul-surface-2);
+    border: 1px solid var(--ul-border);
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+
+.profile-annotation-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: $text-secondary;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin: 0 0 0.4rem;
+}
+
+.profile-annotation-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.profile-badge-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--badge-color, var(--ul-border));
+    background: transparent;
+    color: var(--badge-color, $text-color);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+
+    &:hover {
+        background: color-mix(in srgb, var(--badge-color, #{$primary-color}) 12%, transparent);
+    }
+
+    &--on {
+        background: color-mix(in srgb, var(--badge-color, #{$primary-color}) 18%, transparent);
+        font-weight: 600;
+    }
+
+    .profile-badge-chip-icon { font-size: 0.9rem; }
+}
+
+.profile-annotation-textarea {
+    width: 100%;
+    min-height: 80px;
+    resize: vertical;
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-sm;
+    background: var(--ul-surface-2);
+    color: var(--ul-text);
+    font-size: 0.875rem;
+    padding: 0.6rem 0.75rem;
+    box-sizing: border-box;
+    font-family: inherit;
+
+    &:focus {
+        outline: none;
+        border-color: $primary-color;
+    }
+}
+
+.profile-note-status {
+    font-size: 0.75rem;
+    color: $text-secondary;
+    display: block;
+    margin-top: 3px;
+    min-height: 1em;
+}
+
+.profile-note-saved {
+    color: #4caf50;
+}
+
+// ── Friends page: invite button + dialog ──────────────────────────────────────
+
+.friends-page-header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.btn-friend--invite {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: $radius-sm;
+    background: $primary-color;
+    color: #fff;
+    border: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+
+    .material-icons { font-size: 1.1rem; }
+
+    &:hover { background: darken($primary-color, 8%); }
+}
+
+.invite-dialog {
+    max-width: 460px;
+    width: 100%;
+    border-radius: $radius-md;
+    border: 1px solid var(--ul-border);
+    background: var(--ul-surface-1);
+    color: var(--ul-text);
+    padding: 0;
+
+    &::backdrop { background: rgba(0, 0, 0, 0.45); }
+}
+
+.invite-dialog-inner {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.invite-dialog-hint {
+    font-size: 0.875rem;
+    color: $text-secondary;
+    line-height: 1.55;
+    margin: 0;
+}
+
+.invite-form-row {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.invite-email-input {
+    flex: 1;
+    padding: 9px 12px;
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-sm;
+    background: var(--ul-surface-2);
+    color: var(--ul-text);
+    font-size: 0.875rem;
+
+    &:focus {
+        outline: none;
+        border-color: $primary-color;
+    }
+}
+
+.invite-result-wrap { min-height: 1.5rem; }
+
+.invite-result {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: $radius-sm;
+    font-size: 0.875rem;
+
+    .material-icons { font-size: 1.1rem; }
+
+    &--success {
+        background: rgba(#4caf50, 0.1);
+        color: #2e7d32;
+        border: 1px solid rgba(#4caf50, 0.3);
+    }
+
+    &--error {
+        background: rgba(#f44336, 0.1);
+        color: #c62828;
+        border: 1px solid rgba(#f44336, 0.3);
+    }
+}
+
 .edit-discord-form {
     margin-top: 0.6rem;
 }

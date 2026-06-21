@@ -115,7 +115,7 @@ class Profile(abstract.Model):
         max_length=20,
         choices=VisibilityChoice.choices,
         default=VisibilityChoice.ANYONE,
-        help_text="Who can see the photos you upload to pins and locations.",
+        help_text="Who can see the photos you upload to locations.",
     )
     viewer_photo_filter = CharField(
         max_length=20,
@@ -233,10 +233,7 @@ class Profile(abstract.Model):
         # The point with the highest count is the cluster seed.
         best_idx = max(
             range(len(pts)),
-            key=lambda i: sum(
-                1 for other in pts
-                if _haversine_km(pts[i], other) <= _CLUSTER_RADIUS_KM
-            ),
+            key=lambda i: sum(1 for other in pts if _haversine_km(pts[i], other) <= _CLUSTER_RADIUS_KM),
         )
 
         seed = pts[best_idx]
@@ -291,29 +288,51 @@ class Profile(abstract.Model):
                 return False
             if visibility == VisibilityChoice.FRIENDS:
                 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
                 return Friendship.objects.filter(
                     models.Q(from_profile=subject, to_profile=other) | models.Q(from_profile=other, to_profile=subject),
                     status=FriendshipStatus.ACCEPTED,
                 ).exists()
             if visibility == VisibilityChoice.COMMON_PIN:
                 from urbanlens.dashboard.models.pin.model import Pin
-                my_locs = set(Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True))
-                their_locs = set(Pin.objects.filter(profile=other, location__isnull=False).values_list("location_id", flat=True))
+
+                my_locs = set(
+                    Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True),
+                )
+                their_locs = set(
+                    Pin.objects.filter(profile=other, location__isnull=False).values_list("location_id", flat=True),
+                )
                 return bool(my_locs & their_locs)
             if visibility == VisibilityChoice.COMMON_FRIEND:
                 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
                 accepted = FriendshipStatus.ACCEPTED
-                my_friends = (
-                    set(Friendship.objects.filter(from_profile=subject, status=accepted).values_list("to_profile_id", flat=True))
-                    | set(Friendship.objects.filter(to_profile=subject, status=accepted).values_list("from_profile_id", flat=True))
+                my_friends = set(
+                    Friendship.objects.filter(from_profile=subject, status=accepted).values_list(
+                        "to_profile_id",
+                        flat=True,
+                    ),
+                ) | set(
+                    Friendship.objects.filter(to_profile=subject, status=accepted).values_list(
+                        "from_profile_id",
+                        flat=True,
+                    ),
                 )
-                their_friends = (
-                    set(Friendship.objects.filter(from_profile=other, status=accepted).values_list("to_profile_id", flat=True))
-                    | set(Friendship.objects.filter(to_profile=other, status=accepted).values_list("from_profile_id", flat=True))
+                their_friends = set(
+                    Friendship.objects.filter(from_profile=other, status=accepted).values_list(
+                        "to_profile_id",
+                        flat=True,
+                    ),
+                ) | set(
+                    Friendship.objects.filter(to_profile=other, status=accepted).values_list(
+                        "from_profile_id",
+                        flat=True,
+                    ),
                 )
                 return bool(my_friends & their_friends)
             if visibility == VisibilityChoice.COMMON_TRIP:
                 from urbanlens.dashboard.models.trips.model import TripMembership
+
                 my_trips = set(TripMembership.objects.filter(profile=subject).values_list("trip_id", flat=True))
                 their_trips = set(TripMembership.objects.filter(profile=other).values_list("trip_id", flat=True))
                 return bool(my_trips & their_trips)

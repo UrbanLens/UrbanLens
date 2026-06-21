@@ -27,6 +27,10 @@
                 role="tab" data-tab="priority" aria-controls="panel-priority">
             <i class="material-icons">low_priority</i> Priority
         </button>
+        <button type="button" class="organize-tab{% if active_tab == 'people' %} active{% endif %}"
+                role="tab" data-tab="people" aria-controls="panel-people">
+            <i class="material-icons">people</i> People
+        </button>
     </div>
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
@@ -478,6 +482,78 @@
             {% endfor %}
         </div>
     </div>{# end #panel-priority #}
+
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    {# PEOPLE PANEL                                                               #}
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    <div class="organize-panel tag-page" id="panel-people" role="tabpanel"
+         {% if active_tab != 'people' %}hidden{% endif %}>
+
+        <div class="tag-header">
+            <div>
+                <h2 class="tag-title">People Labels</h2>
+                <p class="tag-subtitle">Labels you apply privately to other users' profiles. Only visible to you.</p>
+            </div>
+            <div class="tag-header-right">
+                <button type="button" class="btn-primary btn-sm" id="people-badge-create-btn"
+                        hx-get="{% url 'tag.create' %}?kind=user"
+                        hx-target="#people-badge-edit-dialog-body"
+                        hx-swap="innerHTML"
+                        onclick="document.getElementById('people-badge-edit-dialog').showModal()">
+                    <i class="material-icons">add</i> New Label
+                </button>
+            </div>
+        </div>
+
+        <div class="tag-list" id="people-badge-list">
+            {% for badge in user_badges %}
+            <div class="tag-row" id="pbd-{{ badge.id }}">
+                <div class="tag-row-icon" {% if badge.color %}style="background:{{ badge.color }}22;border-color:{{ badge.color }}44;"{% endif %}>
+                    {% if badge.icon %}
+                        {% if badge.icon|is_material_icon %}
+                            <i class="material-icons" {% if badge.color %}style="color:{{ badge.color }}"{% endif %}>{{ badge.icon }}</i>
+                        {% else %}
+                            <span class="tag-icon-emoji">{{ badge.icon }}</span>
+                        {% endif %}
+                    {% else %}
+                        <i class="material-icons">person</i>
+                    {% endif %}
+                </div>
+                <div class="tag-row-info">
+                    <span class="tag-row-name">{{ badge.name }}</span>
+                    {% if not badge.profile %}<span class="tag-global-badge">global</span>{% endif %}
+                </div>
+                {% if badge.profile %}
+                <button type="button" class="tag-row-action" title="Edit"
+                        hx-get="{% url 'tag.edit' badge.id %}"
+                        hx-target="#people-badge-edit-dialog-body"
+                        hx-swap="innerHTML"
+                        onclick="document.getElementById('people-badge-edit-dialog').showModal()">
+                    <i class="material-icons">edit</i>
+                </button>
+                <button type="button" class="tag-row-action tag-row-action--danger" title="Delete"
+                        hx-post="{% url 'tag.delete' badge.id %}"
+                        hx-confirm="Delete label '{{ badge.name }}'?"
+                        hx-target="#pbd-{{ badge.id }}"
+                        hx-swap="outerHTML">
+                    <i class="material-icons">delete</i>
+                </button>
+                {% endif %}
+            </div>
+            {% empty %}
+            <div class="tag-empty">
+                <i class="material-icons">people_outline</i>
+                <p>No custom people labels yet. The global defaults (Preservation, Vandalism, Photography, Influencer) are always available.</p>
+            </div>
+            {% endfor %}
+        </div>
+
+    </div>{# end #panel-people #}
+
+    {# People-badge edit dialog #}
+    <dialog id="people-badge-edit-dialog" class="dialog tag-edit-dialog">
+        <div id="people-badge-edit-dialog-body"></div>
+    </dialog>
 
 </div>{# end .organize-page #}
 

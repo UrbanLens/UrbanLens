@@ -42,6 +42,8 @@
   justify-content: center;
   pointer-events: all;
   border: 3px dashed var(--color-accent, #2563eb);
+
+  &[hidden] { display: none !important; }
 }
 
 .gallery-drop-overlay-inner {

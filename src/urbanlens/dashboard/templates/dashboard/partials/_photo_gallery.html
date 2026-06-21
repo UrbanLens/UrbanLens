@@ -135,6 +135,14 @@ Context:
     if (_overlay) _overlay.hidden = true;
   });
 
+  // ESC closes the overlay
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && _overlay && !_overlay.hidden) {
+      _dragDepth = 0;
+      _overlay.hidden = true;
+    }
+  });
+
   // Drop ON the overlay uploads the files
   window._galleryOverlayDrop = function (e) {
     e.preventDefault();

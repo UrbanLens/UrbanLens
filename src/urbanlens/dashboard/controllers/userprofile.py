@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
@@ -25,7 +25,7 @@ from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from django.http import HttpRequest, HttpResponse
+    from django.http import HttpRequest
 
 
 class ViewProfileView(LoginRequiredMixin, View):
@@ -168,6 +168,20 @@ class ViewProfileView(LoginRequiredMixin, View):
             Location.objects.filter(id__in=shared_visited_ids).order_by("name")
             if shared_visited_ids
             else Location.objects.none()
+        )
+
+        # Private annotations (notes + user badges) — only when viewing someone else
+        from urbanlens.dashboard.models.badges.model import KIND_USER, Badge
+        from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
+        from urbanlens.dashboard.models.profile.note import ProfileNote
+
+        context["viewer_note"] = ProfileNote.objects.filter(author=my_profile, subject=profile).first()
+        context["user_badges"] = (
+            Badge.objects.user_badges().visible_to(my_profile).ordered()
+        )
+        context["assigned_badge_ids"] = set(
+            ProfileBadgeAssignment.objects.filter(author=my_profile, subject=profile)
+            .values_list("badge_id", flat=True),
         )
 
 
@@ -324,3 +338,93 @@ class EditProfileView(LoginRequiredMixin, View):
         if platform in KNOWN_PLATFORMS:
             profile.social_links.filter(platform=platform).delete()
         return redirect("profile.edit")
+
+
+class ProfileNoteView(LoginRequiredMixin, View):
+    """Save or update the viewer's private note about another profile (HTMX)."""
+
+    def post(self, request: HttpRequest, profile_uuid: UUID) -> HttpResponse:
+        from uuid import UUID as _UUID
+
+        from urbanlens.dashboard.models.profile.note import ProfileNote
+
+        subject = get_object_or_404(Profile, uuid=profile_uuid)
+        author = request.user.profile
+        if author == subject:
+            return HttpResponse("Cannot annotate your own profile.", status=400)
+
+        content = request.POST.get("content", "").strip()
+        ProfileNote.objects.update_or_create(
+            author=author,
+            subject=subject,
+            defaults={"content": content},
+        )
+        return HttpResponse(
+            '<span class="profile-note-saved">Saved</span>',
+            content_type="text/html",
+        )
+
+
+class ProfileBadgeToggleView(LoginRequiredMixin, View):
+    """Toggle a user-type badge on another profile (HTMX — re-renders the badge chips)."""
+
+    def post(self, request: HttpRequest, profile_uuid: UUID, badge_id: int) -> HttpResponse:
+        from urbanlens.dashboard.models.badges.model import KIND_USER, Badge
+        from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
+
+        subject = get_object_or_404(Profile, uuid=profile_uuid)
+        author = request.user.profile
+        if author == subject:
+            return HttpResponse("Cannot annotate your own profile.", status=400)
+
+        badge = get_object_or_404(Badge, pk=badge_id, kind=KIND_USER)
+
+        assignment, created = ProfileBadgeAssignment.objects.get_or_create(
+            author=author, subject=subject, badge=badge,
+        )
+        if not created:
+            assignment.delete()
+
+        return _render_profile_annotation_partial(request, author, subject)
+
+
+def _render_profile_annotation_partial(
+    request: HttpRequest,
+    author: Profile,
+    subject: Profile,
+) -> HttpResponse:
+    """Render the private annotation partial for HTMX swaps.
+
+    Args:
+        request: The HTTP request.
+        author: The viewing user's profile.
+        subject: The profile being annotated.
+
+    Returns:
+        Rendered HTML partial.
+    """
+    from urbanlens.dashboard.models.badges.model import KIND_USER, Badge
+    from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
+    from urbanlens.dashboard.models.profile.note import ProfileNote
+
+    note = ProfileNote.objects.filter(author=author, subject=subject).first()
+    user_badges = (
+        Badge.objects.user_badges()
+        .visible_to(author)
+        .ordered()
+    )
+    assigned_ids = set(
+        ProfileBadgeAssignment.objects.filter(author=author, subject=subject)
+        .values_list("badge_id", flat=True),
+    )
+
+    return render(
+        request,
+        "dashboard/partials/profile_annotation_partial.html",
+        {
+            "subject": subject,
+            "note": note,
+            "user_badges": user_badges,
+            "assigned_badge_ids": assigned_ids,
+        },
+    )

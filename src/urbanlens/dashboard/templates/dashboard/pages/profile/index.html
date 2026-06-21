@@ -44,7 +44,7 @@
             {% if profile.bio %}
             <p class="profile-bio">{{ profile.bio }}</p>
             {% else %}
-            <p class="profile-bio empty">No bio added yet.</p>
+            <p class="profile-bio empty" />
             {% endif %}
 
             <div class="profile-meta-row">
@@ -73,10 +73,6 @@
             <span class="stat-value">{{ profile.pins.count }}</span>
             <span class="stat-label">Pins</span>
         </div>
-        <a href="{% url 'friend.page' profile.id %}" class="profile-stat profile-stat--link">
-            <span class="stat-value"><i class="material-icons" style="font-size:1.4rem;vertical-align:middle;">people</i></span>
-            <span class="stat-label">Friends</span>
-        </a>
         {% if profile.started_exploring %}
         <div class="profile-stat">
             <span class="stat-value">{{ profile.started_exploring|date:"Y" }}</span>
@@ -131,6 +127,11 @@
             {% endfor %}
         </ul>
     </div>
+    {% endif %}
+
+    {# ── Private annotation panel (viewer ≠ profile owner) ─────────────────── #}
+    {% if user.is_authenticated and profile.user != request.user %}
+    {% include "dashboard/partials/profile_annotation_partial.html" with subject=profile note=viewer_note user_badges=user_badges assigned_badge_ids=assigned_badge_ids %}
     {% endif %}
 
     {# ── Friends ───────────────────────────────────────────────────────────── #}

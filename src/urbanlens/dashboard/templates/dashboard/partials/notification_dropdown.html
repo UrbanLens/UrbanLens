@@ -15,6 +15,41 @@
   {% if notifications %}
   <ul class="notif-list">
     {% for n in notifications %}
+    {% if n.notification_type == 'friend_request' %}
+    {# Friend requests get inline Accept/Decline buttons instead of click-to-navigate #}
+    <li class="notif-item{% if n.status == 'unread' %} notif-item--unread{% endif %} notif-item--friend-req"
+        id="notif-{{ n.id }}">
+      <div class="notif-item__icon-wrap notif-item__icon-wrap--friend_request">
+        <i class="material-icons">person_add</i>
+      </div>
+      <div class="notif-item__body">
+        {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
+        {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
+        <p class="notif-item__time">{{ n.created|timesince }} ago</p>
+        {% if n.source_profile_id and n.status == 'unread' %}
+        <div class="notif-friend-actions">
+          <button type="button" class="btn-notif-friend btn-notif-friend--accept"
+                  hx-post="{% url 'friend.respond' n.source_profile_id %}"
+                  hx-vals='{"action": "accept"}'
+                  hx-target="#notif-dropdown-wrap"
+                  hx-swap="innerHTML"
+                  hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+            <i class="material-icons">check</i> Accept
+          </button>
+          <button type="button" class="btn-notif-friend btn-notif-friend--decline"
+                  hx-post="{% url 'friend.respond' n.source_profile_id %}"
+                  hx-vals='{"action": "decline"}'
+                  hx-target="#notif-dropdown-wrap"
+                  hx-swap="innerHTML"
+                  hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+            <i class="material-icons">close</i> Decline
+          </button>
+        </div>
+        {% endif %}
+      </div>
+      {% if n.status == 'unread' %}<div class="notif-item__dot"></div>{% endif %}
+    </li>
+    {% else %}
     <li class="notif-item{% if n.status == 'unread' %} notif-item--unread{% endif %}"
         id="notif-{{ n.id }}"
         hx-post="{% url 'notifications.read' n.id %}"
@@ -25,8 +60,7 @@
 
       <div class="notif-item__icon-wrap notif-item__icon-wrap--{{ n.notification_type }}">
         <i class="material-icons">
-          {% if n.notification_type == 'friend_request' %}person_add
-          {% elif n.notification_type == 'friend_accepted' %}people
+          {% if n.notification_type == 'friend_accepted' %}people
           {% elif n.notification_type == 'added_to_trip' %}directions
           {% elif n.notification_type == 'trip_updated' %}map
           {% elif n.notification_type == 'comment_reply' %}reply
@@ -46,6 +80,7 @@
 
       {% if n.status == 'unread' %}<div class="notif-item__dot"></div>{% endif %}
     </li>
+    {% endif %}
     {% endfor %}
   </ul>
   {% else %}

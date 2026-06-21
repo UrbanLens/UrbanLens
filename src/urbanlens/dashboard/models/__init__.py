@@ -46,3 +46,6 @@ from urbanlens.dashboard.models.markup import MarkupType, PinMarkup
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.models.reactions import Reaction
+from urbanlens.dashboard.models.profile.note import ProfileNote
+from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
+from urbanlens.dashboard.models.friendship.invitation import FriendInvitation

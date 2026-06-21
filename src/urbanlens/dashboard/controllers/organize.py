@@ -10,7 +10,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views import View
 
-from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Badge
+from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_USER, Badge
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +55,15 @@ class OrganizeIndexView(LoginRequiredMixin, View):
             .ordered()
             .with_pin_counts()
         )
-        # Priority list: all tags visible to the user + all categories, sorted by order desc then name.
+        user_badges = (
+            Badge.objects.user_badges()
+            .visible_to(profile)
+            .ordered()
+        )
+        # Priority list: tags + categories + statuses (excludes people/user badges).
         priority_items = (
             Badge.objects.visible_to(profile)
+            .exclude(kind=KIND_USER)
             .ordered()
             .with_pin_counts()
         )
@@ -70,6 +76,7 @@ class OrganizeIndexView(LoginRequiredMixin, View):
                 "tags": tags,
                 "categories": categories,
                 "statuses": statuses,
+                "user_badges": user_badges,
                 "priority_items": priority_items,
                 "active_tab": tab,
             },
