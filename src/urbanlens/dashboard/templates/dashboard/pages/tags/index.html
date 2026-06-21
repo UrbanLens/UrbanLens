@@ -184,7 +184,7 @@
             <div class="cat-merge-section-label">
                 <i class="material-icons">delete_sweep</i>
                 Will be deleted after merge
-                <span class="cat-merge-hint">— click <i class="material-icons" style="font-size:.85rem;vertical-align:middle">swap_vert</i> to swap</span>
+                <span class="cat-merge-hint">- click <i class="material-icons" style="font-size:.85rem;vertical-align:middle">swap_vert</i> to swap</span>
             </div>
             <div id="tag-merge-sources-list" class="cat-merge-sources-list"></div>
         </div>
@@ -218,7 +218,7 @@
             </div>
             <label class="cat-bulk-nochange-label">
                 <input type="checkbox" id="tag-bulk-icon-nochange" checked>
-                <span>No change — leave icon unchanged</span>
+                <span>No change - leave icon unchanged</span>
             </label>
         </div>
 
@@ -240,11 +240,11 @@
             </div>
             <label class="cat-bulk-nochange-label">
                 <input type="checkbox" id="tag-bulk-color-nochange" checked>
-                <span>No change — leave color unchanged</span>
+                <span>No change - leave color unchanged</span>
             </label>
         </div>
 
-        {# Parent tags — additive only #}
+        {# Parent tags - additive only #}
         <div class="cat-bulk-field">
             <label class="form-label">Add parent tags</label>
             <p class="cat-bulk-parents-hint">Checked tags will be <strong>added</strong> as parents. Existing parents are not removed.</p>
@@ -539,7 +539,7 @@ function renderTreeView(rows) {
         cardMap[id] = card;
         var parents = card.dataset.tagParents || '';
         parentMap[id] = parents ? parents.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
-        // Hide original card — will be re-placed in tree
+        // Hide original card - will be re-placed in tree
         card.style.display = 'none';
     });
 
@@ -682,7 +682,7 @@ function _updateTagBar() {
     }
 }
 
-// Checkbox selection — change for normal clicks, click for shift-range
+// Checkbox selection - change for normal clicks, click for shift-range
 document.getElementById('tag-rows').addEventListener('click', function(e) {
     var cb = e.target;
     if (!cb.classList.contains('tag-select-cb')) return;

@@ -49,15 +49,14 @@ def _apply_trip_visibility_filter(
     common_pin_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_PIN]
     friends_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.FRIENDS]
     c_friend_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_FRIEND]
-    # COMMON_TRIP: viewer is already in this trip — treat as visible.
+    # COMMON_TRIP: viewer is already in this trip - treat as visible.
 
     hidden_out.update(act.id for act in no_one_acts)
 
     if common_pin_acts:
         loc_ids = {a.location_id for a in common_pin_acts}
         viewer_locs = set(
-            Pin.objects.filter(profile=viewer, location_id__in=loc_ids)
-            .values_list("location_id", flat=True),
+            Pin.objects.filter(profile=viewer, location_id__in=loc_ids).values_list("location_id", flat=True),
         )
         for act in common_pin_acts:
             if act.location_id not in viewer_locs:
@@ -617,7 +616,8 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         today = datetime.date.today()
         if activity.scheduled_at is None or activity.scheduled_at.date() > today:
             activity.scheduled_at = datetime.datetime.combine(
-                today, activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
+                today,
+                activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
             )
 
         activity.status = TripActivity.STATUS_COMPLETED
@@ -762,6 +762,7 @@ class TripCommentsView(LoginRequiredMixin, View):
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
         from urbanlens.dashboard.controllers.comments import _parse_map_data
+
         map_data = _parse_map_data(request)
         if not text and not image and not map_data:
             return HttpResponse("Please add some text, a photo, or a map.", status=400)
@@ -1173,7 +1174,7 @@ class TripLeaveView(LoginRequiredMixin, View):
         trip = result
 
         if trip.creator == profile:
-            return HttpResponse("The trip creator cannot leave — delete the trip instead.", status=400)
+            return HttpResponse("The trip creator cannot leave - delete the trip instead.", status=400)
 
         TripMembership.objects.filter(trip=trip, profile=profile).delete()
 
@@ -1245,7 +1246,7 @@ class TripActivityPositionView(LoginRequiredMixin, View):
 
     POST /trips/<uuid>/activities/<int:activity_id>/position/
     Body: {lat: float, lng: float}
-    This updates lat_override/lng_override on the TripActivity only — the
+    This updates lat_override/lng_override on the TripActivity only - the
     underlying Pin and Location coordinates are never modified.
     """
 
@@ -1426,7 +1427,7 @@ class TripWeatherView(LoginRequiredMixin, View):
                 and (act.scheduled_at is None or act.scheduled_at.date() >= today)
             ]
             if not activities:
-                pass  # no upcoming activities — leave error/grouped empty to hide the section
+                pass  # no upcoming activities - leave error/grouped empty to hide the section
             else:
                 try:
                     gateway = WeatherForecastGateway()

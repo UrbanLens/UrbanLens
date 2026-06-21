@@ -1,4 +1,5 @@
 """Auth controllers: registration, email verification, login."""
+
 from __future__ import annotations
 
 import logging
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 # ── Registration form ─────────────────────────────────────────────────────
+
 
 class RegistrationForm(UserCreationForm):
     """Extends UserCreationForm to require an email address."""
@@ -67,6 +69,7 @@ class RegistrationForm(UserCreationForm):
 
 # ── Sign-up view ──────────────────────────────────────────────────────────
 
+
 class SignupView(generic.CreateView):
     """Create a new user account and send a verification email."""
 
@@ -100,7 +103,7 @@ class SignupView(generic.CreateView):
         text_body = (
             f"Hi {user.username},\n\n"
             f"Please verify your email by visiting:\n{verify_url}\n\n"
-            "This link expires in 48 hours.\n\n— UrbanLens"
+            "This link expires in 48 hours.\n\n- UrbanLens"
         )
         html_body = render_to_string("registration/email/verify_email.html", context)
 
@@ -122,16 +125,21 @@ class SignupView(generic.CreateView):
 
 # ── Email verification views ──────────────────────────────────────────────
 
+
 class VerifyEmailSentView(View):
     """Renders the 'check your email' confirmation page."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
         email = request.session.pop("pending_verification_email", None)
         debug_url = request.session.pop("debug_verify_url", None)
-        return render(request, "registration/verify_email_sent.html", {
-            "email": email,
-            "debug_verify_url": debug_url,
-        })
+        return render(
+            request,
+            "registration/verify_email_sent.html",
+            {
+                "email": email,
+                "debug_verify_url": debug_url,
+            },
+        )
 
 
 class VerifyEmailView(View):
@@ -141,17 +149,25 @@ class VerifyEmailView(View):
         verification = EmailVerification.objects.filter(token=token).select_related("user").first()
 
         if not verification:
-            return render(request, "registration/verify_email_confirm.html", {
-                "valid": False,
-                "expired": False,
-            })
+            return render(
+                request,
+                "registration/verify_email_confirm.html",
+                {
+                    "valid": False,
+                    "expired": False,
+                },
+            )
 
         if not verification.is_valid():
-            return render(request, "registration/verify_email_confirm.html", {
-                "valid": False,
-                "expired": True,
-                "email": verification.user.email,
-            })
+            return render(
+                request,
+                "registration/verify_email_confirm.html",
+                {
+                    "valid": False,
+                    "expired": True,
+                    "email": verification.user.email,
+                },
+            )
 
         verification.mark_verified()
         user = verification.user
@@ -194,7 +210,7 @@ def _send_verification_email(request: HttpRequest, user: User, verification: Ema
     text_body = (
         f"Hi {user.username},\n\n"
         f"Please verify your email by visiting:\n{verify_url}\n\n"
-        "This link expires in 48 hours.\n\n— UrbanLens"
+        "This link expires in 48 hours.\n\n- UrbanLens"
     )
     html_body = render_to_string("registration/email/verify_email.html", context)
     try:
@@ -207,6 +223,7 @@ def _send_verification_email(request: HttpRequest, user: User, verification: Ema
 
 
 # ── Custom login view ─────────────────────────────────────────────────────
+
 
 class CustomLoginView(LoginView):
     """LoginView extended to detect inactive-account failures and offer a resend link."""
@@ -225,18 +242,21 @@ class CustomLoginView(LoginView):
                 user = User.objects.get(username=username)
                 if not user.is_active and hasattr(user, "email_verification"):
                     resend_url = reverse("resend_verification") + f"?email={quote(user.email)}"
-                    form.errors["__all__"] = form.error_class([
-                        mark_safe(  # noqa: S308 — URL and text are internal, no user input
-                            "Your email address hasn't been verified yet. "
-                            f'<a href="{resend_url}" class="auth-inline-link">Resend verification email</a>',
-                        ),
-                    ])
+                    form.errors["__all__"] = form.error_class(
+                        [
+                            mark_safe(  # noqa: S308 - URL and text are internal, no user input
+                                "Your email address hasn't been verified yet. "
+                                f'<a href="{resend_url}" class="auth-inline-link">Resend verification email</a>',
+                            ),
+                        ],
+                    )
             except User.DoesNotExist:
                 pass
         return super().form_invalid(form)
 
 
 # ── Invitation processing ──────────────────────────────────────────────────
+
 
 def _process_pending_invitations(user: User) -> None:
     """After a new user's email is verified, auto-create friend requests from any matching invitations.
@@ -267,6 +287,7 @@ def _process_pending_invitations(user: User) -> None:
 
 
 # ── Legacy social_auth helper (kept for compatibility but not in URL routing) ──
+
 
 def social_auth(request: HttpRequest, backend: str) -> HttpResponseRedirect:
     """Fallback used if the social pipeline doesn't handle redirect itself."""

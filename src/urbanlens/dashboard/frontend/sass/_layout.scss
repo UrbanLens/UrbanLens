@@ -655,7 +655,7 @@ body.page-location-details div.section {
         transition: background .13s, border-color .13s, color .13s, box-shadow .13s;
         user-select: none;
         white-space: nowrap;
-        box-shadow: 0 1px 2px rgba(0,0,0,.04);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
     }
 
     .org-filter-chip:hover {
@@ -703,7 +703,7 @@ body.page-location-details div.section {
 
         &.active {
             border-color: var(--ul-text-1);
-            box-shadow: 0 0 0 2px rgba(255,255,255,.7), 0 0 0 4px var(--ul-color-accent);
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, .7), 0 0 0 4px var(--ul-color-accent);
             transform: scale(1.15);
         }
     }
@@ -897,7 +897,7 @@ body.page-location-details div.section {
     }
 }
 
-/* ── Organize: floating bulk action bar (fixed — lives OUTSIDE .organize-page in DOM) ── */
+/* ── Organize: floating bulk action bar (fixed - lives OUTSIDE .organize-page in DOM) ── */
 
 .org-bulk-bar {
     position: fixed;

@@ -1,7 +1,7 @@
 """Property-based tests for Pin model computed properties.
 
 These tests exercise business logic that is expressed as Python properties on
-Pin, using in-memory model instances — no database round-trips required.  Each
+Pin, using in-memory model instances - no database round-trips required.  Each
 property tested here carries a real invariant that the rest of the application
 depends on.
 """
@@ -49,7 +49,7 @@ def _make_pin(**kwargs: Any) -> Pin:
 	for k, v in defaults.items():
 		if k in _FK_FIELDS:
 			# Inject directly into the field cache to bypass the FK descriptor's
-			# isinstance check — location is often a MagicMock in these tests.
+			# isinstance check - location is often a MagicMock in these tests.
 			pin._state.fields_cache[k] = v
 		else:
 			setattr(pin, k, v)
@@ -91,7 +91,7 @@ class PinEffectiveNameTests(TestCase):
 	@given(nonempty_name, nonempty_name)
 	@settings(max_examples=200)
 	def test_nickname_is_always_returned_verbatim(self, nickname: str, location_name: str) -> None:
-		"""The returned name must be exactly what was stored — no transformation."""
+		"""The returned name must be exactly what was stored - no transformation."""
 		loc = _make_location(name=location_name)
 		pin = _make_pin(nickname=nickname, location=loc)
 		self.assertIs(type(pin.effective_name), str)
@@ -226,7 +226,7 @@ class PinEffectiveDateLastActiveTests(TestCase):
 	@given(reasonable_date)
 	@settings(max_examples=200)
 	def test_inferred_date_is_strictly_before_abandoned(self, abandoned: date) -> None:
-		"""The inferred activity date must be one day before abandonment — never equal or after."""
+		"""The inferred activity date must be one day before abandonment - never equal or after."""
 		pin = _make_pin(date_last_active=None, date_abandoned=abandoned)
 		inferred = pin.effective_date_last_active
 		self.assertIsNotNone(inferred)
@@ -247,7 +247,7 @@ class PinEffectiveIconTests(TestCase):
 	"""effective_icon follows a defined priority chain.
 
 	The DB-backed tag-lookup branch is not tested here (it requires a live ORM
-	queryset) but the top two tiers — custom_icon and icon — are pure Python.
+	queryset) but the top two tiers - custom_icon and icon - are pure Python.
 	"""
 
 	def _make_pin_with_icon(self, icon: str | None, custom_icon: Any = None) -> Pin:
@@ -263,7 +263,7 @@ class PinEffectiveIconTests(TestCase):
 	@settings(max_examples=200)
 	def test_text_icon_field_is_returned_when_set(self, icon_key: str) -> None:
 		"""When only the icon CharField is set, it must be returned."""
-		# effective_icon returns self.icon immediately — tags are never accessed.
+		# effective_icon returns self.icon immediately - tags are never accessed.
 		pin = self._make_pin_with_icon(icon=icon_key, custom_icon=None)
 		self.assertEqual(pin.effective_icon, icon_key)
 
@@ -278,7 +278,7 @@ class PinEffectiveIconTests(TestCase):
 	@settings(max_examples=100)
 	def test_custom_icon_url_beats_icon_field(self, icon_key: str) -> None:
 		"""A custom uploaded icon takes priority over the text icon key."""
-		# effective_icon returns self.custom_icon.url immediately — tags are never accessed.
+		# effective_icon returns self.custom_icon.url immediately - tags are never accessed.
 		url = "/media/pin_custom_icons/test.png"
 		pin = _make_pin(icon=icon_key)
 		mock_cf = MagicMock()

@@ -243,7 +243,7 @@
                         Click or drag on the map to place
                     </p>
                     <label class="markup-form-label-row">
-                        Text <small>(optional — type before or after placing)</small>
+                        Text <small>(optional - type before or after placing)</small>
                         <input type="text" id="text-form-label" placeholder="Label text"
                                class="markup-form-input">
                     </label>
@@ -467,7 +467,7 @@
     </p>
     <div id="detail-pin-picker-map"></div>
     <p id="detail-pin-no-location" class="detail-pin-no-location">
-        No location selected yet — click the map above.
+        No location selected yet - click the map above.
     </p>
     <form id="detail-pin-add-form" class="detail-pin-add-form" novalidate>
         {% csrf_token %}
@@ -684,7 +684,7 @@
     const pinDbId = {{ pin.pk }};
     let _pinMarkerLat = pinLat, _pinMarkerLng = pinLng;
 
-    // Main pin marker — hidden when a campus boundary exists
+    // Main pin marker - hidden when a campus boundary exists
     let _pinMarker = L.marker([pinLat, pinLng], { draggable: true }).addTo(map);
     _pinMarker.on('dragend', function () {
         const pos = _pinMarker.getLatLng();
@@ -1275,7 +1275,7 @@
             li.innerHTML = `
                 <div class="photo-panel-thumb-wrap">
                     <img src="${img.url}" class="photo-panel-thumb" alt="">
-                    <span class="photo-panel-coord-badge ${hasCoords ? 'has-gps' : 'no-gps'}" title="${hasCoords ? 'Has GPS' : 'No GPS — drag to map'}">
+                    <span class="photo-panel-coord-badge ${hasCoords ? 'has-gps' : 'no-gps'}" title="${hasCoords ? 'Has GPS' : 'No GPS - drag to map'}">
                         <i class="material-icons">${hasCoords ? 'place' : 'location_off'}</i>
                     </span>
                 </div>
@@ -1371,11 +1371,11 @@
         document.getElementById('detail-pin-add-dialog').showModal();
     }
 
-    // ── Markup drawing — engine-backed ───────────────────────────────────────
+    // ── Markup drawing - engine-backed ───────────────────────────────────────
     let _editingMarkupItem = null;
 
     function _onDrawCommit(type, latlngs, extras) {
-        // Deactivate tool first — hides panels via onToolChange
+        // Deactivate tool first - hides panels via onToolChange
         _drawSession.deactivate();
 
         if (type === 'line' || type === 'arrow') {
@@ -1742,7 +1742,7 @@
         });
         map.addControl(campusDrawControl);
         map.on(L.Draw.Event.CREATED, function (e) {
-            // Add the new polygon to the existing set — never clear others.
+            // Add the new polygon to the existing set - never clear others.
             campusItems.addLayer(e.layer);
             _setPinMarkerVisible(false);
             const n = campusItems.getLayers().length;
@@ -1783,7 +1783,7 @@
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(() => {
             _savedCampusGeoJSON = geometry;
-            toastr.success(geometry ? 'Boundary saved.' : 'Boundary cleared — default radius will be used.');
+            toastr.success(geometry ? 'Boundary saved.' : 'Boundary cleared - default radius will be used.');
             _exitCampusEdit();
         })
         .catch(() => toastr.error('Failed to save campus boundary.'));
@@ -2137,7 +2137,7 @@
                 }
             })
             .catch(() => {
-                toastr.error('Network error — please try again.');
+                toastr.error('Network error - please try again.');
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Add Pin';
                 _submitting = false;

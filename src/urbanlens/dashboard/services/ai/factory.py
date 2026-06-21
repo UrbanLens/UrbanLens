@@ -1,4 +1,4 @@
-"""AI gateway factory — selects provider and checks feature flags from SiteSettings."""
+"""AI gateway factory - selects provider and checks feature flags from SiteSettings."""
 
 from __future__ import annotations
 

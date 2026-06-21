@@ -9,7 +9,17 @@ from uuid import uuid4
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import CASCADE, SET_NULL, ForeignKey, ImageField, Index, ManyToManyField, Q, UniqueConstraint, UUIDField
+from django.db.models import (
+    CASCADE,
+    SET_NULL,
+    ForeignKey,
+    ImageField,
+    Index,
+    ManyToManyField,
+    Q,
+    UniqueConstraint,
+    UUIDField,
+)
 from django.db.models.fields import CharField, DateField, DateTimeField, DecimalField, IntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
@@ -459,7 +469,7 @@ class PinNote(abstract.Model):
     """A private, timestamped note that only the pin owner can see.
 
     Distinct from Pin.description (single editable blob). Notes are append-only
-    entries — the owner can delete individual notes but not edit them in place.
+    entries - the owner can delete individual notes but not edit them in place.
     """
 
     pin = ForeignKey(

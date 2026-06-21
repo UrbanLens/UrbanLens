@@ -247,7 +247,7 @@
                 <label class="settings-label">{{ map_display_form.cluster_radius.label }}</label>
                 <p class="settings-help">Group pins within this radius. Auto adjusts the radius based on zoom level.</p>
 
-                {# Actual hidden form field — updated by JS below #}
+                {# Actual hidden form field - updated by JS below #}
                 <input type="hidden"
                        name="{{ map_display_form.cluster_radius.html_name }}"
                        id="{{ map_display_form.cluster_radius.id_for_label }}"
@@ -296,7 +296,7 @@
                         {% if not map_display_form.use_pin_cache.value %}
                         <span class="settings-warning">
                             <i class="material-icons" style="font-size:0.9rem;vertical-align:-0.15em;">warning</i>
-                            Caching is off — map loads will be slower.
+                            Caching is off - map loads will be slower.
                         </span>
                         {% endif %}
                     </span>
@@ -418,7 +418,7 @@ function applyThemePreview(theme) {
     var previewLng  = {{ preview_lng|default:"null" }};
     var previewZoom = {{ preview_zoom|default:13 }};
 
-    // Clustering centroid passed from the server — used when switching to Auto mode.
+    // Clustering centroid passed from the server - used when switching to Auto mode.
     var _PIN_CENTROID_LAT = {{ pin_centroid_lat|default:"null" }};
     var _PIN_CENTROID_LNG = {{ pin_centroid_lng|default:"null" }};
 
@@ -468,7 +468,7 @@ function applyThemePreview(theme) {
 
     // Only write the custom coordinate hidden fields when already in custom mode.
     // In GPS/AUTO modes the form must keep whatever custom coords were previously
-    // saved — overwriting them here would corrupt the stored custom location.
+    // saved - overwriting them here would corrupt the stored custom location.
     if (currentMode === 'custom') {
         syncHiddenFields(previewLat, previewLng);
     }
@@ -493,8 +493,8 @@ function applyThemePreview(theme) {
         });
     }
 
-    var _GPS_ZOOM  = 13;  // street/neighbourhood — appropriate for "where am I now"
-    var _AUTO_ZOOM = 11;  // slightly wider — shows a whole pin cluster
+    var _GPS_ZOOM  = 13;  // street/neighbourhood - appropriate for "where am I now"
+    var _AUTO_ZOOM = 11;  // slightly wider - shows a whole pin cluster
 
     window.selectMapMode = function (mode) {
         // Select the matching hidden radio input.
@@ -510,7 +510,7 @@ function applyThemePreview(theme) {
             previewMap.setZoom(_AUTO_ZOOM);
             document.getElementById('id_map_default_zoom').value = _AUTO_ZOOM;
             // Move the preview to the server-computed pin centroid for visual reference.
-            // Don't sync the custom hidden fields — this is not a custom location.
+            // Don't sync the custom hidden fields - this is not a custom location.
             if (_PIN_CENTROID_LAT !== null && _PIN_CENTROID_LNG !== null) {
                 var centroid = L.latLng(_PIN_CENTROID_LAT, _PIN_CENTROID_LNG);
                 marker.setLatLng(centroid);
@@ -552,7 +552,7 @@ function applyThemePreview(theme) {
     });
 
     // Use the browser's GPS to move the preview marker.
-    // Hidden custom-coordinate fields are only updated in CUSTOM mode — in GPS
+    // Hidden custom-coordinate fields are only updated in CUSTOM mode - in GPS
     // mode this just gives a visual preview of where the map will open.
     window.useDeviceLocation = function () {
         if (!navigator.geolocation) return;

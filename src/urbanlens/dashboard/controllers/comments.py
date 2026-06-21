@@ -50,10 +50,7 @@ def _build_context(comments_qs, profile: Profile, **extra) -> dict:
         all_commenters.add(c.profile)
         all_commenters.update(r.profile for r in c.replies.all())
     # Set of profile IDs whose images should be blurred for this viewer.
-    blurred_profiles: set[int] = {
-        p.pk for p in all_commenters
-        if p != profile and not profile.can_view_photos_from(p)
-    }
+    blurred_profiles: set[int] = {p.pk for p in all_commenters if p != profile and not profile.can_view_photos_from(p)}
 
     rendered = []
     for c in top_level:
@@ -179,7 +176,9 @@ class WikiCommentsView(LoginRequiredMixin, View):
         parent = None
         if parent_id:
             parent = get_object_or_404(Comment, id=parent_id, location=location)
-        comment = Comment.objects.create(location=location, profile=profile, text=text, parent=parent, map_data=map_data)
+        comment = Comment.objects.create(
+            location=location, profile=profile, text=text, parent=parent, map_data=map_data,
+        )
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
@@ -208,7 +207,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
 
 
 class CommentReactionView(LoginRequiredMixin, View):
-    """POST /comments/<int>/react/  — toggle an emoji reaction on a Comment."""
+    """POST /comments/<int>/react/  - toggle an emoji reaction on a Comment."""
 
     def post(self, request, comment_id):
         profile = _profile(request)
@@ -226,7 +225,7 @@ class CommentReactionView(LoginRequiredMixin, View):
 
 
 class TripCommentReactionView(LoginRequiredMixin, View):
-    """POST /trips/<uuid>/comments/<int>/react/  — toggle reaction on a TripComment."""
+    """POST /trips/<uuid>/comments/<int>/react/  - toggle reaction on a TripComment."""
 
     def post(self, request, trip_uuid, comment_id):
         from urbanlens.dashboard.models.trips.model import Trip, TripComment
@@ -322,17 +321,14 @@ def _parse_map_data(request) -> dict | None:
 
 
 class CommentMapPinsView(LoginRequiredMixin, View):
-    """GET /comments/map-pins/?q=… — return user's pins for the comment map center picker."""
+    """GET /comments/map-pins/?q=… - return user's pins for the comment map center picker."""
 
     def get(self, request):
         from urbanlens.dashboard.models.pin.model import Pin
 
         profile = _profile(request)
         q = request.GET.get("q", "").strip().lower()
-        qs = (
-            Pin.objects.filter(profile=profile)
-            .select_related("location")[:200]
-        )
+        qs = Pin.objects.filter(profile=profile).select_related("location")[:200]
         results = []
         for pin in qs:
             lat = pin.effective_latitude
@@ -342,14 +338,16 @@ class CommentMapPinsView(LoginRequiredMixin, View):
             name = pin.effective_name or ""
             if q and q not in name.lower():
                 continue
-            results.append({
-                "uuid": str(pin.uuid),
-                "name": name,
-                "lat": float(lat),
-                "lng": float(lng),
-                "detail_pins_url": f"/map/pin/{pin.uuid}/detail-pins/json/",
-                "markup_url": f"/map/pin/{pin.uuid}/markup/json/",
-            })
+            results.append(
+                {
+                    "uuid": str(pin.uuid),
+                    "name": name,
+                    "lat": float(lat),
+                    "lng": float(lng),
+                    "detail_pins_url": f"/map/pin/{pin.uuid}/detail-pins/json/",
+                    "markup_url": f"/map/pin/{pin.uuid}/markup/json/",
+                },
+            )
         return JsonResponse({"pins": results})
 
 
@@ -357,7 +355,7 @@ class CommentMapPinsView(LoginRequiredMixin, View):
 
 
 class PinnedLocationsJsonView(LoginRequiredMixin, View):
-    """GET /comments/locations/  — return viewer's pinned locations for @mention autocomplete."""
+    """GET /comments/locations/  - return viewer's pinned locations for @mention autocomplete."""
 
     def get(self, request):
         import json

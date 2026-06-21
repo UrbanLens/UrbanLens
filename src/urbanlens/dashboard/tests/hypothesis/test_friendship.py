@@ -247,7 +247,7 @@ class FriendshipPredicateInvariantTests(TestCase):
 			self.assertEqual(FriendshipStatus.is_friend(status), expected, f"is_friend({status!r}) wrong")
 
 	def test_can_request_subset_of_rejected(self) -> None:
-		"""can_request is a strict subset of rejected — anything requestable must also be rejected."""
+		"""can_request is a strict subset of rejected - anything requestable must also be rejected."""
 		for status in FriendshipStatus.values:
 			if FriendshipStatus.can_request(status):
 				self.assertTrue(

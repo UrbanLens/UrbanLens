@@ -36,7 +36,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "AI — Global",
+            "AI - Global",
             {
                 "fields": ["ai_enabled", "ai_provider"],
                 "description": (
@@ -46,18 +46,18 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "AI — Models",
+            "AI - Models",
             {
                 "fields": ["openai_model", "cloudflare_model"],
                 "description": (
                     "Model names are only used for the matching provider. "
-                    "Changing the model here takes effect immediately — no restart needed."
+                    "Changing the model here takes effect immediately - no restart needed."
                 ),
                 "classes": ["collapse"],
             },
         ),
         (
-            "AI — Feature Toggles",
+            "AI - Feature Toggles",
             {
                 "fields": ["ai_category_suggestions_enabled"],
                 "description": "Individual feature toggles. The global <em>AI enabled</em> switch overrides all of these.",

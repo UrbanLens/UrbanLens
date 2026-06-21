@@ -1,6 +1,6 @@
 """Tests for environment configuration classes and factory.
 
-No database access — pure Pydantic model logic.
+No database access - pure Pydantic model logic.
 """
 from __future__ import annotations
 

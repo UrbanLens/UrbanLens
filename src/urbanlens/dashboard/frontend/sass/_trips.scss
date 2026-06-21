@@ -234,7 +234,7 @@
     }
 }
 
-// Trip header action buttons — icon-only, unobtrusive
+// Trip header action buttons - icon-only, unobtrusive
 .trip-header-btn {
     display: inline-flex;
     align-items: center;
@@ -875,7 +875,7 @@
     }
 }
 
-// Comment avatar — slightly larger than member list avatar
+// Comment avatar - slightly larger than member list avatar
 .trip-member-avatar.trip-comment-avatar {
     width: 36px;
     height: 36px;
@@ -1308,7 +1308,7 @@
     z-index: 200;
     min-width: 80px;
 
-    // display:flex overrides the HTML [hidden] attribute by default — be explicit
+    // display:flex overrides the HTML [hidden] attribute by default - be explicit
     &[hidden] {
         display: none;
     }

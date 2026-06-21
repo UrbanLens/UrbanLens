@@ -320,7 +320,7 @@ class ProfileFormTests(TestCase):
 		self.assertIn("birth_date", form.errors)
 
 	def test_too_young_birth_date_raises_validation_error(self) -> None:
-		# 5 years ago — under the 13-year minimum
+		# 5 years ago - under the 13-year minimum
 		too_young = (_today() - timedelta(days=365 * 5)).isoformat()
 		form = self._submit(birth_date=too_young)
 		self.assertFalse(form.is_valid())

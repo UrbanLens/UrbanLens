@@ -39,7 +39,7 @@ def backfill_missing_statuses(apps, schema_editor):
 
 
 def reverse_backfill(apps, schema_editor):
-    """No-op reverse — we do not remove badges added by this migration."""
+    """No-op reverse - we do not remove badges added by this migration."""
 
 
 class Migration(migrations.Migration):

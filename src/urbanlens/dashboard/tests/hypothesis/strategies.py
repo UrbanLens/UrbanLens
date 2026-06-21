@@ -55,7 +55,7 @@ lat_float = st.floats(min_value=-89.9, max_value=89.9, allow_nan=False, allow_in
 lon_float = st.floats(min_value=-179.9, max_value=179.9, allow_nan=False, allow_infinity=False)
 coord_pair_float = st.tuples(lat_float, lon_float)
 
-# Two clearly distinct coordinate pairs (> 1 degree apart) — useful for
+# Two clearly distinct coordinate pairs (> 1 degree apart) - useful for
 # get_nearby_or_create tests that need two non-coincident locations.
 _far_lat = st.floats(min_value=-85.0, max_value=85.0, allow_nan=False, allow_infinity=False)
 _far_lon = st.floats(min_value=-175.0, max_value=175.0, allow_nan=False, allow_infinity=False)

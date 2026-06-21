@@ -116,7 +116,7 @@ class ContactSettingsForm(forms.Form):
 
 
 class StyleSettingsForm(forms.ModelForm):
-    """Site-wide appearance — color theme only."""
+    """Site-wide appearance - color theme only."""
 
     dark_mode = forms.BooleanField(
         required=False,
@@ -160,7 +160,7 @@ class MapDisplayForm(forms.ModelForm):
 
 
 class MapCenterForm(forms.ModelForm):
-    """Saved map center preference — mode, optional custom coordinates, and default zoom."""
+    """Saved map center preference - mode, optional custom coordinates, and default zoom."""
 
     map_center_mode = forms.ChoiceField(
         choices=MapCenterMode.choices,

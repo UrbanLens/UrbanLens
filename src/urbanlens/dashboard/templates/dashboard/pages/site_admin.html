@@ -38,6 +38,32 @@
 
     <div class="site-admin-card card">
         <div class="card-header">
+            <i class="material-icons">search</i>
+            <span>Web Search</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="search-provider">Search provider</label>
+                <p class="form-help">
+                    Provider used for the "Web Search" panel on pin detail pages.
+                    Brave Search is the default and does not require a Custom Search Engine setup — just an API key from
+                    <a href="https://api.search.brave.com/app/keys" target="_blank" rel="noopener">api.search.brave.com</a>.
+                </p>
+                <select name="search_provider" id="search-provider">
+                    {% for value, label in search_provider_choices %}
+                    <option value="{{ value }}"{% if settings.search_provider == value %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="submit-button">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card card">
+        <div class="card-header">
             <i class="material-icons">crop_free</i>
             <span>Location Bounding Box</span>
         </div>
@@ -47,7 +73,7 @@
                 <label for="max-bbox-area">Maximum bounding box area (km²)</label>
                 <p class="form-help">
                     Largest area a user may draw as a location boundary.
-                    Default is 2,600 km² — approximately the size of the Chernobyl Exclusion Zone.
+                    Default is 2,600 km² - approximately the size of the Chernobyl Exclusion Zone.
                 </p>
                 <input type="number" name="max_bbox_area_km2" id="max-bbox-area"
                        value="{{ settings.max_bbox_area_km2 }}" min="0.001" step="any">

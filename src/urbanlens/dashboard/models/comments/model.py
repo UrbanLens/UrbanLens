@@ -1,4 +1,5 @@
-"""Comment model — for Pin and Location (wiki) comments."""
+"""Comment model - for Pin and Location (wiki) comments."""
+
 from __future__ import annotations
 
 from django.db import models

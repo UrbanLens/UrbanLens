@@ -1,4 +1,4 @@
-"""ProfileNote — a private, per-viewer note attached to another user's profile."""
+"""ProfileNote - a private, per-viewer note attached to another user's profile."""
 
 from __future__ import annotations
 

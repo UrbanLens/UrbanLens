@@ -28,7 +28,7 @@ def _loc(**kwargs) -> Location:
 	"""Create an unsaved Location with address fields overridden from kwargs.
 
 	Uses Location() so Django's __init__ sets up internal state correctly.
-	No DB interaction occurs — save() is never called.
+	No DB interaction occurs - save() is never called.
 	"""
 	loc = Location()
 	for k, v in kwargs.items():
@@ -114,7 +114,7 @@ class AddressPropertyTests(TestCase):
 # ── address_basic property ────────────────────────────────────────────────────
 
 class AddressBasicPropertyTests(TestCase):
-	"""AddressableMixin.address_basic — only street_number and route."""
+	"""AddressableMixin.address_basic - only street_number and route."""
 
 	def test_both_fields_present(self) -> None:
 		loc = _loc(street_number="10", route="Downing St")
@@ -157,7 +157,7 @@ class AddressBasicPropertyTests(TestCase):
 # ── address_extended property ─────────────────────────────────────────────────
 
 class AddressExtendedPropertyTests(TestCase):
-	"""AddressableMixin.address_extended — street with city, no state/zip."""
+	"""AddressableMixin.address_extended - street with city, no state/zip."""
 
 	def test_all_three_fields_present(self) -> None:
 		loc = _loc(street_number="5", route="Penny Lane", locality="Liverpool")

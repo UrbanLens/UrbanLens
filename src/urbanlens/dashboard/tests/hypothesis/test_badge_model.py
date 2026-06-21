@@ -4,7 +4,7 @@ get_badge_and_descendants is already thoroughly covered in test_badge.py.
 This file covers the customization-aware display properties and queryset filters.
 
 Property tests use unsaved Badge instances with _user_customizations injected
-directly — no DB access required.  Queryset tests use baker.
+directly - no DB access required.  Queryset tests use baker.
 """
 from __future__ import annotations
 
@@ -345,7 +345,7 @@ class BadgeQuerySetWithCustomizationsForTests(TestCase):
 		self.assertEqual(len(customizations), 0)
 
 	def test_prefetch_excludes_other_users_customizations(self) -> None:
-		# Only the other user has a customization — our user should see empty list.
+		# Only the other user has a customization - our user should see empty list.
 		baker.make(
 			self.BadgeCustomization,
 			profile=self.other.profile,

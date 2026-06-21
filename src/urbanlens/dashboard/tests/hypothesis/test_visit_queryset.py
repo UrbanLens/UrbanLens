@@ -1,6 +1,6 @@
 """Tests for VisitQuerySet filter methods: for_pin, manual, from_takeout.
 
-All tests require the database — records are created with model_bakery.
+All tests require the database - records are created with model_bakery.
 """
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ class VisitQuerySetForPinTests(TestCase):
 
     def test_returns_queryset_type(self):
         qs = PinVisit.objects.for_pin(self.pin_a.pk)
-        # Should be chainable — filter further without error
+        # Should be chainable - filter further without error
         self.assertFalse(qs.filter(source="nonexistent").exists())
 
     def test_multiple_visits_for_same_pin_all_returned(self):

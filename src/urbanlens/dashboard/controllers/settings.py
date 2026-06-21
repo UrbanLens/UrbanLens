@@ -173,6 +173,7 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
     # Try Google Geocoding.
     try:
         from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+
         gateway = GoogleGeocodingGateway()
         result = gateway.geocode_place_name(address)
         if result:
@@ -184,9 +185,10 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
     except Exception:
         logger.warning("Google geocoding unavailable for %r", address, exc_info=True)
 
-    # Fall back to Nominatim (OpenStreetMap) — no API key required.
+    # Fall back to Nominatim (OpenStreetMap) - no API key required.
     try:
         from geopy.geocoders import Nominatim
+
         geolocator = Nominatim(user_agent="urbanlens-settings/1.0")
         location = geolocator.geocode(address, timeout=5)
         if location:

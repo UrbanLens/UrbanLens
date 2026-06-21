@@ -16,7 +16,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
 
     {% load static %}
-    {# ── Shared markup engine — must load before {% block content %} scripts ── #}
+    {# ── Shared markup engine - must load before {% block content %} scripts ── #}
     {% include 'dashboard/partials/_markup_engine.html' %}
     {% block header %}{% endblock %}
     <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">
@@ -354,7 +354,7 @@
             <span>Color</span>
             <input type="color" id="cmc-color" value="#e74c3c">
           </label>
-          {# text label input — shown only when text tool is active #}
+          {# text label input - shown only when text tool is active #}
           <input type="text" id="cmc-text-label" class="cmc-text-label-input"
                  placeholder="Label text…" autocomplete="off" maxlength="100" hidden>
           <span class="cmc-hint-text" id="cmc-hint"></span>
@@ -416,13 +416,13 @@
     </script>
 
     {# ── Comment map composer + viewer JS ────────────────────────────────────── #}
-    {# Leaflet is NOT re-loaded here — pages with maps (pin detail, wiki, trips) already load  #}
+    {# Leaflet is NOT re-loaded here - pages with maps (pin detail, wiki, trips) already load  #}
     {# it in {% block header %} along with their plugins (MarkerCluster, Leaflet.draw).         #}
     {# Re-loading would clobber those plugins by replacing window.L.  Comment-map code          #}
     {# guards every Leaflet call with typeof L checks so it degrades gracefully on other pages. #}
     <script>
     (function () {
-        // ── Shared tile layer factory (guarded — L may not be present on every page) ──
+        // ── Shared tile layer factory (guarded - L may not be present on every page) ──
         function _makeTileLayer() {
             return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors', maxZoom: 19
@@ -462,7 +462,7 @@
             // showModal() sets [open] synchronously, but the browser hasn't run
             // style recalculation yet. Reading offsetHeight forces an immediate
             // synchronous reflow so Leaflet reads the correct container dimensions
-            // on the very next line — no setTimeout/rAF timing tricks needed.
+            // on the very next line - no setTimeout/rAF timing tricks needed.
             void _dialog.offsetHeight;
 
             var mapEl = document.getElementById('comment-map-composer-map');
@@ -577,7 +577,7 @@
             if (chip) chip.hidden = true;
         };
 
-        // Wire chip buttons (event delegation — forms are dynamic via HTMX)
+        // Wire chip buttons (event delegation - forms are dynamic via HTMX)
         document.addEventListener('click', function (e) {
             if (e.target.closest('.comment-map-chip-remove')) {
                 var form = e.target.closest('.comment-compose');
@@ -828,7 +828,7 @@
                 try { data = JSON.parse(script.textContent); } catch (_) { return; }
 
                 thumb.dataset.initialized = '1';
-                // Set height inline — guarantees Leaflet reads a non-zero size
+                // Set height inline - guarantees Leaflet reads a non-zero size
                 // regardless of whether the compiled CSS has loaded yet.
                 thumb.style.height = '180px';
                 thumb.style.width = '100%';

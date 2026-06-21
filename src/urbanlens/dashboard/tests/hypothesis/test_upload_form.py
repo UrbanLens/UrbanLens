@@ -1,11 +1,11 @@
 """Tests for the multi-file upload form and its supporting widget/field classes.
 
-No database access required — these are pure form-validation tests.
+No database access required - these are pure form-validation tests.
 
 Classes under test:
-    _MultipleFileInput  — widget that extracts a list from the file dict
-    _MultipleFileField  — field that validates and returns a list of files
-    UploadDataFile      — the public form
+    _MultipleFileInput  - widget that extracts a list from the file dict
+    _MultipleFileField  - field that validates and returns a list of files
+    UploadDataFile      - the public form
 """
 from __future__ import annotations
 
@@ -135,7 +135,7 @@ class UploadDataFileFormTests(TestCase):
 		self.assertEqual(len(form.cleaned_data["upload_files"]), 2)
 
 
-# ── _MultipleFileField — falsy file filtering ─────────────────────────────────
+# ── _MultipleFileField - falsy file filtering ─────────────────────────────────
 
 class MultipleFileFieldFalsyFilterTests(TestCase):
 	"""_MultipleFileField.clean skips falsy entries in the list (the `if f` guard)."""
@@ -147,7 +147,7 @@ class MultipleFileFieldFalsyFilterTests(TestCase):
 		return SimpleUploadedFile(name, b"content")
 
 	def test_falsy_entries_are_filtered_out(self) -> None:
-		# A list that contains one real file and one None — only the real file should survive.
+		# A list that contains one real file and one None - only the real file should survive.
 		real_file = self._file("real.kml")
 		# We need to pass something truthy first to bypass the `if not data` guard.
 		# But None entries are filtered via `if f`.

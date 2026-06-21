@@ -111,7 +111,7 @@
                     <dd>{{ location.address_extended }}</dd>
                 </div>
                 {% endif %}
-                {# Categories shown via HTMX panel below — not repeated here #}
+                {# Categories shown via HTMX panel below - not repeated here #}
                 {% if location.date_abandoned %}
                 <div class="wiki-dl-row">
                     <dt>Abandoned</dt>
@@ -125,7 +125,7 @@
                 </div>
                 {% endif %}
             </dl>
-            {# Security indicators — only shown when at least one is non-unknown #}
+            {# Security indicators - only shown when at least one is non-unknown #}
             {% if location.fences != "unknown" or location.alarms != "unknown" or location.cameras != "unknown" or location.security != "unknown" or location.signs != "unknown" or location.vps != "unknown" or location.plywood != "unknown" or location.locked != "unknown" %}
             <div class="security-indicators">
                 <span class="security-indicators-label">Security</span>
@@ -367,7 +367,7 @@
 
 </div>
 
-{# ── Add community detail-pin dialog — outside wiki-body ─────────────────── #}
+{# ── Add community detail-pin dialog - outside wiki-body ─────────────────── #}
 <dialog id="wiki-detail-pin-dialog" class="detail-pin-add-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Add Community Detail Pin" %}
     <p class="detail-pin-add-hint">
@@ -377,7 +377,7 @@
     </p>
     <div id="wiki-detail-pin-picker-map"></div>
     <p id="wiki-dp-no-location" class="detail-pin-no-location">
-        No location selected yet — click the map above.
+        No location selected yet - click the map above.
     </p>
     <form id="wiki-detail-pin-form" class="detail-pin-add-form" novalidate>
         {% csrf_token %}
@@ -811,7 +811,7 @@
             li.innerHTML = `
                 <div class="photo-panel-thumb-wrap">
                     <img src="${img.url}" class="photo-panel-thumb" alt="">
-                    <span class="photo-panel-coord-badge ${hasCoords ? 'has-gps' : 'no-gps'}" title="${hasCoords ? 'Has GPS' : 'No GPS — drag to map'}">
+                    <span class="photo-panel-coord-badge ${hasCoords ? 'has-gps' : 'no-gps'}" title="${hasCoords ? 'Has GPS' : 'No GPS - drag to map'}">
                         <i class="material-icons">${hasCoords ? 'place' : 'location_off'}</i>
                     </span>
                 </div>

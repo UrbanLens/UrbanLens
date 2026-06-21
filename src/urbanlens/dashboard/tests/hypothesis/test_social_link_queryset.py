@@ -1,6 +1,6 @@
 """Tests for SocialLink QuerySet methods: for_profile and platform.
 
-All tests require the database — records are created with model_bakery.
+All tests require the database - records are created with model_bakery.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def _make_link(profile, platform: str = "instagram", handle: str = "testuser") -
 
 
 # ---------------------------------------------------------------------------
-# for_profile — Profile instance path (line 18)
+# for_profile - Profile instance path (line 18)
 # ---------------------------------------------------------------------------
 
 class SocialLinkForProfileInstanceTests(TestCase):
@@ -61,7 +61,7 @@ class SocialLinkForProfileInstanceTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# for_profile — integer pk path (lines 16-17)
+# for_profile - integer pk path (lines 16-17)
 # ---------------------------------------------------------------------------
 
 class SocialLinkForProfileIntTests(TestCase):

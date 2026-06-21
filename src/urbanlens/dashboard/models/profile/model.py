@@ -199,7 +199,7 @@ class Profile(abstract.Model):
     def compute_map_center(self) -> tuple[float, float] | None:
         """Find the densest geographic cluster of pins and return its centroid.
 
-        A naive average breaks when the user has pins on multiple continents —
+        A naive average breaks when the user has pins on multiple continents -
         the centre point ends up in the ocean between them.  Instead we find the
         "seed" point with the most neighbours within _CLUSTER_RADIUS_KM, then
         return the centroid of those neighbours.  For a single tight collection
@@ -252,7 +252,7 @@ class Profile(abstract.Model):
     def get_map_center(self) -> tuple[float, float] | None:
         """Return the map center coordinates to use as the initial view.
 
-        In GPS mode, returns None — the browser handles centering via geolocation.
+        In GPS mode, returns None - the browser handles centering via geolocation.
         In custom mode, returns the user-stored coordinates.
         In auto mode, returns the cached pin centroid (computing it if needed).
 

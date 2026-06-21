@@ -1,4 +1,4 @@
-"""Add PinNote model — private per-pin notes for the pin owner."""
+"""Add PinNote model - private per-pin notes for the pin owner."""
 
 from django.db import migrations, models
 import django.db.models.deletion

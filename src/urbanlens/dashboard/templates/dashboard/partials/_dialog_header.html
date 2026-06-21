@@ -1,8 +1,8 @@
 {% comment %}
 Shared dialog header. Usage:
   {% include "dashboard/partials/_dialog_header.html" with title="My Title" %}
-  Optional: closefn="myCloseFunc"  — JS function to call instead of dialog.close()
-  Optional: title_id="my-title-id" — adds an id to the title span for dynamic JS updates
+  Optional: closefn="myCloseFunc"  - JS function to call instead of dialog.close()
+  Optional: title_id="my-title-id" - adds an id to the title span for dynamic JS updates
 {% endcomment %}
 <div class="dialog-header">
     <span{% if title_id %} id="{{ title_id }}"{% endif %}>{{ title }}</span>

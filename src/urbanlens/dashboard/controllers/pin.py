@@ -41,11 +41,37 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.services.google.search import GoogleCustomSearchGateway
+from urbanlens.dashboard.services.search import get_search_gateway
 from urbanlens.dashboard.services.smithsonian import SmithsonianGateway
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _build_pin_search_query(pin: Pin) -> str:
+    """Build a plain-text search query for a pin's location.
+
+    Combines the most useful identifiers into a concise query string that
+    works across search providers (Brave, Google Custom Search, etc.).
+    """
+    parts: list[str] = []
+    name = pin.effective_name
+    if name:
+        parts.append(name)
+    if pin.address_basic and pin.address_basic != name:
+        parts.append(pin.address_basic)
+    place_name = getattr(pin, "place_name", None)
+    if place_name and place_name not in {name, pin.address_basic}:
+        parts.append(place_name)
+    if pin.city:
+        parts.append(pin.city)
+    elif pin.county:
+        parts.append(pin.county)
+    if pin.state:
+        parts.append(pin.state)
+    if not parts and pin.latitude and pin.longitude:
+        return f"{pin.latitude}, {pin.longitude}"
+    return ", ".join(filter(None, parts))
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):
@@ -248,43 +274,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not pin.has_meaningful_name:
             return HttpResponse("", status=204)
 
-        # Instantiate the GoogleCustomSearchGateway with the API key
         try:
-            google_gateway = GoogleCustomSearchGateway()
-
-            # Get web search results from the Google Custom Search API
-            query = [
-                pin.address_extended,
-                [
-                    pin.address_basic,
-                    pin.city,
-                ],
-                [
-                    pin.address_basic,
-                    pin.county,
-                ],
-                [
-                    pin.address_basic,
-                    pin.state,
-                ],
-                f"{pin.latitude}, {pin.longitude}",
-            ]
-
-            if pin.effective_name and pin.address_basic != pin.effective_name:
-                query.append(
-                    [
-                        pin.effective_name,
-                        pin.city,
-                    ],
-                )
-
-            place_name = pin.place_name
-            if place_name and place_name not in {pin.address_basic, pin.effective_name}:
-                query.append(place_name)
-
-            search_results = google_gateway.search(query)
+            search_gateway = get_search_gateway()
+            query = _build_pin_search_query(pin)
+            search_results = search_gateway.search(query)
         except Exception as e:
-            logger.exception("Unable to contact Google Search API: %s", e)
+            logger.exception("Unable to contact web search API: %s", e)
             return render(request, "dashboard/pages/location/web_search.html", {"error": "Search unavailable. Please try again later."})
 
         return render(request, "dashboard/pages/location/web_search.html", {"search_results": search_results})

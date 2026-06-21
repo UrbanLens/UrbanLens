@@ -373,7 +373,7 @@
     background: linear-gradient(135deg, #db2777 0%, #9c124a 100%);
 }
 
-/* ── Map tile loading — dim tile pane while images download ─────── */
+/* ── Map tile loading - dim tile pane while images download ─────── */
 #map .leaflet-tile-pane {
     transition: opacity 0.35s ease;
 }
@@ -522,7 +522,7 @@
             <button class="fp-close" onclick="toggleFilterPanel()" title="Close">✕</button>
         </div>
 
-        {# Address jump — geocodes and pans the map, not a pin filter #}
+        {# Address jump - geocodes and pans the map, not a pin filter #}
         <div class="fp-address-jump">
             <div class="fp-label">Jump to Address</div>
             <div class="fp-address-row">
@@ -705,11 +705,11 @@
         <div class="apdlg-latlon-row">
             <div class="form-field">
                 <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Latitude</label>
-                <input type="text" id="apdlg-lat" class="form-input" readonly placeholder="—">
+                <input type="text" id="apdlg-lat" class="form-input" readonly placeholder="-">
             </div>
             <div class="form-field">
                 <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Longitude</label>
-                <input type="text" id="apdlg-lng" class="form-input" readonly placeholder="—">
+                <input type="text" id="apdlg-lng" class="form-input" readonly placeholder="-">
             </div>
         </div>
 
@@ -816,7 +816,7 @@
     const _MAP_CENTER_MODE   = '{{ map_center_mode|default:"gps" }}';
     const _SERVER_CENTER_LAT = {{ map_center_lat|default:"null" }};
     const _SERVER_CENTER_LNG = {{ map_center_lng|default:"null" }};
-    // Pin-cluster centroid — used as fallback when GPS permission is denied.
+    // Pin-cluster centroid - used as fallback when GPS permission is denied.
     const _GPS_FALLBACK_LAT  = {{ gps_fallback_lat|default:"null" }};
     const _GPS_FALLBACK_LNG  = {{ gps_fallback_lng|default:"null" }};
     const _defaultZoom       = {{ map_default_zoom|default:13 }};
@@ -893,7 +893,7 @@
         setTimeout(() => overlay.classList.add('hidden'), 460);
     }
 
-    // On cache hit the overlay is unnecessary — suppress it immediately.
+    // On cache hit the overlay is unnecessary - suppress it immediately.
     function _suppressPinOverlay() {
         const overlay = document.getElementById('pin-load-overlay');
         if (overlay) overlay.classList.add('hidden');
@@ -931,7 +931,7 @@
         const lats = Math.ceil((n - s) / _TILE_SIZE);
         const lngs = Math.ceil((e - w) / _TILE_SIZE);
         if (lats * lngs > _MAX_TILES) {
-            // Viewport covers huge area — request everything once
+            // Viewport covers huge area - request everything once
             return _fetchedTiles.has('*') ? [] : ['*'];
         }
         return _tilesInBbox(s, w, n, e).filter(k => !_fetchedTiles.has(k));
@@ -988,9 +988,9 @@
             });
             localStorage.setItem(_CACHE_KEY, payload);
             _updateCacheStatus(ts);
-            console.log('[UL] Cache written — %d pins, %dKB', _pinStore.size, Math.round(payload.length / 1024));
+            console.log('[UL] Cache written - %d pins, %dKB', _pinStore.size, Math.round(payload.length / 1024));
         } catch (err) {
-            console.warn('[UL] Cache write failed (%s) — pins will reload next visit', err && err.name || err);
+            console.warn('[UL] Cache write failed (%s) - pins will reload next visit', err && err.name || err);
             try { localStorage.removeItem(_CACHE_KEY); } catch {}
         }
     }
@@ -1023,9 +1023,9 @@
 
     // ── Background pin refresh (non-disruptive) ───────────────────────────────
     // Fetches all pins, then adds new ones, updates changed markers, removes
-    // deleted ones — without altering map position or zoom.
+    // deleted ones - without altering map position or zoom.
     async function _refreshAllPins() {
-        console.log('[UL] Pin data changed on server — running full background refresh');
+        console.log('[UL] Pin data changed on server - running full background refresh');
         const csi = document.getElementById('cache-status');
         if (csi) csi.classList.add('refreshing');
         _setFetching(true, 'Refreshing pins…');
@@ -1076,7 +1076,7 @@
             _totalPins = _pinStore.size;
             updatePinCounter();
             _scheduleCache();
-            console.log('[UL] Full refresh complete — %d pins total', _pinStore.size);
+            console.log('[UL] Full refresh complete - %d pins total', _pinStore.size);
         } catch (err) {
             console.warn('[UrbanLens] Background pin refresh failed:', err);
         } finally {
@@ -1275,7 +1275,7 @@
     // ── Viewport-based loading ────────────────────────────────────────────────
     // Always fetch the full dataset ('*') rather than bbox subsets.
     // Once _fetchedTiles has '*', all viewport changes are served from
-    // _pinStore with zero network cost — panning never hits the server again.
+    // _pinStore with zero network cost - panning never hits the server again.
     async function _loadViewport() {
         if (_filterMode) return;
         if (_fetchedTiles.has('*')) return;
@@ -1314,9 +1314,9 @@
     (async () => {
         const cache = _readCache();
         if (cache?.pins && Object.keys(cache.pins).length) {
-            // Restore from cache immediately — no server round-trip, no loading indicator.
+            // Restore from cache immediately - no server round-trip, no loading indicator.
             const ageSeconds = Math.round((Date.now() - cache.ts) / 1000);
-            console.log('[UL] Cache HIT — %d pins, age %ds', Object.keys(cache.pins).length, ageSeconds);
+            console.log('[UL] Cache HIT - %d pins, age %ds', Object.keys(cache.pins).length, ageSeconds);
             const layers = [];
             for (const [uuid, pin] of Object.entries(cache.pins)) {
                 _pinStore.set(uuid, pin);
@@ -1326,19 +1326,19 @@
             if (cache.tiles) cache.tiles.forEach(k => _fetchedTiles.add(k));
             if (layers.length) clusterGroup.addLayers(layers);
             updatePinCounter();
-            _suppressPinOverlay();   // cache hit — overlay is not needed
+            _suppressPinOverlay();   // cache hit - overlay is not needed
             hideLoadingMessage();
             _lastKnownUpdated = cache.lastUpdated || null;
             _updateCacheStatus(cache.ts);
 
             // Trigger a silent background refresh when:
-            //   • Cache has no lastUpdated baseline (old format) — can't validate freshness
-            //   • Cache used partial tile keys instead of '*' — panning would hit server
+            //   • Cache has no lastUpdated baseline (old format) - can't validate freshness
+            //   • Cache used partial tile keys instead of '*' - panning would hit server
             // _refreshAllPins() fetches all pins, marks _fetchedTiles as '*', and
             // reschedules the cache write with the upgraded format.
             if (!_lastKnownUpdated || !_fetchedTiles.has('*')) {
                 const reason = !_lastKnownUpdated ? 'no lastUpdated baseline' : 'partial tile cache';
-                console.log('[UL] Cache needs upgrade (%s) — triggering silent refresh', reason);
+                console.log('[UL] Cache needs upgrade (%s) - triggering silent refresh', reason);
                 _refreshAllPins().catch(() => {});
             }
         } else {
@@ -1346,9 +1346,9 @@
             // Fetch the full pin set in one request so the cache becomes complete
             // and future viewport pans never need a server round-trip.
             if (!_USE_CACHE) {
-                console.log('[UL] Pin cache disabled by user preference — fetching from server');
+                console.log('[UL] Pin cache disabled by user preference - fetching from server');
             } else {
-                console.log('[UL] Cache MISS — fetching all pins from server');
+                console.log('[UL] Cache MISS - fetching all pins from server');
             }
             try { await _fetchTiles(['*']); } catch (e) { console.warn('Initial pin load failed:', e); }
             hideLoadingMessage();
@@ -1824,7 +1824,7 @@
         if (addrInput) addrInput.value = '';
         // Show all hidden tag chips
         document.querySelectorAll('#fp-tag-chips .fp-chip').forEach(c => c.style.display = '');
-        // Restore full pin set from local store — no server round-trip
+        // Restore full pin set from local store - no server round-trip
         _exitFilterMode();
         document.getElementById('search-pins-button').classList.remove('has-filters');
     }
@@ -1868,7 +1868,7 @@
             map.setView([parseFloat(r.lat), parseFloat(r.lon)], 16);
             //toastr.info('Jumped to ' + (r.display_name.split(',')[0] || query));
         })
-        .catch(() => toastr.error('Geocoding failed — check your connection.'))
+        .catch(() => toastr.error('Geocoding failed - check your connection.'))
         .finally(() => { if (btn) btn.disabled = false; });
     }
 
@@ -2023,7 +2023,7 @@
         const lat = document.getElementById('apdlg-lat').value.trim();
         const lng = document.getElementById('apdlg-lng').value.trim();
         if (!lat || !lng) {
-            toastr.warning('Set a location first — click the map or enter an address.');
+            toastr.warning('Set a location first - click the map or enter an address.');
             return;
         }
         const formData = new FormData();

@@ -1,4 +1,4 @@
-"""Alias views — add/remove alternate names for Pins and Locations."""
+"""Alias views - add/remove alternate names for Pins and Locations."""
 
 from __future__ import annotations
 

@@ -3,10 +3,10 @@
 filter_by_criteria is the primary server-side search engine.  For each filter
 key the invariants are:
 
-    Completeness  — every matching pin IS in the result.
-    Soundness     — every pin in the result DOES match the criterion.
-    Idempotency   — applying the same criteria twice yields the same result.
-    Monotonicity  — removing a criterion never produces a smaller result set.
+    Completeness  - every matching pin IS in the result.
+    Soundness     - every pin in the result DOES match the criterion.
+    Idempotency   - applying the same criteria twice yields the same result.
+    Monotonicity  - removing a criterion never produces a smaller result set.
 
 The pin fixtures are created once in setUp so they survive across all
 @given examples (which are each wrapped in an individually rolled-back

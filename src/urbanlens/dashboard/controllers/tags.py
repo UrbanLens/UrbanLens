@@ -63,13 +63,7 @@ _PERM = "dashboard.edit_global_badge"
 
 
 def _rows_ctx(profile, can_edit_global: bool = False, extra: dict | None = None) -> dict:
-    tags = (
-        Badge.objects.tags()
-        .visible_to(profile)
-        .ordered()
-        .with_customizations_for(profile)
-        .with_pin_counts()
-    )
+    tags = Badge.objects.tags().visible_to(profile).ordered().with_customizations_for(profile).with_pin_counts()
     ctx = {**_BASE_CTX, "tags": tags, "can_edit_global": can_edit_global}
     if extra:
         ctx.update(extra)
@@ -208,7 +202,7 @@ class TagEditView(LoginRequiredMixin, View):
         tag.save()
 
         if kind_changed:
-            # Parent IDs from the form belong to the old kind — clear and let the user re-set them.
+            # Parent IDs from the form belong to the old kind - clear and let the user re-set them.
             tag.parents.clear()
         else:
             parent_ids = request.POST.getlist("parent_ids")
@@ -403,7 +397,7 @@ class TagBulkEditView(LoginRequiredMixin, View):
     """Bulk-edit icon, color, and/or parents for multiple user-owned tags (JSON POST).
 
     Key-absent = no change; null/empty string = clear; string value = set.
-    add_parent_ids is additive — existing parents are never removed.
+    add_parent_ids is additive - existing parents are never removed.
     """
 
     def post(self, request, *args, **kwargs):

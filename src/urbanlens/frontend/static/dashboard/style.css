@@ -17302,7 +17302,7 @@ a.profile-stat--link:hover .stat-label {
 }
 
 .alias-chip .alias-chip-author::before {
-  content: "— ";
+  content: "- ";
 }
 
 .alias-chip .alias-chip-remove {

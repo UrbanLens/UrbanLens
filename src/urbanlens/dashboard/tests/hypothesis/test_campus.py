@@ -209,7 +209,7 @@ class CampusQuerySetWithLocationTests(TestCase):
 		self.assertEqual(qs.count(), 1)
 
 	def test_with_location_select_relates_location(self) -> None:
-		# After with_location the location is cached — accessing it should not hit DB.
+		# After with_location the location is cached - accessing it should not hit DB.
 		campus = Campus.objects.filter(pk=self.campus.pk).with_location().get()
 		# location should be in _state.fields_cache (select_related sets this)
 		self.assertIsNotNone(campus.location)

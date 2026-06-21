@@ -159,7 +159,7 @@
         });
     }
 
-    // Single document click handler — closes whichever dropdown was not clicked in
+    // Single document click handler - closes whichever dropdown was not clicked in
     document.addEventListener('click', function (e) {
         if (menu      && !menu.contains(e.target))      closeMenu();
         if (notifWrap && !notifWrap.contains(e.target)) closeNotif();

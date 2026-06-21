@@ -6,7 +6,7 @@ profile so that no user is left without a starter set. New users receive the
 same set via the create_default_tags signal (badges/signals.py).
 
 Users may freely rename, recolor, or delete any of these categories after
-creation — they are not protected.
+creation - they are not protected.
 """
 
 from django.db import migrations

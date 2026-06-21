@@ -14,10 +14,11 @@ Usage::
     # Or let the recipe create a fresh user+profile on its own:
     pin = baker.make_recipe('dashboard.pin')
 
-All recipes that carry a Profile FK use ``_make_profile`` — a callable that
+All recipes that carry a Profile FK use ``_make_profile`` - a callable that
 baker invokes fresh for each make() call, ensuring each recipe instance gets
 its own User/Profile and avoiding OneToOneField constraint violations.
 """
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -167,7 +168,7 @@ pin_markup: Recipe[Any] = Recipe(
 
 # ── Comments & Reactions ──────────────────────────────────────────────────────
 
-# Pin comment — exactly one of (pin, location) must be set.
+# Pin comment - exactly one of (pin, location) must be set.
 comment: Recipe[Any] = Recipe(
     "dashboard.Comment",
     profile=_make_profile,

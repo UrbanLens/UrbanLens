@@ -155,7 +155,9 @@ class Db:
         self._host = os.environ.get("UL_DB_HOST", "localhost")
         self._port = int(os.environ.get("UL_DB_PORT", "5432"))
 
-    def _pg_ctl(self, command: str, with_server_opts: bool = False, pg_wait: bool = False, **kwargs) -> subprocess.CompletedProcess:
+    def _pg_ctl(
+        self, command: str, with_server_opts: bool = False, pg_wait: bool = False, **kwargs,
+    ) -> subprocess.CompletedProcess:
         """Build and run a pg_ctl command.
 
         Args:
@@ -193,8 +195,17 @@ class Db:
 
         """
         cmd = [
-            "psql", "-U", self.user, "-h", self._host, "-p", str(self._port),
-            "-d", database or self.database, "-c", sql,
+            "psql",
+            "-U",
+            self.user,
+            "-h",
+            self._host,
+            "-p",
+            str(self._port),
+            "-d",
+            database or self.database,
+            "-c",
+            sql,
         ]
         return subprocess.call(cmd)
 
@@ -405,17 +416,26 @@ class DbInitializer:
 
         """
         cmd = [
-            "psql", "-U", self.db_user, "-h", self.db_host, "-p", self.db_port,
-            "-d", database or "postgres", "-w", "-c", sql,
+            "psql",
+            "-U",
+            self.db_user,
+            "-h",
+            self.db_host,
+            "-p",
+            self.db_port,
+            "-d",
+            database or "postgres",
+            "-w",
+            "-c",
+            sql,
         ]
-        return subprocess.run(cmd, env=self._psql_env(), check=check,
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return subprocess.run(cmd, env=self._psql_env(), check=check, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def _check_role_exists(self) -> bool:
         """Return True if the db_user role already exists in this cluster.
 
         Uses COUNT(*) and checks stdout because a SELECT that finds no rows
-        still exits with code 0 — only the output distinguishes the cases.
+        still exits with code 0 - only the output distinguishes the cases.
 
         Returns:
             bool: True if the role exists, False otherwise.
@@ -439,7 +459,7 @@ class DbInitializer:
         """Return True if the application database already exists.
 
         Attempts a direct connection to the target database rather than
-        querying pg_database — a SELECT always exits 0 even with no rows,
+        querying pg_database - a SELECT always exits 0 even with no rows,
         but a connection to a non-existent database exits non-zero.
 
         Returns:
@@ -448,8 +468,18 @@ class DbInitializer:
         """
         result = subprocess.run(
             [
-                "psql", "-U", self.db_user, "-h", self.db_host, "-p", self.db_port,
-                "-d", self.db_name, "-w", "-c", "SELECT 1",
+                "psql",
+                "-U",
+                self.db_user,
+                "-h",
+                self.db_host,
+                "-p",
+                self.db_port,
+                "-d",
+                self.db_name,
+                "-w",
+                "-c",
+                "SELECT 1",
             ],
             env=self._psql_env(),
             stdout=subprocess.PIPE,
@@ -597,7 +627,7 @@ def main():
         if conf_path.exists():
             conf = conf_path.read_text(encoding="utf-8")
             conf = re.sub(r"^#?port\s*=\s*\d+", f"port = {db_port}", conf, flags=re.MULTILINE)
-            # Use the data directory for socket/lock files — /var/run/postgresql requires root.
+            # Use the data directory for socket/lock files - /var/run/postgresql requires root.
             conf = re.sub(
                 r"^#?unix_socket_directories\s*=\s*'[^']*'",
                 f"unix_socket_directories = '{data_path}'",

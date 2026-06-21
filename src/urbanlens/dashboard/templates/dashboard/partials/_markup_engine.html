@@ -1,6 +1,6 @@
 <script>
 {% comment %}
-Shared Markup Engine — defines window.MarkupEngine with helpers and the draw-session factory.
+Shared Markup Engine - defines window.MarkupEngine with helpers and the draw-session factory.
 Include BEFORE any template that uses MarkupEngine (e.g. in base.html <head>).
 {% endcomment %}
 window.MarkupEngine = (function () {
@@ -48,7 +48,7 @@ window.MarkupEngine = (function () {
             ';box-shadow:0 1px 3px rgba(0,0,0,.2)">' + (lbl || '&nbsp;') + '</span>';
     }
 
-    // ── Shape renderer — works for both comment-composer (simple) and detail/wiki views ──
+    // ── Shape renderer - works for both comment-composer (simple) and detail/wiki views ──
 
     function renderShape(s, group, zoom) {
         if (typeof L === 'undefined') return;
@@ -127,9 +127,9 @@ window.MarkupEngine = (function () {
             if (!_tool) { opts.onHintChange(''); return; }
             var n = _state ? _state.points.length : 0;
             var msgs = {
-                arrow:   n ? n + ' pt' + (n > 1 ? 's' : '') + ' — drag to finish, or double-click'
+                arrow:   n ? n + ' pt' + (n > 1 ? 's' : '') + ' - drag to finish, or double-click'
                            : 'Drag for a quick arrow, or click to add points',
-                line:    n ? n + ' pt' + (n > 1 ? 's' : '') + ' — drag to finish, or double-click'
+                line:    n ? n + ' pt' + (n > 1 ? 's' : '') + ' - drag to finish, or double-click'
                            : 'Drag for a quick line, or click to add points',
                 polygon: n >= 3 ? 'Click near start or double-click to close'
                                 : n ? 'Click to add vertices' : 'Click to place first vertex',
@@ -328,7 +328,7 @@ window.MarkupEngine = (function () {
                 document.removeEventListener('mousemove', onMove);
                 _clearPrev();
                 var dx = ev.clientX - startX, dy = ev.clientY - startY;
-                if (!isDragging || Math.hypot(dx, dy) < 6) return;  // too small — treat as click
+                if (!isDragging || Math.hypot(dx, dy) < 6) return;  // too small - treat as click
                 var endLL = map.mouseEventToLatLng(ev);
 
                 if (_tool === 'circle') {

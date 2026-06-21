@@ -170,18 +170,23 @@ class DjangoProjectInitializer:
     def enable_postgis(self) -> None:
         """Enable the PostGIS extension in the application database.
 
-        This is idempotent — CREATE EXTENSION IF NOT EXISTS is a no-op when
+        This is idempotent - CREATE EXTENSION IF NOT EXISTS is a no-op when
         PostGIS is already present.  Must be called after the database exists.
         """
         self.run_command(
             [
                 "psql",
-                "-U", self.db_user,
-                "-h", self.db_host,
-                "-p", str(self.db_port),
+                "-U",
+                self.db_user,
+                "-h",
+                self.db_host,
+                "-p",
+                str(self.db_port),
                 "-w",
-                "-d", self.db_name,
-                "-c", "CREATE EXTENSION IF NOT EXISTS postgis",
+                "-d",
+                self.db_name,
+                "-c",
+                "CREATE EXTENSION IF NOT EXISTS postgis",
             ],
             "enabling postgis extension",
             raise_error=False,
@@ -208,7 +213,7 @@ class DjangoProjectInitializer:
                 logger.error("Database %s was not created.", self.db_name)
                 raise UnrecoverableError(f"Database {self.db_name} was not created.")
 
-        # Always ensure PostGIS is available — required for the PointField on Pin.
+        # Always ensure PostGIS is available - required for the PointField on Pin.
         # Safe to call even on existing databases; IF NOT EXISTS makes it idempotent.
         self.enable_postgis()
 

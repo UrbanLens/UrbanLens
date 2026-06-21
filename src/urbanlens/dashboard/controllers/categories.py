@@ -1,6 +1,6 @@
 """Category controller - CRUD, hierarchy management, and pin/location membership.
 
-Categories are Badge rows with kind='category'. They are user-owned — every
+Categories are Badge rows with kind='category'. They are user-owned - every
 category belongs to a specific profile (no global/shared categories).
 """
 
@@ -91,7 +91,9 @@ class CategoryCreateView(LoginRequiredMixin, View):
             valid_parents = Badge.objects.categories().for_profile(profile).filter(id__in=parent_ids)
             category.parents.set(valid_parents)
 
-        return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile, {"new_category_id": category.id}))
+        return render(
+            request, "dashboard/partials/category_rows.html", _rows_ctx(profile, {"new_category_id": category.id}),
+        )
 
 
 class CategoryEditView(LoginRequiredMixin, View):
@@ -176,7 +178,9 @@ class CategoryEditView(LoginRequiredMixin, View):
         else:
             parent_ids = request.POST.getlist("parent_ids")
             if parent_ids:
-                valid_parents = Badge.objects.categories().for_profile(profile).filter(id__in=parent_ids).exclude(id=cat_id)
+                valid_parents = (
+                    Badge.objects.categories().for_profile(profile).filter(id__in=parent_ids).exclude(id=cat_id)
+                )
                 category.parents.set(valid_parents)
             else:
                 category.parents.clear()
@@ -277,7 +281,7 @@ class CategoryBulkEditView(LoginRequiredMixin, View):
     """Bulk-edit icon, color, and/or parents for multiple user-owned categories (JSON POST).
 
     Key-absent = no change; null/empty string = clear; string value = set.
-    add_parent_ids is additive — existing parents are never removed.
+    add_parent_ids is additive - existing parents are never removed.
     """
 
     def post(self, request, *args, **kwargs):

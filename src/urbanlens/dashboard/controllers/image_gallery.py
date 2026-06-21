@@ -1,4 +1,5 @@
-"""Image gallery controller — upload, list, reposition, and delete photos."""
+"""Image gallery controller - upload, list, reposition, and delete photos."""
+
 from __future__ import annotations
 
 import contextlib
@@ -34,7 +35,7 @@ def _extract_gps_coords(image_file) -> tuple[float, float] | None:
         exif = img.getexif()
         if not exif:
             return None
-        gps_ifd = exif.get_ifd(0x8825)  # 34853 — GPSInfo IFD tag
+        gps_ifd = exif.get_ifd(0x8825)  # 34853 - GPSInfo IFD tag
         if not gps_ifd:
             return None
         gps_data = {GPSTAGS.get(k, k): v for k, v in gps_ifd.items()}
@@ -74,6 +75,7 @@ def _image_to_json(img: Image, request: HttpRequest, viewer_profile: Profile | N
 
 
 # ── Pin gallery ──────────────────────────────────────────────────────────────
+
 
 class PinGalleryView(LoginRequiredMixin, View):
     """HTML gallery panel for the pin detail page (loaded via HTMX)."""
@@ -118,12 +120,7 @@ class PinGalleryJsonView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, pin_uuid: str) -> JsonResponse:
         pin = get_object_or_404(Pin, uuid=pin_uuid)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        images = (
-            Image.objects.filter(pin=pin)
-            .select_related("profile")
-            .visible_to(profile)
-            .with_coords()
-        )
+        images = Image.objects.filter(pin=pin).select_related("profile").visible_to(profile).with_coords()
         data = [_image_to_json(img, request, profile) for img in images]
         return JsonResponse({"images": data})
 
@@ -160,6 +157,7 @@ class PinImageView(LoginRequiredMixin, View):
 
 
 # ── Location wiki gallery ─────────────────────────────────────────────────────
+
 
 class WikiGalleryView(LoginRequiredMixin, View):
     """HTML gallery panel for the location wiki page."""
@@ -202,12 +200,7 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, location_uuid: str) -> JsonResponse:
         location = get_object_or_404(Location, uuid=location_uuid)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        images = (
-            Image.objects.filter(location=location)
-            .select_related("profile")
-            .visible_to(profile)
-            .with_coords()
-        )
+        images = Image.objects.filter(location=location).select_related("profile").visible_to(profile).with_coords()
         data = [_image_to_json(img, request, profile) for img in images]
         return JsonResponse({"images": data})
 

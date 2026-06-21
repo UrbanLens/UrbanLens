@@ -1,11 +1,21 @@
-"""PinMarkup model — map annotations (lines, arrows, text) attached to a Pin."""
+"""PinMarkup model - map annotations (lines, arrows, text) attached to a Pin."""
 
 from __future__ import annotations
 
 import logging
 from uuid import uuid4
 
-from django.db.models import CASCADE, CharField, ForeignKey, Index, IntegerField, JSONField, TextChoices, TextField, UUIDField
+from django.db.models import (
+    CASCADE,
+    CharField,
+    ForeignKey,
+    Index,
+    IntegerField,
+    JSONField,
+    TextChoices,
+    TextField,
+    UUIDField,
+)
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.markup.queryset import PinMarkupManager
@@ -46,7 +56,7 @@ class PinMarkup(abstract.Model):
         label: Display text; optional for all types.
         color: Primary CSS hex colour (fill for shapes, text colour for text type).
         stroke_width: Line thickness in pixels; doubles as font size for text.
-        border_color: Secondary colour — outline/stroke for shapes and lines;
+        border_color: Secondary colour - outline/stroke for shapes and lines;
             background colour for text labels. Empty string means use the
             renderer default. The sentinel value ``"none"`` means no border /
             transparent background.

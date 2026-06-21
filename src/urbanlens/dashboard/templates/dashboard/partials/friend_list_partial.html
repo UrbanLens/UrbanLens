@@ -85,16 +85,11 @@
         </li>
         {% endfor %}
     </ul>
-    <div class="friend-section-footer">
-        <a href="{% url 'friend.page' viewer.id %}" class="friend-page-link">
-            <i class="material-icons">people</i> View full friends list
-        </a>
-    </div>
     {% else %}
     <p class="profile-section-empty">No friends yet.</p>
     {% endif %}
     {% else %}
-    {# Viewing another user's profile — show mutual friends only #}
+    {# Viewing another user's profile - show mutual friends only #}
     {% if mutual_friends %}
     <ul class="friend-grid">
         {% for friend in mutual_friends %}

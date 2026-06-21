@@ -82,7 +82,7 @@ class MapCenterFormZoomCleanTests(TestCase):
 		self.assertIn("map_default_zoom", form.errors)
 
 
-# ── MapCenterForm — mode choices ──────────────────────────────────────────────
+# ── MapCenterForm - mode choices ──────────────────────────────────────────────
 
 class MapCenterFormModeTests(TestCase):
 	"""All three MapCenterMode values must be accepted by the form."""
@@ -238,7 +238,7 @@ class MapCenterFormSaveTests(TestCase):
 		original_mode = profile.map_center_mode
 		form = self._submit(profile, MapCenterMode.GPS)
 		instance = form.save(commit=False)
-		# Reload from DB — it should not have changed.
+		# Reload from DB - it should not have changed.
 		db_profile = Profile.objects.get(pk=profile.pk)
 		self.assertEqual(db_profile.map_center_mode, original_mode)
 
@@ -320,7 +320,7 @@ class ContactSettingsFormTests(TestCase):
 		self.assertTrue(form.is_valid(), form.errors)
 
 
-# ── MapDisplayForm — cluster_radius and default_map_view ─────────────────────
+# ── MapDisplayForm - cluster_radius and default_map_view ─────────────────────
 
 class MapDisplayFormClusterRadiusTests(TestCase):
 	"""MapDisplayForm.cluster_radius is optional and bounded 1-500."""

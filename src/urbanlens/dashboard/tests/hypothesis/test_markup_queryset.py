@@ -1,6 +1,6 @@
 """Tests for PinMarkupQuerySet filter methods: for_pin and for_profile.
 
-All tests require the database — records are created with model_bakery.
+All tests require the database - records are created with model_bakery.
 """
 from __future__ import annotations
 

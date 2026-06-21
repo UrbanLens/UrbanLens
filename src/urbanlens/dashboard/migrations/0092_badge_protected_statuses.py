@@ -4,7 +4,7 @@ Changes:
 1. Delete all global categories (profile=None, kind='category'). These were
    shared across all users; categories are now personal like tags and statuses.
 2. Mark existing 'Active', 'Abandoned', and 'Demolished' status badges as
-   protected — joining 'Visited' which was already protected.
+   protected - joining 'Visited' which was already protected.
 """
 
 from django.db import migrations

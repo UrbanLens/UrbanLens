@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Ensure PostGIS is enabled — required for PointField(geography=True) on Pin.
+        # Ensure PostGIS is enabled - required for PointField(geography=True) on Pin.
         # IF NOT EXISTS makes this idempotent on databases that already have it.
         migrations.RunSQL(
             "CREATE EXTENSION IF NOT EXISTS postgis",

@@ -1,6 +1,6 @@
 """Tests for the AI MessageQueue and token estimation utilities.
 
-No database access — all tests exercise pure Python logic.
+No database access - all tests exercise pure Python logic.
 """
 from __future__ import annotations
 

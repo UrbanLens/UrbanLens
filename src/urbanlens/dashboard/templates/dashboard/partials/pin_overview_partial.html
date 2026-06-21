@@ -128,7 +128,7 @@
             </div>
             {% endif %}
         </div>
-        {# Security indicators — only shown when at least one is non-unknown #}
+        {# Security indicators - only shown when at least one is non-unknown #}
         {% if pin.fences != "unknown" or pin.alarms != "unknown" or pin.cameras != "unknown" or pin.security != "unknown" or pin.signs != "unknown" or pin.vps != "unknown" or pin.plywood != "unknown" or pin.locked != "unknown" %}
         <div class="security-indicators">
             <span class="security-indicators-label">Security</span>

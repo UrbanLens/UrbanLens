@@ -1,4 +1,5 @@
 """URL configuration for urbanlens project."""
+
 from __future__ import annotations
 
 import logging
@@ -26,23 +27,19 @@ admin.autodiscover()
 
 urlpatterns = [
     path("admin/", admin.site.urls, name="admin"),
-
     # Override Django's default login view with our custom one (must come before accounts/ include)
     path("accounts/login/", CustomLoginView.as_view(), name="login"),
     path("accounts/", include("django.contrib.auth.urls")),
-
     # Registration
     path("signup/", SignupView.as_view(), name="signup"),
-
     # Email verification
     path("verify-email/sent/", VerifyEmailSentView.as_view(), name="verify_email_sent"),
     path("verify-email/<uuid:token>/", VerifyEmailView.as_view(), name="verify_email"),
     path("resend-verification/", ResendVerificationView.as_view(), name="resend_verification"),
-
     path("dashboard/", include(dashboard_urls), name="dashboard"),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),
     path("", IndexController.as_view(), name="index"),
     *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
-    # 404 catch-all — must be last
+    # 404 catch-all - must be last
     re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),
 ]

@@ -47,7 +47,7 @@ def _profile_with_mode(mode: str, **extra) -> Profile:
 # ── GPS mode ──────────────────────────────────────────────────────────────────
 
 class GetMapCenterGpsModeTests(TestCase):
-	"""GPS mode must always return None — the browser handles geolocation."""
+	"""GPS mode must always return None - the browser handles geolocation."""
 
 	def test_gps_mode_returns_none_with_no_stored_coords(self) -> None:
 		profile = _profile_with_mode(MapCenterMode.GPS)
@@ -147,7 +147,7 @@ class GetMapCenterCustomModeTests(TestCase):
 		self.assertAlmostEqual(result[1], float(lng), places=5)
 
 
-# ── AUTO mode — cached centroid ───────────────────────────────────────────────
+# ── AUTO mode - cached centroid ───────────────────────────────────────────────
 
 class GetMapCenterAutoCachedTests(TestCase):
 	"""AUTO mode returns the cached centroid without hitting the DB for pins."""
@@ -186,7 +186,7 @@ class GetMapCenterAutoCachedTests(TestCase):
 		mock_compute.assert_not_called()
 
 
-# ── AUTO mode — cold cache ────────────────────────────────────────────────────
+# ── AUTO mode - cold cache ────────────────────────────────────────────────────
 
 class GetMapCenterAutoColdTests(TestCase):
 	"""AUTO mode falls back to compute_map_center() when the cache is empty."""
@@ -234,7 +234,7 @@ class ComputeMapCenterTests(TestCase):
 		self.assertAlmostEqual(result[1], -73.75, places=4)
 
 	def test_two_nearby_pins_result_is_their_midpoint(self) -> None:
-		# These two points are ~140 km apart — both in the same cluster.
+		# These two points are ~140 km apart - both in the same cluster.
 		baker.make(Pin, profile=self.profile, latitude=40.0, longitude=-70.0)
 		baker.make(Pin, profile=self.profile, latitude=41.0, longitude=-71.0)
 		result = self.profile.compute_map_center()
@@ -253,7 +253,7 @@ class ComputeMapCenterTests(TestCase):
 	def test_result_is_also_set_on_instance(self) -> None:
 		baker.make(Pin, profile=self.profile, latitude=42.65, longitude=-73.75)
 		self.profile.compute_map_center()
-		# No refresh_from_db — check the in-memory instance
+		# No refresh_from_db - check the in-memory instance
 		self.assertIsNotNone(self.profile.map_center_latitude)
 
 	def test_returns_floats_not_decimals(self) -> None:
@@ -264,7 +264,7 @@ class ComputeMapCenterTests(TestCase):
 
 	def test_falls_back_to_location_coordinates_when_pin_has_no_override(self) -> None:
 		location = baker.make(Location, latitude=50.0, longitude=10.0)
-		# Pin has no coordinate override — Coalesce must use location coords.
+		# Pin has no coordinate override - Coalesce must use location coords.
 		baker.make(Pin, profile=self.profile, location=location, latitude=None, longitude=None)
 		result = self.profile.compute_map_center()
 		self.assertIsNotNone(result)
@@ -319,7 +319,7 @@ class ComputeMapCenterClusteringTests(TestCase):
 
 	def test_equal_sized_clusters_returns_a_cluster_centroid_not_midpoint(self) -> None:
 		# One pin in NYC and one in London.  The result must be one of the two
-		# locations — NOT the midpoint in the mid-Atlantic (~46°N 37°W).
+		# locations - NOT the midpoint in the mid-Atlantic (~46°N 37°W).
 		baker.make(Pin, profile=self.profile, latitude=40.7, longitude=-74.0)   # NYC
 		baker.make(Pin, profile=self.profile, latitude=51.5, longitude=-0.1)    # London
 		result = self.profile.compute_map_center()

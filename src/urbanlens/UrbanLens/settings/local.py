@@ -41,7 +41,7 @@ from dotenv import load_dotenv, find_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load environment variables from .env — search upward from this file so the
+# Load environment variables from .env - search upward from this file so the
 # repo-root .env is found regardless of working directory.
 load_dotenv(find_dotenv())
 
@@ -199,7 +199,7 @@ LOGOUT_REDIRECT_URL = "/"
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = "/dashboard/map/"
 SOCIAL_AUTH_NEW_USER_REDIRECT_URL = "/dashboard/map/"
 
-# Email backend — use console in dev, configure via env in production
+# Email backend - use console in dev, configure via env in production
 EMAIL_BACKEND = os.getenv("UL_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 EMAIL_HOST = os.getenv("UL_EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("UL_EMAIL_PORT", "587"))

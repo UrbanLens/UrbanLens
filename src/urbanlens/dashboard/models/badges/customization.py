@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class BadgeCustomization(abstract.Model):
     """Stores a user's display overrides for a global badge (tag or category).
 
-    Each field is nullable — null means "use the badge's global value", non-null
+    Each field is nullable - null means "use the badge's global value", non-null
     means "override with this value".  The form normalises empty strings to None
     before saving, so there is no ambiguity between "not set" and "cleared".
     """

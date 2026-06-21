@@ -10,7 +10,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.views import View
 
-from urbanlens.dashboard.models.trips.model import SiteSettings
+from urbanlens.dashboard.models.trips.model import SEARCH_PROVIDER_CHOICES, SiteSettings
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,12 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         return render(
             request,
             "dashboard/pages/site_admin.html",
-            {"settings": settings, "page_name": "site-admin", "saved": request.GET.get("saved")},
+            {
+                "settings": settings,
+                "page_name": "site-admin",
+                "saved": request.GET.get("saved"),
+                "search_provider_choices": SEARCH_PROVIDER_CHOICES,
+            },
         )
 
     def post(self, request):
@@ -51,6 +56,11 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 settings.max_bbox_area_km2 = max_bbox
         except (ValueError, TypeError):
             pass
+
+        valid_providers = {v for v, _ in SEARCH_PROVIDER_CHOICES}
+        provider = request.POST.get("search_provider", "")
+        if provider in valid_providers:
+            settings.search_provider = provider
 
         settings.save()
 

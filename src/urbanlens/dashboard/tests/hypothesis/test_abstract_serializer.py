@@ -1,6 +1,6 @@
 """Tests for the abstract Serializer's context-driven field inclusion/exclusion.
 
-No database access — all tests exercise the serializer's __init__ and classmethods
+No database access - all tests exercise the serializer's __init__ and classmethods
 in isolation using in-process DRF serializers.
 """
 from __future__ import annotations
@@ -174,7 +174,7 @@ class SerializerClassMethodTests(TestCase):
 # ── TDD: get_native_fields has a mutation bug ─────────────────────────────────
 
 class SerializerGetNativeFieldsMutationBugTests(TestCase):
-	"""TDD: get_native_fields() must be idempotent — repeated calls should return the same result.
+	"""TDD: get_native_fields() must be idempotent - repeated calls should return the same result.
 
 	Currently it calls get_fieldnames() which returns the actual Meta.fields list by
 	reference, then mutates it via list.remove().  On the second call, the generated
@@ -185,7 +185,7 @@ class SerializerGetNativeFieldsMutationBugTests(TestCase):
 	_ORIGINAL_FIELDS = ["id", "value", "computed"]
 
 	def setUp(self):
-		# Hardcode the reset — don't read from the class, which may already be
+		# Hardcode the reset - don't read from the class, which may already be
 		# mutated by earlier tests (SerializerClassMethodTests runs first).
 		_GeneratedSerializer.Meta.fields = list(self._ORIGINAL_FIELDS)
 

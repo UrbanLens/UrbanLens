@@ -1,6 +1,6 @@
 // ── Reusable UI components ────────────────────────────────────────────────────
 // Built entirely on var(--ul-*) design tokens from _dark.scss so every component
-// adapts to dark mode automatically — no per-element dark overrides needed.
+// adapts to dark mode automatically - no per-element dark overrides needed.
 // Include this file AFTER _dark.scss in style.scss.
 
 @use 'sass:color';
@@ -575,6 +575,7 @@
 // ── About page ────────────────────────────────────────────────────────────────
 
 body.page-about {
+
     // Shared inner width
     .about-section-inner,
     .about-cta-inner {
@@ -631,7 +632,10 @@ body.page-about {
         max-width: 500px;
         margin: 0 0 2rem;
 
-        @media (max-width: 820px) { margin-left: auto; margin-right: auto; }
+        @media (max-width: 820px) {
+            margin-left: auto;
+            margin-right: auto;
+        }
     }
 
     .about-hero-actions {
@@ -639,7 +643,9 @@ body.page-about {
         gap: .85rem;
         flex-wrap: wrap;
 
-        @media (max-width: 820px) { justify-content: center; }
+        @media (max-width: 820px) {
+            justify-content: center;
+        }
     }
 
     .about-btn {
@@ -654,7 +660,9 @@ body.page-about {
         transition: background .15s, transform .1s, box-shadow .15s;
         border: 2px solid transparent;
 
-        .material-icons { font-size: 1.05rem; }
+        .material-icons {
+            font-size: 1.05rem;
+        }
 
         &--primary {
             background: #fff;
@@ -663,18 +671,18 @@ body.page-about {
             &:hover {
                 background: #f0f4ff;
                 transform: translateY(-2px);
-                box-shadow: 0 6px 18px rgba(255,255,255,.22);
+                box-shadow: 0 6px 18px rgba(255, 255, 255, .22);
             }
         }
 
         &--ghost {
             background: transparent;
             color: #c7d2fe;
-            border-color: rgba(255,255,255,.35);
+            border-color: rgba(255, 255, 255, .35);
 
             &:hover {
-                background: rgba(255,255,255,.08);
-                border-color: rgba(255,255,255,.55);
+                background: rgba(255, 255, 255, .08);
+                border-color: rgba(255, 255, 255, .55);
             }
         }
 
@@ -690,15 +698,17 @@ body.page-about {
         align-items: center;
         justify-content: center;
 
-        @media (max-width: 820px) { display: none; }
+        @media (max-width: 820px) {
+            display: none;
+        }
     }
 
     .about-map-mock {
         position: relative;
         width: 340px;
         height: 280px;
-        background: rgba(255,255,255,.06);
-        border: 1px solid rgba(255,255,255,.12);
+        background: rgba(255, 255, 255, .06);
+        border: 1px solid rgba(255, 255, 255, .12);
         border-radius: 16px;
         backdrop-filter: blur(4px);
     }
@@ -711,24 +721,56 @@ body.page-about {
         width: 40px;
         height: 40px;
         border-radius: 50%;
-        background: rgba(255,255,255,.15);
-        border: 2px solid rgba(255,255,255,.4);
+        background: rgba(255, 255, 255, .15);
+        border: 2px solid rgba(255, 255, 255, .4);
 
-        .material-icons { font-size: 1.2rem; color: #fff; }
+        .material-icons {
+            font-size: 1.2rem;
+            color: #fff;
+        }
 
-        &--1 { top: 40px;  left: 60px; }
-        &--2 { top: 80px;  left: 200px; }
-        &--3 { top: 180px; left: 100px; }
-        &--4 { top: 140px; left: 250px; background: rgba(99,102,241,.5); }
+        &--1 {
+            top: 40px;
+            left: 60px;
+        }
+
+        &--2 {
+            top: 80px;
+            left: 200px;
+        }
+
+        &--3 {
+            top: 180px;
+            left: 100px;
+        }
+
+        &--4 {
+            top: 140px;
+            left: 250px;
+            background: rgba(99, 102, 241, .5);
+        }
     }
 
     .about-map-line {
         position: absolute;
-        background: rgba(255,255,255,.2);
+        background: rgba(255, 255, 255, .2);
         border-radius: 2px;
 
-        &--1 { top: 59px; left: 96px; width: 110px; height: 2px; transform: rotate(12deg); }
-        &--2 { top: 100px; left: 140px; width: 120px; height: 2px; transform: rotate(40deg); }
+        &--1 {
+            top: 59px;
+            left: 96px;
+            width: 110px;
+            height: 2px;
+            transform: rotate(12deg);
+        }
+
+        &--2 {
+            top: 100px;
+            left: 140px;
+            width: 120px;
+            height: 2px;
+            transform: rotate(40deg);
+        }
     }
 
     // ── Shared section chrome ─────────────────────────────────────────────────
@@ -736,12 +778,24 @@ body.page-about {
         padding: 5rem 0;
         background: var(--ul-surface-0);
 
-        &:nth-child(even) { background: var(--ul-surface-1); }
+        &:nth-child(even) {
+            background: var(--ul-surface-1);
+        }
     }
 
-    .about-values-section  { padding: 5rem 0; background: var(--ul-surface-1); }
-    .about-features-section { background: var(--ul-surface-0); }
-    .about-audience-section { padding: 5rem 0; background: var(--ul-surface-1); }
+    .about-values-section {
+        padding: 5rem 0;
+        background: var(--ul-surface-1);
+    }
+
+    .about-features-section {
+        background: var(--ul-surface-0);
+    }
+
+    .about-audience-section {
+        padding: 5rem 0;
+        background: var(--ul-surface-1);
+    }
 
     .about-section-label {
         font-size: .7rem;
@@ -794,7 +848,10 @@ body.page-about {
         justify-content: center;
         margin-bottom: .85rem;
 
-        .material-icons { color: $primary-color; font-size: 1.35rem; }
+        .material-icons {
+            color: $primary-color;
+            font-size: 1.35rem;
+        }
     }
 
     .about-pillar-title {
@@ -871,18 +928,24 @@ body.page-about {
         &--flip {
             grid-template-columns: 1fr 220px;
 
-            @media (max-width: 720px) { grid-template-columns: 1fr; }
+            @media (max-width: 720px) {
+                grid-template-columns: 1fr;
+            }
 
             .about-feature-visual {
                 order: 2;
 
-                @media (max-width: 720px) { order: 0; }
+                @media (max-width: 720px) {
+                    order: 0;
+                }
             }
 
             .about-feature-text {
                 order: 1;
 
-                @media (max-width: 720px) { order: 0; }
+                @media (max-width: 720px) {
+                    order: 0;
+                }
             }
         }
     }
@@ -898,13 +961,16 @@ body.page-about {
         width: 120px;
         height: 120px;
         border-radius: 24px;
-        background: linear-gradient(135deg, rgba($primary-color,.12), rgba($primary-color,.22));
-        border: 1px solid rgba($primary-color,.2);
+        background: linear-gradient(135deg, rgba($primary-color, .12), rgba($primary-color, .22));
+        border: 1px solid rgba($primary-color, .2);
         display: flex;
         align-items: center;
         justify-content: center;
 
-        .material-icons { font-size: 3.5rem; color: $primary-color; }
+        .material-icons {
+            font-size: 3.5rem;
+            color: $primary-color;
+        }
     }
 
     .about-feature-title {

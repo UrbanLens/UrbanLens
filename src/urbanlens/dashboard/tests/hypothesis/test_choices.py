@@ -1,6 +1,6 @@
 """Property-based tests for TextChoices utilities and choice enums.
 
-No database access — these are pure logic tests.
+No database access - these are pure logic tests.
 """
 from __future__ import annotations
 

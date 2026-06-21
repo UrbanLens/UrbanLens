@@ -47,7 +47,7 @@ def create_default_tags(sender, instance, created: bool, **kwargs) -> None:
     """Create default personal status and category badges for every new profile.
 
     Status badges:
-        "Visited" is protected — it cannot be deleted or renamed.
+        "Visited" is protected - it cannot be deleted or renamed.
         "Active", "Abandoned", and "Demolished" are also protected.
 
     Category badges:

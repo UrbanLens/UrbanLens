@@ -13,7 +13,7 @@
       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
       hx-on:submit="if(!window._validateCommentForm||!_validateCommentForm(this)){event.preventDefault();if(window.toastr)toastr.warning('Please add some text, a photo, or a map.');return false;}">
   {% if parent_id %}<input type="hidden" name="parent_id" value="{{ parent_id }}">{% endif %}
-  {# Hidden field that carries the map snapshot — populated by the composer JS #}
+  {# Hidden field that carries the map snapshot - populated by the composer JS #}
   <input type="hidden" name="map_data" class="comment-map-data-field" value="">
   <div class="comment-compose-inner">
     {% if not is_reply %}
@@ -36,7 +36,7 @@
         <div class="mention-dropdown" hidden></div>
       </div>
 
-      {# Map preview chip — shown when a map is attached #}
+      {# Map preview chip - shown when a map is attached #}
       <div class="comment-map-chip" hidden>
         <i class="material-icons">map</i>
         <span class="comment-map-chip-label">Map attached</span>

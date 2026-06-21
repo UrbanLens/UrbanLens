@@ -1,4 +1,4 @@
-"""Markup views — lines, arrows, and text labels on a pin's detail map."""
+"""Markup views - lines, arrows, and text labels on a pin's detail map."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ _GEOMETRY_TYPES = {
     "arrow": "LineString",
     "text": "Point",
     "square": "Polygon",
-    "circle": "Circle",   # Custom non-GeoJSON type stored as {"type":"Circle","coordinates":[lng,lat],"radius":m}
+    "circle": "Circle",  # Custom non-GeoJSON type stored as {"type":"Circle","coordinates":[lng,lat],"radius":m}
     "polygon": "Polygon",
 }
 
@@ -114,8 +114,8 @@ class MarkupView(LoginRequiredMixin, View):
 class MarkupEditView(LoginRequiredMixin, View):
     """Update or delete a single markup item.
 
-    POST /map/pin/<pin_uuid>/markup/<markup_uuid>/  — update geometry / label / color / width
-    DELETE /map/pin/<pin_uuid>/markup/<markup_uuid>/  — delete
+    POST /map/pin/<pin_uuid>/markup/<markup_uuid>/  - update geometry / label / color / width
+    DELETE /map/pin/<pin_uuid>/markup/<markup_uuid>/  - delete
     """
 
     def _get_item(self, request, pin_uuid, markup_uuid) -> PinMarkup:

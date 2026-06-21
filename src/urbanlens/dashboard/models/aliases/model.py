@@ -1,4 +1,4 @@
-"""Alias models — alternate names for Pins (personal) and Locations (shared)."""
+"""Alias models - alternate names for Pins (personal) and Locations (shared)."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ class PinAlias(_AliasBase):
 class LocationAlias(_AliasBase):
     """An alternate name for a Location, visible to all users who have it pinned.
 
-    ``created_by`` is optional attribution only — deleting a profile does not
+    ``created_by`` is optional attribution only - deleting a profile does not
     cascade-delete the alias.
     """
 

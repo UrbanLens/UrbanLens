@@ -1,4 +1,5 @@
 """Notification bell dropdown and preferences controllers."""
+
 from __future__ import annotations
 
 import logging
@@ -31,25 +32,26 @@ def _get_or_create_prefs(profile) -> NotificationPreference:
 
 
 class NotificationDropdownView(LoginRequiredMixin, View):
-    """GET /notifications/dropdown/ — renders the bell dropdown partial."""
+    """GET /notifications/dropdown/ - renders the bell dropdown partial."""
 
     def get(self, request):
         profile = request.user.profile
         notifications = (
-            NotificationLog.objects
-            .for_profile(profile)
-            .select_related("source_profile")
-            .order_by("-created")[:20]
+            NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20]
         )
         unread_count = NotificationLog.objects.for_profile(profile).unread().count()
-        return render(request, "dashboard/partials/notification_dropdown.html", {
-            "notifications": notifications,
-            "unread_count": unread_count,
-        })
+        return render(
+            request,
+            "dashboard/partials/notification_dropdown.html",
+            {
+                "notifications": notifications,
+                "unread_count": unread_count,
+            },
+        )
 
 
 class NotificationMarkReadView(LoginRequiredMixin, View):
-    """POST /notifications/<id>/read/ — mark one notification as read."""
+    """POST /notifications/<id>/read/ - mark one notification as read."""
 
     def post(self, request, notification_id):
         profile = request.user.profile
@@ -60,26 +62,36 @@ class NotificationMarkReadView(LoginRequiredMixin, View):
 
 
 class NotificationMarkAllReadView(LoginRequiredMixin, View):
-    """POST /notifications/read-all/ — mark all notifications as read."""
+    """POST /notifications/read-all/ - mark all notifications as read."""
 
     def post(self, request):
         profile = request.user.profile
         NotificationLog.objects.for_profile(profile).unread().mark_read()
-        return render(request, "dashboard/partials/notification_dropdown.html", {
-            "notifications": NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20],
-            "unread_count": 0,
-        })
+        return render(
+            request,
+            "dashboard/partials/notification_dropdown.html",
+            {
+                "notifications": NotificationLog.objects.for_profile(profile)
+                .select_related("source_profile")
+                .order_by("-created")[:20],
+                "unread_count": 0,
+            },
+        )
 
 
 class NotificationPreferencesView(LoginRequiredMixin, View):
-    """GET/POST /notifications/preferences/ — view or save per-type delivery prefs."""
+    """GET/POST /notifications/preferences/ - view or save per-type delivery prefs."""
 
     def _render(self, request, prefs, *, saved: bool = False) -> HttpResponse:
-        return render(request, "dashboard/partials/notification_preferences.html", {
-            "prefs": prefs,
-            "pref_fields": _PREF_FIELDS,
-            "saved": saved,
-        })
+        return render(
+            request,
+            "dashboard/partials/notification_preferences.html",
+            {
+                "prefs": prefs,
+                "pref_fields": _PREF_FIELDS,
+                "saved": saved,
+            },
+        )
 
     def get(self, request):
         profile = request.user.profile
@@ -106,7 +118,7 @@ class NotificationPreferencesView(LoginRequiredMixin, View):
 
 
 class NotificationUnreadCountView(LoginRequiredMixin, View):
-    """GET /notifications/unread-count/ — returns the unread count badge partial."""
+    """GET /notifications/unread-count/ - returns the unread count badge partial."""
 
     def get(self, request):
         profile = request.user.profile

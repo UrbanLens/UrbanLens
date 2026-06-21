@@ -10,7 +10,7 @@ is missing three details that the model code already specifies:
 3. id pk: BigAutoField, matching DEFAULT_AUTO_FIELD set in the project (0041 used
    AutoField explicitly).
 
-All three are state-only — the DB already matches. Instances that ran the
+All three are state-only - the DB already matches. Instances that ran the
 original 0044 need this migration to bring their state in sync; fresh instances
 will run it immediately after 0044 and reach the same final state.
 """
@@ -54,7 +54,7 @@ class Migration(migrations.Migration):
                 ),
                 # Sync pk type to BigAutoField (DEFAULT_AUTO_FIELD).
                 # Migration 0041 used AutoField explicitly; the DB integer column
-                # is unaffected — this is a state-only correction.
+                # is unaffected - this is a state-only correction.
                 migrations.AlterField(
                     model_name="badgecustomization",
                     name="id",

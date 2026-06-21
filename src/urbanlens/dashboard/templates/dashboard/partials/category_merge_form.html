@@ -35,7 +35,7 @@
     <div class="form-field">
         <label class="form-label" for="merge-cat-target-select">Target category</label>
         <select name="target_category_id" id="merge-cat-target-select" class="form-input" required>
-            <option value="">— Select a category —</option>
+            <option value="">- Select a category -</option>
             {% for candidate in candidates %}
             <option value="{{ candidate.id }}">{{ candidate.name }}</option>
             {% endfor %}

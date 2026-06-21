@@ -34,7 +34,7 @@
     <div class="form-field">
         <label class="form-label" for="merge-target-select">Target tag</label>
         <select name="target_tag_id" id="merge-target-select" class="form-input" required>
-            <option value="">— Select a tag —</option>
+            <option value="">- Select a tag -</option>
             {% for candidate in candidates %}
             <option value="{{ candidate.id }}">
                 {{ candidate.name }}{% if not candidate.profile %} (global){% endif %}

@@ -1,4 +1,4 @@
-"""Add cluster_radius to Profile — null means use the default zoom-based function."""
+"""Add cluster_radius to Profile - null means use the default zoom-based function."""
 from django.db import migrations, models
 
 

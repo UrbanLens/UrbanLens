@@ -37,7 +37,7 @@
     }
 }
 
-// Shared destructive icon button — used in detail pins, trip panels, etc.
+// Shared destructive icon button - used in detail pins, trip panels, etc.
 .detail-pin-action-btn {
     border: none;
     background: transparent;
@@ -160,7 +160,7 @@
     border-radius: 12px;
     padding: 0;
     width: min(520px, 96vw);
-    // Constrain to viewport — the inner body scrolls, not the dialog itself
+    // Constrain to viewport - the inner body scrolls, not the dialog itself
     max-height: min(92vh, 900px);
     overflow: hidden;
 
@@ -173,7 +173,7 @@
         background: rgba(0, 0, 0, .4);
     }
 
-    // Scrollable body — everything below the fixed header
+    // Scrollable body - everything below the fixed header
     .detail-pin-add-body {
         flex: 1;
         overflow-y: auto;
@@ -394,7 +394,7 @@
         padding: 0 .2rem;
 
         &::before {
-            content: '— ';
+            content: '- ';
         }
     }
 

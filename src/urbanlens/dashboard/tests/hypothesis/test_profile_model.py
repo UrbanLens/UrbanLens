@@ -246,7 +246,7 @@ class ProfileComputeMapCenterTests(TestCase):
 		self.assertIsNotNone(user.profile.map_center_longitude)
 
 	def test_intercontinental_pins_picks_largest_cluster(self) -> None:
-		# Four pins in Europe and one in North America — the European cluster should win.
+		# Four pins in Europe and one in North America - the European cluster should win.
 		user: User = baker.make(User)
 		europe_coords = [
 			("48.850000", "2.350000"),    # Paris
@@ -333,7 +333,7 @@ class ProfileChoiceTests(TestCase):
 		self.assertIn("custom", MapCenterMode.values)
 
 
-# ── Profile.get_map_center – custom mode with only one coord None ─────────────
+# ── Profile.get_map_center - custom mode with only one coord None ─────────────
 
 class ProfileGetMapCenterEdgeCaseTests(TestCase):
 	"""get_map_center() edge: CUSTOM mode with only one coordinate set returns None."""

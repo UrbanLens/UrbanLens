@@ -1,19 +1,19 @@
 {% comment %}
-Photo gallery panel — used on pin detail and location wiki pages.
+Photo gallery panel - used on pin detail and location wiki pages.
 
 Context:
-  images       — filtered Image queryset visible to the current viewer
-  profile      — current viewer's Profile
-  context_type — "pin" or "wiki"
-  pin          — Pin instance (when context_type == "pin")
-  location     — Location instance (when context_type == "wiki")
+  images       - filtered Image queryset visible to the current viewer
+  profile      - current viewer's Profile
+  context_type - "pin" or "wiki"
+  pin          - Pin instance (when context_type == "pin")
+  location     - Location instance (when context_type == "wiki")
 {% endcomment %}
 <div class="photo-gallery card" id="photo-gallery">
   <div class="card-header">
     <i class="material-icons">photo_library</i>
     <span>Photos</span>
     {% if images %}<span class="badge">{{ images|length }}</span>{% endif %}
-    {# Compact upload button — always visible in the header #}
+    {# Compact upload button - always visible in the header #}
     <label class="gallery-upload-compact-btn" title="Upload photos">
       <i class="material-icons">add_photo_alternate</i>
       <input type="file" id="gallery-file-input" accept="image/*" multiple hidden

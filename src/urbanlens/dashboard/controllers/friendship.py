@@ -90,11 +90,12 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
             # Compute mutual friends (profile's friends that viewer is also friends with)
             profile_friend_ids = {fp.pk for fp in friend_profiles}
             viewer_friendships = (
-                Friendship.objects.all().profile(viewer.pk).is_friend()
-                .values_list("from_profile_id", "to_profile_id")
+                Friendship.objects.all().profile(viewer.pk).is_friend().values_list("from_profile_id", "to_profile_id")
             )
             viewer_friend_ids: set[int] = set()
-            viewer_friend_ids.update(to_id if from_id == viewer.pk else from_id for from_id, to_id in viewer_friendships)
+            viewer_friend_ids.update(
+                to_id if from_id == viewer.pk else from_id for from_id, to_id in viewer_friendships
+            )
 
             mutual_ids = profile_friend_ids & viewer_friend_ids
             mutual_friends = [fp for fp in friend_profiles if fp.pk in mutual_ids]
@@ -128,21 +129,49 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
 
         if visibility == VisibilityChoice.COMMON_PIN:
             from urbanlens.dashboard.models.pin.model import Pin
-            req_locs = set(Pin.objects.filter(profile=requesting).exclude(location__isnull=True).values_list("location_id", flat=True))
-            their_locs = set(Pin.objects.filter(profile=to_profile).exclude(location__isnull=True).values_list("location_id", flat=True))
+
+            req_locs = set(
+                Pin.objects.filter(profile=requesting)
+                .exclude(location__isnull=True)
+                .values_list("location_id", flat=True),
+            )
+            their_locs = set(
+                Pin.objects.filter(profile=to_profile)
+                .exclude(location__isnull=True)
+                .values_list("location_id", flat=True),
+            )
             if not req_locs & their_locs:
-                return HttpResponse("This user only accepts requests from people who share a pinned location.", status=403)
+                return HttpResponse(
+                    "This user only accepts requests from people who share a pinned location.", status=403,
+                )
 
         elif visibility == VisibilityChoice.COMMON_FRIEND:
-            req_friends = set(Friendship.objects.filter(from_profile=requesting, status=FriendshipStatus.ACCEPTED).values_list("to_profile_id", flat=True))
-            req_friends |= set(Friendship.objects.filter(to_profile=requesting, status=FriendshipStatus.ACCEPTED).values_list("from_profile_id", flat=True))
-            their_friends = set(Friendship.objects.filter(from_profile=to_profile, status=FriendshipStatus.ACCEPTED).values_list("to_profile_id", flat=True))
-            their_friends |= set(Friendship.objects.filter(to_profile=to_profile, status=FriendshipStatus.ACCEPTED).values_list("from_profile_id", flat=True))
+            req_friends = set(
+                Friendship.objects.filter(from_profile=requesting, status=FriendshipStatus.ACCEPTED).values_list(
+                    "to_profile_id", flat=True,
+                ),
+            )
+            req_friends |= set(
+                Friendship.objects.filter(to_profile=requesting, status=FriendshipStatus.ACCEPTED).values_list(
+                    "from_profile_id", flat=True,
+                ),
+            )
+            their_friends = set(
+                Friendship.objects.filter(from_profile=to_profile, status=FriendshipStatus.ACCEPTED).values_list(
+                    "to_profile_id", flat=True,
+                ),
+            )
+            their_friends |= set(
+                Friendship.objects.filter(to_profile=to_profile, status=FriendshipStatus.ACCEPTED).values_list(
+                    "from_profile_id", flat=True,
+                ),
+            )
             if not req_friends & their_friends:
                 return HttpResponse("This user only accepts requests from friends of friends.", status=403)
 
         elif visibility == VisibilityChoice.COMMON_TRIP:
             from urbanlens.dashboard.models.trips.model import TripMembership
+
             req_trips = set(TripMembership.objects.filter(profile=requesting).values_list("trip_id", flat=True))
             their_trips = set(TripMembership.objects.filter(profile=to_profile).values_list("trip_id", flat=True))
             if not req_trips & their_trips:
@@ -160,6 +189,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
 
         if pref != DeliveryPreference.NONE:
             from django.urls import reverse
+
             NotificationLog.objects.create(
                 profile=to_profile,
                 status=Status.UNREAD,
@@ -192,6 +222,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         # Notify the original requester that their request was accepted.
         requester = friendship.from_profile if friendship.to_profile == request.user.profile else friendship.to_profile
         from django.urls import reverse
+
         NotificationLog.objects.create(
             profile=requester,
             status=Status.UNREAD,
@@ -228,7 +259,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         )
 
     def ignore_friend(self, request: HttpRequest, profile_id: int):
-        """Ignore a friend request — no notification sent, button stays unavailable."""
+        """Ignore a friend request - no notification sent, button stays unavailable."""
         if not isinstance(request.user, User):
             return HttpResponse("Authentication required.", status=401)
         try:
@@ -313,7 +344,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         )
 
     def friends_page(self, request: HttpRequest, profile_id: int):
-        """Full friends list page — only accessible to the profile owner."""
+        """Full friends list page - only accessible to the profile owner."""
         from django.http import Http404
         from django.shortcuts import redirect
 
@@ -354,6 +385,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             from_profile = Profile.objects.filter(pk=from_profile_id).first()
             if from_profile:
                 from django.urls import reverse
+
                 NotificationLog.objects.create(
                     profile=from_profile,
                     status=Status.UNREAD,
@@ -376,16 +408,19 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
 
         # Return refreshed notification dropdown
         notifications = (
-            NotificationLog.objects
-            .for_profile(viewer_profile)
+            NotificationLog.objects.for_profile(viewer_profile)
             .select_related("source_profile")
             .order_by("-created")[:20]
         )
         unread_count = NotificationLog.objects.for_profile(viewer_profile).unread().count()
-        return render(request, "dashboard/partials/notification_dropdown.html", {
-            "notifications": notifications,
-            "unread_count": unread_count,
-        })
+        return render(
+            request,
+            "dashboard/partials/notification_dropdown.html",
+            {
+                "notifications": notifications,
+                "unread_count": unread_count,
+            },
+        )
 
     def invite_by_email(self, request: HttpRequest):
         """Invite a friend by email address.
@@ -440,7 +475,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 {"result": "request_sent", "username": to_profile.username},
             )
 
-        # No registered user — create an invitation token and send email
+        # No registered user - create an invitation token and send email
         # Avoid duplicate pending invitations from the same inviter
         FriendInvitation.objects.filter(
             inviter=inviter,
@@ -461,10 +496,10 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         subject = f"{inviter.username} invited you to join UrbanLens"
         text_body = (
             f"Hi,\n\n"
-            f"{inviter.username} invited you to join UrbanLens — a private mapping platform "
+            f"{inviter.username} invited you to join UrbanLens - a private mapping platform "
             f"for urban explorers and photographers.\n\n"
             f"Accept the invitation:\n{signup_url}\n\n"
-            f"— UrbanLens"
+            f"- UrbanLens"
         )
         html_body = render_to_string("dashboard/email/friend_invite.html", context)
 

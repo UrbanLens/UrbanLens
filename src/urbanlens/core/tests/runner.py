@@ -109,7 +109,7 @@ class QuietTestRunner(unittest.TextTestRunner):
 class TestRunner(DiscoverRunner):
 
     def setup_test_environment(self, **kwargs : 'Any') -> None:
-        # Set env var first — checked by signals before settings are fully loaded.
+        # Set env var first - checked by signals before settings are fully loaded.
         os.environ['DJANGO_TESTING'] = '1'
 
         super().setup_test_environment(**kwargs)

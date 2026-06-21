@@ -1,4 +1,4 @@
-"""ProfileBadgeAssignment — a private user-badge applied to another profile."""
+"""ProfileBadgeAssignment - a private user-badge applied to another profile."""
 
 from __future__ import annotations
 

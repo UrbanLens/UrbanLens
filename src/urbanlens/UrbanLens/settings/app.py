@@ -115,6 +115,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     google_maps_api_key : str | None = Field(default=None, description = "The google maps key")
     google_search_api_key : str | None = Field(default=None, description = "The google search key")
     google_search_tenant : str | None = Field(default=None, description = "The google search tenant")
+    brave_search_api_key : str | None = Field(default=None, description = "The Brave Search API key")
     smithsonian_api_key : str | None = Field(default=None, description = "The smithsonian key")
     google_client_id : str | None = Field(default=None, description = "The google client id")
     google_client_secret : str | None = Field(default=None, description = "The google client secret")

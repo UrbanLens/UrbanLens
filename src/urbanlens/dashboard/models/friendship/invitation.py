@@ -1,4 +1,4 @@
-"""FriendInvitation — email-based invitation to join UrbanLens and become a friend."""
+"""FriendInvitation - email-based invitation to join UrbanLens and become a friend."""
 
 from __future__ import annotations
 

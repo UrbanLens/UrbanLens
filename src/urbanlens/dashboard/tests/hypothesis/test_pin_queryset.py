@@ -180,7 +180,7 @@ class PinQuerySetByTagTests(TestCase):
 		self.assertNotIn(self.pin_none, qs)
 
 	def test_by_child_tag_excludes_pin_with_only_parent_tag(self) -> None:
-		# Ancestry is one-way — child tag does not imply parent tag
+		# Ancestry is one-way - child tag does not imply parent tag
 		qs = self._qs().by_tag(self.child_tag.id)
 		self.assertNotIn(self.pin_parent, qs)
 

@@ -1,4 +1,4 @@
-"""Trip models — collaborative trip planning."""
+"""Trip models - collaborative trip planning."""
 
 from __future__ import annotations
 
@@ -6,7 +6,18 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, FloatField, ForeignKey, ImageField, Index, IntegerField, JSONField, ManyToManyField, UUIDField
+from django.db.models import (
+    CASCADE,
+    SET_NULL,
+    FloatField,
+    ForeignKey,
+    ImageField,
+    Index,
+    IntegerField,
+    JSONField,
+    ManyToManyField,
+    UUIDField,
+)
 from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, TextField
 
 from urbanlens.dashboard.models import abstract
@@ -37,7 +48,7 @@ class Trip(abstract.Model):
         blank=True,
         related_name="created_trips",
     )
-    # All participants including the creator — through TripMembership for RSVP tracking.
+    # All participants including the creator - through TripMembership for RSVP tracking.
     profiles: ManyToManyField[Profile, Profile] = ManyToManyField(
         "dashboard.Profile",
         blank=True,
@@ -54,10 +65,18 @@ class Trip(abstract.Model):
         ("everyone", "Everyone"),
     ]
 
-    allow_add_members = CharField(max_length=20, choices=PERMISSION_CHOICES, default="none", help_text="Who can add new members.")
-    allow_add_activities = CharField(max_length=20, choices=PERMISSION_CHOICES, default="everyone", help_text="Who can add activities.")
-    allow_edit_activities = CharField(max_length=20, choices=PERMISSION_CHOICES, default="everyone", help_text="Who can edit or delete activities.")
-    allow_comments = CharField(max_length=20, choices=PERMISSION_CHOICES, default="everyone", help_text="Who can leave comments.")
+    allow_add_members = CharField(
+        max_length=20, choices=PERMISSION_CHOICES, default="none", help_text="Who can add new members.",
+    )
+    allow_add_activities = CharField(
+        max_length=20, choices=PERMISSION_CHOICES, default="everyone", help_text="Who can add activities.",
+    )
+    allow_edit_activities = CharField(
+        max_length=20, choices=PERMISSION_CHOICES, default="everyone", help_text="Who can edit or delete activities.",
+    )
+    allow_comments = CharField(
+        max_length=20, choices=PERMISSION_CHOICES, default="everyone", help_text="Who can leave comments.",
+    )
 
     def __str__(self) -> str:
         return self.name or f"Trip #{self.id}"
@@ -132,7 +151,7 @@ class TripActivity(abstract.Model):
     order = IntegerField(default=0)
     status = CharField(max_length=20, choices=STATUS_CHOICES, default="proposed")
 
-    # Map position override — set when user drags the marker; does NOT modify the underlying Pin/Location.
+    # Map position override - set when user drags the marker; does NOT modify the underlying Pin/Location.
     lat_override = FloatField(null=True, blank=True)
     lng_override = FloatField(null=True, blank=True)
 
@@ -177,7 +196,9 @@ class TripMembership(abstract.Model):
         related_name="trip_memberships",
     )
     rsvp = CharField(max_length=20, choices=RSVP_CHOICES, null=True, blank=True)
-    is_organizer = BooleanField(default=False, help_text="Organizers have the same trip-management rights as the creator.")
+    is_organizer = BooleanField(
+        default=False, help_text="Organizers have the same trip-management rights as the creator.",
+    )
 
     def __str__(self) -> str:
         return f"{self.profile} in {self.trip} ({self.rsvp or 'no response'})"
@@ -275,6 +296,13 @@ AI_PROVIDER_CHOICES = [
     (AI_PROVIDER_OPENAI, "OpenAI"),
 ]
 
+SEARCH_PROVIDER_BRAVE = "brave"
+SEARCH_PROVIDER_GOOGLE = "google"
+SEARCH_PROVIDER_CHOICES = [
+    (SEARCH_PROVIDER_BRAVE, "Brave Search"),
+    (SEARCH_PROVIDER_GOOGLE, "Google Custom Search"),
+]
+
 DEFAULT_OPENAI_MODEL = "gpt-5-nano"
 DEFAULT_CLOUDFLARE_MODEL = "@cf/mistral/mistral-7b-instruct-v0.1"
 
@@ -299,7 +327,7 @@ class SiteSettings(abstract.Model):
         help_text="Maximum allowed area (km²) for a location bounding box. Default ≈ Chernobyl Exclusion Zone.",
     )
 
-    # --- AI — Global controls ---
+    # --- AI - Global controls ---
 
     ai_enabled = BooleanField(
         default=True,
@@ -314,7 +342,7 @@ class SiteSettings(abstract.Model):
         verbose_name="AI provider",
     )
 
-    # --- AI — Model selection ---
+    # --- AI - Model selection ---
 
     openai_model = CharField(
         max_length=100,
@@ -329,12 +357,22 @@ class SiteSettings(abstract.Model):
         verbose_name="Cloudflare model",
     )
 
-    # --- AI — Feature toggles ---
+    # --- AI - Feature toggles ---
 
     ai_category_suggestions_enabled = BooleanField(
         default=True,
         help_text="Allow AI to suggest categories for pins and locations based on their metadata.",
         verbose_name="Category suggestions",
+    )
+
+    # --- Search provider ---
+
+    search_provider = CharField(
+        max_length=20,
+        choices=SEARCH_PROVIDER_CHOICES,
+        default=SEARCH_PROVIDER_BRAVE,
+        help_text="Which web search provider to use for pin news/search results.",
+        verbose_name="Search provider",
     )
 
     def __str__(self) -> str:

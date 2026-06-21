@@ -28,7 +28,7 @@
         <p class="trip-map-empty" id="trip-map-empty" hidden>No activities with locations to display.</p>
     </div>
 
-    {# ── Sortable sections — draggable per user, order stored in localStorage ── #}
+    {# ── Sortable sections - draggable per user, order stored in localStorage ── #}
     <div id="trip-sections" class="trip-sections">
 
         {# Activities #}
@@ -81,7 +81,7 @@
             </div>
         </div>
 
-        {# Weather — default last per requirements #}
+        {# Weather - default last per requirements #}
         <div class="trip-section" data-section="weather">
             <div class="trip-section-grip" title="Drag to reorder">
                 <i class="material-icons">drag_indicator</i>
@@ -150,7 +150,7 @@
           class="trip-create-form">
         {% csrf_token %}
 
-        {# Name hidden by default — reveal with toggle #}
+        {# Name hidden by default - reveal with toggle #}
         <div id="add-activity-name-wrap" hidden>
             <div class="form-row">
                 <label for="activity-title">Custom Name <small>(optional)</small></label>
@@ -167,7 +167,7 @@
         </div>
 
         <div class="form-row">
-            <label>Location <small>(optional — search existing or enter an address)</small></label>
+            <label>Location <small>(optional - search existing or enter an address)</small></label>
             <div class="activity-location-search-wrap">
                 <input type="text" id="activity-location-search"
                        placeholder="Search by name or address…" autocomplete="off">
@@ -198,7 +198,7 @@
         </div>
 
         <div class="form-row">
-            <label>Child Trip <small>(optional — link another trip as an activity)</small></label>
+            <label>Child Trip <small>(optional - link another trip as an activity)</small></label>
             <div class="activity-child-trip-wrap">
                 <input type="text" id="activity-child-trip-search"
                        placeholder="Search your trips…" autocomplete="off">

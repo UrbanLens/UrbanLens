@@ -1,4 +1,4 @@
-"""Tests for SmithsonianGateway — covers get_data, get_images_by_coordinates, and parse_response.
+"""Tests for SmithsonianGateway - covers get_data, get_images_by_coordinates, and parse_response.
 
 All HTTP calls are mocked so no real network access occurs.
 """
@@ -123,7 +123,7 @@ class SmithsonianParseResponseTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# get_data — cache miss path
+# get_data - cache miss path
 # ---------------------------------------------------------------------------
 
 class SmithsonianGetDataCacheMissTests(TestCase):
@@ -181,7 +181,7 @@ class SmithsonianGetDataCacheMissTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# get_data — cache hit path
+# get_data - cache hit path
 # ---------------------------------------------------------------------------
 
 class SmithsonianGetDataCacheHitTests(TestCase):

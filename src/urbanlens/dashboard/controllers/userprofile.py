@@ -149,7 +149,7 @@ class ViewProfileView(LoginRequiredMixin, View):
         )
         common_ids = their_loc_ids & my_loc_ids
 
-        # Visited by both — has the protected "Visited" status badge, or has a last_visited date
+        # Visited by both - has the protected "Visited" status badge, or has a last_visited date
         visited_filter = Q(statuses__name="Visited") | Q(last_visited__isnull=False)
         their_visited_ids = set(
             Pin.objects.filter(profile=profile, location__isnull=False)
@@ -170,18 +170,17 @@ class ViewProfileView(LoginRequiredMixin, View):
             else Location.objects.none()
         )
 
-        # Private annotations (notes + user badges) — only when viewing someone else
+        # Private annotations (notes + user badges) - only when viewing someone else
         from urbanlens.dashboard.models.badges.model import KIND_USER, Badge
         from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
         context["viewer_note"] = ProfileNote.objects.filter(author=my_profile, subject=profile).first()
-        context["user_badges"] = (
-            Badge.objects.user_badges().visible_to(my_profile).ordered()
-        )
+        context["user_badges"] = Badge.objects.user_badges().visible_to(my_profile).ordered()
         context["assigned_badge_ids"] = set(
-            ProfileBadgeAssignment.objects.filter(author=my_profile, subject=profile)
-            .values_list("badge_id", flat=True),
+            ProfileBadgeAssignment.objects.filter(author=my_profile, subject=profile).values_list(
+                "badge_id", flat=True,
+            ),
         )
 
 
@@ -366,7 +365,7 @@ class ProfileNoteView(LoginRequiredMixin, View):
 
 
 class ProfileBadgeToggleView(LoginRequiredMixin, View):
-    """Toggle a user-type badge on another profile (HTMX — re-renders the badge chips)."""
+    """Toggle a user-type badge on another profile (HTMX - re-renders the badge chips)."""
 
     def post(self, request: HttpRequest, profile_uuid: UUID, badge_id: int) -> HttpResponse:
         from urbanlens.dashboard.models.badges.model import KIND_USER, Badge
@@ -380,7 +379,9 @@ class ProfileBadgeToggleView(LoginRequiredMixin, View):
         badge = get_object_or_404(Badge, pk=badge_id, kind=KIND_USER)
 
         assignment, created = ProfileBadgeAssignment.objects.get_or_create(
-            author=author, subject=subject, badge=badge,
+            author=author,
+            subject=subject,
+            badge=badge,
         )
         if not created:
             assignment.delete()
@@ -408,14 +409,9 @@ def _render_profile_annotation_partial(
     from urbanlens.dashboard.models.profile.note import ProfileNote
 
     note = ProfileNote.objects.filter(author=author, subject=subject).first()
-    user_badges = (
-        Badge.objects.user_badges()
-        .visible_to(author)
-        .ordered()
-    )
+    user_badges = Badge.objects.user_badges().visible_to(author).ordered()
     assigned_ids = set(
-        ProfileBadgeAssignment.objects.filter(author=author, subject=subject)
-        .values_list("badge_id", flat=True),
+        ProfileBadgeAssignment.objects.filter(author=author, subject=subject).values_list("badge_id", flat=True),
     )
 
     return render(

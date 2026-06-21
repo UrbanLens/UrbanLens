@@ -9,6 +9,7 @@ Rendering:
   - @loc mentions whose location UUID the viewer has pinned → rendered as hyperlink
   - @act:{n} → resolved via activity_index_map to an activity link
 """
+
 from __future__ import annotations
 
 import operator
@@ -84,8 +85,7 @@ def render_comment_text(
                 try:
                     wiki_url = reverse("location.wiki", args=[str(activity.location.uuid)])
                     html = format_html(
-                        '<a href="{}" class="mention mention--activity" data-activity-id="{}">'
-                        "@act:{} {}</a>",
+                        '<a href="{}" class="mention mention--activity" data-activity-id="{}">@act:{} {}</a>',
                         wiki_url,
                         activity.id,
                         n,
@@ -109,16 +109,20 @@ def render_comment_text(
         last_end = end
 
     parts.append(conditional_escape(text[last_end:]))
-    return mark_safe("".join(str(p) for p in parts))  # noqa: S308 — safe: all parts built via format_html/conditional_escape
+    return mark_safe("".join(str(p) for p in parts))  # noqa: S308 - safe: all parts built via format_html/conditional_escape
 
 
 def viewer_pinned_uuids(profile: Profile) -> set[uuid.UUID]:
     """Return the set of Location UUIDs that profile has pinned."""
     from urbanlens.dashboard.models.pin.model import Pin
 
-    raw = Pin.objects.filter(profile=profile).exclude(
-        location__isnull=True,
-    ).values_list("location__uuid", flat=True)
+    raw = (
+        Pin.objects.filter(profile=profile)
+        .exclude(
+            location__isnull=True,
+        )
+        .values_list("location__uuid", flat=True)
+    )
     return {uuid.UUID(str(u)) for u in raw}
 
 
