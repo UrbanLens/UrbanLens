@@ -11,10 +11,8 @@
 /* ── Filter panel ─────────────────────────────────────────────────── */
 #filter-panel {
     position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 268px;
+    top: 0; right: 0; bottom: 0;
+    width: 272px;
     background: rgba(14, 16, 22, 0.93);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
@@ -35,6 +33,7 @@
     justify-content: space-between;
     padding: 13px 15px 12px;
     border-bottom: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
 }
 .fp-title {
     font-size: 0.72rem;
@@ -44,14 +43,10 @@
     color: rgba(255,255,255,0.45);
 }
 .fp-close {
-    background: none;
-    border: none;
+    background: none; border: none;
     color: rgba(255,255,255,0.4);
-    cursor: pointer;
-    padding: 3px 6px;
-    border-radius: 4px;
-    font-size: 1rem;
-    line-height: 1;
+    cursor: pointer; padding: 3px 6px;
+    border-radius: 4px; font-size: 1rem; line-height: 1;
     transition: color 0.15s, background 0.15s;
 }
 .fp-close:hover { color: #fff; background: rgba(255,255,255,0.1); }
@@ -59,12 +54,12 @@
 #filter-form {
     flex: 1;
     overflow-y: auto;
-    padding: 12px 14px 16px;
+    padding: 10px 14px 16px;
     scrollbar-width: thin;
     scrollbar-color: rgba(255,255,255,0.12) transparent;
 }
 
-.fp-section { margin-bottom: 14px; }
+.fp-section { margin-bottom: 12px; }
 
 .fp-label {
     font-size: 0.65rem;
@@ -87,23 +82,16 @@
     box-sizing: border-box;
     transition: border-color 0.15s, background 0.15s;
 }
-.fp-search:focus {
-    border-color: rgba(90,150,255,0.5);
-    background: rgba(255,255,255,0.09);
-}
+.fp-search:focus { border-color: rgba(90,150,255,0.5); background: rgba(255,255,255,0.09); }
 .fp-search::placeholder { color: rgba(255,255,255,0.25); }
 
-.fp-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-}
+.fp-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 
 .fp-chip {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 4px 10px;
+    padding: 4px 9px;
     border-radius: 20px;
     background: rgba(255,255,255,0.06);
     border: 1px solid rgba(255,255,255,0.1);
@@ -112,7 +100,7 @@
     transition: background 0.15s, border-color 0.15s, color 0.15s;
     user-select: none;
     white-space: nowrap;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
 }
 .fp-chip:hover { background: rgba(255,255,255,0.11); color: #fff; }
 .fp-chip input { display: none; }
@@ -122,69 +110,48 @@
     color: #c8d8ff;
 }
 
-.fp-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    max-height: 190px;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255,255,255,0.12) transparent;
-}
-
 .fp-reset {
     width: 100%;
     padding: 7px;
-    margin-top: 6px;
+    margin-top: 10px;
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 8px;
     color: rgba(255,255,255,0.4);
     font-size: 0.78rem;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
     transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.fp-reset:hover {
-    background: rgba(255,70,70,0.18);
-    border-color: rgba(255,70,70,0.35);
-    color: #ff9999;
-}
+.fp-reset:hover { background: rgba(255,70,70,0.18); border-color: rgba(255,70,70,0.35); color: #ff9999; }
+.fp-reset .material-icons { font-size: .9rem; }
 
 /* Active-filter dot on the search button */
 #search-pins-button { position: relative; }
 #search-pins-button.has-filters::after {
     content: '';
     position: absolute;
-    top: 5px;
-    right: 5px;
-    width: 7px;
-    height: 7px;
+    top: 5px; right: 5px;
+    width: 7px; height: 7px;
     border-radius: 50%;
     background: #5082ff;
     pointer-events: none;
 }
 
-/* ── Address jump section ─────────────────────────────────────────── */
-.fp-address-jump {
-    padding: 10px 14px 0;
-}
-.fp-address-row {
-    display: flex;
-    gap: 5px;
-    margin-top: 6px;
-}
+/* ── Address jump ─────────────────────────────────────────────────── */
+.fp-address-jump { padding: 10px 14px 0; }
+.fp-address-row { display: flex; gap: 5px; margin-top: 6px; }
 .fp-address-row .fp-search { flex: 1; }
 .fp-address-btn {
     flex-shrink: 0;
     background: rgba(70,120,255,0.2);
     border: 1px solid rgba(70,120,255,0.4);
-    border-radius: 7px;
-    color: #9ab8ff;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    border-radius: 7px; color: #9ab8ff;
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
 }
@@ -192,20 +159,97 @@
 .fp-address-btn:disabled { opacity: .45; cursor: not-allowed; }
 .fp-address-btn .material-icons { font-size: .95rem; }
 
-/* ── Date filter row ──────────────────────────────────────────────── */
-.fp-date-row {
+/* ── Accordion filter sections ────────────────────────────────────── */
+.fp-accordion-item {
+    border-top: 1px solid rgba(255,255,255,0.06);
+    margin: 0 -14px;
+    padding: 0 14px;
+}
+
+.fp-accordion-summary {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    padding: 9px 0;
+    cursor: pointer;
+    list-style: none;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.6);
+    user-select: none;
+    transition: color 0.15s;
+}
+.fp-accordion-summary::-webkit-details-marker { display: none; }
+.fp-accordion-summary:hover { color: #fff; }
+.fp-accordion-label { flex: 1; }
+
+.fp-acc-dot {
+    display: none;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #5082ff;
+    flex-shrink: 0;
+}
+/* Show dot when this section has an active filter (CSS-only, no JS needed) */
+details.fp-accordion-item:has(input[type=radio]:not([value=""]):checked) .fp-acc-dot,
+details.fp-accordion-item:has(input[type=checkbox]:checked) .fp-acc-dot,
+details.fp-accordion-item:has(input[type=date]:not([value=""])) .fp-acc-dot,
+details.fp-accordion-item:has(input[type=number]:not([value=""])) .fp-acc-dot { display: inline-block; }
+
+.fp-acc-arrow {
+    font-size: .9rem;
+    color: rgba(255,255,255,0.25);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
+
+.fp-accordion-body { padding-bottom: 12px; }
+
+/* ── Range layout (min / max) ─────────────────────────────────────── */
+.fp-range-row { display: flex; align-items: flex-start; gap: 8px; }
+.fp-range-row--number { align-items: center; }
+.fp-range-col { flex: 1; min-width: 0; }
+.fp-range-divider {
+    padding-top: 20px;
+    color: rgba(255,255,255,0.2);
+    font-size: .9rem;
+    flex-shrink: 0;
+}
+.fp-range-row--number .fp-range-divider { padding-top: 0; }
+.fp-range-hint {
+    display: block;
+    font-size: .6rem;
+    color: rgba(255,255,255,0.28);
+    text-transform: uppercase;
+    letter-spacing: .07em;
     margin-bottom: 5px;
 }
+
+.fp-number-input {
+    width: 100%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.11);
+    border-radius: 7px;
+    color: #fff;
+    padding: 6px 8px;
+    font-size: .8rem;
+    outline: none;
+    box-sizing: border-box;
+    color-scheme: dark;
+}
+.fp-number-input:focus { border-color: rgba(90,150,255,0.5); background: rgba(255,255,255,0.09); }
+
+/* ── Date inputs ──────────────────────────────────────────────────── */
+.fp-date-block { margin-top: 8px; }
+.fp-date-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
 .fp-date-label {
-    font-size: 0.68rem;
-    color: rgba(255,255,255,0.35);
-    width: 34px;
+    font-size: .62rem;
+    color: rgba(255,255,255,0.3);
+    width: 72px;
     flex-shrink: 0;
     text-transform: uppercase;
-    letter-spacing: .06em;
+    letter-spacing: .05em;
 }
 .fp-date-input {
     flex: 1;
@@ -213,290 +257,39 @@
     border: 1px solid rgba(255,255,255,0.11);
     border-radius: 7px;
     color: #fff;
-    padding: 5px 8px;
-    font-size: 0.78rem;
+    padding: 5px 7px;
+    font-size: .74rem;
     outline: none;
     color-scheme: dark;
-}
-.fp-date-input:focus { border-color: rgba(90,150,255,0.5); background: rgba(255,255,255,0.09); }
-.fp-tag-search { margin-bottom: 6px; }
-
-/* ── Advanced Search button row ──────────────────────────────────── */
-.fp-advanced-row {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-}
-.fp-advanced-btn {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 12px;
-    background: rgba(70,120,255,0.14);
-    border: 1px solid rgba(70,120,255,0.35);
-    border-radius: 8px;
-    color: #9ab8ff;
-    font-size: .82rem;
-    cursor: pointer;
-    transition: background .15s, border-color .15s;
-}
-.fp-advanced-btn:hover { background: rgba(70,120,255,0.25); border-color: rgba(70,120,255,0.55); }
-.fp-advanced-btn .material-icons { font-size: .95rem; }
-.fp-advanced-badge {
-    margin-left: auto;
-    background: #5082ff;
-    color: #fff;
-    border-radius: 10px;
-    font-size: .7rem;
-    font-weight: 700;
-    padding: 1px 6px;
-    line-height: 1.4;
-}
-.fp-advanced-row .fp-reset {
-    width: auto;
-    flex-shrink: 0;
-    padding: 7px 10px;
-    margin-top: 0;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-.fp-advanced-row .fp-reset .material-icons { font-size: .9rem; }
-
-/* ── Advanced Search dialog ──────────────────────────────────────── */
-.adv-search-dialog {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    margin: 0;
-    width: min(520px, 95vw);
-    max-height: 85vh;
-    background: #13151f;
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 14px;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.65);
-    color: #d8d8e0;
-    display: flex;
-    flex-direction: column;
-    padding: 0;
-    overflow: hidden;
-}
-.adv-search-dialog::backdrop { background: rgba(0,0,0,.55); }
-.adv-search-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 18px 12px;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    flex-shrink: 0;
-}
-.adv-search-title {
-    font-size: .95rem;
-    font-weight: 700;
-    color: #fff;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: .4rem;
-}
-.adv-search-title .material-icons { font-size: 1.1rem; color: #9ab8ff; }
-.adv-search-close {
-    background: none;
-    border: none;
-    color: rgba(255,255,255,0.4);
-    cursor: pointer;
-    padding: 4px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    transition: color .15s, background .15s;
-}
-.adv-search-close:hover { color: #fff; background: rgba(255,255,255,0.1); }
-.adv-search-close .material-icons { font-size: 1.2rem; }
-
-.adv-search-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 14px 18px;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255,255,255,0.12) transparent;
-}
-.adv-section {
-    margin-bottom: 18px;
-}
-.adv-section-label {
-    font-size: .65rem;
-    font-weight: 700;
-    letter-spacing: .09em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.35);
-    margin-bottom: 8px;
-}
-.adv-section-hint {
-    font-weight: 400;
-    text-transform: none;
-    letter-spacing: 0;
-    color: rgba(255,255,255,0.25);
-    font-size: .63rem;
-}
-.adv-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-}
-.adv-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 11px;
-    border-radius: 20px;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    cursor: pointer;
-    color: rgba(255,255,255,0.55);
-    font-size: .78rem;
-    transition: background .15s, border-color .15s, color .15s;
-    white-space: nowrap;
-}
-.adv-chip:hover { background: rgba(255,255,255,0.11); color: #fff; }
-.adv-chip.adv-chip--active {
-    background: rgba(70,120,255,0.28);
-    border-color: rgba(70,120,255,0.55);
-    color: #c8d8ff;
-}
-.adv-range-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-}
-.adv-range-row.adv-range-row--number { align-items: center; }
-.adv-range-col { flex: 1; }
-.adv-range-divider {
-    padding-top: 22px;
-    color: rgba(255,255,255,0.2);
-    font-size: .9rem;
-    flex-shrink: 0;
-}
-.adv-range-row--number .adv-range-divider { padding-top: 0; }
-.adv-range-hint {
-    display: block;
-    font-size: .6rem;
-    color: rgba(255,255,255,0.3);
-    text-transform: uppercase;
-    letter-spacing: .07em;
-    margin-bottom: 5px;
-}
-.adv-number-input {
-    width: 100%;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.11);
-    border-radius: 7px;
-    color: #fff;
-    padding: 6px 10px;
-    font-size: .82rem;
-    outline: none;
+    min-width: 0;
     box-sizing: border-box;
 }
-.adv-number-input:focus { border-color: rgba(90,150,255,0.5); background: rgba(255,255,255,0.09); }
-.adv-date-block { margin-top: 10px; }
-.adv-date-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 5px;
-}
-.adv-date-label {
-    font-size: .68rem;
-    color: rgba(255,255,255,0.35);
-    width: 100px;
-    flex-shrink: 0;
-}
-.adv-date-input {
-    flex: 1;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.11);
-    border-radius: 7px;
-    color: #fff;
-    padding: 5px 8px;
-    font-size: .78rem;
-    outline: none;
-    color-scheme: dark;
-    width: 100%;
-}
-.adv-date-input:focus { border-color: rgba(90,150,255,0.5); background: rgba(255,255,255,0.09); }
-.adv-tag-search {
+.fp-date-input:focus { border-color: rgba(90,150,255,0.5); background: rgba(255,255,255,0.09); }
+
+/* ── Tag filter list ──────────────────────────────────────────────── */
+.fp-tag-search {
     width: 100%;
     background: rgba(255,255,255,0.06);
     border: 1px solid rgba(255,255,255,0.11);
     border-radius: 7px;
     color: #fff;
-    padding: 6px 10px;
+    padding: 5px 9px;
     font-size: .78rem;
     outline: none;
     box-sizing: border-box;
     margin-bottom: 7px;
+    color-scheme: dark;
 }
-.adv-tag-search::placeholder { color: rgba(255,255,255,0.25); }
-.adv-tag-list {
+.fp-tag-search::placeholder { color: rgba(255,255,255,0.25); }
+.fp-tag-list {
     display: flex;
     flex-wrap: wrap;
     gap: 5px;
-    max-height: 130px;
+    max-height: 140px;
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(255,255,255,0.12) transparent;
 }
-.adv-tag-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    border-radius: 20px;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    cursor: pointer;
-    color: rgba(255,255,255,0.55);
-    font-size: .78rem;
-    transition: background .15s, color .15s;
-    user-select: none;
-    white-space: nowrap;
-}
-.adv-tag-chip:hover { background: rgba(255,255,255,0.11); color: #fff; }
-.adv-tag-chip input { display: none; }
-.adv-tag-chip:has(input:checked) {
-    background: rgba(70,120,255,0.28);
-    border-color: rgba(70,120,255,0.55);
-    color: #c8d8ff;
-}
-.adv-tag-icon { font-size: .9rem; }
-
-.adv-search-footer {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 18px 14px;
-    border-top: 1px solid rgba(255,255,255,0.08);
-    flex-shrink: 0;
-}
-.adv-reset-btn {
-    margin-right: auto;
-    background: none;
-    border: 1px solid rgba(255,255,255,0.12);
-    color: rgba(255,255,255,0.4);
-    padding: 6px 12px;
-    border-radius: 7px;
-    font-size: .82rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    transition: background .15s, color .15s;
-}
-.adv-reset-btn:hover { background: rgba(255,70,70,0.18); color: #ff9999; border-color: rgba(255,70,70,0.3); }
-.adv-reset-btn .material-icons { font-size: .9rem; }
 
 /* ── Pin popup ────────────────────────────────────────────────────── */
 .leaflet-popup-content-wrapper {
@@ -813,172 +606,164 @@
 
         <form id="filter-form"
               hx-post="{% url 'map.search' %}"
-              hx-trigger="change, input delay:600ms from:[name=name]"
+              hx-trigger="change, input delay:600ms from:[name=name], input delay:800ms from:input[type=number]"
               hx-target="#map-body"
               hx-swap="outerHTML">
             {% csrf_token %}
-
-            {# Hidden fields populated by the advanced dialog #}
-            <input type="hidden" name="min_rating" id="adv-min-rating-hidden">
-            <input type="hidden" name="max_rating" id="adv-max-rating-hidden">
-            <input type="hidden" name="has_visits" id="adv-has-visits-hidden">
-            <input type="hidden" name="visited_after" id="adv-visited-after-hidden">
-            <input type="hidden" name="visited_before" id="adv-visited-before-hidden">
-            <input type="hidden" name="min_priority" id="adv-min-priority-hidden">
-            <input type="hidden" name="max_priority" id="adv-max-priority-hidden">
-            <input type="hidden" name="created_after" id="adv-created-after-hidden">
-            <input type="hidden" name="created_before" id="adv-created-before-hidden">
-            <div id="adv-tags-hidden-container"></div>
-            <div id="adv-exclude-tags-hidden-container"></div>
 
             <div class="fp-section">
                 <div class="fp-label">Search Pins</div>
                 <input type="text" name="name" id="fp-search" class="fp-search" placeholder="Name or alias..." autocomplete="off">
             </div>
 
-            <div class="fp-section fp-advanced-row">
-                <button type="button" class="fp-advanced-btn" id="fp-advanced-btn"
-                        onclick="document.getElementById('advanced-search-dialog').showModal()">
-                    <i class="material-icons">tune</i>
-                    <span>Advanced Search</span>
-                    <span id="fp-advanced-badge" class="fp-advanced-badge" hidden>0</span>
-                </button>
-                <button type="button" class="fp-reset" onclick="resetFilters()">
-                    <i class="material-icons">refresh</i> Reset
-                </button>
-            </div>
-        </form>
-    </div>
-
-    {# ── Advanced Search Dialog ─────────────────────────────────────────── #}
-    <dialog id="advanced-search-dialog" class="adv-search-dialog">
-        <div class="adv-search-header">
-            <h2 class="adv-search-title"><i class="material-icons">tune</i> Advanced Search</h2>
-            <button type="button" class="adv-search-close" onclick="document.getElementById('advanced-search-dialog').close()" aria-label="Close">
-                <i class="material-icons">close</i>
-            </button>
-        </div>
-        <div class="adv-search-body">
-
-            {# Rating #}
-            <div class="adv-section">
-                <div class="adv-section-label">Rating</div>
-                <div class="adv-range-row">
-                    <div class="adv-range-col">
-                        <span class="adv-range-hint">Min</span>
-                        <div class="adv-chips" id="adv-min-rating-chips">
-                            <button type="button" class="adv-chip adv-chip--active" data-val="">Any</button>
-                            {% for n in "12345"|make_list %}
-                            <button type="button" class="adv-chip" data-val="{{ n }}">{{ n }}★+</button>
-                            {% endfor %}
+            {# Rating ── collapsible ── #}
+            <details class="fp-accordion-item" id="fp-acc-rating">
+                <summary class="fp-accordion-summary">
+                    <span class="fp-accordion-label">Rating</span>
+                    <span class="fp-acc-dot"></span>
+                    <i class="material-icons fp-acc-arrow">expand_more</i>
+                </summary>
+                <div class="fp-accordion-body">
+                    <div class="fp-range-row">
+                        <div class="fp-range-col">
+                            <span class="fp-range-hint">Min</span>
+                            <div class="fp-chips">
+                                <label class="fp-chip"><input type="radio" name="min_rating" value="" checked>Any</label>
+                                {% for n in "12345"|make_list %}<label class="fp-chip"><input type="radio" name="min_rating" value="{{ n }}">{{ n }}★+</label>{% endfor %}
+                            </div>
                         </div>
-                    </div>
-                    <div class="adv-range-divider">–</div>
-                    <div class="adv-range-col">
-                        <span class="adv-range-hint">Max</span>
-                        <div class="adv-chips" id="adv-max-rating-chips">
-                            <button type="button" class="adv-chip adv-chip--active" data-val="">Any</button>
-                            {% for n in "12345"|make_list %}
-                            <button type="button" class="adv-chip" data-val="{{ n }}">≤{{ n }}★</button>
-                            {% endfor %}
+                        <div class="fp-range-divider">–</div>
+                        <div class="fp-range-col">
+                            <span class="fp-range-hint">Max</span>
+                            <div class="fp-chips">
+                                <label class="fp-chip"><input type="radio" name="max_rating" value="" checked>Any</label>
+                                {% for n in "12345"|make_list %}<label class="fp-chip"><input type="radio" name="max_rating" value="{{ n }}">≤{{ n }}★</label>{% endfor %}
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            </details>
 
-            {# Visit history #}
-            <div class="adv-section">
-                <div class="adv-section-label">Visit History</div>
-                <div class="adv-chips" id="adv-has-visits-chips">
-                    <button type="button" class="adv-chip adv-chip--active" data-val="">Any</button>
-                    <button type="button" class="adv-chip" data-val="yes">Has visits</button>
-                    <button type="button" class="adv-chip" data-val="no">Never visited</button>
-                </div>
-                <div class="adv-date-block" id="adv-visit-date-block">
-                    <div class="adv-date-row">
-                        <span class="adv-date-label">Last visit after</span>
-                        <input type="date" id="adv-visited-after" class="adv-date-input">
+            {# Visit status ── collapsible ── #}
+            <details class="fp-accordion-item" id="fp-acc-visits">
+                <summary class="fp-accordion-summary">
+                    <span class="fp-accordion-label">Visit Status</span>
+                    <span class="fp-acc-dot"></span>
+                    <i class="material-icons fp-acc-arrow">expand_more</i>
+                </summary>
+                <div class="fp-accordion-body">
+                    <div class="fp-chips">
+                        <label class="fp-chip"><input type="radio" name="has_visits" value="" checked>Any</label>
+                        <label class="fp-chip"><input type="radio" name="has_visits" value="yes">Has visits</label>
+                        <label class="fp-chip"><input type="radio" name="has_visits" value="no">Never visited</label>
                     </div>
-                    <div class="adv-date-row">
-                        <span class="adv-date-label">Last visit before</span>
-                        <input type="date" id="adv-visited-before" class="adv-date-input">
+                    <div class="fp-date-block">
+                        <div class="fp-date-row">
+                            <span class="fp-date-label">Last visit after</span>
+                            <input type="date" name="visited_after" class="fp-date-input">
+                        </div>
+                        <div class="fp-date-row">
+                            <span class="fp-date-label">Last visit before</span>
+                            <input type="date" name="visited_before" class="fp-date-input">
+                        </div>
                     </div>
                 </div>
-            </div>
+            </details>
 
-            {# Priority #}
-            <div class="adv-section">
-                <div class="adv-section-label">Priority</div>
-                <div class="adv-range-row adv-range-row--number">
-                    <div class="adv-range-col">
-                        <span class="adv-range-hint">Min</span>
-                        <input type="number" id="adv-min-priority" class="adv-number-input" min="0" max="100" placeholder="0">
-                    </div>
-                    <div class="adv-range-divider">–</div>
-                    <div class="adv-range-col">
-                        <span class="adv-range-hint">Max</span>
-                        <input type="number" id="adv-max-priority" class="adv-number-input" min="0" max="100" placeholder="100">
+            {# Priority ── collapsible ── #}
+            <details class="fp-accordion-item" id="fp-acc-priority">
+                <summary class="fp-accordion-summary">
+                    <span class="fp-accordion-label">Priority</span>
+                    <span class="fp-acc-dot"></span>
+                    <i class="material-icons fp-acc-arrow">expand_more</i>
+                </summary>
+                <div class="fp-accordion-body">
+                    <div class="fp-range-row fp-range-row--number">
+                        <div class="fp-range-col">
+                            <span class="fp-range-hint">Min</span>
+                            <input type="number" name="min_priority" class="fp-number-input" min="0" max="100" placeholder="0">
+                        </div>
+                        <div class="fp-range-divider">–</div>
+                        <div class="fp-range-col">
+                            <span class="fp-range-hint">Max</span>
+                            <input type="number" name="max_priority" class="fp-number-input" min="0" max="100" placeholder="100">
+                        </div>
                     </div>
                 </div>
-            </div>
+            </details>
 
-            {# Pinned date #}
-            <div class="adv-section">
-                <div class="adv-section-label">Date Pinned</div>
-                <div class="adv-date-row">
-                    <span class="adv-date-label">After</span>
-                    <input type="date" id="adv-created-after" class="adv-date-input">
+            {# Date pinned ── collapsible ── #}
+            <details class="fp-accordion-item" id="fp-acc-date">
+                <summary class="fp-accordion-summary">
+                    <span class="fp-accordion-label">Date Pinned</span>
+                    <span class="fp-acc-dot"></span>
+                    <i class="material-icons fp-acc-arrow">expand_more</i>
+                </summary>
+                <div class="fp-accordion-body">
+                    <div class="fp-date-block">
+                        <div class="fp-date-row">
+                            <span class="fp-date-label">After</span>
+                            <input type="date" name="created_after" class="fp-date-input">
+                        </div>
+                        <div class="fp-date-row">
+                            <span class="fp-date-label">Before</span>
+                            <input type="date" name="created_before" class="fp-date-input">
+                        </div>
+                    </div>
                 </div>
-                <div class="adv-date-row">
-                    <span class="adv-date-label">Before</span>
-                    <input type="date" id="adv-created-before" class="adv-date-input">
-                </div>
-            </div>
+            </details>
 
             {% if tags %}
-            {# Tags: include #}
-            <div class="adv-section">
-                <div class="adv-section-label">Include Tags <span class="adv-section-hint">— pin must have at least one</span></div>
-                <input type="text" class="adv-tag-search" id="adv-incl-tag-search" placeholder="Search tags…" autocomplete="off"
-                       oninput="filterAdvTags('incl', this.value)">
-                <div class="adv-tag-list" id="adv-incl-tag-list">
-                    {% for tag in tags %}
-                    <label class="adv-tag-chip" data-tag-name="{{ tag.name|lower }}">
-                        <input type="checkbox" class="adv-incl-tag-cb" value="{{ tag.id }}" data-tag-id="{{ tag.id }}">
-                        {% if tag.icon %}<span class="adv-tag-icon">{{ tag.icon }}</span>{% endif %}
-                        <span>{{ tag.name }}</span>
-                    </label>
-                    {% endfor %}
+            {# Include tags ── collapsible ── #}
+            <details class="fp-accordion-item" id="fp-acc-incl-tags">
+                <summary class="fp-accordion-summary">
+                    <span class="fp-accordion-label">Include Tags</span>
+                    <span class="fp-acc-dot"></span>
+                    <i class="material-icons fp-acc-arrow">expand_more</i>
+                </summary>
+                <div class="fp-accordion-body">
+                    <input type="text" class="fp-tag-search" placeholder="Search tags…" autocomplete="off"
+                           oninput="filterFpTags('incl', this.value)">
+                    <div class="fp-tag-list" id="fp-incl-tag-list">
+                        {% for tag in tags %}
+                        <label class="fp-chip" data-tag-name="{{ tag.name|lower }}">
+                            <input type="checkbox" name="tags" value="{{ tag.id }}">
+                            {% if tag.icon %}<span style="font-size:.9em">{{ tag.icon }}</span>{% endif %}
+                            {{ tag.name }}
+                        </label>
+                        {% endfor %}
+                    </div>
                 </div>
-            </div>
+            </details>
 
-            {# Tags: exclude #}
-            <div class="adv-section">
-                <div class="adv-section-label">Exclude Tags <span class="adv-section-hint">— pin must not have any</span></div>
-                <input type="text" class="adv-tag-search" id="adv-excl-tag-search" placeholder="Search tags…" autocomplete="off"
-                       oninput="filterAdvTags('excl', this.value)">
-                <div class="adv-tag-list" id="adv-excl-tag-list">
-                    {% for tag in tags %}
-                    <label class="adv-tag-chip" data-tag-name="{{ tag.name|lower }}">
-                        <input type="checkbox" class="adv-excl-tag-cb" value="{{ tag.id }}" data-tag-id="{{ tag.id }}">
-                        {% if tag.icon %}<span class="adv-tag-icon">{{ tag.icon }}</span>{% endif %}
-                        <span>{{ tag.name }}</span>
-                    </label>
-                    {% endfor %}
+            {# Exclude tags ── collapsible ── #}
+            <details class="fp-accordion-item" id="fp-acc-excl-tags">
+                <summary class="fp-accordion-summary">
+                    <span class="fp-accordion-label">Exclude Tags</span>
+                    <span class="fp-acc-dot"></span>
+                    <i class="material-icons fp-acc-arrow">expand_more</i>
+                </summary>
+                <div class="fp-accordion-body">
+                    <input type="text" class="fp-tag-search" placeholder="Search tags…" autocomplete="off"
+                           oninput="filterFpTags('excl', this.value)">
+                    <div class="fp-tag-list" id="fp-excl-tag-list">
+                        {% for tag in tags %}
+                        <label class="fp-chip" data-tag-name="{{ tag.name|lower }}">
+                            <input type="checkbox" name="exclude_tags" value="{{ tag.id }}">
+                            {% if tag.icon %}<span style="font-size:.9em">{{ tag.icon }}</span>{% endif %}
+                            {{ tag.name }}
+                        </label>
+                        {% endfor %}
+                    </div>
                 </div>
-            </div>
+            </details>
             {% endif %}
 
-        </div>
-        <div class="adv-search-footer">
-            <button type="button" class="btn-ghost adv-reset-btn" onclick="resetAdvancedFilters()">
-                <i class="material-icons">refresh</i> Reset
+            <button type="button" class="fp-reset" onclick="resetFilters()">
+                <i class="material-icons">refresh</i> Clear all filters
             </button>
-            <button type="button" class="btn-primary" onclick="applyAdvancedFilters()">
-                <i class="material-icons">search</i> Apply
-            </button>
-        </div>
-    </dialog>
+        </form>
+    </div>
 
     <div id="tile-fetch-indicator" aria-hidden="true">
         <span class="tfi-dot"></span>
@@ -2140,10 +1925,11 @@
 
     function resetFilters() {
         const form = document.getElementById('filter-form');
-        form.querySelectorAll('input[type=text], input[type=date]').forEach(t => t.value = '');
+        form.querySelectorAll('input[type=text], input[type=date], input[type=number]').forEach(el => { el.value = ''; });
+        form.querySelectorAll('input[type=checkbox]').forEach(el => { el.checked = false; });
+        form.querySelectorAll('input[type=radio][value=""]').forEach(el => { el.checked = true; });
         const addrInput = document.getElementById('address-search-input');
         if (addrInput) addrInput.value = '';
-        resetAdvancedFilters(/*triggerSearch=*/false);
         _exitFilterMode();
         document.getElementById('search-pins-button').classList.remove('has-filters');
     }
@@ -2152,13 +1938,11 @@
         const form = document.getElementById('filter-form');
         if (!form) return false;
         if ((form.querySelector('input[name=name]')?.value || '').trim()) return true;
-        const advFields = ['min_rating','max_rating','has_visits','visited_after','visited_before',
-                           'min_priority','max_priority','created_after','created_before'];
-        for (const name of advFields) {
-            if ((form.querySelector(`input[name=${name}]`)?.value || '').trim()) return true;
+        if (form.querySelector('input[type=radio]:not([value=""]):checked')) return true;
+        if (form.querySelector('input[type=checkbox]:checked')) return true;
+        for (const el of form.querySelectorAll('input[type=date], input[type=number]')) {
+            if ((el.value || '').trim()) return true;
         }
-        if (document.querySelector('#adv-tags-hidden-container input')) return true;
-        if (document.querySelector('#adv-exclude-tags-hidden-container input')) return true;
         return false;
     }
 
@@ -2191,124 +1975,11 @@
         .finally(() => { if (btn) btn.disabled = false; });
     }
 
-    // ── Advanced Search dialog ────────────────────────────────────────────
-
-    // Single-select chip groups in the advanced dialog
-    document.querySelectorAll('#adv-min-rating-chips, #adv-max-rating-chips, #adv-has-visits-chips').forEach(group => {
-        group.addEventListener('click', e => {
-            const btn = e.target.closest('.adv-chip');
-            if (!btn) return;
-            group.querySelectorAll('.adv-chip').forEach(b => b.classList.remove('adv-chip--active'));
-            btn.classList.add('adv-chip--active');
-        });
-    });
-
-    function filterAdvTags(kind, q) {
-        const listId = kind === 'incl' ? 'adv-incl-tag-list' : 'adv-excl-tag-list';
+    // ── Tag search within accordion sections ─────────────────────────────
+    function filterFpTags(kind, q) {
+        const listId = kind === 'incl' ? 'fp-incl-tag-list' : 'fp-excl-tag-list';
         q = (q || '').toLowerCase().trim();
-        document.querySelectorAll('#' + listId + ' .adv-tag-chip').forEach(chip => {
-            chip.style.display = (!q || (chip.dataset.tagName || '').includes(q)) ? '' : 'none';
-        });
-    }
-
-    function _advChipVal(groupId) {
-        const active = document.querySelector('#' + groupId + ' .adv-chip--active');
-        return active ? active.dataset.val : '';
-    }
-
-    function applyAdvancedFilters() {
-        // Copy all advanced dialog values into the hidden form fields
-        const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-        set('adv-min-rating-hidden', _advChipVal('adv-min-rating-chips'));
-        set('adv-max-rating-hidden', _advChipVal('adv-max-rating-chips'));
-        set('adv-has-visits-hidden', _advChipVal('adv-has-visits-chips'));
-        set('adv-visited-after-hidden', (document.getElementById('adv-visited-after') || {}).value || '');
-        set('adv-visited-before-hidden', (document.getElementById('adv-visited-before') || {}).value || '');
-        set('adv-min-priority-hidden', (document.getElementById('adv-min-priority') || {}).value || '');
-        set('adv-max-priority-hidden', (document.getElementById('adv-max-priority') || {}).value || '');
-        set('adv-created-after-hidden', (document.getElementById('adv-created-after') || {}).value || '');
-        set('adv-created-before-hidden', (document.getElementById('adv-created-before') || {}).value || '');
-
-        // Rebuild hidden tag inputs
-        const inclContainer = document.getElementById('adv-tags-hidden-container');
-        const exclContainer = document.getElementById('adv-exclude-tags-hidden-container');
-        inclContainer.innerHTML = '';
-        exclContainer.innerHTML = '';
-        document.querySelectorAll('.adv-incl-tag-cb:checked').forEach(cb => {
-            const inp = document.createElement('input');
-            inp.type = 'hidden'; inp.name = 'tags'; inp.value = cb.value;
-            inclContainer.appendChild(inp);
-        });
-        document.querySelectorAll('.adv-excl-tag-cb:checked').forEach(cb => {
-            const inp = document.createElement('input');
-            inp.type = 'hidden'; inp.name = 'exclude_tags'; inp.value = cb.value;
-            exclContainer.appendChild(inp);
-        });
-
-        // Update badge count on button
-        const count = _countAdvFilters();
-        const badge = document.getElementById('fp-advanced-badge');
-        if (badge) { badge.hidden = count === 0; badge.textContent = count; }
-        document.getElementById('search-pins-button').classList.toggle('has-filters', _hasActiveFilters());
-
-        document.getElementById('advanced-search-dialog').close();
-        // Trigger HTMX form submission
-        htmx.trigger(document.getElementById('filter-form'), 'change');
-    }
-
-    function _countAdvFilters() {
-        let n = 0;
-        if (_advChipVal('adv-min-rating-chips')) n++;
-        if (_advChipVal('adv-max-rating-chips')) n++;
-        if (_advChipVal('adv-has-visits-chips')) n++;
-        if ((document.getElementById('adv-visited-after') || {}).value) n++;
-        if ((document.getElementById('adv-visited-before') || {}).value) n++;
-        if ((document.getElementById('adv-min-priority') || {}).value) n++;
-        if ((document.getElementById('adv-max-priority') || {}).value) n++;
-        if ((document.getElementById('adv-created-after') || {}).value) n++;
-        if ((document.getElementById('adv-created-before') || {}).value) n++;
-        n += document.querySelectorAll('.adv-incl-tag-cb:checked').length;
-        n += document.querySelectorAll('.adv-excl-tag-cb:checked').length;
-        return n;
-    }
-
-    function resetAdvancedFilters(triggerSearch) {
-        // Reset chip groups to "Any"
-        ['adv-min-rating-chips', 'adv-max-rating-chips', 'adv-has-visits-chips'].forEach(gid => {
-            const group = document.getElementById(gid);
-            if (!group) return;
-            group.querySelectorAll('.adv-chip').forEach(b => b.classList.remove('adv-chip--active'));
-            const anyBtn = group.querySelector('.adv-chip[data-val=""]');
-            if (anyBtn) anyBtn.classList.add('adv-chip--active');
-        });
-        ['adv-visited-after','adv-visited-before','adv-min-priority','adv-max-priority',
-         'adv-created-after','adv-created-before'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.value = '';
-        });
-        document.querySelectorAll('.adv-incl-tag-cb, .adv-excl-tag-cb').forEach(cb => cb.checked = false);
-        // Clear hidden fields
-        ['adv-min-rating-hidden','adv-max-rating-hidden','adv-has-visits-hidden',
-         'adv-visited-after-hidden','adv-visited-before-hidden','adv-min-priority-hidden',
-         'adv-max-priority-hidden','adv-created-after-hidden','adv-created-before-hidden'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.value = '';
-        });
-        const inclContainer = document.getElementById('adv-tags-hidden-container');
-        const exclContainer = document.getElementById('adv-exclude-tags-hidden-container');
-        if (inclContainer) inclContainer.innerHTML = '';
-        if (exclContainer) exclContainer.innerHTML = '';
-        const badge = document.getElementById('fp-advanced-badge');
-        if (badge) { badge.hidden = true; badge.textContent = '0'; }
-        if (triggerSearch !== false) {
-            htmx.trigger(document.getElementById('filter-form'), 'change');
-        }
-    }
-
-    // ── Tag chip search (client-side) ─────────────────────────────────────
-    function filterTagChips(input) {
-        const q = (input.value || '').toLowerCase().trim();
-        document.querySelectorAll('#fp-tag-chips .fp-chip').forEach(chip => {
+        document.querySelectorAll('#' + listId + ' .fp-chip').forEach(chip => {
             chip.style.display = (!q || (chip.dataset.tagName || '').includes(q)) ? '' : 'none';
         });
     }
