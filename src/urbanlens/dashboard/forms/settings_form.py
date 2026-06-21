@@ -68,7 +68,7 @@ class PrivacySettingsForm(forms.ModelForm):
     photo_upload_visibility = forms.ChoiceField(
         choices=VisibilityChoice.choices,
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
-        label="My Photo Visibility",
+        label="Photo Visibility",
         help_text="Who can see the photos you upload to pins and locations.",
     )
     viewer_photo_filter = forms.ChoiceField(
@@ -151,9 +151,7 @@ class MapDisplayForm(forms.ModelForm):
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
         label="Local Storage",
-        help_text=(
-            "Cache pins in your browser for instant map loads. Disabling this will make the map feel sluggish."
-        ),
+        help_text=("Cache pins in your browser for instant map loads. Disabling this will make the map feel sluggish."),
     )
 
     class Meta:
@@ -208,8 +206,8 @@ class MapCenterForm(forms.ModelForm):
         if instance.map_center_mode != MapCenterMode.CUSTOM:
             # Restore original custom coordinates from the database.
             original = (
-                type(instance).objects
-                .filter(pk=instance.pk)
+                type(instance)
+                .objects.filter(pk=instance.pk)
                 .values("map_custom_latitude", "map_custom_longitude")
                 .first()
             ) or {}

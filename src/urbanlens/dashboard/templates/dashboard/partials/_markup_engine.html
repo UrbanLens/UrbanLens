@@ -1,0 +1,400 @@
+<script>
+{% comment %}
+Shared Markup Engine — defines window.MarkupEngine with helpers and the draw-session factory.
+Include BEFORE any template that uses MarkupEngine (e.g. in base.html <head>).
+{% endcomment %}
+window.MarkupEngine = (function () {
+    'use strict';
+
+    // ── Geometry helpers ──────────────────────────────────────────────────────
+
+    function bearing(from, to) {
+        var flat = Array.isArray(from) ? from[0] : from.lat;
+        var flng = Array.isArray(from) ? from[1] : from.lng;
+        var tlat = Array.isArray(to)   ? to[0]   : to.lat;
+        var tlng = Array.isArray(to)   ? to[1]   : to.lng;
+        return Math.atan2(tlng - flng, tlat - flat) * (180 / Math.PI);
+    }
+
+    function arrowheadSvg(color, deg, sz, opacity) {
+        sz      = sz || 28;
+        opacity = (opacity == null) ? 1 : +opacity;
+        var h   = sz / 2, tip = -(sz * 0.43), bx = sz * 0.36, by = sz * 0.29;
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="' + sz + '" height="' + sz + '"' +
+            ' viewBox="' + (-h) + ' ' + (-h) + ' ' + sz + ' ' + sz + '"' +
+            ' style="transform:rotate(' + deg.toFixed(1) + 'deg);opacity:' + opacity.toFixed(2) + '">' +
+            '<polygon points="0,' + tip.toFixed(1) + ' ' + bx.toFixed(1) + ',' + by.toFixed(1) +
+            ' ' + (-bx).toFixed(1) + ',' + by.toFixed(1) + '"' +
+            ' fill="' + color + '" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+    }
+
+    function arrowheadSize(zoom) {
+        if (zoom == null || zoom >= 16) return 28;
+        if (zoom >= 13) return 20;
+        if (zoom >= 10) return 14;
+        return 8;
+    }
+
+    function textLabelHtml(s) {
+        var color = s.color || '#e53e3e';
+        var sz    = s.stroke_width || 16;
+        var bg    = s.border_color;
+        var bgVal = (!bg || bg === 'none') ? 'rgba(255,255,255,0.92)' : bg;
+        var lbl   = (s.label || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        return '<span class="markup-text-label" style="color:' + color +
+            ';font-size:' + sz + 'px;background:' + bgVal +
+            ';display:inline-block;padding:.15em .45em;border-radius:3px' +
+            ';white-space:nowrap;line-height:1.3;font-weight:600' +
+            ';box-shadow:0 1px 3px rgba(0,0,0,.2)">' + (lbl || '&nbsp;') + '</span>';
+    }
+
+    // ── Shape renderer — works for both comment-composer (simple) and detail/wiki views ──
+
+    function renderShape(s, group, zoom) {
+        if (typeof L === 'undefined') return;
+        var color  = s.color || '#e74c3c';
+        var weight = s.stroke_width || s.weight || 3;
+        var fillOp   = (s.fill_opacity   != null ? s.fill_opacity   : 87)  / 100;
+        var borderOp = (s.border_opacity != null ? s.border_opacity : 100) / 100;
+        var bc = s.border_color, hasBorder = !!(bc && bc !== 'none');
+        var strokeC = hasBorder ? bc : color;
+
+        function shapeOpts() {
+            return { color: strokeC, weight: hasBorder ? weight : 2,
+                     fillColor: color, fillOpacity: fillOp, opacity: borderOp };
+        }
+
+        switch (s.type) {
+            case 'line':
+                L.polyline(s.latlngs, { color: color, weight: weight, opacity: fillOp }).addTo(group);
+                break;
+            case 'arrow': {
+                L.polyline(s.latlngs, { color: color, weight: weight, opacity: fillOp }).addTo(group);
+                if (s.latlngs.length >= 2) {
+                    var n = s.latlngs.length;
+                    var deg = bearing(s.latlngs[n-2], s.latlngs[n-1]);
+                    var sz2 = arrowheadSize(zoom);
+                    L.marker(L.latLng(s.latlngs[n-1][0], s.latlngs[n-1][1]), {
+                        icon: L.divIcon({ className: '', html: arrowheadSvg(color, deg, sz2, fillOp),
+                            iconSize: [sz2, sz2], iconAnchor: [sz2/2, sz2/2] }),
+                        interactive: false,
+                    }).addTo(group);
+                }
+                break;
+            }
+            case 'circle': {
+                var p1 = L.latLng(s.latlngs[0]), p2 = L.latLng(s.latlngs[1]);
+                var cOpts = shapeOpts(); cOpts.radius = p1.distanceTo(p2);
+                L.circle(p1, cOpts).addTo(group);
+                break;
+            }
+            case 'rect':
+                L.rectangle(L.latLngBounds(s.latlngs[0], s.latlngs[1]), shapeOpts()).addTo(group);
+                break;
+            case 'polygon':
+                L.polygon(s.latlngs, shapeOpts()).addTo(group);
+                break;
+            case 'text':
+                L.marker(L.latLng(s.latlngs[0][0], s.latlngs[0][1]), {
+                    icon: L.divIcon({ className: '', html: textLabelHtml(s), iconSize: null, iconAnchor: [0, 0] }),
+                    interactive: false,
+                }).addTo(group);
+                break;
+        }
+    }
+
+    // ── Draw session factory ──────────────────────────────────────────────────
+    //
+    // opts:
+    //   getColor()          → css color string for the current tool
+    //   getWidth()          → stroke-width number
+    //   getTextLabel()      → label string (for text tool)
+    //   onCommit(type, latlngs[[lat,lng],...], extras)
+    //   onHintChange(text)
+    //   onToolChange(tool)  → null when deactivated
+    //
+    function createDrawSession(map, opts) {
+        var _tool  = null;
+        var _state = null;   // { points: [[lat,lng],...] } while multi-point drawing
+        var _prevL = L.layerGroup().addTo(map);
+
+        function _c()  { return opts.getColor     ? opts.getColor()     : '#e74c3c'; }
+        function _lbl(){ return opts.getTextLabel ? opts.getTextLabel() : ''; }
+
+        // ── Hint text ─────────────────────────────────────────────────────────
+        function _hint() {
+            if (!opts.onHintChange) return;
+            if (!_tool) { opts.onHintChange(''); return; }
+            var n = _state ? _state.points.length : 0;
+            var msgs = {
+                arrow:   n ? n + ' pt' + (n > 1 ? 's' : '') + ' — drag to finish, or double-click'
+                           : 'Drag for a quick arrow, or click to add points',
+                line:    n ? n + ' pt' + (n > 1 ? 's' : '') + ' — drag to finish, or double-click'
+                           : 'Drag for a quick line, or click to add points',
+                polygon: n >= 3 ? 'Click near start or double-click to close'
+                                : n ? 'Click to add vertices' : 'Click to place first vertex',
+                circle:  'Drag to draw a circle',
+                rect:    _state ? 'Click second corner, or drag' : 'Click first corner, or drag to draw',
+                text:    'Drag to size text box, or click to place',
+            };
+            opts.onHintChange(msgs[_tool] || '');
+        }
+
+        function _clearPrev() { _prevL.clearLayers(); }
+
+        // ── Rubber-band preview ───────────────────────────────────────────────
+        function _preview(cursorLL) {
+            _clearPrev();
+            var c = _c();
+
+            if ((_tool === 'line' || _tool === 'arrow') && _state) {
+                var pts = _state.points.concat([[cursorLL.lat, cursorLL.lng]]);
+                L.polyline(pts, { color: c, dashArray: '5 7', weight: 2, opacity: 0.7, interactive: false }).addTo(_prevL);
+                if (_tool === 'arrow' && pts.length >= 2) {
+                    var n = pts.length, deg = bearing(pts[n-2], pts[n-1]), sz = 20;
+                    L.marker(L.latLng(pts[n-1][0], pts[n-1][1]), {
+                        icon: L.divIcon({ className: '', html: arrowheadSvg(c, deg, sz), iconSize: [sz, sz], iconAnchor: [sz/2, sz/2] }),
+                        interactive: false,
+                    }).addTo(_prevL);
+                }
+            } else if (_tool === 'polygon' && _state) {
+                var ppts = _state.points.concat([[cursorLL.lat, cursorLL.lng]]);
+                L.polygon(ppts, { color: c, dashArray: '5 7', weight: 2, fillOpacity: 0.07, interactive: false }).addTo(_prevL);
+                // Highlight the close target when near the first point
+                if (_state.points.length >= 3) {
+                    L.circleMarker(L.latLng(_state.points[0][0], _state.points[0][1]),
+                        { radius: 8, color: c, fillColor: c, fillOpacity: 0.35, weight: 2, interactive: false }).addTo(_prevL);
+                }
+            } else if (_tool === 'rect' && _state && _state.points.length >= 1) {
+                L.rectangle(L.latLngBounds(_state.points[0], [cursorLL.lat, cursorLL.lng]),
+                    { color: c, weight: 2, fillOpacity: 0.08, dashArray: '4 4', interactive: false }).addTo(_prevL);
+            }
+        }
+
+        // ── Commit a finished shape ───────────────────────────────────────────
+        function _commit(type, latlngs, extras) {
+            _clearPrev();
+            _state = null;
+            _hint();
+            if (opts.onCommit) opts.onCommit(type, latlngs, extras || {});
+        }
+
+        // ── Public: cancel in-progress shape without deactivating tool ────────
+        function cancelShape() {
+            _state = null;
+            _clearPrev();
+            _hint();
+        }
+
+        // ── Public: deactivate tool entirely ──────────────────────────────────
+        function deactivate() {
+            cancelShape();
+            _tool = null;
+            map.doubleClickZoom.enable();
+            map.getContainer().style.cursor = '';
+            if (opts.onToolChange) opts.onToolChange(null);
+        }
+
+        // ── Public: activate a tool ───────────────────────────────────────────
+        function startTool(type) {
+            cancelShape();
+            _tool = type;
+            map.doubleClickZoom.disable();
+            map.getContainer().style.cursor = 'crosshair';
+            if (opts.onToolChange) opts.onToolChange(type);
+            _hint();
+        }
+
+        function getCurrentTool() { return _tool; }
+
+        // ── Click ─────────────────────────────────────────────────────────────
+        function _onClick(e) {
+            if (!_tool || e.originalEvent.detail > 1) return;  // skip 2nd click of dblclick
+            var ll = e.latlng;
+
+            if (_tool === 'text') {
+                _commit('text', [[ll.lat, ll.lng]], { label: _lbl() });
+                return;
+            }
+
+            if (_tool === 'line' || _tool === 'arrow') {
+                if (!_state) _state = { points: [[ll.lat, ll.lng]] };
+                else _state.points.push([ll.lat, ll.lng]);
+                _preview(ll); _hint();
+                return;
+            }
+
+            if (_tool === 'polygon') {
+                if (!_state) {
+                    _state = { points: [[ll.lat, ll.lng]] };
+                } else {
+                    // Close polygon when clicking near first point
+                    if (_state.points.length >= 3) {
+                        var fp = map.latLngToContainerPoint(L.latLng(_state.points[0][0], _state.points[0][1]));
+                        var cp = map.latLngToContainerPoint(ll);
+                        if (Math.hypot(fp.x - cp.x, fp.y - cp.y) <= 20) {
+                            _commit('polygon', _state.points.slice());
+                            return;
+                        }
+                    }
+                    _state.points.push([ll.lat, ll.lng]);
+                }
+                _preview(ll); _hint();
+                return;
+            }
+
+            if (_tool === 'rect') {
+                if (!_state) { _state = { points: [[ll.lat, ll.lng]] }; _hint(); }
+                else { _commit('rect', [_state.points[0], [ll.lat, ll.lng]]); }
+                return;
+            }
+        }
+
+        // ── Double-click: commit multi-point shapes ───────────────────────────
+        function _onDblClick(e) {
+            if (!_tool || !_state) return;
+            L.DomEvent.stop(e);  // critical: prevent map zoom
+
+            if (_tool === 'line' || _tool === 'arrow') {
+                // The first click of the dblclick sequence already added a duplicate last point;
+                // strip it unless doing so would leave us with fewer than 2 points.
+                var pts = _state.points.length > 2
+                    ? _state.points.slice(0, -1)
+                    : _state.points.slice();
+                if (pts.length >= 2) { _commit(_tool, pts); }
+                return;
+            }
+
+            if (_tool === 'polygon') {
+                var ppts = _state.points.length > 3
+                    ? _state.points.slice(0, -1)
+                    : _state.points.slice();
+                if (ppts.length >= 3) { _commit('polygon', ppts); }
+            }
+        }
+
+        // ── Mouse move: update rubber-band preview ────────────────────────────
+        function _onMouseMove(e) {
+            if (_state || _tool === 'rect') _preview(e.latlng);
+        }
+
+        // ── Mouse down: drag-to-draw for circle, rect, arrow/line, text ───────
+        function _onMouseDown(e) {
+            if (!_tool || e.button !== 0) return;
+            var eligible = ['circle', 'rect', 'arrow', 'line', 'text'].indexOf(_tool) >= 0;
+            if (!eligible) return;
+
+            var startLL = map.mouseEventToLatLng(e);
+            var startX = e.clientX, startY = e.clientY;
+            var isDragging = false;
+            // For arrow/line: if we already have points placed via click, chain onto them
+            var hasPoints = !!(_state && _state.points && _state.points.length > 0 &&
+                               (_tool === 'arrow' || _tool === 'line'));
+
+            function onMove(ev) {
+                var dx = ev.clientX - startX, dy = ev.clientY - startY;
+                if (!isDragging && Math.hypot(dx, dy) < 6) return;
+                isDragging = true;
+                var endLL = map.mouseEventToLatLng(ev);
+                var c = _c();
+                _clearPrev();
+
+                if (_tool === 'circle') {
+                    L.circle(startLL, { radius: startLL.distanceTo(endLL), color: c, weight: 2, fillOpacity: 0.1, interactive: false }).addTo(_prevL);
+
+                } else if (_tool === 'rect') {
+                    var rs = (_state && _state.points.length >= 1) ? L.latLng(_state.points[0]) : startLL;
+                    L.rectangle(L.latLngBounds(rs, endLL), { color: c, weight: 2, fillOpacity: 0.08, dashArray: '4 4', interactive: false }).addTo(_prevL);
+
+                } else if (_tool === 'arrow' || _tool === 'line') {
+                    var pts = hasPoints
+                        ? _state.points.concat([[endLL.lat, endLL.lng]])
+                        : [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]];
+                    L.polyline(pts, { color: c, weight: 2, opacity: 0.85, interactive: false }).addTo(_prevL);
+                    if (_tool === 'arrow') {
+                        var n = pts.length, deg = bearing(pts[n-2], pts[n-1]), sz = 20;
+                        L.marker(L.latLng(endLL.lat, endLL.lng), {
+                            icon: L.divIcon({ className: '', html: arrowheadSvg(c, deg, sz), iconSize: [sz, sz], iconAnchor: [sz/2, sz/2] }),
+                            interactive: false,
+                        }).addTo(_prevL);
+                    }
+
+                } else if (_tool === 'text') {
+                    L.rectangle(L.latLngBounds(startLL, endLL), { color: c, weight: 1, dashArray: '3 4', fillOpacity: 0.04, interactive: false }).addTo(_prevL);
+                }
+            }
+
+            function onUp(ev) {
+                document.removeEventListener('mousemove', onMove);
+                _clearPrev();
+                var dx = ev.clientX - startX, dy = ev.clientY - startY;
+                if (!isDragging || Math.hypot(dx, dy) < 6) return;  // too small — treat as click
+                var endLL = map.mouseEventToLatLng(ev);
+
+                if (_tool === 'circle') {
+                    _commit('circle', [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]]);
+
+                } else if (_tool === 'rect') {
+                    var rectStart = (_state && _state.points.length >= 1) ? _state.points[0] : [startLL.lat, startLL.lng];
+                    _commit('rect', [rectStart, [endLL.lat, endLL.lng]]);
+
+                } else if (_tool === 'arrow' || _tool === 'line') {
+                    var finalPts = hasPoints
+                        ? _state.points.concat([[endLL.lat, endLL.lng]])
+                        : [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]];
+                    _commit(_tool, finalPts);
+
+                } else if (_tool === 'text') {
+                    var fontSize = Math.max(10, Math.min(72, Math.round(Math.abs(dy) * 0.65)));
+                    _commit('text', [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]],
+                        { dragFontSize: fontSize, label: _lbl() });
+                }
+            }
+
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp, { once: true });
+        }
+
+        // ── ESC: cancel in-progress shape; deactivate if no state ────────────
+        function _onKeyDown(e) {
+            if (e.key !== 'Escape' || !_tool) return;
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            if (_state) { cancelShape(); }
+            else        { deactivate(); }
+        }
+
+        map.on('click',     _onClick);
+        map.on('dblclick',  _onDblClick);
+        map.on('mousemove', _onMouseMove);
+        map.getContainer().addEventListener('mousedown', _onMouseDown);
+        document.addEventListener('keydown', _onKeyDown, true);
+
+        function destroy() {
+            map.off('click',     _onClick);
+            map.off('dblclick',  _onDblClick);
+            map.off('mousemove', _onMouseMove);
+            map.getContainer().removeEventListener('mousedown', _onMouseDown);
+            document.removeEventListener('keydown', _onKeyDown, true);
+            if (map.hasLayer(_prevL)) map.removeLayer(_prevL);
+        }
+
+        return {
+            startTool:       startTool,
+            deactivate:      deactivate,
+            cancelShape:     cancelShape,
+            getCurrentTool:  getCurrentTool,
+            destroy:         destroy,
+        };
+    }
+
+    return {
+        bearing:           bearing,
+        arrowheadSvg:      arrowheadSvg,
+        arrowheadSize:     arrowheadSize,
+        textLabelHtml:     textLabelHtml,
+        renderShape:       renderShape,
+        createDrawSession: createDrawSession,
+    };
+}());
+</script>

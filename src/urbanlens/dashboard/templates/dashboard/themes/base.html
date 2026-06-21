@@ -16,6 +16,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
 
     {% load static %}
+    {# ── Shared markup engine — must load before {% block content %} scripts ── #}
+    {% include 'dashboard/partials/_markup_engine.html' %}
     {% block header %}{% endblock %}
     <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">
     <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}" />
@@ -352,6 +354,9 @@
             <span>Color</span>
             <input type="color" id="cmc-color" value="#e74c3c">
           </label>
+          {# text label input — shown only when text tool is active #}
+          <input type="text" id="cmc-text-label" class="cmc-text-label-input"
+                 placeholder="Label text…" autocomplete="off" maxlength="100" hidden>
           <span class="cmc-hint-text" id="cmc-hint"></span>
         </div>
       </div>
@@ -427,10 +432,8 @@
         // ── Composer state ────────────────────────────────────────────────────
         var _composerMap = null;
         var _composerMarkupLayer = null;  // L.LayerGroup of confirmed shapes
-        var _composerPreviewLayer = null; // L.LayerGroup for in-progress drawing preview
+        var _composerSession = null;      // MarkupEngine draw session
         var _composerShapes = [];         // raw shape descriptors [{type, latlngs, label, color}]
-        var _activeTool = null;
-        var _drawState = null;            // { type, points:[[lat,lng],...] } while drawing
         var _originForm = null;           // the .comment-compose element that opened the dialog
         var _pinSearchTimer = null;
         var _pinCache = [];
@@ -467,8 +470,55 @@
                 _composerMap = L.map(mapEl, { zoomControl: true });
                 _makeTileLayer().addTo(_composerMap);
                 _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
-                _composerPreviewLayer = L.layerGroup().addTo(_composerMap);
-                _attachMapEvents();
+                _composerSession = MarkupEngine.createDrawSession(_composerMap, {
+                    getColor: function () { return _colorPicker ? _colorPicker.value : '#e74c3c'; },
+                    getTextLabel: function () {
+                        var inp = document.getElementById('cmc-text-label');
+                        return inp ? inp.value.trim() : '';
+                    },
+                    onCommit: function (type, latlngs, extras) {
+                        var color = _colorPicker ? _colorPicker.value : '#e74c3c';
+                        var s = { type: type, latlngs: latlngs, color: color };
+                        if (type === 'text') {
+                            var label = extras.label || '';
+                            if (!label) {
+                                var hintEl = document.getElementById('cmc-hint');
+                                if (hintEl) hintEl.textContent = 'Enter a label first, then click the map';
+                                return;
+                            }
+                            s.label = label;
+                            s.stroke_width = extras.dragFontSize || 16;
+                        }
+                        _composerShapes.push(s);
+                        _redrawMarkup();
+                    },
+                    onHintChange: function (hint) {
+                        var el = document.getElementById('cmc-hint');
+                        if (el) el.textContent = hint;
+                    },
+                    onToolChange: function (tool) {
+                        document.querySelectorAll('.cmc-tool-btn').forEach(function (b) {
+                            b.classList.toggle('is-active', b.dataset.tool === tool);
+                        });
+                        var textInp = document.getElementById('cmc-text-label');
+                        var hintEl  = document.getElementById('cmc-hint');
+                        if (textInp) {
+                            textInp.hidden = (tool !== 'text');
+                            if (tool === 'text') { setTimeout(function () { textInp.focus(); }, 0); }
+                        }
+                        if (hintEl) hintEl.hidden = (tool === 'text');
+                        if (_composerMap) {
+                            if (tool) { _composerMap.dragging.disable(); }
+                            else      { _composerMap.dragging.enable(); }
+                        }
+                    },
+                });
+                // Intercept dialog ESC: let engine cancel the shape instead of closing dialog
+                _dialog.addEventListener('cancel', function (e) {
+                    if (_composerSession && _composerSession.getCurrentTool()) {
+                        e.preventDefault();
+                    }
+                });
             }
 
             if (existing) {
@@ -486,7 +536,7 @@
             _composerMap.invalidateSize();
 
             _redrawMarkup();
-            _setActiveTool(null);
+            if (_composerSession) _composerSession.deactivate();
         };
 
         // ── Close / cancel ────────────────────────────────────────────────────
@@ -494,8 +544,8 @@
         document.getElementById('comment-map-composer-cancel').addEventListener('click', _closeComposer);
 
         function _closeComposer() {
+            if (_composerSession) _composerSession.deactivate();
             if (_dialog.open) _dialog.close();
-            _setActiveTool(null);
         }
 
         // ── Save ──────────────────────────────────────────────────────────────
@@ -542,8 +592,10 @@
         // ── Tool selection ────────────────────────────────────────────────────
         document.querySelectorAll('.cmc-tool-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
+                if (!_composerSession) return;
                 var tool = btn.dataset.tool;
-                _setActiveTool(_activeTool === tool ? null : tool);
+                if (_composerSession.getCurrentTool() === tool) { _composerSession.deactivate(); }
+                else { _composerSession.startTool(tool); }
             });
         });
 
@@ -557,240 +609,13 @@
             _redrawMarkup();
         });
 
-        function _setActiveTool(tool) {
-            _drawState = null;
-            if (_composerPreviewLayer) _composerPreviewLayer.clearLayers();
-            _activeTool = tool;
-            document.querySelectorAll('.cmc-tool-btn').forEach(function (b) {
-                b.classList.toggle('is-active', b.dataset.tool === tool);
-            });
-            if (_composerMap) {
-                if (tool) {
-                    _composerMap.dragging.disable();
-                    _composerMap.getContainer().style.cursor = 'crosshair';
-                } else {
-                    _composerMap.dragging.enable();
-                    _composerMap.getContainer().style.cursor = '';
-                }
-            }
-            _updateHint();
-        }
-
-        function _updateHint() {
-            var hintEl = document.getElementById('cmc-hint');
-            if (!hintEl) return;
-            if (!_activeTool) { hintEl.textContent = ''; return; }
-            var nPts = _drawState ? _drawState.points.length : 0;
-            var msgs = {
-                arrow:   nPts ? (nPts + ' pt' + (nPts > 1 ? 's' : '') + ' — double-click to finish') : 'Click to add points — double-click to finish',
-                line:    nPts ? (nPts + ' pt' + (nPts > 1 ? 's' : '') + ' — double-click to finish') : 'Click to add points — double-click to finish',
-                polygon: nPts ? (nPts + ' pt' + (nPts > 1 ? 's' : '') + ' — double-click to close') : 'Click to add vertices — double-click to close',
-                circle:  'Drag to draw a circle',
-                rect:    'Drag to draw a rectangle',
-                text:    'Click to place a text label',
-            };
-            hintEl.textContent = msgs[_activeTool] || '';
-        }
-
-        // ── Map drawing events ────────────────────────────────────────────────
-        function _attachMapEvents() {
-            // Single click — add a point for line/arrow/polygon; place text
-            _composerMap.on('click', function (e) {
-                if (e.originalEvent.detail > 1) return;  // skip the 2nd click of a dblclick
-                if (!_activeTool) return;
-                var ll = e.latlng;
-                var color = _colorPicker ? _colorPicker.value : '#e74c3c';
-
-                if (_activeTool === 'text') {
-                    var label = window.prompt('Enter label text:');
-                    if (!label) return;
-                    _composerShapes.push({ type: 'text', latlngs: [[ll.lat, ll.lng]], label: label, color: color });
-                    _redrawMarkup();
-                    return;
-                }
-
-                if (_activeTool === 'line' || _activeTool === 'arrow') {
-                    if (!_drawState) {
-                        _drawState = { points: [[ll.lat, ll.lng]] };
-                    } else {
-                        _drawState.points.push([ll.lat, ll.lng]);
-                    }
-                    _updateDrawPreview(ll);
-                    _updateHint();
-                    return;
-                }
-
-                if (_activeTool === 'polygon') {
-                    if (!_drawState) {
-                        _drawState = { points: [[ll.lat, ll.lng]] };
-                    } else {
-                        _drawState.points.push([ll.lat, ll.lng]);
-                    }
-                    _updateDrawPreview(ll);
-                    _updateHint();
-                    return;
-                }
-            });
-
-            // Double-click — commit multi-point line/arrow/polygon
-            _composerMap.on('dblclick', function (e) {
-                if (!_activeTool || !_drawState) return;
-                var color = _colorPicker ? _colorPicker.value : '#e74c3c';
-
-                if ((_activeTool === 'line' || _activeTool === 'arrow') && _drawState.points.length >= 2) {
-                    _composerShapes.push({ type: _activeTool, latlngs: _drawState.points.slice(), color: color });
-                    _drawState = null;
-                    if (_composerPreviewLayer) _composerPreviewLayer.clearLayers();
-                    _redrawMarkup();
-                    _updateHint();
-                    return;
-                }
-
-                if (_activeTool === 'polygon' && _drawState.points.length >= 3) {
-                    _composerShapes.push({ type: 'polygon', latlngs: _drawState.points.slice(), color: color });
-                    _drawState = null;
-                    if (_composerPreviewLayer) _composerPreviewLayer.clearLayers();
-                    _redrawMarkup();
-                    _updateHint();
-                    return;
-                }
-            });
-
-            // Mouse move — rubber-band preview while drawing line/arrow/polygon
-            _composerMap.on('mousemove', function (e) {
-                if (!_drawState) return;
-                _updateDrawPreview(e.latlng);
-            });
-
-            // Drag-draw for circle and rect (native events; map.dragging is disabled)
-            _composerMap.getContainer().addEventListener('mousedown', function (e) {
-                if (!_activeTool || (_activeTool !== 'circle' && _activeTool !== 'rect')) return;
-                if (e.button !== 0) return;
-                var startLL = _composerMap.mouseEventToLatLng(e);
-                var startX = e.clientX, startY = e.clientY;
-                var _dragPreview = null;
-
-                function onMM(ev) {
-                    var endLL = _composerMap.mouseEventToLatLng(ev);
-                    var color = _colorPicker ? _colorPicker.value : '#e74c3c';
-                    if (_dragPreview) _composerMarkupLayer.removeLayer(_dragPreview);
-                    if (_activeTool === 'circle') {
-                        _dragPreview = L.circle(startLL, { radius: startLL.distanceTo(endLL), color: color, weight: 2, fillOpacity: 0.1, interactive: false }).addTo(_composerMarkupLayer);
-                    } else {
-                        _dragPreview = L.rectangle(L.latLngBounds(startLL, endLL), { color: color, weight: 2, fillOpacity: 0.1, interactive: false }).addTo(_composerMarkupLayer);
-                    }
-                }
-
-                function onMU(ev) {
-                    document.removeEventListener('mousemove', onMM);
-                    if (_dragPreview) { _composerMarkupLayer.removeLayer(_dragPreview); _dragPreview = null; }
-                    if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
-                    var endLL = _composerMap.mouseEventToLatLng(ev);
-                    var color = _colorPicker ? _colorPicker.value : '#e74c3c';
-                    _composerShapes.push({ type: _activeTool, latlngs: [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]], color: color });
-                    _redrawMarkup();
-                }
-
-                document.addEventListener('mousemove', onMM);
-                document.addEventListener('mouseup', onMU, { once: true });
-            });
-        }
-
-        // Rubber-band preview line from placed points to cursor
-        function _updateDrawPreview(cursorLL) {
-            if (!_composerPreviewLayer) return;
-            _composerPreviewLayer.clearLayers();
-            if (!_drawState) return;
-            var pts = _drawState.points.slice();
-            pts.push([cursorLL.lat, cursorLL.lng]);
-            var color = _colorPicker ? _colorPicker.value : '#e74c3c';
-            L.polyline(pts, { color: color, dashArray: '5 7', weight: 2, opacity: 0.75, interactive: false })
-                .addTo(_composerPreviewLayer);
-            if (_activeTool === 'arrow' && pts.length >= 2) {
-                var n = pts.length;
-                var deg = _markupBearing(pts[n - 2], pts[n - 1]);
-                var sz = 24;
-                L.marker(L.latLng(pts[n - 1][0], pts[n - 1][1]), {
-                    icon: L.divIcon({ className: '', html: _arrowheadSvg(color, deg, sz), iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }),
-                    interactive: false
-                }).addTo(_composerPreviewLayer);
-            }
-        }
-
-        // ── Geometry helpers ──────────────────────────────────────────────────
-        function _markupBearing(from, to) {
-            var flat = Array.isArray(from) ? from[0] : from.lat;
-            var flng = Array.isArray(from) ? from[1] : from.lng;
-            var tlat = Array.isArray(to)   ? to[0]   : to.lat;
-            var tlng = Array.isArray(to)   ? to[1]   : to.lng;
-            return Math.atan2(tlng - flng, tlat - flat) * (180 / Math.PI);
-        }
-
-        function _arrowheadSvg(color, deg, sz) {
-            sz = sz || 28;
-            var h   = sz / 2;
-            var tip = -(sz * 0.43);
-            var bx  = sz * 0.36;
-            var by  = sz * 0.29;
-            return '<svg xmlns="http://www.w3.org/2000/svg" width="' + sz + '" height="' + sz + '"' +
-                ' viewBox="' + (-h) + ' ' + (-h) + ' ' + sz + ' ' + sz + '"' +
-                ' style="transform:rotate(' + deg.toFixed(1) + 'deg)">' +
-                '<polygon points="0,' + tip.toFixed(1) +
-                ' ' + bx.toFixed(1) + ',' + by.toFixed(1) +
-                ' ' + (-bx).toFixed(1) + ',' + by.toFixed(1) + '"' +
-                ' fill="' + color + '" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>';
-        }
-
-        // ── Redraw all markup layers ──────────────────────────────────────────
+        // ── Redraw all confirmed shapes ───────────────────────────────────────
         function _redrawMarkup() {
             if (!_composerMarkupLayer) return;
             _composerMarkupLayer.clearLayers();
-            _composerShapes.forEach(function (s) { _renderShape(s, _composerMarkupLayer); });
-        }
-
-        function _renderShape(s, group) {
-            var color = s.color || '#e74c3c';
-            switch (s.type) {
-                case 'line':
-                    L.polyline(s.latlngs, { color: color, weight: 3 }).addTo(group);
-                    break;
-                case 'arrow': {
-                    L.polyline(s.latlngs, { color: color, weight: 4 }).addTo(group);
-                    if (s.latlngs.length >= 2) {
-                        var n = s.latlngs.length;
-                        var deg = _markupBearing(s.latlngs[n - 2], s.latlngs[n - 1]);
-                        var sz = 28;
-                        L.marker(s.latlngs[n - 1], {
-                            icon: L.divIcon({ className: '', html: _arrowheadSvg(color, deg, sz), iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }),
-                            interactive: false
-                        }).addTo(group);
-                    }
-                    break;
-                }
-                case 'circle': {
-                    var p1 = L.latLng(s.latlngs[0]), p2 = L.latLng(s.latlngs[1]);
-                    L.circle(p1, { radius: p1.distanceTo(p2), color: color, fillOpacity: 0.15 }).addTo(group);
-                    break;
-                }
-                case 'rect': {
-                    var bounds = L.latLngBounds(s.latlngs[0], s.latlngs[1]);
-                    L.rectangle(bounds, { color: color, fillOpacity: 0.1 }).addTo(group);
-                    break;
-                }
-                case 'polygon':
-                    L.polygon(s.latlngs, { color: color, fillOpacity: 0.15 }).addTo(group);
-                    break;
-                case 'text': {
-                    var icon = L.divIcon({
-                        className: 'cmc-text-label',
-                        html: '<span style="color:' + color + ';font-weight:600">' +
-                              s.label.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>',
-                        iconSize: null
-                    });
-                    L.marker(s.latlngs[0], { icon: icon }).addTo(group);
-                    break;
-                }
-            }
+            _composerShapes.forEach(function (s) {
+                MarkupEngine.renderShape(s, _composerMarkupLayer);
+            });
         }
 
         // ── Pin search / address / coordinate autocomplete ────────────────────
@@ -978,7 +803,7 @@
             _fitMapToMarkup(viewMap, data);
 
             var markupGroup = L.layerGroup().addTo(viewMap);
-            (data.markup || []).forEach(function (s) { _renderShape(s, markupGroup); });
+            (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, markupGroup); });
 
             viewMap.invalidateSize();
             _viewerMaps[commentId] = viewMap;
@@ -1013,7 +838,7 @@
                 _fitMapToMarkup(tmap, data);
                 tmap.invalidateSize();
                 var mg = L.layerGroup().addTo(tmap);
-                (data.markup || []).forEach(function (s) { _renderShape(s, mg); });
+                (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, mg); });
             });
         }
 

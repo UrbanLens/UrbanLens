@@ -936,14 +936,9 @@
     const _markupDefaultFillOpacity   = {{ markup_fill_opacity }}   / 100;
     const _markupDefaultBorderOpacity = {{ markup_border_opacity }} / 100;
 
-    let _markupItems        = [];
-    let _markupDrawType      = null;
-    let _markupDrawHandler   = null;
-    let _markupPreviewLayer  = null;
-    let _previewArrowhead    = null;
-    let _pendingLatlngs      = null;
-    let _textClickHandler    = null;
-    let _textPlacementActive = false;
+    let _markupItems    = [];
+    let _markupDrawType = null;
+    let _drawSession    = null;  // MarkupEngine draw session (created after loadMarkup)
 
     const _markupPalette = ['#e53e3e', '#1d4ed8', '#16a34a', '#d97706', '#7c3aed', '#0f172a', '#f8fafc'];
 
@@ -1004,17 +999,7 @@
     _buildBorderSwatches('text-bg-swatches', 'text-form-bg');
     document.getElementById('markup-form-width').addEventListener('input', () => _updateMarkupPreview && _updateMarkupPreview());
 
-    function _markupBearing(from, to) {
-        return Math.atan2(to.lng - from.lng, to.lat - from.lat) * (180 / Math.PI);
-    }
-
-    function _arrowheadSize() {
-        const z = map.getZoom();
-        if (z >= 16) return 28;
-        if (z >= 13) return 20;
-        if (z >= 10) return 14;
-        return 8;
-    }
+    function _arrowheadSize() { return MarkupEngine.arrowheadSize(map.getZoom()); }
 
     function _textFontSize(item) {
         // Scale text proportionally to zoom, halving/doubling every 2 zoom levels
@@ -1085,12 +1070,12 @@
             layers.push(L.polyline(latlngs, { color: item.color, weight: isArrow ? w + 2 : w, opacity: fillOp }));
 
             if (isArrow && latlngs.length >= 2) {
-                const deg = _markupBearing(latlngs[latlngs.length - 2], latlngs[latlngs.length - 1]);
+                const deg = MarkupEngine.bearing(latlngs[latlngs.length - 2], latlngs[latlngs.length - 1]);
                 const sz  = _arrowheadSize();
                 const arrowMarker = L.marker(latlngs[latlngs.length - 1], {
                     icon: L.divIcon({
                         className: '',
-                        html: _arrowheadSvg(item.color, deg, sz, fillOp),
+                        html: MarkupEngine.arrowheadSvg(item.color, deg, sz, fillOp),
                         iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2],
                     }),
                     interactive: false,
@@ -1148,15 +1133,6 @@
         });
     }
 
-    function _arrowheadSvg(color, deg, sz, opacity) {
-        sz      = sz      || 28;
-        opacity = opacity != null ? opacity : 0.87;
-        const h   = sz / 2;
-        const tip = -(sz * 0.43);
-        const bx  = sz * 0.36;
-        const by  = sz * 0.29;
-        return `<svg class="map-markup-arrowhead-svg" xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="${-h} ${-h} ${sz} ${sz}" style="transform:rotate(${deg}deg);opacity:${opacity}"><polygon points="0,${tip.toFixed(1)} ${bx.toFixed(1)},${by.toFixed(1)} ${(-bx).toFixed(1)},${by.toFixed(1)}" fill="${color}" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
-    }
 
     // Kept as a no-op; the width slider still references it via the input listener
     function _updateMarkupPreview() {}
@@ -1191,6 +1167,25 @@
             .catch(err => console.warn('Could not load markup:', err));
     }
     loadMarkup();
+
+    // ── Markup draw session ───────────────────────────────────────────────────
+    _drawSession = MarkupEngine.createDrawSession(map, {
+        getColor:     () => document.getElementById('markup-form-color').value   || document.getElementById('text-form-color').value,
+        getWidth:     () => parseInt(document.getElementById('markup-form-width').value || '3', 10),
+        getTextLabel: () => document.getElementById('text-form-label').value.trim(),
+        onCommit:     _onDrawCommit,
+        onHintChange: (hint) => {
+            const el = document.getElementById('markup-hint-text');
+            if (el) el.textContent = hint;
+        },
+        onToolChange: (tool) => {
+            _markupDrawType = tool;
+            if (!tool) {
+                document.getElementById('markup-form-panel').style.display = 'none';
+                document.getElementById('text-place-panel').style.display = 'none';
+            }
+        },
+    });
 
     // ── Photo panel ───────────────────────────────────────────────────────────
     function _makePhotoIcon(url, size, highlighted) {
@@ -1376,104 +1371,74 @@
         document.getElementById('detail-pin-add-dialog').showModal();
     }
 
-    // ── Line / Arrow drawing ──────────────────────────────────────────────────
+    // ── Markup drawing — engine-backed ───────────────────────────────────────
     let _editingMarkupItem = null;
-    let _dragPreviewLine   = null;
-    let _dragPreviewHead   = null;
-    let _cancelDragDetect  = null;
+
+    function _onDrawCommit(type, latlngs, extras) {
+        // Deactivate tool first — hides panels via onToolChange
+        _drawSession.deactivate();
+
+        if (type === 'line' || type === 'arrow') {
+            _immediatelySaveMarkup(type, latlngs.map(ll => L.latLng(ll[0], ll[1])));
+            return;
+        }
+        if (type === 'circle') {
+            const center = L.latLng(latlngs[0][0], latlngs[0][1]);
+            const edge   = L.latLng(latlngs[1][0], latlngs[1][1]);
+            _immediatelySaveShape('circle', {
+                type: 'Circle',
+                coordinates: [latlngs[0][1], latlngs[0][0]],
+                radius: center.distanceTo(edge),
+            });
+            return;
+        }
+        if (type === 'rect') {
+            const [n, w] = [latlngs[0][0], latlngs[0][1]];
+            const [s, e] = [latlngs[1][0], latlngs[1][1]];
+            _immediatelySaveShape('square', {
+                type: 'Polygon',
+                coordinates: [[[w,n],[e,n],[e,s],[w,s],[w,n]]],
+            });
+            return;
+        }
+        if (type === 'polygon') {
+            const coords = latlngs.map(ll => [ll[1], ll[0]]);
+            coords.push(coords[0]);
+            _immediatelySaveShape('polygon', { type: 'Polygon', coordinates: [coords] });
+            return;
+        }
+        if (type === 'text') {
+            const ll = L.latLng(latlngs[0][0], latlngs[0][1]);
+            const strokeWidth = extras.dragFontSize || parseInt(document.getElementById('text-form-size').value, 10);
+            fetch(_markupPostUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                body: JSON.stringify({
+                    markup_type: 'text',
+                    geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] },
+                    label: document.getElementById('text-form-label').value.trim(),
+                    color: document.getElementById('text-form-color').value,
+                    border_color: document.getElementById('text-form-bg').value,
+                    stroke_width: strokeWidth,
+                    fill_opacity: Math.round(_markupDefaultFillOpacity * 100),
+                    border_opacity: Math.round(_markupDefaultBorderOpacity * 100),
+                }),
+            })
+            .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+            .then(data => {
+                document.getElementById('text-form-label').value = '';
+                return _reloadMarkupAndOpenEdit(data.uuid);
+            })
+            .catch(() => toastr.error('Failed to save text label.'));
+        }
+    }
 
     function startMarkupDraw(type) {
         _closeAddDetailMenu();
-        _markupDrawType = type;
         document.getElementById('markup-form-title').textContent = type === 'arrow' ? 'Draw Arrow' : 'Draw Line';
-        document.getElementById('markup-hint-text').textContent = type === 'arrow'
-            ? 'Drag for a 2-point arrow, or click to switch to multi-point mode'
-            : 'Click on the map to start; double-click to finish';
+        document.getElementById('text-place-panel').style.display = 'none';
         document.getElementById('markup-form-panel').style.display = '';
-        map._container.style.cursor = 'crosshair';
-        _startDragDetect(type);
-    }
-
-    function _startDragDetect(type) {
-        let _startX = 0, _startY = 0, _startLatlng = null, _isDragging = false;
-
-        function onMouseDown(e) {
-            if (e.button !== 0) return;
-            _startX = e.clientX;
-            _startY = e.clientY;
-            _startLatlng = map.mouseEventToLatLng(e);
-            _isDragging = false;
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp, { once: true });
-        }
-
-        function onMouseMove(e) {
-            if (!_startLatlng) return;
-            if (Math.hypot(e.clientX - _startX, e.clientY - _startY) < 5) return;
-            _isDragging = true;
-            const end    = map.mouseEventToLatLng(e);
-            const color  = document.getElementById('markup-form-color').value;
-            const weight = parseInt(document.getElementById('markup-form-width').value, 10);
-            if (_dragPreviewLine) map.removeLayer(_dragPreviewLine);
-            if (_dragPreviewHead) map.removeLayer(_dragPreviewHead);
-            _dragPreviewLine = L.polyline([_startLatlng, end], {
-                color, weight: weight + 2, opacity: 0.87, interactive: false,
-            }).addTo(map);
-            if (type === 'arrow') {
-                const deg = _markupBearing(_startLatlng, end);
-                const sz  = _arrowheadSize();
-                _dragPreviewHead = L.marker(end, {
-                    icon: L.divIcon({ className: '', html: _arrowheadSvg(color, deg, sz), iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }),
-                    interactive: false,
-                }).addTo(map);
-            }
-        }
-
-        function onMouseUp(e) {
-            document.removeEventListener('mousemove', onMouseMove);
-            const startLatlng = _startLatlng;
-            _startLatlng = null;
-
-            if (_isDragging && startLatlng) {
-                _isDragging = false;
-                map._container.removeEventListener('mousedown', onMouseDown);
-                _cancelDragDetect = null;
-                if (_dragPreviewLine) { map.removeLayer(_dragPreviewLine); _dragPreviewLine = null; }
-                if (_dragPreviewHead) { map.removeLayer(_dragPreviewHead); _dragPreviewHead = null; }
-                _immediatelySaveMarkup(type, [startLatlng, map.mouseEventToLatLng(e)]);
-            } else {
-                // Click (no drag) → switch to multi-point L.Draw.Polyline mode
-                _isDragging = false;
-                map._container.removeEventListener('mousedown', onMouseDown);
-                _cancelDragDetect = null;
-                map._container.style.cursor = '';
-                document.getElementById('markup-hint-text').textContent = 'Click to add points; double-click to finish';
-                _startClickDraw(type);
-            }
-        }
-
-        map._container.addEventListener('mousedown', onMouseDown);
-        _cancelDragDetect = () => {
-            map._container.removeEventListener('mousedown', onMouseDown);
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-        };
-    }
-
-    function _startClickDraw(type) {
-        _markupDrawHandler = new L.Draw.Polyline(map, {
-            shapeOptions: {
-                color: document.getElementById('markup-form-color').value,
-                weight: parseInt(document.getElementById('markup-form-width').value),
-            },
-        });
-        _markupDrawHandler.enable();
-        map.once(L.Draw.Event.CREATED, ev => {
-            _markupDrawHandler = null;
-            const latlngs = ev.layer.getLatLngs();
-            if (ev.layer && map.hasLayer(ev.layer)) map.removeLayer(ev.layer);
-            _immediatelySaveMarkup(type, latlngs);
-        });
+        _drawSession.startTool(type);
     }
 
     function _reloadMarkupAndOpenEdit(newUuid) {
@@ -1491,9 +1456,6 @@
     }
 
     function _immediatelySaveMarkup(type, latlngs) {
-        document.getElementById('markup-form-panel').style.display = 'none';
-        map._container.style.cursor = '';
-        _markupDrawType = null;
         const color         = document.getElementById('markup-form-color').value;
         const borderColor   = document.getElementById('markup-form-border').value;
         const strokeWidth   = parseInt(document.getElementById('markup-form-width').value, 10);
@@ -1515,100 +1477,18 @@
     }
 
     // ── Shape drawing (square, circle, polygon) ───────────────────────────────
-    let _shapePreview    = null;
-    let _cancelShape     = null;
-    let _shapeDrawHandler = null;
 
     function startShapeDraw(type) {
         _closeAddDetailMenu();
         document.getElementById('markup-form-title').textContent =
             type === 'square' ? 'Draw Square' : type === 'circle' ? 'Draw Circle' : 'Draw Polygon';
-        document.getElementById('markup-hint-text').textContent =
-            type === 'polygon' ? 'Click to add vertices; double-click to close' : 'Drag to draw';
+        document.getElementById('text-place-panel').style.display = 'none';
         document.getElementById('markup-form-panel').style.display = '';
-        map._container.style.cursor = 'crosshair';
-        _markupDrawType = type;
-
-        if (type === 'polygon') {
-            _shapeDrawHandler = new L.Draw.Polygon(map, {
-                shapeOptions: {
-                    color: document.getElementById('markup-form-color').value,
-                    weight: parseInt(document.getElementById('markup-form-width').value),
-                },
-            });
-            _shapeDrawHandler.enable();
-            map.once(L.Draw.Event.CREATED, ev => {
-                _shapeDrawHandler = null;
-                const coords = ev.layer.getLatLngs();
-                if (ev.layer && map.hasLayer(ev.layer)) map.removeLayer(ev.layer);
-                _immediatelySaveShape('polygon', {
-                    type: 'Polygon',
-                    coordinates: [coords[0].map(ll => [ll.lng, ll.lat]).concat([[coords[0][0].lng, coords[0][0].lat]])],
-                });
-            });
-            _cancelShape = () => {
-                if (_shapeDrawHandler) { _shapeDrawHandler.disable(); _shapeDrawHandler = null; }
-                map.off(L.Draw.Event.CREATED);
-            };
-        } else {
-            // Drag mode for square and circle
-            let _startX = 0, _startY = 0, _startLL = null;
-            function onMouseDown(e) {
-                if (e.button !== 0) return;
-                _startX = e.clientX; _startY = e.clientY;
-                _startLL = map.mouseEventToLatLng(e);
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp, { once: true });
-            }
-            function onMouseMove(e) {
-                if (!_startLL) return;
-                const endLL = map.mouseEventToLatLng(e);
-                if (_shapePreview) map.removeLayer(_shapePreview);
-                const opts = { color: document.getElementById('markup-form-color').value, weight: 2, fillOpacity: 0.3, interactive: false };
-                _shapePreview = type === 'square'
-                    ? L.rectangle([_startLL, endLL], opts).addTo(map)
-                    : L.circle(_startLL, { ...opts, radius: _startLL.distanceTo(endLL) }).addTo(map);
-            }
-            function onMouseUp(e) {
-                document.removeEventListener('mousemove', onMouseMove);
-                map._container.removeEventListener('mousedown', onMouseDown);
-                _cancelShape = null;
-                if (_shapePreview) { map.removeLayer(_shapePreview); _shapePreview = null; }
-                if (!_startLL) return;
-                const endLL = map.mouseEventToLatLng(e);
-                const startLL = _startLL; _startLL = null;
-                if (Math.hypot(e.clientX - _startX, e.clientY - _startY) < 5) {
-                    // Too small; treat as cancelled
-                    cancelShapeDraw();
-                    return;
-                }
-                if (type === 'square') {
-                    const sw = startLL.lng, se = endLL.lng, n = startLL.lat, s = endLL.lat;
-                    _immediatelySaveShape('square', {
-                        type: 'Polygon',
-                        coordinates: [[[sw,n],[se,n],[se,s],[sw,s],[sw,n]]],
-                    });
-                } else {
-                    _immediatelySaveShape('circle', {
-                        type: 'Circle',
-                        coordinates: [startLL.lng, startLL.lat],
-                        radius: startLL.distanceTo(endLL),
-                    });
-                }
-            }
-            map._container.addEventListener('mousedown', onMouseDown);
-            _cancelShape = () => {
-                map._container.removeEventListener('mousedown', onMouseDown);
-                document.removeEventListener('mousemove', onMouseMove);
-                document.removeEventListener('mouseup', onMouseUp);
-            };
-        }
+        // Engine uses 'rect' for both 'square' and 'rect'
+        _drawSession.startTool(type === 'square' ? 'rect' : type);
     }
 
     function _immediatelySaveShape(type, geometry) {
-        document.getElementById('markup-form-panel').style.display = 'none';
-        map._container.style.cursor = '';
-        _markupDrawType = null;
         const color         = document.getElementById('markup-form-color').value;
         const borderColor   = document.getElementById('markup-form-border').value;
         const strokeWidth   = parseInt(document.getElementById('markup-form-width').value, 10);
@@ -1627,41 +1507,9 @@
         .catch(() => toastr.error('Failed to save shape.'));
     }
 
-    function cancelShapeDraw() {
-        if (_cancelShape)     { _cancelShape(); _cancelShape = null; }
-        if (_shapePreview)    { map.removeLayer(_shapePreview); _shapePreview = null; }
-        if (_shapeDrawHandler){ _shapeDrawHandler.disable(); _shapeDrawHandler = null; }
-        _markupDrawType = null;
-        map._container.style.cursor = '';
-        document.getElementById('markup-form-panel').style.display = 'none';
-    }
-
-    function cancelMarkupDraw() {
-        if (_cancelDragDetect)   { _cancelDragDetect(); _cancelDragDetect = null; }
-        if (_markupDrawHandler)  { _markupDrawHandler.disable(); _markupDrawHandler = null; }
-        if (_dragPreviewLine)    { map.removeLayer(_dragPreviewLine); _dragPreviewLine = null; }
-        if (_dragPreviewHead)    { map.removeLayer(_dragPreviewHead); _dragPreviewHead = null; }
-        if (_markupPreviewLayer) { map.removeLayer(_markupPreviewLayer); _markupPreviewLayer = null; }
-        if (_previewArrowhead)   { map.removeLayer(_previewArrowhead); _previewArrowhead = null; }
-        _pendingLatlngs = null;
-        _markupDrawType = null;
-        map._container.style.cursor = '';
-        document.getElementById('markup-form-panel').style.display = 'none';
-    }
-
-    function _cancelCurrentDraw() {
-        // Dispatch to the correct cancel function based on what's active
-        const type = _markupDrawType;
-        if (type === 'square' || type === 'circle' || type === 'polygon') {
-            cancelShapeDraw();
-        } else if (type === 'line' || type === 'arrow') {
-            cancelMarkupDraw();
-        } else {
-            // Fallback — close the panel anyway
-            document.getElementById('markup-form-panel').style.display = 'none';
-            map._container.style.cursor = '';
-        }
-    }
+    function cancelShapeDraw()   { _drawSession.deactivate(); }
+    function cancelMarkupDraw()  { _drawSession.deactivate(); }
+    function _cancelCurrentDraw(){ _drawSession.deactivate(); }
 
     function _rebuildEditSwatch(containerId, inputId, withNone) {
         const cont  = document.getElementById(containerId);
@@ -1782,7 +1630,7 @@
                 const itemOp = (item.fill_opacity != null ? item.fill_opacity : 87) / 100;
                 item._arrowheadMarker.setIcon(L.divIcon({
                     className: '',
-                    html: _arrowheadSvg(item.color, item._arrowheadDeg, sz, itemOp),
+                    html: MarkupEngine.arrowheadSvg(item.color, item._arrowheadDeg, sz, itemOp),
                     iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2],
                 }));
             }
@@ -1793,103 +1641,17 @@
     });
 
     // ── Text placement ────────────────────────────────────────────────────────
-    let _textCancelDrag = null;
 
     function startTextPlacement() {
         _closeAddDetailMenu();
+        document.getElementById('markup-form-panel').style.display = 'none';
         document.getElementById('text-place-panel').style.display = '';
-        _textPlacementActive = true;
-        map._container.style.cursor = 'crosshair';
-        _beginTextDragDetect();
-    }
-
-    function _beginTextDragDetect() {
-        let _startX = 0, _startY = 0, _startLL = null, _isDragging = false;
-        let _rectPreview = null;
-
-        function onMouseDown(e) {
-            if (e.button !== 0) return;
-            _startX = e.clientX; _startY = e.clientY;
-            _startLL = map.mouseEventToLatLng(e);
-            _isDragging = false;
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp, { once: true });
-        }
-
-        function onMouseMove(e) {
-            if (!_startLL) return;
-            if (Math.hypot(e.clientX - _startX, e.clientY - _startY) < 5) return;
-            _isDragging = true;
-            const end = map.mouseEventToLatLng(e);
-            if (_rectPreview) map.removeLayer(_rectPreview);
-            _rectPreview = L.rectangle([_startLL, end], {
-                color: document.getElementById('text-form-color').value,
-                dashArray: '4 4', weight: 1, fillOpacity: 0.1, interactive: false,
-            }).addTo(map);
-        }
-
-        function onMouseUp(e) {
-            document.removeEventListener('mousemove', onMouseMove);
-            map._container.removeEventListener('mousedown', onMouseDown);
-            _textCancelDrag = null;
-            const startLL = _startLL; _startLL = null;
-            if (_rectPreview) { map.removeLayer(_rectPreview); _rectPreview = null; }
-            if (!startLL) return;
-
-            let strokeWidth = parseInt(document.getElementById('text-form-size').value, 10);
-            if (_isDragging) {
-                // Derive font size from bounding box pixel height
-                const p1 = map.latLngToContainerPoint(startLL);
-                const p2 = { x: e.clientX, y: e.clientY };
-                const boxH = Math.abs(p2.y - p1.y);
-                strokeWidth = Math.max(10, Math.min(48, Math.round(boxH * 0.65)));
-                document.getElementById('text-form-size').value = strokeWidth;
-                document.getElementById('text-size-label').textContent = strokeWidth;
-            }
-            _isDragging = false;
-
-            document.getElementById('text-place-panel').style.display = 'none';
-            map._container.style.cursor = '';
-            _textPlacementActive = false;
-
-            fetch(_markupPostUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-                body: JSON.stringify({
-                    markup_type: 'text',
-                    geometry: { type: 'Point', coordinates: [startLL.lng, startLL.lat] },
-                    label: document.getElementById('text-form-label').value.trim(),
-                    color: document.getElementById('text-form-color').value,
-                    border_color: document.getElementById('text-form-bg').value,
-                    stroke_width: strokeWidth,
-                    fill_opacity: Math.round(_markupDefaultFillOpacity * 100),
-                    border_opacity: Math.round(_markupDefaultBorderOpacity * 100),
-                }),
-            })
-            .then(r => { if (!r.ok) throw new Error(); return r.json(); })
-            .then(data => {
-                document.getElementById('text-form-label').value = '';
-                return _reloadMarkupAndOpenEdit(data.uuid);
-            })
-            .catch(() => toastr.error('Failed to save text label.'));
-        }
-
-        map._container.addEventListener('mousedown', onMouseDown);
-        _textCancelDrag = () => {
-            map._container.removeEventListener('mousedown', onMouseDown);
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-            if (_rectPreview) { map.removeLayer(_rectPreview); _rectPreview = null; }
-        };
+        _drawSession.startTool('text');
     }
 
     function cancelTextPlacement() {
-        if (_textCancelDrag)   { _textCancelDrag(); _textCancelDrag = null; }
-        if (_textClickHandler) { map.off('click', _textClickHandler); _textClickHandler = null; }
-        map._container.style.cursor = '';
-        _textPlacementActive = false;
-        document.getElementById('text-place-panel').style.display = 'none';
         document.getElementById('text-form-label').value = '';
+        _drawSession.deactivate();
     }
 
     // ── Campus boundary editor ────────────────────────────────────────────────

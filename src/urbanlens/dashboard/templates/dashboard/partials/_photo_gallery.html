@@ -13,23 +13,12 @@ Context:
     <i class="material-icons">photo_library</i>
     <span>Photos</span>
     {% if images %}<span class="badge">{{ images|length }}</span>{% endif %}
-  </div>
-
-  {# ── Upload zone ─────────────────────────────────────────────────────────── #}
-  <div class="gallery-upload-zone" id="gallery-upload-zone"
-       ondragover="galleryDragOver(event)"
-       ondragleave="galleryDragLeave(event)"
-       ondrop="galleryDrop(event)">
-    <i class="material-icons gallery-upload-icon">cloud_upload</i>
-    <p class="gallery-upload-hint">Drag photos here or</p>
-    <label class="gallery-upload-btn">
-      <i class="material-icons">add_photo_alternate</i> Upload
+    {# Compact upload button — always visible in the header #}
+    <label class="gallery-upload-compact-btn" title="Upload photos">
+      <i class="material-icons">add_photo_alternate</i>
       <input type="file" id="gallery-file-input" accept="image/*" multiple hidden
              onchange="galleryHandleFiles(this.files)">
     </label>
-    <div id="gallery-upload-progress" class="gallery-upload-progress" hidden>
-      <div class="gallery-upload-bar" id="gallery-upload-bar"></div>
-    </div>
   </div>
 
   {# ── Gallery grid ────────────────────────────────────────────────────────── #}
@@ -64,7 +53,7 @@ Context:
     {% empty %}
     <li class="gallery-empty" id="gallery-empty">
       <i class="material-icons">photo_camera</i>
-      <p>No photos yet. Upload the first one!</p>
+      <p>No photos yet. Drag files here or click <i class="material-icons" style="font-size:1em;vertical-align:middle">add_photo_alternate</i> above.</p>
     </li>
     {% endfor %}
   </ul>
@@ -87,6 +76,19 @@ Context:
   </div>
 </dialog>
 
+{# ── Full-page drop overlay (shown when user drags files onto the page) ─────── #}
+<div id="gallery-drop-overlay" class="gallery-drop-overlay" hidden
+     ondragover="event.preventDefault()"
+     ondrop="_galleryOverlayDrop(event)">
+  <div class="gallery-drop-overlay-inner">
+    <i class="material-icons">cloud_upload</i>
+    <p>Drop photos to upload</p>
+    <div id="gallery-upload-progress" class="gallery-upload-progress" hidden>
+      <div class="gallery-upload-bar" id="gallery-upload-bar"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   // ── State ──────────────────────────────────────────────────────────────────
@@ -106,17 +108,39 @@ Context:
   });
   var _lightboxIdx = 0;
 
-  // ── Drag & drop ────────────────────────────────────────────────────────────
-  window.galleryDragOver = function (e) {
+  // ── Page-level drag-to-upload detection ────────────────────────────────────
+  // Depth counting handles enter/leave bubbling from child elements.
+  var _dragDepth = 0;
+  var _overlay   = document.getElementById('gallery-drop-overlay');
+
+  function _isFilesDrag(e) {
+    return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  }
+
+  document.addEventListener('dragenter', function (e) {
+    if (!_isFilesDrag(e)) return;
+    _dragDepth++;
+    if (_overlay) _overlay.hidden = false;
+  });
+
+  document.addEventListener('dragleave', function (e) {
+    if (!_isFilesDrag(e) && _dragDepth === 0) return;
+    _dragDepth = Math.max(0, _dragDepth - 1);
+    if (_dragDepth === 0 && _overlay) _overlay.hidden = true;
+  });
+
+  // Drop anywhere outside the overlay hides it without uploading
+  document.addEventListener('drop', function (e) {
+    _dragDepth = 0;
+    if (_overlay) _overlay.hidden = true;
+  });
+
+  // Drop ON the overlay uploads the files
+  window._galleryOverlayDrop = function (e) {
     e.preventDefault();
-    document.getElementById('gallery-upload-zone').classList.add('gallery-upload-zone--over');
-  };
-  window.galleryDragLeave = function () {
-    document.getElementById('gallery-upload-zone').classList.remove('gallery-upload-zone--over');
-  };
-  window.galleryDrop = function (e) {
-    e.preventDefault();
-    galleryDragLeave();
+    e.stopPropagation();
+    _dragDepth = 0;
+    if (_overlay) _overlay.hidden = true;
     galleryHandleFiles(e.dataTransfer.files);
   };
 
@@ -125,7 +149,7 @@ Context:
     if (!files || !files.length) return;
     var progress = document.getElementById('gallery-upload-progress');
     var bar = document.getElementById('gallery-upload-bar');
-    progress.hidden = false;
+    if (progress) progress.hidden = false;
     var total = files.length;
     var done = 0;
 
@@ -138,18 +162,21 @@ Context:
         .then(function (r) { return r.json(); })
         .then(function (img) {
           done++;
-          bar.style.width = Math.round(done / total * 100) + '%';
+          if (bar) bar.style.width = Math.round(done / total * 100) + '%';
           _addItemToGrid(img);
           if (window._galleryAddMarker) window._galleryAddMarker(img);
           if (done === total) {
-            setTimeout(function () { progress.hidden = true; bar.style.width = '0'; }, 800);
+            setTimeout(function () {
+              if (progress) progress.hidden = true;
+              if (bar) bar.style.width = '0';
+            }, 800);
           }
           var empty = document.getElementById('gallery-empty');
           if (empty) empty.remove();
         })
         .catch(function (err) {
           done++;
-          if (window.toastr) toastr.error('Upload failed: ' + err.message);
+          if (window.toastr) toastr.error('Upload failed: ' + (err.message || 'unknown error'));
         });
     });
   };
@@ -225,7 +252,7 @@ Context:
     if (window._galleryHighlightMarker) window._galleryHighlightMarker(imgId, on);
   };
 
-  // ── Reposition callback (called from map.js when user finishes dragging) ───
+  // ── Reposition callback (called from map panel when user finishes dragging) ──
   window.galleryRepositionImage = function (imgId, lat, lng) {
     fetch(REPOSITION_BASE + imgId + '/', {
       method: 'POST',
