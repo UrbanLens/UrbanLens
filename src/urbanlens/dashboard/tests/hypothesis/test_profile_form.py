@@ -269,15 +269,17 @@ class PrivacySettingsFormTests(TestCase):
 		))
 		self.assertTrue(form.is_valid(), form.errors)
 
-	def test_hide_pin_locations_omitted_defaults_to_false(self) -> None:
+	def test_trip_pin_visibility_defaults_to_anyone(self) -> None:
 		form = self._submit(**self._default_data())
 		self.assertTrue(form.is_valid(), form.errors)
-		self.assertFalse(form.cleaned_data["hide_pin_locations_in_trips"])
+		self.assertEqual(form.cleaned_data["trip_pin_location_visibility"], VisibilityChoice.ANYONE)
 
-	def test_hide_pin_locations_true_is_saved(self) -> None:
-		form = self._submit(**self._default_data(hide_pin_locations_in_trips="on"))
+	@given(choice=st.sampled_from(VisibilityChoice.values))
+	@_hyp_db
+	def test_trip_pin_visibility_accepts_all_choices(self, choice: str) -> None:
+		form = self._submit(**self._default_data(trip_pin_location_visibility=choice))
 		self.assertTrue(form.is_valid(), form.errors)
-		self.assertTrue(form.cleaned_data["hide_pin_locations_in_trips"])
+		self.assertEqual(form.cleaned_data["trip_pin_location_visibility"], choice)
 
 	@given(choice=st.sampled_from([c for c in VisibilityChoice.values if c != VisibilityChoice.FRIENDS]))
 	@_hyp_db

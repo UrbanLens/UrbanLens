@@ -76,17 +76,14 @@
                 {% endif %}
             </div>
 
-            <div class="settings-field settings-field--checkbox">
-                <label class="settings-checkbox-label">
-                    {{ privacy_form.hide_pin_locations_in_trips }}
-                    <span class="settings-checkbox-materialize"></span>
-                    <span>
-                        <span class="settings-label">{{ privacy_form.hide_pin_locations_in_trips.label }}</span>
-                        <p class="settings-help">{{ privacy_form.hide_pin_locations_in_trips.help_text }}</p>
-                    </span>
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.trip_pin_location_visibility.id_for_label }}">
+                    {{ privacy_form.trip_pin_location_visibility.label }}
                 </label>
-                {% if privacy_form.hide_pin_locations_in_trips.errors %}
-                <p class="settings-error">{{ privacy_form.hide_pin_locations_in_trips.errors|join:", " }}</p>
+                <p class="settings-help">{{ privacy_form.trip_pin_location_visibility.help_text }}</p>
+                {{ privacy_form.trip_pin_location_visibility }}
+                {% if privacy_form.trip_pin_location_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.trip_pin_location_visibility.errors|join:", " }}</p>
                 {% endif %}
             </div>
 

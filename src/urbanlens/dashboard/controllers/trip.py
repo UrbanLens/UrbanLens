@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 import requests
 
-from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import SiteSettings, Trip, TripActivity, TripComment, TripMembership
 
 if TYPE_CHECKING:
@@ -24,6 +24,93 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.openweather.gateway import WeatherForecastGateway
 
 logger = logging.getLogger(__name__)
+
+
+def _apply_trip_visibility_filter(
+    sensitive: list,
+    viewer: Profile,
+    hidden_out: set[int],
+) -> None:
+    """Populate *hidden_out* with the IDs of activities whose location the viewer
+    may not see, based on each adder's trip_pin_location_visibility setting.
+
+    Args:
+        sensitive: Activities already filtered to non-ANYONE visibility and
+                   non-owner viewer.
+        viewer:    The profile viewing the trip.
+        hidden_out: Mutable set to add hidden activity IDs into.
+    """
+    from django.db.models import Q
+
+    from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    no_one_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.NO_ONE]
+    common_pin_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_PIN]
+    friends_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.FRIENDS]
+    c_friend_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_FRIEND]
+    # COMMON_TRIP: viewer is already in this trip — treat as visible.
+
+    hidden_out.update(act.id for act in no_one_acts)
+
+    if common_pin_acts:
+        loc_ids = {a.location_id for a in common_pin_acts}
+        viewer_locs = set(
+            Pin.objects.filter(profile=viewer, location_id__in=loc_ids)
+            .values_list("location_id", flat=True),
+        )
+        for act in common_pin_acts:
+            if act.location_id not in viewer_locs:
+                hidden_out.add(act.id)
+
+    if friends_acts:
+        adder_ids = {a.added_by_id for a in friends_acts}
+        accepted_friend_adder_ids = set(
+            Friendship.objects.filter(
+                Q(from_profile=viewer, to_profile_id__in=adder_ids)
+                | Q(to_profile=viewer, from_profile_id__in=adder_ids),
+                status=FriendshipStatus.ACCEPTED,
+            ).values_list("from_profile_id", "to_profile_id"),
+        )
+        # Flatten to a set of IDs that are friends with the viewer.
+        flat_friend_ids: set[int] = set()
+        for pair in accepted_friend_adder_ids:
+            flat_friend_ids.update(pair)
+        flat_friend_ids.discard(viewer.id)
+
+        for act in friends_acts:
+            if act.added_by_id not in flat_friend_ids:
+                hidden_out.add(act.id)
+
+    if c_friend_acts:
+        {a.added_by_id for a in c_friend_acts}
+        # Viewer's friends
+        viewer_friend_ids = set(
+            Friendship.objects.filter(
+                Q(from_profile=viewer) | Q(to_profile=viewer),
+                status=FriendshipStatus.ACCEPTED,
+            ).values_list("from_profile_id", "to_profile_id"),
+        )
+        viewer_flat: set[int] = set()
+        for pair in viewer_friend_ids:
+            viewer_flat.update(pair)
+        viewer_flat.discard(viewer.id)
+
+        for act in c_friend_acts:
+            # Adder's friends
+            adder_friends = set(
+                Friendship.objects.filter(
+                    Q(from_profile_id=act.added_by_id) | Q(to_profile_id=act.added_by_id),
+                    status=FriendshipStatus.ACCEPTED,
+                ).values_list("from_profile_id", "to_profile_id"),
+            )
+            adder_flat: set[int] = set()
+            for pair in adder_friends:
+                adder_flat.update(pair)
+            adder_flat.discard(act.added_by_id)
+
+            if not (viewer_flat & adder_flat):
+                hidden_out.add(act.id)
 
 
 class _ReplyData(TypedDict):
@@ -225,7 +312,7 @@ def _render_activities_panel(request, trip: Trip, profile: Profile) -> HttpRespo
             user_votes[aid] = v["vote"]
 
     # Determine which activities have their location hidden from this viewer
-    # due to the adder's hide_pin_locations_in_trips privacy setting.
+    # based on the adder's trip_pin_location_visibility privacy setting.
     viewer_hidden: set[int] = set()
     sensitive = [
         act
@@ -234,22 +321,11 @@ def _render_activities_panel(request, trip: Trip, profile: Profile) -> HttpRespo
         and act.added_by_id
         and act.added_by_id != profile.id
         and act.added_by
-        and act.added_by.hide_pin_locations_in_trips
+        and act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE
         and act.location_id
     ]
     if sensitive:
-        from urbanlens.dashboard.models.pin.model import Pin
-
-        sensitive_location_ids = {act.location_id for act in sensitive}
-        viewer_pin_locations = set(
-            Pin.objects.filter(
-                profile=profile,
-                location_id__in=sensitive_location_ids,
-            ).values_list("location_id", flat=True),
-        )
-        for act in sensitive:
-            if act.location_id not in viewer_pin_locations:
-                viewer_hidden.add(act.id)
+        _apply_trip_visibility_filter(sensitive, profile, viewer_hidden)
 
     viewer_is_organizer = _is_organizer(profile, trip)
     activities_with_index = [
@@ -917,22 +993,11 @@ class TripMapDataView(LoginRequiredMixin, View):
             and act.added_by_id
             and act.added_by_id != profile.id
             and act.added_by
-            and act.added_by.hide_pin_locations_in_trips
+            and act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE
             and act.location_id
         ]
         if sensitive_map:
-            from urbanlens.dashboard.models.pin.model import Pin
-
-            sens_loc_ids = {act.location_id for act in sensitive_map}
-            viewer_has = set(
-                Pin.objects.filter(
-                    profile=profile,
-                    location_id__in=sens_loc_ids,
-                ).values_list("location_id", flat=True),
-            )
-            for act in sensitive_map:
-                if act.location_id not in viewer_has:
-                    viewer_hidden_map.add(act.id)
+            _apply_trip_visibility_filter(sensitive_map, profile, viewer_hidden_map)
 
         include_past = request.GET.get("include_past", "0") not in {"", "0", "false"}
 

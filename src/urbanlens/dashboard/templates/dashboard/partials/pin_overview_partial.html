@@ -83,6 +83,31 @@
                         </span>
                     </span>
                 </div>
+                <div class="pin-stat-item">
+                    <span class="field-label">Vulnerability</span>
+                    <span class="field-value">
+                        <span class="star-rating-interactive star-rating-interactive--vulnerability">
+                            {% for i in "12345"|make_list %}
+                            <button type="button"
+                                    class="sr-star-btn {% if pin.vulnerability and forloop.counter <= pin.vulnerability %}sr-star-btn--on{% endif %}"
+                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-target="#pin-overview"
+                                    hx-swap="outerHTML"
+                                    hx-vals='{"vulnerability": {{ forloop.counter }}}'
+                                    title="Vulnerability {{ forloop.counter }}">★</button>
+                            {% endfor %}
+                            {% if pin.vulnerability %}
+                            <button type="button"
+                                    class="sr-star-clear"
+                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-target="#pin-overview"
+                                    hx-swap="outerHTML"
+                                    hx-vals='{"vulnerability": 0}'
+                                    title="Clear vulnerability">×</button>
+                            {% endif %}
+                        </span>
+                    </span>
+                </div>
             </div>
             {% if pin.address_basic %}
             <div class="detail-row">

@@ -123,11 +123,13 @@ class Profile(abstract.Model):
         default=VisibilityChoice.ANYONE,
         help_text="Whose photos you want to see. Photos from users outside this setting will be blurred.",
     )
-    hide_pin_locations_in_trips = BooleanField(
-        default=False,
+    trip_pin_location_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.ANYONE,
         help_text=(
-            "When sharing one of your pins as a trip activity, hide the location "
-            "from members who don't already have that pin on their map."
+            "When you share one of your pins as a trip activity, who can see the "
+            "actual location? Members outside this setting will only see the pin name."
         ),
     )
 

@@ -77,13 +77,13 @@ class PrivacySettingsForm(forms.ModelForm):
         label="Show Me Photos From",
         help_text="Whose photos you want to see. Photos from users outside this setting will be blurred.",
     )
-    hide_pin_locations_in_trips = forms.BooleanField(
-        required=False,
-        widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
-        label="Hide My Pins in Trips",
+    trip_pin_location_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Pin Locations in Trips",
         help_text=(
-            "When you share one of your pins as a trip activity, hide the location "
-            "from trip members who don't already have that pin on their own map."
+            "When you share one of your pins as a trip activity, who can see the "
+            "actual location? Members outside this setting will only see the pin name."
         ),
     )
 
@@ -95,7 +95,7 @@ class PrivacySettingsForm(forms.ModelForm):
             "friend_request_visibility",
             "photo_upload_visibility",
             "viewer_photo_filter",
-            "hide_pin_locations_in_trips",
+            "trip_pin_location_visibility",
         ]
 
 

@@ -99,6 +99,10 @@ urlpatterns = [
     ),
     path("rest/", include(router.urls)),
     re_path("^$", IndexController.as_view(), name="home"),
+    path("about/", TemplateView.as_view(
+        template_name="dashboard/pages/about/index.html",
+        extra_context={"page_name": "about"},
+    ), name="about"),
     path(
         "map/",
         include(

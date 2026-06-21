@@ -849,6 +849,27 @@
     }
 }
 
+// Vulnerability — red scale (higher = more exposed/risky)
+.star-rating-interactive--vulnerability .sr-star-btn {
+    &--on {
+        color: #ef4444;
+    }
+}
+
+.star-rating-interactive--vulnerability {
+    @for $i from 1 through 5 {
+        &:has(.sr-star-btn:nth-child(#{$i}):hover) {
+            .sr-star-btn:nth-child(-n+#{$i}) {
+                color: #ef4444;
+            }
+
+            .sr-star-btn:not(:nth-child(-n+#{$i})) {
+                color: #d1d5db;
+            }
+        }
+    }
+}
+
 .sr-star-clear {
     background: none;
     border: none;

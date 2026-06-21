@@ -1,0 +1,277 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block content %}
+
+{# ── Hero ───────────────────────────────────────────────────────────────── #}
+<section class="about-hero">
+    <div class="about-hero-inner">
+        <p class="about-eyebrow">Urban Exploration Platform</p>
+        <h1 class="about-title">Built for explorers<br><em>who respect what they find.</em></h1>
+        <p class="about-subtitle">
+            UrbanLens is a private, purpose-built mapping platform for urban explorers,
+            historians, and photographers who want to document forgotten places — responsibly.
+        </p>
+        <div class="about-hero-actions">
+            {% if not user.is_authenticated %}
+            <a href="{% url 'signup' %}" class="about-btn about-btn--primary">
+                <i class="material-icons">person_add</i> Join UrbanLens
+            </a>
+            <a href="{% url 'login' %}" class="about-btn about-btn--ghost">Sign in</a>
+            {% else %}
+            <a href="{% url 'map.view' %}" class="about-btn about-btn--primary">
+                <i class="material-icons">map</i> Open my map
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="about-hero-visual" aria-hidden="true">
+        <div class="about-map-mock">
+            <div class="about-map-dot about-map-dot--1"><i class="material-icons">place</i></div>
+            <div class="about-map-dot about-map-dot--2"><i class="material-icons">place</i></div>
+            <div class="about-map-dot about-map-dot--3"><i class="material-icons">place</i></div>
+            <div class="about-map-dot about-map-dot--4"><i class="material-icons">photo_camera</i></div>
+            <div class="about-map-line about-map-line--1"></div>
+            <div class="about-map-line about-map-line--2"></div>
+        </div>
+    </div>
+</section>
+
+{# ── What is UrbanLens ────────────────────────────────────────────────────── #}
+<section class="about-section">
+    <div class="about-section-inner">
+        <div class="about-section-label">What is UrbanLens?</div>
+        <h2 class="about-section-title">Your personal atlas of forgotten places.</h2>
+        <p class="about-section-body">
+            Urban explorers accumulate knowledge — locations, access routes, structural notes,
+            hazards, history — across years of fieldwork. That knowledge typically lives in
+            scattered notes, private DMs, and memory. UrbanLens gives it a permanent, organised home.
+        </p>
+        <p class="about-section-body">
+            Every pin you drop is yours. You decide what to share, who can see it, and
+            how much detail is visible. The platform is built around the understanding that
+            some places deserve to be documented without being advertised.
+        </p>
+
+        <div class="about-pillars">
+            <div class="about-pillar">
+                <div class="about-pillar-icon"><i class="material-icons">lock</i></div>
+                <h3 class="about-pillar-title">Privacy by default</h3>
+                <p class="about-pillar-body">Your pins are private. Granular visibility controls let you share selectively — with friends, with trip members, or with no one.</p>
+            </div>
+            <div class="about-pillar">
+                <div class="about-pillar-icon"><i class="material-icons">history_edu</i></div>
+                <h3 class="about-pillar-title">Document history</h3>
+                <p class="about-pillar-body">Each location has a community wiki for collectively recording history, access notes, hazards, and architectural details before they disappear.</p>
+            </div>
+            <div class="about-pillar">
+                <div class="about-pillar-icon"><i class="material-icons">group</i></div>
+                <h3 class="about-pillar-title">Trusted community</h3>
+                <p class="about-pillar-body">Trip planning, RSVPs, and shared itineraries — coordinate expeditions with people you trust without exposing location details to the world.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ── Core values ────────────────────────────────────────────────────────── #}
+<section class="about-values-section">
+    <div class="about-section-inner">
+        <div class="about-section-label">Our principles</div>
+        <h2 class="about-section-title">What we believe</h2>
+
+        <div class="about-values-grid">
+            <div class="about-value-card">
+                <span class="about-value-num">01</span>
+                <h3 class="about-value-title">Take nothing, leave nothing</h3>
+                <p class="about-value-body">
+                    Responsible exploration means leaving every site exactly as you found it.
+                    UrbanLens does not facilitate vandalism, theft, or damage — and we will
+                    remove users who do.
+                </p>
+            </div>
+            <div class="about-value-card">
+                <span class="about-value-num">02</span>
+                <h3 class="about-value-title">Protect vulnerable places</h3>
+                <p class="about-value-body">
+                    Some locations are fragile. Publishing coordinates indiscriminately invites
+                    damage. Our privacy tools exist so you can document a place privately
+                    without turning it into a viral destination.
+                </p>
+            </div>
+            <div class="about-value-card">
+                <span class="about-value-num">03</span>
+                <h3 class="about-value-title">Safety first</h3>
+                <p class="about-value-body">
+                    Abandoned structures are dangerous. Structural hazards, asbestos, and
+                    unstable floors kill. We encourage users to record and share safety
+                    information — and to never explore alone.
+                </p>
+            </div>
+            <div class="about-value-card">
+                <span class="about-value-num">04</span>
+                <h3 class="about-value-title">Preserve the record</h3>
+                <p class="about-value-body">
+                    Factories, hospitals, theatres — these buildings have stories.
+                    Photography and written documentation keep that history alive long
+                    after demolition. Every pin is a contribution to the archive.
+                </p>
+            </div>
+            <div class="about-value-card">
+                <span class="about-value-num">05</span>
+                <h3 class="about-value-title">Community over competition</h3>
+                <p class="about-value-body">
+                    The best discoveries are shared with people who will appreciate them.
+                    UrbanLens makes sharing with trusted friends easy — while keeping
+                    the wider world at a respectful distance.
+                </p>
+            </div>
+            <div class="about-value-card">
+                <span class="about-value-num">06</span>
+                <h3 class="about-value-title">Your data stays yours</h3>
+                <p class="about-value-body">
+                    We don't sell your location data. We don't show ads. Your pins,
+                    your photos, and your notes belong to you and are never used
+                    for anything beyond running this platform.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ── Features ───────────────────────────────────────────────────────────── #}
+<section class="about-section about-features-section">
+    <div class="about-section-inner">
+        <div class="about-section-label">Features</div>
+        <h2 class="about-section-title">Everything you need, nothing you don't.</h2>
+
+        <div class="about-features-list">
+
+            <div class="about-feature-row">
+                <div class="about-feature-visual">
+                    <div class="about-feature-icon-lg"><i class="material-icons">map</i></div>
+                </div>
+                <div class="about-feature-text">
+                    <h3 class="about-feature-title">Interactive map</h3>
+                    <p class="about-feature-body">
+                        Drop pins on any location worldwide. Add photos, notes, visit dates,
+                        priority ratings, and vulnerability assessments. Filter by tags and
+                        categories to find what you need instantly.
+                    </p>
+                    <ul class="about-feature-bullets">
+                        <li>Custom tags, categories, and status badges</li>
+                        <li>Satellite, street, and topographic base layers</li>
+                        <li>Priority &amp; vulnerability star ratings</li>
+                        <li>GPS coordinates extracted from photo EXIF data</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="about-feature-row about-feature-row--flip">
+                <div class="about-feature-visual">
+                    <div class="about-feature-icon-lg"><i class="material-icons">public</i></div>
+                </div>
+                <div class="about-feature-text">
+                    <h3 class="about-feature-title">Community location wiki</h3>
+                    <p class="about-feature-body">
+                        Each physical location can have a shared wiki page where the community
+                        documents history, architectural details, access notes, hazards, and more —
+                        without revealing coordinates to anyone outside your circle.
+                    </p>
+                    <ul class="about-feature-bullets">
+                        <li>Markdown-formatted history and notes</li>
+                        <li>Annotated maps with arrows, shapes, and labels</li>
+                        <li>Linked to your personal pin — separate from it</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="about-feature-row">
+                <div class="about-feature-visual">
+                    <div class="about-feature-icon-lg"><i class="material-icons">hiking</i></div>
+                </div>
+                <div class="about-feature-text">
+                    <h3 class="about-feature-title">Trip planning</h3>
+                    <p class="about-feature-body">
+                        Organise group expeditions end-to-end. Add activities, invite members,
+                        collect RSVPs, and share detailed itineraries — all without exposing
+                        exact pin locations to people who haven't been there yet.
+                    </p>
+                    <ul class="about-feature-bullets">
+                        <li>RSVP tracking and member management</li>
+                        <li>Per-trip privacy for location details</li>
+                        <li>Linked to pins for instant context</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="about-feature-row about-feature-row--flip">
+                <div class="about-feature-visual">
+                    <div class="about-feature-icon-lg"><i class="material-icons">photo_library</i></div>
+                </div>
+                <div class="about-feature-text">
+                    <h3 class="about-feature-title">Photo management</h3>
+                    <p class="about-feature-body">
+                        Upload photos and have GPS coordinates pulled automatically from EXIF data.
+                        Drag untagged photos onto the map to assign locations. Annotate maps
+                        with detailed markup visible in both thumbnails and full view.
+                    </p>
+                    <ul class="about-feature-bullets">
+                        <li>Automatic GPS extraction from EXIF metadata</li>
+                        <li>Drag-and-drop coordinate assignment on the map</li>
+                        <li>Per-photo visibility controls</li>
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+{# ── Who it's for ───────────────────────────────────────────────────────── #}
+<section class="about-audience-section">
+    <div class="about-section-inner">
+        <div class="about-section-label">Who it's for</div>
+        <h2 class="about-section-title">Made for people who explore with intention.</h2>
+        <div class="about-audience-grid">
+            <div class="about-audience-card">
+                <i class="material-icons about-audience-icon">camera_alt</i>
+                <h3>Urban photographers</h3>
+                <p>Track shooting locations, document access conditions, and build a private library of sites worth returning to.</p>
+            </div>
+            <div class="about-audience-card">
+                <i class="material-icons about-audience-icon">explore</i>
+                <h3>Urban explorers</h3>
+                <p>Log sites you've visited, rate their security and vulnerability, and share detailed trip notes with your crew.</p>
+            </div>
+            <div class="about-audience-card">
+                <i class="material-icons about-audience-icon">history</i>
+                <h3>Local historians</h3>
+                <p>Build a living archive of endangered heritage sites with written histories, photographs, and architectural notes.</p>
+            </div>
+            <div class="about-audience-card">
+                <i class="material-icons about-audience-icon">construction</i>
+                <h3>Industrial explorers</h3>
+                <p>Record structural hazards, asbestos risks, and structural conditions to keep your crew safer on every visit.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ── CTA ────────────────────────────────────────────────────────────────── #}
+<section class="about-cta-section">
+    <div class="about-cta-inner">
+        <h2 class="about-cta-title">Start mapping your world.</h2>
+        <p class="about-cta-body">It's free, private, and built for people who explore with care.</p>
+        {% if not user.is_authenticated %}
+        <a href="{% url 'signup' %}" class="about-btn about-btn--primary about-btn--lg">
+            <i class="material-icons">rocket_launch</i> Create an account
+        </a>
+        {% else %}
+        <a href="{% url 'map.view' %}" class="about-btn about-btn--primary about-btn--lg">
+            <i class="material-icons">map</i> Open my map
+        </a>
+        {% endif %}
+    </div>
+</section>
+
+{% endblock %}
