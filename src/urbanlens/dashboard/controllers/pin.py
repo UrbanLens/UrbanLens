@@ -53,6 +53,7 @@ def _format_search_date(raw: str | None) -> str:
     if not raw:
         return ""
     from datetime import datetime, timezone
+
     for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
         try:
             dt = datetime.strptime(raw[:19].rstrip("Z"), fmt.rstrip("%z"))
@@ -134,12 +135,20 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         min_date = date(today.year - 100, today.month, today.day)
 
         detail_pin_icon_choices = [
-            ("place", "Place"), ("business", "Building"), ("door_front", "Entrance"),
-            ("star", "Star"), ("warning", "Warning"), ("info", "Info"),
-            ("camera_alt", "Camera"), ("local_parking", "Parking"),
-            ("stairs", "Stairs"), ("elevator", "Elevator"),
-            ("exit_to_app", "Exit"), ("lock", "Lock"),
-            ("construction", "Construction"), ("emergency", "Emergency"),
+            ("place", "Place"),
+            ("business", "Building"),
+            ("door_front", "Entrance"),
+            ("star", "Star"),
+            ("warning", "Warning"),
+            ("info", "Info"),
+            ("camera_alt", "Camera"),
+            ("local_parking", "Parking"),
+            ("stairs", "Stairs"),
+            ("elevator", "Elevator"),
+            ("exit_to_app", "Exit"),
+            ("lock", "Lock"),
+            ("construction", "Construction"),
+            ("emergency", "Emergency"),
         ]
 
         return render(
@@ -318,7 +327,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             search_results = search_gateway.search(query)
         except Exception as e:
             logger.exception("Unable to contact web search API: %s", e)
-            return render(request, "dashboard/pages/location/web_search.html", {"error": "Search unavailable. Please try again later."})
+            return render(
+                request,
+                "dashboard/pages/location/web_search.html",
+                {"error": "Search unavailable. Please try again later."},
+            )
 
         for r in search_results:
             try:
@@ -344,7 +357,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         lat = pin.effective_latitude
         lng = pin.effective_longitude
         if lat is None or lng is None:
-            return render(request, "dashboard/pages/location/satellite_view.html", {"error": "No coordinates available."})
+            return render(
+                request,
+                "dashboard/pages/location/satellite_view.html",
+                {"error": "No coordinates available."},
+            )
 
         return render(request, "dashboard/pages/location/satellite_view.html", {"lat": lat, "lng": lng, "pin": pin})
 
@@ -365,7 +382,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return render(request, "dashboard/pages/location/street_view.html", {"error": "No coordinates available."})
 
         try:
-            google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
+            google_maps_gateway = GoogleMapsGateway(api_key=settings.street_view_api_key or "")
             image_bytes = google_maps_gateway.get_street_view(lat, lng)
             image_b64 = base64.b64encode(image_bytes).decode("ascii")
         except Exception as exc:
@@ -454,7 +471,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         google_maps_gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
 
         response = StreamingHttpResponse(
-            google_maps_gateway.import_pins_streaming(all_files, profile, tags=import_tags, tag_by_filename=tag_by_filename),
+            google_maps_gateway.import_pins_streaming(
+                all_files,
+                profile,
+                tags=import_tags,
+                tag_by_filename=tag_by_filename,
+            ),
             content_type="text/event-stream",
         )
         response["Cache-Control"] = "no-cache"
