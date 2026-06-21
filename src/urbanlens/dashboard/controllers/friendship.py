@@ -94,8 +94,7 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
                 .values_list("from_profile_id", "to_profile_id")
             )
             viewer_friend_ids: set[int] = set()
-            for from_id, to_id in viewer_friendships:
-                viewer_friend_ids.add(to_id if from_id == viewer.pk else from_id)
+            viewer_friend_ids.update(to_id if from_id == viewer.pk else from_id for from_id, to_id in viewer_friendships)
 
             mutual_ids = profile_friend_ids & viewer_friend_ids
             mutual_friends = [fp for fp in friend_profiles if fp.pk in mutual_ids]

@@ -4,7 +4,8 @@
 // ── Profile page ──────────────────────────────────────────────────────────────
 
 .profile-page {
-    max-width: 860px;
+    width: min(90vw, 40rem);
+    max-width: 90vw;
     margin: 2rem auto;
     padding: 0 1rem;
     display: flex;
@@ -1104,7 +1105,9 @@ textarea.edit-textarea {
     gap: 0.5rem;
     color: $text-secondary;
 
-    .material-icons { font-size: 1rem; }
+    .material-icons {
+        font-size: 1rem;
+    }
 }
 
 .profile-annotation-title {
@@ -1160,7 +1163,9 @@ textarea.edit-textarea {
         font-weight: 600;
     }
 
-    .profile-badge-chip-icon { font-size: 0.9rem; }
+    .profile-badge-chip-icon {
+        font-size: 0.9rem;
+    }
 }
 
 .profile-annotation-textarea {
@@ -1218,9 +1223,13 @@ textarea.edit-textarea {
     cursor: pointer;
     transition: background 0.2s;
 
-    .material-icons { font-size: 1.1rem; }
+    .material-icons {
+        font-size: 1.1rem;
+    }
 
-    &:hover { background: darken($primary-color, 8%); }
+    &:hover {
+        background: darken($primary-color, 8%);
+    }
 }
 
 .invite-dialog {
@@ -1232,7 +1241,9 @@ textarea.edit-textarea {
     color: var(--ul-text);
     padding: 0;
 
-    &::backdrop { background: rgba(0, 0, 0, 0.45); }
+    &::backdrop {
+        background: rgba(0, 0, 0, 0.45);
+    }
 }
 
 .invite-dialog-inner {
@@ -1269,7 +1280,9 @@ textarea.edit-textarea {
     }
 }
 
-.invite-result-wrap { min-height: 1.5rem; }
+.invite-result-wrap {
+    min-height: 1.5rem;
+}
 
 .invite-result {
     display: flex;
@@ -1279,7 +1292,9 @@ textarea.edit-textarea {
     border-radius: $radius-sm;
     font-size: 0.875rem;
 
-    .material-icons { font-size: 1.1rem; }
+    .material-icons {
+        font-size: 1.1rem;
+    }
 
     &--success {
         background: rgba(#4caf50, 0.1);

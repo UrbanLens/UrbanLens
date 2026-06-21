@@ -925,9 +925,9 @@ body.page-location-details {
     }
 
     // ── Rating / Priority / Place Name row ─────────────────────────────────
-    .pin-stat-trio {
+    .pin-stats {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(4, 1fr);
         gap: .2rem .25rem;
         padding: .45rem .9rem;
         border-bottom: 1px solid $border-color;
