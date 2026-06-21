@@ -17,8 +17,8 @@ will run it immediately after 0044 and reach the same final state.
 
 from __future__ import annotations
 
-import django.db.models.deletion
 from django.db import migrations, models
+import django.db.models.deletion
 
 
 class Migration(migrations.Migration):

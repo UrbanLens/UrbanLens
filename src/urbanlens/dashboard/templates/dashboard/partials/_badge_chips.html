@@ -1,0 +1,26 @@
+{% load dashboard_tags %}
+<div class="tag-chips-row">
+    {% for cat in all_categories %}
+    {% if cat.id in member_ids %}
+    <span class="tag-chip tag-chip--{{ cat.kind }}" {% if cat.color %}style="--tag-color:{{ cat.color }}"{% endif %}>
+        {% if cat.icon %}
+        <span class="tag-chip-icon">
+            {% if cat.icon|is_material_icon %}
+            <i class="material-icons" style="font-size:13px{% if cat.color %};color:{{ cat.color }}{% endif %}">{{ cat.icon }}</i>
+            {% else %}{{ cat.icon }}{% endif %}
+        </span>
+        {% endif %}
+        <span class="tag-chip-name">{{ cat.name }}</span>
+        <form hx-post="{% url post_url_name obj_uuid %}" hx-target="#{{ panel_id }}" hx-swap="outerHTML" style="display:inline">
+            {% csrf_token %}
+            <input type="hidden" name="category_id" value="{{ cat.id }}">
+            <input type="hidden" name="action" value="remove">
+            <button type="submit" class="tag-chip-remove" title="Remove">×</button>
+        </form>
+    </span>
+    {% endif %}
+    {% endfor %}
+    {% if not member_ids %}
+    <span class="tag-chips-empty">{{ empty_text|default:"No badges yet. Click + to add one." }}</span>
+    {% endif %}
+</div>

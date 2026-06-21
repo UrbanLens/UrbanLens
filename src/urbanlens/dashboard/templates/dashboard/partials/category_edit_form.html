@@ -3,7 +3,7 @@
       hx-target="#category-rows"
       hx-swap="innerHTML"
       class="tag-inline-edit category-global-edit-form"
-      hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); toastr.success('Category saved.'); }">
+      hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); var kc=event.detail.xhr&&event.detail.xhr.getResponseHeader('X-Kind-Changed'); toastr.success(kc?'Converted to '+kc+'.':'Category saved.'); }">
     {% csrf_token %}
 
     <div class="form-field" style="margin-bottom:1rem;">
@@ -30,11 +30,8 @@
             <label class="form-label">Name</label>
             <input name="name" type="text" class="form-input" value="{{ category.name }}" required>
         </div>
-        <div class="form-field">
-            <label class="form-label">Order</label>
-            <input name="order" type="number" class="form-input" value="{{ category.order }}">
-        </div>
     </div>
+    <input type="hidden" name="order" value="{{ category.order }}">
 
     <div class="form-field">
         <label class="form-label">Description</label>

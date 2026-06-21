@@ -85,6 +85,10 @@ class SignupView(generic.CreateView):
         self._send_verification_email(user, verification)
         # Store the email in session so the "check email" page can display it
         self.request.session["pending_verification_email"] = user.email
+        # Store pending invite token (if the user arrived via an invitation link)
+        invite_token = self.request.GET.get("invite") or self.request.POST.get("invite")
+        if invite_token:
+            self.request.session["pending_invite_token"] = invite_token
         return redirect("verify_email_sent")
 
     def _send_verification_email(self, user: User, verification: EmailVerification) -> None:
@@ -153,6 +157,10 @@ class VerifyEmailView(View):
         user = verification.user
         user.is_active = True
         user.save(update_fields=["is_active"])
+
+        # Auto-send friend request from any pending email invitations
+        _process_pending_invitations(user)
+
         return render(request, "registration/verify_email_confirm.html", {"valid": True})
 
 
@@ -226,6 +234,36 @@ class CustomLoginView(LoginView):
             except User.DoesNotExist:
                 pass
         return super().form_invalid(form)
+
+
+# ── Invitation processing ──────────────────────────────────────────────────
+
+def _process_pending_invitations(user: User) -> None:
+    """After a new user's email is verified, auto-create friend requests from any matching invitations.
+
+    Args:
+        user: The newly-verified User.
+    """
+    try:
+        from django.utils import timezone
+
+        from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+        from urbanlens.dashboard.models.friendship.model import Friendship
+
+        pending = FriendInvitation.objects.filter(
+            email__iexact=user.email,
+            accepted_at__isnull=True,
+            expires_at__gt=timezone.now(),
+        ).select_related("inviter")
+
+        profile = user.profile
+        for invitation in pending:
+            if invitation.inviter == profile:
+                continue
+            Friendship.request(from_profile=invitation.inviter, to_profile=profile.pk)
+            invitation.mark_accepted()
+    except Exception:
+        logger.exception("Error processing pending invitations for %s", user.email)
 
 
 # ── Legacy social_auth helper (kept for compatibility but not in URL routing) ──

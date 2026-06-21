@@ -8,7 +8,7 @@
 
 <div class="comment-body">
   <div class="comment-meta">
-    <a href="{% url 'profile.view_user' comment.profile.id %}" class="comment-author comment-author--link">{{ comment.profile.username }}</a>
+    <a href="{% url 'profile.view_user' comment.profile.uuid %}" class="comment-author comment-author--link">{{ comment.profile.username }}</a>
     <span class="comment-date">{{ comment.created|timesince }} ago</span>
     {% if comment.profile == profile %}
     <button type="button" class="comment-delete-btn" title="Delete"
@@ -29,7 +29,7 @@
   <div class="comment-text">{{ rendered_text }}</div>
 
   {% if comment.map_data %}
-  {% with sid="comment-map-data-"|add:comment.id %}{{ comment.map_data|json_script:sid }}{% endwith %}
+  {% with id_str=comment.id|stringformat:"d" %}{% with sid="comment-map-data-"|add:id_str %}{{ comment.map_data|json_script:sid }}{% endwith %}{% endwith %}
   <div class="comment-map-preview" data-comment-id="{{ comment.id }}">
     <div class="comment-map-thumb" id="comment-map-thumb-{{ comment.id }}"></div>
     <button type="button" class="comment-map-expand-btn"
@@ -38,7 +38,7 @@
       Expand map
     </button>
   </div>
-  <dialog id="comment-map-dialog-{{ comment.id }}" class="comment-map-view-dialog">
+  <dialog id="comment-map-dialog-{{ comment.id }}" class="comment-map-view-dialog ul-dialog">
     <div class="dialog-header">
       <span>Map</span>
       <button type="button" class="dialog-close"
@@ -51,9 +51,18 @@
   {% endif %}
 
   {% if comment.image %}
+  {% if comment.profile.pk in blurred_profiles %}
+  <div class="comment-image-blurred" title="Photo hidden by your privacy settings">
+    <img src="{{ comment.image.url }}" alt="Attached" class="comment-image comment-image--blurred">
+    <span class="comment-image-blur-label">
+      <i class="material-icons">visibility_off</i> Photo hidden
+    </span>
+  </div>
+  {% else %}
   <a href="{{ comment.image.url }}" target="_blank" class="comment-image-link">
     <img src="{{ comment.image.url }}" alt="Attached" class="comment-image">
   </a>
+  {% endif %}
   {% endif %}
 
   {# ── Reactions ── #}
@@ -117,7 +126,7 @@
     {% for reply_item in replies %}
     {% with r=reply_item.comment %}
     <li class="comment-item comment-item--reply" id="comment-{{ r.id }}">
-      {% include "dashboard/partials/_comment_body.html" with comment=r rendered_text=reply_item.rendered_text reactions=reply_item.reactions replies=None context_type=context_type pin=pin location=location trip=trip trip_uuid=trip_uuid profile=profile allowed_emojis=allowed_emojis is_reply=True %}
+      {% include "dashboard/partials/_comment_body.html" with comment=r rendered_text=reply_item.rendered_text reactions=reply_item.reactions replies=None context_type=context_type pin=pin location=location trip=trip trip_uuid=trip_uuid profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=True %}
     </li>
     {% endwith %}
     {% endfor %}

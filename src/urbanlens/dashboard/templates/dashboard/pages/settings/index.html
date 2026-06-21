@@ -54,17 +54,36 @@
                 {% endif %}
             </div>
 
-            <div class="settings-field settings-field--checkbox">
-                <label class="settings-checkbox-label">
-                    {{ privacy_form.hide_pin_locations_in_trips }}
-                    <span class="settings-checkbox-materialize"></span>
-                    <span>
-                        <span class="settings-label">{{ privacy_form.hide_pin_locations_in_trips.label }}</span>
-                        <p class="settings-help">{{ privacy_form.hide_pin_locations_in_trips.help_text }}</p>
-                    </span>
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.photo_upload_visibility.id_for_label }}">
+                    {{ privacy_form.photo_upload_visibility.label }}
                 </label>
-                {% if privacy_form.hide_pin_locations_in_trips.errors %}
-                <p class="settings-error">{{ privacy_form.hide_pin_locations_in_trips.errors|join:", " }}</p>
+                <p class="settings-help">{{ privacy_form.photo_upload_visibility.help_text }}</p>
+                {{ privacy_form.photo_upload_visibility }}
+                {% if privacy_form.photo_upload_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.photo_upload_visibility.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.viewer_photo_filter.id_for_label }}">
+                    {{ privacy_form.viewer_photo_filter.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.viewer_photo_filter.help_text }}</p>
+                {{ privacy_form.viewer_photo_filter }}
+                {% if privacy_form.viewer_photo_filter.errors %}
+                <p class="settings-error">{{ privacy_form.viewer_photo_filter.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.trip_pin_location_visibility.id_for_label }}">
+                    {{ privacy_form.trip_pin_location_visibility.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.trip_pin_location_visibility.help_text }}</p>
+                {{ privacy_form.trip_pin_location_visibility }}
+                {% if privacy_form.trip_pin_location_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.trip_pin_location_visibility.errors|join:", " }}</p>
                 {% endif %}
             </div>
 
@@ -298,7 +317,7 @@
         <div class="settings-section-header">
             <i class="material-icons">draw</i>
             <div>
-                <h2 class="settings-section-title">Pin Annotation Defaults</h2>
+                <h2 class="settings-section-title">Markup</h2>
                 <p class="settings-section-desc">Default colors and transparency applied when you add arrows, shapes, and text to a pin.</p>
             </div>
         </div>

@@ -25,6 +25,24 @@
 
     --ul-hover-bg: rgba(0, 0, 0, .04);
     --ul-hover-bg-primary: rgba(33, 150, 243, .08);
+
+    // Semantic color tokens
+    --ul-color-accent: #6366f1;
+    --ul-color-accent-bg: #eef2ff;
+    --ul-color-accent-fg: #4f46e5;
+    --ul-color-accent-ring: rgba(99, 102, 241, .15);
+
+    --ul-color-success-bg: #f0fdf4;
+    --ul-color-success-border: #86efac;
+
+    --ul-color-warning-text: #92400e;
+    --ul-color-warning-bg: #fffbeb;
+    --ul-color-warning-border: #fde68a;
+    --ul-color-warning-icon: #d97706;
+
+    --ul-color-danger-text: #ef4444;
+    --ul-color-danger-border: #fca5a5;
+    --ul-color-danger-bg: #fef2f2;
 }
 
 // ── Dark mode ─────────────────────────────────────────────────────────────────
@@ -50,6 +68,22 @@
 
     --ul-hover-bg: rgba(255, 255, 255, .05);
     --ul-hover-bg-primary: rgba(66, 165, 245, .1);
+
+    // Semantic color token overrides for dark mode
+    --ul-color-accent-bg: rgba(99, 102, 241, .12);
+    --ul-color-accent-fg: #a5b4fc;
+
+    --ul-color-success-bg: rgba(74, 222, 128, .07);
+    --ul-color-success-border: rgba(74, 222, 128, .3);
+
+    --ul-color-warning-text: #fde68a;
+    --ul-color-warning-bg: rgba(251, 191, 36, .07);
+    --ul-color-warning-border: rgba(251, 191, 36, .3);
+    --ul-color-warning-icon: #fbbf24;
+
+    --ul-color-danger-text: #f87171;
+    --ul-color-danger-border: rgba(239, 68, 68, .4);
+    --ul-color-danger-bg: rgba(239, 68, 68, .08);
 
     // Legacy props used by .card and older components
     --card-bg: #1e1e1e;

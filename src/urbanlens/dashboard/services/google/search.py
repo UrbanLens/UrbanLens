@@ -86,20 +86,7 @@ class GoogleCustomSearchGateway(Gateway):
             "num": max(1, min(max_results, 10)),
         }
         response = self.session.get(self.base_url, params=params, timeout=60)
-        try:
-            response.raise_for_status()
-        except HTTPError:
-            detail = self.extract_error_detail(response)
-            logger.warning(
-                "Google Custom Search request failed with status %s; key=%s cx=%s reason=%s",
-                response.status_code,
-                _mask_secret(self.api_key),
-                _mask_secret(self.cx),
-                detail,
-            )
-            raise GoogleCustomSearchError(
-                f"Google Custom Search request failed with status {response.status_code}: {detail}",
-            ) from None
+        response.raise_for_status()
         return self.parse_response(response)
 
     def validate_configuration(self) -> None:

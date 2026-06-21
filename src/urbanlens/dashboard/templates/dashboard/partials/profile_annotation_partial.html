@@ -1,0 +1,42 @@
+{# Private annotation panel — only visible to the viewing user, never to the profile owner. #}
+<div class="profile-annotation-panel" id="profile-annotation-panel">
+
+    <div class="profile-annotation-header">
+        <i class="material-icons">lock</i>
+        <span class="profile-annotation-title">My Private Notes</span>
+        <span class="profile-annotation-badge">Only visible to you</span>
+    </div>
+
+    {# ── People badges ──────────────────────────────────────────────────────── #}
+    <div class="profile-annotation-badges">
+        <p class="profile-annotation-label">Labels</p>
+        <div class="profile-annotation-chips" id="pab-chips">
+            {% for badge in user_badges %}
+            <button type="button"
+                    class="profile-badge-chip {% if badge.id in assigned_badge_ids %}profile-badge-chip--on{% endif %}"
+                    style="--badge-color: {{ badge.color|default:'#6b7280' }}"
+                    hx-post="{% url 'profile.badge_toggle' subject.uuid badge.id %}"
+                    hx-target="#profile-annotation-panel"
+                    hx-swap="outerHTML"
+                    title="{% if badge.id in assigned_badge_ids %}Remove {% else %}Add {% endif %}{{ badge.name }}">
+                {% if badge.icon %}<span class="profile-badge-chip-icon">{{ badge.icon }}</span>{% endif %}
+                {{ badge.name }}
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# ── Text note ──────────────────────────────────────────────────────────── #}
+    <div class="profile-annotation-note">
+        <p class="profile-annotation-label">Notes</p>
+        <textarea class="profile-annotation-textarea"
+                  placeholder="Add private notes about this person…"
+                  hx-post="{% url 'profile.note' subject.uuid %}"
+                  hx-trigger="input changed delay:600ms"
+                  hx-target=".profile-note-status"
+                  hx-swap="innerHTML"
+                  name="content">{{ note.content|default:'' }}</textarea>
+        <span class="profile-note-status"></span>
+    </div>
+
+</div>

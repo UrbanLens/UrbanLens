@@ -36,7 +36,29 @@ from django.views.generic import TemplateView
 # 3rd Party imports
 from rest_framework import routers
 
-from urbanlens.dashboard.controllers import aliases, campus, categories, comments, detail_pins, friendship, location_wiki, maps, markup, notifications, organize, pin, pin_edit, settings, site_admin, statuses, tags, trip, userprofile, visits
+from urbanlens.dashboard.controllers import (
+    aliases,
+    campus,
+    categories,
+    comments,
+    detail_pins,
+    friendship,
+    image_gallery,
+    location_wiki,
+    maps,
+    markup,
+    notifications,
+    organize,
+    pin,
+    pin_edit,
+    settings,
+    site_admin,
+    statuses,
+    tags,
+    trip,
+    userprofile,
+    visits,
+)
 from urbanlens.dashboard.controllers.index import IndexController
 
 # from urbanlens.dashboard.models.categories import CategoryViewSet
@@ -77,6 +99,10 @@ urlpatterns = [
     ),
     path("rest/", include(router.urls)),
     re_path("^$", IndexController.as_view(), name="home"),
+    path("about/", TemplateView.as_view(
+        template_name="dashboard/pages/about/index.html",
+        extra_context={"page_name": "about"},
+    ), name="about"),
     path(
         "map/",
         include(
@@ -248,6 +274,21 @@ urlpatterns = [
                                 name="pin.comment.delete",
                             ),
                             path(
+                                "<uuid:pin_uuid>/gallery/",
+                                image_gallery.PinGalleryView.as_view(),
+                                name="pin.gallery",
+                            ),
+                            path(
+                                "<uuid:pin_uuid>/gallery/json/",
+                                image_gallery.PinGalleryJsonView.as_view(),
+                                name="pin.gallery.json",
+                            ),
+                            path(
+                                "<uuid:pin_uuid>/gallery/<int:image_id>/",
+                                image_gallery.PinImageView.as_view(),
+                                name="pin.gallery.image",
+                            ),
+                            path(
                                 "import/",
                                 include(
                                     [
@@ -277,7 +318,9 @@ urlpatterns = [
                 path("", userprofile.ViewProfileView.as_view(), name="profile.view"),
                 path("edit/", userprofile.EditProfileView.as_view(), name="profile.edit"),
                 path("edit/field/", userprofile.ProfileFieldUpdateView.as_view(), name="profile.field.update"),
-                path("<int:profile_id>/", userprofile.ViewProfileView.as_view(), name="profile.view_user"),
+                path("<uuid:profile_uuid>/", userprofile.ViewProfileView.as_view(), name="profile.view_user"),
+                path("<uuid:profile_uuid>/note/", userprofile.ProfileNoteView.as_view(), name="profile.note"),
+                path("<uuid:profile_uuid>/badge/<int:badge_id>/", userprofile.ProfileBadgeToggleView.as_view(), name="profile.badge_toggle"),
             ],
         ),
     ),
@@ -297,6 +340,7 @@ urlpatterns = [
                 path("bulk-delete/", tags.TagBulkDeleteView.as_view(), name="tag.bulk_delete"),
                 path("bulk-edit/", tags.TagBulkEditView.as_view(), name="tag.bulk_edit"),
                 path("bulk-convert/", tags.TagBulkConvertView.as_view(), name="tag.bulk_convert"),
+                path("bulk-convert-status/", tags.TagBulkConvertToStatusView.as_view(), name="tag.bulk_convert_status"),
                 path("multi-merge/", tags.TagMultiMergeView.as_view(), name="tag.multi_merge"),
                 path("<int:tag_id>/customize/", tags.TagCustomizeView.as_view(), name="tag.customize"),
                 path("pin/<uuid:pin_uuid>/", tags.TagMembershipView.as_view(), name="tag.membership"),
@@ -351,6 +395,16 @@ urlpatterns = [
                     "mute/<int:profile_id>",
                     friendship.FriendController.as_view({"post": "mute_friend"}),
                     name="friend.mute",
+                ),
+                path(
+                    "respond/<int:from_profile_id>/",
+                    friendship.FriendController.as_view({"post": "friend_request_respond"}),
+                    name="friend.respond",
+                ),
+                path(
+                    "invite/",
+                    friendship.FriendController.as_view({"post": "invite_by_email"}),
+                    name="friend.invite_email",
                 ),
             ],
         ),
@@ -424,6 +478,21 @@ urlpatterns = [
                     aliases.LocationAliasDeleteView.as_view(),
                     name="location.wiki.alias.delete",
                 ),
+                path(
+                    "<uuid:location_uuid>/wiki/gallery/",
+                    image_gallery.WikiGalleryView.as_view(),
+                    name="location.wiki.gallery",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/gallery/json/",
+                    image_gallery.WikiGalleryJsonView.as_view(),
+                    name="location.wiki.gallery.json",
+                ),
+                path(
+                    "<uuid:location_uuid>/wiki/gallery/<int:image_id>/",
+                    image_gallery.WikiImageView.as_view(),
+                    name="location.wiki.gallery.image",
+                ),
             ],
         ),
     ),
@@ -473,6 +542,7 @@ urlpatterns = [
                 path("bulk-delete/", categories.CategoryBulkDeleteView.as_view(), name="category.bulk_delete"),
                 path("bulk-edit/", categories.CategoryBulkEditView.as_view(), name="category.bulk_edit"),
                 path("bulk-convert/", categories.CategoryBulkConvertView.as_view(), name="category.bulk_convert"),
+                path("bulk-convert-status/", categories.CategoryBulkConvertToStatusView.as_view(), name="category.bulk_convert_status"),
                 path("rows/", categories.CategoryRowsView.as_view(), name="category.rows"),
                 path("<int:cat_id>/customize/", categories.CategoryCustomizeView.as_view(), name="category.customize"),
                 path("reorder/", categories.CategoryReorderView.as_view(), name="category.reorder"),
@@ -499,6 +569,7 @@ urlpatterns = [
                 path("<int:status_id>/edit/", statuses.StatusEditView.as_view(), name="status.edit"),
                 path("<int:status_id>/delete/", statuses.StatusDeleteView.as_view(), name="status.delete"),
                 path("bulk-delete/", statuses.StatusBulkDeleteView.as_view(), name="status.bulk_delete"),
+                path("multi-merge/", statuses.StatusMultiMergeView.as_view(), name="status.multi_merge"),
                 path("pin/<uuid:pin_uuid>/", statuses.StatusMembershipView.as_view(), name="status.membership"),
             ],
         ),

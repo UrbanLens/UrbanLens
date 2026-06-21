@@ -1,7 +1,7 @@
 """Add PinNote model — private per-pin notes for the pin owner."""
 
-import django.db.models.deletion
 from django.db import migrations, models
+import django.db.models.deletion
 
 
 class Migration(migrations.Migration):

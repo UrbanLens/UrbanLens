@@ -1,5 +1,5 @@
-from django.db import migrations, models
 import django.contrib.gis.db.models.fields
+from django.db import migrations, models
 import django.db.models.deletion
 
 

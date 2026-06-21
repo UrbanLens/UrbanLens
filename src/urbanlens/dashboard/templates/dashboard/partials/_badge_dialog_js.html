@@ -1,0 +1,62 @@
+<script>
+(function () {
+    // Register HTMX listeners once; re-open the dialog after a badge add/remove swap.
+    if (window._badgeDialogJsLoaded) return;
+    window._badgeDialogJsLoaded = true;
+
+    var _pendingDlgId = null;
+    document.body.addEventListener('htmx:beforeRequest', function (e) {
+        var el = e.target;
+        if (!el || !el.closest) return;
+        var dlg = el.closest('dialog.tag-add-dialog');
+        if (dlg && dlg.open) _pendingDlgId = dlg.id;
+    });
+    document.body.addEventListener('htmx:afterSwap', function () {
+        if (!_pendingDlgId) return;
+        var dlg = document.getElementById(_pendingDlgId);
+        if (dlg) { dlg.showModal(); window._initBadgeDialog(dlg); }
+        _pendingDlgId = null;
+    });
+}());
+
+if (!window._initBadgeDialog) {
+    window._initBadgeDialog = function _initBadgeDialog(dlg) {
+        if (!dlg) return;
+        var tabs   = dlg.querySelectorAll('.tad-tab');
+        var search = dlg.querySelector('.dialog-search');
+        var items  = function () { return dlg.querySelectorAll('.tag-dialog-item'); };
+        var pills  = function () { return dlg.querySelectorAll('.tad-kind-pill'); };
+        var active = 'all';
+
+        function applyFilter() {
+            var q = search ? search.value.toLowerCase().trim() : '';
+            items().forEach(function (el) {
+                var nameOk = !q || el.dataset.name.includes(q);
+                var kindOk = active === 'all' || el.dataset.kind === active;
+                el.hidden = !(nameOk && kindOk);
+            });
+            pills().forEach(function (p) { p.hidden = (active !== 'all'); });
+        }
+
+        tabs.forEach(function (tab) {
+            var fresh = tab.cloneNode(true);
+            tab.parentNode.replaceChild(fresh, tab);
+            fresh.addEventListener('click', function () {
+                dlg.querySelectorAll('.tad-tab').forEach(function (t) { t.classList.remove('tad-tab--active'); });
+                this.classList.add('tad-tab--active');
+                active = this.dataset.tab;
+                applyFilter();
+            });
+        });
+
+        if (search) {
+            var freshSearch = search.cloneNode(true);
+            search.parentNode.replaceChild(freshSearch, search);
+            freshSearch.addEventListener('input', applyFilter);
+        }
+        applyFilter();
+    };
+}
+
+document.querySelectorAll('.tag-add-dialog').forEach(window._initBadgeDialog);
+</script>

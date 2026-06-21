@@ -1,4 +1,4 @@
-"""Property-based tests for PinQuerySet.filter_by_criteria.
+﻿"""Property-based tests for PinQuerySet.filter_by_criteria.
 
 filter_by_criteria is the primary server-side search engine.  For each filter
 key the invariants are:
@@ -18,9 +18,9 @@ from datetime import date, timedelta
 from typing import Any
 
 from django.contrib.auth.models import User
+from urbanlens.core.tests.testcase import TestCase
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.badges.model import Badge, KIND_TAG
@@ -36,7 +36,7 @@ _db_settings = settings(
 
 
 
-class FilterByCriteriaHasVisitsTests(HypothesisTestCase):
+class FilterByCriteriaHasVisitsTests(TestCase):
 	"""has_visits criterion: 'yes' returns visited; 'no' returns unvisited."""
 
 	profile: Profile
@@ -75,7 +75,7 @@ class FilterByCriteriaHasVisitsTests(HypothesisTestCase):
 		self.assertIn(self.unvisited.pk, result_ids)
 
 
-class FilterByCriteriaPriorityTests(HypothesisTestCase):
+class FilterByCriteriaPriorityTests(TestCase):
 	"""min_priority criterion: result contains only pins at or above the threshold."""
 
 	profile: Profile
@@ -117,7 +117,7 @@ class FilterByCriteriaPriorityTests(HypothesisTestCase):
 				self.assertNotIn(pin.pk, result_ids, f"Pin with priority {p} must be excluded (min={min_prio})")
 
 
-class FilterByCriteriaDateTests(HypothesisTestCase):
+class FilterByCriteriaDateTests(TestCase):
 	"""created_after / created_before criteria."""
 
 	profile: Profile
@@ -151,7 +151,7 @@ class FilterByCriteriaDateTests(HypothesisTestCase):
 		self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 
 
-class FilterByCriteriaRatingTests(HypothesisTestCase):
+class FilterByCriteriaRatingTests(TestCase):
 	"""min_rating / max_rating criteria filter by review score."""
 
 	user: User
@@ -202,7 +202,7 @@ class FilterByCriteriaRatingTests(HypothesisTestCase):
 				self.assertLessEqual(rating_val, max_r)
 
 
-class FilterByCriteriaNameTests(HypothesisTestCase):
+class FilterByCriteriaNameTests(TestCase):
 	"""name criterion: case-insensitive substring match against nickname."""
 
 	profile: Profile
@@ -250,7 +250,7 @@ class FilterByCriteriaNameTests(HypothesisTestCase):
 		self.assertIn(self.decoy.pk, result_ids)
 
 
-class FilterByCriteriaIdempotencyTests(HypothesisTestCase):
+class FilterByCriteriaIdempotencyTests(TestCase):
 	"""Applying the same criteria object twice must yield an identical result."""
 
 	profile: Profile
@@ -274,7 +274,7 @@ class FilterByCriteriaIdempotencyTests(HypothesisTestCase):
 		self.assertEqual(first, second, "filter_by_criteria must be deterministic")
 
 
-class FilterByCriteriaMonotonicityTests(HypothesisTestCase):
+class FilterByCriteriaMonotonicityTests(TestCase):
 	"""Loosening a criterion must never produce a strictly smaller result set."""
 
 	profile: Profile
@@ -302,7 +302,7 @@ class FilterByCriteriaMonotonicityTests(HypothesisTestCase):
 		)
 
 
-class FilterByCriteriaTagTests(HypothesisTestCase):
+class FilterByCriteriaTagTests(TestCase):
 	"""Tag criterion filters via Badge.get_badge_and_descendants."""
 
 	profile: Profile

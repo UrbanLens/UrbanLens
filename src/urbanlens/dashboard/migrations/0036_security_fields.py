@@ -1,6 +1,5 @@
 from django.db import migrations, models
 
-
 _SECURITY_CHOICES = [("unknown", "Unknown"), ("no", "No"), ("some", "Some"), ("everywhere", "Everywhere")]
 
 

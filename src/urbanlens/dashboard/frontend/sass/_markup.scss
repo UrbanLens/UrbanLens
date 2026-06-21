@@ -1,0 +1,43 @@
+// ── Shared markup-engine styles ────────────────────────────────────────────────
+
+// Text-label span produced by MarkupEngine.textLabelHtml()
+.markup-text-label {
+  font-family: inherit;
+  pointer-events: none;
+  user-select: none;
+  cursor: default;
+}
+
+// Inline text-label input shown inside the comment-composer toolbar when the
+// text tool is active.
+.cmc-text-label-input {
+  flex: 1 1 140px;
+  min-width: 110px;
+  max-width: 220px;
+  height: 30px;
+  padding: .2rem .55rem;
+  border: 1px solid var(--ul-border, #e2e8f0);
+  border-radius: 5px;
+  font-size: .82rem;
+  font-family: inherit;
+  background: var(--ul-surface-2, #fff);
+  color: var(--color-text, #1e293b);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+
+  &::placeholder { color: var(--color-muted, #94a3b8); }
+
+  &:focus {
+    border-color: var(--color-accent, #2563eb);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, .15);
+  }
+}
+
+// Close-target indicator rendered during polygon drawing
+.markup-polygon-close-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  background: rgba(255, 255, 255, .6);
+}

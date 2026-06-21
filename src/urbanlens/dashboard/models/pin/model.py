@@ -70,6 +70,7 @@ class Pin(abstract.Model):
     # User's personal notes. Unrelated to Location.description (place-level info).
     description = TextField(null=True, blank=True)
     priority = IntegerField(default=0)
+    vulnerability = IntegerField(default=0)
     last_visited = DateTimeField(null=True, blank=True)
     # Per-user coordinate override. None = use location.latitude/longitude (see effective_latitude/longitude).
     # Only set these when the user wants to reposition the marker from the canonical Location coords.
@@ -312,7 +313,7 @@ class Pin(abstract.Model):
 
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
         """Suggest a category using the pin's personal context and location metadata."""
-        from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
+        from urbanlens.dashboard.services.ai.factory import get_gateway
         from urbanlens.dashboard.services.ai.keywords import categorize_by_keywords
 
         keyword_parts = [p for p in (self.effective_name, self.place_name if self.has_place_name() else None) if p]
@@ -347,7 +348,9 @@ class Pin(abstract.Model):
         if not prompt:
             return None
 
-        gateway = CloudflareGateway(instructions=instructions)
+        gateway = get_gateway("category_suggestions", instructions=instructions)
+        if not gateway:
+            return None
         category_name = gateway.send_prompt(prompt)
         if not category_name or len(category_name) < 3:
             return None

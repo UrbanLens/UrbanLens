@@ -102,7 +102,7 @@
 </div>
 
 {# ── Edit trip dialog ───────────────────────────────────────────────────── #}
-<dialog id="edit-trip-dialog" class="trip-create-dialog">
+<dialog id="edit-trip-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Edit Trip" %}
     <form hx-post="{% url 'trips.edit' trip.uuid %}"
           hx-target="#trip-header"
@@ -140,7 +140,7 @@
 </dialog>
 
 {# ── Add activity dialog ────────────────────────────────────────────────── #}
-<dialog id="add-activity-dialog" class="trip-create-dialog">
+<dialog id="add-activity-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Add Activity" %}
     <form id="add-activity-form"
           hx-post="{% url 'trips.activities' trip.uuid %}"
@@ -249,7 +249,7 @@
 </dialog>
 
 {# ── Edit activity dialog ───────────────────────────────────────────────── #}
-<dialog id="edit-activity-dialog" class="trip-create-dialog">
+<dialog id="edit-activity-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Edit Activity" %}
     <form id="edit-activity-form"
           hx-post=""
@@ -376,7 +376,7 @@
 
 {# ── Trip settings dialog ─────────────────────────────────────────────────── #}
 {% if viewer_is_organizer %}
-<dialog id="trip-settings-dialog" class="trip-create-dialog">
+<dialog id="trip-settings-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Trip Settings" %}
     <div id="trip-settings-content">
         {% include "dashboard/partials/trip_settings_partial.html" %}
@@ -385,7 +385,7 @@
 {% endif %}
 
 {# ── Add member dialog ──────────────────────────────────────────────────── #}
-<dialog id="add-member-dialog" class="trip-create-dialog">
+<dialog id="add-member-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Add Member" %}
     <form hx-post="{% url 'trips.members' trip.uuid %}"
           hx-target="#trip-members-panel"

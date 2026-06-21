@@ -29,8 +29,7 @@ def migrate_pin_lists_to_tags(apps, schema_editor):
                 tag.description = pin_list.description
             if not tag.icon and pin_list.icon:
                 tag.icon = pin_list.icon
-            if pin_list.order > tag.order:
-                tag.order = pin_list.order
+            tag.order = max(pin_list.order, tag.order)
             tag.save()
 
         for pin in pin_list.pins.all():
@@ -44,12 +43,10 @@ def create_default_tags_for_existing_profiles(apps, schema_editor):
     just migrated above. This step is a no-op unless a profile somehow had no
     matching lists.
     """
-    pass
 
 
 def reverse_migrate(apps, schema_editor):
     """Reverse is a no-op - we cannot reliably reconstruct PinList rows."""
-    pass
 
 
 class Migration(migrations.Migration):

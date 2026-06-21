@@ -49,7 +49,7 @@
     {% endif %}
 
     {# ── Log-a-visit dialog ──────────────────────────────────────────── #}
-    <dialog id="visit-add-dialog-{{ pin.uuid }}" class="visit-add-dialog">
+    <dialog id="visit-add-dialog-{{ pin.uuid }}" class="visit-add-dialog ul-dialog">
         {% include "dashboard/partials/_dialog_header.html" with title="Log a Visit" %}
         <form hx-post="{% url 'pin.visits' pin.uuid %}"
               hx-target="#visit-history-panel"

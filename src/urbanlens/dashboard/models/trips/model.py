@@ -268,11 +268,24 @@ class TripActivityVote(abstract.Model):
         ]
 
 
+AI_PROVIDER_OPENAI = "openai"
+AI_PROVIDER_CLOUDFLARE = "cloudflare"
+AI_PROVIDER_CHOICES = [
+    (AI_PROVIDER_CLOUDFLARE, "Cloudflare Workers AI"),
+    (AI_PROVIDER_OPENAI, "OpenAI"),
+]
+
+DEFAULT_OPENAI_MODEL = "gpt-5-nano"
+DEFAULT_CLOUDFLARE_MODEL = "@cf/mistral/mistral-7b-instruct-v0.1"
+
+
 class SiteSettings(abstract.Model):
     """Singleton model for site-wide configurable settings.
 
     Always access via ``SiteSettings.get_current()``; never instantiate directly.
     """
+
+    # --- Trip settings ---
 
     max_trip_members = IntegerField(
         default=10,
@@ -284,6 +297,44 @@ class SiteSettings(abstract.Model):
     max_bbox_area_km2 = FloatField(
         default=2600.0,
         help_text="Maximum allowed area (km²) for a location bounding box. Default ≈ Chernobyl Exclusion Zone.",
+    )
+
+    # --- AI — Global controls ---
+
+    ai_enabled = BooleanField(
+        default=True,
+        help_text="Master toggle for all AI features. Disabling this prevents all AI API calls.",
+        verbose_name="AI enabled",
+    )
+    ai_provider = CharField(
+        max_length=20,
+        choices=AI_PROVIDER_CHOICES,
+        default=AI_PROVIDER_CLOUDFLARE,
+        help_text="Which AI provider to use for all AI-powered features.",
+        verbose_name="AI provider",
+    )
+
+    # --- AI — Model selection ---
+
+    openai_model = CharField(
+        max_length=100,
+        default=DEFAULT_OPENAI_MODEL,
+        help_text="OpenAI model name (e.g. gpt-4o, gpt-4o-mini, gpt-5-nano). Only used when provider is OpenAI.",
+        verbose_name="OpenAI model",
+    )
+    cloudflare_model = CharField(
+        max_length=200,
+        default=DEFAULT_CLOUDFLARE_MODEL,
+        help_text="Cloudflare Workers AI model name. Only used when provider is Cloudflare.",
+        verbose_name="Cloudflare model",
+    )
+
+    # --- AI — Feature toggles ---
+
+    ai_category_suggestions_enabled = BooleanField(
+        default=True,
+        help_text="Allow AI to suggest categories for pins and locations based on their metadata.",
+        verbose_name="Category suggestions",
     )
 
     def __str__(self) -> str:

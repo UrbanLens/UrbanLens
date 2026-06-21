@@ -44,6 +44,17 @@ def _build_context(comments_qs, profile: Profile, **extra) -> dict:
             "replies__profile__user",
         ),
     )
+    # Collect all unique commenter profiles so we can check photo visibility once.
+    all_commenters: set[Profile] = set()
+    for c in top_level:
+        all_commenters.add(c.profile)
+        all_commenters.update(r.profile for r in c.replies.all())
+    # Set of profile IDs whose images should be blurred for this viewer.
+    blurred_profiles: set[int] = {
+        p.pk for p in all_commenters
+        if p != profile and not profile.can_view_photos_from(p)
+    }
+
     rendered = []
     for c in top_level:
         html = render_comment_text(c.text, pinned)
@@ -72,6 +83,7 @@ def _build_context(comments_qs, profile: Profile, **extra) -> dict:
     return {
         "rendered_comments": rendered,
         "profile": profile,
+        "blurred_profiles": blurred_profiles,
         "allowed_emojis": sorted(_ALLOWED_EMOJIS),
         **extra,
     }
@@ -97,16 +109,17 @@ class PinCommentsView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
         profile = _profile(request)
         text = request.POST.get("text", "").strip()
-        if not text:
-            return HttpResponse("Comment text is required.", status=400)
+        image = request.FILES.get("image")
+        map_data = _parse_map_data(request)
+        if not text and not image and not map_data:
+            return HttpResponse("Please add some text, a photo, or a map.", status=400)
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
             parent = get_object_or_404(Comment, id=parent_id, pin=pin)
-        map_data = _parse_map_data(request)
         comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, map_data=map_data)
-        if comment.image or request.FILES.get("image"):
-            comment.image = request.FILES.get("image")
+        if image:
+            comment.image = image
             comment.save(update_fields=["image"])
         if parent and parent.profile != profile:
             _notify_reply(profile, parent, reply=comment)
@@ -158,16 +171,17 @@ class WikiCommentsView(LoginRequiredMixin, View):
         if profile is None:
             return HttpResponse("You must have this location pinned to leave a comment.", status=403)
         text = request.POST.get("text", "").strip()
-        if not text:
-            return HttpResponse("Comment text is required.", status=400)
+        image = request.FILES.get("image")
+        map_data = _parse_map_data(request)
+        if not text and not image and not map_data:
+            return HttpResponse("Please add some text, a photo, or a map.", status=400)
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
             parent = get_object_or_404(Comment, id=parent_id, location=location)
-        map_data = _parse_map_data(request)
         comment = Comment.objects.create(location=location, profile=profile, text=text, parent=parent, map_data=map_data)
-        if request.FILES.get("image"):
-            comment.image = request.FILES["image"]
+        if image:
+            comment.image = image
             comment.save(update_fields=["image"])
         if parent and parent.profile != profile:
             _notify_reply(profile, parent, reply=comment)

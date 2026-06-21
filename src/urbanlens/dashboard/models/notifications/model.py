@@ -28,6 +28,13 @@ class NotificationLog(abstract.Model):
         null=True,
         blank=True,
     )
+    source_profile = models.ForeignKey(
+        "dashboard.Profile",
+        on_delete=models.SET_NULL,
+        related_name="triggered_notifications",
+        null=True,
+        blank=True,
+    )
     status = models.CharField(max_length=17, choices=Status.choices, default=Status.UNREAD)
     importance = models.CharField(max_length=17, choices=Importance.choices, default=Importance.LOWEST)
     notification_type = models.CharField(max_length=20, choices=NotificationType.choices, default=NotificationType.INFO)

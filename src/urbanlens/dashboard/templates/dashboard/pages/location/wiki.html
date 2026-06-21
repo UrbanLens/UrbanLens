@@ -183,15 +183,28 @@
             </div>
             <div class="map-wrapper">
 
-                {# ── Detail pin list overlay (top-left) ── #}
+                {# ── Map sidebar panel (Details + Photos tabs) ── #}
                 <div id="detail-pin-list-panel" class="detail-pin-list-panel" style="display:none">
                     <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle">
-                        <i class="material-icons">format_list_bulleted</i>
-                        <span id="detail-pin-count-label">0 Pins</span>
+                        <i class="material-icons">layers</i>
+                        <span id="detail-pin-count-label">0 Layers</span>
                         <i class="material-icons detail-pin-list-chevron" id="detail-pin-list-chevron">expand_more</i>
                     </button>
                     <div id="detail-pin-list-drawer" class="detail-pin-list-drawer" style="display:none">
-                        <ul id="detail-pin-list-ul" class="detail-pin-list-ul"></ul>
+                        <div class="map-panel-tabs">
+                            <button type="button" class="map-panel-tab is-active" data-tab="details">
+                                <i class="material-icons">layers</i>Details
+                            </button>
+                            <button type="button" class="map-panel-tab" data-tab="photos" id="map-panel-tab-photos">
+                                <i class="material-icons">photo_library</i>Photos
+                            </button>
+                        </div>
+                        <div id="map-panel-details" class="map-panel-body">
+                            <ul id="detail-pin-list-ul" class="detail-pin-list-ul"></ul>
+                        </div>
+                        <div id="map-panel-photos" class="map-panel-body" hidden>
+                            <ul id="photo-panel-list" class="photo-panel-list"></ul>
+                        </div>
                     </div>
                 </div>
 
@@ -244,6 +257,20 @@
             <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
         </div>
 
+        {# ── Photo gallery ────────────────────────────────────────────────── #}
+        <div id="wiki-gallery-panel"
+             hx-get="{% url 'location.wiki.gallery' location.uuid %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-icons">photo_library</i>
+                    <span>Photos</span>
+                </div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            </div>
+        </div>
+
         {# ── Comments ─────────────────────────────────────────────────────── #}
         <div id="comment-panel"
              hx-get="{% url 'location.wiki.comments' location.uuid %}"
@@ -278,7 +305,7 @@
     </div>{# end wiki-body #}
 
     {# ── Suggest-edits dialog ─────────────────────────────────────────────── #}
-    <dialog id="wiki-edit-dialog" class="wiki-edit-dialog">
+    <dialog id="wiki-edit-dialog" class="wiki-edit-dialog ul-dialog">
         {% include "dashboard/partials/_dialog_header.html" with title="Suggest Edits" %}
         <p class="wiki-edit-notice">
             <i class="material-icons">public</i>
@@ -341,7 +368,7 @@
 </div>
 
 {# ── Add community detail-pin dialog — outside wiki-body ─────────────────── #}
-<dialog id="wiki-detail-pin-dialog" class="detail-pin-add-dialog">
+<dialog id="wiki-detail-pin-dialog" class="detail-pin-add-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Add Community Detail Pin" %}
     <p class="detail-pin-add-hint">
         <i class="material-icons">public</i>
@@ -597,17 +624,24 @@
         });
     }
 
-    const _dpMarkers = {};  // uuid → Leaflet marker
+    const _dpMarkers = {};      // uuid → Leaflet marker
+    let _photoPanelItems = []; // { id, url, lat, lng, mine }
+    const _photoMarkers  = {}; // imgId → { marker, url, lat, lng }
+
+    function _refreshPanelHeader() {
+        const panel      = document.getElementById('detail-pin-list-panel');
+        const countLabel = document.getElementById('detail-pin-count-label');
+        if (!panel) return;
+        const dpCount = document.querySelectorAll('#detail-pin-list-ul .detail-pin-list-item').length;
+        const total   = dpCount + _photoPanelItems.length;
+        panel.style.display = total ? '' : 'none';
+        if (countLabel) countLabel.textContent = `${total} Layer${total === 1 ? '' : 's'}`;
+    }
 
     function _buildDetailPinList(pins) {
-        const panel = document.getElementById('detail-pin-list-panel');
-        const countLabel = document.getElementById('detail-pin-count-label');
         const ul = document.getElementById('detail-pin-list-ul');
-        if (!panel || !ul) return;
+        if (!ul) return;
         ul.innerHTML = '';
-        if (!pins.length) { panel.style.display = 'none'; return; }
-        panel.style.display = '';
-        countLabel.textContent = pins.length + ' Pin' + (pins.length !== 1 ? 's' : '');
         pins.forEach(dp => {
             const li = document.createElement('li');
             li.className = 'detail-pin-list-item';
@@ -641,6 +675,7 @@
             });
             ul.appendChild(li);
         });
+        _refreshPanelHeader();
     }
 
     document.getElementById('detail-pin-list-toggle').addEventListener('click', function () {
@@ -688,6 +723,166 @@
             .catch(err => console.warn('Could not load community detail pins:', err));
     }
     loadWikiDetailPinsOnMap();
+
+    // ── Photo panel (wiki) ────────────────────────────────────────────────────
+    function _makePhotoIcon(url, size, highlighted) {
+        const shadow = highlighted
+            ? '0 0 0 3px #2563eb, 0 3px 10px rgba(0,0,0,.45)'
+            : '0 2px 6px rgba(0,0,0,.35)';
+        return L.divIcon({
+            className: '',
+            html: `<img src="${url}" class="photo-marker-img" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:5px;border:2px solid #fff;box-shadow:${shadow};display:block;transition:transform .15s,box-shadow .15s;">`,
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2],
+        });
+    }
+
+    function _addPhotoMarker(imgId, url, lat, lng) {
+        if (_photoMarkers[imgId]) bboxMap.removeLayer(_photoMarkers[imgId].marker);
+        const marker = L.marker([lat, lng], { icon: _makePhotoIcon(url, 44, false), draggable: true });
+        marker.on('dragend', function () {
+            const pos = marker.getLatLng();
+            _photoMarkers[imgId].lat = pos.lat;
+            _photoMarkers[imgId].lng = pos.lng;
+            const item = _photoPanelItems.find(p => p.id === imgId);
+            if (item) { item.lat = pos.lat; item.lng = pos.lng; }
+            if (window.galleryRepositionImage) window.galleryRepositionImage(imgId, pos.lat, pos.lng);
+            _buildPhotoPanel();
+        });
+        marker.on('mouseover', () => window._galleryHighlightMarker(imgId, true));
+        marker.on('mouseout',  () => window._galleryHighlightMarker(imgId, false));
+        marker.addTo(bboxMap);
+        _photoMarkers[imgId] = { marker, url, lat, lng };
+    }
+
+    window._galleryAddMarker = function (img) {
+        if (!_photoPanelItems.find(p => p.id === img.id))
+            _photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true });
+        if (img.latitude != null && img.longitude != null) _addPhotoMarker(img.id, img.url, img.latitude, img.longitude);
+        _buildPhotoPanel();
+        _refreshPanelHeader();
+    };
+
+    window._galleryRemoveMarker = function (imgId) {
+        _photoPanelItems = _photoPanelItems.filter(p => p.id !== imgId);
+        if (_photoMarkers[imgId]) { bboxMap.removeLayer(_photoMarkers[imgId].marker); delete _photoMarkers[imgId]; }
+        _buildPhotoPanel();
+        _refreshPanelHeader();
+    };
+
+    window._galleryHighlightMarker = function (imgId, on) {
+        const entry = _photoMarkers[imgId];
+        if (entry) {
+            const sz = on ? 56 : 44;
+            entry.marker.setIcon(_makePhotoIcon(entry.url, sz, on));
+            if (on) bboxMap.panTo([entry.lat, entry.lng]);
+        }
+        document.querySelectorAll('.photo-panel-item').forEach(li => {
+            li.classList.toggle('is-highlighted', +li.dataset.id === imgId && on);
+        });
+    };
+
+    function _buildPhotoPanel() {
+        const ul = document.getElementById('photo-panel-list');
+        if (!ul) return;
+        ul.innerHTML = '';
+        const photoTab = document.getElementById('map-panel-tab-photos');
+        if (photoTab) {
+            let badge = photoTab.querySelector('.map-panel-tab-badge');
+            if (_photoPanelItems.length) {
+                if (!badge) { badge = document.createElement('span'); badge.className = 'map-panel-tab-badge'; photoTab.appendChild(badge); }
+                badge.textContent = _photoPanelItems.length;
+            } else if (badge) { badge.remove(); }
+        }
+        if (!_photoPanelItems.length) {
+            const empty = document.createElement('li');
+            empty.className = 'photo-panel-empty';
+            empty.innerHTML = '<i class="material-icons">photo_camera</i><span>No photos yet</span>';
+            ul.appendChild(empty);
+            return;
+        }
+        _photoPanelItems.forEach(function (img) {
+            const hasCoords = img.lat != null && img.lng != null;
+            const li = document.createElement('li');
+            li.className = 'photo-panel-item';
+            li.dataset.id = img.id;
+            li.draggable = true;
+            li.title = hasCoords ? 'Drag to reposition · click to view' : 'Drag onto map to set location · click to view';
+            li.innerHTML = `
+                <div class="photo-panel-thumb-wrap">
+                    <img src="${img.url}" class="photo-panel-thumb" alt="">
+                    <span class="photo-panel-coord-badge ${hasCoords ? 'has-gps' : 'no-gps'}" title="${hasCoords ? 'Has GPS' : 'No GPS — drag to map'}">
+                        <i class="material-icons">${hasCoords ? 'place' : 'location_off'}</i>
+                    </span>
+                </div>
+                <span class="photo-panel-hint">${hasCoords ? 'Drag to move' : 'Drag to map'}</span>`;
+            li.addEventListener('mouseenter', () => window._galleryHighlightMarker(img.id, true));
+            li.addEventListener('mouseleave', () => window._galleryHighlightMarker(img.id, false));
+            li.addEventListener('dragstart', e => {
+                e.dataTransfer.setData('text/photoid', String(img.id));
+                e.dataTransfer.effectAllowed = 'move';
+                li.classList.add('is-dragging');
+            });
+            li.addEventListener('dragend', () => li.classList.remove('is-dragging'));
+            li.addEventListener('click', () => {
+                if (hasCoords) bboxMap.panTo([img.lat, img.lng]);
+                if (window.galleryOpenLightbox) window.galleryOpenLightbox(img.id);
+            });
+            ul.appendChild(li);
+        });
+    }
+
+    // Drop photo onto bbox map → assign coordinates
+    const _bboxMapEl = document.getElementById('bbox-map');
+    _bboxMapEl.addEventListener('dragover', e => {
+        if (!e.dataTransfer.types.includes('text/photoid')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        _bboxMapEl.classList.add('photo-drop-target');
+    });
+    _bboxMapEl.addEventListener('dragleave', () => _bboxMapEl.classList.remove('photo-drop-target'));
+    _bboxMapEl.addEventListener('drop', e => {
+        _bboxMapEl.classList.remove('photo-drop-target');
+        const idStr = e.dataTransfer.getData('text/photoid');
+        if (!idStr) return;
+        e.preventDefault();
+        const imgId = parseInt(idStr, 10);
+        const rect  = _bboxMapEl.getBoundingClientRect();
+        const latlng = bboxMap.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]);
+        const item = _photoPanelItems.find(p => p.id === imgId);
+        if (!item) return;
+        item.lat = latlng.lat;
+        item.lng = latlng.lng;
+        _addPhotoMarker(imgId, item.url, latlng.lat, latlng.lng);
+        if (window.galleryRepositionImage) window.galleryRepositionImage(imgId, latlng.lat, latlng.lng);
+        _buildPhotoPanel();
+        _refreshPanelHeader();
+    });
+
+    // Tab switching
+    document.querySelectorAll('.map-panel-tab').forEach(btn => {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.map-panel-tab').forEach(b => b.classList.remove('is-active'));
+            btn.classList.add('is-active');
+            const tab = btn.dataset.tab;
+            document.getElementById('map-panel-details').hidden = (tab !== 'details');
+            document.getElementById('map-panel-photos').hidden  = (tab !== 'photos');
+        });
+    });
+
+    // Load gallery photos on page load
+    fetch("{% url 'location.wiki.gallery.json' location.uuid %}")
+        .then(r => r.json())
+        .then(data => {
+            _photoPanelItems = [];
+            (data.images || []).forEach(function (img) {
+                _photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: img.is_mine });
+                if (img.latitude != null && img.longitude != null) _addPhotoMarker(img.id, img.url, img.latitude, img.longitude);
+            });
+            _buildPhotoPanel();
+            _refreshPanelHeader();
+        })
+        .catch(err => console.warn('Could not load gallery photos for wiki panel:', err));
 
     // ── Wiki detail-pin add dialog ───────────────────────────────────────────
     (function () {
@@ -796,5 +991,55 @@
             });
         });
     }());
+
+    // ── Photo map layer ───────────────────────────────────────────────────────
+    const _wikiPhotoLayer   = L.layerGroup().addTo(bboxMap);
+    const _wikiPhotoMarkers = {};  // id → { marker, img }
+    const _wikiPhotoJsonUrl = "{% url 'location.wiki.gallery.json' location.uuid %}";
+
+    function _wikiPhotoMarkerHtml(img, size) {
+        return `<div class="photo-map-marker" style="width:${size}px;height:${size}px">` +
+               `<img src="${img.url}" style="width:100%;height:100%;object-fit:cover;border-radius:4px">` +
+               `</div>`;
+    }
+
+    function _loadWikiPhotoLayer() {
+        fetch(_wikiPhotoJsonUrl)
+            .then(r => r.json())
+            .then(data => {
+                _wikiPhotoLayer.clearLayers();
+                Object.keys(_wikiPhotoMarkers).forEach(k => delete _wikiPhotoMarkers[k]);
+                (data.images || []).forEach(img => {
+                    if (img.latitude === null || img.longitude === null) return;
+                    const sz = 48;
+                    const icon = L.divIcon({ html: _wikiPhotoMarkerHtml(img, sz), className: '', iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] });
+                    const marker = L.marker([img.latitude, img.longitude], { icon, draggable: !!img.is_mine });
+                    marker.bindTooltip(img.caption || img.uploader || 'Photo', { direction: 'top' });
+                    marker.on('click', () => { if (window.galleryOpenLightbox) galleryOpenLightbox(img.id); });
+                    if (img.is_mine) {
+                        marker.on('dragend', function () {
+                            const pos = marker.getLatLng();
+                            if (window.galleryRepositionImage) galleryRepositionImage(img.id, pos.lat, pos.lng);
+                        });
+                    }
+                    marker.addTo(_wikiPhotoLayer);
+                    _wikiPhotoMarkers[img.id] = { marker, img };
+                });
+            })
+            .catch(err => console.warn('Could not load wiki photo layer:', err));
+    }
+    _loadWikiPhotoLayer();
+
+    window._galleryAddMarker = function (img) { _loadWikiPhotoLayer(); };
+    window._galleryRemoveMarker = function (imgId) {
+        const entry = _wikiPhotoMarkers[imgId];
+        if (entry) { _wikiPhotoLayer.removeLayer(entry.marker); delete _wikiPhotoMarkers[imgId]; }
+    };
+    window._galleryHighlightMarker = function (imgId, on) {
+        const entry = _wikiPhotoMarkers[imgId];
+        if (!entry) return;
+        const sz = on ? 64 : 48;
+        entry.marker.setIcon(L.divIcon({ html: _wikiPhotoMarkerHtml(entry.img, sz), className: '', iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }));
+    };
 </script>
 {% endblock %}

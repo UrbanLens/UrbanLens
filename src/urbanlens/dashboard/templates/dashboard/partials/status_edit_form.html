@@ -1,7 +1,7 @@
 {% load dashboard_tags %}
 <form hx-post="{% url 'status.edit' badge.id %}" hx-target="#status-rows" hx-swap="innerHTML"
       class="tag-form"
-      hx-on::after-request="if(event.detail.successful){ document.getElementById('status-edit-dialog').close(); toastr.success('Status updated.'); }">
+      hx-on::after-request="if(event.detail.successful){ document.getElementById('status-edit-dialog').close(); var kc=event.detail.xhr&&event.detail.xhr.getResponseHeader('X-Kind-Changed'); toastr.success(kc?'Converted to '+kc+'.':'Status saved.'); }">
     {% csrf_token %}
     <div class="form-field" style="margin-bottom:1rem;">
         <label class="form-label">Type</label>
@@ -19,7 +19,7 @@
                 <span><i class="material-icons">flag</i> Status</span>
             </label>
         </div>
-        <p class="form-hint">Converting to a tag moves pin statuses to pin tags. Converting to a category makes it global.</p>
+        <p class="form-hint">Converting to a tag moves pin statuses to pin tags.</p>
     </div>
 
     <div class="tag-form-grid">
@@ -33,12 +33,8 @@
                    value="{{ badge.name }}" required>
             {% endif %}
         </div>
-        <div class="form-field">
-            <label class="form-label" for="edit-status-order-{{ badge.id }}">Order</label>
-            <input id="edit-status-order-{{ badge.id }}" name="order" type="number" class="form-input"
-                   value="{{ badge.order }}">
-        </div>
     </div>
+    <input type="hidden" name="order" value="{{ badge.order }}">
     <div class="form-field">
         <label class="form-label" for="edit-status-desc-{{ badge.id }}">Description (optional)</label>
         <textarea id="edit-status-desc-{{ badge.id }}" name="description" class="form-input" rows="2">{{ badge.description|default:'' }}</textarea>

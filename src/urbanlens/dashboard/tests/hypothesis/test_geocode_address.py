@@ -1,4 +1,4 @@
-"""Tests for the geocode_address settings view.
+﻿"""Tests for the geocode_address settings view.
 
 The view accepts GET ?address=<text> and returns JSON {lat, lng}.
 
@@ -15,9 +15,9 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+from urbanlens.core.tests.testcase import TestCase
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 _db_settings = settings(
@@ -33,7 +33,7 @@ _valid_lat = st.floats(min_value=-90.0, max_value=90.0, allow_nan=False, allow_i
 _valid_lng = st.floats(min_value=-180.0, max_value=180.0, allow_nan=False, allow_infinity=False)
 
 
-class GeocodeAddressEmptyInputTests(HypothesisTestCase):
+class GeocodeAddressEmptyInputTests(TestCase):
 	"""Missing or blank address must return 400."""
 
 	def test_missing_address_param_returns_400(self) -> None:
@@ -49,7 +49,7 @@ class GeocodeAddressEmptyInputTests(HypothesisTestCase):
 		self.assertEqual(resp.status_code, 400)
 
 
-class GeocodeAddressCoordParsingTests(HypothesisTestCase):
+class GeocodeAddressCoordParsingTests(TestCase):
 	"""'lat, lng' strings within valid bounds must be parsed without hitting Google."""
 
 	def test_valid_lat_lng_string_returns_200(self) -> None:
@@ -130,7 +130,7 @@ class GeocodeAddressCoordParsingTests(HypothesisTestCase):
 		self.assertAlmostEqual(data["lng"], lng, places=5)
 
 
-class GeocodeAddressGoogleFallbackTests(HypothesisTestCase):
+class GeocodeAddressGoogleFallbackTests(TestCase):
 	"""When parsing fails, the view must delegate to GoogleGeocodingGateway."""
 
 	def _google_result(self, lat: float, lng: float) -> dict:

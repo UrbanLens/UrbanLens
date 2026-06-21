@@ -373,49 +373,107 @@
     background: linear-gradient(135deg, #db2777 0%, #9c124a 100%);
 }
 
+/* ── Map tile loading — dim tile pane while images download ─────── */
+#map .leaflet-tile-pane {
+    transition: opacity 0.35s ease;
+}
+#map.tiles-loading .leaflet-tile-pane {
+    opacity: 0.72;
+}
+
+/* ── Pin load overlay (cold start only) ─────────────────────────── */
+#pin-load-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 801;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.45s ease;
+}
+#pin-load-overlay.fading { opacity: 0; }
+#pin-load-overlay.hidden { display: none !important; }
+.plo-card {
+    background: rgba(10, 14, 24, 0.88);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 15px 22px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04);
+}
+.plo-spinner {
+    width: 17px;
+    height: 17px;
+    border: 2px solid rgba(90,143,255,0.22);
+    border-top-color: #5a8fff;
+    border-radius: 50%;
+    animation: plo-spin 0.85s linear infinite;
+    flex-shrink: 0;
+}
+@keyframes plo-spin { to { transform: rotate(360deg); } }
+.plo-text {
+    color: rgba(255,255,255,0.75);
+    font-size: 0.82rem;
+    letter-spacing: 0.015em;
+}
+
 /* ── Tile-fetch progress pill ─────────────────────────────────────── */
 #tile-fetch-indicator {
     position: absolute;
     bottom: 28px;
     left: 50%;
-    transform: translateX(-50%);
-    background: rgba(10,14,24,.82);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    color: rgba(255,255,255,.8);
-    font-size: .68rem;
-    letter-spacing: .02em;
-    padding: 5px 14px 5px 10px;
-    border-radius: 20px;
+    transform: translateX(-50%) translateY(4px);
+    background: rgba(10,14,24,.88);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: rgba(255,255,255,.82);
+    font-size: .7rem;
+    letter-spacing: .03em;
+    padding: 6px 16px 6px 11px;
+    border-radius: 22px;
     z-index: 1000;
     pointer-events: none;
-    display: none;
-    gap: 7px;
+    display: flex;
+    gap: 8px;
     align-items: center;
-    border: 1px solid rgba(255,255,255,.09);
+    border: 1px solid rgba(255,255,255,.1);
+    box-shadow: 0 4px 16px rgba(0,0,0,.35);
+    opacity: 0;
+    transition: opacity 0.25s ease, transform 0.25s ease;
 }
-#tile-fetch-indicator.visible { display: flex; }
+#tile-fetch-indicator.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
 .tfi-dot {
     width: 7px; height: 7px; border-radius: 50%;
     background: #5a8fff;
     animation: tfi-pulse 1.1s ease-in-out infinite;
     flex-shrink: 0;
+    box-shadow: 0 0 6px rgba(90,143,255,.6);
 }
-@keyframes tfi-pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+@keyframes tfi-pulse { 0%,100%{opacity:1} 50%{opacity:.28} }
 
 /* ── Cache status indicator ─────────────────────────────────────── */
 #cache-status {
     position: absolute;
-    bottom: 5px;
-    left: 5px;
+    bottom: 6px;
+    left: 8px;
     z-index: 999;
     font-size: 0.58rem;
     font-family: monospace;
-    color: rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.18);
     pointer-events: none;
-    letter-spacing: 0.01em;
+    letter-spacing: 0.02em;
+    transition: color 0.3s ease;
 }
-#cache-status.refreshing { color: rgba(90,143,255,0.45); }
+#cache-status:not(:empty) { color: rgba(255,255,255,0.22); }
+#cache-status.refreshing { color: rgba(90,143,255,0.55); }
 </style>
 {% endblock %}
 
@@ -599,10 +657,18 @@
 
     <div id="tile-fetch-indicator" aria-hidden="true">
         <span class="tfi-dot"></span>
-        <span>Loading pins…</span>
+        <span id="tfi-text">Loading pins…</span>
     </div>
 
-    <div id="loading-pins-message" aria-hidden="true"></div>
+    {# Full-map overlay shown during cold start (no cache). Hidden immediately on cache hit. #}
+    <div id="pin-load-overlay" aria-hidden="true">
+        <div class="plo-card">
+            <div class="plo-spinner"></div>
+            <span class="plo-text" id="plo-text">Loading your pins…</span>
+        </div>
+    </div>
+
+    <div id="loading-pins-message" aria-hidden="true" style="display:none"></div>
 
     <div id="pin-counter">
         <span id="pin-counter-value">0</span>
@@ -612,7 +678,7 @@
     <div id="map-body"></div>
 
 </div>
-<dialog id="add-pin-dialog" class="add-pin-dialog">
+<dialog id="add-pin-dialog" class="add-pin-dialog ul-dialog">
     <div class="apdlg-header">
         <h2><i class="material-icons" style="font-size:1.1rem;vertical-align:-.15em;margin-right:.35rem;">add_location</i>Add Pin</h2>
         <button class="btn-close" onclick="closeAddPinDialog()" aria-label="Close">×</button>
@@ -727,7 +793,7 @@
     // ── Constants ─────────────────────────────────────────────────────────────
     const _PROFILE_ID  = {{ profile_id|default:0 }};
     const _USE_CACHE      = {{ use_pin_cache|yesno:"true,false" }};
-    const _CACHE_KEY      = `ul_pins_v3_${_PROFILE_ID}`;
+    const _CACHE_KEY      = `ul_pins_v4_${_PROFILE_ID}`;
     const _CACHE_MAX      = 180 * 24 * 60 * 60 * 1000;  // 6 months: space reclaim for inactive users
     const _POLL_INTERVAL  = 2 * 60 * 1000;               // 2 min: background poll for pin changes
     const _TILE_SIZE   = 0.5;   // degrees per tile edge (~55 km at mid-latitudes)
@@ -805,12 +871,33 @@
     // ── UI helpers ────────────────────────────────────────────────────────────
     const _tfi = document.getElementById('tile-fetch-indicator');
     let _fetching = 0;
-    function _setFetching(on) {
+    function _setFetching(on, message) {
         _fetching += on ? 1 : -1;
-        if (_tfi) _tfi.classList.toggle('visible', _fetching > 0);
+        if (!_tfi) return;
+        // Suppress the small indicator while the full-screen cold-start overlay is active
+        const overlay = document.getElementById('pin-load-overlay');
+        const overlayActive = overlay && !overlay.classList.contains('hidden');
+        _tfi.classList.toggle('visible', _fetching > 0 && !overlayActive);
+        if (on && message) {
+            const txt = document.getElementById('tfi-text');
+            if (txt) txt.textContent = message;
+        }
     }
 
-    function hideLoadingMessage() { $('#loading-pins-message').hide(); }
+    function hideLoadingMessage() {
+        $('#loading-pins-message').hide();
+        // Fade out and then fully hide the cold-start pin load overlay.
+        const overlay = document.getElementById('pin-load-overlay');
+        if (!overlay || overlay.classList.contains('hidden')) return;
+        overlay.classList.add('fading');
+        setTimeout(() => overlay.classList.add('hidden'), 460);
+    }
+
+    // On cache hit the overlay is unnecessary — suppress it immediately.
+    function _suppressPinOverlay() {
+        const overlay = document.getElementById('pin-load-overlay');
+        if (overlay) overlay.classList.add('hidden');
+    }
 
     function updatePinCounter() {
         // Show the total pin count for the user, not just what's visible in the current viewport.
@@ -862,35 +949,60 @@
     }
 
     // ── LocalStorage cache ────────────────────────────────────────────────────
+    // Only the fields needed for marker rendering and popup display are cached.
+    // Dropping address/city/state/country/priority/profile/statuses/tags_data_json
+    // cuts the stored payload by ~40%, keeping it under the 5 MB quota.
+    const _CACHE_FIELDS = new Set([
+        'uuid', 'id', 'name', 'icon', 'color',
+        'latitude', 'longitude',
+        'description', 'status', 'last_visited', 'rating',
+        'tags', 'tags_data', 'viewLocationUrl',
+    ]);
+    function _slimPin(pin) {
+        const slim = {};
+        for (const k of _CACHE_FIELDS) { if (k in pin) slim[k] = pin[k]; }
+        return slim;
+    }
+
     function _readCache() {
         if (!_USE_CACHE) return null;
         try {
             const raw = localStorage.getItem(_CACHE_KEY);
             if (!raw) return null;
             const c = JSON.parse(raw);
-            if (c.v !== 3 || c.profileId !== _PROFILE_ID) return null;
+            if (c.v !== 4 || c.profileId !== _PROFILE_ID) return null;
             if (Date.now() - c.ts > _CACHE_MAX) { localStorage.removeItem(_CACHE_KEY); return null; }
             return c;
         } catch { return null; }
     }
     function _writeCache() {
         if (!_USE_CACHE) return;
+        if (!_pinStore.size) return;   // nothing to cache yet
         const ts = Date.now();
         try {
-            localStorage.setItem(_CACHE_KEY, JSON.stringify({
-                v: 3, ts, profileId: _PROFILE_ID,
+            const payload = JSON.stringify({
+                v: 4, ts, profileId: _PROFILE_ID,
                 lastUpdated: _lastKnownUpdated,
                 tiles: [..._fetchedTiles],
-                pins: Object.fromEntries(_pinStore),
-            }));
+                pins: Object.fromEntries([..._pinStore.entries()].map(([k, v]) => [k, _slimPin(v)])),
+            });
+            localStorage.setItem(_CACHE_KEY, payload);
             _updateCacheStatus(ts);
-        } catch { try { localStorage.removeItem(_CACHE_KEY); } catch {} }
+            console.log('[UL] Cache written — %d pins, %dKB', _pinStore.size, Math.round(payload.length / 1024));
+        } catch (err) {
+            console.warn('[UL] Cache write failed (%s) — pins will reload next visit', err && err.name || err);
+            try { localStorage.removeItem(_CACHE_KEY); } catch {}
+        }
     }
     function _scheduleCache() {
         if (!_USE_CACHE) return;
         if (_cacheTid) clearTimeout(_cacheTid);
         _cacheTid = setTimeout(_writeCache, 1500);
     }
+    // Flush the cache when the user navigates away so it's always saved
+    window.addEventListener('beforeunload', _writeCache);
+    // Purge any leftover oversized v3 entry from the old key
+    try { localStorage.removeItem(`ul_pins_v3_${_PROFILE_ID}`); } catch {}
     // Call after any pin mutation (add/delete) to force a fresh fetch next time.
     // Always clears any existing localStorage entry regardless of _USE_CACHE,
     // so disabling and re-enabling caching starts fresh.
@@ -916,9 +1028,10 @@
         console.log('[UL] Pin data changed on server — running full background refresh');
         const csi = document.getElementById('cache-status');
         if (csi) csi.classList.add('refreshing');
+        _setFetching(true, 'Refreshing pins…');
         try {
             const resp = await fetch('{% url "map.pins" %}', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-            if (!resp.ok) return;
+            if (!resp.ok) { _setFetching(false); return; }
             const data = await resp.json();
 
             const freshUuids = new Set((data.pins || []).map(p => p.uuid));
@@ -967,6 +1080,7 @@
         } catch (err) {
             console.warn('[UrbanLens] Background pin refresh failed:', err);
         } finally {
+            _setFetching(false);
             if (csi) csi.classList.remove('refreshing');
         }
     }
@@ -1111,7 +1225,8 @@
         if (!tileKeys.length) return 0;
         console.log('[UL] Fetching %d tile(s) from server: %s', tileKeys.length, tileKeys.join(', '));
         tileKeys.forEach(k => _fetchedTiles.add(k));
-        _setFetching(true);
+        const msg = (tileKeys.length === 1 && tileKeys[0] === '*') ? 'Loading pins…' : 'Loading pins…';
+        _setFetching(true, msg);
         try {
             const url = (tileKeys.length === 1 && tileKeys[0] === '*')
                 ? '{% url "map.pins" %}'
@@ -1158,11 +1273,13 @@
     }
 
     // ── Viewport-based loading ────────────────────────────────────────────────
+    // Always fetch the full dataset ('*') rather than bbox subsets.
+    // Once _fetchedTiles has '*', all viewport changes are served from
+    // _pinStore with zero network cost — panning never hits the server again.
     async function _loadViewport() {
         if (_filterMode) return;
-        const newTiles = _newTilesForBounds(map.getBounds());
-        if (!newTiles.length) return;
-        await _fetchTiles(newTiles);
+        if (_fetchedTiles.has('*')) return;
+        await _fetchTiles(['*']);
     }
 
     function _onViewportChange() {
@@ -1209,28 +1326,31 @@
             if (cache.tiles) cache.tiles.forEach(k => _fetchedTiles.add(k));
             if (layers.length) clusterGroup.addLayers(layers);
             updatePinCounter();
+            _suppressPinOverlay();   // cache hit — overlay is not needed
             hideLoadingMessage();
             _lastKnownUpdated = cache.lastUpdated || null;
             _updateCacheStatus(cache.ts);
 
-            // Freshness is determined by comparing cache.lastUpdated to the server's
-            // last_updated value — not by cache age.  _pollForUpdates() handles this:
-            //   • If lastUpdated matches → no refresh, no network cost.
-            //   • If lastUpdated differs → silent full refresh via _refreshAllPins().
-            // Edge case: cache has no lastUpdated baseline (old format).  Trigger a
-            // silent refresh so we don't silently serve potentially stale data forever.
-            if (!_lastKnownUpdated) {
-                console.log('[UL] Cache has no lastUpdated baseline — triggering silent refresh');
+            // Trigger a silent background refresh when:
+            //   • Cache has no lastUpdated baseline (old format) — can't validate freshness
+            //   • Cache used partial tile keys instead of '*' — panning would hit server
+            // _refreshAllPins() fetches all pins, marks _fetchedTiles as '*', and
+            // reschedules the cache write with the upgraded format.
+            if (!_lastKnownUpdated || !_fetchedTiles.has('*')) {
+                const reason = !_lastKnownUpdated ? 'no lastUpdated baseline' : 'partial tile cache';
+                console.log('[UL] Cache needs upgrade (%s) — triggering silent refresh', reason);
                 _refreshAllPins().catch(() => {});
             }
         } else {
-            // Cold start: cache disabled, empty, or expired — fetch from server.
+            // Cold start: cache disabled, empty, or expired.
+            // Fetch the full pin set in one request so the cache becomes complete
+            // and future viewport pans never need a server round-trip.
             if (!_USE_CACHE) {
                 console.log('[UL] Pin cache disabled by user preference — fetching from server');
             } else {
-                console.log('[UL] Cache MISS — fetching pins from server');
+                console.log('[UL] Cache MISS — fetching all pins from server');
             }
-            try { await _loadViewport(); } catch (e) { console.warn('Initial pin load failed:', e); }
+            try { await _fetchTiles(['*']); } catch (e) { console.warn('Initial pin load failed:', e); }
             hideLoadingMessage();
         }
         // Begin background polling.  First call compares cache.lastUpdated to the
@@ -1257,6 +1377,25 @@
     const cloudLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{openweathermap_api_key}}', {
         attribution: 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
         layer: 'clouds_new',
+    });
+
+    // ── Tile loading visual feedback ──────────────────────────────────────────
+    // Grey-dim the tile pane while map tiles are downloading; restore when done.
+    // Each layer tracks its own loading state via a counter so that swapping
+    // layers doesn't leave the map permanently dimmed.
+    let _tileLoadingCount = 0;
+    function _onTileLayerLoading() {
+        _tileLoadingCount++;
+        document.getElementById('map').classList.add('tiles-loading');
+    }
+    function _onTileLayerLoad() {
+        _tileLoadingCount = Math.max(0, _tileLoadingCount - 1);
+        if (_tileLoadingCount === 0) document.getElementById('map').classList.remove('tiles-loading');
+    }
+    [standardLayer, topographyLayer, satelliteLayer].forEach(layer => {
+        layer.on('loading', _onTileLayerLoading);
+        layer.on('load',    _onTileLayerLoad);
+        layer.on('error',   _onTileLayerLoad);
     });
 
     map.on('popupopen', function() {
@@ -1967,7 +2106,7 @@
 </script>
 
 {# ── Location conflict picker dialog ────────────────────────────────────────── #}
-<dialog id="loc-conflict-dialog" class="loc-conflict-dialog">
+<dialog id="loc-conflict-dialog" class="loc-conflict-dialog ul-dialog">
     <div class="dialog-header">
         <i class="material-icons" style="font-size:1.1rem;color:#f59e0b">warning_amber</i>
         <span>Multiple locations match this area</span>

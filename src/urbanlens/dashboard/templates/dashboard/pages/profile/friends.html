@@ -5,7 +5,7 @@
 
     {# ── Page header ──────────────────────────────────────────────────────────── #}
     <div class="friends-page-header">
-        <a href="{% url 'profile.view_user' profile.id %}" class="friends-back-link">
+        <a href="{% url 'profile.view_user' profile.uuid %}" class="friends-back-link">
             <i class="material-icons">arrow_back</i>
             {% if is_own_profile %}My Profile{% else %}{{ profile.full_name|default:profile.username }}'s Profile{% endif %}
         </a>
@@ -13,7 +13,45 @@
             {% if is_own_profile %}Your Friends{% else %}{{ profile.full_name|default:profile.username }}'s Friends{% endif %}
             <span class="friends-page-count">{{ friends|length }}</span>
         </h1>
+        {% if is_own_profile %}
+        <button type="button" class="btn-friend btn-friend--invite" id="invite-friend-btn"
+                onclick="document.getElementById('invite-friend-dialog').showModal()">
+            <i class="material-icons">person_add_alt</i> Invite a Friend
+        </button>
+        {% endif %}
     </div>
+
+    {# ── Invite dialog ──────────────────────────────────────────────────────── #}
+    {% if is_own_profile %}
+    <dialog id="invite-friend-dialog" class="dialog invite-dialog">
+        <div class="invite-dialog-inner">
+            <div class="dialog-header">
+                <h2 class="dialog-title"><i class="material-icons">mail</i> Invite a Friend</h2>
+                <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+                    <i class="material-icons">close</i>
+                </button>
+            </div>
+            <p class="invite-dialog-hint">
+                If they're already on UrbanLens, we'll send them a friend request.
+                If not, they'll receive an email with a link to join — and you'll become friends automatically when they sign up.
+            </p>
+            <form id="invite-form"
+                  hx-post="{% url 'friend.invite_email' %}"
+                  hx-target="#invite-result"
+                  hx-swap="innerHTML">
+                {% csrf_token %}
+                <div class="invite-form-row">
+                    <input type="email" name="email" class="invite-email-input"
+                           placeholder="friend@example.com" required autocomplete="email">
+                    <button type="submit" class="btn-primary">
+                        <i class="material-icons">send</i> Send
+                    </button>
+                </div>
+            </form>
+            <div id="invite-result" class="invite-result-wrap"></div>
+        </div>
+    </dialog>
+    {% endif %}
 
     {# ── Incoming requests (own profile only) ────────────────────────────────── #}
     {% if is_own_profile and incoming_requests %}
@@ -32,7 +70,7 @@
                 <div class="friend-avatar friend-avatar-placeholder">{{ req.from_profile.username|first|upper }}</div>
                 {% endif %}
                 <div class="friend-request-info">
-                    <a href="{% url 'profile.view_user' req.from_profile.id %}" class="friend-request-name">
+                    <a href="{% url 'profile.view_user' req.from_profile.uuid %}" class="friend-request-name">
                         {{ req.from_profile.full_name|default:req.from_profile.username }}
                     </a>
                     <span class="friend-request-sub">@{{ req.from_profile.username }}</span>
@@ -73,7 +111,7 @@
         <ul class="friend-grid friend-grid--page">
             {% for friend in friends %}
             <li class="friend-card friend-card--page">
-                <a href="{% url 'profile.view_user' friend.id %}" class="friend-card-link">
+                <a href="{% url 'profile.view_user' friend.uuid %}" class="friend-card-link">
                     {% if friend.avatar %}
                     <img class="friend-avatar" src="{{ friend.avatar.url }}" alt="{{ friend.username }}">
                     {% else %}

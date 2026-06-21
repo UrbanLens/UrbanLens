@@ -1,4 +1,4 @@
-"""Property-based tests for the Review model.
+﻿"""Property-based tests for the Review model.
 
 Covers:
 - Rating field validation (MinValueValidator(0), MaxValueValidator(5))
@@ -8,8 +8,8 @@ Covers:
 from __future__ import annotations
 
 from django.contrib.auth.models import User
+from urbanlens.core.tests.testcase import TestCase
 from hypothesis import HealthCheck, given, settings
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from django.core.exceptions import ValidationError
@@ -31,7 +31,7 @@ _db_settings = settings(
 )
 
 
-class ReviewRatingBoundsTests(HypothesisTestCase):
+class ReviewRatingBoundsTests(TestCase):
 	"""Rating must be in [0, 5]; values outside must fail validation."""
 
 	user: User
@@ -76,7 +76,7 @@ class ReviewRatingBoundsTests(HypothesisTestCase):
 		review.full_clean()
 
 
-class ReviewUniqueConstraintTests(HypothesisTestCase):
+class ReviewUniqueConstraintTests(TestCase):
 	"""Each (user, pin) pair must have at most one Review."""
 
 	user: User
@@ -122,7 +122,7 @@ class ReviewUniqueConstraintTests(HypothesisTestCase):
 			self.fail(f"Reviews from different users for the same pin should be independent: {exc}")
 
 
-class PinRatingPropertyTests(HypothesisTestCase):
+class PinRatingPropertyTests(TestCase):
 	"""Pin.rating returns the latest review rating, or 0 if none exist."""
 
 	user: User

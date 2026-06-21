@@ -6,7 +6,6 @@ Twitch data is intentionally not migrated (platform replaced by TikTok).
 from django.db import migrations, models
 import django.db.models.deletion
 
-
 # Fields on Profile → platform key in SocialLink.  twitch excluded.
 _PROFILE_FIELD_TO_PLATFORM = [
     ("instagram", "instagram"),
@@ -38,7 +37,7 @@ def migrate_links_forward(apps, schema_editor):
 
 def migrate_links_backward(apps, schema_editor):
     """Restore social link columns on Profile from SocialLink rows."""
-    Profile = apps.get_model("dashboard", "Profile")
+    apps.get_model("dashboard", "Profile")
     SocialLink = apps.get_model("dashboard", "SocialLink")
     platform_to_field = {plat: field for field, plat in _PROFILE_FIELD_TO_PLATFORM}
     for link in SocialLink.objects.select_related("profile"):

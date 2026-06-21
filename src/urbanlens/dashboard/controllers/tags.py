@@ -10,7 +10,6 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
-from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Badge
@@ -184,7 +183,7 @@ class TagEditView(LoginRequiredMixin, View):
 
         if kind_changed and new_kind == "category":
             # Migrate tag → category: move pin.tags → pin.categories and
-            # location.tags → location.categories, then make it a global category.
+            # location.tags → location.categories.
             from urbanlens.dashboard.models.location.model import Location
             from urbanlens.dashboard.models.pin.model import Pin
 
@@ -195,7 +194,6 @@ class TagEditView(LoginRequiredMixin, View):
                 loc.categories.add(tag)
                 loc.tags.remove(tag)
             tag.kind = "category"
-            tag.profile = None
 
         elif kind_changed and new_kind == "status":
             # Migrate tag → status: remove from pin.tags, add to pin.statuses.
@@ -220,17 +218,10 @@ class TagEditView(LoginRequiredMixin, View):
             else:
                 tag.parents.clear()
 
-        if kind_changed and new_kind == "category":
-            response = HttpResponse(status=204)
-            response["HX-Redirect"] = reverse("organize.index") + "?tab=categories"
-            return response
-
-        if kind_changed and new_kind == "status":
-            response = HttpResponse(status=204)
-            response["HX-Redirect"] = reverse("organize.index") + "?tab=statuses"
-            return response
-
-        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM)))
+        response = render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM)))
+        if kind_changed:
+            response["X-Kind-Changed"] = new_kind
+        return response
 
 
 class TagDeleteView(LoginRequiredMixin, View):
@@ -461,7 +452,7 @@ class TagBulkEditView(LoginRequiredMixin, View):
 
 
 class TagBulkConvertView(LoginRequiredMixin, View):
-    """Convert multiple user-owned tags to global categories (JSON POST)."""
+    """Convert multiple user-owned tags to categories (JSON POST)."""
 
     def post(self, request, *args, **kwargs):
         """Convert tags to categories, migrating all pin and location memberships.
@@ -470,7 +461,7 @@ class TagBulkConvertView(LoginRequiredMixin, View):
             request: The HTTP request with JSON body containing ids list.
 
         Returns:
-            204 with HX-Redirect header pointing to the categories tab.
+            Rendered tag_rows.html partial (converted tags will be absent).
         """
         try:
             data = json.loads(request.body)
@@ -493,13 +484,45 @@ class TagBulkConvertView(LoginRequiredMixin, View):
                 loc.categories.add(tag)
                 loc.tags.remove(tag)
             tag.kind = "category"
-            tag.profile = None
             tag.parents.clear()
             tag.save()
 
-        response = HttpResponse(status=204)
-        response["HX-Redirect"] = reverse("organize.index") + "?tab=categories"
-        return response
+        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM)))
+
+
+class TagBulkConvertToStatusView(LoginRequiredMixin, View):
+    """Convert multiple user-owned tags to personal status badges (JSON POST)."""
+
+    def post(self, request, *args, **kwargs):
+        """Convert tags to statuses, migrating pin memberships.
+
+        Args:
+            request: The HTTP request with JSON body containing ids list.
+
+        Returns:
+            Rendered tag_rows.html partial (converted tags will be absent).
+        """
+        try:
+            data = json.loads(request.body)
+            ids = [int(x) for x in data.get("ids", [])]
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return JsonResponse({"error": "Invalid data"}, status=400)
+
+        if not ids:
+            return HttpResponse("No tags specified.", status=400)
+
+        profile = request.user.profile
+        tags_to_convert = list(Badge.objects.filter(id__in=ids, profile=profile, kind="tag"))
+        for tag in tags_to_convert:
+            for pin in Pin.objects.filter(tags=tag, profile=profile):
+                pin.statuses.add(tag)
+                pin.tags.remove(tag)
+            tag.kind = "status"
+            tag.profile = profile
+            tag.parents.clear()
+            tag.save()
+
+        return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM)))
 
 
 class TagMultiMergeView(LoginRequiredMixin, View):

@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="badgecustomization",
             constraint=models.UniqueConstraint(
-                fields=("profile", "badge"), name="unique_tag_customization_per_profile"
+                fields=("profile", "badge"), name="unique_tag_customization_per_profile",
             ),
         ),
     ]

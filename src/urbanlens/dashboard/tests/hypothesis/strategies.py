@@ -1,4 +1,4 @@
-"""Shared Hypothesis strategies for UrbanLens property-based tests.
+﻿"""Shared Hypothesis strategies for UrbanLens property-based tests.
 
 Import these instead of re-declaring primitives in each test module.
 """

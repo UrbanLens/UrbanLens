@@ -1,4 +1,4 @@
-"""Property-based and unit tests for Profile.get_map_center and compute_map_center.
+﻿"""Property-based and unit tests for Profile.get_map_center and compute_map_center.
 
 Invariants verified:
   - GPS mode always returns None regardless of stored coordinates.
@@ -19,9 +19,9 @@ import decimal
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from urbanlens.core.tests.testcase import TestCase
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from urbanlens.dashboard.models.location.model import Location
@@ -46,7 +46,7 @@ def _profile_with_mode(mode: str, **extra) -> Profile:
 
 # ── GPS mode ──────────────────────────────────────────────────────────────────
 
-class GetMapCenterGpsModeTests(HypothesisTestCase):
+class GetMapCenterGpsModeTests(TestCase):
 	"""GPS mode must always return None — the browser handles geolocation."""
 
 	def test_gps_mode_returns_none_with_no_stored_coords(self) -> None:
@@ -84,7 +84,7 @@ class GetMapCenterGpsModeTests(HypothesisTestCase):
 
 # ── CUSTOM mode ───────────────────────────────────────────────────────────────
 
-class GetMapCenterCustomModeTests(HypothesisTestCase):
+class GetMapCenterCustomModeTests(TestCase):
 	"""CUSTOM mode returns the stored coordinates, or None when either is missing."""
 
 	def test_custom_mode_returns_tuple_when_both_coords_are_set(self) -> None:
@@ -149,7 +149,7 @@ class GetMapCenterCustomModeTests(HypothesisTestCase):
 
 # ── AUTO mode — cached centroid ───────────────────────────────────────────────
 
-class GetMapCenterAutoCachedTests(HypothesisTestCase):
+class GetMapCenterAutoCachedTests(TestCase):
 	"""AUTO mode returns the cached centroid without hitting the DB for pins."""
 
 	def test_auto_mode_returns_cached_centroid(self) -> None:
@@ -188,7 +188,7 @@ class GetMapCenterAutoCachedTests(HypothesisTestCase):
 
 # ── AUTO mode — cold cache ────────────────────────────────────────────────────
 
-class GetMapCenterAutoColdTests(HypothesisTestCase):
+class GetMapCenterAutoColdTests(TestCase):
 	"""AUTO mode falls back to compute_map_center() when the cache is empty."""
 
 	def test_auto_mode_returns_none_when_no_cache_and_no_pins(self) -> None:
@@ -214,7 +214,7 @@ class GetMapCenterAutoColdTests(HypothesisTestCase):
 
 # ── compute_map_center ────────────────────────────────────────────────────────
 
-class ComputeMapCenterTests(HypothesisTestCase):
+class ComputeMapCenterTests(TestCase):
 	"""compute_map_center() averages pin coordinates and persists the result."""
 
 	profile: Profile
@@ -294,7 +294,7 @@ class ComputeMapCenterTests(HypothesisTestCase):
 
 # ── Clustering behaviour ──────────────────────────────────────────────────────
 
-class ComputeMapCenterClusteringTests(HypothesisTestCase):
+class ComputeMapCenterClusteringTests(TestCase):
 	"""The largest geographic cluster wins over intercontinental spreads."""
 
 	profile: Profile
@@ -364,7 +364,7 @@ class ComputeMapCenterClusteringTests(HypothesisTestCase):
 
 # ── map_default_zoom default ──────────────────────────────────────────────────
 
-class MapDefaultZoomTests(HypothesisTestCase):
+class MapDefaultZoomTests(TestCase):
 	"""map_default_zoom defaults to 13 for new profiles."""
 
 	def test_new_profile_has_default_zoom_of_13(self) -> None:

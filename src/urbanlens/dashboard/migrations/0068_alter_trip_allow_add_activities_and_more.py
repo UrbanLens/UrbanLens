@@ -70,7 +70,7 @@ class Migration(migrations.Migration):
             model_name="tripactivityvote",
             name="id",
             field=models.BigAutoField(
-                auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                auto_created=True, primary_key=True, serialize=False, verbose_name="ID",
             ),
         ),
     ]

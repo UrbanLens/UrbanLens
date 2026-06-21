@@ -151,28 +151,18 @@ class StatusEditView(LoginRequiredMixin, View):
             badge.profile = profile
 
         elif kind_changed and new_kind == "category":
-            # Migrate status → category: remove from pin.statuses, add to pin.categories. Make global.
+            # Migrate status → category: remove from pin.statuses, add to pin.categories.
             for pin in Pin.objects.filter(statuses=badge, profile=profile):
                 pin.categories.add(badge)
                 pin.statuses.remove(badge)
             badge.kind = "category"
-            badge.profile = None
 
         badge.save()
 
-        if kind_changed and new_kind == "tag":
-            from django.urls import reverse
-            response = HttpResponse(status=204)
-            response["HX-Redirect"] = reverse("organize.index") + "?tab=tags"
-            return response
-
-        if kind_changed and new_kind == "category":
-            from django.urls import reverse
-            response = HttpResponse(status=204)
-            response["HX-Redirect"] = reverse("organize.index") + "?tab=categories"
-            return response
-
-        return render(request, "dashboard/partials/status_rows.html", _rows_ctx(request.user.profile))
+        response = render(request, "dashboard/partials/status_rows.html", _rows_ctx(request.user.profile))
+        if kind_changed:
+            response["X-Kind-Changed"] = new_kind
+        return response
 
 
 class StatusDeleteView(LoginRequiredMixin, View):
@@ -192,7 +182,7 @@ class StatusDeleteView(LoginRequiredMixin, View):
         if badge.profile is None or badge.profile.user != request.user:
             return HttpResponseForbidden()
         if badge.is_protected:
-            return HttpResponse("The 'Visited' status cannot be deleted.", status=403)
+            return HttpResponse(f"'{badge.name}' is a protected status and cannot be deleted.", status=403)
         badge.delete()
         return render(request, "dashboard/partials/status_rows.html", _rows_ctx(request.user.profile))
 
@@ -249,6 +239,41 @@ class StatusMembershipView(LoginRequiredMixin, View):
             "dashboard/partials/status_panel.html",
             {"pin": pin, "all_statuses": all_statuses, "member_ids": member_ids},
         )
+
+
+class StatusMultiMergeView(LoginRequiredMixin, View):
+    """Merge multiple personal status badges into one (JSON POST)."""
+
+    def post(self, request, *args, **kwargs):
+        """Transfer all pin memberships from source statuses to target, then delete sources.
+
+        Args:
+            request: The HTTP request with JSON body containing target_id and source_ids.
+
+        Returns:
+            Rendered status_rows.html partial, or 400/403 on error.
+        """
+        try:
+            data = json.loads(request.body)
+            target_id = int(data["target_id"])
+            source_ids = [int(x) for x in data.get("source_ids", [])]
+        except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+            return JsonResponse({"error": "Invalid data"}, status=400)
+
+        if not source_ids:
+            return HttpResponse("No source statuses specified.", status=400)
+
+        profile = request.user.profile
+        target = get_object_or_404(Badge, id=target_id, kind="status", profile=profile)
+        sources = Badge.objects.filter(id__in=source_ids, kind="status", profile=profile, is_protected=False)
+
+        for src in sources:
+            for pin in Pin.objects.filter(statuses=src, profile=profile):
+                pin.statuses.add(target)
+                pin.statuses.remove(src)
+            src.delete()
+
+        return render(request, "dashboard/partials/status_rows.html", _rows_ctx(profile))
 
 
 class StatusBulkDeleteView(LoginRequiredMixin, View):

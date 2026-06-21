@@ -9,7 +9,6 @@ from datetime import UTC, date, datetime, timedelta
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from model_bakery import baker
 
 from django import forms as django_forms
@@ -152,7 +151,7 @@ class ValidateStartedExploringTests(TestCase):
 
 # ── MarkupDefaultsForm ────────────────────────────────────────────────────────
 
-class MarkupDefaultsFormTests(HypothesisTestCase):
+class MarkupDefaultsFormTests(TestCase):
 	"""MarkupDefaultsForm clean methods apply defaults and strip whitespace."""
 
 	def _profile(self):
@@ -220,7 +219,7 @@ class MarkupDefaultsFormTests(HypothesisTestCase):
 
 # ── PrivacySettingsForm ───────────────────────────────────────────────────────
 
-class PrivacySettingsFormTests(HypothesisTestCase):
+class PrivacySettingsFormTests(TestCase):
 	"""PrivacySettingsForm excludes FRIENDS from friend_request_visibility."""
 
 	def _profile(self):
@@ -237,6 +236,8 @@ class PrivacySettingsFormTests(HypothesisTestCase):
 			"profile_visibility": VisibilityChoice.ANYONE,
 			"comment_visibility": VisibilityChoice.ANYONE,
 			"friend_request_visibility": VisibilityChoice.ANYONE,
+			"photo_upload_visibility": VisibilityChoice.ANYONE,
+			"viewer_photo_filter": VisibilityChoice.ANYONE,
 			**overrides,
 		}
 
@@ -268,15 +269,17 @@ class PrivacySettingsFormTests(HypothesisTestCase):
 		))
 		self.assertTrue(form.is_valid(), form.errors)
 
-	def test_hide_pin_locations_omitted_defaults_to_false(self) -> None:
+	def test_trip_pin_visibility_defaults_to_anyone(self) -> None:
 		form = self._submit(**self._default_data())
 		self.assertTrue(form.is_valid(), form.errors)
-		self.assertFalse(form.cleaned_data["hide_pin_locations_in_trips"])
+		self.assertEqual(form.cleaned_data["trip_pin_location_visibility"], VisibilityChoice.ANYONE)
 
-	def test_hide_pin_locations_true_is_saved(self) -> None:
-		form = self._submit(**self._default_data(hide_pin_locations_in_trips="on"))
+	@given(choice=st.sampled_from(VisibilityChoice.values))
+	@_hyp_db
+	def test_trip_pin_visibility_accepts_all_choices(self, choice: str) -> None:
+		form = self._submit(**self._default_data(trip_pin_location_visibility=choice))
 		self.assertTrue(form.is_valid(), form.errors)
-		self.assertTrue(form.cleaned_data["hide_pin_locations_in_trips"])
+		self.assertEqual(form.cleaned_data["trip_pin_location_visibility"], choice)
 
 	@given(choice=st.sampled_from([c for c in VisibilityChoice.values if c != VisibilityChoice.FRIENDS]))
 	@_hyp_db
@@ -287,7 +290,7 @@ class PrivacySettingsFormTests(HypothesisTestCase):
 
 # ── ProfileForm ───────────────────────────────────────────────────────────────
 
-class ProfileFormTests(HypothesisTestCase):
+class ProfileFormTests(TestCase):
 	"""ProfileForm.clean_birth_date and clean_started_exploring raise ValidationError for bad values."""
 
 	def _profile(self):

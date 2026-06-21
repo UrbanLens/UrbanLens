@@ -45,7 +45,7 @@ _FRIEND_REQUEST_CHOICES = [(k, v) for k, v in VisibilityChoice.choices if k != V
 
 
 class PrivacySettingsForm(forms.ModelForm):
-    """Controls who can see this user's profile and comments, and whether they accept friend requests."""
+    """Controls who can see this user's profile, comments, photos, and friend requests."""
 
     profile_visibility = forms.ChoiceField(
         choices=VisibilityChoice.choices,
@@ -65,19 +65,38 @@ class PrivacySettingsForm(forms.ModelForm):
         label="Friend Requests",
         help_text="Which users are allowed to send you friend requests.",
     )
-    hide_pin_locations_in_trips = forms.BooleanField(
-        required=False,
-        widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
-        label="Hide My Pins in Trips",
+    photo_upload_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Photo Visibility",
+        help_text="Who can see the photos you upload to locations.",
+    )
+    trip_pin_location_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Trip Pins",
         help_text=(
-            "When you share one of your pins as a trip activity, hide the location "
-            "from trip members who don't already have that pin on their own map."
+            "When you share one of your pins as a trip activity, who can see the "
+            "actual location? Members outside this setting will only see the pin name."
         ),
+    )
+    viewer_photo_filter = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Show Photos From",
+        help_text="Whose photos you want to see. Photos from users outside this setting will be blurred.",
     )
 
     class Meta:
         model = Profile
-        fields = ["profile_visibility", "comment_visibility", "friend_request_visibility", "hide_pin_locations_in_trips"]
+        fields = [
+            "profile_visibility",
+            "comment_visibility",
+            "friend_request_visibility",
+            "photo_upload_visibility",
+            "viewer_photo_filter",
+            "trip_pin_location_visibility",
+        ]
 
 
 class ContactSettingsForm(forms.Form):
@@ -132,9 +151,7 @@ class MapDisplayForm(forms.ModelForm):
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
         label="Local Storage",
-        help_text=(
-            "Cache pins in your browser for instant map loads. Disabling this will make the map feel sluggish."
-        ),
+        help_text=("Cache pins in your browser for instant map loads. Disabling this will make the map feel sluggish."),
     )
 
     class Meta:
@@ -189,8 +206,8 @@ class MapCenterForm(forms.ModelForm):
         if instance.map_center_mode != MapCenterMode.CUSTOM:
             # Restore original custom coordinates from the database.
             original = (
-                type(instance).objects
-                .filter(pk=instance.pk)
+                type(instance)
+                .objects.filter(pk=instance.pk)
                 .values("map_custom_latitude", "map_custom_longitude")
                 .first()
             ) or {}

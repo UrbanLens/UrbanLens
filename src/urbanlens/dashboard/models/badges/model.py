@@ -12,10 +12,12 @@ from urbanlens.dashboard.models.badges.queryset import BadgeManager
 KIND_TAG = "tag"
 KIND_CATEGORY = "category"
 KIND_STATUS = "status"
+KIND_USER = "user"
 KIND_CHOICES = [
     (KIND_TAG, "Tag"),
     (KIND_CATEGORY, "Category"),
     (KIND_STATUS, "Status"),
+    (KIND_USER, "Person"),
 ]
 
 if TYPE_CHECKING:

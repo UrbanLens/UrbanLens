@@ -1,11 +1,11 @@
 from django.db import migrations, models
 
 _DEFAULT_STATUSES = [
-    {"name": "Visited",    "icon": "✅", "color": "#4CAF50", "order": 100, "is_protected": True},
-    {"name": "Want to Go", "icon": "⭐", "color": "#2196F3", "order": 90,  "is_protected": False},
-    {"name": "Active",     "icon": "🟢", "color": "#009688", "order": 80,  "is_protected": False},
-    {"name": "Abandoned",  "icon": "🏚️", "color": "#FF9800", "order": 70,  "is_protected": False},
-    {"name": "Demolished", "icon": "💀", "color": "#795548", "order": 60,  "is_protected": False},
+    {"name": "Visited", "icon": "✅", "color": "#4CAF50", "order": 100, "is_protected": True},
+    {"name": "Want to Go", "icon": "⭐", "color": "#2196F3", "order": 90, "is_protected": False},
+    {"name": "Active", "icon": "🟢", "color": "#009688", "order": 80, "is_protected": False},
+    {"name": "Abandoned", "icon": "🏚️", "color": "#FF9800", "order": 70, "is_protected": False},
+    {"name": "Demolished", "icon": "💀", "color": "#795548", "order": 60, "is_protected": False},
 ]
 
 

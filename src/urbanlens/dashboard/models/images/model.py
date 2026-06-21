@@ -1,46 +1,40 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    model.py                                                                                             *
-*        Path:    /dashboard/models/images/model.py                                                                    *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-01-01     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
+"""Image model for pin and location photo uploads."""
 from __future__ import annotations
 
-from django.db.models import CASCADE, ForeignKey, ImageField
+from django.db.models import CASCADE, SET_NULL, CharField, DecimalField, ForeignKey, ImageField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.images.queryset import ImageManager
 
 
 class Image(abstract.Model):
-    """
-    Records image data.
-    """
-    image = ImageField()
+    """A photo uploaded by a user, attached to a pin or shared location."""
+
+    image = ImageField(upload_to="pin_images/")
     pin = ForeignKey(
         "dashboard.Pin",
         on_delete=CASCADE,
         related_name="images",
+        null=True,
+        blank=True,
     )
+    location = ForeignKey(
+        "dashboard.Location",
+        on_delete=CASCADE,
+        related_name="images",
+        null=True,
+        blank=True,
+    )
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=SET_NULL,
+        related_name="uploaded_images",
+        null=True,
+        blank=True,
+    )
+    caption = CharField(max_length=500, null=True, blank=True)
+    latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 
     objects = ImageManager()
 
