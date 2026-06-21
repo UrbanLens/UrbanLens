@@ -22,19 +22,6 @@
         <div class="pin-details location-details card" style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
 
-    {# ── Personal notes ───────────────────────────────────────────────── #}
-    <div id="pin-notes-panel"
-         hx-get="{% url 'pin.notes' pin.uuid %}"
-         hx-trigger="load"
-         hx-swap="outerHTML"
-         class="pin-notes-panel card">
-        <div class="card-header">
-            <i class="material-icons">sticky_note_2</i>
-            <span>My Notes</span>
-        </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
-    </div>
-
     {# ── Visit history ────────────────────────────────────────────────── #}
     <div hx-get="{% url 'pin.visits' pin.uuid %}"
          hx-trigger="load"

@@ -74,29 +74,45 @@ def _format_search_date(raw: str | None) -> str:
 
 
 def _build_pin_search_query(pin: Pin) -> str:
-    """Build a plain-text search query for a pin's location.
+    """Build a search query combining the pin's name with optional location keywords.
 
-    Combines the most useful identifiers into a concise query string that
-    works across search providers (Brave, Google Custom Search, etc.).
+    The effective name and place name are the primary search terms. Street name,
+    city, and state are appended as space-separated optional keywords so that
+    search engines can disambiguate results without requiring an exact phrase match.
     """
-    parts: list[str] = []
     name = pin.effective_name
-    if name:
-        parts.append(name)
-    if pin.address_basic and pin.address_basic != name:
-        parts.append(pin.address_basic)
     place_name = getattr(pin, "place_name", None)
-    if place_name and place_name not in {name, pin.address_basic}:
-        parts.append(place_name)
+    address_basic = pin.address_basic
+    route = pin.location.route if pin.location else None
+
+    # Primary identifier(s)
+    primary: list[str] = []
+    if name:
+        primary.append(name)
+    if place_name and place_name not in {name, address_basic}:
+        primary.append(place_name)
+    elif address_basic and address_basic != name:
+        primary.append(address_basic)
+
+    if not primary:
+        if pin.effective_latitude is not None and pin.effective_longitude is not None:
+            return f"{pin.effective_latitude}, {pin.effective_longitude}"
+        return ""
+
+    primary_str = " ".join(primary)
+
+    # Optional location keywords: street name, city (or county), state
+    location: list[str] = []
+    if route and route not in primary_str:
+        location.append(route)
     if pin.city:
-        parts.append(pin.city)
+        location.append(pin.city)
     elif pin.county:
-        parts.append(pin.county)
+        location.append(pin.county)
     if pin.state:
-        parts.append(pin.state)
-    if not parts and pin.latitude and pin.longitude:
-        return f"{pin.latitude}, {pin.longitude}"
-    return ", ".join(filter(None, parts))
+        location.append(pin.state)
+
+    return " ".join(filter(None, [primary_str] + location))
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):
@@ -283,8 +299,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # Instantiate the SmithsonianGateway with the API key
         smithsonian_gateway = SmithsonianGateway(api_key=settings.smithsonian_api_key or "")
 
-        # Get historic images from the Smithsonian's API
-        smithsonian_images = smithsonian_gateway.get_data(pin.effective_name)
+        # Get historic images from the Smithsonian's API; discard entries without a usable URL
+        smithsonian_images = [
+            img for img in smithsonian_gateway.get_data(pin.effective_name) if img.get("url")
+        ]
 
         return render(
             request,

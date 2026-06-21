@@ -69,6 +69,59 @@ def _overview_context(pin: Pin) -> dict:
     }
 
 
+def _ensure_location_address(location) -> None:
+    """Populate address fields on a Location that has coordinates but no street data.
+
+    Calls the Google Geocoding API (with GeocodedLocation as an intermediate cache),
+    then writes the parsed components back to the Location row so the next request
+    reads directly from the DB with no API call.
+    """
+    if not location or location.route:
+        return
+    lat = float(location.latitude) if location.latitude is not None else None
+    lng = float(location.longitude) if location.longitude is not None else None
+    if lat is None or lng is None:
+        return
+
+    try:
+        from urbanlens.UrbanLens.settings.app import settings as app_settings
+        from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+
+        if not app_settings.google_maps_api_key:
+            return
+
+        data = GoogleGeocodingGateway().geocode_coordinates(lat, lng)
+        if not data:
+            return
+        results = data.get("results", [])
+        if not results:
+            return
+
+        type_map: dict[str, str] = {}
+        for comp in results[0].get("address_components", []):
+            for t in comp.get("types", []):
+                type_map.setdefault(t, comp.get("short_name") or comp.get("long_name") or "")
+
+        update_fields: list[str] = []
+
+        def _maybe_set(field: str, value: str | None) -> None:
+            if value and not getattr(location, field):
+                setattr(location, field, value)
+                update_fields.append(field)
+
+        _maybe_set("street_number", type_map.get("street_number"))
+        _maybe_set("route", type_map.get("route"))
+        _maybe_set("locality", type_map.get("locality"))
+        _maybe_set("administrative_area_level_1", type_map.get("administrative_area_level_1"))
+        _maybe_set("administrative_area_level_2", type_map.get("administrative_area_level_2"))
+        _maybe_set("zipcode", type_map.get("postal_code"))
+
+        if update_fields:
+            location.save(update_fields=update_fields)
+    except Exception:
+        logger.exception("Reverse geocoding failed for location pk=%s", getattr(location, "pk", None))
+
+
 class PinOverviewView(LoginRequiredMixin, View):
     """Render the swappable pin overview partial (title + details card).
 
@@ -79,7 +132,10 @@ class PinOverviewView(LoginRequiredMixin, View):
         result = _pin_for_user(pin_uuid, request)
         if isinstance(result, HttpResponse):
             return result
-        return render(request, "dashboard/partials/pin_overview_partial.html", _overview_context(result))
+        pin = result
+        if pin.location and not pin.location.route:
+            _ensure_location_address(pin.location)
+        return render(request, "dashboard/partials/pin_overview_partial.html", _overview_context(pin))
 
 
 class PinEditView(LoginRequiredMixin, View):
