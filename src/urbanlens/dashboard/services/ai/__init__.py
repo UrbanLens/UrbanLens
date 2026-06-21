@@ -30,3 +30,4 @@ from urbanlens.dashboard.services.ai.gateway import LLMGateway
 from urbanlens.dashboard.services.ai.huggingface import HuggingFaceGateway
 from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
 from urbanlens.dashboard.services.ai.openai import OpenAIGateway
+from urbanlens.dashboard.services.ai.factory import get_gateway

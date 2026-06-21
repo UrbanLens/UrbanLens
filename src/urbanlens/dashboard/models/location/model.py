@@ -155,7 +155,7 @@ class Location(abstract.AddressableMixin, abstract.Model):
         self.save()
 
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
-        from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
+        from urbanlens.dashboard.services.ai.factory import get_gateway
 
         instructions = (
             "Look at the following information about a location and determine what category it belongs in. Example categories are: "
@@ -180,7 +180,9 @@ class Location(abstract.AddressableMixin, abstract.Model):
         if not prompt:
             return None
 
-        gateway = CloudflareGateway(instructions=instructions)
+        gateway = get_gateway("category_suggestions", instructions=instructions)
+        if not gateway:
+            return None
         category_name = gateway.send_prompt(prompt)
         if not category_name or len(category_name) < 3:
             return None

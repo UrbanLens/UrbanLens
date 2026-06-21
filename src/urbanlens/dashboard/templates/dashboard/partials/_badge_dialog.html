@@ -1,7 +1,4 @@
 {% load dashboard_tags %}
-{# Shared add-badge dialog (tabs: All / Tags / Categories / Statuses).
-   Required via include: dialog_id_prefix, dialog_id_suffix, post_url_name, obj_uuid, panel_id
-   Required from context: all_categories, member_ids #}
 <dialog id="{{ dialog_id_prefix }}{{ dialog_id_suffix }}" class="tag-add-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Add Badges" %}
 

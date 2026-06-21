@@ -1,8 +1,4 @@
 {% load dashboard_tags %}
-{# Shared badge chip row.
-   Required via include: post_url_name, obj_uuid, panel_id
-   Required from context: all_categories, member_ids
-   Optional via include: empty_text #}
 <div class="tag-chips-row">
     {% for cat in all_categories %}
     {% if cat.id in member_ids %}
