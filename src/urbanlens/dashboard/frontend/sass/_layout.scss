@@ -448,7 +448,7 @@ body.page-location-details div.section {
 
     .location-details {
         .details-grid {
-            display: grid;
+            display: block;
             grid-template-columns: 1fr 1fr;
             gap: .5rem;
             padding: .75rem 1rem;

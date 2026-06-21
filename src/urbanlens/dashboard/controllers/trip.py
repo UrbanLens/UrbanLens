@@ -1181,7 +1181,7 @@ class TripLeaveView(LoginRequiredMixin, View):
         from django.urls import reverse as _reverse
 
         response = HttpResponse("", status=200)
-        response["HX-Redirect"] = _reverse("dashboard:trips.list")
+        response["HX-Redirect"] = _reverse("trips.list")
         return response
 
 

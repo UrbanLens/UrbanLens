@@ -23,13 +23,13 @@
                 role="tab" data-tab="status" aria-controls="panel-status">
             <i class="material-icons">flag_circle</i> Statuses
         </button>
-        <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
-                role="tab" data-tab="priority" aria-controls="panel-priority">
-            <i class="material-icons">low_priority</i> Priority
-        </button>
         <button type="button" class="organize-tab{% if active_tab == 'people' %} active{% endif %}"
                 role="tab" data-tab="people" aria-controls="panel-people">
             <i class="material-icons">people</i> People
+        </button>
+        <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
+                role="tab" data-tab="priority" aria-controls="panel-priority">
+            <i class="material-icons">low_priority</i> Priority
         </button>
     </div>
 
@@ -491,8 +491,8 @@
 
         <div class="tag-header">
             <div>
-                <h2 class="tag-title">People Labels</h2>
-                <p class="tag-subtitle">Labels you apply privately to other users' profiles. Only visible to you.</p>
+                <h2 class="tag-title">People</h2>
+                <p class="tag-subtitle">Labels you apply privately to other users. Only visible to you.</p>
             </div>
             <div class="tag-header-right">
                 <button type="button" class="btn-primary btn-sm" id="people-badge-create-btn"

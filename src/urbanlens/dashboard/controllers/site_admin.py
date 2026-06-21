@@ -64,4 +64,4 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         settings.save()
 
-        return HttpResponseRedirect(reverse("dashboard:site_admin") + "?saved=1")
+        return HttpResponseRedirect(reverse("site_admin") + "?saved=1")
