@@ -85,11 +85,14 @@ class BraveSearchGateway(Gateway):
     def _parse(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
         for item in data.get("web", {}).get("results", []):
+            thumbnail_obj = item.get("thumbnail") or {}
             results.append(
                 {
                     "title": item.get("title"),
                     "link": item.get("url"),
                     "snippet": item.get("description"),
+                    "date": item.get("age"),
+                    "thumbnail": thumbnail_obj.get("src"),
                 },
             )
         return results

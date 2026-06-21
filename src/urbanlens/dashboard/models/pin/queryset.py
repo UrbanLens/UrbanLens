@@ -146,16 +146,25 @@ class PinQuerySet(abstract.QuerySet):
         if badge_statuses := criteria.get("status"):
             qs = qs.filter(statuses__id__in=[s.id if hasattr(s, "id") else s for s in badge_statuses])
         if tags := criteria.get("tags"):
-            from urbanlens.dashboard.models.badges.model import Badge as _Badge
-            for tag in tags:
-                tag_ids = _Badge.get_badge_and_descendants(tag.id)
-                qs = qs.filter(tags__id__in=tag_ids)
+            from urbanlens.dashboard.models.badges.model import KIND_CATEGORY, KIND_STATUS, Badge as _Badge
+            for badge in tags:
+                badge_ids = _Badge.get_badge_and_descendants(badge.id)
+                if badge.kind == KIND_CATEGORY:
+                    qs = qs.filter(categories__id__in=badge_ids)
+                elif badge.kind == KIND_STATUS:
+                    qs = qs.filter(statuses__id__in=badge_ids)
+                else:
+                    qs = qs.filter(tags__id__in=badge_ids)
         if exclude_tags := criteria.get("exclude_tags"):
-            from urbanlens.dashboard.models.badges.model import Badge as _Badge
-            excluded_ids: list[int] = []
-            for tag in exclude_tags:
-                excluded_ids.extend(_Badge.get_badge_and_descendants(tag.id))
-            qs = qs.exclude(tags__id__in=excluded_ids)
+            from urbanlens.dashboard.models.badges.model import KIND_CATEGORY, KIND_STATUS, Badge as _Badge
+            for badge in exclude_tags:
+                badge_ids = _Badge.get_badge_and_descendants(badge.id)
+                if badge.kind == KIND_CATEGORY:
+                    qs = qs.exclude(categories__id__in=badge_ids)
+                elif badge.kind == KIND_STATUS:
+                    qs = qs.exclude(statuses__id__in=badge_ids)
+                else:
+                    qs = qs.exclude(tags__id__in=badge_ids)
         if min_rating := criteria.get("min_rating"):
             with contextlib.suppress(ValueError, TypeError):
                 qs = qs.filter(reviews__rating__gte=int(min_rating))
@@ -163,10 +172,11 @@ class PinQuerySet(abstract.QuerySet):
             with contextlib.suppress(ValueError, TypeError):
                 qs = qs.filter(reviews__rating__lte=int(max_rating))
         if has_visits := criteria.get("has_visits"):
+            visited_q = Q(last_visited__isnull=False) | Q(statuses__name="Visited")
             if has_visits == "yes":
-                qs = qs.filter(last_visited__isnull=False)
+                qs = qs.filter(visited_q)
             elif has_visits == "no":
-                qs = qs.filter(last_visited__isnull=True)
+                qs = qs.exclude(visited_q)
         if visited_after := criteria.get("visited_after"):
             qs = qs.filter(last_visited__date__gte=visited_after)
         if visited_before := criteria.get("visited_before"):

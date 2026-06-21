@@ -141,23 +141,6 @@
     pointer-events: none;
 }
 
-/* ── Address jump ─────────────────────────────────────────────────── */
-.fp-address-jump { padding: 10px 14px 0; }
-.fp-address-row { display: flex; gap: 5px; margin-top: 6px; }
-.fp-address-row .fp-search { flex: 1; }
-.fp-address-btn {
-    flex-shrink: 0;
-    background: rgba(70,120,255,0.2);
-    border: 1px solid rgba(70,120,255,0.4);
-    border-radius: 7px; color: #9ab8ff;
-    width: 32px; height: 32px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
-}
-.fp-address-btn:hover { background: rgba(70,120,255,0.35); border-color: rgba(70,120,255,0.6); }
-.fp-address-btn:disabled { opacity: .45; cursor: not-allowed; }
-.fp-address-btn .material-icons { font-size: .95rem; }
 
 /* ── Accordion filter sections ────────────────────────────────────── */
 .fp-accordion-item {
@@ -193,8 +176,7 @@
 /* Show dot when this section has an active filter (CSS-only, no JS needed) */
 details.fp-accordion-item:has(input[type=radio]:not([value=""]):checked) .fp-acc-dot,
 details.fp-accordion-item:has(input[type=checkbox]:checked) .fp-acc-dot,
-details.fp-accordion-item:has(input[type=date]:not([value=""])) .fp-acc-dot,
-details.fp-accordion-item:has(input[type=number]:not([value=""])) .fp-acc-dot { display: inline-block; }
+details.fp-accordion-item:has(input[type=date]:not([value=""])) .fp-acc-dot { display: inline-block; }
 
 .fp-acc-arrow {
     font-size: .9rem;
@@ -290,6 +272,146 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
     scrollbar-width: thin;
     scrollbar-color: rgba(255,255,255,0.12) transparent;
 }
+
+/* ── JS-managed active dot (for sliders) ─────────────────────────── */
+details.fp-accordion-item.fp-acc-active .fp-acc-dot { display: inline-block; }
+
+/* ── Dual-handle range slider ─────────────────────────────────────── */
+.fp-dual-slider {
+    position: relative;
+    height: 22px;
+    margin: 4px 0 2px;
+}
+.fp-dual-slider-track {
+    position: absolute;
+    top: 50%; left: 0; right: 0;
+    height: 4px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 2px;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+.fp-dual-slider-fill {
+    position: absolute;
+    height: 100%;
+    background: #5082ff;
+    border-radius: 2px;
+}
+.fp-slider-input {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0; left: 0;
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+    pointer-events: none;
+    outline: none;
+    margin: 0;
+}
+.fp-slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: #5082ff;
+    border: 2px solid rgba(255,255,255,0.9);
+    cursor: pointer;
+    pointer-events: all;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.45);
+    transition: transform .12s;
+}
+.fp-slider-input::-webkit-slider-thumb:hover { transform: scale(1.18); }
+.fp-slider-input::-moz-range-thumb {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: #5082ff;
+    border: 2px solid rgba(255,255,255,0.9);
+    cursor: pointer;
+    pointer-events: all;
+}
+.fp-dual-slider-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: .65rem;
+    color: rgba(255,255,255,0.4);
+    margin-top: 4px;
+}
+
+/* ── Floating address search bar ──────────────────────────────────── */
+#addr-search-bar {
+    position: absolute;
+    top: 12px;
+    left: 54px;
+    width: min(360px, calc(100% - 68px));
+    background: rgba(14, 18, 28, 0.92);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    gap: 6px;
+    z-index: 1000;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    transition: border-color .15s, box-shadow .15s;
+}
+#addr-search-bar:focus-within {
+    border-color: rgba(90,150,255,0.5);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 0 2px rgba(80,130,255,0.15);
+}
+.addr-search-icon { font-size: .95rem; color: rgba(255,255,255,0.3); flex-shrink: 0; }
+#address-search-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #fff;
+    font-size: 0.84rem;
+    padding: 10px 0;
+}
+#address-search-input::placeholder { color: rgba(255,255,255,0.28); }
+.addr-search-clear {
+    background: none; border: none;
+    color: rgba(255,255,255,0.3);
+    cursor: pointer; padding: 3px;
+    border-radius: 50%;
+    display: flex; align-items: center;
+    transition: color .15s, background .15s;
+    flex-shrink: 0;
+}
+.addr-search-clear:hover { color: #fff; background: rgba(255,255,255,0.1); }
+.addr-search-clear .material-icons { font-size: .9rem; }
+#addr-search-suggestions {
+    position: absolute;
+    top: 52px;
+    left: 54px;
+    width: min(360px, calc(100% - 68px));
+    background: rgba(14, 18, 28, 0.97);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+    z-index: 1000;
+    overflow: hidden;
+}
+.addr-suggestion {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: none; border: none;
+    color: #d0d0e0;
+    text-align: left;
+    padding: 9px 14px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    transition: background .1s;
+}
+.addr-suggestion:last-child { border-bottom: none; }
+.addr-suggestion:hover { background: rgba(255,255,255,0.07); color: #fff; }
+.addr-suggestion .material-icons { font-size: .85rem; color: rgba(255,255,255,0.3); flex-shrink: 0; }
 
 /* ── Pin popup ────────────────────────────────────────────────────── */
 .leaflet-popup-content-wrapper {
@@ -450,6 +572,13 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
 #map.tiles-loading .leaflet-tile-pane {
     opacity: 0.72;
 }
+/* Shift map-buttons left when filter panel is open so they don't overlap */
+#map .map-buttons {
+    transition: right 0.22s cubic-bezier(.4,0,.2,1), opacity 0.2s ease;
+}
+#map.filter-open .map-buttons {
+    right: calc(272px + 12px);
+}
 
 /* ── Pin load overlay (cold start only) ─────────────────────────── */
 #pin-load-overlay {
@@ -575,15 +704,24 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
             <button id="weather-button" class="map-btn-icon" title="Weather View" onclick="toggleWeatherView()">
                 <i class="material-icons">cloud</i>
             </button>
-            <button id="campus-button" class="map-btn-icon" title="Boundaries" onclick="toggleCampusBoundaries()">
-                <i class="material-icons">hexagon</i>
-            </button>
             <button id="import-pins-button" class="map-btn-icon" title="Import Pins"
                     hx-get="{% url 'pin.import.form' %}" hx-target="#importPinsModal" hx-swap="innerHTML">
                 <i class="material-icons">upload</i>
             </button>
         </div>
     </div>
+
+    {# ── Floating address search bar ───────────────────────────────────── #}
+    <div id="addr-search-bar">
+        <i class="material-icons addr-search-icon">place</i>
+        <input type="text" id="address-search-input" placeholder="Jump to a place…"
+               autocomplete="off" onkeydown="if(event.key==='Enter'){geocodeAddress();event.preventDefault();}">
+        <button type="button" class="addr-search-clear" id="addr-search-clear" hidden
+                onclick="clearAddrSearch()" title="Clear">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div id="addr-search-suggestions" hidden></div>
 
     {# ── Filter panel ──────────────────────────────────────────────────── #}
     <div id="filter-panel">
@@ -592,21 +730,9 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
             <button class="fp-close" onclick="toggleFilterPanel()" title="Close">✕</button>
         </div>
 
-        {# Address jump - geocodes and pans the map, not a pin filter #}
-        <div class="fp-address-jump">
-            <div class="fp-label">Jump to Address</div>
-            <div class="fp-address-row">
-                <input type="text" id="address-search-input" class="fp-search" placeholder="Enter address…"
-                       autocomplete="off" onkeydown="if(event.key==='Enter'){geocodeAddress();event.preventDefault();}">
-                <button type="button" class="fp-address-btn" onclick="geocodeAddress()" title="Go to address">
-                    <i class="material-icons">near_me</i>
-                </button>
-            </div>
-        </div>
-
         <form id="filter-form"
               hx-post="{% url 'map.search' %}"
-              hx-trigger="change, input delay:600ms from:[name=name], input delay:800ms from:input[type=number]"
+              hx-trigger="change, input delay:600ms from:[name=name]"
               hx-target="#map-body"
               hx-swap="outerHTML">
             {% csrf_token %}
@@ -654,23 +780,23 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
                 <div class="fp-accordion-body">
                     <div class="fp-chips">
                         <label class="fp-chip"><input type="radio" name="has_visits" value="" checked>Any</label>
-                        <label class="fp-chip"><input type="radio" name="has_visits" value="yes">Has visits</label>
+                        <label class="fp-chip"><input type="radio" name="has_visits" value="yes">Visited</label>
                         <label class="fp-chip"><input type="radio" name="has_visits" value="no">Never visited</label>
                     </div>
                     <div class="fp-date-block">
                         <div class="fp-date-row">
-                            <span class="fp-date-label">Last visit after</span>
+                            <span class="fp-date-label">After</span>
                             <input type="date" name="visited_after" class="fp-date-input">
                         </div>
                         <div class="fp-date-row">
-                            <span class="fp-date-label">Last visit before</span>
+                            <span class="fp-date-label">Before</span>
                             <input type="date" name="visited_before" class="fp-date-input">
                         </div>
                     </div>
                 </div>
             </details>
 
-            {# Priority ── collapsible ── #}
+            {# Priority ── dual-handle slider ── #}
             <details class="fp-accordion-item" id="fp-acc-priority">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Priority</span>
@@ -678,16 +804,24 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
-                    <div class="fp-range-row fp-range-row--number">
-                        <div class="fp-range-col">
-                            <span class="fp-range-hint">Min</span>
-                            <input type="number" name="min_priority" class="fp-number-input" min="0" max="100" placeholder="0">
+                    <input type="hidden" name="min_priority" id="fp-priority-min-val">
+                    <input type="hidden" name="max_priority" id="fp-priority-max-val">
+                    <div class="fp-dual-slider">
+                        <div class="fp-dual-slider-track">
+                            <div class="fp-dual-slider-fill" id="fp-priority-fill" style="left:0%;width:100%"></div>
                         </div>
-                        <div class="fp-range-divider">–</div>
-                        <div class="fp-range-col">
-                            <span class="fp-range-hint">Max</span>
-                            <input type="number" name="max_priority" class="fp-number-input" min="0" max="100" placeholder="100">
-                        </div>
+                        <input type="range" id="fp-priority-min" min="0" max="100" value="0"
+                               class="fp-slider-input"
+                               oninput="syncDualSlider('priority')"
+                               onchange="htmx.trigger(document.getElementById('filter-form'),'change')">
+                        <input type="range" id="fp-priority-max" min="0" max="100" value="100"
+                               class="fp-slider-input"
+                               oninput="syncDualSlider('priority')"
+                               onchange="htmx.trigger(document.getElementById('filter-form'),'change')">
+                    </div>
+                    <div class="fp-dual-slider-labels">
+                        <span id="fp-priority-min-label">Any</span>
+                        <span id="fp-priority-max-label">Any</span>
                     </div>
                 </div>
             </details>
@@ -713,45 +847,45 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
                 </div>
             </details>
 
-            {% if tags %}
-            {# Include tags ── collapsible ── #}
+            {% if filter_badges %}
+            {# Include badges ── collapsible ── #}
             <details class="fp-accordion-item" id="fp-acc-incl-tags">
                 <summary class="fp-accordion-summary">
-                    <span class="fp-accordion-label">Include Tags</span>
+                    <span class="fp-accordion-label">Include Badges</span>
                     <span class="fp-acc-dot"></span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
-                    <input type="text" class="fp-tag-search" placeholder="Search tags…" autocomplete="off"
+                    <input type="text" class="fp-tag-search" placeholder="Search…" autocomplete="off"
                            oninput="filterFpTags('incl', this.value)">
                     <div class="fp-tag-list" id="fp-incl-tag-list">
-                        {% for tag in tags %}
-                        <label class="fp-chip" data-tag-name="{{ tag.name|lower }}">
-                            <input type="checkbox" name="tags" value="{{ tag.id }}">
-                            {% if tag.icon %}<span style="font-size:.9em">{{ tag.icon }}</span>{% endif %}
-                            {{ tag.name }}
+                        {% for badge in filter_badges %}
+                        <label class="fp-chip" data-tag-name="{{ badge.name|lower }}">
+                            <input type="checkbox" name="tags" value="{{ badge.id }}">
+                            {% if badge.icon %}<span style="font-size:.9em">{{ badge.icon }}</span>{% endif %}
+                            {{ badge.name }}
                         </label>
                         {% endfor %}
                     </div>
                 </div>
             </details>
 
-            {# Exclude tags ── collapsible ── #}
+            {# Exclude badges ── collapsible ── #}
             <details class="fp-accordion-item" id="fp-acc-excl-tags">
                 <summary class="fp-accordion-summary">
-                    <span class="fp-accordion-label">Exclude Tags</span>
+                    <span class="fp-accordion-label">Exclude Badges</span>
                     <span class="fp-acc-dot"></span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
-                    <input type="text" class="fp-tag-search" placeholder="Search tags…" autocomplete="off"
+                    <input type="text" class="fp-tag-search" placeholder="Search…" autocomplete="off"
                            oninput="filterFpTags('excl', this.value)">
                     <div class="fp-tag-list" id="fp-excl-tag-list">
-                        {% for tag in tags %}
-                        <label class="fp-chip" data-tag-name="{{ tag.name|lower }}">
-                            <input type="checkbox" name="exclude_tags" value="{{ tag.id }}">
-                            {% if tag.icon %}<span style="font-size:.9em">{{ tag.icon }}</span>{% endif %}
-                            {{ tag.name }}
+                        {% for badge in filter_badges %}
+                        <label class="fp-chip" data-tag-name="{{ badge.name|lower }}">
+                            <input type="checkbox" name="exclude_tags" value="{{ badge.id }}">
+                            {% if badge.icon %}<span style="font-size:.9em">{{ badge.icon }}</span>{% endif %}
+                            {{ badge.name }}
                         </label>
                         {% endfor %}
                     </div>
@@ -1807,13 +1941,23 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
     }
 
     function toggleTopographyView() {
+        // Satellite and topography are mutually exclusive
+        if (map.hasLayer(satelliteLayer)) {
+            map.removeLayer(satelliteLayer);
+            document.querySelector('#satellite-button').classList.remove('active');
+        }
         toggleMapView(topographyLayer);
-        document.querySelector('#topography-button').classList.toggle('active');
+        document.querySelector('#topography-button').classList.toggle('active', map.hasLayer(topographyLayer));
     }
 
     function toggleSatelliteView() {
+        // Satellite and topography are mutually exclusive
+        if (map.hasLayer(topographyLayer)) {
+            map.removeLayer(topographyLayer);
+            document.querySelector('#topography-button').classList.remove('active');
+        }
         toggleMapView(satelliteLayer);
-        document.querySelector('#satellite-button').classList.toggle('active');
+        document.querySelector('#satellite-button').classList.toggle('active', map.hasLayer(satelliteLayer));
     }
 
     function toggleWeatherView() {
@@ -1828,47 +1972,6 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
         rainLayer.addTo(map);
         cloudLayer.addTo(map);
         document.querySelector('#weather-button').classList.toggle('active');
-    }
-
-    // Campus boundary overlay
-    const campusStyle = { color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 };
-    const campusLayerGroup = L.layerGroup();
-    let campusLoaded = false;
-
-    async function toggleCampusBoundaries() {
-        const btn = document.querySelector('#campus-button');
-        if (map.hasLayer(campusLayerGroup)) {
-            map.removeLayer(campusLayerGroup);
-            btn.classList.remove('active');
-            return;
-        }
-
-        // Load data once; re-use the layer on subsequent toggles
-        if (!campusLoaded) {
-            try {
-                const response = await fetch("{% url 'campus.list' %}");
-                const data = await response.json();
-                data.campuses.forEach(c => {
-                    if (c.polygon) {
-                        L.geoJSON(c.polygon, { style: campusStyle }).addTo(campusLayerGroup);
-                    } else {
-                        // No polygon - fall back to a circle
-                        L.circle([c.latitude, c.longitude], {
-                            radius: c.default_radius_meters,
-                            ...campusStyle,
-                        }).addTo(campusLayerGroup);
-                    }
-                });
-                campusLoaded = true;
-            } catch (err) {
-                toastr.error('Failed to load campus boundaries.');
-                console.error('Campus load error:', err);
-                return;
-            }
-        }
-
-        campusLayerGroup.addTo(map);
-        btn.classList.add('active');
     }
 
     // Update the Leaflet icon URLs
@@ -1919,17 +2022,24 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
     function toggleFilterPanel() {
         const panel = document.getElementById('filter-panel');
         const btn = document.getElementById('search-pins-button');
+        const mapEl = document.getElementById('map');
         const isOpen = panel.classList.toggle('open');
         btn.classList.toggle('active', isOpen);
+        mapEl.classList.toggle('filter-open', isOpen);
     }
 
     function resetFilters() {
         const form = document.getElementById('filter-form');
-        form.querySelectorAll('input[type=text], input[type=date], input[type=number]').forEach(el => { el.value = ''; });
+        form.querySelectorAll('input[type=text], input[type=date]').forEach(el => { el.value = ''; });
         form.querySelectorAll('input[type=checkbox]').forEach(el => { el.checked = false; });
         form.querySelectorAll('input[type=radio][value=""]').forEach(el => { el.checked = true; });
-        const addrInput = document.getElementById('address-search-input');
-        if (addrInput) addrInput.value = '';
+        // Reset dual sliders
+        ['priority'].forEach(name => {
+            const minEl = document.getElementById('fp-' + name + '-min');
+            const maxEl = document.getElementById('fp-' + name + '-max');
+            if (minEl) { minEl.value = minEl.min; syncDualSlider(name); }
+            if (maxEl) { maxEl.value = maxEl.max; syncDualSlider(name); }
+        });
         _exitFilterMode();
         document.getElementById('search-pins-button').classList.remove('has-filters');
     }
@@ -1940,7 +2050,11 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
         if ((form.querySelector('input[name=name]')?.value || '').trim()) return true;
         if (form.querySelector('input[type=radio]:not([value=""]):checked')) return true;
         if (form.querySelector('input[type=checkbox]:checked')) return true;
-        for (const el of form.querySelectorAll('input[type=date], input[type=number]')) {
+        for (const el of form.querySelectorAll('input[type=date]')) {
+            if ((el.value || '').trim()) return true;
+        }
+        // Check hidden slider inputs (set by syncDualSlider only when non-extreme)
+        for (const el of form.querySelectorAll('input[type=hidden]')) {
             if ((el.value || '').trim()) return true;
         }
         return false;
@@ -1954,13 +2068,58 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
         document.getElementById('search-pins-button').classList.toggle('has-filters', _hasActiveFilters());
     });
 
-    // ── Address geocoding ─────────────────────────────────────────────────
+    // ── Scroll wheel: prevent filter panel from zooming the map ──────────
+    document.getElementById('filter-panel').addEventListener('wheel', function (e) {
+        e.stopPropagation();
+    }, { passive: true });
+
+    // ── Dual-handle range slider ──────────────────────────────────────────
+    function syncDualSlider(name) {
+        const minSlider  = document.getElementById('fp-' + name + '-min');
+        const maxSlider  = document.getElementById('fp-' + name + '-max');
+        const fill       = document.getElementById('fp-' + name + '-fill');
+        const minLabel   = document.getElementById('fp-' + name + '-min-label');
+        const maxLabel   = document.getElementById('fp-' + name + '-max-label');
+        const minHidden  = document.getElementById('fp-' + name + '-min-val');
+        const maxHidden  = document.getElementById('fp-' + name + '-max-val');
+        if (!minSlider || !maxSlider) return;
+
+        let lo = parseInt(minSlider.value, 10);
+        let hi = parseInt(maxSlider.value, 10);
+        const MIN = parseInt(minSlider.min, 10);
+        const MAX = parseInt(maxSlider.max, 10);
+
+        // Clamp so handles don't cross
+        if (lo > hi) { lo = hi; minSlider.value = lo; }
+
+        const range = MAX - MIN;
+        const leftPct  = ((lo - MIN) / range) * 100;
+        const widthPct = ((hi - lo) / range) * 100;
+        fill.style.left  = leftPct + '%';
+        fill.style.width = widthPct + '%';
+
+        minLabel.textContent = (lo === MIN) ? 'Any' : lo;
+        maxLabel.textContent = (hi === MAX) ? 'Any' : hi;
+
+        // Only submit the hidden field when not at the extreme (avoids pointless filters)
+        minHidden.value = (lo === MIN) ? '' : lo;
+        maxHidden.value = (hi === MAX) ? '' : hi;
+
+        // Toggle active-dot class on the details element
+        const details = document.getElementById('fp-acc-' + name);
+        if (details) details.classList.toggle('fp-acc-active', lo !== MIN || hi !== MAX);
+    }
+    // Initialise slider display on page load
+    ['priority'].forEach(name => syncDualSlider(name));
+
+    // ── Floating address search bar ────────────────────────────────────────
+    let _addrBarTimer = null;
+
     function geocodeAddress() {
         const input = document.getElementById('address-search-input');
         const query = (input?.value || '').trim();
         if (!query) return;
-        const btn = document.querySelector('.fp-address-btn');
-        if (btn) btn.disabled = true;
+        document.getElementById('addr-search-suggestions').hidden = true;
         fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`, {
             headers: { 'Accept': 'application/json', 'Accept-Language': 'en' },
         })
@@ -1969,11 +2128,66 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
             if (!results.length) { toastr.warning('Address not found.'); return; }
             const r = results[0];
             map.setView([parseFloat(r.lat), parseFloat(r.lon)], 16);
-            //toastr.info('Jumped to ' + (r.display_name.split(',')[0] || query));
         })
-        .catch(() => toastr.error('Geocoding failed - check your connection.'))
-        .finally(() => { if (btn) btn.disabled = false; });
+        .catch(() => toastr.error('Geocoding failed - check your connection.'));
     }
+
+    function clearAddrSearch() {
+        const input = document.getElementById('address-search-input');
+        input.value = '';
+        document.getElementById('addr-search-clear').hidden = true;
+        document.getElementById('addr-search-suggestions').hidden = true;
+        input.focus();
+    }
+
+    function _fetchAddrBarSuggestions(query) {
+        fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5`, {
+            headers: { 'Accept': 'application/json', 'Accept-Language': 'en' },
+        })
+        .then(r => r.json())
+        .then(results => {
+            const box = document.getElementById('addr-search-suggestions');
+            box.innerHTML = '';
+            if (!results.length) { box.hidden = true; return; }
+            results.forEach(r => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'addr-suggestion';
+                btn.innerHTML = `<i class="material-icons">place</i><span>${r.display_name}</span>`;
+                btn.addEventListener('mousedown', () => {
+                    document.getElementById('address-search-input').value = r.display_name;
+                    map.setView([parseFloat(r.lat), parseFloat(r.lon)], 16);
+                    box.hidden = true;
+                });
+                box.appendChild(btn);
+            });
+            box.hidden = false;
+        })
+        .catch(() => {});
+    }
+
+    (function _initAddrBar() {
+        const input = document.getElementById('address-search-input');
+        const clearBtn = document.getElementById('addr-search-clear');
+        const suggestions = document.getElementById('addr-search-suggestions');
+
+        input.addEventListener('input', function () {
+            const q = this.value.trim();
+            clearBtn.hidden = !q;
+            clearTimeout(_addrBarTimer);
+            if (!q) { suggestions.hidden = true; return; }
+            _addrBarTimer = setTimeout(() => _fetchAddrBarSuggestions(q), 380);
+        });
+
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { geocodeAddress(); e.preventDefault(); }
+            if (e.key === 'Escape') { clearAddrSearch(); }
+        });
+
+        input.addEventListener('blur', function () {
+            setTimeout(() => { suggestions.hidden = true; }, 150);
+        });
+    })();
 
     // ── Tag search within accordion sections ─────────────────────────────
     function filterFpTags(kind, q) {
@@ -2141,6 +2355,9 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
 
         this.disabled = true;
         this.textContent = 'Saving…';
+        const pinLat = parseFloat(lat);
+        const pinLng = parseFloat(lng);
+        const pinName = formData.get('name') || 'New Pin';
         fetch("{% url 'pin.add' %}", {
             method: 'POST',
             body: formData,
@@ -2150,8 +2367,12 @@ details.fp-accordion-item[open] .fp-acc-arrow { transform: rotate(180deg); }
         .then(data => {
             toastr.success('Pin added!');
             closeAddPinDialog();
+            // Optimistically add a placeholder marker so the user sees the pin immediately
+            const tempMarker = L.marker([pinLat, pinLng]).addTo(map);
+            tempMarker.bindPopup(`<strong>${pinName}</strong><br><em>Saving…</em>`);
+            // Refresh pins in the background; replace the temp marker when done
             if (typeof window.invalidatePinCache === 'function') window.invalidatePinCache();
-            _refreshAllPins();
+            _refreshAllPins().then(() => map.removeLayer(tempMarker)).catch(() => map.removeLayer(tempMarker));
             // When multiple locations cover the same coordinates, prompt the user to choose.
             if (data && data.conflicting_locations && data.conflicting_locations.length > 1) {
                 _showLocationConflictPicker(data.pin_uuid, data.conflicting_locations);

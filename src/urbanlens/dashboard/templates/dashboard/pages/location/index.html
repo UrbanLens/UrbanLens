@@ -2146,7 +2146,7 @@
     }());
 
     // ── Photo map layer ───────────────────────────────────────────────────────
-    const _photoMarkers   = {};  // id → { marker, img }
+    const _photoLayerMarkers = {};  // id → { marker, img }
     const _photoJsonUrl   = "{% url 'pin.gallery.json' pin.uuid %}";
 
     function _photoMarkerHtml(img, size) {
@@ -2160,7 +2160,7 @@
             .then(r => r.json())
             .then(data => {
                 _photoLayer.clearLayers();
-                Object.keys(_photoMarkers).forEach(k => delete _photoMarkers[k]);
+                Object.keys(_photoLayerMarkers).forEach(k => delete _photoLayerMarkers[k]);
                 (data.images || []).forEach(img => {
                     if (img.latitude === null || img.longitude === null) return;
                     const sz = 48;
@@ -2175,7 +2175,7 @@
                         });
                     }
                     marker.addTo(_photoLayer);
-                    _photoMarkers[img.id] = { marker, img };
+                    _photoLayerMarkers[img.id] = { marker, img };
                 });
             })
             .catch(err => console.warn('Could not load photo layer:', err));
@@ -2188,11 +2188,11 @@
         _loadPhotoLayer();
     };
     window._galleryRemoveMarker = function (imgId) {
-        const entry = _photoMarkers[imgId];
-        if (entry) { _photoLayer.removeLayer(entry.marker); delete _photoMarkers[imgId]; }
+        const entry = _photoLayerMarkers[imgId];
+        if (entry) { _photoLayer.removeLayer(entry.marker); delete _photoLayerMarkers[imgId]; }
     };
     window._galleryHighlightMarker = function (imgId, on) {
-        const entry = _photoMarkers[imgId];
+        const entry = _photoLayerMarkers[imgId];
         if (!entry) return;
         const sz = on ? 64 : 48;
         entry.marker.setIcon(L.divIcon({ html: _photoMarkerHtml(entry.img, sz), className: '', iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }));

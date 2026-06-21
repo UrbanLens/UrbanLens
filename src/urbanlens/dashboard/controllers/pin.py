@@ -24,7 +24,7 @@
 *                                                                                                                      *
 *********************************************************************************************************************"""
 
-from datetime import datetime
+from datetime import UTC, datetime
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -46,6 +46,30 @@ from urbanlens.dashboard.services.smithsonian import SmithsonianGateway
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _format_search_date(raw: str | None) -> str:
+    """Convert an ISO date string or human-readable age string to a short display label."""
+    if not raw:
+        return ""
+    from datetime import datetime, timezone
+    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
+        try:
+            dt = datetime.strptime(raw[:19].rstrip("Z"), fmt.rstrip("%z"))
+            dt = dt.replace(tzinfo=UTC)
+            now = datetime.now(tz=UTC)
+            delta = now - dt
+            if delta.days < 1:
+                hours = delta.seconds // 3600
+                return f"{hours}h ago" if hours else "Just now"
+            if delta.days < 7:
+                return f"{delta.days}d ago"
+            if delta.days < 365:
+                return dt.strftime("%b %-d")
+            return dt.strftime("%b %-d, %Y")
+        except ValueError:
+            continue
+    return raw
 
 
 def _build_pin_search_query(pin: Pin) -> str:
@@ -301,6 +325,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 r["domain"] = urlparse(r.get("link", "")).netloc.removeprefix("www.")
             except Exception:
                 r["domain"] = ""
+            r["date_display"] = _format_search_date(r.get("date"))
 
         if cache_hours > 0:
             cache.set(cache_key, search_results, cache_hours * 3600)

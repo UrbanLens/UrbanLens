@@ -134,10 +134,25 @@ class GoogleCustomSearchGateway(Gateway):
 
         results: list[dict[str, Any]] = []
         for item in data.get("items", []):
+            pagemap = item.get("pagemap", {})
+            metatags = (pagemap.get("metatags") or [{}])[0]
+            date_published = (
+                metatags.get("article:published_time")
+                or metatags.get("article:modified_time")
+                or metatags.get("og:updated_time")
+                or (pagemap.get("newsarticle") or [{}])[0].get("datepublished")
+                or (pagemap.get("article") or [{}])[0].get("datepublished")
+            )
+            thumbnail = (
+                metatags.get("og:image")
+                or (pagemap.get("cse_thumbnail") or [{}])[0].get("src")
+            )
             result = {
                 "title": item.get("title"),
                 "link": item.get("link"),
                 "snippet": item.get("snippet"),
+                "date": date_published,
+                "thumbnail": thumbnail,
             }
             results.append(result)
         return results

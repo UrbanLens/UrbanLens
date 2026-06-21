@@ -167,32 +167,44 @@
 
     {# ── Stats row ─────────────────────────────────────────────────────────── #}
     <div class="profile-stats-row">
-        {% if profile.user == request.user or not common_pin_count %}
+        {% if profile.user == request.user %}
+        {# Own profile — show their own pin count and exploring year #}
         <div class="profile-stat">
             <span class="stat-value">{{ profile.pins.count }}</span>
             <span class="stat-label">Pins</span>
         </div>
-        {% else %}
-        <div class="profile-stat profile-stat--highlight" title="Locations you both have pinned">
-            <span class="stat-value">{{ common_pin_count }}</span>
-            <span class="stat-label">In Common</span>
-        </div>
-        <div class="profile-stat" title="Total pins (their map)">
-            <span class="stat-value">{{ profile.pins.count }}</span>
-            <span class="stat-label">Their Pins</span>
-        </div>
-        {% endif %}
         {% if profile.started_exploring %}
         <div class="profile-stat">
             <span class="stat-value">{{ profile.started_exploring|date:"Y" }}</span>
             <span class="stat-label">Exploring Since</span>
         </div>
         {% endif %}
-        {% if trips_in_common %}
-        <div class="profile-stat" title="Trips you're both members of">
-            <span class="stat-value">{{ trips_in_common|length }}</span>
-            <span class="stat-label">Trips in Common</span>
+        {% else %}
+        {# Viewing another user — show only mutual/shared stats #}
+        {% if common_pin_count %}
+        <div class="profile-stat profile-stat--highlight" title="Locations you've both pinned">
+            <span class="stat-value">{{ common_pin_count }}</span>
+            <span class="stat-label">Places in Common</span>
         </div>
+        {% endif %}
+        {% if trips_in_common %}
+        <div class="profile-stat profile-stat--highlight" title="Trips you're both on">
+            <span class="stat-value">{{ trips_in_common|length }}</span>
+            <span class="stat-label">Trips Together</span>
+        </div>
+        {% endif %}
+        {% if shared_visited %}
+        <div class="profile-stat profile-stat--highlight" title="Places you've both visited">
+            <span class="stat-value">{{ shared_visited|length }}</span>
+            <span class="stat-label">Visited Together</span>
+        </div>
+        {% endif %}
+        {% if not common_pin_count and not trips_in_common and not shared_visited %}
+        <div class="profile-stat">
+            <span class="stat-value">—</span>
+            <span class="stat-label">Nothing in Common Yet</span>
+        </div>
+        {% endif %}
         {% endif %}
     </div>
 
@@ -223,39 +235,9 @@
     </div>
     {% endif %}
 
-    {# ── Shared visited locations (only when viewing another user) ─────────── #}
-    {% if shared_visited %}
-    <div class="profile-section">
-        <h3 class="profile-section-title">Places You've Both Visited</h3>
-        <ul class="shared-visited-list">
-            {% for location in shared_visited %}
-            <li class="shared-visited-item">
-                <i class="material-icons">location_on</i>
-                <span>{{ location.name }}</span>
-            </li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
-
-    {# ── Trips in common ─────────────────────────────────────────────────── #}
-    {% if trips_in_common %}
-    <div class="profile-section">
-        <h3 class="profile-section-title">Trips in Common</h3>
-        <ul class="shared-visited-list">
-            {% for trip in trips_in_common %}
-            <li class="shared-visited-item">
-                <i class="material-icons">map</i>
-                <span>{{ trip.name }}</span>
-            </li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
-
     {# ── Private annotation panel (viewer ≠ profile owner) ─────────────────── #}
     {% if user.is_authenticated and profile.user != request.user %}
-    {% include "dashboard/partials/profile_annotation_partial.html" with subject=profile note=viewer_note user_badges=user_badges assigned_badge_ids=assigned_badge_ids %}
+    {% include "dashboard/partials/profile_annotation_partial.html" with subject=profile viewer_notes=viewer_notes user_badges=user_badges assigned_badge_ids=assigned_badge_ids %}
     {% endif %}
 
     {# ── Friends ───────────────────────────────────────────────────────────── #}

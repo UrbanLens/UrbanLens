@@ -8,19 +8,36 @@
         {% for result in search_results %}
         {% if result.title or result.link %}
         <li class="search-result">
-            {% if result.domain %}
-            <span class="search-result-domain">
-                <i class="material-icons">language</i>
-                {{ result.domain }}
-            </span>
-            {% endif %}
-            <a href="{{ result.link }}" target="_blank" rel="noopener noreferrer" class="search-result-title">
-                {{ result.title }}
-                <i class="material-icons search-result-ext-icon">open_in_new</i>
-            </a>
-            {% if result.snippet %}
-            <p class="search-result-snippet">{{ result.snippet }}</p>
-            {% endif %}
+            <div class="search-result-inner">
+                {% if result.thumbnail %}
+                <div class="search-result-thumb-wrap">
+                    <img class="search-result-thumb" src="{{ result.thumbnail }}" alt="" loading="lazy"
+                         onerror="this.closest('.search-result-thumb-wrap').style.display='none'">
+                </div>
+                {% endif %}
+                <div class="search-result-body">
+                    <div class="search-result-source-row">
+                        {% if result.domain %}
+                        <span class="search-result-domain">
+                            <img class="search-result-favicon"
+                                 src="https://www.google.com/s2/favicons?domain={{ result.domain }}&sz=16"
+                                 alt="" loading="lazy" onerror="this.style.display='none'">
+                            {{ result.domain }}
+                        </span>
+                        {% endif %}
+                        {% if result.date_display %}
+                        <span class="search-result-date">{{ result.date_display }}</span>
+                        {% endif %}
+                    </div>
+                    <a href="{{ result.link }}" target="_blank" rel="noopener noreferrer" class="search-result-title">
+                        {{ result.title }}
+                        <i class="material-icons search-result-ext-icon">open_in_new</i>
+                    </a>
+                    {% if result.snippet %}
+                    <p class="search-result-snippet">{{ result.snippet }}</p>
+                    {% endif %}
+                </div>
+            </div>
         </li>
         {% endif %}
         {% endfor %}

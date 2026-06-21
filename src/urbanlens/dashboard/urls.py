@@ -320,6 +320,8 @@ urlpatterns = [
                 path("edit/field/", userprofile.ProfileFieldUpdateView.as_view(), name="profile.field.update"),
                 path("<uuid:profile_uuid>/", userprofile.ViewProfileView.as_view(), name="profile.view_user"),
                 path("<uuid:profile_uuid>/note/", userprofile.ProfileNoteView.as_view(), name="profile.note"),
+                path("<uuid:profile_uuid>/note/<int:note_id>/delete/", userprofile.ProfileNoteDeleteView.as_view(), name="profile.note.delete"),
+                path("<uuid:profile_uuid>/note/<int:note_id>/edit/", userprofile.ProfileNoteEditView.as_view(), name="profile.note.edit"),
                 path("<uuid:profile_uuid>/badge/<int:badge_id>/", userprofile.ProfileBadgeToggleView.as_view(), name="profile.badge_toggle"),
             ],
         ),

@@ -937,25 +937,35 @@ body.page-location-details {
     .pin-stats {
         display: flex;
         flex-wrap: wrap;
-        gap: .2rem .75rem;
-        padding: .45rem .9rem;
+        justify-content: space-around;
+        gap: .5rem 1rem;
+        padding: .6rem .9rem;
         border-bottom: 1px solid $border-color;
     }
 
     .pin-stat-item {
         display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: .4rem;
+        gap: .2rem;
         min-width: 0;
+        flex: 1;
+        min-width: max-content;
+
+        &--place {
+            flex: 2;
+            align-items: flex-start;
+        }
 
         .field-label {
             width: auto;
             white-space: nowrap;
             flex-shrink: 0;
-            font-size: .75rem;
-            font-weight: 600;
+            font-size: .68rem;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: .04em;
+            letter-spacing: .07em;
+            color: $text-muted;
         }
 
         .field-value {

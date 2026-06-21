@@ -4,7 +4,7 @@
 // ── Profile page ──────────────────────────────────────────────────────────────
 
 .profile-page {
-    width: min(90vw, 40rem);
+    width: min(90vw, 48rem);
     max-width: 90vw;
     margin: 2rem auto;
     padding: 0 1rem;
@@ -307,7 +307,8 @@
 // Stats row
 .profile-stats-row {
     display: flex;
-    gap: 1rem;
+    gap: .75rem;
+    flex-wrap: wrap;
 }
 
 .profile-stat {
@@ -1205,11 +1206,45 @@ textarea.edit-textarea {
     }
 }
 
+// ── Profile page modernization ────────────────────────────────────────────────
+
+.profile-hero {
+    background: linear-gradient(135deg, var(--ul-surface-1) 0%, var(--ul-surface-2) 100%);
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-md;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, .08);
+}
+
+.profile-stats-row {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: .75rem;
+
+    .profile-stat {
+        flex: 1;
+        min-width: 100px;
+        max-width: 160px;
+    }
+
+    .profile-stat--highlight {
+        background: linear-gradient(135deg,
+            color-mix(in srgb, $primary-color 8%, var(--ul-surface-1)) 0%,
+            color-mix(in srgb, $primary-color 4%, var(--ul-surface-1)) 100%);
+        border-color: color-mix(in srgb, $primary-color 30%, transparent);
+    }
+}
+
+.profile-section {
+    border-radius: $radius-md;
+    overflow: hidden;
+}
+
 // ── Private profile annotation panel ─────────────────────────────────────────
 
 .profile-annotation-panel {
     background: var(--ul-surface-1);
-    border: 1px dashed var(--ul-border);
+    border: 1px solid var(--ul-border);
+    border-left: 3px solid color-mix(in srgb, $primary-color 50%, transparent);
     border-radius: $radius-md;
     padding: 1.1rem 1.25rem;
     display: flex;
@@ -1379,6 +1414,123 @@ textarea.edit-textarea {
 
 .profile-note-saved {
     color: #4caf50;
+}
+
+// ── Multi-note annotation system ──────────────────────────────────────────────
+
+.profile-annotation-notes {
+    display: flex;
+    flex-direction: column;
+    gap: .65rem;
+}
+
+.pan-note {
+    background: var(--ul-surface-2);
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-sm;
+    overflow: hidden;
+}
+
+.pan-note-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .4rem .65rem;
+    border-bottom: 1px solid var(--ul-border);
+    background: var(--ul-surface-3);
+}
+
+.pan-note-date {
+    font-size: .72rem;
+    color: $text-muted;
+    font-weight: 500;
+}
+
+.pan-note-actions {
+    display: flex;
+    gap: .15rem;
+}
+
+.pan-note-body {
+    padding: .55rem .7rem;
+}
+
+.pan-note-content {
+    font-size: .875rem;
+    color: $text-primary;
+    margin: 0;
+    white-space: pre-wrap;
+    line-height: 1.55;
+}
+
+.pan-note-edit {
+    padding: .5rem .65rem;
+}
+
+.pan-note-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: .4rem;
+}
+
+.pan-note-textarea {
+    width: 100%;
+    min-height: 70px;
+    resize: vertical;
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-sm;
+    background: var(--ul-surface-1);
+    color: var(--ul-text);
+    font-size: 0.875rem;
+    padding: 0.55rem 0.7rem;
+    box-sizing: border-box;
+    font-family: inherit;
+    line-height: 1.5;
+
+    &:focus {
+        outline: none;
+        border-color: $primary-color;
+        box-shadow: 0 0 0 2px rgba($primary-color, 0.12);
+    }
+}
+
+.pan-compose {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    padding: .5rem 0 .1rem;
+    border-top: 1px dashed var(--ul-border);
+    margin-top: .25rem;
+}
+
+.pan-compose-textarea {
+    min-height: 54px;
+}
+
+.pan-compose-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.pan-compose-submit {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .3rem .75rem;
+    background: $primary-color;
+    color: var(--ul-text-4);
+    border: none;
+    border-radius: $radius-sm;
+    font-size: .8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .13s;
+
+    .material-icons { font-size: .9rem; }
+
+    &:hover {
+        background: color-mix(in srgb, $primary-color 85%, black);
+    }
 }
 
 // ── Friends page: invite button + dialog ──────────────────────────────────────

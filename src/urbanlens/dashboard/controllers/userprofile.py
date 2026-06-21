@@ -197,7 +197,7 @@ class ViewProfileView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
-        context["viewer_note"] = ProfileNote.objects.filter(author=my_profile, subject=profile).first()
+        context["viewer_notes"] = ProfileNote.objects.filter(author=my_profile, subject=profile)
         context["user_badges"] = Badge.objects.user_badges().visible_to(my_profile).ordered()
         context["assigned_badge_ids"] = set(
             ProfileBadgeAssignment.objects.filter(author=my_profile, subject=profile).values_list(
@@ -363,11 +363,9 @@ class EditProfileView(LoginRequiredMixin, View):
 
 
 class ProfileNoteView(LoginRequiredMixin, View):
-    """Save or update the viewer's private note about another profile (HTMX)."""
+    """Create a new private note about another profile (HTMX)."""
 
     def post(self, request: HttpRequest, profile_uuid: UUID) -> HttpResponse:
-        from uuid import UUID as _UUID
-
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
         subject = get_object_or_404(Profile, uuid=profile_uuid)
@@ -376,15 +374,35 @@ class ProfileNoteView(LoginRequiredMixin, View):
             return HttpResponse("Cannot annotate your own profile.", status=400)
 
         content = request.POST.get("content", "").strip()
-        ProfileNote.objects.update_or_create(
-            author=author,
-            subject=subject,
-            defaults={"content": content},
-        )
-        return HttpResponse(
-            '<span class="profile-note-saved">Saved</span>',
-            content_type="text/html",
-        )
+        if content:
+            ProfileNote.objects.create(author=author, subject=subject, content=content)
+
+        return _render_profile_annotation_partial(request, author, subject)
+
+
+class ProfileNoteDeleteView(LoginRequiredMixin, View):
+    """Delete one of the viewer's private notes about another profile (HTMX)."""
+
+    def post(self, request: HttpRequest, profile_uuid: UUID, note_id: int) -> HttpResponse:
+        from urbanlens.dashboard.models.profile.note import ProfileNote
+
+        subject = get_object_or_404(Profile, uuid=profile_uuid)
+        author = request.user.profile
+        ProfileNote.objects.filter(pk=note_id, author=author, subject=subject).delete()
+        return _render_profile_annotation_partial(request, author, subject)
+
+
+class ProfileNoteEditView(LoginRequiredMixin, View):
+    """Edit (PATCH) the content of an existing private note (HTMX)."""
+
+    def post(self, request: HttpRequest, profile_uuid: UUID, note_id: int) -> HttpResponse:
+        from urbanlens.dashboard.models.profile.note import ProfileNote
+
+        subject = get_object_or_404(Profile, uuid=profile_uuid)
+        author = request.user.profile
+        content = request.POST.get("content", "").strip()
+        ProfileNote.objects.filter(pk=note_id, author=author, subject=subject).update(content=content)
+        return _render_profile_annotation_partial(request, author, subject)
 
 
 class ProfileBadgeToggleView(LoginRequiredMixin, View):
@@ -431,7 +449,7 @@ def _render_profile_annotation_partial(
     from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
     from urbanlens.dashboard.models.profile.note import ProfileNote
 
-    note = ProfileNote.objects.filter(author=author, subject=subject).first()
+    viewer_notes = ProfileNote.objects.filter(author=author, subject=subject)
     user_badges = Badge.objects.user_badges().visible_to(author).ordered()
     assigned_ids = set(
         ProfileBadgeAssignment.objects.filter(author=author, subject=subject).values_list("badge_id", flat=True),
@@ -442,7 +460,7 @@ def _render_profile_annotation_partial(
         "dashboard/partials/profile_annotation_partial.html",
         {
             "subject": subject,
-            "note": note,
+            "viewer_notes": viewer_notes,
             "user_badges": user_badges,
             "assigned_badge_ids": assigned_ids,
         },

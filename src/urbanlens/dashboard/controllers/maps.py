@@ -57,6 +57,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         tags = Badge.objects.tags().visible_to(profile).ordered()
         categories = Badge.objects.categories().ordered()
+        from urbanlens.dashboard.models.badges.model import KIND_USER
+        filter_badges = Badge.objects.exclude(kind=KIND_USER).visible_to(profile).ordered()
         map_center = profile.get_map_center()
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
 
@@ -77,6 +79,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "openweathermap_api_key": settings.openweathermap_api_key,
                 "tags": tags,
                 "categories": categories,
+                "filter_badges": filter_badges,
                 "profile_id": profile.id,
                 "cluster_radius": profile.cluster_radius,
                 "pin_count": pin_count,

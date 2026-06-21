@@ -113,25 +113,15 @@
     {% endif %}
     {% endif %}
 
-    {# ── Add friend button (viewing another user's profile) ─────────────────── #}
-    {% if not is_own_profile and viewer %}
+    {# ── Add friend button (only when not already friends) ──────────────────── #}
+    {% if not is_own_profile and viewer and viewer_can_request %}
     <div class="friend-action-row">
-        {% if viewer_friendship and viewer_friendship.status == 'Accepted' %}
-        <span class="friend-status-badge friend-status-badge--friends">
-            <i class="material-icons">people</i> Friends
-        </span>
-        {% elif viewer_friendship and viewer_friendship.status == 'Requested' %}
-        <span class="friend-status-badge friend-status-badge--pending">
-            <i class="material-icons">hourglass_top</i> Request pending
-        </span>
-        {% elif viewer_can_request %}
         <button type="button" class="btn-add-friend"
                 hx-post="{% url 'friend.request' friend_list_profile.id %}"
                 hx-target="#friend_list"
                 hx-swap="outerHTML">
             <i class="material-icons">person_add</i> Add Friend
         </button>
-        {% endif %}
     </div>
     {% endif %}
 
