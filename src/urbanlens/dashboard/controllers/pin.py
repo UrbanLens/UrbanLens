@@ -41,7 +41,7 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.services.google.search import GoogleCustomSearchGateway
+from urbanlens.dashboard.services.google.search import GoogleCustomSearchError, GoogleCustomSearchGateway
 from urbanlens.dashboard.services.smithsonian import SmithsonianGateway
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -283,8 +283,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 query.append(place_name)
 
             search_results = google_gateway.search(query)
+        except GoogleCustomSearchError as e:
+            logger.warning("Unable to contact Google Search API: %s", e)
+            return render(request, "dashboard/pages/location/web_search.html", {"error": "Search unavailable. Please try again later."})
         except Exception as e:
-            logger.exception("Unable to contact Google Search API: %s", e)
+            logger.exception("Unexpected Google Search API error: %s", e)
             return render(request, "dashboard/pages/location/web_search.html", {"error": "Search unavailable. Please try again later."})
 
         return render(request, "dashboard/pages/location/web_search.html", {"search_results": search_results})

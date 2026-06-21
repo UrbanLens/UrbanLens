@@ -30,6 +30,8 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any
 
+from requests import HTTPError
+
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -39,6 +41,19 @@ if TYPE_CHECKING:
     import requests
 
 logger = logging.getLogger(__name__)
+
+
+class GoogleCustomSearchError(RuntimeError):
+    """Raised when Google Custom Search cannot complete a request safely."""
+
+
+def _mask_secret(value: str | None) -> str:
+    """Return a log-safe representation of a Google API key or CSE id."""
+    if not value:
+        return "<missing>"
+    if len(value) <= 8:
+        return "<redacted>"
+    return f"{value[:4]}...{value[-4:]}"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -55,22 +70,61 @@ class GoogleCustomSearchGateway(Gateway):
         self,
         terms: str | list[str | list[str | None] | None],
         *,
-        max_results: int = 20,
+        max_results: int = 10,
     ) -> list[dict[str, Any]]:
         """
-        Perform a search using the Google Custom Search API.
+        Perform a search using the Google Custom Search JSON API.
         """
+        self.validate_configuration()
         query = self.build_query(terms)
 
         params = {
             "key": self.api_key,
             "cx": self.cx,
             "q": query,
-            # 'num': min(max_results, 20)
+            # Google Custom Search JSON API accepts 1-10 results per request.
+            "num": max(1, min(max_results, 10)),
         }
         response = self.session.get(self.base_url, params=params, timeout=60)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except HTTPError:
+            detail = self.extract_error_detail(response)
+            logger.warning(
+                "Google Custom Search request failed with status %s; key=%s cx=%s reason=%s",
+                response.status_code,
+                _mask_secret(self.api_key),
+                _mask_secret(self.cx),
+                detail,
+            )
+            raise GoogleCustomSearchError(
+                f"Google Custom Search request failed with status {response.status_code}: {detail}",
+            ) from None
         return self.parse_response(response)
+
+    def validate_configuration(self) -> None:
+        """Fail before issuing a request when required credentials are missing."""
+        if not self.api_key:
+            raise GoogleCustomSearchError("UL_GOOGLE_SEARCH_API_KEY is not configured.")
+        if not self.cx:
+            raise GoogleCustomSearchError("UL_GOOGLE_SEARCH_TENANT/UL_GOOGLE_SEARCH_CX is not configured.")
+
+    def extract_error_detail(self, response: requests.Response) -> str:
+        """Extract a concise Google API error without including the API key URL."""
+        try:
+            error = response.json().get("error", {})
+        except ValueError:
+            return response.text[:300] or "No response body"
+
+        message = error.get("message") or "No error message returned"
+        reasons = []
+        for item in error.get("errors", []):
+            reason = item.get("reason")
+            if reason:
+                reasons.append(reason)
+        if reasons:
+            return f"{message} ({', '.join(reasons)})"
+        return message
 
     def parse_response(self, response: requests.Response) -> list[dict[str, Any]]:
         """
@@ -164,7 +218,9 @@ class GoogleCustomSearchGateway(Gateway):
 
         for term in terms:
             if isinstance(term, list):
-                query_terms.append(self.build_query_and(term))
+                built_term = self.build_query_and(term)
+                if built_term:
+                    query_terms.append(built_term)
             elif term is not None:
                 query_terms.append(term)
 
