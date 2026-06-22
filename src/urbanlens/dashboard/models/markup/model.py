@@ -34,6 +34,19 @@ class MarkupType(TextChoices):
     POLYGON = "polygon", "Polygon"
 
 
+class SecurityIndicatorType(TextChoices):
+    """Optional security feature represented by this markup item."""
+
+    FENCE = "fence", "Fence"
+    CAMERA = "camera", "Camera"
+    ALARM = "alarm", "Alarm"
+    SECURITY = "security", "Security Guard"
+    SIGN = "sign", "Sign"
+    PLYWOOD = "plywood", "Plywood"
+    LOCKED = "locked", "Locked"
+    VPS = "vps", "VPS"
+
+
 class PinMarkup(abstract.Model):
     """A map annotation attached to a user's Pin.
 
@@ -83,6 +96,12 @@ class PinMarkup(abstract.Model):
     border_color = CharField(max_length=20, blank=True, default="")
     fill_opacity = IntegerField(default=87)
     border_opacity = IntegerField(default=100)
+    security_indicator = CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        choices=SecurityIndicatorType.choices,
+    )
 
     objects = PinMarkupManager()
 
@@ -103,6 +122,7 @@ class PinMarkup(abstract.Model):
             "border_color": self.border_color,
             "fill_opacity": self.fill_opacity,
             "border_opacity": self.border_opacity,
+            "security_indicator": self.security_indicator,
         }
 
     def __str__(self) -> str:

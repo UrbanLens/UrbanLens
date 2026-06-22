@@ -4,9 +4,7 @@
 // ── Trip planning ─────────────────────────────────────────────────────────
 
 .trips-page {
-    padding: 2rem 1rem;
-    max-width: 860px;
-    margin: 0 auto;
+    //padding: 2rem 1rem;
 }
 
 .trips-header {
@@ -163,10 +161,7 @@
 // ── Trip detail page ──────────────────────────────────────────────────────
 
 .trip-detail-page {
-    padding: 1.5rem 1rem 3rem;
-    max-width: 1100px;
-    width: 90vw;
-    margin: 0 auto;
+    //padding: 1.5rem 1rem 3rem;
 }
 
 .trip-detail-header {
@@ -509,7 +504,7 @@
     }
 
     &--has-events {
-        background: #f0f9ff;
+        background: var(--ul-surface-1);
     }
 
     &--today {
@@ -637,7 +632,7 @@
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: #f0f9ff;
+    background: var(--ul-surface-1);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -854,7 +849,7 @@
     }
 
     &:hover {
-        background: #fafcff;
+        background: var(--ul-surface-1);
 
         .detail-pin-action-btn {
             opacity: 1;
@@ -1024,7 +1019,7 @@
     color: var(--ul-text-1);
 
     &:hover {
-        background: #f0f9ff;
+        background: var(--ul-surface-1);
     }
 }
 
@@ -1272,12 +1267,7 @@
         padding: 2px 5px;
 
         &.trip-member-rsvp--none {
-            display: inline-flex;
-            color: $text-muted;
-            background: var(--ul-surface-3);
-            border: 1px solid var(--ul-border);
-            ;
-            opacity: 0.2;
+            display: none;
         }
 
         &:hover {
@@ -1327,7 +1317,7 @@
     color: $text-primary;
 
     &:hover {
-        background: #f5f5f5;
+        background: var(--ul-surface-1);
     }
 
     &--yes {
@@ -1472,9 +1462,9 @@
 // ── Trip not-found / error page ───────────────────────────────────────────
 
 .trip-error-page {
-    max-width: 540px;
-    margin: 5rem auto;
-    padding: 0 1.5rem;
+    //max-width: 540px;
+    //margin: 5rem auto;
+    //padding: 0 1.5rem;
     text-align: center;
 }
 
@@ -1518,9 +1508,9 @@
 // ── Site admin page ───────────────────────────────────────────────────────
 
 .site-admin-page {
-    max-width: 680px;
-    margin: 2rem auto;
-    padding: 0 1rem;
+    //max-width: 680px;
+    //margin: 2rem auto;
+    //padding: 0 1rem;
 }
 
 .site-admin-header {
@@ -2157,7 +2147,7 @@
         padding: .2rem .3rem;
 
         &:hover {
-            background: #f3f4f6;
+            background: var(--ul-surface-1);
             color: $text-secondary;
         }
     }
@@ -2286,14 +2276,14 @@
     &:has(input:checked),
     &.active {
         border-color: $primary-color;
-        background: #f0f7ff;
+        background: var(--ul-surface-1);
         color: $primary-color;
         font-weight: 500;
     }
 
     &:hover:not(:has(input:checked)) {
         border-color: color.adjust($primary-color, $lightness: 20%);
-        background: #f8fbff;
+        background: var(--ul-surface-1);
     }
 
     // Dark mode

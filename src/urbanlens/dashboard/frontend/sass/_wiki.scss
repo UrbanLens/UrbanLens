@@ -5,10 +5,8 @@
 // Wiki uses a teal/sky palette and a different structural layout.
 
 .wiki-page {
-    max-width: 90vw;
-    width: 90em;
-    margin: 0 auto;
-    padding: 1.5rem 1rem 3rem;
+    //width: 90em;
+    //padding: 1.5rem 1rem 3rem;
 
     // ── Banner ────────────────────────────────────────────────────────────
     .wiki-banner {
@@ -140,7 +138,9 @@
             font-size: .78rem;
             color: var(--ul-text-2);
 
-            .material-icons { font-size: .9rem; }
+            .material-icons {
+                font-size: .9rem;
+            }
         }
     }
 
@@ -196,7 +196,7 @@
         gap: .6rem;
         padding: .85rem 1.1rem;
         border-bottom: 1px solid #e2e8f0;
-        background: #f8fafc;
+        background: var(--ul-surface-1);
 
         .material-icons {
             font-size: 1.1rem;
@@ -336,7 +336,7 @@
         }
 
         &:hover {
-            background: #f1f5f9;
+            background: var(--ul-surface-1);
             border-color: #94a3b8;
         }
 
@@ -358,7 +358,7 @@
         gap: 0;
         border-bottom: 2px solid #e2e8f0;
         padding: 0 1rem;
-        background: #f8fafc;
+        background: var(--ul-surface-1);
     }
 
     .wiki-tab {
@@ -431,7 +431,7 @@
 
         &--reverted {
             opacity: .55;
-            background: #f8fafc;
+            background: var(--ul-surface-1);
         }
     }
 
@@ -510,7 +510,7 @@
 
     .wiki-change-from {
         color: #b91c1c;
-        background: #fef2f2;
+        background: var(--ul-surface-1);
         border-radius: 4px;
         padding: .1rem .35rem;
         font-size: .82rem;
@@ -527,7 +527,7 @@
 
     .wiki-change-to {
         color: #15803d;
-        background: #f0fdf4;
+        background: var(--ul-surface-1);
         border-radius: 4px;
         padding: .1rem .35rem;
         font-size: .82rem;
@@ -557,7 +557,7 @@
         }
 
         &:hover {
-            background: #fef2f2;
+            background: var(--ul-surface-1);
             border-color: #dc2626;
             opacity: 1;
         }

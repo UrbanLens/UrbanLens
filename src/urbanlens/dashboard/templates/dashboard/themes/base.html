@@ -323,6 +323,17 @@
         </div>
         <div id="comment-map-composer-map" class="comment-map-composer-map"></div>
         <div class="comment-map-composer-toolbar">
+          <span class="cmc-toolbar-label">Layer:</span>
+          <button type="button" class="cmc-layer-btn is-active" data-layer="standard" title="Street map">
+            <i class="material-icons">map</i>
+          </button>
+          <button type="button" class="cmc-layer-btn" data-layer="satellite" title="Satellite">
+            <i class="material-icons">satellite_alt</i>
+          </button>
+          <button type="button" class="cmc-layer-btn" data-layer="topo" title="Topographic">
+            <i class="material-icons">terrain</i>
+          </button>
+          <span class="cmc-toolbar-sep"></span>
           <span class="cmc-toolbar-label">Draw:</span>
           <button type="button" class="cmc-tool-btn" data-tool="arrow" title="Arrow">
             <i class="material-icons">arrow_forward</i>
@@ -422,15 +433,31 @@
     {# guards every Leaflet call with typeof L checks so it degrades gracefully on other pages. #}
     <script>
     (function () {
-        // ── Shared tile layer factory (guarded - L may not be present on every page) ──
-        function _makeTileLayer() {
-            return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors', maxZoom: 19
-            });
+        // ── Shared tile layer factory ─────────────────────────────────────────
+        var _TILE_LAYERS = {
+            standard: {
+                url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                options: { attribution: '© OpenStreetMap contributors', maxZoom: 19 }
+            },
+            satellite: {
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                options: { attribution: 'Tiles &copy; Esri', maxZoom: 19 }
+            },
+            topo: {
+                url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+                options: { attribution: '© OpenTopoMap contributors', maxZoom: 17 }
+            }
+        };
+
+        function _makeTileLayer(mode) {
+            var cfg = _TILE_LAYERS[mode] || _TILE_LAYERS.standard;
+            return L.tileLayer(cfg.url, cfg.options);
         }
 
         // ── Composer state ────────────────────────────────────────────────────
         var _composerMap = null;
+        var _composerTileLayer = null;    // active tile layer
+        var _composerLayerMode = 'standard';
         var _composerMarkupLayer = null;  // L.LayerGroup of confirmed shapes
         var _composerSession = null;      // MarkupEngine draw session
         var _composerShapes = [];         // raw shape descriptors [{type, latlngs, label, color}]
@@ -468,7 +495,8 @@
             var mapEl = document.getElementById('comment-map-composer-map');
             if (!_composerMap) {
                 _composerMap = L.map(mapEl, { zoomControl: true });
-                _makeTileLayer().addTo(_composerMap);
+                _composerTileLayer = _makeTileLayer(_composerLayerMode);
+                _composerTileLayer.addTo(_composerMap);
                 _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
                 _composerSession = MarkupEngine.createDrawSession(_composerMap, {
                     getColor: function () { return _colorPicker ? _colorPicker.value : '#e74c3c'; },
@@ -524,6 +552,10 @@
             if (existing) {
                 _composerMap.setView([existing.center_lat, existing.center_lng], existing.zoom || 14);
                 _composerShapes = existing.markup || [];
+                var savedMode = existing.layer_mode || 'standard';
+                if (savedMode !== _composerLayerMode) {
+                    _setComposerLayer(savedMode);
+                }
             } else {
                 var defLat = (window._commentMapDefaultLat != null) ? window._commentMapDefaultLat : 40.7128;
                 var defLng = (window._commentMapDefaultLng != null) ? window._commentMapDefaultLng : -74.0060;
@@ -538,6 +570,22 @@
             _redrawMarkup();
             if (_composerSession) _composerSession.deactivate();
         };
+
+        // ── Layer switching ───────────────────────────────────────────────────
+        function _setComposerLayer(mode) {
+            if (!_composerMap || !_TILE_LAYERS[mode]) return;
+            if (_composerTileLayer) _composerMap.removeLayer(_composerTileLayer);
+            _composerLayerMode = mode;
+            _composerTileLayer = _makeTileLayer(mode);
+            _composerTileLayer.addTo(_composerMap);
+            document.querySelectorAll('.cmc-layer-btn').forEach(function (b) {
+                b.classList.toggle('is-active', b.dataset.layer === mode);
+            });
+        }
+
+        document.querySelectorAll('.cmc-layer-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () { _setComposerLayer(btn.dataset.layer); });
+        });
 
         // ── Close / cancel ────────────────────────────────────────────────────
         document.getElementById('comment-map-composer-close').addEventListener('click', _closeComposer);
@@ -556,6 +604,7 @@
                 center_lat: center.lat,
                 center_lng: center.lng,
                 zoom: _composerMap.getZoom(),
+                layer_mode: _composerLayerMode,
                 detail_pins: [],
                 markup: _composerShapes.slice()
             };
@@ -799,7 +848,7 @@
             el.style.minHeight = '300px';
 
             var viewMap = L.map(el);
-            _makeTileLayer().addTo(viewMap);
+            _makeTileLayer(data.layer_mode || 'standard').addTo(viewMap);
             _fitMapToMarkup(viewMap, data);
 
             var markupGroup = L.layerGroup().addTo(viewMap);
@@ -834,7 +883,7 @@
                 thumb.style.width = '100%';
                 var tmap = L.map(thumb, { zoomControl: false, attributionControl: false, dragging: false,
                                           scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
-                _makeTileLayer().addTo(tmap);
+                _makeTileLayer(data.layer_mode || 'standard').addTo(tmap);
                 _fitMapToMarkup(tmap, data);
                 tmap.invalidateSize();
                 var mg = L.layerGroup().addTo(tmap);

@@ -401,13 +401,17 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         try:
             google_maps_gateway = GoogleMapsGateway(api_key=settings.google_street_view_api_key or "")
-            image_bytes = google_maps_gateway.get_street_view(lat, lng)
+            image_bytes, capture_date = google_maps_gateway.get_street_view(lat, lng)
             image_b64 = base64.b64encode(image_bytes).decode("ascii")
         except Exception as exc:
             logger.warning("Street view unavailable for pin %s: %s", kwargs.get("pin_uuid"), exc)
             return render(request, "dashboard/pages/location/street_view.html", {"error": "Street view unavailable."})
 
-        return render(request, "dashboard/pages/location/street_view.html", {"image_b64": image_b64, "pin": pin})
+        return render(
+            request,
+            "dashboard/pages/location/street_view.html",
+            {"image_b64": image_b64, "pin": pin, "capture_date": capture_date},
+        )
 
     @action(detail=True, methods=["get"])
     def import_form(self, request: HttpRequest):

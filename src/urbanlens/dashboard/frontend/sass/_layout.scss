@@ -130,7 +130,7 @@
     margin-top: 20px;
 
     .smithsonian-image {
-        background: #f5f5f5;
+        background: var(--ul-surface-1);
         padding: 20px;
         text-align: center;
         border-radius: 10px;
@@ -393,6 +393,21 @@
     display: block;
 }
 
+.view-date-label {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .35rem .6rem;
+    font-size: .78rem;
+    color: #6b7280;
+    border-top: 1px solid var(--ul-border);
+
+    .material-icons {
+        font-size: 1rem;
+        color: #9ca3af;
+    }
+}
+
 @keyframes spin {
     from {
         transform: rotate(0deg);
@@ -408,7 +423,7 @@
 }
 
 body.page-location-details {
-    background: #f0f2f5;
+    background: var(--ul-surface-1);
 }
 
 body.page-location-details div.section {
@@ -566,8 +581,13 @@ body.page-location-details div.section {
             border-bottom: 1px solid var(--ul-border, #e5e7eb);
             transition: background .12s;
 
-            &:last-child { border-bottom: none; }
-            &:hover { background: var(--ul-surface-2, #f8fafc); }
+            &:last-child {
+                border-bottom: none;
+            }
+
+            &:hover {
+                background: var(--ul-surface-2, #f8fafc);
+            }
         }
 
         .search-result-inner {
@@ -628,7 +648,12 @@ body.page-location-details div.section {
             font-size: .7rem;
             color: var(--ul-text-muted, #9ca3af);
             font-weight: 500;
-            &::before { content: "·"; margin-right: .35rem; color: var(--ul-border); }
+
+            &::before {
+                content: "·";
+                margin-right: .35rem;
+                color: var(--ul-border);
+            }
         }
 
         .search-result-title {
@@ -641,7 +666,9 @@ body.page-location-details div.section {
             line-height: 1.35;
             text-decoration: none;
 
-            &:hover { text-decoration: underline; }
+            &:hover {
+                text-decoration: underline;
+            }
 
             .search-result-ext-icon {
                 font-size: .75rem;

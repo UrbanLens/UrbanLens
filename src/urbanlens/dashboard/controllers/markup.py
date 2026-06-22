@@ -10,13 +10,42 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 
-from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup
+from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup, SecurityIndicatorType
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
 _ALLOWED_TYPES = {mt.value for mt in MarkupType}
+_ALLOWED_SECURITY_INDICATORS = {si.value for si in SecurityIndicatorType}
+
+_INDICATOR_TO_FIELD: dict[str, str] = {
+    "fence": "fences",
+    "camera": "cameras",
+    "alarm": "alarms",
+    "security": "security",
+    "sign": "signs",
+    "plywood": "plywood",
+    "locked": "locked",
+    "vps": "vps",
+}
+
+
+def _apply_security_indicator(pin: Pin, indicator: str) -> None:
+    """Upgrade the matching security field on *pin* to at least 'some'.
+
+    Only upgrades from unknown/no; never downgrades an existing value.
+    """
+    field = _INDICATOR_TO_FIELD.get(indicator)
+    if not field:
+        return
+    current = getattr(pin, field, SecurityLevel.UNKNOWN)
+    if current in (SecurityLevel.UNKNOWN, SecurityLevel.NO):
+        setattr(pin, field, SecurityLevel.SOME)
+        pin.save(update_fields=[field])
+
+
 _GEOMETRY_TYPES = {
     "line": "LineString",
     "arrow": "LineString",
@@ -92,6 +121,9 @@ class MarkupView(LoginRequiredMixin, View):
             )
 
         label = (body.get("label") or "").strip()
+        security_indicator = body.get("security_indicator") or ""
+        if security_indicator not in _ALLOWED_SECURITY_INDICATORS:
+            security_indicator = ""
 
         fill_opacity = int(body.get("fill_opacity") or profile.markup_fill_opacity)
         border_opacity = int(body.get("border_opacity") or profile.markup_border_opacity)
@@ -107,7 +139,10 @@ class MarkupView(LoginRequiredMixin, View):
             border_color=body.get("border_color") or "",
             fill_opacity=fill_opacity,
             border_opacity=border_opacity,
+            security_indicator=security_indicator,
         )
+        if security_indicator:
+            _apply_security_indicator(pin, security_indicator)
         return JsonResponse({"ok": True, "uuid": str(item.uuid)})
 
 
@@ -151,7 +186,12 @@ class MarkupEditView(LoginRequiredMixin, View):
             item.fill_opacity = int(body["fill_opacity"])
         if "border_opacity" in body:
             item.border_opacity = int(body["border_opacity"])
+        if "security_indicator" in body:
+            indicator = body.get("security_indicator") or ""
+            item.security_indicator = indicator if indicator in _ALLOWED_SECURITY_INDICATORS else ""
         item.save()
+        if item.security_indicator:
+            _apply_security_indicator(item.parent_pin, item.security_indicator)
         return JsonResponse({"ok": True})
 
     def delete(self, request, pin_uuid, markup_uuid):

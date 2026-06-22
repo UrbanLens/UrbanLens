@@ -7,6 +7,12 @@
     <img src="data:image/jpeg;base64,{{ image_b64 }}"
          alt="Street view{% if pin %} of {{ pin.effective_name }}{% endif %}"
          class="view-image">
+    {% if capture_date %}
+    <div class="view-date-label">
+        <i class="material-icons">event</i>
+        Captured {{ capture_date }}
+    </div>
+    {% endif %}
     {% else %}
     <div class="view-unavailable">
         <i class="material-icons">broken_image</i>

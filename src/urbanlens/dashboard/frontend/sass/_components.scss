@@ -669,7 +669,7 @@ body.page-about {
             color: #4338ca;
 
             &:hover {
-                background: #f0f4ff;
+                background: var(--ul-surface-1);
                 transform: translateY(-2px);
                 box-shadow: 0 6px 18px rgba(255, 255, 255, .22);
             }
@@ -776,7 +776,7 @@ body.page-about {
     // ── Shared section chrome ─────────────────────────────────────────────────
     .about-section {
         padding: 5rem 0;
-        background: var(--ul-surface-0);
+        background: var(--ul-surface-1);
 
         &:nth-child(even) {
             background: var(--ul-surface-1);
@@ -789,7 +789,7 @@ body.page-about {
     }
 
     .about-features-section {
-        background: var(--ul-surface-0);
+        background: var(--ul-surface-1);
     }
 
     .about-audience-section {
@@ -878,7 +878,7 @@ body.page-about {
 
     .about-value-card {
         padding: 1.75rem;
-        background: var(--ul-surface-0);
+        background: var(--ul-surface-1);
         border: 1px solid var(--ul-border);
         border-radius: 12px;
         position: relative;
@@ -1023,7 +1023,7 @@ body.page-about {
 
     .about-audience-card {
         padding: 1.5rem;
-        background: var(--ul-surface-0);
+        background: var(--ul-surface-1);
         border: 1px solid var(--ul-border);
         border-radius: 12px;
         text-align: center;

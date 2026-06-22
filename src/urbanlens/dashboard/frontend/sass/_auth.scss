@@ -59,7 +59,7 @@ body.page-auth {
 .auth-title {
     font-size: 1.45rem;
     font-weight: 700;
-    color: #111827;
+    color: var(--ul-text-1);
     margin: 0 0 .3rem;
     line-height: 1.25;
 }
@@ -103,8 +103,8 @@ body.page-auth {
         border: 1.5px solid var(--ul-border);
         border-radius: 9px;
         font-size: .95rem;
-        color: #111827;
-        background: #fafafa;
+        color: var(--ul-text-1);
+        background: var(--ul-surface-1);
         transition: border-color .15s, box-shadow .15s, background .15s;
         box-sizing: border-box;
         font-family: inherit;
@@ -146,7 +146,7 @@ body.page-auth {
 
 // ── Non-field errors ──────────────────────────────────────────────────────
 .auth-errors {
-    background: #fef2f2;
+    background: var(--ul-surface-1);
     border: 1px solid #fecaca;
     border-radius: 9px;
     padding: .75rem 1rem;
@@ -207,7 +207,7 @@ body.page-auth {
         content: '';
         flex: 1;
         height: 1px;
-        background: #e5e7eb;
+        background: var(--ul-surface-1);
     }
 
     span {
@@ -245,7 +245,7 @@ body.page-auth {
         color: #3c4043;
 
         &:hover {
-            background: var(--ul-surface-0);
+            background: var(--ul-surface-1);
             box-shadow: 0 1px 6px rgba(0, 0, 0, .15);
         }
 
@@ -314,7 +314,7 @@ body.page-auth {
 .auth-info-title {
     font-size: 1.3rem;
     font-weight: 700;
-    color: #111827;
+    color: var(--ul-text-1);
     margin: 0 0 .5rem;
     text-align: center;
 }
@@ -334,7 +334,7 @@ body.page-auth {
 
 // Debug-only verification link block
 .auth-debug-block {
-    background: #f0fdf4;
+    background: var(--ul-surface-1);
     border: 1px solid #bbf7d0;
     border-radius: 9px;
     padding: .85rem 1rem;
@@ -423,7 +423,7 @@ body.page-index {
             color: #4338ca;
 
             &:hover {
-                background: var(--ul-surface-0);
+                background: var(--ul-surface-1);
                 transform: translateY(-2px);
                 box-shadow: 0 6px 20px rgba(255, 255, 255, .25);
             }

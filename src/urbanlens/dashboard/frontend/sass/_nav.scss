@@ -296,7 +296,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
         }
 
         &:hover {
-            background: #fff5f5;
+            background: var(--ul-surface-1);
 
             .material-icons {
                 color: #c62828;
@@ -560,11 +560,11 @@ nav .brand-logo img {
 
     // ── Unread state: prominent ──────────────────────────────────────────
     &--unread {
-        background: #faf9ff;
+        background: var(--ul-surface-1);
         border-left-color: #6366f1;
 
         &:hover {
-            background: #f5f3ff;
+            background: var(--ul-surface-1);
         }
 
         .notif-item__icon-wrap {
@@ -661,20 +661,27 @@ nav .brand-logo img {
     cursor: pointer;
     transition: background .15s, color .15s;
 
-    .material-icons { font-size: .9rem; }
+    .material-icons {
+        font-size: .9rem;
+    }
 
     &--accept {
         background: #dcfce7;
         color: #15803d;
 
-        &:hover { background: #bbf7d0; }
+        &:hover {
+            background: #bbf7d0;
+        }
     }
 
     &--decline {
         background: var(--ul-surface-3, #f1f5f9);
         color: var(--ul-text-2, #475569);
 
-        &:hover { background: #fee2e2; color: #dc2626; }
+        &:hover {
+            background: #fee2e2;
+            color: #dc2626;
+        }
     }
 }
 
@@ -713,7 +720,7 @@ nav .brand-logo img {
         border-bottom: 1px solid #f3f4f6;
 
         &:hover {
-            background: #f9fafb;
+            background: var(--ul-surface-1);
         }
     }
 

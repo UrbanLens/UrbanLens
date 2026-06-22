@@ -264,7 +264,7 @@
     height: 34px;
     border-radius: 6px;
     border: 1px solid var(--ul-border);
-    background: #f9fafb;
+    background: var(--ul-surface-1);
     cursor: pointer;
     transition: border-color .12s, background .12s;
 

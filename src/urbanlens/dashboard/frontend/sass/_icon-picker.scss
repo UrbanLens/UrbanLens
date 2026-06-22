@@ -145,7 +145,7 @@
     transition: background 0.1s, border-color 0.1s;
 
     &:hover {
-        background: #f5f5f5;
+        background: var(--ul-surface-1);
     }
 
     &.selected {
@@ -201,10 +201,12 @@
     transition: background .12s, border-color .12s, color .12s;
     flex-shrink: 0;
 
-    .material-icons { font-size: 1rem !important; }
+    .material-icons {
+        font-size: 1rem !important;
+    }
 
     &:hover {
-        background: #fef2f2;
+        background: var(--ul-surface-1);
         border-color: #fca5a5;
         color: #dc2626;
     }

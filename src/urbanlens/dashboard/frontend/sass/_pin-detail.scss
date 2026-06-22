@@ -200,7 +200,7 @@
         border-bottom: 2px solid #e5e7eb;
         padding: 0 .5rem;
         flex-shrink: 0;
-        background: #fafafa;
+        background: var(--ul-surface-1);
     }
 
     .tad-tab {
@@ -747,14 +747,18 @@
         font-size: .85rem;
         font-weight: 600;
         color: #475569;
-        background: #f8fafc;
+        background: var(--ul-surface-1);
         border-radius: 8px;
         cursor: pointer;
         user-select: none;
 
-        &:hover { background: #f1f5f9; }
+        &:hover {
+            background: var(--ul-surface-1);
+        }
 
-        &::marker { color: #94a3b8; }
+        &::marker {
+            color: #94a3b8;
+        }
     }
 }
 
@@ -903,7 +907,7 @@
 }
 
 .panel-header {
-    background: #f8f9fb;
+    background: var(--ul-surface-1);
 }
 
 // ── Pin details card theming (pin overview / location details page) ────────
@@ -924,7 +928,7 @@ body.page-location-details {
             }
 
             &:nth-child(even) {
-                background: #f8f9fb;
+                background: var(--ul-surface-1);
             }
         }
 
@@ -1129,7 +1133,7 @@ body.page-location-details {
     border: 1px solid var(--ul-border);
     border-radius: 10px;
     overflow: visible;
-    background: #f9fafb;
+    background: var(--ul-surface-1);
 
     &--unlinked {
         display: flex;
@@ -1216,7 +1220,7 @@ body.page-location-details {
     border-color: #fca5a5;
 
     &:hover {
-        background: #fef2f2;
+        background: var(--ul-surface-1);
         border-color: #dc2626;
     }
 }
@@ -1267,7 +1271,7 @@ body.page-location-details {
     gap: .5rem;
 
     &--current {
-        background: #f0f9ff;
+        background: var(--ul-surface-1);
     }
 }
 
@@ -1282,7 +1286,7 @@ body.page-location-details {
 .pin-loc-option-name {
     font-size: .84rem;
     font-weight: 500;
-    color: #111827;
+    color: var(--ul-text-1);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1370,7 +1374,7 @@ body.page-location-details {
     gap: .5rem;
 
     &--current {
-        background: #f0f9ff;
+        background: var(--ul-surface-1);
         border-color: #bae6fd;
     }
 }
@@ -1378,7 +1382,7 @@ body.page-location-details {
 .loc-conflict-option-name {
     font-size: .86rem;
     font-weight: 500;
-    color: #111827;
+    color: var(--ul-text-1);
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -1638,7 +1642,7 @@ body.page-location-details {
     // Map section: slate
     .location-map.card .card-header {
         @extend .panel-header;
-        background: #f8fafc;
+        background: var(--ul-surface-1);
         color: #1e293b;
         border-bottom-color: #e2e8f0;
 

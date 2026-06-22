@@ -209,6 +209,20 @@
                         <input type="range" id="markup-edit-border-opacity" min="0" max="100" value="100"
                                oninput="document.getElementById('markup-edit-border-opacity-val').textContent=this.value">
                     </label>
+                    <label class="markup-form-label-row">
+                        Security Type
+                        <select id="markup-edit-security" class="markup-form-select">
+                            <option value="">— None —</option>
+                            <option value="fence">Fence</option>
+                            <option value="camera">Camera</option>
+                            <option value="alarm">Alarm</option>
+                            <option value="security">Security Guard</option>
+                            <option value="sign">Sign</option>
+                            <option value="plywood">Plywood</option>
+                            <option value="locked">Locked</option>
+                            <option value="vps">VPS</option>
+                        </select>
+                    </label>
                     <div class="form-actions" style="margin-top:.5rem">
                         <button type="button" class="submit-button" onclick="saveMarkupEdit()">Save</button>
                         <button type="button" class="btn-ghost" onclick="closeMarkupEditDialog()">Cancel</button>
@@ -1571,6 +1585,7 @@
         document.getElementById('markup-edit-border').value = item.border_color || (isText ? '' : '');
         _rebuildEditSwatch('markup-edit-color-swatches',  'markup-edit-color',  false);
         _rebuildEditSwatch('markup-edit-border-swatches', 'markup-edit-border', true);
+        document.getElementById('markup-edit-security').value = item.security_indicator || '';
 
         const dialog = document.getElementById('markup-edit-dialog');
 
@@ -1593,16 +1608,17 @@
 
     function saveMarkupEdit() {
         if (!_editingMarkupItem) return;
-        const label          = document.getElementById('markup-edit-label').value.trim();
-        const color          = document.getElementById('markup-edit-color').value;
-        const border_color   = document.getElementById('markup-edit-border').value;
-        const stroke_width   = parseInt(document.getElementById('markup-edit-width').value, 10);
-        const fill_opacity   = parseInt(document.getElementById('markup-edit-fill-opacity').value, 10);
-        const border_opacity = parseInt(document.getElementById('markup-edit-border-opacity').value, 10);
+        const label              = document.getElementById('markup-edit-label').value.trim();
+        const color              = document.getElementById('markup-edit-color').value;
+        const border_color       = document.getElementById('markup-edit-border').value;
+        const stroke_width       = parseInt(document.getElementById('markup-edit-width').value, 10);
+        const fill_opacity       = parseInt(document.getElementById('markup-edit-fill-opacity').value, 10);
+        const border_opacity     = parseInt(document.getElementById('markup-edit-border-opacity').value, 10);
+        const security_indicator = document.getElementById('markup-edit-security').value;
         fetch(_markupEditBase + _editingMarkupItem.uuid + '/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-            body: JSON.stringify({ label, color, border_color, stroke_width, fill_opacity, border_opacity }),
+            body: JSON.stringify({ label, color, border_color, stroke_width, fill_opacity, border_opacity, security_indicator }),
         })
         .then(r => { if (!r.ok) throw new Error(); return r.json(); })
         .then(() => { closeMarkupEditDialog(); loadMarkup(); })

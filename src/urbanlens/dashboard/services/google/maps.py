@@ -165,7 +165,7 @@ class GoogleMapsGateway(Gateway):
                 image_url = "https://maps.googleapis.com/maps/api/streetview"
                 image_response = self.session.get(image_url, params=image_params)
                 image_response.raise_for_status()
-                return image_response.content
+                return image_response.content, metadata.get("date")
 
             if status in {"REQUEST_DENIED", "INVALID_REQUEST", "UNKNOWN_ERROR"}:
                 raise ValueError(f"Street View API error: {status}")

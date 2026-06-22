@@ -49,7 +49,7 @@
     }
 
     &.is-member {
-        background: #f0f7ff;
+        background: var(--ul-surface-1);
     }
 }
 
@@ -57,7 +57,7 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: #f0f4ff;
+    background: var(--ul-surface-1);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -146,9 +146,8 @@
 // ── Tags (replaces pin lists) ─────────────────────────────────────────────────
 
 .tag-page {
-    max-width: 860px;
-    margin: 0 auto;
-    padding: 2rem 1rem;
+    //margin: 0 auto;
+    //padding: 2rem 1rem;
 }
 
 .tag-header {
@@ -324,7 +323,7 @@
     font-size: 0.7rem;
     font-weight: 500;
     color: $text-muted;
-    background: #f0f0f0;
+    background: var(--ul-surface-1);
     border-radius: 4px;
     padding: 1px 5px;
 }
@@ -446,7 +445,7 @@
 }
 
 .color-clear {
-    background: #f5f5f5 !important;
+    background: var(--ul-surface-1) !important;
     color: $text-muted;
 
     i {
@@ -483,11 +482,11 @@
     padding: 3px 8px;
     border-radius: 20px;
     border: 1px solid var(--ul-border);
-    background: #fafafa;
+    background: var(--ul-surface-1);
     transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
 
     &:hover {
-        background: #f0f0f0;
+        background: var(--ul-surface-1);
     }
 
     &:has(input:checked) {
@@ -856,7 +855,7 @@
 // SortableJS ghost state
 .tag-card--ghost {
     opacity: 0.4;
-    background: #f0f7ff;
+    background: var(--ul-surface-1);
     border-color: $primary-color;
 }
 
@@ -1188,7 +1187,7 @@
 
 .cat-sel-edit-btn {
     &:hover:not(:disabled) {
-        background: #f0f9ff;
+        background: var(--ul-surface-1);
         border-color: $primary-color;
         color: $primary-color;
     }
@@ -1199,7 +1198,7 @@
     color: #dc2626;
 
     &:hover:not(:disabled) {
-        background: #fef2f2;
+        background: var(--ul-surface-1);
         border-color: #dc2626;
         color: #b91c1c;
     }
@@ -1620,10 +1619,9 @@
 // ── Organize page (unified Tags + Categories + Priority) ──────────────────────
 
 .organize-page {
-    max-width: 90vw;
-    width: 90em;
-    margin: 0 auto;
-    padding: 2rem 1rem;
+    //width: 90em;
+    //margin: 0 auto;
+    //padding: 2rem 1rem;
 }
 
 // When .tag-page is used as a panel inside .organize-page, strip its own
@@ -1717,7 +1715,7 @@
 
     &.priority-item--ghost {
         opacity: .4;
-        background: #f0f7ff;
+        background: var(--ul-surface-1);
         border-color: $primary-color;
     }
 }
@@ -1925,7 +1923,10 @@
     justify-content: center;
     flex-shrink: 0;
 
-    i { font-size: 1.25rem; color: $text-secondary; }
+    i {
+        font-size: 1.25rem;
+        color: $text-secondary;
+    }
 }
 
 .tag-row-info {
@@ -1953,7 +1954,9 @@
     opacity: 0;
     transition: opacity .13s;
 
-    .tag-row:hover & { opacity: 1; }
+    .tag-row:hover & {
+        opacity: 1;
+    }
 }
 
 .tag-row-action {
@@ -1969,7 +1972,9 @@
     color: $text-muted;
     transition: background .12s, color .12s;
 
-    i { font-size: 1rem; }
+    i {
+        font-size: 1rem;
+    }
 
     &:hover {
         background: var(--ul-surface-3);
@@ -1991,7 +1996,9 @@
     flex-shrink: 0;
     cursor: pointer;
 
-    .org-selectable & { display: flex; }
+    .org-selectable & {
+        display: flex;
+    }
 }
 
 .org-sel-cb {
@@ -2016,11 +2023,17 @@
         list-style: none;
         padding: .35rem 0;
 
-        i { font-size: 1rem; }
+        i {
+            font-size: 1rem;
+        }
 
-        &::-webkit-details-marker { display: none; }
+        &::-webkit-details-marker {
+            display: none;
+        }
 
-        &:hover { color: var(--ul-text-1); }
+        &:hover {
+            color: var(--ul-text-1);
+        }
     }
 
     &-list {

@@ -5,6 +5,10 @@
     </div>
     {% if lat and lng %}
     <div id="pin-satellite-map" class="view-map"></div>
+    <div class="view-date-label" id="satellite-date-label" style="visibility:hidden">
+        <i class="material-icons">event</i>
+        <span id="satellite-date-text">Imagery date unavailable</span>
+    </div>
     <script>
     (function () {
         var el = document.getElementById('pin-satellite-map');
@@ -16,6 +20,39 @@
         ).addTo(map);
         L.marker([{{ lat }}, {{ lng }}]).addTo(map);
         L.control.zoom({ position: 'topright' }).addTo(map);
+
+        // Fetch imagery capture date from Esri Identify endpoint
+        var lat = {{ lat }}, lng = {{ lng }};
+        var delta = 0.001;
+        var url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/identify'
+            + '?f=json&returnGeometry=false&layers=all%3A0&tolerance=5&geometryType=esriGeometryPoint'
+            + '&geometry=' + lng + '%2C' + lat
+            + '&sr=4326'
+            + '&mapExtent=' + (lng-delta) + '%2C' + (lat-delta) + '%2C' + (lng+delta) + '%2C' + (lat+delta)
+            + '&imageDisplay=800%2C600%2C96';
+        fetch(url)
+            .then(function(r){ return r.json(); })
+            .then(function(data){
+                var results = data.results || [];
+                for (var i = 0; i < results.length; i++) {
+                    var src = (results[i].attributes || {}).SRC_DATE2;
+                    if (src) {
+                        var s = String(src);
+                        if (s.length === 8) {
+                            var d = new Date(s.slice(0,4) + '-' + s.slice(4,6) + '-' + s.slice(6,8));
+                            if (!isNaN(d)) {
+                                document.getElementById('satellite-date-text').textContent =
+                                    'Imagery ' + d.toLocaleDateString('en-US', {year:'numeric', month:'short'});
+                            }
+                        }
+                        break;
+                    }
+                }
+                document.getElementById('satellite-date-label').style.visibility = '';
+            })
+            .catch(function(){
+                document.getElementById('satellite-date-label').style.visibility = '';
+            });
     }());
     </script>
     {% else %}

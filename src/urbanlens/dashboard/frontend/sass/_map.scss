@@ -139,7 +139,7 @@
     transition: background .1s;
 
     &:hover {
-        background: #f3f4f6;
+        background: var(--ul-surface-1);
     }
 
     &.is-highlighted {
@@ -219,13 +219,13 @@
 
     &:hover {
         color: #374151;
-        background: #f9fafb;
+        background: var(--ul-surface-1);
     }
 
     &.is-active {
         color: #2563eb;
         border-bottom-color: #2563eb;
-        background: #f0f7ff;
+        background: var(--ul-surface-1);
     }
 }
 
@@ -266,7 +266,7 @@
     border-radius: 6px;
     overflow: hidden;
     cursor: pointer;
-    background: #f3f4f6;
+    background: var(--ul-surface-1);
     border: 2px solid transparent;
     transition: border-color .12s, box-shadow .12s, transform .12s;
 
@@ -302,7 +302,7 @@
     position: absolute;
     bottom: 3px;
     right: 3px;
-    background: rgba(0,0,0,.52);
+    background: rgba(0, 0, 0, .52);
     border-radius: 3px;
     display: flex;
     align-items: center;
@@ -313,8 +313,13 @@
         line-height: 1;
     }
 
-    &.has-gps  { color: #86efac; }
-    &.no-gps   { color: #fca5a5; }
+    &.has-gps {
+        color: #86efac;
+    }
+
+    &.no-gps {
+        color: #fca5a5;
+    }
 }
 
 .photo-panel-hint {
@@ -325,7 +330,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    background: rgba(255,255,255,.85);
+    background: rgba(255, 255, 255, .85);
 }
 
 .photo-panel-empty {
@@ -401,7 +406,7 @@
     }
 
     &:hover {
-        background: #f3f4f6;
+        background: var(--ul-surface-1);
     }
 
     &+& {
@@ -466,13 +471,15 @@
     font-weight: 500;
 }
 
-.markup-form-input {
+.markup-form-input,
+.markup-form-select {
     padding: .3rem .5rem;
     border: 1px solid var(--ul-border);
     border-radius: 5px;
     font-size: .8rem;
     color: #374151;
     width: 100%;
+    background: #fff;
 
     &:focus {
         border-color: #93c5fd;
@@ -585,7 +592,7 @@
 
     &:hover:not(.active) {
         border-color: #93c5fd;
-        background: #f8fafc;
+        background: var(--ul-surface-1);
     }
 }
 
@@ -719,7 +726,7 @@
     padding: .28rem .65rem;
     border-radius: 20px;
     border: 1.5px solid $border-color;
-    background: #fafafa;
+    background: var(--ul-surface-1);
     font-size: .8rem;
     cursor: pointer;
     user-select: none;
@@ -800,7 +807,7 @@
     }
 
     &:hover {
-        background: #f5f3ff;
+        background: var(--ul-surface-1);
         color: #4338ca;
 
         .material-icons {

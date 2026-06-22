@@ -23,6 +23,14 @@ button,
     }
 }
 
+// - Pages
+.page-content {
+    padding: 1.5rem 1rem 3rem;
+    max-width: 90vw;
+    width: min(90vw, 50rem);
+    margin: 0 auto;
+}
+
 // ── Confirm dialog ────────────────────────────────────────────────────────────
 
 .confirm-dialog {
@@ -172,7 +180,7 @@ button,
     flex-shrink: 0;
 
     &:hover {
-        background: #f0f0f0;
+        background: var(--ul-surface-1);
         color: $text-primary;
     }
 
