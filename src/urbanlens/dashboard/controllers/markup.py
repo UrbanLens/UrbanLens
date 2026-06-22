@@ -41,7 +41,7 @@ def _apply_security_indicator(pin: Pin, indicator: str) -> None:
     if not field:
         return
     current = getattr(pin, field, SecurityLevel.UNKNOWN)
-    if current in (SecurityLevel.UNKNOWN, SecurityLevel.NO):
+    if current in {SecurityLevel.UNKNOWN, SecurityLevel.NO}:
         setattr(pin, field, SecurityLevel.SOME)
         pin.save(update_fields=[field])
 

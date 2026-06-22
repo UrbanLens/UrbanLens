@@ -112,7 +112,7 @@ def _build_pin_search_query(pin: Pin) -> str:
     if pin.state:
         location.append(pin.state)
 
-    return " ".join(filter(None, [primary_str] + location))
+    return " ".join(filter(None, [primary_str, *location]))
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):
