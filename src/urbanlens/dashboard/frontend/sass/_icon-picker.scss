@@ -354,25 +354,4 @@
     cursor: pointer;
 }
 
-.pinlist-form-actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 1rem;
-}
-
-// Empty state
-.pinlist-empty {
-    text-align: center;
-    padding: 3rem 1rem;
-    color: $text-muted;
-
-    i {
-        font-size: 3rem;
-        display: block;
-        margin-bottom: 0.75rem;
-    }
-
-    p {
-        margin: 0;
-    }
-}
+// .pinlist-form-actions / .pinlist-empty → _tags.scss

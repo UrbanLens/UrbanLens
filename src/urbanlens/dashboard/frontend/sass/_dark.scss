@@ -1779,3 +1779,123 @@
         }
     }
 }
+
+// ── Comment component dark overrides ──────────────────────────────────────
+// ── Dark mode ─────────────────────────────────────────────────────────────────
+
+[data-theme="dark"] {
+    .comment-map-btn {
+        border-color: var(--ul-border);
+        color: var(--ul-muted);
+
+        &:hover {
+            background: rgba(167, 139, 250, .15);
+            border-color: #a78bfa;
+            color: #c4b5fd;
+        }
+    }
+
+    .comment-map-chip {
+        background: rgba(109, 40, 217, .2);
+        border-color: #7c3aed;
+        color: #c4b5fd;
+    }
+
+    .comment-map-expand-btn {
+        background: rgba(30, 30, 40, .9);
+        border-color: var(--ul-border);
+        color: var(--ul-text);
+
+        &:hover {
+            background: rgba(40, 40, 55, 1);
+        }
+    }
+
+    .comment-map-preview {
+        border-color: var(--ul-border);
+    }
+
+    .comment-map-view-dialog,
+    .comment-map-composer-dialog {
+        background: var(--ul-surface-1);
+        color: var(--ul-text);
+
+        .dialog-header {
+            border-color: var(--ul-border);
+        }
+
+        .dialog-footer {
+            border-color: var(--ul-border);
+        }
+    }
+
+    .comment-map-composer-controls {
+        border-color: var(--ul-border);
+    }
+
+    .comment-map-composer-toolbar {
+        border-color: var(--ul-border);
+    }
+
+    .cmcc-label {
+        color: var(--ul-muted);
+    }
+
+    .cmcc-pin-search {
+        background: var(--ul-input-bg, #1e1e2e);
+        border-color: var(--ul-border);
+        color: var(--ul-text);
+    }
+
+    .cmcc-pin-dropdown {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
+    }
+
+    .cmcc-pin-option {
+        color: var(--ul-text);
+
+        &:hover {
+            background: var(--ul-hover, rgba(255, 255, 255, .05));
+        }
+    }
+
+    .cmc-layer-btn,
+    .cmc-tool-btn,
+    .cmc-undo-btn,
+    .cmc-clear-btn {
+        border-color: var(--ul-border);
+        color: var(--ul-text);
+
+        &:hover {
+            background: var(--ul-hover, rgba(255, 255, 255, .05));
+        }
+
+        &.is-active {
+            background: rgba(109, 40, 217, .25);
+            border-color: #7c3aed;
+            color: #c4b5fd;
+        }
+    }
+
+    .cmc-toolbar-sep {
+        background: var(--ul-border);
+    }
+
+    .cmc-toolbar-label {
+        color: var(--ul-muted);
+    }
+
+    .cmc-color-wrap {
+        color: var(--ul-muted);
+
+        input[type="color"] {
+            border-color: var(--ul-border);
+            background: var(--ul-surface-1);
+        }
+    }
+
+    .comment-map-view-dialog .dialog-header {
+        background: var(--ul-surface-1);
+    }
+}
