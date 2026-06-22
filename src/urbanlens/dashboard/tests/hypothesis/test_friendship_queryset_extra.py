@@ -95,19 +95,19 @@ class FriendshipQuerySetRelationshipTypeTests(TestCase):
 			self.profile_a, self.profile_b,
 			relationship_type=FriendshipType.FRIEND,
 		)
-		self.f_following = _make_friendship(
+		self.f_connected = _make_friendship(
 			self.profile_a, self.profile_c,
-			relationship_type=FriendshipType.FOLLOWING,
+			relationship_type=FriendshipType.CONNECTED,
 		)
 
 	def test_friend_type_includes_friend_friendship(self) -> None:
 		qs = Friendship.objects.all().relationship_type(FriendshipType.FRIEND)
 		self.assertIn(self.f_friend, qs)
-		self.assertNotIn(self.f_following, qs)
+		self.assertNotIn(self.f_connected, qs)
 
-	def test_following_type_includes_following_friendship(self) -> None:
-		qs = Friendship.objects.all().relationship_type(FriendshipType.FOLLOWING)
-		self.assertIn(self.f_following, qs)
+	def test_connected_type_includes_connected_friendship(self) -> None:
+		qs = Friendship.objects.all().relationship_type(FriendshipType.CONNECTED)
+		self.assertIn(self.f_connected, qs)
 		self.assertNotIn(self.f_friend, qs)
 
 

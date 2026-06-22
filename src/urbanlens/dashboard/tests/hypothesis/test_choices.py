@@ -205,7 +205,7 @@ class FriendshipTypeTests(TestCase):
 	"""Smoke tests for FriendshipType values."""
 
 	def test_all_types_present(self) -> None:
-		expected = {"Following", "Friend", "Close Friend"}
+		expected = {"Encountered", "Connected", "Friend", "Close Friend"}
 		self.assertEqual(set(FriendshipType.values), expected)
 
 	@given(st.sampled_from(list(FriendshipType)))
