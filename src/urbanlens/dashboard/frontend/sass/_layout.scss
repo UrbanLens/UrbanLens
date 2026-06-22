@@ -427,34 +427,9 @@ body.page-location-details {
 }
 
 body.page-location-details div.section {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 1rem;
-    grid-template-areas:
-        "overview overview overview"
-        "notes notes notes"
-        "visits visits tags"
-        "visits visits categories"
-        "aliases aliases aliases"
-        "map map map"
-        "satellite aerial street"
-        "smithsonian smithsonian smithsonian"
-        "weather weather weather"
-        "search search search";
-    justify-items: stretch;
-    align-items: start;
-
-    #pin-overview {
-        grid-area: overview;
-    }
-
-    .pin-notes-panel {
-        grid-area: notes;
-    }
-
-    .aliases-panel {
-        grid-area: aliases;
-    }
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
 
     .location-title {
         text-align: center;
@@ -463,76 +438,68 @@ body.page-location-details div.section {
 
     .location-details {
         .details-grid {
-            display: block;
+            display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: .5rem;
+            gap: .35rem .75rem;
             padding: .75rem 1rem;
+
+            @media (min-width: 1024px) {
+                grid-template-columns: repeat(3, 1fr);
+            }
 
             .detail-row {
                 display: flex;
                 flex-direction: column;
-                gap: .15rem;
+                gap: .1rem;
 
                 &.full-width {
                     grid-column: 1 / -1;
                 }
             }
 
+            .pin-stats {
+                grid-column: 1 / -1;
+                display: flex;
+                flex-wrap: wrap;
+                gap: .75rem 1.25rem;
+                padding: .25rem 0;
+            }
+
+            .pin-stat-item {
+                display: flex;
+                flex-direction: column;
+                gap: .1rem;
+            }
+
             .field-label {
-                font-size: .72rem;
+                font-size: .7rem;
                 text-transform: uppercase;
-                letter-spacing: .04em;
-                color: #888;
+                letter-spacing: .05em;
+                color: var(--ul-text-3, #9ca3af);
                 font-weight: 600;
             }
 
             .field-value {
-                font-size: .9rem;
+                font-size: .92rem;
+                color: var(--ul-text-1, #1e293b);
             }
         }
     }
 
-    .visit-history {
-        grid-area: visits;
-    }
-
-    #tag-panel {
-        grid-area: tags;
-    }
-
-    #category-panel {
-        grid-area: categories;
-    }
-
     .location-map {
-        grid-area: map;
-
         .map-wrapper {
             position: relative;
             width: 100%;
         }
 
         #map {
-            height: 28rem;
+            height: min(52vh, 540px);
+            min-height: 320px;
             width: 100%;
         }
     }
 
-    .satellite-view {
-        grid-area: satellite;
-    }
-
-    .street-view {
-        grid-area: street;
-    }
-
-    .aerial-view {
-        grid-area: aerial;
-    }
-
     .smithsonian-images {
-        grid-area: smithsonian;
-
         .smithsonian-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -563,13 +530,7 @@ body.page-location-details div.section {
         }
     }
 
-    .weather-widget {
-        grid-area: weather;
-    }
-
     .web-search {
-        grid-area: search;
-
         .search-results-list {
             padding: .25rem 0;
             list-style: none;
@@ -689,11 +650,33 @@ body.page-location-details div.section {
             overflow: hidden;
         }
     }
+}
 
-    .weather-widget {
-        grid-area: weather;
+// ── Pin detail row wrappers ──────────────────────────────────────────────────
+.pin-info-row {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+    align-items: start;
+
+    @media (min-width: 640px) {
+        grid-template-columns: 1fr 1fr;
     }
 
+    @media (min-width: 1024px) {
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+}
+
+.pin-media-row {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+    align-items: start;
+
+    @media (min-width: 640px) {
+        grid-template-columns: 1fr 1fr;
+    }
 }
 
 .organize-page {

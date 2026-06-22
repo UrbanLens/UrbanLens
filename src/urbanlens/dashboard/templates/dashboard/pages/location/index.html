@@ -22,12 +22,8 @@
         <div class="pin-details location-details card" style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
 
-    {# ── Two-column body: map (left) | metadata sidebar (right) ─────── #}
-    <div class="pin-body-grid">
-
-        {# ── Left: map ─────────────────────────────────────────────────── #}
-        <div class="pin-body-main">
-        <div class="location-map pin-map card">
+    {# ── Map (full width) ─────────────────────────────────────────────── #}
+    <div class="location-map pin-map card">
         <div class="card-header">
             <i class="material-icons">place</i>
             <h3>Location</h3>
@@ -235,120 +231,118 @@
             </div>
 
         </div>
+    </div>{# end .map-wrapper #}
     </div>{# end .location-map #}
-        </div>{# end .pin-body-main #}
 
-        {# ── Right: metadata sidebar ──────────────────────────────────── #}
-        <div class="pin-body-sidebar">
+    {# ── Info row: visits | badges | aliases ──────────────────────────── #}
+    <div class="pin-info-row">
 
-            {# ── Visit history ───────────────────────────────────────── #}
-            <div hx-get="{% url 'pin.visits' pin.uuid %}"
-                 hx-trigger="load"
-                 hx-swap="outerHTML"
-                 class="visit-history card">
-                <div class="card-header">
-                    <i class="material-icons">history</i>
-                    <span>Visit History</span>
-                </div>
-                <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+        <div hx-get="{% url 'pin.visits' pin.uuid %}"
+             hx-trigger="load"
+             hx-swap="outerHTML"
+             class="visit-history card">
+            <div class="card-header">
+                <i class="material-icons">history</i>
+                <span>Visit History</span>
             </div>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+        </div>
 
-            {# ── Badges panel (tags, categories, statuses) ───────────── #}
-            <div hx-get="{% url 'category.pin' pin.uuid %}"
-                 hx-trigger="load"
-                 hx-swap="outerHTML"
-                 class="tag-panel">
-                <div class="tag-panel-header">
-                    <i class="material-icons">category</i>
-                    <span>Categories</span>
-                </div>
-                <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+        <div hx-get="{% url 'category.pin' pin.uuid %}"
+             hx-trigger="load"
+             hx-swap="outerHTML"
+             class="tag-panel">
+            <div class="tag-panel-header">
+                <i class="material-icons">category</i>
+                <span>Categories</span>
             </div>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+        </div>
 
-            {# ── Aliases ─────────────────────────────────────────────── #}
-            <div hx-get="{% url 'pin.aliases' pin.uuid %}"
-                 hx-trigger="load"
-                 hx-swap="outerHTML"
-                 id="pin-aliases-panel"
-                 class="aliases-panel card">
-                <div class="card-header">
-                    <i class="material-icons">label_important</i>
-                    <span>Aliases</span>
-                </div>
-                <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+        <div hx-get="{% url 'pin.aliases' pin.uuid %}"
+             hx-trigger="load"
+             hx-swap="outerHTML"
+             id="pin-aliases-panel"
+             class="aliases-panel card">
+            <div class="card-header">
+                <i class="material-icons">label_important</i>
+                <span>Aliases</span>
             </div>
-
-        </div>{# end .pin-body-sidebar #}
-
-    </div>{# end .pin-body-grid #}
-
-    {# ── 2-column media grid: satellite, street view, Smithsonian, web ─── #}
-    <div class="pin-cards-grid ul-grid ul-grid--2col">
-
-    {# ── Satellite view ───────────────────────────────────────────────── #}
-    <div id="satellite-view-section" class="satellite-view card"
-         hx-get="{% url 'pin.satellite_view' pin.uuid %}"
-         hx-trigger="load"
-         hx-swap="outerHTML">
-        <div class="card-header">
-            <i class="material-icons">satellite_alt</i>
-            <h3>Satellite View</h3>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
         </div>
-        <div class="view-loading">
-            <i class="material-icons spin">autorenew</i>
-            Loading…
-        </div>
-    </div>
 
-    {# ── Street view ──────────────────────────────────────────────────── #}
-    <div id="street-view-section" class="street-view card"
-         hx-get="{% url 'pin.street_view' pin.uuid %}"
-         hx-trigger="load"
-         hx-swap="outerHTML">
-        <div class="card-header">
-            <i class="material-icons">streetview</i>
-            <h3>Street View</h3>
-        </div>
-        <div class="view-loading">
-            <i class="material-icons spin">autorenew</i>
-            Loading…
-        </div>
-    </div>
+    </div>{# end .pin-info-row #}
 
-    {# ── Smithsonian images ───────────────────────────────────────────── #}
-    <div id="smithsonian-section" class="smithsonian-images card"
-         hx-get="{% url 'smithsonian_images' pin.uuid %}"
-         hx-trigger="load"
-         hx-swap="outerHTML">
-        <div class="card-header">
-            <i class="material-icons">collections</i>
-            <h3>Smithsonian Archives</h3>
-        </div>
-        <div class="view-loading">
-            <i class="material-icons spin">autorenew</i>
-            Loading…
-        </div>
-    </div>
+    {# ── Media row: satellite | street view ───────────────────────────── #}
+    <div class="pin-media-row">
 
-    {# ── Web search results ───────────────────────────────────────────── #}
-    {% if pin.has_meaningful_name %}
-    <div id="web-search-section" class="web-search card"
-         hx-get="{% url 'pin.web_search' pin.uuid %}"
-         hx-trigger="load"
-         hx-swap="outerHTML">
-        <div class="card-header">
-            <i class="material-icons">search</i>
-            <h3>Web Results</h3>
+        <div id="satellite-view-section" class="satellite-view card"
+             hx-get="{% url 'pin.satellite_view' pin.uuid %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            <div class="card-header">
+                <i class="material-icons">satellite_alt</i>
+                <h3>Satellite View</h3>
+            </div>
+            <div class="view-loading">
+                <i class="material-icons spin">autorenew</i>
+                Loading…
+            </div>
         </div>
-        <div class="view-loading">
-            <i class="material-icons spin">autorenew</i>
-            Loading…
-        </div>
-    </div>
-    {% endif %}
 
-    {# ── Photo gallery ────────────────────────────────────────────────── #}
-    <div id="pin-gallery-panel" class="ul-grid__full"
+        <div id="street-view-section" class="street-view card"
+             hx-get="{% url 'pin.street_view' pin.uuid %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            <div class="card-header">
+                <i class="material-icons">streetview</i>
+                <h3>Street View</h3>
+            </div>
+            <div class="view-loading">
+                <i class="material-icons spin">autorenew</i>
+                Loading…
+            </div>
+        </div>
+
+    </div>{# end .pin-media-row (satellite / street) #}
+
+    {# ── Archive row: Smithsonian | web search ────────────────────────── #}
+    <div class="pin-media-row">
+
+        <div id="smithsonian-section" class="smithsonian-images card"
+             hx-get="{% url 'smithsonian_images' pin.uuid %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            <div class="card-header">
+                <i class="material-icons">collections</i>
+                <h3>Smithsonian Archives</h3>
+            </div>
+            <div class="view-loading">
+                <i class="material-icons spin">autorenew</i>
+                Loading…
+            </div>
+        </div>
+
+        {% if pin.has_meaningful_name %}
+        <div id="web-search-section" class="web-search card"
+             hx-get="{% url 'pin.web_search' pin.uuid %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            <div class="card-header">
+                <i class="material-icons">search</i>
+                <h3>Web Results</h3>
+            </div>
+            <div class="view-loading">
+                <i class="material-icons spin">autorenew</i>
+                Loading…
+            </div>
+        </div>
+        {% endif %}
+
+    </div>{# end .pin-media-row (smithsonian / web) #}
+
+    {# ── Photo gallery (full width) ────────────────────────────────────── #}
+    <div id="pin-gallery-panel"
          hx-get="{% url 'pin.gallery' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML">
@@ -361,8 +355,8 @@
         </div>
     </div>
 
-    {# ── Comments ─────────────────────────────────────────────────────── #}
-    <div id="comment-panel" class="ul-grid__full"
+    {# ── Comments (full width) ─────────────────────────────────────────── #}
+    <div id="comment-panel"
          hx-get="{% url 'pin.comments' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML">
@@ -375,9 +369,7 @@
         </div>
     </div>
 
-    </div>{# end .pin-cards-grid #}
-
-</div>
+</div>{# end .section #}
 
 {# ── Pin edit dialog ────────────────────────────────────────────────────── #}
 <dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog">
