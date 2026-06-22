@@ -202,12 +202,8 @@ These are planned features - treat any missing implementation as a gap to fill, 
 
 - **AI support**: Add AI-assisted suggestions and customization throughout the application (OpenAI integration exists, extend it)
 - **UI modernization**: Current UI is functional but dated. Move toward a sleek, professional, modern aesthetic
-- **Photo upload with GPS extraction**: Drag-and-drop photo upload; extract GPS coordinates from EXIF metadata, auto-associate with the nearest pin; allow the user to adjust by dragging a mini-pin on the map
-- **Paperless-ngx integration**: Connect via API to show related documents and photos for each location
-- **Google Search integration**: Surface recent news articles about a location on the pin detail page
 - **API cost tracking**: Log and aggregate cost estimates on every external API call
 - **Celery / async tasks**: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure
-- **Data encryption & access control**: It is desired that all user data be encrypted at rest and scoped strictly to the submitting user - In the future, this may become a hard requirement
 - **Hypothesis unit tests**: Add property-based tests wherever possible.
 
 ## UI & UX Standards
