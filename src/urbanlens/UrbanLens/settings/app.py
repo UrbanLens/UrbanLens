@@ -122,6 +122,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     google_client_secret : str | None = Field(default=None, description = "The google client secret")
     openweathermap_api_key : str | None = Field(default=None, description = "The openweathermap key")
     nps_api_key : str | None = Field(default=None, description = "The national park service api key")
+    discord_client_secret : str | None = Field(default=None, description = "The discord client secret")
+    discord_client_id : str | None = Field(default=None, description = "The discord client ID")
 
     # DB
     database_engine : str = Field(default = 'psqlextra.backend', description = "The database engine")

@@ -46,6 +46,14 @@
     --ul-color-danger-bg: #fef2f2;
 }
 
+// ── Dark-mode accent palette ──────────────────────────────────────────────────
+// Repeated colours extracted so a single change propagates everywhere.
+$dk-navy:         #1a2540;    // icon backgrounds, calendar cells
+$dk-blue:         #60a5fa;    // blue text / icons
+$dk-purple:       #a78bfa;    // purple accent links / sort handles
+$dk-panel-bg:     #1e2130;    // trip/weather panel background
+$dk-panel-border: #2d3348;    // trip/weather panel border
+
 [data-theme="dark"] {
     --ul-surface-1: #1a1a1a;
     --ul-surface-2: #222222;
@@ -133,10 +141,6 @@
         color: var(--ul-text-4);
     }
 
-    .container {
-        background: transparent;
-    }
-
     .dialog {
         background: var(--ul-surface-1);
         border-color: var(--ul-border);
@@ -169,18 +173,12 @@
     }
 
     .tag-view-btn {
-        background: var(--ul-surface-1);
         color: #aaa;
         border-right-color: #444;
 
         &:hover {
             background: var(--ul-surface-1);
             color: #e0e0e0;
-        }
-
-        &.active {
-            background: $primary-color;
-            color: var(--ul-text-4);
         }
     }
 
@@ -194,10 +192,6 @@
 
     .settings-title {
         color: var(--ul-text-4);
-    }
-
-    .settings-section-header {
-        border-color: var(--ul-border);
     }
 
     .settings-section-title,
@@ -220,7 +214,6 @@
     .settings-input,
     .form-input,
     textarea.form-input {
-        background: var(--ul-surface-1);
         color: #e0e0e0;
         border-color: #444;
     }
@@ -230,14 +223,7 @@
         background: rgb(40, 40, 40);
     }
 
-    .settings-select:focus,
-    .settings-input:focus,
-    .form-input:focus {
-        border-color: $primary-color;
-    }
-
     .settings-theme-option {
-        background: var(--ul-surface-1);
         border-color: #444;
 
         span {
@@ -277,7 +263,6 @@
     .icon-option {
         color: #ccc;
         border-color: #444;
-        background: var(--ul-surface-1);
     }
 
     .icon-option:hover {
@@ -289,37 +274,17 @@
         border-color: $primary-color;
     }
 
-    .color-clear {
-        background: var(--ul-surface-1) !important;
-    }
-
     .tag-order-badge {
-        background: #333;
         color: #aaa;
     }
 
     .icon-picker-trigger {
-        background: var(--ul-surface-1);
         border-color: #444;
         color: #e0e0e0;
     }
 
-    .icon-picker-panel {
-        background: var(--ul-surface-1);
-        border-color: #333;
-    }
-
-    .icon-picker-search-row {
-        border-color: #333;
-    }
-
     .icon-picker-search-input {
         color: #e0e0e0;
-        background: transparent;
-    }
-
-    .icon-picker-tabs {
-        border-color: #333;
     }
 
     .icon-tab {
@@ -334,14 +299,8 @@
         }
     }
 
-    .icon-picker-item {
-        &:hover {
-            background: var(--ul-surface-1);
-        }
-
-        &.selected {
-            background: rgba($primary-color, 0.18);
-        }
+    .icon-picker-item.selected {
+        background: rgba($primary-color, 0.18);
     }
 
     .icon-picker-item-label {
@@ -367,19 +326,9 @@
         color: #888;
     }
 
-    .edit-card {
-        background: var(--ul-surface-1);
-        border-color: #333;
-    }
-
-    .edit-card-title {
-        border-color: #333;
-    }
-
     .edit-input,
     input.edit-input,
     textarea.edit-textarea {
-        background: var(--ul-surface-1);
         color: #e0e0e0;
         border-color: #444;
     }
@@ -400,11 +349,9 @@
 
     .edit-link-row {
         background: var(--ul-surface-1);
-        border-color: #333;
     }
 
     .edit-add-link-input {
-        background: var(--ul-surface-1);
         color: #e0e0e0;
         border-color: #444;
     }
@@ -434,14 +381,13 @@
         color: #aaa;
 
         &:hover {
-            background: var(--ul-surface-1);
             border-color: #666;
         }
     }
 
     .trip-map-ctx-menu {
-        background: #1e2130;
-        border-color: #2d3348;
+        background: $dk-panel-bg;
+        border-color: $dk-panel-border;
         box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
     }
 
@@ -465,8 +411,8 @@
     }
 
     .trip-weather-panel {
-        background: #1e2130;
-        border-color: #2d3348;
+        background: $dk-panel-bg;
+        border-color: $dk-panel-border;
 
         .trip-weather-header .trip-weather-title {
             color: #e2e8f0;
@@ -474,17 +420,17 @@
     }
 
     .trip-weather-day {
-        border-color: #2d3348;
-        background: #1e2130;
+        border-color: $dk-panel-border;
+        background: $dk-panel-bg;
 
         .trip-weather-day-header {
-            background: linear-gradient(135deg, #1a2540 0%, #162035 100%);
-            border-bottom-color: #2d3348;
+            background: linear-gradient(135deg, $dk-navy 0%, #162035 100%);
+            border-bottom-color: $dk-panel-border;
         }
     }
 
     .trip-weather-activity {
-        border-top-color: #2d3348;
+        border-top-color: $dk-panel-border;
 
         .trip-weather-activity-name {
             color: #e2e8f0;
@@ -510,15 +456,10 @@
 
     .notif-prefs__table th {
         color: #888;
-        border-bottom-color: #333;
     }
 
     .notif-prefs__row {
         border-bottom-color: #2a2a2a;
-
-        &:hover {
-            background: var(--ul-surface-1);
-        }
     }
 
     .notif-prefs__label {
@@ -530,11 +471,8 @@
         color: #86efac;
     }
 
-    .profile-hero,
-    .profile-stat,
-    .profile-section {
+    .profile-hero {
         background: var(--ul-surface-1);
-        border-color: #333;
     }
 
     .profile-full-name {
@@ -584,13 +522,11 @@
     }
 
     .shared-visited-item {
-        background: var(--ul-surface-1);
         border-color: #383838;
         color: #ccc;
     }
 
     .friend-card {
-        background: var(--ul-surface-1);
         border-color: #383838;
 
         &:hover {
@@ -649,13 +585,8 @@
     }
 
     .btn-friend-ignore {
-        background: var(--ul-surface-1);
         border-color: #444;
         color: #888;
-
-        &:hover {
-            background: var(--ul-surface-1);
-        }
     }
 
     .btn-friend-remove:hover {
@@ -730,13 +661,8 @@
     }
 
     .btn-friend--ignore {
-        background: var(--ul-surface-1);
         border-color: #444;
         color: #888;
-
-        &:hover {
-            background: var(--ul-surface-1);
-        }
     }
 
     .btn-friend--remove {
@@ -795,7 +721,7 @@
             background: rgba(124, 58, 237, .15);
 
             .material-icons {
-                color: #a78bfa;
+                color: $dk-purple;
             }
         }
     }
@@ -814,7 +740,7 @@
         background: rgba(37, 99, 235, .15);
 
         .material-icons {
-            color: #60a5fa;
+            color: $dk-blue;
         }
     }
 
@@ -845,10 +771,6 @@
 
     .notif-mark-all-btn {
         color: #7cb9e8;
-
-        &:hover {
-            background: rgba(66, 165, 245, .1);
-        }
     }
 
     .btn--danger {
@@ -862,7 +784,7 @@
     }
 
     .trips-title .material-icons {
-        color: #60a5fa;
+        color: $dk-blue;
     }
 
     .trips-empty .trips-empty-icon {
@@ -875,15 +797,15 @@
     }
 
     .trip-card-icon {
-        background: #1a2540;
+        background: $dk-navy;
 
         .material-icons {
-            color: #60a5fa;
+            color: $dk-blue;
         }
     }
 
     .trip-back-link:hover {
-        color: #60a5fa;
+        color: $dk-blue;
     }
 
     .trip-header-btn {
@@ -894,7 +816,7 @@
             &:hover,
             &:focus {
                 background: var(--ul-surface-2);
-                color: #60a5fa;
+                color: $dk-blue;
                 border-color: var(--ul-border);
             }
         }
@@ -932,7 +854,7 @@
         }
 
         &.view-toggle-btn--active {
-            color: #60a5fa;
+            color: $dk-blue;
             box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
         }
     }
@@ -955,7 +877,7 @@
         }
 
         &--today {
-            background: #1a2540;
+            background: $dk-navy;
         }
     }
 
@@ -972,10 +894,10 @@
     }
 
     .trip-activity-icon {
-        background: #1a2540;
+        background: $dk-navy;
 
         .material-icons {
-            color: #60a5fa;
+            color: $dk-blue;
         }
     }
 
@@ -984,7 +906,7 @@
     }
 
     .trip-attr-link:hover {
-        color: #a78bfa;
+        color: $dk-purple;
     }
 
     .trip-member-item {
@@ -992,11 +914,11 @@
     }
 
     .trip-member-avatar {
-        background: #1a2540;
+        background: $dk-navy;
     }
 
     .trip-member-avatar-initial {
-        color: #60a5fa;
+        color: $dk-blue;
     }
 
     .trip-member-badge {
@@ -1008,14 +930,14 @@
 
         &--organizer {
             background: rgba(167, 139, 250, .12);
-            color: #a78bfa;
+            color: $dk-purple;
             border-color: rgba(167, 139, 250, .25);
         }
     }
 
     .trip-organizer-btn {
         &--active {
-            color: #a78bfa !important;
+            color: $dk-purple !important;
 
             &:hover {
                 background: rgba(167, 139, 250, .1) !important;
@@ -1066,7 +988,6 @@
     .rsvp-pill-btn {
 
         &:hover {
-            background: var(--ul-surface-2);
             border-color: var(--ul-border-strong);
         }
     }
@@ -1084,7 +1005,7 @@
     }
 
     .trip-comment-input:focus {
-        border-color: #60a5fa;
+        border-color: $dk-blue;
         box-shadow: 0 0 0 3px rgba(96, 165, 250, .12);
     }
 
@@ -1125,7 +1046,7 @@
         }
 
         &:hover {
-            color: #a78bfa;
+            color: $dk-purple;
             background: rgba(124, 58, 237, .08);
         }
     }
@@ -1198,7 +1119,7 @@
         &:hover,
         &.is-selected {
             background: rgba(124, 58, 237, .08);
-            color: #a78bfa;
+            color: $dk-purple;
         }
     }
 
@@ -1211,7 +1132,7 @@
 
         &:hover {
             background: rgba(167, 139, 250, .15);
-            border-color: #a78bfa;
+            border-color: $dk-purple;
             color: #c4b5fd;
         }
     }
@@ -1303,9 +1224,9 @@
         }
 
         &--active {
-            background: #1a2540;
+            background: $dk-navy;
             border-color: #3b82f6;
-            color: #60a5fa;
+            color: $dk-blue;
         }
     }
 
@@ -1344,8 +1265,6 @@
 
         &:hover:not(:disabled) {
             background: var(--ul-surface-2);
-            border-color: var(--ul-border-strong);
-            color: var(--ul-text-1);
         }
     }
 
@@ -1365,7 +1284,6 @@
         }
 
         .cat-select-check {
-            background: var(--ul-surface-1);
             border-color: var(--ul-border-strong);
         }
     }
