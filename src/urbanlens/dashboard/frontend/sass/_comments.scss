@@ -36,7 +36,7 @@
 
 .comment-replies {
     margin-top: .5rem;
-    border-left: 2px solid #e5e7eb;
+    border-left: 2px solid var(--ul-border);
     margin-left: .4rem;
 
     .comment-item {
@@ -503,7 +503,7 @@
         align-items: center;
         justify-content: space-between;
         padding: .75rem 1rem;
-        border-bottom: 1px solid #e5e7eb;
+        border-bottom: 1px solid var(--ul-border);
         font-weight: 600;
     }
 }
@@ -538,7 +538,7 @@
         align-items: center;
         justify-content: space-between;
         padding: .75rem 1rem;
-        border-bottom: 1px solid #e5e7eb;
+        border-bottom: 1px solid var(--ul-border);
         font-weight: 600;
         flex-shrink: 0;
     }
@@ -548,7 +548,7 @@
         justify-content: flex-end;
         gap: .6rem;
         padding: .75rem 1rem;
-        border-top: 1px solid #e5e7eb;
+        border-top: 1px solid var(--ul-border);
         flex-shrink: 0;
     }
 }

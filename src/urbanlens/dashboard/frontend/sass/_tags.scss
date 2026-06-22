@@ -1,3 +1,4 @@
+@use 'sass:color';
 @use 'variables' as *;
 
 // ── Pin list membership panel (on pin detail page) ───────────────────────────
@@ -145,10 +146,6 @@
 
 // ── Tags (replaces pin lists) ─────────────────────────────────────────────────
 
-.tag-page {
-    //margin: 0 auto;
-    //padding: 2rem 1rem;
-}
 
 .tag-header {
     display: flex;
@@ -242,9 +239,7 @@
 .tag-card-desc {
     font-size: 0.85rem;
     color: $text-secondary;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @include truncate;
 }
 
 .tag-card-meta {
@@ -1175,7 +1170,7 @@
     }
 
     &:hover:not(:disabled) {
-        background: darken($primary-color, 8%);
+        background: color.adjust($primary-color, $lightness: -8%);
     }
 
     &:disabled {
@@ -1618,11 +1613,6 @@
 
 // ── Organize page (unified Tags + Categories + Priority) ──────────────────────
 
-.organize-page {
-    //width: 90em;
-    //margin: 0 auto;
-    //padding: 2rem 1rem;
-}
 
 // When .tag-page is used as a panel inside .organize-page, strip its own
 // max-width and padding so all tabs sit flush at the same width.
@@ -1766,18 +1756,14 @@
     font-size: .9rem;
     font-weight: 600;
     color: $text-primary;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @include truncate;
     margin-right: 1em;
 }
 
 .priority-item-desc {
     font-size: .78rem;
     color: $text-muted;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @include truncate;
 }
 
 .priority-item-badges {
@@ -1941,9 +1927,7 @@
     font-size: .95rem;
     font-weight: 500;
     color: var(--ul-text-1);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @include truncate;
 }
 
 .tag-row-actions {

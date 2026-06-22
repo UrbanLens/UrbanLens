@@ -1,7 +1,6 @@
 @use 'sass:color';
 @use 'variables' as *;
 
-// Prevent layout shift when scrollbar appears/disappears (e.g. list↔calendar toggle)
 html {
     scrollbar-gutter: stable;
 }
@@ -88,11 +87,7 @@ button,
     }
 
     .confirm-dialog-footer {
-        display: flex;
-        justify-content: flex-end;
-        gap: .5rem;
-        padding: .75rem 1rem 1rem;
-        border-top: 1px solid $border-color;
+        @include dialog-footer;
     }
 }
 
@@ -163,9 +158,8 @@ button,
             width: 100%;
             padding: 9px 12px;
             font-size: 0.9rem;
-            border: 1.5px solid $border-color !important;
+            border: 1.5px solid var(--ul-border) !important;
             border-radius: $radius-sm !important;
-            border-bottom: 1.5px solid $border-color !important;
             background: var(--ul-surface-1);
             color: $text-primary;
             outline: none;
@@ -176,8 +170,9 @@ button,
             box-shadow: none !important;
 
             &:focus {
+                @include input-focus;
                 border-color: $primary-color !important;
-                box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1) !important;
+                box-shadow: 0 0 0 3px rgba($primary-color, .12) !important;
             }
         }
 

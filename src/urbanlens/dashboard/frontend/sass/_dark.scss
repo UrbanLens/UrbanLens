@@ -1,3 +1,4 @@
+@use 'sass:color';
 @use 'variables' as *;
 
 // ── Design tokens (light-mode defaults) ──────────────────────────────────────
@@ -165,7 +166,7 @@
         &.tag-stat--children {
             background: #1a2a3a;
             border-color: #2a4a6a;
-            color: lighten($primary-color, 20%);
+            color: color.adjust($primary-color, $lightness: 20%);
         }
 
         &.tag-stat--total {
@@ -414,7 +415,7 @@
 
     .edit-avatar-upload-btn {
         background: #1a2a3a;
-        border-color: lighten($primary-color, 10%);
+        border-color: color.adjust($primary-color, $lightness: 10%);
     }
 
     .edit-link-row {
@@ -1476,8 +1477,8 @@
 
     .organize-tab {
         &.active {
-            color: lighten($primary-color, 15%);
-            border-bottom-color: lighten($primary-color, 15%);
+            color: color.adjust($primary-color, $lightness: 15%);
+            border-bottom-color: color.adjust($primary-color, $lightness: 15%);
         }
     }
 
@@ -1529,7 +1530,7 @@
     }
 
     .tag-card--selected {
-        border-color: lighten($primary-color, 10%) !important;
+        border-color: color.adjust($primary-color, $lightness: 10%) !important;
         background: rgba(66, 133, 244, .1) !important;
     }
 
@@ -1625,7 +1626,7 @@
             color: var(--ul-text-1);
 
             &:focus {
-                border-color: lighten($primary-color, 10%);
+                border-color: color.adjust($primary-color, $lightness: 10%);
             }
         }
     }

@@ -432,10 +432,6 @@
 
 // ── Settings page ────────────────────────────────────────────────────────────
 
-.settings-page {
-    //margin: 2rem auto;
-    //padding: 0 1rem;
-}
 
 .settings-header {
     margin-bottom: 2rem;
@@ -622,7 +618,7 @@
     transition: background 0.2s;
 
     &:hover {
-        background: darken($primary-color, 8%);
+        background: color.adjust($primary-color, $lightness: -8%);
     }
 }
 
@@ -858,10 +854,6 @@
 // ── Profile supplements ────────────────────
 // ── Edit profile page ────────────────────────────────────────────────────────
 
-.edit-profile-page {
-    //margin: 2rem auto;
-    //padding: 0 1rem;
-}
 
 .edit-profile-header {
     margin-bottom: 1.75rem;
@@ -1021,7 +1013,7 @@
     }
 
     &:hover {
-        background: lighten($primary-color, 40%);
+        background: color.adjust($primary-color, $lightness: 40%);
     }
 }
 
@@ -1077,7 +1069,7 @@ textarea.edit-textarea {
     transition: background 0.2s;
 
     &:hover {
-        background: darken($primary-color, 8%);
+        background: color.adjust($primary-color, $lightness: -8%);
     }
 }
 
@@ -1120,9 +1112,7 @@ textarea.edit-textarea {
     font-size: 0.9rem;
     color: $text-color;
     text-decoration: none;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    @include truncate;
 
     &:hover {
         color: $primary-color;
@@ -1177,7 +1167,7 @@ textarea.edit-textarea {
     background: var(--ul-surface-1);
 
     &::placeholder {
-        color: lighten($text-secondary, 15%);
+        color: color.adjust($text-secondary, $lightness: 15%);
     }
 
     &:focus {
@@ -1208,7 +1198,7 @@ textarea.edit-textarea {
     transition: background 0.2s;
 
     &:hover {
-        background: darken($primary-color, 8%);
+        background: color.adjust($primary-color, $lightness: -8%);
     }
 }
 
@@ -1590,7 +1580,7 @@ textarea.edit-textarea {
     }
 
     &:hover {
-        background: darken($primary-color, 8%);
+        background: color.adjust($primary-color, $lightness: -8%);
     }
 }
 
@@ -1762,10 +1752,6 @@ textarea.edit-textarea {
 
 // ── Pin Lists ────────────────────────────────────────────────────────────────
 
-.pinlist-page {
-    //margin: 0 auto;
-    //padding: 2rem 1rem;
-}
 
 .pinlist-header {
     display: flex;
@@ -1885,9 +1871,7 @@ textarea.edit-textarea {
     font-size: 0.85rem;
     color: $text-secondary;
     margin-bottom: 0.4rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @include truncate;
 }
 
 .pinlist-card-meta {
@@ -2152,9 +2136,7 @@ a.profile-stat--link {
     font-weight: 600;
     font-size: .88rem;
     color: $text-primary;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @include truncate;
 }
 
 .friend-card-username {
@@ -2425,7 +2407,7 @@ a.profile-stat--link {
     }
 
     &:hover {
-        background: darken($primary-color, 8%);
+        background: color.adjust($primary-color, $lightness: -8%);
     }
 }
 

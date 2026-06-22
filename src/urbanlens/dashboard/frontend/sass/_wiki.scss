@@ -522,9 +522,7 @@
         padding: .1rem .35rem;
         font-size: .82rem;
         max-width: 200px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        @include truncate;
     }
 
     .wiki-change-arrow {
@@ -539,9 +537,7 @@
         padding: .1rem .35rem;
         font-size: .82rem;
         max-width: 200px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        @include truncate;
     }
 
     .wiki-revert-btn {

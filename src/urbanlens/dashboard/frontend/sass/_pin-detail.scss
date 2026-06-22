@@ -79,9 +79,7 @@
     .wx-condition {
         font-size: .63rem;
         color: #666;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        @include truncate;
         max-width: 66px;
     }
 
@@ -197,7 +195,7 @@
     .tad-tabs {
         display: flex;
         gap: 0;
-        border-bottom: 2px solid #e5e7eb;
+        border-bottom: 2px solid var(--ul-border);
         padding: 0 .5rem;
         flex-shrink: 0;
         background: var(--ul-surface-1);
@@ -920,7 +918,7 @@ body.page-location-details {
     .details-grid {
         .detail-row {
             padding: .45rem .9rem;
-            border-bottom: 1px solid $border-color;
+            border-bottom: 1px solid var(--ul-border);
             border-radius: 0;
 
             &:last-child {
@@ -944,7 +942,7 @@ body.page-location-details {
         justify-content: space-around;
         gap: .5rem 1rem;
         padding: .6rem .9rem;
-        border-bottom: 1px solid $border-color;
+        border-bottom: 1px solid var(--ul-border);
     }
 
     .pin-stat-item {
@@ -979,7 +977,7 @@ body.page-location-details {
     }
 
     .security-indicators {
-        border-top-color: $border-color;
+        border-top-color: var(--ul-border);
     }
 }
 
@@ -1187,9 +1185,7 @@ body.page-location-details {
     display: inline-flex;
     align-items: center;
     gap: .2rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @include truncate;
 
     &:hover {
         text-decoration: underline;
@@ -1228,7 +1224,7 @@ body.page-location-details {
 // ── Location picker panel (inline in pin overview) ────────────────────────────
 
 .pin-loc-picker {
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid var(--ul-border);
     background: var(--ul-surface-1);
     border-radius: 0 0 10px 10px;
 }
@@ -1287,9 +1283,7 @@ body.page-location-details {
     font-size: .84rem;
     font-weight: 500;
     color: var(--ul-text-1);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @include truncate;
 }
 
 .pin-loc-option-badge {
@@ -1338,7 +1332,7 @@ body.page-location-details {
         align-items: center;
         gap: .45rem;
         padding: .75rem 1rem;
-        border-bottom: 1px solid #e5e7eb;
+        border-bottom: 1px solid var(--ul-border);
         font-weight: 600;
         font-size: .9rem;
 
@@ -1385,9 +1379,7 @@ body.page-location-details {
     color: var(--ul-text-1);
     flex: 1;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    @include truncate;
 }
 
 .loc-conflict-badge {

@@ -339,7 +339,7 @@
         align-items: center;
         gap: .5rem;
         padding: .75rem 1rem;
-        border-bottom: 1px solid var(--border-color, #e5e7eb);
+        border-bottom: 1px solid var(--ul-border);
         font-weight: 600;
         font-size: .95rem;
 
@@ -539,7 +539,7 @@ body.page-location-details div.section {
 
         .search-result {
             padding: .75rem 1rem;
-            border-bottom: 1px solid var(--ul-border, #e5e7eb);
+            border-bottom: 1px solid var(--ul-border);
             transition: background .12s;
 
             &:last-child {
@@ -706,7 +706,7 @@ body.page-location-details div.section {
         border: 1.5px solid var(--ul-border, #cbd5e1);
         border-radius: 999px;
         font-size: .82rem;
-        background: var(--ul-surface, #fff);
+        background: var(--ul-surface-1);
         color: inherit;
         outline: none;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
@@ -734,12 +734,12 @@ body.page-location-details div.section {
         gap: 4px;
         padding: 5px 11px;
         border-radius: 999px;
-        background: var(--ul-surface, #fff);
+        background: var(--ul-surface-1);
         border: 1.5px solid var(--ul-border, #e2e8f0);
         font-size: .75rem;
         font-weight: 500;
         cursor: pointer;
-        color: var(--ul-text-muted, #64748b);
+        color: var(--ul-text-3);
         transition: background .13s, border-color .13s, color .13s, box-shadow .13s;
         user-select: none;
         white-space: nowrap;
@@ -801,12 +801,12 @@ body.page-location-details div.section {
         align-items: center;
         gap: 3px;
         font-size: .73rem;
-        color: var(--ul-text-muted, #94a3b8);
+        color: var(--ul-text-3);
         cursor: pointer;
         padding: 5px 9px;
         border-radius: 999px;
         border: 1.5px solid var(--ul-border, #e2e8f0);
-        background: var(--ul-surface, #fff);
+        background: var(--ul-surface-1);
         transition: color .12s, border-color .12s, background .12s;
         white-space: nowrap;
 
@@ -918,7 +918,7 @@ body.page-location-details div.section {
         border: 1px solid transparent;
         background: transparent;
         cursor: pointer;
-        color: var(--ul-text-muted, #94a3b8);
+        color: var(--ul-text-3);
         transition: background .13s, border-color .13s, color .13s;
         opacity: 0;
         pointer-events: none;

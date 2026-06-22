@@ -115,7 +115,7 @@
 }
 
 .detail-pin-list-drawer {
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid var(--ul-border);
     max-height: 320px;
     overflow: hidden;
     display: flex;
@@ -158,9 +158,7 @@
 
     .detail-pin-list-item-name {
         flex: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        @include truncate;
     }
 
     .detail-pin-list-item-delete {
@@ -192,7 +190,7 @@
 
 .map-panel-tabs {
     display: flex;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--ul-border);
     flex-shrink: 0;
 }
 
@@ -327,9 +325,7 @@
     padding: .18rem .3rem;
     font-size: .62rem;
     color: #6b7280;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @include truncate;
     background: rgba(255, 255, 255, .85);
 }
 
@@ -446,7 +442,7 @@
     font-size: .82rem;
     font-weight: 600;
     color: #374151;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--ul-border);
 }
 
 .markup-form-body {
@@ -623,7 +619,7 @@
     align-items: center;
     justify-content: space-between;
     padding: .85rem 1.25rem;
-    border-bottom: 1px solid $border-color;
+    border-bottom: 1px solid var(--ul-border);
     flex-shrink: 0;
 
     h2 {
@@ -653,7 +649,7 @@
     left: 0;
     right: 0;
     background: var(--ul-surface-1);
-    border: 1.5px solid $border-color;
+    border: 1.5px solid var(--ul-border);
     border-top: none;
     border-radius: 0 0 $radius-sm $radius-sm;
     box-shadow: 0 6px 18px rgba(0, 0, 0, .1);
@@ -725,7 +721,7 @@
     gap: .25rem;
     padding: .28rem .65rem;
     border-radius: 20px;
-    border: 1.5px solid $border-color;
+    border: 1.5px solid var(--ul-border);
     background: var(--ul-surface-1);
     font-size: .8rem;
     cursor: pointer;
@@ -754,7 +750,7 @@
     align-items: center;
     gap: .6rem;
     padding: .85rem 1.25rem;
-    border-top: 1px solid $border-color;
+    border-top: 1px solid var(--ul-border);
     flex-shrink: 0;
 }
 

@@ -15,23 +15,17 @@ $text-primary: #1a1a1a;
 $text-secondary: #5f6368;
 $text-muted: #9aa0a6;
 $border-color: #e0e0e0;
+$radius-xs: 4px;
 $radius-sm: 8px;
 $radius-md: 12px;
+// $radius-lg was identical to $radius-md — removed; use $radius-md instead
+$radius-full: 9999px;
+$shadow-sm: 0 1px 3px rgba(0, 0, 0, .08);
+$shadow-md: 0 4px 16px rgba(0, 0, 0, .12);
 $shadow-dialog: 0 8px 40px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .08);
 $text-color: $text-primary;
 $surface-hover: color.scale($primary-color, $lightness: +5%);
 
-// Prevent scrollbar-induced layout shift on all pages
-html {
-    scrollbar-gutter: stable;
-}
-
-// ── Additional shared tokens ─────────────────────────────────────────────────
-$shadow-sm: 0 1px 3px rgba(0, 0, 0, .08);
-$shadow-md: 0 4px 16px rgba(0, 0, 0, .12);
-$radius-xs: 4px;
-$radius-lg: 12px;
-$radius-full: 9999px;
 $danger-color: #c0392b;
 $danger-bg: #fdf0ee;
 $danger-border: #e8c2be;
@@ -43,9 +37,43 @@ $teal-color: #0d6e6e;
 $teal-bg: #e6f7f7;
 
 // ── Shared mixins ─────────────────────────────────────────────────────────────
+
+// Text overflow truncation
+@mixin truncate {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+// Small inline icon button (28×28 by default)
+@mixin icon-btn($size: 28px) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: $size;
+    height: $size;
+    border-radius: $radius-xs + 2; // 6px
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+    color: var(--ul-text-3);
+    transition: background .12s, color .12s;
+
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: var(--ul-hover-bg);
+        color: var(--ul-text-1);
+    }
+}
+
+// Dialog / panel base
 @mixin dialog-base {
     border: none;
-    border-radius: $radius-lg;
+    border-radius: $radius-md;
     box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
     padding: 0;
     max-width: 90vw;
@@ -62,37 +90,41 @@ $teal-bg: #e6f7f7;
     }
 }
 
-@mixin panel-base {
-    background: var(--ul-surface-1);
-    border: 1px solid $border-color;
-    border-radius: $radius-lg;
-    overflow: hidden;
-}
-
+// Panel / card header bar
 @mixin panel-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: .5rem;
     padding: .75rem 1rem;
-    border-bottom: 1px solid $border-color;
+    border-bottom: 1px solid var(--ul-border);
     font-weight: 600;
     font-size: .95rem;
     flex-shrink: 0;
 }
 
+// Panel base card container
+@mixin panel-base {
+    background: var(--ul-surface-1);
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-md;
+    overflow: hidden;
+}
+
+// List item inside a panel
 @mixin panel-item {
     display: flex;
     align-items: center;
     gap: .5rem;
     padding: .5rem .75rem;
-    border-bottom: 1px solid $border-color;
+    border-bottom: 1px solid var(--ul-border);
 
     &:last-child {
         border-bottom: none;
     }
 }
 
+// Empty / no-content state
 @mixin empty-state {
     display: flex;
     flex-direction: column;
@@ -100,7 +132,7 @@ $teal-bg: #e6f7f7;
     justify-content: center;
     gap: .5rem;
     padding: 2rem;
-    color: #999;
+    color: var(--ul-text-3);
     text-align: center;
 
     .material-icons {
@@ -109,17 +141,29 @@ $teal-bg: #e6f7f7;
     }
 }
 
+// Input focus ring
 @mixin input-focus {
     outline: none;
     border-color: $primary-color;
     box-shadow: 0 0 0 3px rgba($primary-color, .15);
 }
 
+// Add-row at the bottom of a panel
 @mixin add-form-row {
     display: flex;
     gap: .5rem;
     align-items: center;
     padding: .75rem 1rem;
-    border-top: 1px solid $border-color;
+    border-top: 1px solid var(--ul-border);
     background: var(--ul-surface-1);
+}
+
+// Dialog footer: right-aligned action buttons with top border
+@mixin dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: .5rem;
+    padding: .75rem 1rem 1rem;
+    border-top: 1px solid var(--ul-border);
+    flex-shrink: 0;
 }

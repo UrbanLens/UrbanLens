@@ -3,9 +3,6 @@
 
 // ── Trip planning ─────────────────────────────────────────────────────────
 
-.trips-page {
-    //padding: 2rem 1rem;
-}
 
 .trips-header {
     display: flex;
@@ -84,7 +81,6 @@
 .trip-card {
     background: var(--ul-surface-1);
     border: 1px solid var(--ul-border);
-    ;
     border-radius: 10px;
     transition: box-shadow .15s, border-color .15s;
 
@@ -136,9 +132,7 @@
 .trip-card-desc {
     font-size: .85rem;
     color: var(--ul-text-2);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @include truncate;
 }
 
 .trip-card-meta {
@@ -577,9 +571,7 @@
 }
 
 .cal-event-title {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @include truncate;
     min-width: 0;
 }
 
@@ -1935,9 +1927,7 @@
             font-size: .85rem;
             font-weight: 500;
             color: $text-primary;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            @include truncate;
         }
     }
 

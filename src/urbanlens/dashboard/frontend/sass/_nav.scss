@@ -156,9 +156,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     font-size: 0.875rem;
     font-weight: 500;
     max-width: 120px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    @include truncate;
 }
 
 .nav-chevron {
@@ -230,17 +228,13 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     font-size: 0.875rem;
     font-weight: 600;
     color: var(--ul-text-1);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @include truncate;
 }
 
 .nav-dropdown-username {
     font-size: 0.8rem;
     color: var(--ul-text-2);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @include truncate;
 }
 
 // Separator
@@ -529,18 +523,14 @@ nav .brand-logo img {
         font-weight: 400;
         color: var(--ul-text-2);
         margin: 0 0 .15rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        @include truncate;
     }
 
     &__msg {
         font-size: .79rem;
         color: var(--ul-text-3);
         margin: 0 0 .2rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        @include truncate;
     }
 
     &__time {
@@ -708,7 +698,7 @@ nav .brand-logo img {
             color: #6b7280;
             font-weight: 600;
             font-size: .78rem;
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid var(--ul-border);
         }
 
         th:first-child {
