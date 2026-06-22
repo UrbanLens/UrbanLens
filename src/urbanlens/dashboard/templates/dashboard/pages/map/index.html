@@ -881,7 +881,7 @@
                 zoom: z,
                 csrfmiddlewaretoken: document.querySelector('[name=csrfmiddlewaretoken]')?.value || '',
             });
-            fetch('{% url "dashboard:settings.save_map_position" %}', {
+            fetch('{% url "settings.save_map_position" %}', {
                 method: 'POST',
                 headers: { 'X-CSRFToken': body.get('csrfmiddlewaretoken'), 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: body.toString(),

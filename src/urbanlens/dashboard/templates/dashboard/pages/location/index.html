@@ -22,45 +22,12 @@
         <div class="pin-details location-details card" style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
     </div>
 
-    {# ── Visit history ────────────────────────────────────────────────── #}
-    <div hx-get="{% url 'pin.visits' pin.uuid %}"
-         hx-trigger="load"
-         hx-swap="outerHTML"
-         class="visit-history card">
-        <div class="card-header">
-            <i class="material-icons">history</i>
-            <span>Visit History</span>
-        </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
-    </div>
+    {# ── Two-column body: map (left) | metadata sidebar (right) ─────── #}
+    <div class="pin-body-grid">
 
-    {# ── Badges panel (tags, categories, statuses) ───────────────────── #}
-    <div hx-get="{% url 'category.pin' pin.uuid %}"
-         hx-trigger="load"
-         hx-swap="outerHTML"
-         class="tag-panel">
-        <div class="tag-panel-header">
-            <i class="material-icons">category</i>
-            <span>Categories</span>
-        </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
-    </div>
-
-    {# ── Aliases ──────────────────────────────────────────────────────── #}
-    <div hx-get="{% url 'pin.aliases' pin.uuid %}"
-         hx-trigger="load"
-         hx-swap="outerHTML"
-         id="pin-aliases-panel"
-         class="aliases-panel card">
-        <div class="card-header">
-            <i class="material-icons">label_important</i>
-            <span>Aliases</span>
-        </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
-    </div>
-
-    {# ── Location map (includes campus boundary editor + detail pins) ─── #}
-    <div class="location-map pin-map card">
+        {# ── Left: map ─────────────────────────────────────────────────── #}
+        <div class="pin-body-main">
+        <div class="location-map pin-map card">
         <div class="card-header">
             <i class="material-icons">place</i>
             <h3>Location</h3>
@@ -268,10 +235,55 @@
             </div>
 
         </div>
-    </div>
+    </div>{# end .location-map #}
+        </div>{# end .pin-body-main #}
 
-    {# ── Responsive multi-column grid for secondary panels ───────────── #}
-    <div class="pin-cards-grid ul-grid ul-grid--3col">
+        {# ── Right: metadata sidebar ──────────────────────────────────── #}
+        <div class="pin-body-sidebar">
+
+            {# ── Visit history ───────────────────────────────────────── #}
+            <div hx-get="{% url 'pin.visits' pin.uuid %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML"
+                 class="visit-history card">
+                <div class="card-header">
+                    <i class="material-icons">history</i>
+                    <span>Visit History</span>
+                </div>
+                <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+            </div>
+
+            {# ── Badges panel (tags, categories, statuses) ───────────── #}
+            <div hx-get="{% url 'category.pin' pin.uuid %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML"
+                 class="tag-panel">
+                <div class="tag-panel-header">
+                    <i class="material-icons">category</i>
+                    <span>Categories</span>
+                </div>
+                <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+            </div>
+
+            {# ── Aliases ─────────────────────────────────────────────── #}
+            <div hx-get="{% url 'pin.aliases' pin.uuid %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML"
+                 id="pin-aliases-panel"
+                 class="aliases-panel card">
+                <div class="card-header">
+                    <i class="material-icons">label_important</i>
+                    <span>Aliases</span>
+                </div>
+                <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+            </div>
+
+        </div>{# end .pin-body-sidebar #}
+
+    </div>{# end .pin-body-grid #}
+
+    {# ── 2-column media grid: satellite, street view, Smithsonian, web ─── #}
+    <div class="pin-cards-grid ul-grid ul-grid--2col">
 
     {# ── Satellite view ───────────────────────────────────────────────── #}
     <div id="satellite-view-section" class="satellite-view card"

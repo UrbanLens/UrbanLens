@@ -6,8 +6,10 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.models import User
+from django.core.exceptions import PermissionDenied
 from django.db.models import Q
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
@@ -24,8 +26,6 @@ from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
 if TYPE_CHECKING:
     from uuid import UUID
-
-    from django.http import HttpRequest
 
 
 class ViewProfileView(LoginRequiredMixin, View):
@@ -362,6 +362,21 @@ class EditProfileView(LoginRequiredMixin, View):
         return redirect("profile.edit")
 
 
+def _authenticated_profile(request: HttpRequest) -> "Profile":
+    """Return the authenticated user's Profile.
+
+    LoginRequiredMixin guarantees this path is only reached by authenticated
+    users, but mypy sees request.user as User | AnonymousUser.  The isinstance
+    guard here makes that explicit and raises PermissionDenied (→ 403) for the
+    theoretically-unreachable anonymous case.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    if not isinstance(request.user, User):
+        raise PermissionDenied
+    return get_object_or_404(Profile, user=request.user)
+
+
 class ProfileNoteView(LoginRequiredMixin, View):
     """Create a new private note about another profile (HTMX)."""
 
@@ -369,7 +384,7 @@ class ProfileNoteView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
         subject = get_object_or_404(Profile, uuid=profile_uuid)
-        author = request.user.profile
+        author = _authenticated_profile(request)
         if author == subject:
             return HttpResponse("Cannot annotate your own profile.", status=400)
 
@@ -387,7 +402,7 @@ class ProfileNoteDeleteView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
         subject = get_object_or_404(Profile, uuid=profile_uuid)
-        author = request.user.profile
+        author = _authenticated_profile(request)
         ProfileNote.objects.filter(pk=note_id, author=author, subject=subject).delete()
         return _render_profile_annotation_partial(request, author, subject)
 
@@ -399,7 +414,7 @@ class ProfileNoteEditView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
         subject = get_object_or_404(Profile, uuid=profile_uuid)
-        author = request.user.profile
+        author = _authenticated_profile(request)
         content = request.POST.get("content", "").strip()
         ProfileNote.objects.filter(pk=note_id, author=author, subject=subject).update(content=content)
         return _render_profile_annotation_partial(request, author, subject)
@@ -413,7 +428,7 @@ class ProfileBadgeToggleView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
 
         subject = get_object_or_404(Profile, uuid=profile_uuid)
-        author = request.user.profile
+        author = _authenticated_profile(request)
         if author == subject:
             return HttpResponse("Cannot annotate your own profile.", status=400)
 

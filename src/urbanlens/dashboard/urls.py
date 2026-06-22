@@ -288,6 +288,12 @@ urlpatterns = [
                                 image_gallery.PinImageView.as_view(),
                                 name="pin.gallery.image",
                             ),
+                            # No-trailing-slash variant so DELETE/POST fetch calls work even
+                            # when APPEND_SLASH would otherwise downgrade the method to GET.
+                            path(
+                                "<uuid:pin_uuid>/gallery/<int:image_id>",
+                                image_gallery.PinImageView.as_view(),
+                            ),
                             path(
                                 "import/",
                                 include(

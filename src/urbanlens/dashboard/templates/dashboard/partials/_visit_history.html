@@ -33,7 +33,7 @@
             <div class="visit-notes">{{ visit.notes }}</div>
             {% endif %}
             <button type="button"
-                    hx-post="{% url 'pin.visit.delete' pin.id visit.id %}"
+                    hx-post="{% url 'pin.visit.delete' pin.uuid visit.id %}"
                     hx-target="#visit-history-panel"
                     hx-swap="outerHTML"
                     hx-confirm="Delete this visit record?"
@@ -57,8 +57,12 @@
               class="visit-add-form">
             {% csrf_token %}
             <div class="form-row">
-                <label for="visited_at_{{ pin.uuid }}">Date &amp; time</label>
-                <input type="datetime-local" name="visited_at" id="visited_at_{{ pin.uuid }}" required>
+                <label for="visited_date_{{ pin.uuid }}">Date</label>
+                <input type="date" name="visited_date" id="visited_date_{{ pin.uuid }}" required>
+            </div>
+            <div class="form-row">
+                <label for="visited_time_{{ pin.uuid }}">Time <small>(optional)</small></label>
+                <input type="time" name="visited_time" id="visited_time_{{ pin.uuid }}">
             </div>
             <div class="form-row">
                 <label for="visit_notes_{{ pin.uuid }}">Notes <small>(optional)</small></label>

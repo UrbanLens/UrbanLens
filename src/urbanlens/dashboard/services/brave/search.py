@@ -55,7 +55,7 @@ class BraveSearchGateway(Gateway):
             BraveSearchError: When the API key is missing or the request fails.
         """
         self._validate()
-        params = {
+        params: dict[str, str | int] = {
             "q": query,
             "count": max(1, min(max_results, 20)),
         }

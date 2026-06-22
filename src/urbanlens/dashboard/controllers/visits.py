@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -79,13 +79,13 @@ class VisitHistoryView(LoginRequiredMixin, View):
         """
         pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
 
-        raw_date = request.POST.get("visited_at", "").strip()
+        raw_date = request.POST.get("visited_date", "").strip()
+        raw_time = request.POST.get("visited_time", "").strip()
         if not raw_date:
             return HttpResponse("Date is required.", status=400)
         try:
-            visited_at = datetime.fromisoformat(raw_date)
-            if visited_at.tzinfo is None:
-                visited_at = visited_at.replace(tzinfo=UTC)
+            iso_str = f"{raw_date}T{raw_time}" if raw_time else f"{raw_date}T00:00"
+            visited_at = datetime.fromisoformat(iso_str).replace(tzinfo=UTC)
         except ValueError:
             return HttpResponse("Invalid date format.", status=400)
 
