@@ -443,3 +443,127 @@ input[type="submit"] {
 select {
     display: block;
 }
+
+// shared button helpers
+.btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: $primary-color;
+    color: var(--ul-text-2);
+    border: none;
+    border-radius: $radius-sm;
+    padding: 9px 18px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+
+    i {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: color.adjust($primary-color, $lightness: -8%);
+    }
+}
+
+.btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-sm;
+    padding: 9px 18px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--ul-text-2);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+
+    &:hover {
+        background: var(--ul-surface-3);
+        color: var(--ul-text-1);
+    }
+}
+
+.btn-danger-filled {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: $danger-color;
+    color: var(--ul-text-4);
+    border: none;
+    border-radius: $radius-sm;
+    padding: 9px 18px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+
+    i {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: color.adjust($danger-color, $lightness: -8%);
+    }
+}
+
+.btn-icon {
+    background: none;
+    border: none;
+    border-radius: $radius-sm;
+    padding: 6px;
+    cursor: pointer;
+    color: var(--ul-text-2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+    transition: background 0.12s, color 0.12s;
+
+    &:hover,
+    &:focus {
+        background: var(--ul-hover-bg);
+        color: var(--ul-text-1);
+        outline: none;
+    }
+
+    &.btn-icon--danger {
+
+        &:hover,
+        &:focus {
+            background: $danger-bg;
+            color: $danger-color;
+            outline: none;
+        }
+    }
+
+    &.btn-icon--active {
+        color: #7c63d4;
+
+        &:hover,
+        &:focus {
+            background: #ede9ff;
+            color: #5b45b0;
+            outline: none;
+        }
+    }
+
+    &.btn-icon--global-edit {
+        color: #d97706;
+
+        &:hover,
+        &:focus {
+            background: #fef3c7;
+            color: #b45309;
+            outline: none;
+        }
+    }
+
+    i {
+        font-size: 1.15rem;
+    }
+}
