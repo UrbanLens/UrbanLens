@@ -163,7 +163,7 @@ class WebSearchViewTests(TestCase):
         pin = self._make_pin()
         rf = RequestFactory()
         request = rf.get("/")
-        request.user = pin.user
+        request.user = pin.profile.user
 
         mock_results = [{"title": "Result", "link": "http://example.com/page", "snippet": "A snippet"}]
 
@@ -187,7 +187,7 @@ class WebSearchViewTests(TestCase):
         pin = self._make_pin()
         rf = RequestFactory()
         request = rf.get("/")
-        request.user = pin.user
+        request.user = pin.profile.user
 
         captured: list[dict] = []
 
@@ -224,7 +224,7 @@ class WebSearchViewTests(TestCase):
         pin = self._make_pin()
         rf = RequestFactory()
         request = rf.get("/")
-        request.user = pin.user
+        request.user = pin.profile.user
 
         captured_ctx: dict = {}
 

@@ -77,7 +77,7 @@ def _build_pin_search_query(pin: Pin) -> str:
     """Build a search query combining the pin's name with optional location keywords.
 
     The effective name and place name are the primary search terms. Street name,
-    city, and state are appended as space-separated optional keywords so that
+    city, and state are appended as comma-separated optional keywords so that
     search engines can disambiguate results without requiring an exact phrase match.
     """
     name = pin.effective_name
@@ -112,7 +112,7 @@ def _build_pin_search_query(pin: Pin) -> str:
     if pin.state:
         location.append(pin.state)
 
-    return " ".join(filter(None, [primary_str, *location]))
+    return ", ".join(filter(None, [primary_str, *location]))
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):
