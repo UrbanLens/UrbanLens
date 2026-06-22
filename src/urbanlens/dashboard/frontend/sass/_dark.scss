@@ -34,7 +34,9 @@
     --ul-color-accent-fg: #4f46e5;
     --ul-color-accent-ring: rgba(99, 102, 241, .15);
 
-    --ul-color-success-bg: #f0fdf4;
+    --ul-color-button-bg: #2196F3;
+    --ul-color-button-fg: var(--ul-text-1);
+
     --ul-color-success-border: #86efac;
 
     --ul-color-warning-text: #92400e;
@@ -52,8 +54,8 @@
 [data-theme="dark"] {
     // Override design tokens
     --ul-surface-1: #1a1a1a;
-    --ul-surface-2: #5f6368;
-    --ul-surface-3: #9aa0a6;
+    --ul-surface-2: #222222;
+    --ul-surface-3: #5a5a5a;
     --ul-surface-4: #dddddd;
     --ul-surface-5: #ffffff;
 
@@ -96,1656 +98,1684 @@
     background: var(--ul-surface-1);
     color: #e0e0e0;
 
-    body {
-        background: var(--ul-surface-1);
-        color: #e0e0e0;
-    }
-
-    .app-nav {
-        background: var(--ul-surface-1);
-    }
-
-    .app-nav-link {
-        color: rgba(255, 255, 255, .75);
-    }
-
-    .app-nav-link:hover,
-    .app-nav-link.active {
+    input:not([type]):disabled,
+    input:not([type])[readonly=readonly],
+    input[type=text]:not(.browser-default):disabled,
+    input[type=text]:not(.browser-default)[readonly=readonly],
+    input[type=password]:not(.browser-default):disabled,
+    input[type=password]:not(.browser-default)[readonly=readonly],
+    input[type=email]:not(.browser-default):disabled,
+    input[type=email]:not(.browser-default)[readonly=readonly],
+    input[type=url]:not(.browser-default):disabled,
+    input[type=url]:not(.browser-default)[readonly=readonly],
+    input[type=time]:not(.browser-default):disabled,
+    input[type=time]:not(.browser-default)[readonly=readonly],
+    input[type=date]:not(.browser-default):disabled,
+    input[type=date]:not(.browser-default)[readonly=readonly],
+    input[type=datetime]:not(.browser-default):disabled,
+    input[type=datetime]:not(.browser-default)[readonly=readonly],
+    input[type=datetime-local]:not(.browser-default):disabled,
+    input[type=datetime-local]:not(.browser-default)[readonly=readonly],
+    input[type=tel]:not(.browser-default):disabled,
+    input[type=tel]:not(.browser-default)[readonly=readonly],
+    input[type=number]:not(.browser-default):disabled,
+    input[type=number]:not(.browser-default)[readonly=readonly],
+    input[type=search]:not(.browser-default):disabled,
+    input[type=search]:not(.browser-default)[readonly=readonly] {
         color: var(--ul-text-4);
     }
+}
 
-    .container {
-        background: transparent;
-    }
+body {
+    background: var(--ul-surface-1);
+    color: #e0e0e0;
+}
 
-    // Legacy positioned .dialog still needs explicit theming
-    .dialog {
-        background: var(--ul-surface-1);
-        border-color: var(--ul-border);
-    }
+.app-nav {
+    background: var(--ul-surface-1);
+}
 
-    .tag-chip {
-        color: #ccc;
-    }
+.app-nav-link {
+    color: rgba(255, 255, 255, .75);
+}
 
-    .tag-stat {
-        background: var(--ul-surface-1);
-        border-color: #444;
-        color: #9e9e9e;
+.app-nav-link:hover,
+.app-nav-link.active {
+    color: var(--ul-text-4);
+}
 
-        &.tag-stat--children {
-            background: #1a2a3a;
-            border-color: #2a4a6a;
-            color: lighten($primary-color, 20%);
-        }
+.container {
+    background: transparent;
+}
 
-        &.tag-stat--total {
-            background: var(--ul-surface-1);
-            border-color: #3a3a3a;
-            color: #7a7a7a;
-        }
-    }
+// Legacy positioned .dialog still needs explicit theming
+.dialog {
+    background: var(--ul-surface-1);
+    border-color: var(--ul-border);
+}
 
-    .tag-view-toggle {
-        border-color: #444;
-    }
+.tag-chip {
+    color: #ccc;
+}
 
-    .tag-view-btn {
-        background: var(--ul-surface-1);
-        color: #aaa;
-        border-right-color: #444;
+.tag-stat {
+    background: var(--ul-surface-1);
+    border-color: #444;
+    color: #9e9e9e;
 
-        &:hover {
-            background: var(--ul-surface-1);
-            color: #e0e0e0;
-        }
-
-        &.active {
-            background: $primary-color;
-            color: var(--ul-text-4);
-        }
-    }
-
-    .tag-tree-children {
-        border-left-color: #444;
-    }
-
-    .tag-tree-children>.tag-tree-item::before {
-        background: #444;
-    }
-
-    .settings-title {
-        color: var(--ul-text-4);
-    }
-
-    .settings-section-header {
-        border-color: var(--ul-border);
-    }
-
-    .settings-section-title,
-    .settings-label,
-    .settings-toggle-label,
-    .tag-card-name,
-    .tag-title {
-        color: #e0e0e0;
-    }
-
-    .settings-section-desc,
-    .settings-subtitle,
-    .settings-help,
-    .tag-card-desc,
-    .tag-subtitle {
-        color: #9e9e9e;
-    }
-
-    // Inputs / selects
-    .settings-select,
-    .settings-input,
-    .form-input,
-    textarea.form-input {
-        background: var(--ul-surface-1);
-        color: #e0e0e0;
-        border-color: #444;
-    }
-
-    .settings-radio-button {
-        border-color: #333;
-        background: rgb(40, 40, 40);
-    }
-
-    .settings-select:focus,
-    .settings-input:focus,
-    .form-input:focus {
-        border-color: $primary-color;
-    }
-
-    // Theme toggle
-    .settings-theme-option {
-        background: var(--ul-surface-1);
-        border-color: #444;
-
-        span {
-            color: #bbb;
-        }
-
-        i {
-            color: #888;
-        }
-
-        &:hover:not(.active) {
-            background: #333;
-            border-color: #666;
-        }
-
-        &.active {
-            background: rgba($primary-color, 0.12);
-            border-color: $primary-color;
-        }
-    }
-
-    // Tag page
-    .tag-global-badge {
-        background: #333;
-        color: #aaa;
-    }
-
-    .tag-parent-select,
-    .tag-parent-option {
-        background: var(--ul-surface-1);
-        border-color: #444;
-    }
-
-    .tag-parent-option:hover {
-        background: #333;
-    }
-
-    // Misc
-    .icon-option {
-        color: #ccc;
-        border-color: #444;
-        background: var(--ul-surface-1);
-    }
-
-    .icon-option:hover {
-        background: #383838;
-    }
-
-    .icon-option.selected {
-        background: rgba($primary-color, 0.18);
-        border-color: $primary-color;
-    }
-
-    .color-clear {
-        background: var(--ul-surface-1) !important;
-    }
-
-    .tag-order-badge {
-        background: #333;
-        color: #aaa;
-    }
-
-    // Emoji picker
-    .icon-picker-trigger {
-        background: var(--ul-surface-1);
-        border-color: #444;
-        color: #e0e0e0;
-    }
-
-    .icon-picker-panel {
-        background: var(--ul-surface-1);
-        border-color: #333;
-    }
-
-    .icon-picker-search-row {
-        border-color: #333;
-    }
-
-    .icon-picker-search-input {
-        color: #e0e0e0;
-        background: transparent;
-    }
-
-    .icon-picker-tabs {
-        border-color: #333;
-    }
-
-    .icon-tab {
-        color: #888;
-
-        &:hover {
-            color: #ccc;
-        }
-
-        &.active {
-            color: $primary-color;
-        }
-    }
-
-    .icon-picker-item {
-        &:hover {
-            background: var(--ul-surface-1);
-        }
-
-        &.selected {
-            background: rgba($primary-color, 0.18);
-        }
-    }
-
-    .icon-picker-item-label {
-        color: #777;
-    }
-
-    .icon-picker-mi {
-        color: #aaa;
-    }
-
-    .icon-custom-upload-btn {
-        border-color: #444;
-        color: #888;
-    }
-
-    // Dialogs / import
-    .dialog-overlay {
-        background: rgba(0, 0, 0, .7);
-    }
-
-    // Header / footer
-    footer {
-        background: var(--ul-surface-1);
-        border-color: #333;
-        color: #888;
-    }
-
-    // Edit profile page
-    .edit-card {
-        background: var(--ul-surface-1);
-        border-color: #333;
-    }
-
-    .edit-card-title {
-        border-color: #333;
-    }
-
-    .edit-input,
-    input.edit-input,
-    textarea.edit-textarea {
-        background: var(--ul-surface-1);
-        color: #e0e0e0;
-        border-color: #444;
-    }
-
-    .edit-avatar-placeholder {
-        background: var(--ul-surface-1);
-        border-color: #444;
-    }
-
-    .edit-avatar-preview {
-        border-color: #444;
-    }
-
-    .edit-avatar-upload-btn {
+    &.tag-stat--children {
         background: #1a2a3a;
-        border-color: lighten($primary-color, 10%);
+        border-color: #2a4a6a;
+        color: lighten($primary-color, 20%);
     }
 
-    .edit-link-row {
+    &.tag-stat--total {
         background: var(--ul-surface-1);
-        border-color: #333;
+        border-color: #3a3a3a;
+        color: #7a7a7a;
     }
+}
 
-    .edit-add-link-input {
+.tag-view-toggle {
+    border-color: #444;
+}
+
+.tag-view-btn {
+    background: var(--ul-surface-1);
+    color: #aaa;
+    border-right-color: #444;
+
+    &:hover {
         background: var(--ul-surface-1);
         color: #e0e0e0;
-        border-color: #444;
     }
 
-    .edit-discord-details {
-        border-color: #333;
+    &.active {
+        background: $primary-color;
+        color: var(--ul-text-4);
+    }
+}
+
+.tag-tree-children {
+    border-left-color: #444;
+}
+
+.tag-tree-children>.tag-tree-item::before {
+    background: #444;
+}
+
+.settings-title {
+    color: var(--ul-text-4);
+}
+
+.settings-section-header {
+    border-color: var(--ul-border);
+}
+
+.settings-section-title,
+.settings-label,
+.settings-toggle-label,
+.tag-card-name,
+.tag-title {
+    color: #e0e0e0;
+}
+
+.settings-section-desc,
+.settings-subtitle,
+.settings-help,
+.tag-card-desc,
+.tag-subtitle {
+    color: #9e9e9e;
+}
+
+// Inputs / selects
+.settings-select,
+.settings-input,
+.form-input,
+textarea.form-input {
+    background: var(--ul-surface-1);
+    color: #e0e0e0;
+    border-color: #444;
+}
+
+.settings-radio-button {
+    border-color: #333;
+    background: rgb(40, 40, 40);
+}
+
+.settings-select:focus,
+.settings-input:focus,
+.form-input:focus {
+    border-color: $primary-color;
+}
+
+// Theme toggle
+.settings-theme-option {
+    background: var(--ul-surface-1);
+    border-color: #444;
+
+    span {
+        color: #bbb;
     }
 
-    .edit-discord-summary {
+    i {
+        color: #888;
+    }
+
+    &:hover:not(.active) {
+        background: #333;
+        border-color: #666;
+    }
+
+    &.active {
+        background: rgba($primary-color, 0.12);
+        border-color: $primary-color;
+    }
+}
+
+// Tag page
+.tag-global-badge {
+    background: #333;
+    color: #aaa;
+}
+
+.tag-parent-select,
+.tag-parent-option {
+    background: var(--ul-surface-1);
+    border-color: #444;
+}
+
+.tag-parent-option:hover {
+    background: #333;
+}
+
+// Misc
+.icon-option {
+    color: #ccc;
+    border-color: #444;
+    background: var(--ul-surface-1);
+}
+
+.icon-option:hover {
+    background: #383838;
+}
+
+.icon-option.selected {
+    background: rgba($primary-color, 0.18);
+    border-color: $primary-color;
+}
+
+.color-clear {
+    background: var(--ul-surface-1) !important;
+}
+
+.tag-order-badge {
+    background: #333;
+    color: #aaa;
+}
+
+// Emoji picker
+.icon-picker-trigger {
+    background: var(--ul-surface-1);
+    border-color: #444;
+    color: #e0e0e0;
+}
+
+.icon-picker-panel {
+    background: var(--ul-surface-1);
+    border-color: #333;
+}
+
+.icon-picker-search-row {
+    border-color: #333;
+}
+
+.icon-picker-search-input {
+    color: #e0e0e0;
+    background: transparent;
+}
+
+.icon-picker-tabs {
+    border-color: #333;
+}
+
+.icon-tab {
+    color: #888;
+
+    &:hover {
+        color: #ccc;
+    }
+
+    &.active {
+        color: $primary-color;
+    }
+}
+
+.icon-picker-item {
+    &:hover {
         background: var(--ul-surface-1);
     }
 
-    .field-status--saved {
-        color: #66bb6a;
+    &.selected {
+        background: rgba($primary-color, 0.18);
     }
+}
 
-    .settings-cluster-value {
-        color: var(--ul-text-2);
+.icon-picker-item-label {
+    color: #777;
+}
+
+.icon-picker-mi {
+    color: #aaa;
+}
+
+.icon-custom-upload-btn {
+    border-color: #444;
+    color: #888;
+}
+
+// Dialogs / import
+.dialog-overlay {
+    background: rgba(0, 0, 0, .7);
+}
+
+// Header / footer
+footer {
+    background: var(--ul-surface-1);
+    border-color: #333;
+    color: #888;
+}
+
+// Edit profile page
+.edit-card {
+    background: var(--ul-surface-1);
+    border-color: #333;
+}
+
+.edit-card-title {
+    border-color: #333;
+}
+
+.edit-input,
+input.edit-input,
+textarea.edit-textarea {
+    background: var(--ul-surface-1);
+    color: #e0e0e0;
+    border-color: #444;
+}
+
+.edit-avatar-placeholder {
+    background: var(--ul-surface-1);
+    border-color: #444;
+}
+
+.edit-avatar-preview {
+    border-color: #444;
+}
+
+.edit-avatar-upload-btn {
+    background: #1a2a3a;
+    border-color: lighten($primary-color, 10%);
+}
+
+.edit-link-row {
+    background: var(--ul-surface-1);
+    border-color: #333;
+}
+
+.edit-add-link-input {
+    background: var(--ul-surface-1);
+    color: #e0e0e0;
+    border-color: #444;
+}
+
+.edit-discord-details {
+    border-color: #333;
+}
+
+.edit-discord-summary {
+    background: var(--ul-surface-1);
+}
+
+.field-status--saved {
+    color: #66bb6a;
+}
+
+.settings-cluster-value {
+    color: var(--ul-text-2);
+}
+
+.settings-cluster-slider-wrap input[type="range"] {
+    accent-color: $primary-color;
+}
+
+.settings-reset-btn {
+    border-color: #444;
+    color: #aaa;
+
+    &:hover {
+        background: var(--ul-surface-1);
+        border-color: #666;
     }
+}
 
-    .settings-cluster-slider-wrap input[type="range"] {
-        accent-color: $primary-color;
+
+// ── Trip map context menu dark mode ──────────────────────────────────────────
+
+.trip-map-ctx-menu {
+    background: #1e2130;
+    border-color: #2d3348;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+}
+
+.trip-map-ctx-item {
+    color: #e2e8f0;
+
+    &:hover {
+        background: rgba(255, 255, 255, .06);
     }
+}
 
-    .settings-reset-btn {
-        border-color: #444;
-        color: #aaa;
+.btn-danger {
+    border-color: #ef9a9a;
+    color: #ef9a9a;
 
-        &:hover {
-            background: var(--ul-surface-1);
-            border-color: #666;
-        }
+    &:hover {
+        background: #c62828;
+        border-color: #c62828;
+        color: var(--ul-text-4);
     }
+}
 
 
-    // ── Trip map context menu dark mode ──────────────────────────────────────────
+// ── Trip weather dark mode ────────────────────────────────────────────────────
 
-    .trip-map-ctx-menu {
-        background: #1e2130;
-        border-color: #2d3348;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
-    }
+.trip-weather-panel {
+    background: #1e2130;
+    border-color: #2d3348;
 
-    .trip-map-ctx-item {
+    .trip-weather-header .trip-weather-title {
         color: #e2e8f0;
-
-        &:hover {
-            background: rgba(255, 255, 255, .06);
-        }
     }
+}
 
-    .btn-danger {
-        border-color: #ef9a9a;
-        color: #ef9a9a;
+.trip-weather-day {
+    border-color: #2d3348;
+    background: #1e2130;
 
-        &:hover {
-            background: #c62828;
-            border-color: #c62828;
-            color: var(--ul-text-4);
-        }
+    .trip-weather-day-header {
+        background: linear-gradient(135deg, #1a2540 0%, #162035 100%);
+        border-bottom-color: #2d3348;
     }
+}
 
+.trip-weather-activity {
+    border-top-color: #2d3348;
 
-    // ── Trip weather dark mode ────────────────────────────────────────────────────
-
-    .trip-weather-panel {
-        background: #1e2130;
-        border-color: #2d3348;
-
-        .trip-weather-header .trip-weather-title {
-            color: #e2e8f0;
-        }
-    }
-
-    .trip-weather-day {
-        border-color: #2d3348;
-        background: #1e2130;
-
-        .trip-weather-day-header {
-            background: linear-gradient(135deg, #1a2540 0%, #162035 100%);
-            border-bottom-color: #2d3348;
-        }
-    }
-
-    .trip-weather-activity {
-        border-top-color: #2d3348;
-
-        .trip-weather-activity-name {
-            color: #e2e8f0;
-        }
-    }
-
-    .trip-weather-slot-temp {
+    .trip-weather-activity-name {
         color: #e2e8f0;
     }
+}
 
-    .trip-weather-slot-desc,
-    .trip-weather-slot-feels {
-        color: #94a3b8;
-    }
+.trip-weather-slot-temp {
+    color: #e2e8f0;
+}
 
-    // ── Pin detail page dark mode ─────────────────────────────────────────────
+.trip-weather-slot-desc,
+.trip-weather-slot-feels {
+    color: #94a3b8;
+}
 
-    body.page-location-details {
-        background: #0d0d0d;
-    }
+// ── Pin detail page dark mode ─────────────────────────────────────────────
 
-    body.page-location-details .card {
-        box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
-    }
+body.page-location-details {
+    background: #0d0d0d;
+}
 
-    // ── Notification preferences table ───────────────────────────────────────────
+body.page-location-details .card {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
+}
 
-    .notif-prefs__table th {
-        color: #888;
-        border-bottom-color: #333;
-    }
+// ── Notification preferences table ───────────────────────────────────────────
 
-    .notif-prefs__row {
-        border-bottom-color: #2a2a2a;
+.notif-prefs__table th {
+    color: #888;
+    border-bottom-color: #333;
+}
 
-        &:hover {
-            background: var(--ul-surface-1);
-        }
-    }
+.notif-prefs__row {
+    border-bottom-color: #2a2a2a;
 
-    .notif-prefs__label {
-        color: #ccc;
-    }
-
-    .notif-prefs__saved {
-        background: #1a2e1a;
-        color: #86efac;
-    }
-
-    // ── Profile page ─────────────────────────────────────────────────────────────
-
-    // Main cards
-    .profile-hero,
-    .profile-stat,
-    .profile-section {
+    &:hover {
         background: var(--ul-surface-1);
-        border-color: #333;
     }
+}
 
-    // Hero - name, bio, meta
-    .profile-full-name {
-        color: #e0e0e0;
-    }
+.notif-prefs__label {
+    color: #ccc;
+}
 
-    .profile-bio {
-        color: #ccc;
+.notif-prefs__saved {
+    background: #1a2e1a;
+    color: #86efac;
+}
 
-        &.empty {
-            color: #555;
-        }
-    }
+// ── Profile page ─────────────────────────────────────────────────────────────
 
-    .profile-username,
-    .profile-meta-item {
-        color: #888;
-    }
+// Main cards
+.profile-hero,
+.profile-stat,
+.profile-section {
+    background: var(--ul-surface-1);
+    border-color: #333;
+}
 
-    .stat-value {
-        color: #e0e0e0;
-    }
+// Hero - name, bio, meta
+.profile-full-name {
+    color: #e0e0e0;
+}
 
-    .stat-label {
-        color: #777;
-    }
+.profile-bio {
+    color: #ccc;
 
-    .edit-profile-btn {
-        border-color: #444;
-        color: #aaa;
-
-        &:hover {
-            border-color: $primary-color;
-            color: $primary-color;
-            background-color: rgba($primary-color, 0.08);
-        }
-    }
-
-    .social-link {
-        border-color: #444;
-        color: #aaa;
-
-        &:hover {
-            border-color: $primary-color;
-            color: $primary-color;
-        }
-    }
-
-    .shared-visited-item {
-        background: var(--ul-surface-1);
-        border-color: #383838;
-        color: #ccc;
-    }
-
-    // Friend list (partial on profile page)
-    .friend-card {
-        background: var(--ul-surface-1);
-        border-color: #383838;
-
-        &:hover {
-            border-color: #555;
-        }
-    }
-
-    .friend-card-name {
-        color: #e0e0e0;
-    }
-
-    .friend-card-username,
-    .friend-card-area {
-        color: #666;
-    }
-
-    .friend-requests-section {
-        background: #1e1a0e;
-        border-color: #4a3a10;
-    }
-
-    .friend-requests-label {
-        color: #d4a44c;
-    }
-
-    .friend-request-name {
-        color: #ccc;
-    }
-
-    .friend-request-sub {
-        color: #666;
-    }
-
-    .friend-request-item {
-        border-bottom-color: rgba(255, 255, 255, .06);
-    }
-
-    // Icon-only compact accept/reject/ignore buttons in the partial
-    .btn-friend-accept {
-        background: #1a2e1a;
-        border-color: #2d6a2d;
-        color: #86efac;
-
-        &:hover {
-            background: #1f3a1f;
-        }
-    }
-
-    .btn-friend-reject {
-        background: #2e1a1a;
-        border-color: #6a2d2d;
-        color: #fca5a5;
-
-        &:hover {
-            background: #3a2020;
-        }
-    }
-
-    .btn-friend-ignore {
-        background: var(--ul-surface-1);
-        border-color: #444;
-        color: #888;
-
-        &:hover {
-            background: var(--ul-surface-1);
-        }
-    }
-
-    .btn-friend-remove:hover {
-        color: #fca5a5;
-        background: #3a1a1a;
-    }
-
-    // Friend status badges
-    .friend-status-badge--friends {
-        background: #1a2e1a;
-        color: #86efac;
-        border-color: #2d6a2d;
-    }
-
-    .friend-status-badge--pending {
-        background: #2a1e08;
-        color: #fbbf24;
-        border-color: #5a3e10;
-    }
-
-    // Profile section title / counts / links
-    .profile-section-title {
-        color: #888;
-    }
-
-    .profile-section-empty {
+    &.empty {
         color: #555;
     }
+}
 
-    // Full friends page
-    .friends-back-link {
+.profile-username,
+.profile-meta-item {
+    color: #888;
+}
+
+.stat-value {
+    color: #e0e0e0;
+}
+
+.stat-label {
+    color: #777;
+}
+
+.edit-profile-btn {
+    border-color: #444;
+    color: #aaa;
+
+    &:hover {
+        border-color: $primary-color;
+        color: $primary-color;
+        background-color: rgba($primary-color, 0.08);
+    }
+}
+
+.social-link {
+    border-color: #444;
+    color: #aaa;
+
+    &:hover {
+        border-color: $primary-color;
+        color: $primary-color;
+    }
+}
+
+.shared-visited-item {
+    background: var(--ul-surface-1);
+    border-color: #383838;
+    color: #ccc;
+}
+
+// Friend list (partial on profile page)
+.friend-card {
+    background: var(--ul-surface-1);
+    border-color: #383838;
+
+    &:hover {
+        border-color: #555;
+    }
+}
+
+.friend-card-name {
+    color: #e0e0e0;
+}
+
+.friend-card-username,
+.friend-card-area {
+    color: #666;
+}
+
+.friend-requests-section {
+    background: #1e1a0e;
+    border-color: #4a3a10;
+}
+
+.friend-requests-label {
+    color: #d4a44c;
+}
+
+.friend-request-name {
+    color: #ccc;
+}
+
+.friend-request-sub {
+    color: #666;
+}
+
+.friend-request-item {
+    border-bottom-color: rgba(255, 255, 255, .06);
+}
+
+// Icon-only compact accept/reject/ignore buttons in the partial
+.btn-friend-accept {
+    background: #1a2e1a;
+    border-color: #2d6a2d;
+    color: #86efac;
+
+    &:hover {
+        background: #1f3a1f;
+    }
+}
+
+.btn-friend-reject {
+    background: #2e1a1a;
+    border-color: #6a2d2d;
+    color: #fca5a5;
+
+    &:hover {
+        background: #3a2020;
+    }
+}
+
+.btn-friend-ignore {
+    background: var(--ul-surface-1);
+    border-color: #444;
+    color: #888;
+
+    &:hover {
+        background: var(--ul-surface-1);
+    }
+}
+
+.btn-friend-remove:hover {
+    color: #fca5a5;
+    background: #3a1a1a;
+}
+
+// Friend status badges
+.friend-status-badge--friends {
+    background: #1a2e1a;
+    color: #86efac;
+    border-color: #2d6a2d;
+}
+
+.friend-status-badge--pending {
+    background: #2a1e08;
+    color: #fbbf24;
+    border-color: #5a3e10;
+}
+
+// Profile section title / counts / links
+.profile-section-title {
+    color: #888;
+}
+
+.profile-section-empty {
+    color: #555;
+}
+
+// Full friends page
+.friends-back-link {
+    color: #666;
+
+    &:hover {
+        color: #ccc;
+    }
+}
+
+.friends-page-title {
+    color: #e0e0e0;
+}
+
+.friends-section--requests {
+    border-color: #4a3a10;
+}
+
+.friends-empty {
+    .material-icons {
+        color: #444;
+    }
+
+    p {
         color: #666;
-
-        &:hover {
-            color: #ccc;
-        }
     }
+}
 
-    .friends-page-title {
-        color: #e0e0e0;
+// Full-page .btn-friend pills (labelled, used on the friends.html full page)
+.btn-friend--accept {
+    background: #1a2e1a;
+    border-color: #2d6a2d;
+    color: #86efac;
+
+    &:hover {
+        background: #1f3a1f;
     }
+}
 
-    .friends-section--requests {
-        border-color: #4a3a10;
+.btn-friend--reject {
+    background: #2e1a1a;
+    border-color: #6a2d2d;
+    color: #fca5a5;
+
+    &:hover {
+        background: #3a2020;
     }
+}
 
-    .friends-empty {
-        .material-icons {
-            color: #444;
-        }
+.btn-friend--ignore {
+    background: var(--ul-surface-1);
+    border-color: #444;
+    color: #888;
 
-        p {
-            color: #666;
-        }
+    &:hover {
+        background: var(--ul-surface-1);
     }
+}
 
-    // Full-page .btn-friend pills (labelled, used on the friends.html full page)
-    .btn-friend--accept {
-        background: #1a2e1a;
-        border-color: #2d6a2d;
-        color: #86efac;
+.btn-friend--remove {
+    border-color: #444;
+    color: #888;
 
-        &:hover {
-            background: #1f3a1f;
-        }
-    }
-
-    .btn-friend--reject {
-        background: #2e1a1a;
+    &:hover {
+        background: #3a1a1a;
         border-color: #6a2d2d;
         color: #fca5a5;
-
-        &:hover {
-            background: #3a2020;
-        }
     }
+}
 
-    .btn-friend--ignore {
-        background: var(--ul-surface-1);
-        border-color: #444;
-        color: #888;
+// ── Date-validation error dialog ─────────────────────────────────────────────
 
-        &:hover {
-            background: var(--ul-surface-1);
-        }
+.date-error-list {
+    margin: 0 0 0.75rem;
+    padding-left: 1.25rem;
+    color: #d32f2f;
+    font-size: 0.9rem;
+
+    li {
+        margin-bottom: 0.25rem;
     }
+}
 
-    .btn-friend--remove {
-        border-color: #444;
-        color: #888;
-
-        &:hover {
-            background: #3a1a1a;
-            border-color: #6a2d2d;
-            color: #fca5a5;
-        }
-    }
-
-    // ── Date-validation error dialog ─────────────────────────────────────────────
-
-    .date-error-list {
-        margin: 0 0 0.75rem;
-        padding-left: 1.25rem;
-        color: #d32f2f;
-        font-size: 0.9rem;
-
-        li {
-            margin-bottom: 0.25rem;
-        }
-    }
-
-    .date-error-hint {
-        font-size: 0.85rem;
-        color: $text-secondary;
-        margin: 0;
-    }
+.date-error-hint {
+    font-size: 0.85rem;
+    color: $text-secondary;
+    margin: 0;
+}
 
 
-    // ── Nav dropdowns ─────────────────────────────────────────────────────────────
-    // Most nav dropdown styles adapt via CSS vars automatically. These cover the
-    // few cases that use semantic colours rather than surface tokens.
+// ── Nav dropdowns ─────────────────────────────────────────────────────────────
+// Most nav dropdown styles adapt via CSS vars automatically. These cover the
+// few cases that use semantic colours rather than surface tokens.
 
-    // Sign-out in user dropdown
-    .nav-dropdown-item--signout {
+// Sign-out in user dropdown
+.nav-dropdown-item--signout {
+    color: #ef9a9a;
+
+    .material-icons {
         color: #ef9a9a;
+    }
+
+    &:hover {
+        background: rgba(239, 154, 154, .08);
 
         .material-icons {
             color: #ef9a9a;
         }
+    }
+}
 
-        &:hover {
-            background: rgba(239, 154, 154, .08);
+// Notification unread items use an indigo accent in light mode; adapt for dark
+.notif-item--unread {
+    background: #1e1a30;
+    border-left-color: #7c3aed;
 
-            .material-icons {
-                color: #ef9a9a;
-            }
-        }
+    &:hover {
+        background: #221d38;
     }
 
-    // Notification unread items use an indigo accent in light mode; adapt for dark
-    .notif-item--unread {
-        background: #1e1a30;
-        border-left-color: #7c3aed;
-
-        &:hover {
-            background: #221d38;
-        }
-
-        .notif-item__icon-wrap {
-            background: rgba(124, 58, 237, .15);
-
-            .material-icons {
-                color: #a78bfa;
-            }
-        }
-    }
-
-    // Per-type icon wrap overrides for unread notifications
-    .notif-item--unread .notif-item__icon-wrap--friend_request,
-    .notif-item--unread .notif-item__icon-wrap--friend_accepted {
-        background: rgba(22, 163, 74, .15);
+    .notif-item__icon-wrap {
+        background: rgba(124, 58, 237, .15);
 
         .material-icons {
-            color: #4ade80;
-        }
-    }
-
-    .notif-item--unread .notif-item__icon-wrap--added_to_trip,
-    .notif-item--unread .notif-item__icon-wrap--trip_updated {
-        background: rgba(37, 99, 235, .15);
-
-        .material-icons {
-            color: #60a5fa;
-        }
-    }
-
-    .notif-item--unread .notif-item__icon-wrap--comment_reply,
-    .notif-item--unread .notif-item__icon-wrap--comment_liked {
-        background: rgba(219, 39, 119, .15);
-
-        .material-icons {
-            color: #f472b6;
-        }
-    }
-
-    .notif-item--unread .notif-item__icon-wrap--error {
-        background: rgba(220, 38, 38, .15);
-
-        .material-icons {
-            color: #f87171;
-        }
-    }
-
-    .notif-item--unread .notif-item__icon-wrap--warning {
-        background: rgba(217, 119, 6, .15);
-
-        .material-icons {
-            color: #fbbf24;
-        }
-    }
-
-    // "Mark all read" link - lighten primary for legibility on dark surface
-    .notif-mark-all-btn {
-        color: #7cb9e8;
-
-        &:hover {
-            background: rgba(66, 165, 245, .1);
-        }
-    }
-
-    // ── Standard .btn danger variant dark mode ────────────────────────────────────
-
-    .btn--danger {
-        color: #fca5a5;
-        background: rgba(239, 154, 154, .07);
-        border-color: rgba(239, 154, 154, .25);
-
-        &:hover {
-            background: rgba(239, 154, 154, .13);
-        }
-    }
-
-    // ── Trips list page ───────────────────────────────────────────────────────
-
-    .trips-title {
-        color: var(--ul-text-1);
-
-        .material-icons {
-            color: #60a5fa;
-        }
-    }
-
-    .trips-subtitle {
-        color: var(--ul-text-2);
-    }
-
-    .trips-empty {
-        color: var(--ul-text-3);
-
-        .trips-empty-icon {
-            color: var(--ul-text-3);
-        }
-    }
-
-    .trip-card {
-        &:hover {
-            border-color: #3b82f6;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
-        }
-    }
-
-    .trip-card-icon {
-        background: #1a2540;
-
-        .material-icons {
-            color: #60a5fa;
-        }
-    }
-
-    // ── Trip detail header ────────────────────────────────────────────────────
-
-    .trip-back-link {
-        &:hover {
-            color: #60a5fa;
-        }
-    }
-
-    .trip-header-btn {
-
-        &--edit,
-        &--settings {
-            color: var(--ul-text-3);
-
-            &:hover,
-            &:focus {
-                background: var(--ul-surface-2);
-                color: #60a5fa;
-                border-color: var(--ul-border);
-            }
-        }
-
-        &--delete {
-            color: var(--ul-text-3);
-
-            &:hover,
-            &:focus {
-                background: rgba(220, 38, 38, .12);
-                color: #f87171;
-                border-color: rgba(220, 38, 38, .3);
-            }
-        }
-    }
-
-    .trip-section-grip {
-        color: var(--ul-text-3);
-    }
-
-    .trip-section--ghost {
-        outline-color: var(--ul-border);
-    }
-
-    // ── Trip panels (card headers, badges) ────────────────────────────────────
-
-    .trip-panel .card-header {
-        border-bottom-color: var(--ul-border);
-
-        .badge {
-            background: var(--ul-surface-3);
-            color: var(--ul-text-2);
-        }
-    }
-
-    .trip-panel-empty {
-        color: var(--ul-text-3);
-    }
-
-    .trip-panel-loading {
-        color: var(--ul-text-3);
-    }
-
-    // ── View toggles ──────────────────────────────────────────────────────────
-
-    .view-toggle-group {
-        background: var(--ul-surface-3);
-    }
-
-    .view-toggle-btn {
-        color: var(--ul-text-3);
-
-        &:hover {
-            background: var(--ul-surface-2);
-            color: var(--ul-text-2);
-        }
-
-        &.view-toggle-btn--active {
-            background: var(--ul-surface-1);
-            color: #60a5fa;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
-        }
-    }
-
-    // ── Calendar ─────────────────────────────────────────────────────────────
-
-    .cal-month-label {
-        color: var(--ul-text-1);
-    }
-
-    .cal-nav-btn {
-        color: var(--ul-text-2);
-
-        &:hover {
-            background: var(--ul-surface-2);
-            color: var(--ul-text-1);
-        }
-    }
-
-    .cal-cell {
-        &--header {
-            color: var(--ul-text-3);
-        }
-
-        &--empty {
-            background: rgba(255, 255, 255, .025);
-            opacity: .6;
-        }
-
-        &--has-events {
-            background: #192030;
-        }
-
-        &--today {
-            background: #1a2540;
-
-            .cal-day-num {
-                background: #3b82f6;
-                color: var(--ul-text-4);
-            }
-        }
-    }
-
-    .cal-day-num {
-        color: var(--ul-text-2);
-    }
-
-    .cal-month-section-label {
-        color: var(--ul-text-3);
-    }
-
-    .cal-month-section-sep {
-        background: var(--ul-border);
-    }
-
-    // ── Activity list ─────────────────────────────────────────────────────────
-
-    .trip-activity-item {
-        border-bottom-color: var(--ul-border);
-
-        &.trip-activity--highlighted {
-            background: #192030;
-            border-left-color: #3b82f6;
-        }
-    }
-
-    .trip-activity-icon {
-        background: #1a2540;
-
-        .material-icons {
-            color: #60a5fa;
-        }
-    }
-
-    .trip-activity-num {
-        border-color: var(--ul-surface-2);
-    }
-
-    .trip-activity-name {
-        color: var(--ul-text-1);
-    }
-
-    .trip-activity-time {
-        color: var(--ul-text-2);
-    }
-
-    .trip-activity-notes {
-        color: var(--ul-text-2);
-    }
-
-    .trip-activity-attr {
-        color: var(--ul-text-3);
-    }
-
-    .trip-attr-link {
-        &:hover {
             color: #a78bfa;
         }
     }
+}
 
-    // ── Members ───────────────────────────────────────────────────────────────
+// Per-type icon wrap overrides for unread notifications
+.notif-item--unread .notif-item__icon-wrap--friend_request,
+.notif-item--unread .notif-item__icon-wrap--friend_accepted {
+    background: rgba(22, 163, 74, .15);
 
-    .trip-member-item {
-        border-bottom-color: var(--ul-border);
+    .material-icons {
+        color: #4ade80;
     }
+}
 
-    .trip-member-avatar {
-        background: #1a2540;
-    }
+.notif-item--unread .notif-item__icon-wrap--added_to_trip,
+.notif-item--unread .notif-item__icon-wrap--trip_updated {
+    background: rgba(37, 99, 235, .15);
 
-    .trip-member-avatar-initial {
+    .material-icons {
         color: #60a5fa;
     }
+}
 
-    .trip-member-name {
-        color: var(--ul-text-1);
+.notif-item--unread .notif-item__icon-wrap--comment_reply,
+.notif-item--unread .notif-item__icon-wrap--comment_liked {
+    background: rgba(219, 39, 119, .15);
+
+    .material-icons {
+        color: #f472b6;
     }
+}
 
-    .trip-member-username {
+.notif-item--unread .notif-item__icon-wrap--error {
+    background: rgba(220, 38, 38, .15);
+
+    .material-icons {
+        color: #f87171;
+    }
+}
+
+.notif-item--unread .notif-item__icon-wrap--warning {
+    background: rgba(217, 119, 6, .15);
+
+    .material-icons {
+        color: #fbbf24;
+    }
+}
+
+// "Mark all read" link - lighten primary for legibility on dark surface
+.notif-mark-all-btn {
+    color: #7cb9e8;
+
+    &:hover {
+        background: rgba(66, 165, 245, .1);
+    }
+}
+
+// ── Standard .btn danger variant dark mode ────────────────────────────────────
+
+.btn--danger {
+    color: #fca5a5;
+    background: rgba(239, 154, 154, .07);
+    border-color: rgba(239, 154, 154, .25);
+
+    &:hover {
+        background: rgba(239, 154, 154, .13);
+    }
+}
+
+// ── Trips list page ───────────────────────────────────────────────────────
+
+.trips-title {
+    color: var(--ul-text-1);
+
+    .material-icons {
+        color: #60a5fa;
+    }
+}
+
+.trips-subtitle {
+    color: var(--ul-text-2);
+}
+
+.trips-empty {
+    color: var(--ul-text-3);
+
+    .trips-empty-icon {
         color: var(--ul-text-3);
     }
+}
 
-    .trip-member-badge {
-        &--creator {
-            background: rgba(251, 191, 36, .12);
-            color: #fbbf24;
-            border-color: rgba(251, 191, 36, .25);
-        }
-
-        &--organizer {
-            background: rgba(167, 139, 250, .12);
-            color: #a78bfa;
-            border-color: rgba(167, 139, 250, .25);
-        }
+.trip-card {
+    &:hover {
+        border-color: #3b82f6;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
     }
+}
 
-    .trip-organizer-btn {
+.trip-card-icon {
+    background: #1a2540;
+
+    .material-icons {
+        color: #60a5fa;
+    }
+}
+
+// ── Trip detail header ────────────────────────────────────────────────────
+
+.trip-back-link {
+    &:hover {
+        color: #60a5fa;
+    }
+}
+
+.trip-header-btn {
+
+    &--edit,
+    &--settings {
         color: var(--ul-text-3);
-
-        &--active {
-            color: #a78bfa !important;
-
-            &:hover {
-                background: rgba(167, 139, 250, .1) !important;
-            }
-        }
-    }
-
-    // ── RSVP popup ────────────────────────────────────────────────────────────
-
-    .rsvp-popup {
-        background: var(--ul-surface-1);
-        border-color: var(--ul-border);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
-    }
-
-    .rsvp-popup-opt {
-        color: var(--ul-text-1);
-
-        &:hover {
-            background: var(--ul-surface-2);
-        }
-
-        &--yes {
-            color: #4ade80;
-
-            &:hover {
-                background: rgba(34, 197, 94, .1);
-            }
-        }
-
-        &--no {
-            color: #f87171;
-
-            &:hover {
-                background: rgba(220, 38, 38, .1);
-            }
-        }
-
-        &--maybe {
-            color: #fbbf24;
-
-            &:hover {
-                background: rgba(245, 158, 11, .1);
-            }
-        }
-
-        &--clear {
-            color: var(--ul-text-3);
-        }
-    }
-
-    // ── RSVP pill buttons (in the member-list RSVP picker) ────────────────────
-
-    .rsvp-pill-btn {
-        border-color: var(--ul-border);
-        color: var(--ul-text-2);
-
-        &:hover {
-            background: var(--ul-surface-2);
-            border-color: var(--ul-border-strong);
-        }
-    }
-
-    // ── Trip comment form (.trip-comment-* classes) ───────────────────────────
-
-    .trip-comment-item {
-        border-bottom-color: var(--ul-border);
-
-        &:hover {
-            background: rgba(255, 255, 255, .03);
-        }
-    }
-
-    .trip-comment-author {
-        color: var(--ul-text-1);
-    }
-
-    .trip-comment-date {
-        color: var(--ul-text-3);
-    }
-
-    .trip-comment-text {
-        color: var(--ul-text-2);
-    }
-
-    .trip-comment-form {
-        background: var(--ul-surface-2);
-        border-top-color: var(--ul-border);
-    }
-
-    .trip-comment-input {
-        background: var(--ul-surface-1);
-        border-color: var(--ul-border);
-        color: var(--ul-text-1);
-
-        &::placeholder {
-            color: var(--ul-text-3);
-        }
-
-        &:focus {
-            border-color: #60a5fa;
-            box-shadow: 0 0 0 3px rgba(96, 165, 250, .12);
-        }
-    }
-
-    // ── Comments panel (.comment-* classes from _comments.scss) ──────────────
-
-    .comment-item {
-        border-bottom-color: var(--ul-border);
-
-        &--reply {
-            background: var(--ul-surface-2);
-        }
-    }
-
-    .comment-replies {
-        border-left-color: var(--ul-border);
-
-        .comment-item {
-            background: var(--ul-surface-2);
-        }
-    }
-
-    .comment-author {
-        color: var(--ul-text-1);
-    }
-
-    .comment-date {
-        color: var(--ul-text-3);
-    }
-
-    .comment-text {
-        color: var(--ul-text-2);
-    }
-
-    .comment-avatar-initial {
-        background: #1e1936;
-        color: #7c6fcd;
-    }
-
-    .comment-delete-btn {
-        color: var(--ul-text-3);
-
-        &:hover {
-            color: #f87171;
-        }
-    }
-
-    .comment-reply-btn {
-        color: var(--ul-text-3);
-
-        .reply-count {
-            color: var(--ul-text-3);
-        }
-
-        &:hover {
-            color: #a78bfa;
-            background: rgba(124, 58, 237, .08);
-        }
-    }
-
-    .comment-compose {
-        border-top-color: var(--ul-border);
-
-        &--reply {
-            border-top: none;
-        }
-    }
-
-    .comment-input {
-        background: var(--ul-surface-2);
-        border-color: var(--ul-border);
-        color: var(--ul-text-1);
-
-        &::placeholder {
-            color: var(--ul-text-3);
-        }
-
-        &:focus {
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, .1);
-        }
-    }
-
-    .reaction-pill {
-        background: var(--ul-surface-3);
-        border-color: var(--ul-border);
-
-        &:hover {
-            background: var(--ul-surface-2);
-        }
-
-        &--mine {
-            background: rgba(124, 58, 237, .15);
-            border-color: rgba(124, 58, 237, .4);
-            color: #a78bfa;
-        }
-
-        .reaction-count {
-            color: var(--ul-text-2);
-        }
-    }
-
-    .reaction-add-btn {
-        border-color: var(--ul-border);
-        color: var(--ul-text-3);
-
-        &:hover {
-            background: var(--ul-surface-2);
-            color: var(--ul-text-2);
-        }
-    }
-
-    .reaction-picker-popup {
-        background: var(--ul-surface-1);
-        border-color: var(--ul-border);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
-    }
-
-    .reaction-picker-emoji:hover {
-        background: var(--ul-surface-2);
-    }
-
-    .comment-empty {
-        color: var(--ul-text-3);
-    }
-
-    .mention-dropdown {
-        background: var(--ul-surface-1);
-        border-color: var(--ul-border);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
-    }
-
-    .mention-option {
-        color: var(--ul-text-2);
-        border-bottom-color: var(--ul-border);
 
         &:hover,
-        &.is-selected {
-            background: rgba(124, 58, 237, .08);
-            color: #a78bfa;
-        }
-    }
-
-    .comment-image-label {
-        color: var(--ul-text-3);
-
-        &:hover {
-            color: #6366f1;
-        }
-    }
-
-    // ── Trip settings ─────────────────────────────────────────────────────────
-
-    .trip-setting-desc {
-        color: var(--ul-text-3);
-    }
-
-    .trip-setting-pill {
-        border-color: var(--ul-border);
-        color: var(--ul-text-2);
-
-        &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
+        &:focus {
             background: var(--ul-surface-2);
-            border-color: var(--ul-border-strong);
-        }
-
-        &--active {
-            background: #1a2540;
-            border-color: #3b82f6;
             color: #60a5fa;
-        }
-    }
-
-    // ── Trip dialogs ──────────────────────────────────────────────────────────
-
-    .trip-create-dialog {
-        background: var(--ul-surface-1);
-        border-color: var(--ul-border);
-        color: var(--ul-text-1);
-
-        .location-suggestions {
-            background: var(--ul-surface-2);
             border-color: var(--ul-border);
         }
+    }
 
-        .location-suggestion-item {
-            color: var(--ul-text-1);
+    &--delete {
+        color: var(--ul-text-3);
 
-            &:hover {
-                background: var(--ul-surface-3);
-            }
+        &:hover,
+        &:focus {
+            background: rgba(220, 38, 38, .12);
+            color: #f87171;
+            border-color: rgba(220, 38, 38, .3);
         }
     }
+}
 
-    // ── Organize page tabs ────────────────────────────────────────────────────
+.trip-section-grip {
+    color: var(--ul-text-3);
+}
 
-    .organize-title {
-        color: var(--ul-text-1);
+.trip-section--ghost {
+    outline-color: var(--ul-border);
+}
+
+// ── Trip panels (card headers, badges) ────────────────────────────────────
+
+.trip-panel .card-header {
+    border-bottom-color: var(--ul-border);
+
+    .badge {
+        background: var(--ul-surface-3);
+        color: var(--ul-text-2);
     }
+}
 
-    .organize-subtitle {
+.trip-panel-empty {
+    color: var(--ul-text-3);
+}
+
+.trip-panel-loading {
+    color: var(--ul-text-3);
+}
+
+// ── View toggles ──────────────────────────────────────────────────────────
+
+.view-toggle-group {
+    background: var(--ul-surface-3);
+}
+
+.view-toggle-btn {
+    color: var(--ul-text-3);
+
+    &:hover {
+        background: var(--ul-surface-2);
         color: var(--ul-text-2);
     }
 
-    .organize-tab {
-        &.active {
-            color: lighten($primary-color, 15%);
-            border-bottom-color: lighten($primary-color, 15%);
+    &.view-toggle-btn--active {
+        background: var(--ul-surface-1);
+        color: #60a5fa;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+    }
+}
+
+// ── Calendar ─────────────────────────────────────────────────────────────
+
+.cal-month-label {
+    color: var(--ul-text-1);
+}
+
+.cal-nav-btn {
+    color: var(--ul-text-2);
+
+    &:hover {
+        background: var(--ul-surface-2);
+        color: var(--ul-text-1);
+    }
+}
+
+.cal-cell {
+    &--header {
+        color: var(--ul-text-3);
+    }
+
+    &--empty {
+        background: rgba(255, 255, 255, .025);
+        opacity: .6;
+    }
+
+    &--has-events {
+        background: #192030;
+    }
+
+    &--today {
+        background: #1a2540;
+
+        .cal-day-num {
+            background: #3b82f6;
+            color: var(--ul-text-4);
+        }
+    }
+}
+
+.cal-day-num {
+    color: var(--ul-text-2);
+}
+
+.cal-month-section-label {
+    color: var(--ul-text-3);
+}
+
+.cal-month-section-sep {
+    background: var(--ul-border);
+}
+
+// ── Activity list ─────────────────────────────────────────────────────────
+
+.trip-activity-item {
+    border-bottom-color: var(--ul-border);
+
+    &.trip-activity--highlighted {
+        background: #192030;
+        border-left-color: #3b82f6;
+    }
+}
+
+.trip-activity-icon {
+    background: #1a2540;
+
+    .material-icons {
+        color: #60a5fa;
+    }
+}
+
+.trip-activity-num {
+    border-color: var(--ul-surface-2);
+}
+
+.trip-activity-name {
+    color: var(--ul-text-1);
+}
+
+.trip-activity-time {
+    color: var(--ul-text-2);
+}
+
+.trip-activity-notes {
+    color: var(--ul-text-2);
+}
+
+.trip-activity-attr {
+    color: var(--ul-text-3);
+}
+
+.trip-attr-link {
+    &:hover {
+        color: #a78bfa;
+    }
+}
+
+// ── Members ───────────────────────────────────────────────────────────────
+
+.trip-member-item {
+    border-bottom-color: var(--ul-border);
+}
+
+.trip-member-avatar {
+    background: #1a2540;
+}
+
+.trip-member-avatar-initial {
+    color: #60a5fa;
+}
+
+.trip-member-name {
+    color: var(--ul-text-1);
+}
+
+.trip-member-username {
+    color: var(--ul-text-3);
+}
+
+.trip-member-badge {
+    &--creator {
+        background: rgba(251, 191, 36, .12);
+        color: #fbbf24;
+        border-color: rgba(251, 191, 36, .25);
+    }
+
+    &--organizer {
+        background: rgba(167, 139, 250, .12);
+        color: #a78bfa;
+        border-color: rgba(167, 139, 250, .25);
+    }
+}
+
+.trip-organizer-btn {
+    color: var(--ul-text-3);
+
+    &--active {
+        color: #a78bfa !important;
+
+        &:hover {
+            background: rgba(167, 139, 250, .1) !important;
+        }
+    }
+}
+
+// ── RSVP popup ────────────────────────────────────────────────────────────
+
+.rsvp-popup {
+    background: var(--ul-surface-1);
+    border-color: var(--ul-border);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+}
+
+.rsvp-popup-opt {
+    color: var(--ul-text-1);
+
+    &:hover {
+        background: var(--ul-surface-2);
+    }
+
+    &--yes {
+        color: #4ade80;
+
+        &:hover {
+            background: rgba(34, 197, 94, .1);
         }
     }
 
-    // ── Selection / checkbox bar ──────────────────────────────────────────────
+    &--no {
+        color: #f87171;
 
-    .cat-sel-bar {
-        &.cat-sel-bar--active {
-            background: rgba(59, 130, 246, .1);
-            border-color: rgba(59, 130, 246, .35);
+        &:hover {
+            background: rgba(220, 38, 38, .1);
         }
     }
 
-    .cat-sel-count {
-        background: rgba(59, 130, 246, .15);
+    &--maybe {
+        color: #fbbf24;
+
+        &:hover {
+            background: rgba(245, 158, 11, .1);
+        }
+    }
+
+    &--clear {
+        color: var(--ul-text-3);
+    }
+}
+
+// ── RSVP pill buttons (in the member-list RSVP picker) ────────────────────
+
+.rsvp-pill-btn {
+    border-color: var(--ul-border);
+    color: var(--ul-text-2);
+
+    &:hover {
+        background: var(--ul-surface-2);
+        border-color: var(--ul-border-strong);
+    }
+}
+
+// ── Trip comment form (.trip-comment-* classes) ───────────────────────────
+
+.trip-comment-item {
+    border-bottom-color: var(--ul-border);
+
+    &:hover {
+        background: rgba(255, 255, 255, .03);
+    }
+}
+
+.trip-comment-author {
+    color: var(--ul-text-1);
+}
+
+.trip-comment-date {
+    color: var(--ul-text-3);
+}
+
+.trip-comment-text {
+    color: var(--ul-text-2);
+}
+
+.trip-comment-form {
+    background: var(--ul-surface-2);
+    border-top-color: var(--ul-border);
+}
+
+.trip-comment-input {
+    background: var(--ul-surface-1);
+    border-color: var(--ul-border);
+    color: var(--ul-text-1);
+
+    &::placeholder {
+        color: var(--ul-text-3);
+    }
+
+    &:focus {
+        border-color: #60a5fa;
+        box-shadow: 0 0 0 3px rgba(96, 165, 250, .12);
+    }
+}
+
+// ── Comments panel (.comment-* classes from _comments.scss) ──────────────
+
+.comment-item {
+    border-bottom-color: var(--ul-border);
+
+    &--reply {
+        background: var(--ul-surface-2);
+    }
+}
+
+.comment-replies {
+    border-left-color: var(--ul-border);
+
+    .comment-item {
+        background: var(--ul-surface-1);
+    }
+}
+
+.comment-author {
+    color: var(--ul-text-1);
+}
+
+.comment-date {
+    color: var(--ul-text-3);
+}
+
+.comment-text {
+    color: var(--ul-text-2);
+}
+
+.comment-avatar-initial {
+    background: #1e1936;
+    color: #7c6fcd;
+}
+
+.comment-delete-btn {
+    color: var(--ul-text-3);
+
+    &:hover {
+        color: #f87171;
+    }
+}
+
+.comment-reply-btn {
+    color: var(--ul-text-3);
+
+    .reply-count {
+        color: var(--ul-text-3);
+    }
+
+    &:hover {
+        color: #a78bfa;
+        background: rgba(124, 58, 237, .08);
+    }
+}
+
+.comment-compose {
+    border-top-color: var(--ul-border);
+
+    &--reply {
+        border-top: none;
+    }
+}
+
+.comment-input {
+    background: var(--ul-surface-2);
+    border-color: var(--ul-border);
+    color: var(--ul-text-1);
+
+    &::placeholder {
+        color: var(--ul-text-3);
+    }
+
+    &:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, .1);
+    }
+}
+
+.reaction-pill {
+    background: var(--ul-surface-3);
+    border-color: var(--ul-border);
+
+    &:hover {
+        background: var(--ul-surface-2);
+    }
+
+    &--mine {
+        background: rgba(124, 58, 237, .15);
+        border-color: rgba(124, 58, 237, .4);
+        color: #a78bfa;
+    }
+
+    .reaction-count {
+        color: var(--ul-text-2);
+    }
+}
+
+.reaction-add-btn {
+    border-color: var(--ul-border);
+    color: var(--ul-text-3);
+
+    &:hover {
+        background: var(--ul-surface-2);
+        color: var(--ul-text-2);
+    }
+}
+
+.reaction-picker-popup {
+    background: var(--ul-surface-1);
+    border-color: var(--ul-border);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+}
+
+.reaction-picker-emoji:hover {
+    background: var(--ul-surface-2);
+}
+
+.comment-empty {
+    color: var(--ul-text-3);
+}
+
+.mention-dropdown {
+    background: var(--ul-surface-1);
+    border-color: var(--ul-border);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+}
+
+.mention-option {
+    color: var(--ul-text-2);
+    border-bottom-color: var(--ul-border);
+
+    &:hover,
+    &.is-selected {
+        background: rgba(124, 58, 237, .08);
+        color: #a78bfa;
+    }
+}
+
+.comment-image-label {
+    color: var(--ul-text-3);
+
+    &:hover {
+        color: #6366f1;
+    }
+}
+
+// ── Trip settings ─────────────────────────────────────────────────────────
+
+.trip-setting-desc {
+    color: var(--ul-text-3);
+}
+
+.trip-setting-pill {
+    border-color: var(--ul-border);
+    color: var(--ul-text-2);
+
+    &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
+        background: var(--ul-surface-2);
+        border-color: var(--ul-border-strong);
+    }
+
+    &--active {
+        background: #1a2540;
+        border-color: #3b82f6;
+        color: #60a5fa;
+    }
+}
+
+// ── Trip dialogs ──────────────────────────────────────────────────────────
+
+.trip-create-dialog {
+    background: var(--ul-surface-1);
+    border-color: var(--ul-border);
+    color: var(--ul-text-1);
+
+    .location-suggestions {
+        background: var(--ul-surface-2);
+        border-color: var(--ul-border);
+    }
+
+    .location-suggestion-item {
+        color: var(--ul-text-1);
+
+        &:hover {
+            background: var(--ul-surface-3);
+        }
+    }
+}
+
+// ── Organize page tabs ────────────────────────────────────────────────────
+
+.organize-title {
+    color: var(--ul-text-1);
+}
+
+.organize-subtitle {
+    color: var(--ul-text-2);
+}
+
+.organize-tab {
+    &.active {
+        color: lighten($primary-color, 15%);
+        border-bottom-color: lighten($primary-color, 15%);
+    }
+}
+
+// ── Selection / checkbox bar ──────────────────────────────────────────────
+
+.cat-sel-bar {
+    &.cat-sel-bar--active {
+        background: rgba(59, 130, 246, .1);
+        border-color: rgba(59, 130, 246, .35);
+    }
+}
+
+.cat-sel-count {
+    background: rgba(59, 130, 246, .15);
+    color: #93c5fd;
+}
+
+.cat-sel-btn {
+    background: var(--ul-surface-1);
+    border-color: var(--ul-border-strong);
+    color: var(--ul-text-2);
+
+    &:hover:not(:disabled) {
+        background: var(--ul-surface-2);
+        border-color: var(--ul-border-strong);
+        color: var(--ul-text-1);
+    }
+}
+
+.cat-sel-delete-btn {
+    border-color: rgba(220, 38, 38, .45);
+    color: #f87171;
+
+    &:hover:not(:disabled) {
+        background: rgba(220, 38, 38, .08);
+        border-color: #f87171;
+    }
+}
+
+.cat-select-wrap {
+    &:hover {
+        background: var(--ul-surface-2);
+    }
+
+    .cat-select-check {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border-strong);
+    }
+}
+
+.tag-card--selected {
+    border-color: lighten($primary-color, 10%) !important;
+    background: rgba(66, 133, 244, .1) !important;
+}
+
+// ── Tag / category edit dialogs ───────────────────────────────────────────
+
+.tag-edit-dialog {
+    .tag-edit-dialog-body {
+        color: var(--ul-text-1);
+    }
+}
+
+// ── Priority items ────────────────────────────────────────────────────────
+
+.priority-item {
+    &:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+    }
+
+    &.priority-item--ghost {
+        background: rgba(66, 133, 244, .1);
+        border-color: $primary-color;
+    }
+}
+
+.priority-drag-handle {
+    color: var(--ul-text-3);
+}
+
+.priority-item-icon {
+    background: var(--ul-surface-2);
+
+    i {
+        color: var(--ul-text-2);
+    }
+}
+
+.priority-item-name {
+    color: var(--ul-text-1);
+}
+
+.priority-item-desc {
+    color: var(--ul-text-3);
+}
+
+.priority-order-badge {
+    background: var(--ul-surface-2);
+    border-color: var(--ul-border);
+    color: var(--ul-text-2);
+}
+
+.priority-kind-badge {
+    &--tag {
+        background: rgba(29, 78, 216, .2);
         color: #93c5fd;
     }
 
-    .cat-sel-btn {
-        background: var(--ul-surface-1);
-        border-color: var(--ul-border-strong);
-        color: var(--ul-text-2);
+    &--category {
+        background: rgba(21, 128, 61, .2);
+        color: #6ee7b7;
+    }
+}
 
-        &:hover:not(:disabled) {
-            background: var(--ul-surface-2);
-            border-color: var(--ul-border-strong);
+// ── Site admin page ───────────────────────────────────────────────────────
+
+.site-admin-title {
+    color: var(--ul-text-1);
+}
+
+.site-admin-subtitle {
+    color: var(--ul-text-2);
+}
+
+.site-admin-notice {
+    &--success {
+        background: rgba(22, 163, 74, .15);
+        border-color: rgba(22, 163, 74, .3);
+        color: #86efac;
+    }
+}
+
+.site-admin-form {
+    label {
+        color: var(--ul-text-2);
+    }
+
+    .form-help {
+        color: var(--ul-text-3);
+    }
+
+    input[type="number"] {
+        background: var(--ul-surface-2);
+        border-color: var(--ul-border-strong);
+        color: var(--ul-text-1);
+
+        &:focus {
+            border-color: lighten($primary-color, 10%);
+        }
+    }
+}
+
+// ── Community wiki page ───────────────────────────────────────────────────
+
+.wiki-page {
+    .wiki-card {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
+    }
+
+    .wiki-card-header {
+        background: var(--ul-surface-2);
+        border-bottom-color: var(--ul-border);
+
+        h2 {
             color: var(--ul-text-1);
         }
     }
 
-    .cat-sel-delete-btn {
-        border-color: rgba(220, 38, 38, .45);
+    .wiki-card-desc {
+        color: var(--ul-text-2);
+        border-bottom-color: var(--ul-border);
+    }
+
+    .wiki-dl-row {
+        border-bottom-color: var(--ul-border);
+
+        dt {
+            color: var(--ul-text-3);
+        }
+
+        dd {
+            color: var(--ul-text-1);
+        }
+    }
+
+    .wiki-stat-label {
+        color: var(--ul-text-2);
+    }
+
+    .wiki-bbox-controls {
+        background: var(--ul-surface-2);
+        border-top-color: var(--ul-border);
+    }
+
+    .wiki-action-btn {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border-strong);
+        color: var(--ul-text-1);
+
+        &:hover {
+            background: var(--ul-surface-2);
+            border-color: var(--ul-border-strong);
+        }
+    }
+
+    .wiki-tabs {
+        background: var(--ul-surface-2);
+        border-bottom-color: var(--ul-border);
+    }
+
+    .wiki-tab {
+        color: var(--ul-text-2);
+
+        &--active,
+        &:hover {
+            color: #22d3ee;
+            border-bottom-color: #22d3ee;
+        }
+    }
+
+    .wiki-loading {
+        color: var(--ul-text-3);
+    }
+
+    .wiki-history-item {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
+
+        &--reverted {
+            background: var(--ul-surface-2);
+        }
+    }
+
+    .wiki-history-editor {
+        color: var(--ul-text-1);
+    }
+
+    .wiki-history-date {
+        color: var(--ul-text-3);
+    }
+
+    .wiki-history-badge--reverted {
+        background: rgba(146, 64, 14, .3);
+        color: #fcd34d;
+    }
+
+    .wiki-change-field {
+        color: var(--ul-text-2);
+    }
+
+    .wiki-change-arrow {
+        color: var(--ul-text-3);
+    }
+
+    .wiki-change-from {
+        background: rgba(185, 28, 28, .18);
+        color: #fca5a5;
+    }
+
+    .wiki-change-to {
+        background: rgba(21, 128, 61, .18);
+        color: #86efac;
+    }
+
+    .wiki-revert-btn {
+        background: var(--ul-surface-1);
+        border-color: rgba(220, 38, 38, .4);
         color: #f87171;
 
-        &:hover:not(:disabled) {
+        &:hover {
             background: rgba(220, 38, 38, .08);
             border-color: #f87171;
         }
     }
 
-    .cat-select-wrap {
-        &:hover {
-            background: var(--ul-surface-2);
-        }
-
-        .cat-select-check {
-            background: var(--ul-surface-1);
-            border-color: var(--ul-border-strong);
-        }
-    }
-
-    .tag-card--selected {
-        border-color: lighten($primary-color, 10%) !important;
-        background: rgba(66, 133, 244, .1) !important;
-    }
-
-    // ── Tag / category edit dialogs ───────────────────────────────────────────
-
-    .tag-edit-dialog {
-        .tag-edit-dialog-body {
-            color: var(--ul-text-1);
-        }
-    }
-
-    // ── Priority items ────────────────────────────────────────────────────────
-
-    .priority-item {
-        &:hover {
-            box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
-        }
-
-        &.priority-item--ghost {
-            background: rgba(66, 133, 244, .1);
-            border-color: $primary-color;
-        }
-    }
-
-    .priority-drag-handle {
+    .wiki-history-empty {
         color: var(--ul-text-3);
     }
+}
 
-    .priority-item-icon {
+// ── Pin detail page - coloured card headers ───────────────────────────────
+
+body.page-location-details {
+    .location-map.card .card-header {
         background: var(--ul-surface-2);
-
-        i {
-            color: var(--ul-text-2);
-        }
-    }
-
-    .priority-item-name {
         color: var(--ul-text-1);
-    }
+        border-bottom-color: var(--ul-border);
 
-    .priority-item-desc {
-        color: var(--ul-text-3);
-    }
-
-    .priority-order-badge {
-        background: var(--ul-surface-2);
-        border-color: var(--ul-border);
-        color: var(--ul-text-2);
-    }
-
-    .priority-kind-badge {
-        &--tag {
-            background: rgba(29, 78, 216, .2);
-            color: #93c5fd;
-        }
-
-        &--category {
-            background: rgba(21, 128, 61, .2);
-            color: #6ee7b7;
-        }
-    }
-
-    // ── Site admin page ───────────────────────────────────────────────────────
-
-    .site-admin-title {
-        color: var(--ul-text-1);
-    }
-
-    .site-admin-subtitle {
-        color: var(--ul-text-2);
-    }
-
-    .site-admin-notice {
-        &--success {
-            background: rgba(22, 163, 74, .15);
-            border-color: rgba(22, 163, 74, .3);
-            color: #86efac;
-        }
-    }
-
-    .site-admin-form {
-        label {
+        .material-icons {
             color: var(--ul-text-2);
         }
 
-        .form-help {
-            color: var(--ul-text-3);
-        }
-
-        input[type="number"] {
-            background: var(--ul-surface-2);
-            border-color: var(--ul-border-strong);
-            color: var(--ul-text-1);
-
-            &:focus {
-                border-color: lighten($primary-color, 10%);
-            }
-        }
-    }
-
-    // ── Community wiki page ───────────────────────────────────────────────────
-
-    .wiki-page {
-        .wiki-card {
-            background: var(--ul-surface-1);
-            border-color: var(--ul-border);
-        }
-
-        .wiki-card-header {
-            background: var(--ul-surface-2);
-            border-bottom-color: var(--ul-border);
-
-            h2 {
-                color: var(--ul-text-1);
-            }
-        }
-
-        .wiki-card-desc {
-            color: var(--ul-text-2);
-            border-bottom-color: var(--ul-border);
-        }
-
-        .wiki-dl-row {
-            border-bottom-color: var(--ul-border);
-
-            dt {
-                color: var(--ul-text-3);
-            }
-
-            dd {
-                color: var(--ul-text-1);
-            }
-        }
-
-        .wiki-stat-label {
-            color: var(--ul-text-2);
-        }
-
-        .wiki-bbox-controls {
-            background: var(--ul-surface-2);
-            border-top-color: var(--ul-border);
-        }
-
-        .wiki-action-btn {
-            background: var(--ul-surface-1);
-            border-color: var(--ul-border-strong);
-            color: var(--ul-text-1);
-
-            &:hover {
-                background: var(--ul-surface-2);
-                border-color: var(--ul-border-strong);
-            }
-        }
-
-        .wiki-tabs {
-            background: var(--ul-surface-2);
-            border-bottom-color: var(--ul-border);
-        }
-
-        .wiki-tab {
-            color: var(--ul-text-2);
-
-            &--active,
-            &:hover {
-                color: #22d3ee;
-                border-bottom-color: #22d3ee;
-            }
-        }
-
-        .wiki-loading {
-            color: var(--ul-text-3);
-        }
-
-        .wiki-history-item {
-            background: var(--ul-surface-1);
-            border-color: var(--ul-border);
-
-            &--reverted {
-                background: var(--ul-surface-2);
-            }
-        }
-
-        .wiki-history-editor {
+        span,
+        h3 {
             color: var(--ul-text-1);
         }
-
-        .wiki-history-date {
-            color: var(--ul-text-3);
-        }
-
-        .wiki-history-badge--reverted {
-            background: rgba(146, 64, 14, .3);
-            color: #fcd34d;
-        }
-
-        .wiki-change-field {
-            color: var(--ul-text-2);
-        }
-
-        .wiki-change-arrow {
-            color: var(--ul-text-3);
-        }
-
-        .wiki-change-from {
-            background: rgba(185, 28, 28, .18);
-            color: #fca5a5;
-        }
-
-        .wiki-change-to {
-            background: rgba(21, 128, 61, .18);
-            color: #86efac;
-        }
-
-        .wiki-revert-btn {
-            background: var(--ul-surface-1);
-            border-color: rgba(220, 38, 38, .4);
-            color: #f87171;
-
-            &:hover {
-                background: rgba(220, 38, 38, .08);
-                border-color: #f87171;
-            }
-        }
-
-        .wiki-history-empty {
-            color: var(--ul-text-3);
-        }
     }
-
-    // ── Pin detail page - coloured card headers ───────────────────────────────
-
-    body.page-location-details {
-        .location-map.card .card-header {
-            background: var(--ul-surface-2);
-            color: var(--ul-text-1);
-            border-bottom-color: var(--ul-border);
-
-            .material-icons {
-                color: var(--ul-text-2);
-            }
-
-            span,
-            h3 {
-                color: var(--ul-text-1);
-            }
-        }
-    }
+}
 }
