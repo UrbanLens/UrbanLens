@@ -1,1770 +1,1565 @@
 @use 'sass:color';
 @use 'variables' as *;
-
-// ── Design tokens (light-mode defaults) ──────────────────────────────────────
 // Components reference var(--ul-*) so they adapt automatically to dark mode
 // without needing per-element overrides. Override everything below in
 // [data-theme="dark"].
 
 :root {
-	--ul-surface-1: #ffffff;
-	--ul-surface-2: #dddddd;
-	--ul-surface-3: #9aa0a6;
-	--ul-surface-4: #5f6368;
-	--ul-surface-5: #1a1a1a;
+    --ul-surface-1: #ffffff;
+    --ul-surface-2: #dddddd;
+    --ul-surface-3: #9aa0a6;
+    --ul-surface-4: #5f6368;
+    --ul-surface-5: #1a1a1a;
 
-	--ul-text-1: #1a1a1a;
-	--ul-text-2: #5f6368;
-	--ul-text-3: #9aa0a6;
-	--ul-text-4: #dddddd;
-	--ul-text-5: #ffffff;
+    --ul-text-1: #1a1a1a;
+    --ul-text-2: #5f6368;
+    --ul-text-3: #9aa0a6;
+    --ul-text-4: #dddddd;
+    --ul-text-5: #ffffff;
 
-	--ul-border: #e0e0e0;
-	--ul-border-strong: #c0c0c0;
+    --ul-border: #e0e0e0;
+    --ul-border-strong: #c0c0c0;
 
-	--ul-shadow-sm: 0 1px 3px rgba(0, 0, 0, .08);
-	--ul-shadow-md: 0 4px 16px rgba(0, 0, 0, .12);
-	--ul-shadow-lg: 0 8px 32px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .08);
+    --ul-shadow-sm: 0 1px 3px rgba(0, 0, 0, .08);
+    --ul-shadow-md: 0 4px 16px rgba(0, 0, 0, .12);
+    --ul-shadow-lg: 0 8px 32px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .08);
 
-	--ul-hover-bg: rgba(0, 0, 0, .04);
-	--ul-hover-bg-primary: rgba(33, 150, 243, .08);
+    --ul-hover-bg: rgba(0, 0, 0, .04);
+    --ul-hover-bg-primary: rgba(33, 150, 243, .08);
+    --ul-color-accent: #6366f1;
+    --ul-color-accent-bg: #eef2ff;
+    --ul-color-accent-fg: #4f46e5;
+    --ul-color-accent-ring: rgba(99, 102, 241, .15);
+    --ul-color-button-bg: #{$primary-color};
+    --ul-color-button-fg: var(--ul-text-1);
 
-	// Semantic color tokens
-	--ul-color-accent: #6366f1;
-	--ul-color-accent-bg: #eef2ff;
-	--ul-color-accent-fg: #4f46e5;
-	--ul-color-accent-ring: rgba(99, 102, 241, .15);
+    --ul-color-success-bg: #dcfce7;
+    --ul-color-success-border: #86efac;
 
-	// Single source of truth: $primary-color from _variables.scss
-	--ul-color-button-bg: #{$primary-color};
-	--ul-color-button-fg: var(--ul-text-1);
+    --ul-color-warning-text: #92400e;
+    --ul-color-warning-bg: #fffbeb;
+    --ul-color-warning-border: #fde68a;
+    --ul-color-warning-icon: #d97706;
 
-	--ul-color-success-bg: #dcfce7;
-	--ul-color-success-border: #86efac;
-
-	--ul-color-warning-text: #92400e;
-	--ul-color-warning-bg: #fffbeb;
-	--ul-color-warning-border: #fde68a;
-	--ul-color-warning-icon: #d97706;
-
-	--ul-color-danger-text: #ef4444;
-	--ul-color-danger-border: #fca5a5;
-	--ul-color-danger-bg: #fef2f2;
+    --ul-color-danger-text: #ef4444;
+    --ul-color-danger-border: #fca5a5;
+    --ul-color-danger-bg: #fef2f2;
 }
 
-// ── Dark mode ─────────────────────────────────────────────────────────────────
-
 [data-theme="dark"] {
-	// Override design tokens
-	--ul-surface-1: #1a1a1a;
-	--ul-surface-2: #222222;
-	--ul-surface-3: #5a5a5a;
-	--ul-surface-4: #dddddd;
-	--ul-surface-5: #ffffff;
-
-	--ul-text-1: #ffffff;
-	--ul-text-2: #dddddd;
-	--ul-text-3: #9aa0a6;
-	--ul-text-4: #5f6368;
-	--ul-text-5: #1a1a1a;
-
-	--ul-border: #333333;
-	--ul-border-strong: #444444;
-
-	--ul-shadow-sm: 0 1px 3px rgba(0, 0, 0, .3);
-	--ul-shadow-md: 0 4px 16px rgba(0, 0, 0, .4);
-	--ul-shadow-lg: 0 8px 32px rgba(0, 0, 0, .5), 0 2px 8px rgba(0, 0, 0, .3);
-
-	--ul-hover-bg: rgba(255, 255, 255, .05);
-	--ul-hover-bg-primary: rgba(66, 165, 245, .1);
-
-	// Semantic color token overrides for dark mode
-	--ul-color-accent-bg: rgba(99, 102, 241, .12);
-	--ul-color-accent-fg: #a5b4fc;
-
-	--ul-color-success-bg: rgba(74, 222, 128, .07);
-	--ul-color-success-border: rgba(74, 222, 128, .3);
-
-	--ul-color-warning-text: #fde68a;
-	--ul-color-warning-bg: rgba(251, 191, 36, .07);
-	--ul-color-warning-border: rgba(251, 191, 36, .3);
-	--ul-color-warning-icon: #fbbf24;
-
-	--ul-color-danger-text: #f87171;
-	--ul-color-danger-border: rgba(239, 68, 68, .4);
-	--ul-color-danger-bg: rgba(239, 68, 68, .08);
-
-	// Legacy props used by .card and older components
-	--card-bg: #1e1e1e;
-	--border-color: #333;
-
-	background: var(--ul-surface-1);
-	color: #e0e0e0;
-
-	input:not([type]):disabled,
-	input:not([type])[readonly=readonly],
-	input[type=text]:not(.browser-default):disabled,
-	input[type=text]:not(.browser-default)[readonly=readonly],
-	input[type=password]:not(.browser-default):disabled,
-	input[type=password]:not(.browser-default)[readonly=readonly],
-	input[type=email]:not(.browser-default):disabled,
-	input[type=email]:not(.browser-default)[readonly=readonly],
-	input[type=url]:not(.browser-default):disabled,
-	input[type=url]:not(.browser-default)[readonly=readonly],
-	input[type=time]:not(.browser-default):disabled,
-	input[type=time]:not(.browser-default)[readonly=readonly],
-	input[type=date]:not(.browser-default):disabled,
-	input[type=date]:not(.browser-default)[readonly=readonly],
-	input[type=datetime]:not(.browser-default):disabled,
-	input[type=datetime]:not(.browser-default)[readonly=readonly],
-	input[type=datetime-local]:not(.browser-default):disabled,
-	input[type=datetime-local]:not(.browser-default)[readonly=readonly],
-	input[type=tel]:not(.browser-default):disabled,
-	input[type=tel]:not(.browser-default)[readonly=readonly],
-	input[type=number]:not(.browser-default):disabled,
-	input[type=number]:not(.browser-default)[readonly=readonly],
-	input[type=search]:not(.browser-default):disabled,
-	input[type=search]:not(.browser-default)[readonly=readonly] {
-		color: var(--ul-text-4);
-	}
-
-	body {
-		background: var(--ul-surface-1);
-		color: #e0e0e0;
-	}
-
-	.app-nav {
-		background: var(--ul-surface-1);
-	}
-
-	.app-nav-link {
-		color: rgba(255, 255, 255, .75);
-	}
-
-	.app-nav-link:hover,
-	.app-nav-link.active {
-		color: var(--ul-text-4);
-	}
-
-	.container {
-		background: transparent;
-	}
-
-	// Legacy positioned .dialog still needs explicit theming
-	.dialog {
-		background: var(--ul-surface-1);
-		border-color: var(--ul-border);
-	}
-
-	.tag-chip {
-		color: #ccc;
-	}
-
-	.tag-stat {
-		background: var(--ul-surface-1);
-		border-color: #444;
-		color: #9e9e9e;
-
-		&.tag-stat--children {
-			background: #1a2a3a;
-			border-color: #2a4a6a;
-			color: color.adjust($primary-color, $lightness: 20%);
-		}
-
-		&.tag-stat--total {
-			background: var(--ul-surface-1);
-			border-color: #3a3a3a;
-			color: #7a7a7a;
-		}
-	}
-
-	.tag-view-toggle {
-		border-color: #444;
-	}
-
-	.tag-view-btn {
-		background: var(--ul-surface-1);
-		color: #aaa;
-		border-right-color: #444;
-
-		&:hover {
-			background: var(--ul-surface-1);
-			color: #e0e0e0;
-		}
-
-		&.active {
-			background: $primary-color;
-			color: var(--ul-text-4);
-		}
-	}
-
-	.tag-tree-children {
-		border-left-color: #444;
-	}
-
-	.tag-tree-children>.tag-tree-item::before {
-		background: #444;
-	}
-
-	.settings-title {
-		color: var(--ul-text-4);
-	}
-
-	.settings-section-header {
-		border-color: var(--ul-border);
-	}
-
-	.settings-section-title,
-	.settings-label,
-	.settings-toggle-label,
-	.tag-card-name,
-	.tag-title {
-		color: #e0e0e0;
-	}
-
-	.settings-section-desc,
-	.settings-subtitle,
-	.settings-help,
-	.tag-card-desc,
-	.tag-subtitle {
-		color: #9e9e9e;
-	}
-
-	// Inputs / selects
-	.settings-select,
-	.settings-input,
-	.form-input,
-	textarea.form-input {
-		background: var(--ul-surface-1);
-		color: #e0e0e0;
-		border-color: #444;
-	}
-
-	.settings-radio-button {
-		border-color: #333;
-		background: rgb(40, 40, 40);
-	}
-
-	.settings-select:focus,
-	.settings-input:focus,
-	.form-input:focus {
-		border-color: $primary-color;
-	}
-
-	// Theme toggle
-	.settings-theme-option {
-		background: var(--ul-surface-1);
-		border-color: #444;
-
-		span {
-			color: #bbb;
-		}
-
-		i {
-			color: #888;
-		}
-
-		&:hover:not(.active) {
-			background: #333;
-			border-color: #666;
-		}
-
-		&.active {
-			background: rgba($primary-color, 0.12);
-			border-color: $primary-color;
-		}
-	}
-
-	// Tag page
-	.tag-global-badge {
-		background: #333;
-		color: #aaa;
-	}
-
-	.tag-parent-select,
-	.tag-parent-option {
-		background: var(--ul-surface-1);
-		border-color: #444;
-	}
-
-	.tag-parent-option:hover {
-		background: #333;
-	}
-
-	// Misc
-	.icon-option {
-		color: #ccc;
-		border-color: #444;
-		background: var(--ul-surface-1);
-	}
-
-	.icon-option:hover {
-		background: #383838;
-	}
-
-	.icon-option.selected {
-		background: rgba($primary-color, 0.18);
-		border-color: $primary-color;
-	}
-
-	.color-clear {
-		background: var(--ul-surface-1) !important;
-	}
-
-	.tag-order-badge {
-		background: #333;
-		color: #aaa;
-	}
-
-	// Emoji picker
-	.icon-picker-trigger {
-		background: var(--ul-surface-1);
-		border-color: #444;
-		color: #e0e0e0;
-	}
-
-	.icon-picker-panel {
-		background: var(--ul-surface-1);
-		border-color: #333;
-	}
-
-	.icon-picker-search-row {
-		border-color: #333;
-	}
-
-	.icon-picker-search-input {
-		color: #e0e0e0;
-		background: transparent;
-	}
-
-	.icon-picker-tabs {
-		border-color: #333;
-	}
-
-	.icon-tab {
-		color: #888;
-
-		&:hover {
-			color: #ccc;
-		}
-
-		&.active {
-			color: $primary-color;
-		}
-	}
-
-	.icon-picker-item {
-		&:hover {
-			background: var(--ul-surface-1);
-		}
-
-		&.selected {
-			background: rgba($primary-color, 0.18);
-		}
-	}
-
-	.icon-picker-item-label {
-		color: #777;
-	}
-
-	.icon-picker-mi {
-		color: #aaa;
-	}
-
-	.icon-custom-upload-btn {
-		border-color: #444;
-		color: #888;
-	}
-
-	// Dialogs / import
-	.dialog-overlay {
-		background: rgba(0, 0, 0, .7);
-	}
-
-	// Header / footer
-	footer {
-		background: var(--ul-surface-1);
-		border-color: #333;
-		color: #888;
-	}
-
-	// Edit profile page
-	.edit-card {
-		background: var(--ul-surface-1);
-		border-color: #333;
-	}
-
-	.edit-card-title {
-		border-color: #333;
-	}
-
-	.edit-input,
-	input.edit-input,
-	textarea.edit-textarea {
-		background: var(--ul-surface-1);
-		color: #e0e0e0;
-		border-color: #444;
-	}
-
-	.edit-avatar-placeholder {
-		background: var(--ul-surface-1);
-		border-color: #444;
-	}
-
-	.edit-avatar-preview {
-		border-color: #444;
-	}
-
-	.edit-avatar-upload-btn {
-		background: #1a2a3a;
-		border-color: color.adjust($primary-color, $lightness: 10%);
-	}
-
-	.edit-link-row {
-		background: var(--ul-surface-1);
-		border-color: #333;
-	}
-
-	.edit-add-link-input {
-		background: var(--ul-surface-1);
-		color: #e0e0e0;
-		border-color: #444;
-	}
-
-	.edit-discord-details {
-		border-color: #333;
-	}
-
-	.edit-discord-summary {
-		background: var(--ul-surface-1);
-	}
-
-	.field-status--saved {
-		color: #66bb6a;
-	}
-
-	.settings-cluster-value {
-		color: var(--ul-text-2);
-	}
-
-	.settings-cluster-slider-wrap input[type="range"] {
-		accent-color: $primary-color;
-	}
-
-	.settings-reset-btn {
-		border-color: #444;
-		color: #aaa;
-
-		&:hover {
-			background: var(--ul-surface-1);
-			border-color: #666;
-		}
-	}
-
-
-	// ── Trip map context menu dark mode ──────────────────────────────────────────
-
-	.trip-map-ctx-menu {
-		background: #1e2130;
-		border-color: #2d3348;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
-	}
-
-	.trip-map-ctx-item {
-		color: #e2e8f0;
-
-		&:hover {
-			background: rgba(255, 255, 255, .06);
-		}
-	}
-
-	.btn-danger {
-		border-color: #ef9a9a;
-		color: #ef9a9a;
-
-		&:hover {
-			background: #c62828;
-			border-color: #c62828;
-			color: var(--ul-text-4);
-		}
-	}
-
-
-	// ── Trip weather dark mode ────────────────────────────────────────────────────
-
-	.trip-weather-panel {
-		background: #1e2130;
-		border-color: #2d3348;
-
-		.trip-weather-header .trip-weather-title {
-			color: #e2e8f0;
-		}
-	}
-
-	.trip-weather-day {
-		border-color: #2d3348;
-		background: #1e2130;
-
-		.trip-weather-day-header {
-			background: linear-gradient(135deg, #1a2540 0%, #162035 100%);
-			border-bottom-color: #2d3348;
-		}
-	}
-
-	.trip-weather-activity {
-		border-top-color: #2d3348;
-
-		.trip-weather-activity-name {
-			color: #e2e8f0;
-		}
-	}
-
-	.trip-weather-slot-temp {
-		color: #e2e8f0;
-	}
-
-	.trip-weather-slot-desc,
-	.trip-weather-slot-feels {
-		color: #94a3b8;
-	}
-
-	// ── Pin detail page dark mode ─────────────────────────────────────────────
-
-	body.page-location-details {
-		background: #0d0d0d;
-	}
-
-	body.page-location-details .card {
-		box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
-	}
-
-	// ── Notification preferences table ───────────────────────────────────────────
-
-	.notif-prefs__table th {
-		color: #888;
-		border-bottom-color: #333;
-	}
-
-	.notif-prefs__row {
-		border-bottom-color: #2a2a2a;
-
-		&:hover {
-			background: var(--ul-surface-1);
-		}
-	}
-
-	.notif-prefs__label {
-		color: #ccc;
-	}
-
-	.notif-prefs__saved {
-		background: #1a2e1a;
-		color: #86efac;
-	}
-
-	// ── Profile page ─────────────────────────────────────────────────────────────
-
-	// Main cards
-	.profile-hero,
-	.profile-stat,
-	.profile-section {
-		background: var(--ul-surface-1);
-		border-color: #333;
-	}
-
-	// Hero - name, bio, meta
-	.profile-full-name {
-		color: #e0e0e0;
-	}
-
-	.profile-bio {
-		color: #ccc;
-
-		&.empty {
-			color: #555;
-		}
-	}
-
-	.profile-username,
-	.profile-meta-item {
-		color: #888;
-	}
-
-	.stat-value {
-		color: #e0e0e0;
-	}
-
-	.stat-label {
-		color: #777;
-	}
-
-	.edit-profile-btn {
-		border-color: #444;
-		color: #aaa;
-
-		&:hover {
-			border-color: $primary-color;
-			color: $primary-color;
-			background-color: rgba($primary-color, 0.08);
-		}
-	}
-
-	.social-link {
-		border-color: #444;
-		color: #aaa;
-
-		&:hover {
-			border-color: $primary-color;
-			color: $primary-color;
-		}
-	}
-
-	.shared-visited-item {
-		background: var(--ul-surface-1);
-		border-color: #383838;
-		color: #ccc;
-	}
-
-	// Friend list (partial on profile page)
-	.friend-card {
-		background: var(--ul-surface-1);
-		border-color: #383838;
-
-		&:hover {
-			border-color: #555;
-		}
-	}
-
-	.friend-card-name {
-		color: #e0e0e0;
-	}
-
-	.friend-card-username,
-	.friend-card-area {
-		color: #666;
-	}
-
-	.friend-requests-section {
-		background: #1e1a0e;
-		border-color: #4a3a10;
-	}
-
-	.friend-requests-label {
-		color: #d4a44c;
-	}
-
-	.friend-request-name {
-		color: #ccc;
-	}
-
-	.friend-request-sub {
-		color: #666;
-	}
-
-	.friend-request-item {
-		border-bottom-color: rgba(255, 255, 255, .06);
-	}
-
-	// Icon-only compact accept/reject/ignore buttons in the partial
-	.btn-friend-accept {
-		background: #1a2e1a;
-		border-color: #2d6a2d;
-		color: #86efac;
-
-		&:hover {
-			background: #1f3a1f;
-		}
-	}
-
-	.btn-friend-reject {
-		background: #2e1a1a;
-		border-color: #6a2d2d;
-		color: #fca5a5;
-
-		&:hover {
-			background: #3a2020;
-		}
-	}
-
-	.btn-friend-ignore {
-		background: var(--ul-surface-1);
-		border-color: #444;
-		color: #888;
-
-		&:hover {
-			background: var(--ul-surface-1);
-		}
-	}
-
-	.btn-friend-remove:hover {
-		color: #fca5a5;
-		background: #3a1a1a;
-	}
-
-	// Friend status badges
-	.friend-status-badge--friends {
-		background: #1a2e1a;
-		color: #86efac;
-		border-color: #2d6a2d;
-	}
-
-	.friend-status-badge--pending {
-		background: #2a1e08;
-		color: #fbbf24;
-		border-color: #5a3e10;
-	}
-
-	// Profile section title / counts / links
-	.profile-section-title {
-		color: #888;
-	}
-
-	.profile-section-empty {
-		color: #555;
-	}
-
-	// Full friends page
-	.friends-back-link {
-		color: #666;
-
-		&:hover {
-			color: #ccc;
-		}
-	}
-
-	.friends-page-title {
-		color: #e0e0e0;
-	}
-
-	.friends-section--requests {
-		border-color: #4a3a10;
-	}
-
-	.friends-empty {
-		.material-icons {
-			color: #444;
-		}
-
-		p {
-			color: #666;
-		}
-	}
-
-	// Full-page .btn-friend pills (labelled, used on the friends.html full page)
-	.btn-friend--accept {
-		background: #1a2e1a;
-		border-color: #2d6a2d;
-		color: #86efac;
-
-		&:hover {
-			background: #1f3a1f;
-		}
-	}
-
-	.btn-friend--reject {
-		background: #2e1a1a;
-		border-color: #6a2d2d;
-		color: #fca5a5;
-
-		&:hover {
-			background: #3a2020;
-		}
-	}
-
-	.btn-friend--ignore {
-		background: var(--ul-surface-1);
-		border-color: #444;
-		color: #888;
-
-		&:hover {
-			background: var(--ul-surface-1);
-		}
-	}
-
-	.btn-friend--remove {
-		border-color: #444;
-		color: #888;
-
-		&:hover {
-			background: #3a1a1a;
-			border-color: #6a2d2d;
-			color: #fca5a5;
-		}
-	}
-
-	// ── Date-validation error dialog ─────────────────────────────────────────────
-
-	.date-error-list {
-		margin: 0 0 0.75rem;
-		padding-left: 1.25rem;
-		color: #d32f2f;
-		font-size: 0.9rem;
-
-		li {
-			margin-bottom: 0.25rem;
-		}
-	}
-
-	.date-error-hint {
-		font-size: 0.85rem;
-		color: $text-secondary;
-		margin: 0;
-	}
-
-
-	// ── Nav dropdowns ─────────────────────────────────────────────────────────────
-
-	// Sign-out in user dropdown
-	.nav-dropdown-item--signout {
-		color: #ef9a9a;
-
-		.material-icons {
-			color: #ef9a9a;
-		}
-
-		&:hover {
-			background: rgba(239, 154, 154, .08);
-
-			.material-icons {
-				color: #ef9a9a;
-			}
-		}
-	}
-
-	// Notification unread items use an indigo accent in light mode; adapt for dark
-	.notif-item--unread {
-		background: #1e1a30;
-		border-left-color: #7c3aed;
-
-		&:hover {
-			background: #221d38;
-		}
-
-		.notif-item__icon-wrap {
-			background: rgba(124, 58, 237, .15);
-
-			.material-icons {
-				color: #a78bfa;
-			}
-		}
-	}
-
-	// Per-type icon wrap overrides for unread notifications
-	.notif-item--unread .notif-item__icon-wrap--friend_request,
-	.notif-item--unread .notif-item__icon-wrap--friend_accepted {
-		background: rgba(22, 163, 74, .15);
-
-		.material-icons {
-			color: #4ade80;
-		}
-	}
-
-	.notif-item--unread .notif-item__icon-wrap--added_to_trip,
-	.notif-item--unread .notif-item__icon-wrap--trip_updated {
-		background: rgba(37, 99, 235, .15);
-
-		.material-icons {
-			color: #60a5fa;
-		}
-	}
-
-	.notif-item--unread .notif-item__icon-wrap--comment_reply,
-	.notif-item--unread .notif-item__icon-wrap--comment_liked {
-		background: rgba(219, 39, 119, .15);
-
-		.material-icons {
-			color: #f472b6;
-		}
-	}
-
-	.notif-item--unread .notif-item__icon-wrap--error {
-		background: rgba(220, 38, 38, .15);
-
-		.material-icons {
-			color: #f87171;
-		}
-	}
-
-	.notif-item--unread .notif-item__icon-wrap--warning {
-		background: rgba(217, 119, 6, .15);
-
-		.material-icons {
-			color: #fbbf24;
-		}
-	}
-
-	// "Mark all read" link
-	.notif-mark-all-btn {
-		color: #7cb9e8;
-
-		&:hover {
-			background: rgba(66, 165, 245, .1);
-		}
-	}
-
-	// ── Standard .btn danger variant dark mode ────────────────────────────────────
-
-	.btn--danger {
-		color: #fca5a5;
-		background: rgba(239, 154, 154, .07);
-		border-color: rgba(239, 154, 154, .25);
-
-		&:hover {
-			background: rgba(239, 154, 154, .13);
-		}
-	}
-
-	// ── Trips list page ───────────────────────────────────────────────────────
-	// Base .trips-title/.trips-subtitle already use var(--ul-text-*) tokens.
-	// Only override where the dark value differs from what var() would produce.
-
-	.trips-title .material-icons {
-		color: #60a5fa;
-	}
-
-	.trips-empty .trips-empty-icon {
-		// Base uses var(--ul-border) for the icon; explicitly set to text-3 in dark.
-		color: var(--ul-text-3);
-	}
-
-	.trip-card:hover {
-		border-color: #3b82f6;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
-	}
-
-	.trip-card-icon {
-		background: #1a2540;
-
-		.material-icons {
-			color: #60a5fa;
-		}
-	}
-
-	// ── Trip detail header ────────────────────────────────────────────────────
-
-	.trip-back-link:hover {
-		color: #60a5fa;
-	}
-
-	.trip-header-btn {
-		&--edit,
-		&--settings {
-			// Top-level color matches base var(--ul-text-3), so no override needed.
-			&:hover,
-			&:focus {
-				background: var(--ul-surface-2);
-				color: #60a5fa;
-				border-color: var(--ul-border);
-			}
-		}
-
-		&--delete {
-			// Base uses var(--ul-border); use text-3 for better legibility on dark.
-			color: var(--ul-text-3);
-
-			&:hover,
-			&:focus {
-				background: rgba(220, 38, 38, .12);
-				color: #f87171;
-				border-color: rgba(220, 38, 38, .3);
-			}
-		}
-	}
-
-	// ── Trip panels (card headers, badges) ────────────────────────────────────
-
-	.trip-panel .card-header {
-		// Base uses var(--ul-surface-3) for border; use var(--ul-border) in dark.
-		border-bottom-color: var(--ul-border);
-
-		.badge {
-			// Base uses var(--ul-border) for bg; use surface-3 in dark.
-			background: var(--ul-surface-3);
-			color: var(--ul-text-2);
-		}
-	}
-
-	// ── View toggles ──────────────────────────────────────────────────────────
-
-	.view-toggle-group {
-		// Base uses var(--ul-surface-2); use surface-3 in dark for more contrast.
-		background: var(--ul-surface-3);
-	}
-
-	.view-toggle-btn {
-		// Top-level color matches base var(--ul-text-3), so no override needed.
-		&:hover {
-			// Base hover uses var(--ul-border); use surface-2 in dark.
-			background: var(--ul-surface-2);
-			color: var(--ul-text-2);
-		}
-
-		&.view-toggle-btn--active {
-			// Surface matches base; color and shadow differ.
-			color: #60a5fa;
-			box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
-		}
-	}
-
-	// ── Calendar ─────────────────────────────────────────────────────────────
-
-	.cal-nav-btn {
-		// Top-level color matches base var(--ul-text-2), so no override needed.
-		&:hover {
-			// Base hover uses var(--ul-surface-3); use surface-2 in dark.
-			background: var(--ul-surface-2);
-		}
-	}
-
-	.cal-cell {
-		&--empty {
-			// Base uses var(--ul-surface-2); use subtle transparent overlay in dark.
-			background: rgba(255, 255, 255, .025);
-			opacity: .6;
-		}
-
-		&--has-events {
-			// Base uses var(--ul-surface-1); use a blue-tinted dark bg.
-			background: #192030;
-		}
-
-		&--today {
-			// Base uses #eff6ff; use a dark navy.
-			background: #1a2540;
-		}
-	}
-
-	.cal-day-num {
-		// Base uses var(--ul-text-1); use text-2 for lighter feel in dark.
-		color: var(--ul-text-2);
-	}
-
-	// ── Activity list ─────────────────────────────────────────────────────────
-
-	.trip-activity-item {
-		// Base uses var(--ul-surface-3) for border; use var(--ul-border) in dark.
-		border-bottom-color: var(--ul-border);
-
-		&.trip-activity--highlighted {
-			// Base uses #eff6ff; use dark navy.
-			background: #192030;
-		}
-	}
-
-	.trip-activity-icon {
-		background: #1a2540;
-
-		.material-icons {
-			color: #60a5fa;
-		}
-	}
-
-	.trip-activity-num {
-		// Base uses var(--ul-border); use surface-2 in dark for subtlety.
-		border-color: var(--ul-surface-2);
-	}
-
-	.trip-attr-link:hover {
-		color: #a78bfa;
-	}
-
-	// ── Members ───────────────────────────────────────────────────────────────
-
-	.trip-member-item {
-		// Base uses var(--ul-surface-3) for border; use var(--ul-border) in dark.
-		border-bottom-color: var(--ul-border);
-	}
-
-	.trip-member-avatar {
-		background: #1a2540;
-	}
-
-	.trip-member-avatar-initial {
-		color: #60a5fa;
-	}
-
-	.trip-member-badge {
-		&--creator {
-			background: rgba(251, 191, 36, .12);
-			color: #fbbf24;
-			border-color: rgba(251, 191, 36, .25);
-		}
-
-		&--organizer {
-			background: rgba(167, 139, 250, .12);
-			color: #a78bfa;
-			border-color: rgba(167, 139, 250, .25);
-		}
-	}
-
-	.trip-organizer-btn {
-		// Top-level color matches base var(--ul-text-3), so no override needed.
-		&--active {
-			color: #a78bfa !important;
-
-			&:hover {
-				background: rgba(167, 139, 250, .1) !important;
-			}
-		}
-	}
-
-	// ── RSVP popup ────────────────────────────────────────────────────────────
-
-	.rsvp-popup {
-		// background and border already use tokens — only the shadow differs.
-		box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
-	}
-
-	.rsvp-popup-opt {
-		// Base uses $text-primary (hardcoded); override with token.
-		color: var(--ul-text-1);
-
-		&:hover {
-			// Base hover uses var(--ul-surface-1); use surface-2 in dark.
-			background: var(--ul-surface-2);
-		}
-
-		&--yes {
-			color: #4ade80;
-
-			&:hover {
-				background: rgba(34, 197, 94, .1);
-			}
-		}
-
-		&--no {
-			color: #f87171;
-
-			&:hover {
-				background: rgba(220, 38, 38, .1);
-			}
-		}
-
-		&--maybe {
-			color: #fbbf24;
-
-			&:hover {
-				background: rgba(245, 158, 11, .1);
-			}
-		}
-
-		&--clear {
-			// Re-mute after the parent sets color to var(--ul-text-1).
-			color: var(--ul-text-3);
-		}
-	}
-
-	// ── RSVP pill buttons (in the member-list RSVP picker) ────────────────────
-
-	.rsvp-pill-btn {
-		// Base border and color already use tokens; only the hover differs.
-		&:hover {
-			background: var(--ul-surface-2);
-			border-color: var(--ul-border-strong);
-		}
-	}
-
-	// ── Trip comment form (.trip-comment-* classes) ───────────────────────────
-
-	.trip-comment-item {
-		// Base uses var(--ul-surface-3) for border; use var(--ul-border) in dark.
-		border-bottom-color: var(--ul-border);
-
-		&:hover {
-			background: rgba(255, 255, 255, .03);
-		}
-	}
-
-	.trip-comment-text {
-		// Base uses var(--ul-text-1); use text-2 for de-emphasis in dark.
-		color: var(--ul-text-2);
-	}
-
-	.trip-comment-input:focus {
-		// Base focus uses #93c5fd; darken slightly in dark mode.
-		border-color: #60a5fa;
-		box-shadow: 0 0 0 3px rgba(96, 165, 250, .12);
-	}
-
-	// ── Comments panel (.comment-* classes from _comments.scss) ──────────────
-
-	.comment-item {
-		// Base uses #f3f4f6 (hardcoded); use token in dark.
-		border-bottom-color: var(--ul-border);
-
-		&--reply {
-			// Base uses var(--ul-surface-1); use surface-2 to indent visually.
-			background: var(--ul-surface-2);
-		}
-	}
-
-	.comment-date {
-		// Base uses hardcoded #9ca3af; use token in dark.
-		color: var(--ul-text-3);
-	}
-
-	.comment-text {
-		// Base uses hardcoded #374151; use token in dark.
-		color: var(--ul-text-2);
-	}
-
-	.comment-avatar-initial {
-		background: #1e1936;
-		color: #7c6fcd;
-	}
-
-	.comment-delete-btn {
-		// Base uses hardcoded #d1d5db; use token in dark.
-		color: var(--ul-text-3);
-
-		&:hover {
-			color: #f87171;
-		}
-	}
-
-	.comment-reply-btn {
-		// Base uses hardcoded #9ca3af; use token in dark.
-		color: var(--ul-text-3);
-
-		.reply-count {
-			color: var(--ul-text-3);
-		}
-
-		&:hover {
-			color: #a78bfa;
-			background: rgba(124, 58, 237, .08);
-		}
-	}
-
-	.comment-compose {
-		// Base uses hardcoded #f3f4f6; use token in dark.
-		border-top-color: var(--ul-border);
-	}
-
-	.comment-input {
-		// Base sets only border (same token); add explicit background and color for dark.
-		background: var(--ul-surface-2);
-		color: var(--ul-text-1);
-
-		&::placeholder {
-			color: var(--ul-text-3);
-		}
-
-		&:focus {
-			border-color: #6366f1;
-			box-shadow: 0 0 0 3px rgba(99, 102, 241, .1);
-		}
-	}
-
-	.reaction-pill {
-		// Base uses var(--ul-surface-1); use surface-3 in dark.
-		background: var(--ul-surface-3);
-
-		&:hover {
-			// Base hover uses var(--ul-surface-1); use surface-2 in dark.
-			background: var(--ul-surface-2);
-		}
-
-		&--mine {
-			background: rgba(124, 58, 237, .15);
-			border-color: rgba(124, 58, 237, .4);
-			color: #a78bfa;
-		}
-
-		.reaction-count {
-			// Base uses hardcoded #6b7280; use token in dark.
-			color: var(--ul-text-2);
-		}
-	}
-
-	.reaction-add-btn {
-		// Base uses hardcoded #9ca3af; use token in dark.
-		color: var(--ul-text-3);
-
-		&:hover {
-			background: var(--ul-surface-2);
-			color: var(--ul-text-2);
-		}
-	}
-
-	.reaction-picker-popup {
-		// background and border already use tokens — only the shadow differs.
-		box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
-	}
-
-	.reaction-picker-emoji:hover {
-		// Base hover uses var(--ul-surface-1); use surface-2 in dark.
-		background: var(--ul-surface-2);
-	}
-
-	.comment-empty {
-		// Base uses hardcoded #9ca3af; use token in dark.
-		color: var(--ul-text-3);
-	}
-
-	.mention-dropdown {
-		// background and border already use tokens — only the shadow differs.
-		box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
-	}
-
-	.mention-option {
-		// Base uses hardcoded colors; override with tokens in dark.
-		color: var(--ul-text-2);
-		// Base uses hardcoded #f9fafb; use token in dark.
-		border-bottom-color: var(--ul-border);
-
-		&:hover,
-		&.is-selected {
-			background: rgba(124, 58, 237, .08);
-			color: #a78bfa;
-		}
-	}
-
-	.comment-image-label {
-		// Base uses hardcoded #9ca3af; use token in dark.
-		color: var(--ul-text-3);
-		// Hover color (#6366f1) is the same in base, so no hover override needed.
-	}
-
-	// ── Comment map composer / viewer (from _comments.scss) ──────────────────
-	// Tokens var(--ul-muted), var(--ul-text), var(--ul-hover), var(--ul-input-bg)
-	// are not defined in the token system — replaced with correct equivalents.
-
-	.comment-map-btn {
-		// Base border already uses var(--ul-border); only color needs overriding.
-		// Base uses hardcoded #6b7280; use token in dark.
-		color: var(--ul-text-3);
-
-		&:hover {
-			background: rgba(167, 139, 250, .15);
-			border-color: #a78bfa;
-			color: #c4b5fd;
-		}
-	}
-
-	.comment-map-chip {
-		background: rgba(109, 40, 217, .2);
-		border-color: #7c3aed;
-		color: #c4b5fd;
-	}
-
-	.comment-map-expand-btn {
-		// Base uses rgba(255,255,255,.9); use dark semi-transparent background.
-		background: rgba(30, 30, 40, .9);
-		// Base border already uses var(--ul-border); no override needed.
-		// Base uses hardcoded #374151; use token in dark.
-		color: var(--ul-text-1);
-
-		&:hover {
-			background: rgba(40, 40, 55, 1);
-		}
-	}
-
-	.comment-map-view-dialog,
-	.comment-map-composer-dialog {
-		// dialogs need explicit background in dark (browser default is light)
-		background: var(--ul-surface-1);
-		color: var(--ul-text-1);
-		// .dialog-header and .dialog-footer borders already use var(--ul-border); no override.
-	}
-
-	.comment-map-composer-controls {
-		// Base uses hardcoded #f3f4f6; use token in dark.
-		border-color: var(--ul-border);
-	}
-
-	.comment-map-composer-toolbar {
-		// Base uses hardcoded #f3f4f6; use token in dark.
-		border-color: var(--ul-border);
-	}
-
-	.cmcc-label {
-		// Base uses hardcoded #6b7280; use token in dark.
-		color: var(--ul-text-3);
-	}
-
-	.cmcc-pin-search {
-		// Base only sets border; add dark background and color.
-		background: var(--ul-surface-2);
-		// Base border already uses var(--ul-border); no override needed.
-		color: var(--ul-text-1);
-	}
-
-	// .cmcc-pin-dropdown background and border already use tokens; no override needed.
-
-	.cmcc-pin-option {
-		// Base uses hardcoded #374151; use token in dark.
-		color: var(--ul-text-1);
-
-		&:hover {
-			background: var(--ul-hover-bg);
-		}
-	}
-
-	.cmc-layer-btn,
-	.cmc-tool-btn,
-	.cmc-undo-btn,
-	.cmc-clear-btn {
-		// Base border already uses var(--ul-border); only color needs overriding.
-		color: var(--ul-text-1);
-
-		&:hover {
-			background: var(--ul-hover-bg);
-		}
-
-		&.is-active {
-			background: rgba(109, 40, 217, .25);
-			border-color: #7c3aed;
-			color: #c4b5fd;
-		}
-	}
-
-	.cmc-toolbar-sep {
-		// Base uses var(--ul-surface-1); use border token for a visible separator in dark.
-		background: var(--ul-border);
-	}
-
-	.cmc-toolbar-label {
-		// Base uses hardcoded #9ca3af; use token in dark.
-		color: var(--ul-text-3);
-	}
-
-	.cmc-color-wrap {
-		// Base uses hardcoded #6b7280; use token in dark.
-		color: var(--ul-text-3);
-
-		input[type="color"] {
-			// Base border already uses var(--ul-border); only background needs overriding.
-			background: var(--ul-surface-1);
-		}
-	}
-
-	// ── Trip settings ─────────────────────────────────────────────────────────
-
-	.trip-setting-pill {
-		// Base border and color already use tokens; only hover/active differ.
-		&:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
-			// Base hover uses var(--ul-surface-3); use surface-2 in dark.
-			background: var(--ul-surface-2);
-			border-color: var(--ul-border-strong);
-		}
-
-		&--active {
-			background: #1a2540;
-			border-color: #3b82f6;
-			color: #60a5fa;
-		}
-	}
-
-	// ── Trip dialogs ──────────────────────────────────────────────────────────
-
-	.trip-create-dialog {
-		// background/border/color already handled by ul-dialog base styles.
-		// .location-suggestions background/border already use tokens.
-		// Only location-suggestion-item hover differs from base.
-		.location-suggestion-item:hover {
-			background: var(--ul-surface-3);
-		}
-	}
-
-	// ── Organize page tabs ────────────────────────────────────────────────────
-
-	.organize-title {
-		// Base uses $text-primary (hardcoded); override with token.
-		color: var(--ul-text-1);
-	}
-
-	.organize-subtitle {
-		// Base uses $text-secondary (hardcoded); override with token.
-		color: var(--ul-text-2);
-	}
-
-	.organize-tab.active {
-		// Lighten the primary color slightly for dark backgrounds.
-		color: color.adjust($primary-color, $lightness: 15%);
-		border-bottom-color: color.adjust($primary-color, $lightness: 15%);
-	}
-
-	// ── Selection / checkbox bar ──────────────────────────────────────────────
-
-	.cat-sel-bar.cat-sel-bar--active {
-		background: rgba(59, 130, 246, .1);
-		border-color: rgba(59, 130, 246, .35);
-	}
-
-	.cat-sel-count {
-		background: rgba(59, 130, 246, .15);
-		color: #93c5fd;
-	}
-
-	.cat-sel-btn {
-		// Base background and color already use tokens; only border and hover differ.
-		border-color: var(--ul-border-strong);
-
-		&:hover:not(:disabled) {
-			// Base hover uses var(--ul-surface-3); use surface-2 in dark.
-			background: var(--ul-surface-2);
-			border-color: var(--ul-border-strong);
-			color: var(--ul-text-1);
-		}
-	}
-
-	.cat-sel-delete-btn {
-		border-color: rgba(220, 38, 38, .45);
-		color: #f87171;
-
-		&:hover:not(:disabled) {
-			background: rgba(220, 38, 38, .08);
-			border-color: #f87171;
-		}
-	}
-
-	.cat-select-wrap {
-		&:hover {
-			// Base hover uses var(--ul-surface-3); use surface-2 in dark.
-			background: var(--ul-surface-2);
-		}
-
-		.cat-select-check {
-			// Keep token for bg, but strengthen the border in dark.
-			background: var(--ul-surface-1);
-			border-color: var(--ul-border-strong);
-		}
-	}
-
-	.tag-card--selected {
-		border-color: color.adjust($primary-color, $lightness: 10%) !important;
-		background: rgba(66, 133, 244, .1) !important;
-	}
-
-	// ── Priority items ────────────────────────────────────────────────────────
-
-	.priority-item {
-		&:hover {
-			box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
-		}
-
-		&.priority-item--ghost {
-			background: rgba(66, 133, 244, .1);
-			border-color: $primary-color;
-		}
-	}
-
-	.priority-item-icon {
-		// Base uses var(--ul-surface-3); use surface-2 in dark.
-		background: var(--ul-surface-2);
-
-		i {
-			// Base uses $text-secondary (hardcoded); override with token.
-			color: var(--ul-text-2);
-		}
-	}
-
-	.priority-item-name {
-		// Base uses $text-primary (hardcoded); override with token.
-		color: var(--ul-text-1);
-	}
-
-	.priority-order-badge {
-		// Base uses var(--ul-surface-3) and var(--ul-border); both differ in dark.
-		background: var(--ul-surface-2);
-		// Base border already uses var(--ul-border); no override needed.
-		// Base uses $text-secondary (hardcoded); override with token.
-		color: var(--ul-text-2);
-	}
-
-	.priority-kind-badge {
-		&--tag {
-			background: rgba(29, 78, 216, .2);
-			color: #93c5fd;
-		}
-
-		&--category {
-			background: rgba(21, 128, 61, .2);
-			color: #6ee7b7;
-		}
-	}
-
-	// ── Site admin page ───────────────────────────────────────────────────────
-	// Most text colors here already use var(--ul-text-*) tokens.
-	// Only elements with hardcoded colors or differing tokens need overrides.
-
-	.site-admin-notice--success {
-		background: rgba(22, 163, 74, .15);
-		border-color: rgba(22, 163, 74, .3);
-		color: #86efac;
-	}
-
-	.site-admin-form input[type="number"] {
-		background: var(--ul-surface-2);
-		// Strengthen the border vs base var(--ul-border).
-		border-color: var(--ul-border-strong);
-
-		&:focus {
-			border-color: color.adjust($primary-color, $lightness: 10%);
-		}
-	}
-
-	// ── Community wiki page ───────────────────────────────────────────────────
-	// .wiki-card background/border already use tokens — no override needed.
-
-	.wiki-page {
-		.wiki-card-header {
-			// Base uses var(--ul-surface-1); use surface-2 in dark for contrast.
-			background: var(--ul-surface-2);
-			// Base uses hardcoded #e2e8f0; use token in dark.
-			border-bottom-color: var(--ul-border);
-
-			h2 {
-				// Base uses hardcoded #0f172a; use token in dark.
-				color: var(--ul-text-1);
-			}
-		}
-
-		.wiki-card-desc {
-			// Base uses hardcoded #64748b; use token in dark.
-			color: var(--ul-text-2);
-			// Base border already uses var(--ul-border); no override needed.
-		}
-
-		.wiki-dl-row {
-			// Base border already uses var(--ul-border); no override needed.
-			dt {
-				// Base uses hardcoded #64748b; use token in dark.
-				color: var(--ul-text-3);
-			}
-
-			dd {
-				// Base uses hardcoded #1e293b; use token in dark.
-				color: var(--ul-text-1);
-			}
-		}
-
-		.wiki-stat-label {
-			// Base uses hardcoded #64748b; use token in dark.
-			color: var(--ul-text-2);
-		}
-
-		.wiki-bbox-controls {
-			background: var(--ul-surface-2);
-			border-top-color: var(--ul-border);
-		}
-
-		.wiki-action-btn {
-			// Base background already uses var(--ul-surface-1); no bg override needed.
-			// Base uses hardcoded #cbd5e1 for border; use strong token in dark.
-			border-color: var(--ul-border-strong);
-			// Base uses hardcoded #475569; use token in dark.
-			color: var(--ul-text-1);
-
-			&:hover {
-				// Base hover uses var(--ul-surface-1); use surface-2 in dark.
-				background: var(--ul-surface-2);
-				border-color: var(--ul-border-strong);
-			}
-		}
-
-		.wiki-tabs {
-			// Base uses var(--ul-surface-1); use surface-2 in dark for contrast.
-			background: var(--ul-surface-2);
-			// Base uses hardcoded #e2e8f0; use token in dark.
-			border-bottom-color: var(--ul-border);
-		}
-
-		.wiki-tab {
-			// Base uses hardcoded #64748b; use token in dark.
-			color: var(--ul-text-2);
-
-			&--active,
-			&:hover {
-				color: #22d3ee;
-				border-bottom-color: #22d3ee;
-			}
-		}
-
-		.wiki-loading {
-			// Base uses hardcoded #94a3b8; use token in dark.
-			color: var(--ul-text-3);
-		}
-
-		.wiki-history-item {
-			// Base background and border already use tokens; no override for the base item.
-			&--reverted {
-				// Base uses var(--ul-surface-1); use surface-2 to distinguish in dark.
-				background: var(--ul-surface-2);
-			}
-		}
-
-		.wiki-history-editor {
-			// Base uses hardcoded #1e293b; use token in dark.
-			color: var(--ul-text-1);
-		}
-
-		.wiki-history-date {
-			// Base uses hardcoded #94a3b8; use token in dark.
-			color: var(--ul-text-3);
-		}
-
-		.wiki-history-badge--reverted {
-			background: rgba(146, 64, 14, .3);
-			color: #fcd34d;
-		}
-
-		.wiki-change-field {
-			// Base uses hardcoded #475569; use token in dark.
-			color: var(--ul-text-2);
-		}
-
-		.wiki-change-arrow {
-			// Base uses hardcoded #94a3b8; use token in dark.
-			color: var(--ul-text-3);
-		}
-
-		.wiki-change-from {
-			background: rgba(185, 28, 28, .18);
-			color: #fca5a5;
-		}
-
-		.wiki-change-to {
-			background: rgba(21, 128, 61, .18);
-			color: #86efac;
-		}
-
-		.wiki-revert-btn {
-			// Base background already uses var(--ul-surface-1); no bg override needed.
-			// Base uses hardcoded #fca5a5 for border; darken in dark.
-			border-color: rgba(220, 38, 38, .4);
-			// Base uses hardcoded #dc2626; lighten in dark.
-			color: #f87171;
-
-			&:hover {
-				background: rgba(220, 38, 38, .08);
-				border-color: #f87171;
-			}
-		}
-
-		.wiki-history-empty {
-			// Base uses hardcoded #94a3b8; use token in dark.
-			color: var(--ul-text-3);
-		}
-	}
-
-	// ── Pin detail page - coloured card headers ───────────────────────────────
-
-	body.page-location-details {
-		.location-map.card .card-header {
-			background: var(--ul-surface-2);
-			color: var(--ul-text-1);
-			border-bottom-color: var(--ul-border);
-
-			.material-icons {
-				color: var(--ul-text-2);
-			}
-
-			span,
-			h3 {
-				color: var(--ul-text-1);
-			}
-		}
-	}
+    --ul-surface-1: #1a1a1a;
+    --ul-surface-2: #222222;
+    --ul-surface-3: #5a5a5a;
+    --ul-surface-4: #dddddd;
+    --ul-surface-5: #ffffff;
+
+    --ul-text-1: #ffffff;
+    --ul-text-2: #dddddd;
+    --ul-text-3: #9aa0a6;
+    --ul-text-4: #5f6368;
+    --ul-text-5: #1a1a1a;
+
+    --ul-border: #333333;
+    --ul-border-strong: #444444;
+
+    --ul-shadow-sm: 0 1px 3px rgba(0, 0, 0, .3);
+    --ul-shadow-md: 0 4px 16px rgba(0, 0, 0, .4);
+    --ul-shadow-lg: 0 8px 32px rgba(0, 0, 0, .5), 0 2px 8px rgba(0, 0, 0, .3);
+
+    --ul-hover-bg: rgba(255, 255, 255, .05);
+    --ul-hover-bg-primary: rgba(66, 165, 245, .1);
+    --ul-color-accent-bg: rgba(99, 102, 241, .12);
+    --ul-color-accent-fg: #a5b4fc;
+
+    --ul-color-success-bg: rgba(74, 222, 128, .07);
+    --ul-color-success-border: rgba(74, 222, 128, .3);
+
+    --ul-color-warning-text: #fde68a;
+    --ul-color-warning-bg: rgba(251, 191, 36, .07);
+    --ul-color-warning-border: rgba(251, 191, 36, .3);
+    --ul-color-warning-icon: #fbbf24;
+
+    --ul-color-danger-text: #f87171;
+    --ul-color-danger-border: rgba(239, 68, 68, .4);
+    --ul-color-danger-bg: rgba(239, 68, 68, .08);
+    --card-bg: #1e1e1e;
+    --border-color: #333;
+
+    background: var(--ul-surface-1);
+    color: #e0e0e0;
+
+    input:not([type]):disabled,
+    input:not([type])[readonly=readonly],
+    input[type=text]:not(.browser-default):disabled,
+    input[type=text]:not(.browser-default)[readonly=readonly],
+    input[type=password]:not(.browser-default):disabled,
+    input[type=password]:not(.browser-default)[readonly=readonly],
+    input[type=email]:not(.browser-default):disabled,
+    input[type=email]:not(.browser-default)[readonly=readonly],
+    input[type=url]:not(.browser-default):disabled,
+    input[type=url]:not(.browser-default)[readonly=readonly],
+    input[type=time]:not(.browser-default):disabled,
+    input[type=time]:not(.browser-default)[readonly=readonly],
+    input[type=date]:not(.browser-default):disabled,
+    input[type=date]:not(.browser-default)[readonly=readonly],
+    input[type=datetime]:not(.browser-default):disabled,
+    input[type=datetime]:not(.browser-default)[readonly=readonly],
+    input[type=datetime-local]:not(.browser-default):disabled,
+    input[type=datetime-local]:not(.browser-default)[readonly=readonly],
+    input[type=tel]:not(.browser-default):disabled,
+    input[type=tel]:not(.browser-default)[readonly=readonly],
+    input[type=number]:not(.browser-default):disabled,
+    input[type=number]:not(.browser-default)[readonly=readonly],
+    input[type=search]:not(.browser-default):disabled,
+    input[type=search]:not(.browser-default)[readonly=readonly] {
+        color: var(--ul-text-4);
+    }
+
+    body {
+        background: var(--ul-surface-1);
+        color: #e0e0e0;
+    }
+
+    .app-nav {
+        background: var(--ul-surface-1);
+    }
+
+    .app-nav-link {
+        color: rgba(255, 255, 255, .75);
+    }
+
+    .app-nav-link:hover,
+    .app-nav-link.active {
+        color: var(--ul-text-4);
+    }
+
+    .container {
+        background: transparent;
+    }
+
+    .dialog {
+        background: var(--ul-surface-1);
+        border-color: var(--ul-border);
+    }
+
+    .tag-chip {
+        color: #ccc;
+    }
+
+    .tag-stat {
+        background: var(--ul-surface-1);
+        border-color: #444;
+        color: #9e9e9e;
+
+        &.tag-stat--children {
+            background: #1a2a3a;
+            border-color: #2a4a6a;
+            color: color.adjust($primary-color, $lightness: 20%);
+        }
+
+        &.tag-stat--total {
+            background: var(--ul-surface-1);
+            border-color: #3a3a3a;
+            color: #7a7a7a;
+        }
+    }
+
+    .tag-view-toggle {
+        border-color: #444;
+    }
+
+    .tag-view-btn {
+        background: var(--ul-surface-1);
+        color: #aaa;
+        border-right-color: #444;
+
+        &:hover {
+            background: var(--ul-surface-1);
+            color: #e0e0e0;
+        }
+
+        &.active {
+            background: $primary-color;
+            color: var(--ul-text-4);
+        }
+    }
+
+    .tag-tree-children {
+        border-left-color: #444;
+    }
+
+    .tag-tree-children>.tag-tree-item::before {
+        background: #444;
+    }
+
+    .settings-title {
+        color: var(--ul-text-4);
+    }
+
+    .settings-section-header {
+        border-color: var(--ul-border);
+    }
+
+    .settings-section-title,
+    .settings-label,
+    .settings-toggle-label,
+    .tag-card-name,
+    .tag-title {
+        color: #e0e0e0;
+    }
+
+    .settings-section-desc,
+    .settings-subtitle,
+    .settings-help,
+    .tag-card-desc,
+    .tag-subtitle {
+        color: #9e9e9e;
+    }
+
+    .settings-select,
+    .settings-input,
+    .form-input,
+    textarea.form-input {
+        background: var(--ul-surface-1);
+        color: #e0e0e0;
+        border-color: #444;
+    }
+
+    .settings-radio-button {
+        border-color: #333;
+        background: rgb(40, 40, 40);
+    }
+
+    .settings-select:focus,
+    .settings-input:focus,
+    .form-input:focus {
+        border-color: $primary-color;
+    }
+
+    .settings-theme-option {
+        background: var(--ul-surface-1);
+        border-color: #444;
+
+        span {
+            color: #bbb;
+        }
+
+        i {
+            color: #888;
+        }
+
+        &:hover:not(.active) {
+            background: #333;
+            border-color: #666;
+        }
+
+        &.active {
+            background: rgba($primary-color, 0.12);
+            border-color: $primary-color;
+        }
+    }
+
+    .tag-global-badge {
+        background: #333;
+        color: #aaa;
+    }
+
+    .tag-parent-select,
+    .tag-parent-option {
+        background: var(--ul-surface-1);
+        border-color: #444;
+    }
+
+    .tag-parent-option:hover {
+        background: #333;
+    }
+
+    .icon-option {
+        color: #ccc;
+        border-color: #444;
+        background: var(--ul-surface-1);
+    }
+
+    .icon-option:hover {
+        background: #383838;
+    }
+
+    .icon-option.selected {
+        background: rgba($primary-color, 0.18);
+        border-color: $primary-color;
+    }
+
+    .color-clear {
+        background: var(--ul-surface-1) !important;
+    }
+
+    .tag-order-badge {
+        background: #333;
+        color: #aaa;
+    }
+
+    .icon-picker-trigger {
+        background: var(--ul-surface-1);
+        border-color: #444;
+        color: #e0e0e0;
+    }
+
+    .icon-picker-panel {
+        background: var(--ul-surface-1);
+        border-color: #333;
+    }
+
+    .icon-picker-search-row {
+        border-color: #333;
+    }
+
+    .icon-picker-search-input {
+        color: #e0e0e0;
+        background: transparent;
+    }
+
+    .icon-picker-tabs {
+        border-color: #333;
+    }
+
+    .icon-tab {
+        color: #888;
+
+        &:hover {
+            color: #ccc;
+        }
+
+        &.active {
+            color: $primary-color;
+        }
+    }
+
+    .icon-picker-item {
+        &:hover {
+            background: var(--ul-surface-1);
+        }
+
+        &.selected {
+            background: rgba($primary-color, 0.18);
+        }
+    }
+
+    .icon-picker-item-label {
+        color: #777;
+    }
+
+    .icon-picker-mi {
+        color: #aaa;
+    }
+
+    .icon-custom-upload-btn {
+        border-color: #444;
+        color: #888;
+    }
+
+    .dialog-overlay {
+        background: rgba(0, 0, 0, .7);
+    }
+
+    footer {
+        background: var(--ul-surface-1);
+        border-color: #333;
+        color: #888;
+    }
+
+    .edit-card {
+        background: var(--ul-surface-1);
+        border-color: #333;
+    }
+
+    .edit-card-title {
+        border-color: #333;
+    }
+
+    .edit-input,
+    input.edit-input,
+    textarea.edit-textarea {
+        background: var(--ul-surface-1);
+        color: #e0e0e0;
+        border-color: #444;
+    }
+
+    .edit-avatar-placeholder {
+        background: var(--ul-surface-1);
+        border-color: #444;
+    }
+
+    .edit-avatar-preview {
+        border-color: #444;
+    }
+
+    .edit-avatar-upload-btn {
+        background: #1a2a3a;
+        border-color: color.adjust($primary-color, $lightness: 10%);
+    }
+
+    .edit-link-row {
+        background: var(--ul-surface-1);
+        border-color: #333;
+    }
+
+    .edit-add-link-input {
+        background: var(--ul-surface-1);
+        color: #e0e0e0;
+        border-color: #444;
+    }
+
+    .edit-discord-details {
+        border-color: #333;
+    }
+
+    .edit-discord-summary {
+        background: var(--ul-surface-1);
+    }
+
+    .field-status--saved {
+        color: #66bb6a;
+    }
+
+    .settings-cluster-value {
+        color: var(--ul-text-2);
+    }
+
+    .settings-cluster-slider-wrap input[type="range"] {
+        accent-color: $primary-color;
+    }
+
+    .settings-reset-btn {
+        border-color: #444;
+        color: #aaa;
+
+        &:hover {
+            background: var(--ul-surface-1);
+            border-color: #666;
+        }
+    }
+
+    .trip-map-ctx-menu {
+        background: #1e2130;
+        border-color: #2d3348;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+    }
+
+    .trip-map-ctx-item {
+        color: #e2e8f0;
+
+        &:hover {
+            background: rgba(255, 255, 255, .06);
+        }
+    }
+
+    .btn-danger {
+        border-color: #ef9a9a;
+        color: #ef9a9a;
+
+        &:hover {
+            background: #c62828;
+            border-color: #c62828;
+            color: var(--ul-text-4);
+        }
+    }
+
+    .trip-weather-panel {
+        background: #1e2130;
+        border-color: #2d3348;
+
+        .trip-weather-header .trip-weather-title {
+            color: #e2e8f0;
+        }
+    }
+
+    .trip-weather-day {
+        border-color: #2d3348;
+        background: #1e2130;
+
+        .trip-weather-day-header {
+            background: linear-gradient(135deg, #1a2540 0%, #162035 100%);
+            border-bottom-color: #2d3348;
+        }
+    }
+
+    .trip-weather-activity {
+        border-top-color: #2d3348;
+
+        .trip-weather-activity-name {
+            color: #e2e8f0;
+        }
+    }
+
+    .trip-weather-slot-temp {
+        color: #e2e8f0;
+    }
+
+    .trip-weather-slot-desc,
+    .trip-weather-slot-feels {
+        color: #94a3b8;
+    }
+
+    body.page-location-details {
+        background: #0d0d0d;
+    }
+
+    body.page-location-details .card {
+        box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
+    }
+
+    .notif-prefs__table th {
+        color: #888;
+        border-bottom-color: #333;
+    }
+
+    .notif-prefs__row {
+        border-bottom-color: #2a2a2a;
+
+        &:hover {
+            background: var(--ul-surface-1);
+        }
+    }
+
+    .notif-prefs__label {
+        color: #ccc;
+    }
+
+    .notif-prefs__saved {
+        background: #1a2e1a;
+        color: #86efac;
+    }
+
+    .profile-hero,
+    .profile-stat,
+    .profile-section {
+        background: var(--ul-surface-1);
+        border-color: #333;
+    }
+
+    .profile-full-name {
+        color: #e0e0e0;
+    }
+
+    .profile-bio {
+        color: #ccc;
+
+        &.empty {
+            color: #555;
+        }
+    }
+
+    .profile-username,
+    .profile-meta-item {
+        color: #888;
+    }
+
+    .stat-value {
+        color: #e0e0e0;
+    }
+
+    .stat-label {
+        color: #777;
+    }
+
+    .edit-profile-btn {
+        border-color: #444;
+        color: #aaa;
+
+        &:hover {
+            border-color: $primary-color;
+            color: $primary-color;
+            background-color: rgba($primary-color, 0.08);
+        }
+    }
+
+    .social-link {
+        border-color: #444;
+        color: #aaa;
+
+        &:hover {
+            border-color: $primary-color;
+            color: $primary-color;
+        }
+    }
+
+    .shared-visited-item {
+        background: var(--ul-surface-1);
+        border-color: #383838;
+        color: #ccc;
+    }
+
+    .friend-card {
+        background: var(--ul-surface-1);
+        border-color: #383838;
+
+        &:hover {
+            border-color: #555;
+        }
+    }
+
+    .friend-card-name {
+        color: #e0e0e0;
+    }
+
+    .friend-card-username,
+    .friend-card-area {
+        color: #666;
+    }
+
+    .friend-requests-section {
+        background: #1e1a0e;
+        border-color: #4a3a10;
+    }
+
+    .friend-requests-label {
+        color: #d4a44c;
+    }
+
+    .friend-request-name {
+        color: #ccc;
+    }
+
+    .friend-request-sub {
+        color: #666;
+    }
+
+    .friend-request-item {
+        border-bottom-color: rgba(255, 255, 255, .06);
+    }
+
+    .btn-friend-accept {
+        background: #1a2e1a;
+        border-color: #2d6a2d;
+        color: #86efac;
+
+        &:hover {
+            background: #1f3a1f;
+        }
+    }
+
+    .btn-friend-reject {
+        background: #2e1a1a;
+        border-color: #6a2d2d;
+        color: #fca5a5;
+
+        &:hover {
+            background: #3a2020;
+        }
+    }
+
+    .btn-friend-ignore {
+        background: var(--ul-surface-1);
+        border-color: #444;
+        color: #888;
+
+        &:hover {
+            background: var(--ul-surface-1);
+        }
+    }
+
+    .btn-friend-remove:hover {
+        color: #fca5a5;
+        background: #3a1a1a;
+    }
+
+    .friend-status-badge--friends {
+        background: #1a2e1a;
+        color: #86efac;
+        border-color: #2d6a2d;
+    }
+
+    .friend-status-badge--pending {
+        background: #2a1e08;
+        color: #fbbf24;
+        border-color: #5a3e10;
+    }
+
+    .profile-section-title {
+        color: #888;
+    }
+
+    .profile-section-empty {
+        color: #555;
+    }
+
+    .friends-back-link {
+        color: #666;
+
+        &:hover {
+            color: #ccc;
+        }
+    }
+
+    .friends-page-title {
+        color: #e0e0e0;
+    }
+
+    .friends-section--requests {
+        border-color: #4a3a10;
+    }
+
+    .friends-empty {
+        .material-icons {
+            color: #444;
+        }
+
+        p {
+            color: #666;
+        }
+    }
+
+    .btn-friend--accept {
+        background: #1a2e1a;
+        border-color: #2d6a2d;
+        color: #86efac;
+
+        &:hover {
+            background: #1f3a1f;
+        }
+    }
+
+    .btn-friend--reject {
+        background: #2e1a1a;
+        border-color: #6a2d2d;
+        color: #fca5a5;
+
+        &:hover {
+            background: #3a2020;
+        }
+    }
+
+    .btn-friend--ignore {
+        background: var(--ul-surface-1);
+        border-color: #444;
+        color: #888;
+
+        &:hover {
+            background: var(--ul-surface-1);
+        }
+    }
+
+    .btn-friend--remove {
+        border-color: #444;
+        color: #888;
+
+        &:hover {
+            background: #3a1a1a;
+            border-color: #6a2d2d;
+            color: #fca5a5;
+        }
+    }
+
+    .date-error-list {
+        margin: 0 0 0.75rem;
+        padding-left: 1.25rem;
+        color: #d32f2f;
+        font-size: 0.9rem;
+
+        li {
+            margin-bottom: 0.25rem;
+        }
+    }
+
+    .date-error-hint {
+        font-size: 0.85rem;
+        color: $text-secondary;
+        margin: 0;
+    }
+
+    .nav-dropdown-item--signout {
+        color: #ef9a9a;
+
+        .material-icons {
+            color: #ef9a9a;
+        }
+
+        &:hover {
+            background: rgba(239, 154, 154, .08);
+
+            .material-icons {
+                color: #ef9a9a;
+            }
+        }
+    }
+
+    .notif-item--unread {
+        background: #1e1a30;
+        border-left-color: #7c3aed;
+
+        &:hover {
+            background: #221d38;
+        }
+
+        .notif-item__icon-wrap {
+            background: rgba(124, 58, 237, .15);
+
+            .material-icons {
+                color: #a78bfa;
+            }
+        }
+    }
+
+    .notif-item--unread .notif-item__icon-wrap--friend_request,
+    .notif-item--unread .notif-item__icon-wrap--friend_accepted {
+        background: rgba(22, 163, 74, .15);
+
+        .material-icons {
+            color: #4ade80;
+        }
+    }
+
+    .notif-item--unread .notif-item__icon-wrap--added_to_trip,
+    .notif-item--unread .notif-item__icon-wrap--trip_updated {
+        background: rgba(37, 99, 235, .15);
+
+        .material-icons {
+            color: #60a5fa;
+        }
+    }
+
+    .notif-item--unread .notif-item__icon-wrap--comment_reply,
+    .notif-item--unread .notif-item__icon-wrap--comment_liked {
+        background: rgba(219, 39, 119, .15);
+
+        .material-icons {
+            color: #f472b6;
+        }
+    }
+
+    .notif-item--unread .notif-item__icon-wrap--error {
+        background: rgba(220, 38, 38, .15);
+
+        .material-icons {
+            color: #f87171;
+        }
+    }
+
+    .notif-item--unread .notif-item__icon-wrap--warning {
+        background: rgba(217, 119, 6, .15);
+
+        .material-icons {
+            color: #fbbf24;
+        }
+    }
+
+    .notif-mark-all-btn {
+        color: #7cb9e8;
+
+        &:hover {
+            background: rgba(66, 165, 245, .1);
+        }
+    }
+
+    .btn--danger {
+        color: #fca5a5;
+        background: rgba(239, 154, 154, .07);
+        border-color: rgba(239, 154, 154, .25);
+
+        &:hover {
+            background: rgba(239, 154, 154, .13);
+        }
+    }
+
+    .trips-title .material-icons {
+        color: #60a5fa;
+    }
+
+    .trips-empty .trips-empty-icon {
+        color: var(--ul-text-3);
+    }
+
+    .trip-card:hover {
+        border-color: #3b82f6;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+    }
+
+    .trip-card-icon {
+        background: #1a2540;
+
+        .material-icons {
+            color: #60a5fa;
+        }
+    }
+
+    .trip-back-link:hover {
+        color: #60a5fa;
+    }
+
+    .trip-header-btn {
+
+        &--edit,
+        &--settings {
+
+            &:hover,
+            &:focus {
+                background: var(--ul-surface-2);
+                color: #60a5fa;
+                border-color: var(--ul-border);
+            }
+        }
+
+        &--delete {
+            color: var(--ul-text-3);
+
+            &:hover,
+            &:focus {
+                background: rgba(220, 38, 38, .12);
+                color: #f87171;
+                border-color: rgba(220, 38, 38, .3);
+            }
+        }
+    }
+
+    .trip-panel .card-header {
+        border-bottom-color: var(--ul-border);
+
+        .badge {
+            background: var(--ul-surface-3);
+            color: var(--ul-text-2);
+        }
+    }
+
+    .view-toggle-group {
+        background: var(--ul-surface-3);
+    }
+
+    .view-toggle-btn {
+
+        &:hover {
+            background: var(--ul-surface-2);
+            color: var(--ul-text-2);
+        }
+
+        &.view-toggle-btn--active {
+            color: #60a5fa;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+        }
+    }
+
+    .cal-nav-btn {
+
+        &:hover {
+            background: var(--ul-surface-2);
+        }
+    }
+
+    .cal-cell {
+        &--empty {
+            background: rgba(255, 255, 255, .025);
+            opacity: .6;
+        }
+
+        &--has-events {
+            background: #192030;
+        }
+
+        &--today {
+            background: #1a2540;
+        }
+    }
+
+    .cal-day-num {
+        color: var(--ul-text-2);
+    }
+
+    .trip-activity-item {
+        border-bottom-color: var(--ul-border);
+
+        &.trip-activity--highlighted {
+            background: #192030;
+        }
+    }
+
+    .trip-activity-icon {
+        background: #1a2540;
+
+        .material-icons {
+            color: #60a5fa;
+        }
+    }
+
+    .trip-activity-num {
+        border-color: var(--ul-surface-2);
+    }
+
+    .trip-attr-link:hover {
+        color: #a78bfa;
+    }
+
+    .trip-member-item {
+        border-bottom-color: var(--ul-border);
+    }
+
+    .trip-member-avatar {
+        background: #1a2540;
+    }
+
+    .trip-member-avatar-initial {
+        color: #60a5fa;
+    }
+
+    .trip-member-badge {
+        &--creator {
+            background: rgba(251, 191, 36, .12);
+            color: #fbbf24;
+            border-color: rgba(251, 191, 36, .25);
+        }
+
+        &--organizer {
+            background: rgba(167, 139, 250, .12);
+            color: #a78bfa;
+            border-color: rgba(167, 139, 250, .25);
+        }
+    }
+
+    .trip-organizer-btn {
+        &--active {
+            color: #a78bfa !important;
+
+            &:hover {
+                background: rgba(167, 139, 250, .1) !important;
+            }
+        }
+    }
+
+    .rsvp-popup {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+    }
+
+    .rsvp-popup-opt {
+        color: var(--ul-text-1);
+
+        &:hover {
+            background: var(--ul-surface-2);
+        }
+
+        &--yes {
+            color: #4ade80;
+
+            &:hover {
+                background: rgba(34, 197, 94, .1);
+            }
+        }
+
+        &--no {
+            color: #f87171;
+
+            &:hover {
+                background: rgba(220, 38, 38, .1);
+            }
+        }
+
+        &--maybe {
+            color: #fbbf24;
+
+            &:hover {
+                background: rgba(245, 158, 11, .1);
+            }
+        }
+
+        &--clear {
+            color: var(--ul-text-3);
+        }
+    }
+
+    .rsvp-pill-btn {
+
+        &:hover {
+            background: var(--ul-surface-2);
+            border-color: var(--ul-border-strong);
+        }
+    }
+
+    .trip-comment-item {
+        border-bottom-color: var(--ul-border);
+
+        &:hover {
+            background: rgba(255, 255, 255, .03);
+        }
+    }
+
+    .trip-comment-text {
+        color: var(--ul-text-2);
+    }
+
+    .trip-comment-input:focus {
+        border-color: #60a5fa;
+        box-shadow: 0 0 0 3px rgba(96, 165, 250, .12);
+    }
+
+    .comment-item {
+        border-bottom-color: var(--ul-border);
+
+        &--reply {
+            background: var(--ul-surface-2);
+        }
+    }
+
+    .comment-date {
+        color: var(--ul-text-3);
+    }
+
+    .comment-text {
+        color: var(--ul-text-2);
+    }
+
+    .comment-avatar-initial {
+        background: #1e1936;
+        color: #7c6fcd;
+    }
+
+    .comment-delete-btn {
+        color: var(--ul-text-3);
+
+        &:hover {
+            color: #f87171;
+        }
+    }
+
+    .comment-reply-btn {
+        color: var(--ul-text-3);
+
+        .reply-count {
+            color: var(--ul-text-3);
+        }
+
+        &:hover {
+            color: #a78bfa;
+            background: rgba(124, 58, 237, .08);
+        }
+    }
+
+    .comment-compose {
+        border-top-color: var(--ul-border);
+    }
+
+    .comment-input {
+        background: var(--ul-surface-2);
+        color: var(--ul-text-1);
+
+        &::placeholder {
+            color: var(--ul-text-3);
+        }
+
+        &:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, .1);
+        }
+    }
+
+    .reaction-pill {
+        background: var(--ul-surface-3);
+
+        &:hover {
+            background: var(--ul-surface-2);
+        }
+
+        &--mine {
+            background: rgba(124, 58, 237, .15);
+            border-color: rgba(124, 58, 237, .4);
+            color: #a78bfa;
+        }
+
+        .reaction-count {
+            color: var(--ul-text-2);
+        }
+    }
+
+    .reaction-add-btn {
+        color: var(--ul-text-3);
+
+        &:hover {
+            background: var(--ul-surface-2);
+            color: var(--ul-text-2);
+        }
+    }
+
+    .reaction-picker-popup {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+    }
+
+    .reaction-picker-emoji:hover {
+        background: var(--ul-surface-2);
+    }
+
+    .comment-empty {
+        color: var(--ul-text-3);
+    }
+
+    .mention-dropdown {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+    }
+
+    .mention-option {
+        color: var(--ul-text-2);
+        border-bottom-color: var(--ul-border);
+
+        &:hover,
+        &.is-selected {
+            background: rgba(124, 58, 237, .08);
+            color: #a78bfa;
+        }
+    }
+
+    .comment-image-label {
+        color: var(--ul-text-3);
+    }
+
+    .comment-map-btn {
+        color: var(--ul-text-3);
+
+        &:hover {
+            background: rgba(167, 139, 250, .15);
+            border-color: #a78bfa;
+            color: #c4b5fd;
+        }
+    }
+
+    .comment-map-chip {
+        background: rgba(109, 40, 217, .2);
+        border-color: #7c3aed;
+        color: #c4b5fd;
+    }
+
+    .comment-map-expand-btn {
+        background: rgba(30, 30, 40, .9);
+        color: var(--ul-text-1);
+
+        &:hover {
+            background: rgba(40, 40, 55, 1);
+        }
+    }
+
+    .comment-map-view-dialog,
+    .comment-map-composer-dialog {
+        background: var(--ul-surface-1);
+        color: var(--ul-text-1);
+    }
+
+    .comment-map-composer-controls {
+        border-color: var(--ul-border);
+    }
+
+    .comment-map-composer-toolbar {
+        border-color: var(--ul-border);
+    }
+
+    .cmcc-label {
+        color: var(--ul-text-3);
+    }
+
+    .cmcc-pin-search {
+        background: var(--ul-surface-2);
+        color: var(--ul-text-1);
+    }
+
+    .cmcc-pin-option {
+        color: var(--ul-text-1);
+
+        &:hover {
+            background: var(--ul-hover-bg);
+        }
+    }
+
+    .cmc-layer-btn,
+    .cmc-tool-btn,
+    .cmc-undo-btn,
+    .cmc-clear-btn {
+        color: var(--ul-text-1);
+
+        &:hover {
+            background: var(--ul-hover-bg);
+        }
+
+        &.is-active {
+            background: rgba(109, 40, 217, .25);
+            border-color: #7c3aed;
+            color: #c4b5fd;
+        }
+    }
+
+    .cmc-toolbar-sep {
+        background: var(--ul-border);
+    }
+
+    .cmc-toolbar-label {
+        color: var(--ul-text-3);
+    }
+
+    .cmc-color-wrap {
+        color: var(--ul-text-3);
+
+        input[type="color"] {
+            background: var(--ul-surface-1);
+        }
+    }
+
+    .trip-setting-pill {
+
+        &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
+            background: var(--ul-surface-2);
+            border-color: var(--ul-border-strong);
+        }
+
+        &--active {
+            background: #1a2540;
+            border-color: #3b82f6;
+            color: #60a5fa;
+        }
+    }
+
+    .trip-create-dialog {
+
+        .location-suggestion-item:hover {
+            background: var(--ul-surface-3);
+        }
+    }
+
+    .organize-title {
+        color: var(--ul-text-1);
+    }
+
+    .organize-subtitle {
+        color: var(--ul-text-2);
+    }
+
+    .organize-tab.active {
+        color: color.adjust($primary-color, $lightness: 15%);
+        border-bottom-color: color.adjust($primary-color, $lightness: 15%);
+    }
+
+    .cat-sel-bar.cat-sel-bar--active {
+        background: rgba(59, 130, 246, .1);
+        border-color: rgba(59, 130, 246, .35);
+    }
+
+    .cat-sel-count {
+        background: rgba(59, 130, 246, .15);
+        color: #93c5fd;
+    }
+
+    .cat-sel-btn {
+        border-color: var(--ul-border-strong);
+
+        &:hover:not(:disabled) {
+            background: var(--ul-surface-2);
+            border-color: var(--ul-border-strong);
+            color: var(--ul-text-1);
+        }
+    }
+
+    .cat-sel-delete-btn {
+        border-color: rgba(220, 38, 38, .45);
+        color: #f87171;
+
+        &:hover:not(:disabled) {
+            background: rgba(220, 38, 38, .08);
+            border-color: #f87171;
+        }
+    }
+
+    .cat-select-wrap {
+        &:hover {
+            background: var(--ul-surface-2);
+        }
+
+        .cat-select-check {
+            background: var(--ul-surface-1);
+            border-color: var(--ul-border-strong);
+        }
+    }
+
+    .tag-card--selected {
+        border-color: color.adjust($primary-color, $lightness: 10%) !important;
+        background: rgba(66, 133, 244, .1) !important;
+    }
+
+    .priority-item {
+        &:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+        }
+
+        &.priority-item--ghost {
+            background: rgba(66, 133, 244, .1);
+            border-color: $primary-color;
+        }
+    }
+
+    .priority-item-icon {
+        background: var(--ul-surface-2);
+
+        i {
+            color: var(--ul-text-2);
+        }
+    }
+
+    .priority-item-name {
+        color: var(--ul-text-1);
+    }
+
+    .priority-order-badge {
+        background: var(--ul-surface-2);
+        color: var(--ul-text-2);
+    }
+
+    .priority-kind-badge {
+        &--tag {
+            background: rgba(29, 78, 216, .2);
+            color: #93c5fd;
+        }
+
+        &--category {
+            background: rgba(21, 128, 61, .2);
+            color: #6ee7b7;
+        }
+    }
+
+    .site-admin-notice--success {
+        background: rgba(22, 163, 74, .15);
+        border-color: rgba(22, 163, 74, .3);
+        color: #86efac;
+    }
+
+    .site-admin-form input[type="number"] {
+        background: var(--ul-surface-2);
+        border-color: var(--ul-border-strong);
+
+        &:focus {
+            border-color: color.adjust($primary-color, $lightness: 10%);
+        }
+    }
+
+    .wiki-page {
+        .wiki-card-header {
+            background: var(--ul-surface-2);
+            border-bottom-color: var(--ul-border);
+
+            h2 {
+                color: var(--ul-text-1);
+            }
+        }
+
+        .wiki-card-desc {
+            color: var(--ul-text-2);
+        }
+
+        .wiki-dl-row {
+
+            dt {
+                color: var(--ul-text-3);
+            }
+
+            dd {
+                color: var(--ul-text-1);
+            }
+        }
+
+        .wiki-stat-label {
+            color: var(--ul-text-2);
+        }
+
+        .wiki-bbox-controls {
+            background: var(--ul-surface-2);
+            border-top-color: var(--ul-border);
+        }
+
+        .wiki-action-btn {
+            border-color: var(--ul-border-strong);
+            color: var(--ul-text-1);
+
+            &:hover {
+                background: var(--ul-surface-2);
+                border-color: var(--ul-border-strong);
+            }
+        }
+
+        .wiki-tabs {
+            background: var(--ul-surface-2);
+            border-bottom-color: var(--ul-border);
+        }
+
+        .wiki-tab {
+            color: var(--ul-text-2);
+
+            &--active,
+            &:hover {
+                color: #22d3ee;
+                border-bottom-color: #22d3ee;
+            }
+        }
+
+        .wiki-loading {
+            color: var(--ul-text-3);
+        }
+
+        .wiki-history-item {
+
+            &--reverted {
+                background: var(--ul-surface-2);
+            }
+        }
+
+        .wiki-history-editor {
+            color: var(--ul-text-1);
+        }
+
+        .wiki-history-date {
+            color: var(--ul-text-3);
+        }
+
+        .wiki-history-badge--reverted {
+            background: rgba(146, 64, 14, .3);
+            color: #fcd34d;
+        }
+
+        .wiki-change-field {
+            color: var(--ul-text-2);
+        }
+
+        .wiki-change-arrow {
+            color: var(--ul-text-3);
+        }
+
+        .wiki-change-from {
+            background: rgba(185, 28, 28, .18);
+            color: #fca5a5;
+        }
+
+        .wiki-change-to {
+            background: rgba(21, 128, 61, .18);
+            color: #86efac;
+        }
+
+        .wiki-revert-btn {
+            border-color: rgba(220, 38, 38, .4);
+            color: #f87171;
+
+            &:hover {
+                background: rgba(220, 38, 38, .08);
+                border-color: #f87171;
+            }
+        }
+
+        .wiki-history-empty {
+            color: var(--ul-text-3);
+        }
+    }
+
+    body.page-location-details {
+        .location-map.card .card-header {
+            background: var(--ul-surface-2);
+            color: var(--ul-text-1);
+            border-bottom-color: var(--ul-border);
+
+            .material-icons {
+                color: var(--ul-text-2);
+            }
+
+            span,
+            h3 {
+                color: var(--ul-text-1);
+            }
+        }
+    }
 }
