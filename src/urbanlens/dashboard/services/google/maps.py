@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    maps.py                                                                                              *
-*        Path:    /dashboard/services/google/maps.py                                                                   *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2024-01-01                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-01-17     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 from __future__ import annotations
 
 import csv
@@ -457,9 +431,11 @@ class GoogleMapsGateway(Gateway):
                 # Apply a per-file tag to every pin produced from this file.
                 if file_pins:
                     from urbanlens.dashboard.models.badges.model import Badge
+
                     tag_name = _filename_stem(filename)
                     file_tag = Badge.objects.filter(
-                        profile=user_profile, name__iexact=tag_name,
+                        profile=user_profile,
+                        name__iexact=tag_name,
                     ).first() or Badge.objects.create(profile=user_profile, name=tag_name)
                     for pin in file_pins:
                         pin.tags.add(file_tag)

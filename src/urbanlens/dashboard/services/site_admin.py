@@ -15,6 +15,34 @@ logger = logging.getLogger(__name__)
 SITE_ADMIN_GROUP_NAME = "site_admin"
 
 
+def ensure_site_admin_group_permissions(group: Group) -> None:
+    """Attach site-admin panel permissions to ``group`` if missing.
+
+    ``view_site_admin`` is not declared on a model ``Meta.permissions`` and
+    is created here so callers (migrations and runtime promotion) stay aligned.
+
+    Args:
+        group: The site admin auth group to configure.
+    """
+    from django.contrib.auth.models import Permission
+    from django.contrib.contenttypes.models import ContentType
+
+    badge_ct = ContentType.objects.get(app_label="dashboard", model="badge")
+    sitesettings_ct = ContentType.objects.get(app_label="dashboard", model="sitesettings")
+
+    edit_global_badge, _ = Permission.objects.get_or_create(
+        codename="edit_global_badge",
+        content_type=badge_ct,
+        defaults={"name": "Can edit global badges"},
+    )
+    view_site_admin, _ = Permission.objects.get_or_create(
+        codename="view_site_admin",
+        content_type=sitesettings_ct,
+        defaults={"name": "Can access site admin panel"},
+    )
+    group.permissions.add(edit_global_badge, view_site_admin)
+
+
 def add_user_to_site_admin_group(user: User) -> None:
     """Add ``user`` to the site_admin auth group.
 
@@ -22,6 +50,7 @@ def add_user_to_site_admin_group(user: User) -> None:
         user: The user to promote.
     """
     group, _ = Group.objects.get_or_create(name=SITE_ADMIN_GROUP_NAME)
+    ensure_site_admin_group_permissions(group)
     user.groups.add(group)
 
 
@@ -74,10 +103,7 @@ def should_redirect_to_site_admin(user: User) -> bool:
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
     settings = SiteSettings.get_current()
-    return (
-        settings.bootstrap_admin_user_id == user.pk
-        and not settings.bootstrap_admin_onboarding_complete
-    )
+    return settings.bootstrap_admin_user_id == user.pk and not settings.bootstrap_admin_onboarding_complete
 
 
 def complete_site_admin_onboarding(user: User) -> None:

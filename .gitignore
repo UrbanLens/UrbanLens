@@ -18,8 +18,12 @@ package-lock.json
 .*cache
 docs/prompts.txt
 
-# VSCode stuff per user
-.vscode
+# VSCode stuff per user (keep shared workspace config)
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
 .favorites.json
 notes/
 .coverage

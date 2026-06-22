@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        - File:    pin.py                                                                                        *
-*        - Path:    /dashboard/controllers/pin.py                                                                 *
-*        - Project: urbanlens                                                                                          *
-*        - Version: 1.0.0                                                                                              *
-*        - Created: 2024-01-01                                                                                         *
-*        - Author:  Jess Mann                                                                                          *
-*        - Email:   jess@urbanlens.org                                                                               *
-*        - Copyright (c) 2024 Urban Lens                                                                               *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-03-22     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 from datetime import UTC, datetime
 import logging
 
@@ -300,9 +274,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         smithsonian_gateway = SmithsonianGateway(api_key=settings.smithsonian_api_key or "")
 
         # Get historic images from the Smithsonian's API; discard entries without a usable URL
-        smithsonian_images = [
-            img for img in smithsonian_gateway.get_data(pin.effective_name) if img.get("url")
-        ]
+        smithsonian_images = [img for img in smithsonian_gateway.get_data(pin.effective_name) if img.get("url")]
 
         return render(
             request,

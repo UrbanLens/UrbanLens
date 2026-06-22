@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    urls.py                                                                                              *
-*        Path:    /dashboard/urls.py                                                                                   *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 # Generic imports
 from __future__ import annotations
 
@@ -99,10 +73,14 @@ urlpatterns = [
     ),
     path("rest/", include(router.urls)),
     re_path("^$", IndexController.as_view(), name="home"),
-    path("about/", TemplateView.as_view(
-        template_name="dashboard/pages/about/index.html",
-        extra_context={"page_name": "about"},
-    ), name="about"),
+    path(
+        "about/",
+        TemplateView.as_view(
+            template_name="dashboard/pages/about/index.html",
+            extra_context={"page_name": "about"},
+        ),
+        name="about",
+    ),
     path(
         "map/",
         include(
@@ -326,9 +304,21 @@ urlpatterns = [
                 path("edit/field/", userprofile.ProfileFieldUpdateView.as_view(), name="profile.field.update"),
                 path("<uuid:profile_uuid>/", userprofile.ViewProfileView.as_view(), name="profile.view_user"),
                 path("<uuid:profile_uuid>/note/", userprofile.ProfileNoteView.as_view(), name="profile.note"),
-                path("<uuid:profile_uuid>/note/<int:note_id>/delete/", userprofile.ProfileNoteDeleteView.as_view(), name="profile.note.delete"),
-                path("<uuid:profile_uuid>/note/<int:note_id>/edit/", userprofile.ProfileNoteEditView.as_view(), name="profile.note.edit"),
-                path("<uuid:profile_uuid>/badge/<int:badge_id>/", userprofile.ProfileBadgeToggleView.as_view(), name="profile.badge_toggle"),
+                path(
+                    "<uuid:profile_uuid>/note/<int:note_id>/delete/",
+                    userprofile.ProfileNoteDeleteView.as_view(),
+                    name="profile.note.delete",
+                ),
+                path(
+                    "<uuid:profile_uuid>/note/<int:note_id>/edit/",
+                    userprofile.ProfileNoteEditView.as_view(),
+                    name="profile.note.edit",
+                ),
+                path(
+                    "<uuid:profile_uuid>/badge/<int:badge_id>/",
+                    userprofile.ProfileBadgeToggleView.as_view(),
+                    name="profile.badge_toggle",
+                ),
             ],
         ),
     ),
@@ -516,20 +506,68 @@ urlpatterns = [
                 path("<uuid:trip_uuid>/edit/", trip.TripEditView.as_view(), name="trips.edit"),
                 path("<uuid:trip_uuid>/delete/", trip.TripDeleteView.as_view(), name="trips.delete"),
                 path("<uuid:trip_uuid>/activities/", trip.TripActivitiesView.as_view(), name="trips.activities"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/delete/", trip.TripActivityDeleteView.as_view(), name="trips.activity.delete"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/edit/", trip.TripActivityEditView.as_view(), name="trips.activity.edit"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/status/", trip.TripActivityStatusView.as_view(), name="trips.activity.status"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/move/", trip.TripActivityMoveView.as_view(), name="trips.activity.move"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/position/", trip.TripActivityPositionView.as_view(), name="trips.activity.position"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/vote/", trip.TripActivityVoteView.as_view(), name="trips.activity.vote"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/complete/", trip.TripActivityCompleteView.as_view(), name="trips.activity.complete"),
-                path("<uuid:trip_uuid>/child-trip-search/", trip.TripChildTripSearchView.as_view(), name="trips.child_trip_search"),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/delete/",
+                    trip.TripActivityDeleteView.as_view(),
+                    name="trips.activity.delete",
+                ),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/edit/",
+                    trip.TripActivityEditView.as_view(),
+                    name="trips.activity.edit",
+                ),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/status/",
+                    trip.TripActivityStatusView.as_view(),
+                    name="trips.activity.status",
+                ),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/move/",
+                    trip.TripActivityMoveView.as_view(),
+                    name="trips.activity.move",
+                ),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/position/",
+                    trip.TripActivityPositionView.as_view(),
+                    name="trips.activity.position",
+                ),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/vote/",
+                    trip.TripActivityVoteView.as_view(),
+                    name="trips.activity.vote",
+                ),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/complete/",
+                    trip.TripActivityCompleteView.as_view(),
+                    name="trips.activity.complete",
+                ),
+                path(
+                    "<uuid:trip_uuid>/child-trip-search/",
+                    trip.TripChildTripSearchView.as_view(),
+                    name="trips.child_trip_search",
+                ),
                 path("<uuid:trip_uuid>/comments/", trip.TripCommentsView.as_view(), name="trips.comments"),
-                path("<uuid:trip_uuid>/comments/<int:comment_id>/delete/", trip.TripCommentDeleteView.as_view(), name="trips.comment.delete"),
-                path("<uuid:trip_uuid>/comments/<int:comment_id>/react/", comments.TripCommentReactionView.as_view(), name="trips.comment.react"),
+                path(
+                    "<uuid:trip_uuid>/comments/<int:comment_id>/delete/",
+                    trip.TripCommentDeleteView.as_view(),
+                    name="trips.comment.delete",
+                ),
+                path(
+                    "<uuid:trip_uuid>/comments/<int:comment_id>/react/",
+                    comments.TripCommentReactionView.as_view(),
+                    name="trips.comment.react",
+                ),
                 path("<uuid:trip_uuid>/members/", trip.TripMembersView.as_view(), name="trips.members"),
-                path("<uuid:trip_uuid>/members/<int:profile_id>/remove/", trip.TripMemberRemoveView.as_view(), name="trips.member.remove"),
-                path("<uuid:trip_uuid>/members/<int:profile_id>/organizer/", trip.TripMemberOrganizerView.as_view(), name="trips.member.organizer"),
+                path(
+                    "<uuid:trip_uuid>/members/<int:profile_id>/remove/",
+                    trip.TripMemberRemoveView.as_view(),
+                    name="trips.member.remove",
+                ),
+                path(
+                    "<uuid:trip_uuid>/members/<int:profile_id>/organizer/",
+                    trip.TripMemberOrganizerView.as_view(),
+                    name="trips.member.organizer",
+                ),
                 path("<uuid:trip_uuid>/rsvp/", trip.TripMemberRSVPView.as_view(), name="trips.rsvp"),
                 path("<uuid:trip_uuid>/leave/", trip.TripLeaveView.as_view(), name="trips.leave"),
                 path("<uuid:trip_uuid>/settings/", trip.TripSettingsView.as_view(), name="trips.settings"),
@@ -551,12 +589,20 @@ urlpatterns = [
                 path("bulk-delete/", categories.CategoryBulkDeleteView.as_view(), name="category.bulk_delete"),
                 path("bulk-edit/", categories.CategoryBulkEditView.as_view(), name="category.bulk_edit"),
                 path("bulk-convert/", categories.CategoryBulkConvertView.as_view(), name="category.bulk_convert"),
-                path("bulk-convert-status/", categories.CategoryBulkConvertToStatusView.as_view(), name="category.bulk_convert_status"),
+                path(
+                    "bulk-convert-status/",
+                    categories.CategoryBulkConvertToStatusView.as_view(),
+                    name="category.bulk_convert_status",
+                ),
                 path("rows/", categories.CategoryRowsView.as_view(), name="category.rows"),
                 path("<int:cat_id>/customize/", categories.CategoryCustomizeView.as_view(), name="category.customize"),
                 path("reorder/", categories.CategoryReorderView.as_view(), name="category.reorder"),
                 path("pin/<uuid:pin_uuid>/", categories.CategoryPinMembershipView.as_view(), name="category.pin"),
-                path("location/<uuid:location_uuid>/", categories.CategoryLocationMembershipView.as_view(), name="category.location"),
+                path(
+                    "location/<uuid:location_uuid>/",
+                    categories.CategoryLocationMembershipView.as_view(),
+                    name="category.location",
+                ),
             ],
         ),
     ),
@@ -599,9 +645,21 @@ urlpatterns = [
             [
                 path("dropdown/", notifications.NotificationDropdownView.as_view(), name="notifications.dropdown"),
                 path("read-all/", notifications.NotificationMarkAllReadView.as_view(), name="notifications.read_all"),
-                path("unread-count/", notifications.NotificationUnreadCountView.as_view(), name="notifications.unread_count"),
-                path("preferences/", notifications.NotificationPreferencesView.as_view(), name="notifications.preferences"),
-                path("<int:notification_id>/read/", notifications.NotificationMarkReadView.as_view(), name="notifications.read"),
+                path(
+                    "unread-count/",
+                    notifications.NotificationUnreadCountView.as_view(),
+                    name="notifications.unread_count",
+                ),
+                path(
+                    "preferences/",
+                    notifications.NotificationPreferencesView.as_view(),
+                    name="notifications.preferences",
+                ),
+                path(
+                    "<int:notification_id>/read/",
+                    notifications.NotificationMarkReadView.as_view(),
+                    name="notifications.read",
+                ),
             ],
         ),
     ),

@@ -968,6 +968,12 @@ django_settings_module = "urbanlens.UrbanLens.settings.local"
 ignore_missing_model_attributes = true
 #strict_settings = true
 
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "urbanlens.UrbanLens.settings.local"
+pythonpath = ["src"]
+testpaths = ["src/urbanlens"]
+addopts = "--import-mode=importlib"
+
 [tool.coverage.run]
 source = ["."]
 omit = [

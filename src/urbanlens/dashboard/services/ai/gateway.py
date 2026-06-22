@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        - File:    gateway.py                                                                                         *
-*        - Path:    /dashboard/services/ai/gateway.py                                                                  *
-*        - Project: urbanlens                                                                                          *
-*        - Version: 1.0.0                                                                                              *
-*        - Created: 2024-03-21                                                                                         *
-*        - Author:  Jess Mann                                                                                          *
-*        - Email:   jess@urbanlens.org                                                                               *
-*        - Copyright (c) 2024 Urban Lens                                                                               *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-03-21     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -36,7 +10,13 @@ from typing import Any, Generic, TypeVar
 import tiktoken
 
 from urbanlens.dashboard.services.ai.message import MessageQueue
-from urbanlens.dashboard.services.ai.meta import FORMATTING, INSTRUCTIONS, MAX_TOKENS, PROJECT_DESCRIPTION, SHORTEST_MESSAGE
+from urbanlens.dashboard.services.ai.meta import (
+    FORMATTING,
+    INSTRUCTIONS,
+    MAX_TOKENS,
+    PROJECT_DESCRIPTION,
+    SHORTEST_MESSAGE,
+)
 
 logger = logging.getLogger(__name__)
 

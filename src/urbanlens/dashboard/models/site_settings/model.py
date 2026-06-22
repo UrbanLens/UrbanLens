@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db.models import SET_NULL, FloatField, ForeignKey, IntegerField
+from django.db.models import SET_NULL, CheckConstraint, FloatField, ForeignKey, IntegerField, Q
 from django.db.models.fields import BooleanField, CharField
 
 from urbanlens.dashboard.models import abstract
@@ -29,13 +29,14 @@ class SiteSettings(abstract.Model):
     max_trip_members = IntegerField(
         default=10,
         help_text="Maximum number of members allowed per trip.",
+        validators=[MinValueValidator(0.0), MaxValueValidator(100.0)],
     )
 
     # Chernobyl Exclusion Zone ≈ 2,600 km².  Used as a sanity cap on how large
     # a user-drawn bounding box for a location can be.
     max_bbox_area_km2 = FloatField(
-        default=2600.0,
-        help_text="Maximum allowed area (km²) for a location bounding box. Default ≈ Chernobyl Exclusion Zone.",
+        default=1.0,
+        help_text="Maximum allowed area (km²) for a location bounding box. Hard Maximum ≈ Chernobyl Exclusion Zone.",
         validators=[MinValueValidator(0.0), MaxValueValidator(2600.0)],
     )
 
@@ -122,3 +123,9 @@ class SiteSettings(abstract.Model):
         db_table = "dashboard_site_settings"
         verbose_name = "Site Settings"
         verbose_name_plural = "Site Settings"
+
+        constraints = [
+            CheckConstraint(condition=Q(max_bbox_area_km2__lte=2600.0), name="max_bbox_area_lte_2600"),
+            CheckConstraint(condition=Q(max_trip_members__gte=1), name="max_trip_members_gte_1"),
+            CheckConstraint(condition=Q(max_trip_members__lte=100), name="max_trip_members_lte_100"),
+        ]

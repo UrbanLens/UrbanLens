@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import User
 from django.test import Client
 from django.urls import reverse
 from model_bakery import baker
@@ -11,6 +11,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.services.site_admin import (
     SITE_ADMIN_GROUP_NAME,
+    add_user_to_site_admin_group,
     complete_site_admin_onboarding,
     promote_first_user_if_needed,
     should_redirect_to_site_admin,
@@ -45,7 +46,7 @@ class SiteAdminRedirectTests(TestCase):
 
     def setUp(self) -> None:
         self.user: User = baker.make(User, username="founder")
-        Group.objects.get_or_create(name=SITE_ADMIN_GROUP_NAME)[0].user_set.add(self.user)
+        add_user_to_site_admin_group(self.user)
         settings = SiteSettings.get_current()
         settings.bootstrap_admin_user = self.user
         settings.bootstrap_admin_onboarding_complete = False

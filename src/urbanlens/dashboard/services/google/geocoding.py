@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    geocoding.py                                                                                         *
-*        Path:    /dashboard/services/google/geocoding.py                                                              *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2024-01-07                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-01-07     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -164,7 +138,7 @@ class GoogleGeocodingGateway(Gateway):
             GeocodedLocation.objects.create(
                 latitude=latitude,
                 longitude=longitude,
-                place_name=request_data.get("place_name", None),
+                place_name=request_data.get("place_name"),
                 json_response=json.dumps(body),
             )
         except DatabaseError:

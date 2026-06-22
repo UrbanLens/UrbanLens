@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    MapController.py                                                                                     *
-*        Path:    /dashboard/controllers/map.py                                                                        *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 from datetime import datetime
 import json
 import logging
@@ -58,6 +32,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         tags = Badge.objects.tags().visible_to(profile).ordered()
         categories = Badge.objects.categories().ordered()
         from urbanlens.dashboard.models.badges.model import KIND_USER
+
         filter_badges = Badge.objects.exclude(kind=KIND_USER).visible_to(profile).ordered()
         map_center = profile.get_map_center()
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
@@ -175,6 +150,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # client so it can offer the user a choice of which location to use.
             if len(all_locations) > 1:
                 from django.urls import reverse
+
                 response["conflicting_locations"] = [
                     {
                         "uuid": str(loc.uuid),
@@ -185,6 +161,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     for loc in all_locations
                 ]
             from django.http import JsonResponse
+
             return JsonResponse(response)
         except Exception as e:
             logger.exception("Failed to create pin: %s", e)
@@ -272,9 +249,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = Pin.objects.filter(profile=profile).root_pins().aggregate(last_updated=Max("updated"))
         last_updated = result["last_updated"]
-        return JsonResponse({
-            "last_updated": last_updated.isoformat() if last_updated else None,
-        })
+        return JsonResponse(
+            {
+                "last_updated": last_updated.isoformat() if last_updated else None,
+            }
+        )
 
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data(request)
@@ -303,8 +282,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 tags = pin["tags"]
                 if tags and isinstance(tags[0], dict):
                     pin["tags_data"] = [
-                        {"name": t["name"], "color": t.get("color"), "icon": t.get("icon")}
-                        for t in tags
+                        {"name": t["name"], "color": t.get("color"), "icon": t.get("icon")} for t in tags
                     ]
                     pin["tags"] = ", ".join(t["name"] for t in tags)
                 else:

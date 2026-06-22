@@ -43,10 +43,12 @@ Features planned for this release.
 * When in the main map and the trip details page, drag/drop of a pin shouldn't be as easy at higher zoom levels. Not sure what I want here. Confirmation dialog? Disable at higher zoom? [UL-33]
 * User settings don't seem to properly save. [UL-34]
 * When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]
+* On the public profile page, when saving a note, the note section is duplicated.
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
 * Searching / Filtering the map. [UL-37]
+* Cache API results, like Street View and Satellite View images.
 
 ## Project Health
 * Setup JIRA board publicly [UL-2]
@@ -57,6 +59,11 @@ Features planned for this release.
 
 ## Features that need verification
 * password reset. [UL-41]
+* Possible issue with then pulling or displaying visit history entries.
+* On the pin details page, if the smithsonian archive section is empty, then hide it.
+* On the pin details page, there is a notes section and a comments section. But only one is needed. Keep comments, but remove the notes. Attempt to display a street address for the pin, assuming we can figure out what that address would be, and make sure that address is cached so we don't have to contact an external api multiple times.
+* When performing google or brave searches, add the street name, city, and state to the search query as optional keywords, to help disambiguate with unrelated results.
+
 
 # Future Features
 Features planned for future releases.

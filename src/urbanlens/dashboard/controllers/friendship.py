@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    FriendshipController.py                                                                              *
-*        Path:    /dashboard/controllers/friendship.py                                                                 *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 from __future__ import annotations
 
 import logging
@@ -142,28 +116,33 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             )
             if not req_locs & their_locs:
                 return HttpResponse(
-                    "This user only accepts requests from people who share a pinned location.", status=403,
+                    "This user only accepts requests from people who share a pinned location.",
+                    status=403,
                 )
 
         elif visibility == VisibilityChoice.COMMON_FRIEND:
             req_friends = set(
                 Friendship.objects.filter(from_profile=requesting, status=FriendshipStatus.ACCEPTED).values_list(
-                    "to_profile_id", flat=True,
+                    "to_profile_id",
+                    flat=True,
                 ),
             )
             req_friends |= set(
                 Friendship.objects.filter(to_profile=requesting, status=FriendshipStatus.ACCEPTED).values_list(
-                    "from_profile_id", flat=True,
+                    "from_profile_id",
+                    flat=True,
                 ),
             )
             their_friends = set(
                 Friendship.objects.filter(from_profile=to_profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "to_profile_id", flat=True,
+                    "to_profile_id",
+                    flat=True,
                 ),
             )
             their_friends |= set(
                 Friendship.objects.filter(to_profile=to_profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "from_profile_id", flat=True,
+                    "from_profile_id",
+                    flat=True,
                 ),
             )
             if not req_friends & their_friends:

@@ -1,0 +1,7 @@
+{
+	"include": ["src"],
+	"extraPaths": ["src"],
+	"venvPath": ".",
+	"venv": ".venv_windows",
+	"pythonVersion": "3.12"
+}

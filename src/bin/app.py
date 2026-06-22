@@ -1,32 +1,8 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*
-    This script should start up our app and manage it, without having to interact with django's manage.py script.
+"""
+This script should start up our app and manage it, without having to interact with django's manage.py script.
 
-    This allows us to abstract django away, while also giving us additional tools specific to our project.
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    app.py                                                                                               *
-*        Path:    /bin/app.py                                                                                          *
-*        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2024 Urban Lens                                                                                 *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
+This allows us to abstract django away, while also giving us additional tools specific to our project.
+"""
 # !/usr/bin/env python
 
 # Generic imports

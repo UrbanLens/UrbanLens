@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    queryset.py                                                                                          *
-*        Path:    /dashboard/models/pin/queryset.py                                                              *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 # Generic imports
 from __future__ import annotations
 
@@ -139,14 +113,13 @@ class PinQuerySet(abstract.QuerySet):
         qs = self
         if name := (criteria.get("name") or "").strip():
             qs = qs.filter(
-                Q(nickname__icontains=name)
-                | Q(location__name__icontains=name)
-                | Q(aliases__name__icontains=name),
+                Q(nickname__icontains=name) | Q(location__name__icontains=name) | Q(aliases__name__icontains=name),
             )
         if badge_statuses := criteria.get("status"):
             qs = qs.filter(statuses__id__in=[s.id if hasattr(s, "id") else s for s in badge_statuses])
         if tags := criteria.get("tags"):
             from urbanlens.dashboard.models.badges.model import KIND_CATEGORY, KIND_STATUS, Badge as _Badge
+
             for badge in tags:
                 badge_ids = _Badge.get_badge_and_descendants(badge.id)
                 if badge.kind == KIND_CATEGORY:
@@ -157,6 +130,7 @@ class PinQuerySet(abstract.QuerySet):
                     qs = qs.filter(tags__id__in=badge_ids)
         if exclude_tags := criteria.get("exclude_tags"):
             from urbanlens.dashboard.models.badges.model import KIND_CATEGORY, KIND_STATUS, Badge as _Badge
+
             for badge in exclude_tags:
                 badge_ids = _Badge.get_badge_and_descendants(badge.id)
                 if badge.kind == KIND_CATEGORY:

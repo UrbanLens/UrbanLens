@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    queryset.py                                                                                          *
-*        Path:    /dashboard/models/locations/queryset.py                                                              *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 # Generic imports
 from __future__ import annotations
 
@@ -93,6 +67,7 @@ class LocationQuerySet(abstract.QuerySet):
     def within_bounding_box(self, latitude: float, longitude: float):
         """Return Locations whose bounding_box contains this coordinate."""
         from django.contrib.gis.geos import Point as GEOSPoint
+
         pt = GEOSPoint(float(longitude), float(latitude), srid=4326)
         return self.filter(bounding_box__contains=pt)
 

@@ -1,28 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    db.py                                                                                                *
-*        Path:    /db.py                                                                                               *
-*        Project: bin                                                                                                  *
-*        Version: <<projectversion>>                                                                                   *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
 # !/usr/bin/env python
 
 import argparse
@@ -156,7 +131,11 @@ class Db:
         self._port = int(os.environ.get("UL_DB_PORT", "5432"))
 
     def _pg_ctl(
-        self, command: str, with_server_opts: bool = False, pg_wait: bool = False, **kwargs,
+        self,
+        command: str,
+        with_server_opts: bool = False,
+        pg_wait: bool = False,
+        **kwargs,
     ) -> subprocess.CompletedProcess:
         """Build and run a pg_ctl command.
 
@@ -181,7 +160,7 @@ class Db:
             cmd += ["-o", " ".join(server_opts)]
         cmd.append(command)
         kwargs.setdefault("check", True)
-        return subprocess.run(cmd, **kwargs, check=False)
+        return subprocess.run(cmd, **kwargs)  # noqa: PLW1510 - kwargs setdefault above
 
     def execute_sql(self, sql: str, database: str | None = None) -> int:
         """Run a SQL statement via psql and return the exit code.
