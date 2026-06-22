@@ -176,22 +176,10 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     top: calc(100% + 8px);
     right: 0;
     min-width: 220px;
-    background: var(--ul-surface-1);
-    border: 1px solid var(--ul-border);
-    border-radius: $radius-md;
-    box-shadow: var(--ul-shadow-lg);
+    @include surface-elevated;
     padding: 6px 0;
-    z-index: 500;
-    opacity: 0;
-    transform: translateY(-6px);
-    pointer-events: none;
-    transition: opacity 0.15s ease, transform 0.15s ease;
-
-    .nav-user.is-open & {
-        opacity: 1;
-        transform: translateY(0);
-        pointer-events: auto;
-    }
+    z-index: $z-dropdown;
+    @include dropdown-reveal('.nav-user.is-open &');
 }
 
 // Identity header inside dropdown
@@ -246,40 +234,15 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
 
 // Menu items
 .nav-dropdown-item {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    width: 100%;
-    padding: 8px 14px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--ul-text-1);
-    text-decoration: none;
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    transition: background 0.12s;
-    box-sizing: border-box;
+    @include dropdown-item;
 
     span {
         line-height: 1em;
     }
 
     i.material-icons {
-        font-size: 1.05rem;
-        color: var(--ul-text-2);
-        flex-shrink: 0;
         line-height: 1em;
         height: 1em;
-    }
-
-    &:hover {
-        background: var(--ul-surface-2);
-
-        .material-icons {
-            color: $primary-color;
-        }
     }
 
     &--signout {
@@ -427,30 +390,16 @@ nav .brand-logo img {
     width: 340px;
     max-height: 480px;
     overflow-y: auto;
-    background: var(--ul-surface-1);
-    border: 1px solid var(--ul-border);
-    border-radius: 12px;
-    box-shadow: var(--ul-shadow-lg);
+    @include surface-elevated;
+    border-radius: $radius-md;
     z-index: 9000;
-    opacity: 0;
-    transform: translateY(-6px);
-    pointer-events: none;
-    transition: opacity .15s ease, transform .15s ease;
-
-    .nav-notif.is-open & {
-        opacity: 1;
-        transform: translateY(0);
-        pointer-events: auto;
-    }
+    @include dropdown-reveal('.nav-notif.is-open &');
 }
 
 .notif-dropdown {
     &__header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: .75rem 1rem .5rem;
-        border-bottom: 1px solid var(--ul-border);
+        @include panel-header($spread: true);
+        padding-bottom: .5rem;
     }
 
     &__title {

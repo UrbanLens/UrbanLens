@@ -1,0 +1,78 @@
+@use "sass:color";
+
+// ── Brand palette ─────────────────────────────────────────────────────────────
+
+$primary-color: #2196F3;
+$secondary-color: #FFC107;
+$dark-neutral-color: #424242;
+$light-neutral-color: #FAFAFA;
+$inactive-button-color: #424242;
+$highlight-color: #FFC107;
+$selected-color: #2196F3;
+
+$section-header-bg: #e3f2fd;
+
+// ── Semantic colors ───────────────────────────────────────────────────────────
+
+$text-primary: #1a1a1a;
+$text-secondary: #5f6368;
+$text-muted: #9aa0a6;
+$border-color: #e0e0e0;
+$text-color: $text-primary;
+$surface-hover: color.scale($primary-color, $lightness: +5%);
+
+$danger-color: #c0392b;
+$danger-bg: #fdf0ee;
+$danger-border: #e8c2be;
+$success-color: #1e7e34;
+$success-bg: #eaf6ed;
+$warning-color: #856404;
+$warning-bg: #fff3cd;
+$teal-color: #0d6e6e;
+$teal-bg: #e6f7f7;
+
+// Accent colors used by icon-button modifiers (tags, admin)
+$accent-purple: #7c63d4;
+$accent-purple-bg: #ede9ff;
+$accent-purple-fg: #5b45b0;
+$accent-amber: #d97706;
+$accent-amber-bg: #fef3c7;
+$accent-amber-fg: #b45309;
+
+// ── Radius ────────────────────────────────────────────────────────────────────
+
+$radius-xs: 4px;
+$radius-sm: 8px;
+$radius-md: 12px;
+$radius-full: 9999px;
+$radius-icon-btn: $radius-xs + 2; // 6px
+
+// ── Shadows ───────────────────────────────────────────────────────────────────
+
+$shadow-sm: 0 1px 3px rgba(0, 0, 0, .08);
+$shadow-md: 0 4px 16px rgba(0, 0, 0, .12);
+$shadow-dialog: 0 8px 40px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .08);
+
+// ── Spacing ───────────────────────────────────────────────────────────────────
+
+$space-xs: .25rem;
+$space-sm: .5rem;
+$space-md: 1rem;
+$space-lg: 1.5rem;
+$space-xl: 2rem;
+
+$bar-padding-y: .75rem;
+$bar-padding-x: 1rem;
+
+// ── Breakpoints ─────────────────────────────────────────────────────────────────
+
+$breakpoint-sm: 768px;
+$breakpoint-md: 1024px;
+$breakpoint-lg: 1280px;
+
+// ── Z-index scale ─────────────────────────────────────────────────────────────
+
+$z-dropdown: 500;
+$z-overlay: 999;
+$z-dialog: 1001;
+$z-nav: 1100;

@@ -1,0 +1,271 @@
+@use 'sass:color';
+@use 'variables' as *;
+
+// ── Standard button system ────────────────────────────────────────────────────
+// Prefer `.btn` + BEM modifiers for new markup. Legacy class names (`.btn-primary`,
+// `.btn-ghost`, etc.) extend the same rules so existing templates keep working.
+
+@keyframes ul-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: .35em;
+	padding: .5rem 1rem;
+	font-size: .875rem;
+	font-weight: 500;
+	line-height: 1.25;
+	border: 1px solid transparent;
+	border-radius: $radius-sm;
+	cursor: pointer;
+	text-decoration: none;
+	white-space: nowrap;
+	user-select: none;
+	transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+	background: none;
+	color: var(--ul-text-1);
+
+	.material-icons {
+		font-size: 1.05em;
+		flex-shrink: 0;
+	}
+
+	&--primary {
+		background: $primary-color;
+		border-color: $primary-color;
+		color: var(--ul-text-4);
+
+		&:hover {
+			background: color.adjust($primary-color, $lightness: -7%);
+			border-color: color.adjust($primary-color, $lightness: -7%);
+		}
+
+		&:active {
+			background: color.adjust($primary-color, $lightness: -14%);
+		}
+	}
+
+	&--ghost {
+		border-color: var(--ul-border);
+		color: var(--ul-text-2);
+
+		&:hover {
+			background: var(--ul-surface-2);
+			color: var(--ul-text-1);
+			border-color: var(--ul-border-strong);
+		}
+	}
+
+	&--link {
+		color: $primary-color;
+		padding-inline: .5rem;
+
+		&:hover {
+			background: var(--ul-hover-bg-primary);
+		}
+	}
+
+	&--danger {
+		color: $danger-color;
+		border-color: $danger-border;
+		background: $danger-bg;
+
+		&:hover {
+			background: color.scale($danger-bg, $lightness: -4%);
+		}
+	}
+
+	&--danger-filled {
+		background: $danger-color;
+		border-color: $danger-color;
+		color: var(--ul-text-4);
+
+		&:hover {
+			background: color.adjust($danger-color, $lightness: -8%);
+			border-color: color.adjust($danger-color, $lightness: -8%);
+		}
+	}
+
+	&--sm {
+		padding: .3rem .65rem;
+		font-size: .8rem;
+	}
+
+	&--lg {
+		padding: .65rem 1.35rem;
+		font-size: 1rem;
+	}
+
+	&--icon {
+		padding: .45rem;
+		width: 2.2rem;
+		height: 2.2rem;
+		flex-shrink: 0;
+
+		.material-icons {
+			font-size: 1.1rem;
+		}
+	}
+
+	&:disabled,
+	&[disabled] {
+		@include btn-disabled;
+	}
+}
+
+// Filled CTA used in legacy dialogs and forms
+.submit-button,
+.file-button {
+	@extend .btn;
+	@extend .btn--primary;
+	padding: 9px 20px;
+	font-weight: 500;
+	letter-spacing: 0.01em;
+
+	&:hover {
+		box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
+	}
+
+	&:active {
+		transform: translateY(1px);
+		box-shadow: none;
+	}
+
+	&:disabled,
+	&[disabled] {
+		transform: none;
+		box-shadow: none;
+	}
+
+	&.is-loading {
+		opacity: .78;
+		pointer-events: none;
+		cursor: not-allowed;
+		@include btn-loading-spinner;
+	}
+}
+
+input[type="submit"] {
+	@extend .submit-button;
+}
+
+// Legacy aliases — do not remove until templates are migrated to `.btn--*`
+.btn-primary {
+	@extend .btn;
+	@extend .btn--primary;
+	font-weight: 600;
+
+	i {
+		font-size: 1.1rem;
+	}
+}
+
+.btn-ghost {
+	@extend .btn;
+	@extend .btn--ghost;
+}
+
+.btn-danger-filled {
+	@extend .btn;
+	@extend .btn--danger-filled;
+	font-weight: 600;
+
+	i {
+		font-size: 1.1rem;
+	}
+}
+
+.btn-sm {
+	padding: .25rem .6rem;
+	font-size: .8rem;
+}
+
+// Icon-only buttons (legacy `.btn-icon` + modern `.ul-icon-btn`)
+.btn-icon,
+.ul-icon-btn {
+	@include icon-btn(30px);
+	color: var(--ul-text-2);
+
+	&:focus-visible {
+		@include focus-ring($alpha: .12);
+	}
+
+	i {
+		font-size: 1.15rem;
+	}
+}
+
+.btn-icon {
+	&.btn-icon--danger {
+		&:hover,
+		&:focus {
+			background: $danger-bg;
+			color: $danger-color;
+		}
+	}
+
+	&.btn-icon--active {
+		color: $accent-purple;
+
+		&:hover,
+		&:focus {
+			background: $accent-purple-bg;
+			color: $accent-purple-fg;
+		}
+	}
+
+	&.btn-icon--global-edit {
+		color: $accent-amber;
+
+		&:hover,
+		&:focus {
+			background: $accent-amber-bg;
+			color: $accent-amber-fg;
+		}
+	}
+}
+
+.ul-icon-btn {
+	&--primary:hover {
+		background: var(--ul-hover-bg-primary);
+		color: $primary-color;
+	}
+
+	&--danger:hover {
+		background: $danger-bg;
+		color: $danger-color;
+	}
+}
+
+.btn-close {
+	@include icon-btn(28px);
+	position: absolute;
+	top: 16px;
+	right: 16px;
+	color: $text-muted;
+	font-size: 1.15rem;
+	line-height: 1;
+
+	&:hover {
+		background: var(--ul-surface-1);
+		color: $text-primary;
+	}
+
+	&:disabled {
+		opacity: 0.35;
+		cursor: not-allowed;
+	}
+}
+
+.dialog {
+	.submit-button,
+	input[type="submit"] {
+		float: right;
+		margin-top: 6px;
+	}
+}

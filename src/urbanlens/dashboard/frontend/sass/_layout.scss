@@ -329,19 +329,11 @@
 }
 
 .card {
-    border-radius: 8px;
-    background: var(--card-bg, #fff);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, .08);
-    //overflow: hidden;
+    @include surface($radius-sm);
+    box-shadow: $shadow-sm;
 
     .card-header {
-        display: flex;
-        align-items: center;
-        gap: .5rem;
-        padding: .75rem 1rem;
-        border-bottom: 1px solid var(--ul-border);
-        font-weight: 600;
-        font-size: .95rem;
+        @include panel-header($bg: var(--ul-surface-2));
 
         .material-icons {
             font-size: 1.1rem;
@@ -409,10 +401,6 @@
 }
 
 @keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
     to {
         transform: rotate(360deg);
     }

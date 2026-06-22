@@ -1,531 +1,376 @@
 // ── Reusable UI components ────────────────────────────────────────────────────
-// Built entirely on var(--ul-*) design tokens from _dark.scss so every component
-// adapts to dark mode automatically - no per-element dark overrides needed.
-// Include this file AFTER _dark.scss in style.scss.
+// Built on var(--ul-*) design tokens from _dark.scss so every component adapts
+// to dark mode automatically. Include AFTER _dark.scss in style.scss.
 
 @use 'sass:color';
 @use 'variables' as *;
 
-// ── Shared input mixin ────────────────────────────────────────────────────────
-// @include ul-input in any element that needs consistent form-field styling.
+// ── Surface primitives ────────────────────────────────────────────────────────
 
-@mixin ul-input {
-    display: block;
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid var(--ul-border);
-    border-radius: $radius-sm;
-    font-size: .9rem;
-    color: var(--ul-text-1);
-    background: var(--ul-surface-1);
-    box-sizing: border-box;
-    transition: border-color .15s, box-shadow .15s;
-
-    &:focus {
-        outline: none;
-        border-color: $primary-color;
-        box-shadow: 0 0 0 3px rgba($primary-color, .12);
-    }
-
-    &::placeholder {
-        color: var(--ul-text-3);
-    }
-
-    &:disabled {
-        opacity: .5;
-        cursor: not-allowed;
-    }
+.ul-surface {
+	@include surface;
 }
 
 // ── Cards ─────────────────────────────────────────────────────────────────────
 
 .ul-card {
-    background: var(--ul-surface-1);
-    border: 1px solid var(--ul-border);
-    border-radius: $radius-md;
-    box-shadow: var(--ul-shadow-sm);
-    overflow: hidden;
+	@include surface;
+	box-shadow: var(--ul-shadow-sm);
+	overflow: hidden;
 }
 
 .ul-card-header {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    padding: .75rem 1rem;
-    border-bottom: 1px solid var(--ul-border);
-    font-weight: 600;
-    font-size: .95rem;
-    color: var(--ul-text-1);
-    background: var(--ul-surface-2);
-    flex-shrink: 0;
+	@include panel-header($bg: var(--ul-surface-2));
+	color: var(--ul-text-1);
 
-    .material-icons {
-        font-size: 1.1rem;
-        color: $primary-color;
-        opacity: .85;
-    }
+	.material-icons {
+		font-size: 1.1rem;
+		color: $primary-color;
+		opacity: .85;
+	}
 
-    h3 {
-        margin: 0;
-        font-size: .95rem;
-        font-weight: 600;
-    }
+	h3 {
+		margin: 0;
+		font-size: .95rem;
+		font-weight: 600;
+	}
 }
 
 .ul-card-body {
-    padding: 1rem;
+	padding: $space-md;
 }
 
 .ul-card-footer {
-    padding: .75rem 1rem;
-    border-top: 1px solid var(--ul-border);
-    background: var(--ul-surface-2);
+	padding: $bar-padding-y $bar-padding-x;
+	border-top: 1px solid var(--ul-border);
+	background: var(--ul-surface-2);
 }
 
 // ── Dialogs ───────────────────────────────────────────────────────────────────
-// Use as base: .my-dialog { @extend .ul-dialog; width: min(480px, 95vw); }
 
 .ul-dialog {
-    border: none;
-    border-radius: $radius-md;
-    box-shadow: $shadow-dialog;
-    padding: 0;
-    background: var(--ul-surface-1);
-    color: var(--ul-text-1);
-    width: min(55rem, 90vw);
-    max-width: 90vw;
-    // visible so absolutely-positioned children (icon picker panel) are not clipped
-    overflow: visible;
-    max-height: 90vh;
+	border: none;
+	border-radius: $radius-md;
+	box-shadow: $shadow-dialog;
+	padding: 0;
+	background: var(--ul-surface-1);
+	color: var(--ul-text-1);
+	width: min(55rem, 90vw);
+	max-width: 90vw;
+	overflow: visible;
+	max-height: 90vh;
 
-    &::backdrop {
-        background: rgba(0, 0, 0, .55);
-        backdrop-filter: blur(2px);
-        -webkit-backdrop-filter: blur(2px);
-    }
+	&::backdrop {
+		background: rgba(0, 0, 0, .55);
+		backdrop-filter: blur(2px);
+		-webkit-backdrop-filter: blur(2px);
+	}
 
-    &[open] {
-        display: flex;
-        flex-direction: column;
-    }
+	&[open] {
+		display: flex;
+		flex-direction: column;
+	}
 
-    .panel-header {
-        @include panel-header;
-    }
+	.panel-header {
+		@include panel-header($spread: true);
+	}
 
-    .dialog-close {
-        @extend .ul-dialog-close;
-    }
+	.dialog-close {
+		@extend .ul-dialog-close;
+	}
 }
 
 .ul-dialog-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .5rem;
-    padding: .75rem 1rem;
-    border-bottom: 1px solid var(--ul-border);
-    font-weight: 600;
-    font-size: .95rem;
-    color: var(--ul-text-1);
-    flex-shrink: 0;
+	@include panel-header($spread: true);
+	color: var(--ul-text-1);
 }
 
 .ul-dialog-body {
-    padding: 1.25rem;
-    overflow-y: auto;
-    flex: 1;
+	padding: 1.25rem;
+	overflow-y: auto;
+	flex: 1;
 }
 
 .ul-dialog-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: .5rem;
-    padding: .75rem 1rem 1rem;
-    border-top: 1px solid var(--ul-border);
-    flex-shrink: 0;
+	@include dialog-footer;
 }
 
 .ul-dialog-close {
-    @include icon-btn(28px);
-    padding: 0;
-    outline: none;
+	@include icon-btn(28px);
+	outline: none;
 }
 
 // ── Panels ────────────────────────────────────────────────────────────────────
-// Structured list container: header → list → footer.
 
 .ul-panel {
-    background: var(--ul-surface-1);
-    border: 1px solid var(--ul-border);
-    border-radius: $radius-md;
-    overflow: hidden;
+	@include panel-base;
 }
 
 .ul-panel-header {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    padding: .75rem 1rem;
-    border-bottom: 1px solid var(--ul-border);
-    font-weight: 600;
-    font-size: .9rem;
-    color: var(--ul-text-1);
-    background: var(--ul-surface-2);
+	@include panel-header($font-size: .9rem, $bg: var(--ul-surface-2));
+	color: var(--ul-text-1);
 
-    i,
-    .material-icons {
-        font-size: 1.1rem;
-        color: $primary-color;
-    }
+	i,
+	.material-icons {
+		font-size: 1.1rem;
+		color: $primary-color;
+	}
 }
 
 .ul-panel-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+	list-style: none;
+	margin: 0;
+	padding: 0;
 }
 
 .ul-panel-item {
-    display: flex;
-    align-items: center;
-    gap: .6rem;
-    padding: .6rem 1rem;
-    border-bottom: 1px solid var(--ul-border);
-    transition: background .1s;
+	@include panel-item;
+	gap: .6rem;
+	padding: .6rem $space-md;
+	transition: background .1s;
 
-    &:last-child {
-        border-bottom: none;
-    }
-
-    &:hover {
-        background: var(--ul-hover-bg);
-    }
+	&:hover {
+		background: var(--ul-hover-bg);
+	}
 }
 
 .ul-panel-footer {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    padding: .6rem 1rem;
-    border-top: 1px solid var(--ul-border);
-    background: var(--ul-surface-2);
-    font-size: .82rem;
-    color: var(--ul-text-2);
-    text-decoration: none;
-    transition: color .12s;
+	display: flex;
+	align-items: center;
+	gap: $space-sm;
+	padding: .6rem $space-md;
+	border-top: 1px solid var(--ul-border);
+	background: var(--ul-surface-2);
+	font-size: .82rem;
+	color: var(--ul-text-2);
+	text-decoration: none;
+	transition: color .12s;
 
-    i {
-        font-size: 1rem;
-    }
+	i {
+		font-size: 1rem;
+	}
 
-    &:hover {
-        color: $primary-color;
-    }
+	&:hover {
+		color: $primary-color;
+	}
 }
 
 .ul-panel-empty {
-    padding: 1.25rem;
-    font-size: .88rem;
-    color: var(--ul-text-3);
-    text-align: center;
-    font-style: italic;
+	padding: 1.25rem;
+	font-size: .88rem;
+	color: var(--ul-text-3);
+	text-align: center;
+	font-style: italic;
 
-    a {
-        color: $primary-color;
-    }
+	a {
+		color: $primary-color;
+	}
 }
 
 // ── Badges ────────────────────────────────────────────────────────────────────
 
 .ul-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    font-size: .75rem;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: $radius-full;
-    border: 1px solid transparent;
-    line-height: 1.4;
-    white-space: nowrap;
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	font-size: .75rem;
+	font-weight: 600;
+	padding: 2px 8px;
+	border-radius: $radius-full;
+	border: 1px solid transparent;
+	line-height: 1.4;
+	white-space: nowrap;
 
-    &--primary {
-        background: rgba($primary-color, .12);
-        color: $primary-color;
-        border-color: rgba($primary-color, .25);
-    }
+	&--primary {
+		background: rgba($primary-color, .12);
+		color: $primary-color;
+		border-color: rgba($primary-color, .25);
+	}
 
-    &--success {
-        background: $success-bg;
-        color: $success-color;
-        border-color: color.adjust($success-bg, $lightness: -12%);
-    }
+	&--success {
+		background: $success-bg;
+		color: $success-color;
+		border-color: color.adjust($success-bg, $lightness: -12%);
+	}
 
-    &--warning {
-        background: $warning-bg;
-        color: $warning-color;
-        border-color: color.adjust($warning-bg, $lightness: -12%);
-    }
+	&--warning {
+		background: $warning-bg;
+		color: $warning-color;
+		border-color: color.adjust($warning-bg, $lightness: -12%);
+	}
 
-    &--danger {
-        background: $danger-bg;
-        color: $danger-color;
-        border-color: $danger-border;
-    }
+	&--danger {
+		background: $danger-bg;
+		color: $danger-color;
+		border-color: $danger-border;
+	}
 
-    &--neutral {
-        background: var(--ul-surface-3);
-        color: var(--ul-text-2);
-        border-color: var(--ul-border);
-    }
+	&--neutral {
+		background: var(--ul-surface-3);
+		color: var(--ul-text-2);
+		border-color: var(--ul-border);
+	}
 }
 
 // ── Dropdown ──────────────────────────────────────────────────────────────────
-// Position the dropdown absolutely inside a .is-open parent to animate in.
 
 .ul-dropdown {
-    background: var(--ul-surface-1);
-    border: 1px solid var(--ul-border);
-    border-radius: $radius-md;
-    box-shadow: var(--ul-shadow-lg);
-    padding: 4px 0;
-    z-index: 500;
-    overflow: hidden;
-    opacity: 0;
-    transform: translateY(-6px);
-    pointer-events: none;
-    transition: opacity .15s ease, transform .15s ease;
-
-    .is-open>& {
-        opacity: 1;
-        transform: translateY(0);
-        pointer-events: auto;
-    }
+	@include surface-elevated;
+	padding: 4px 0;
+	z-index: $z-dropdown;
+	overflow: hidden;
+	@include dropdown-reveal('.is-open > &');
 }
 
 .ul-dropdown-item {
-    display: flex;
-    align-items: center;
-    gap: .6rem;
-    width: 100%;
-    padding: 8px 14px;
-    font-size: .875rem;
-    font-weight: 500;
-    color: var(--ul-text-1);
-    text-decoration: none;
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    transition: background .12s;
-    box-sizing: border-box;
+	@include dropdown-item;
 
-    .material-icons {
-        font-size: 1.05rem;
-        color: var(--ul-text-2);
-        flex-shrink: 0;
-    }
+	&--danger {
+		color: $danger-color;
 
-    &:hover {
-        background: var(--ul-surface-2);
+		.material-icons {
+			color: $danger-color;
+		}
 
-        .material-icons {
-            color: $primary-color;
-        }
-    }
-
-    &--danger {
-        color: $danger-color;
-
-        .material-icons {
-            color: $danger-color;
-        }
-
-        &:hover {
-            background: $danger-bg;
-        }
-    }
+		&:hover {
+			background: $danger-bg;
+		}
+	}
 }
 
 .ul-dropdown-sep {
-    height: 1px;
-    background: var(--ul-border);
-    margin: 4px 0;
+	height: 1px;
+	background: var(--ul-border);
+	margin: 4px 0;
 }
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
 .ul-tab-bar {
-    display: flex;
-    border-bottom: 2px solid var(--ul-border);
-    gap: 0;
+	display: flex;
+	border-bottom: 2px solid var(--ul-border);
+	gap: 0;
 }
 
 .ul-tab {
-    padding: .55rem 1.1rem;
-    font-size: .875rem;
-    font-weight: 500;
-    color: var(--ul-text-3);
-    border: none;
-    background: none;
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -2px;
-    display: inline-flex;
-    align-items: center;
-    gap: .4rem;
-    transition: color .13s, border-color .13s;
-    text-decoration: none;
+	padding: .55rem 1.1rem;
+	font-size: .875rem;
+	font-weight: 500;
+	color: var(--ul-text-3);
+	border: none;
+	background: none;
+	cursor: pointer;
+	border-bottom: 2px solid transparent;
+	margin-bottom: -2px;
+	display: inline-flex;
+	align-items: center;
+	gap: .4rem;
+	transition: color .13s, border-color .13s;
+	text-decoration: none;
 
-    .material-icons {
-        font-size: 1.05rem;
-    }
+	.material-icons {
+		font-size: 1.05rem;
+	}
 
-    &:hover {
-        color: var(--ul-text-1);
-    }
+	&:hover {
+		color: var(--ul-text-1);
+	}
 
-    &--active,
-    &.active {
-        color: $primary-color;
-        border-bottom-color: $primary-color;
-        font-weight: 600;
-    }
+	&--active,
+	&.active {
+		color: $primary-color;
+		border-bottom-color: $primary-color;
+		font-weight: 600;
+	}
 }
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
 .ul-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: .5rem;
-    padding: 2.5rem 1rem;
-    text-align: center;
-    color: var(--ul-text-3);
+	@include empty-state;
+	padding: 2.5rem $space-md;
 
-    .material-icons {
-        font-size: 3rem;
-        opacity: .35;
-    }
+	.material-icons {
+		font-size: 3rem;
+		opacity: .35;
+	}
 
-    p {
-        margin: 0;
-        font-size: .9rem;
-    }
+	p {
+		margin: 0;
+		font-size: .9rem;
+	}
 }
 
 // ── Notice / inline alert ─────────────────────────────────────────────────────
 
 .ul-notice {
-    display: flex;
-    align-items: flex-start;
-    gap: .5rem;
-    padding: .65rem .85rem;
-    border-radius: $radius-sm;
-    font-size: .875rem;
-    border: 1px solid transparent;
+	display: flex;
+	align-items: flex-start;
+	gap: $space-sm;
+	padding: .65rem .85rem;
+	border-radius: $radius-sm;
+	font-size: .875rem;
+	border: 1px solid transparent;
 
-    .material-icons {
-        font-size: 1.1rem;
-        flex-shrink: 0;
-        margin-top: .05rem;
-    }
+	.material-icons {
+		font-size: 1.1rem;
+		flex-shrink: 0;
+		margin-top: .05rem;
+	}
 
-    &--info {
-        background: rgba($primary-color, .08);
-        color: $primary-color;
-        border-color: rgba($primary-color, .2);
-    }
+	&--info {
+		background: rgba($primary-color, .08);
+		color: $primary-color;
+		border-color: rgba($primary-color, .2);
+	}
 
-    &--success {
-        background: $success-bg;
-        color: $success-color;
-        border-color: color.adjust($success-bg, $lightness: -12%);
-    }
+	&--success {
+		background: $success-bg;
+		color: $success-color;
+		border-color: color.adjust($success-bg, $lightness: -12%);
+	}
 
-    &--warning {
-        background: $warning-bg;
-        color: $warning-color;
-        border-color: color.adjust($warning-bg, $lightness: -12%);
-    }
+	&--warning {
+		background: $warning-bg;
+		color: $warning-color;
+		border-color: color.adjust($warning-bg, $lightness: -12%);
+	}
 
-    &--danger {
-        background: $danger-bg;
-        color: $danger-color;
-        border-color: $danger-border;
-    }
-}
-
-// ── Icon button ───────────────────────────────────────────────────────────────
-// Compact square/circle buttons for icons only.
-
-.ul-icon-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 6px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    color: var(--ul-text-3);
-    padding: 0;
-    transition: background .12s, color .12s;
-    flex-shrink: 0;
-    outline: none;
-
-    .material-icons {
-        font-size: 1.1rem;
-    }
-
-    &:hover {
-        background: var(--ul-hover-bg);
-        color: var(--ul-text-1);
-    }
-
-    &--primary:hover {
-        background: var(--ul-hover-bg-primary);
-        color: $primary-color;
-    }
-
-    &--danger:hover {
-        background: $danger-bg;
-        color: $danger-color;
-    }
+	&--danger {
+		background: $danger-bg;
+		color: $danger-color;
+		border-color: $danger-border;
+	}
 }
 
 // ── Chip / pill ───────────────────────────────────────────────────────────────
 
 .ul-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 10px;
-    border-radius: $radius-full;
-    font-size: .8rem;
-    font-weight: 500;
-    background: var(--ul-surface-3);
-    border: 1px solid var(--ul-border);
-    color: var(--ul-text-2);
-    line-height: 1.4;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 10px;
+	border-radius: $radius-full;
+	font-size: .8rem;
+	font-weight: 500;
+	background: var(--ul-surface-3);
+	border: 1px solid var(--ul-border);
+	color: var(--ul-text-2);
+	line-height: 1.4;
 
-    .material-icons {
-        font-size: .95rem;
-    }
+	.material-icons {
+		font-size: .95rem;
+	}
 
-    &--interactive {
-        cursor: pointer;
-        transition: background .12s, border-color .12s;
+	&--interactive {
+		cursor: pointer;
+		transition: background .12s, border-color .12s;
 
-        &:hover {
-            background: var(--ul-surface-2);
-            border-color: var(--ul-border-strong);
-        }
-    }
+		&:hover {
+			background: var(--ul-surface-2);
+			border-color: var(--ul-border-strong);
+		}
+	}
 }
 
 // About page styles → _about.scss

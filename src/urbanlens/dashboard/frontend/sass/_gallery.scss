@@ -1,5 +1,7 @@
 // ── Photo gallery ─────────────────────────────────────────────────────────────
 
+@use 'variables' as *;
+
 .photo-gallery {
   .card-header {
     border-bottom: 1px solid var(--ul-border);
