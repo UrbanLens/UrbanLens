@@ -10,8 +10,8 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
-from urbanlens.dashboard.models.location.edit_model import LocationEdit
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.profile.model import Profile
 

@@ -14,7 +14,8 @@ from django.views import View
 import requests
 
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.models.trips.model import SiteSettings, Trip, TripActivity, TripComment, TripMembership
+from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment, TripMembership
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet

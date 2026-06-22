@@ -8,21 +8,25 @@ from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from django import forms
+from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
+from django.http import HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.safestring import mark_safe
 from django.views import View, generic
 
 from urbanlens.dashboard.models.account import EmailVerification
+from urbanlens.dashboard.services.site_admin import should_redirect_to_site_admin
 
 if TYPE_CHECKING:
-    from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
+    from django.http import HttpRequest, HttpResponse
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +239,12 @@ class CustomLoginView(LoginView):
             return redirect("map.view")
         return super().dispatch(request, *args, **kwargs)
 
+    def get_success_url(self) -> str:
+        redirect_to = self.get_redirect_url()
+        if redirect_to:
+            return redirect_to
+        return reverse("post_login")
+
     def form_invalid(self, form: AuthenticationForm) -> HttpResponse:
         username = form.data.get("username", "").strip()
         if username:
@@ -253,6 +263,27 @@ class CustomLoginView(LoginView):
             except User.DoesNotExist:
                 pass
         return super().form_invalid(form)
+
+
+class PostLoginRedirectView(View):
+    """Resolve the destination after password or OAuth login."""
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        if not request.user.is_authenticated:
+            return redirect("login")
+
+        redirect_to = request.GET.get(REDIRECT_FIELD_NAME, "")
+        if redirect_to and url_has_allowed_host_and_scheme(
+            redirect_to,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return HttpResponseRedirect(redirect_to)
+
+        if should_redirect_to_site_admin(request.user):
+            return redirect("site_admin")
+
+        return redirect("map.view")
 
 
 # ── Invitation processing ──────────────────────────────────────────────────

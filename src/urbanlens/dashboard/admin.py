@@ -17,7 +17,7 @@ from django.contrib import admin
 from django.http import HttpRequest, HttpResponseRedirect
 from django.urls import reverse
 
-from urbanlens.dashboard.models.trips.model import SiteSettings
+from urbanlens.dashboard.models.site_settings import SiteSettings
 
 
 @admin.register(SiteSettings)

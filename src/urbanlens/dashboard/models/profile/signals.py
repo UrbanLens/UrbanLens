@@ -9,5 +9,7 @@ from django.dispatch import receiver
 def create_user_profile(sender, instance: User, created: bool, **kwargs) -> None:
     if created:
         from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.site_admin import promote_first_user_if_needed
 
         Profile.objects.get_or_create(user=instance)
+        promote_first_user_if_needed(instance)

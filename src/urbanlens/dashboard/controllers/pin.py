@@ -320,7 +320,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from django.core.cache import cache
 
-        from urbanlens.dashboard.models.trips.model import SiteSettings
+        from urbanlens.dashboard.models.site_settings import SiteSettings
 
         try:
             pin: Pin = Pin.objects.get(uuid=pin_uuid)

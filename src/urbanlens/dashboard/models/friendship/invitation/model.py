@@ -1,4 +1,4 @@
-"""FriendInvitation - email-based invitation to join UrbanLens and become a friend."""
+"""FriendInvitation model - email-based invitation to join UrbanLens."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from django.db.models import CASCADE, DateTimeField, EmailField, ForeignKey, UUI
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.friendship.invitation.queryset import FriendInvitationManager
 
 
 class FriendInvitation(abstract.Model):
@@ -27,6 +28,8 @@ class FriendInvitation(abstract.Model):
     token = UUIDField(default=uuid.uuid4, unique=True, editable=False)
     expires_at = DateTimeField()
     accepted_at = DateTimeField(null=True, blank=True)
+
+    objects = FriendInvitationManager()
 
     class Meta(abstract.Model.Meta):
         pass

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from django.db.models import CASCADE, CharField, ForeignKey, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.badges.customization.queryset import BadgeCustomizationManager
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.badges.model import Badge
@@ -36,6 +37,8 @@ class BadgeCustomization(abstract.Model):
     name = CharField(max_length=255, null=True, blank=True)
     icon = CharField(max_length=50, null=True, blank=True)
     color = CharField(max_length=50, null=True, blank=True)
+
+    objects = BadgeCustomizationManager()
 
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_tag_customizations"

@@ -11,8 +11,8 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
-from urbanlens.dashboard.models.location.edit_model import LocationEdit
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -205,7 +205,7 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
 
         # Check area against the site-wide limit.  Project to an equal-area CRS
         # (EPSG:6933) so the area calculation is meaningful globally.
-        from urbanlens.dashboard.models.trips.model import SiteSettings
+        from urbanlens.dashboard.models.site_settings import SiteSettings
 
         max_km2 = SiteSettings.get_current().max_bbox_area_km2
         try:

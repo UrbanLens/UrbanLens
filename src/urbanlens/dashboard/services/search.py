@@ -21,7 +21,7 @@ def get_search_gateway() -> SearchGateway:
         A gateway instance whose ``search(query)`` method returns a list of
         ``{"title": ..., "link": ..., "snippet": ...}`` dicts.
     """
-    from urbanlens.dashboard.models.trips.model import (
+    from urbanlens.dashboard.models.site_settings import (
         SEARCH_PROVIDER_BRAVE,
         SEARCH_PROVIDER_GOOGLE,
         SiteSettings,

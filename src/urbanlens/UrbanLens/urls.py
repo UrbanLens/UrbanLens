@@ -12,6 +12,7 @@ from django.views.generic import TemplateView
 
 from urbanlens.dashboard.controllers.account import (
     CustomLoginView,
+    PostLoginRedirectView,
     ResendVerificationView,
     SignupView,
     VerifyEmailSentView,
@@ -29,6 +30,7 @@ urlpatterns = [
     path("admin/", admin.site.urls, name="admin"),
     # Override Django's default login view with our custom one (must come before accounts/ include)
     path("accounts/login/", CustomLoginView.as_view(), name="login"),
+    path("accounts/post-login/", PostLoginRedirectView.as_view(), name="post_login"),
     path("accounts/", include("django.contrib.auth.urls")),
     # Registration
     path("signup/", SignupView.as_view(), name="signup"),

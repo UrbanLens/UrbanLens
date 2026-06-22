@@ -1,4 +1,4 @@
-﻿"""Tests for EmailVerification model (dashboard/models/account.py).
+﻿"""Tests for EmailVerification model (dashboard/models/account/).
 
 All tests are DB-backed; EmailVerification.created is auto_now_add so we
 back-date it via queryset.update() where time-sensitivity matters.

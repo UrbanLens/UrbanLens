@@ -1,10 +1,11 @@
-"""ProfileBadgeAssignment - a private user-badge applied to another profile."""
+"""ProfileBadgeAssignment model - private user-badge applied to another profile."""
 
 from __future__ import annotations
 
 from django.db.models import CASCADE, ForeignKey, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.badges.profile_assignment.queryset import ProfileBadgeAssignmentManager
 
 
 class ProfileBadgeAssignment(abstract.Model):
@@ -29,6 +30,8 @@ class ProfileBadgeAssignment(abstract.Model):
         on_delete=CASCADE,
         related_name="profile_assignments",
     )
+
+    objects = ProfileBadgeAssignmentManager()
 
     class Meta(abstract.Model.Meta):
         constraints = [

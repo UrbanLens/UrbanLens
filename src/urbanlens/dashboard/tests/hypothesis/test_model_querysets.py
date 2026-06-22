@@ -19,7 +19,7 @@ from urbanlens.dashboard.models.comments.queryset import CommentQuerySet
 from urbanlens.dashboard.models.markup.queryset import PinMarkupQuerySet
 from urbanlens.dashboard.models.notifications.meta.status import Status
 from urbanlens.dashboard.models.social_link.queryset import QuerySet as SocialLinkQuerySet
-from urbanlens.dashboard.models.trips.model import SiteSettings
+from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.models.visits.queryset import VisitQuerySet
 

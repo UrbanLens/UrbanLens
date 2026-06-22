@@ -10,7 +10,8 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.views import View
 
-from urbanlens.dashboard.models.trips.model import SEARCH_PROVIDER_CHOICES, SiteSettings
+from urbanlens.dashboard.models.site_settings import SEARCH_PROVIDER_CHOICES, SiteSettings
+from urbanlens.dashboard.services.site_admin import complete_site_admin_onboarding
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     def get(self, request):
         settings = SiteSettings.get_current()
+        complete_site_admin_onboarding(request.user)
         return render(
             request,
             "dashboard/pages/site_admin.html",

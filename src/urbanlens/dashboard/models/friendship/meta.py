@@ -27,7 +27,8 @@ class FriendshipStatus(TextChoices):
 
 
 class FriendshipType(TextChoices):
-    FOLLOWING = "Following", "Following"
+    ENCOUNTERED = "Encountered", "Encountered"
+    CONNECTED = "Connected", "Connected"
     FRIEND = "Friend", "Friend"
     CLOSE_FRIEND = "Close Friend", "Close Friend"
 

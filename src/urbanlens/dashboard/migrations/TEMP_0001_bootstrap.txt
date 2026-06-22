@@ -1,0 +1,153 @@
+"""TEMPORARY bootstrap helpers for the squashed ``0001_initial`` migration.
+
+Delete this file after wiring its operations into ``0001_initial.py``.
+
+Workflow
+--------
+1. Remove all ``dashboard/migrations/0*.py`` files (keep ``__init__.py``).
+2. ``python -m urbanlens.manage makemigrations dashboard``
+3. Edit the new ``0001_initial.py``:
+
+   a. **Insert at the top of ``operations``** (before any ``CreateModel`` that
+      uses geography fields)::
+
+        from .TEMP_0001_bootstrap import BOOTSTRAP_OPERATIONS_PREFIX
+
+   b. **Append at the end of ``operations``**::
+
+        from .TEMP_0001_bootstrap import BOOTSTRAP_OPERATIONS_SUFFIX
+
+   Or copy the operation objects inline and drop the import.
+
+4. Ensure ``dependencies`` includes auth/contenttypes if not added automatically::
+
+        ("contenttypes", "__first__"),
+        ("auth", "__first__"),
+
+5. ``migrate`` on a fresh database, smoke-test, then delete this file.
+
+Notes
+-----
+* Per-profile status/category badges are **not** seeded here; they are created
+  by ``create_default_tags`` (``models/badges/signals.py``) when a Profile is
+  saved.
+* All functions are idempotent (``get_or_create`` / ``IF NOT EXISTS``).
+"""
+
+from __future__ import annotations
+
+from django.db import migrations
+
+# Global People badges (profile=None, kind="user"). Final state after 0105:
+# editable by users, not protected.
+_GLOBAL_USER_BADGES: list[dict[str, object]] = [
+    {"name": "Preservation", "icon": "🌿", "color": "#4CAF50", "order": 40},
+    {"name": "Vandalism", "icon": "⚠️", "color": "#F44336", "order": 30},
+    {"name": "Photography", "icon": "📷", "color": "#2196F3", "order": 20},
+    {"name": "Influencer", "icon": "📣", "color": "#9C27B0", "order": 10},
+]
+
+_SITE_ADMIN_GROUP = "site_admin"
+
+
+def bootstrap(apps, schema_editor) -> None:
+    """Seed auth groups/permissions and global People badges on a fresh database.
+
+    Args:
+        apps: Django apps registry (historical models).
+        schema_editor: Active schema editor for the migration connection.
+    """
+    _bootstrap_site_admin_group(apps, schema_editor)
+    _bootstrap_global_user_badges(apps, schema_editor)
+
+
+def reverse_bootstrap(apps, schema_editor) -> None:
+    """Remove bootstrap data created by :func:`bootstrap`.
+
+    Args:
+        apps: Django apps registry (historical models).
+        schema_editor: Active schema editor for the migration connection.
+    """
+    db = schema_editor.connection.alias
+    Badge = apps.get_model("dashboard", "Badge")
+    Group = apps.get_model("auth", "Group")
+    Permission = apps.get_model("auth", "Permission")
+
+    names = {d["name"] for d in _GLOBAL_USER_BADGES}
+    Badge.objects.using(db).filter(
+        profile__isnull=True,
+        kind="user",
+        name__in=names,
+    ).delete()
+
+    Group.objects.using(db).filter(name=_SITE_ADMIN_GROUP).delete()
+    Permission.objects.using(db).filter(codename="view_site_admin").delete()
+
+
+def _bootstrap_site_admin_group(apps, schema_editor) -> None:
+    """Create the site_admin group and attach panel permissions.
+
+    ``edit_global_badge`` is declared on ``Badge.Meta.permissions`` and is
+    created automatically when models are migrated; this assigns it to the
+    group. ``view_site_admin`` is not on a model Meta and must be created here
+    (see migration 0049).
+    """
+    db = schema_editor.connection.alias
+    Permission = apps.get_model("auth", "Permission")
+    Group = apps.get_model("auth", "Group")
+    ContentType = apps.get_model("contenttypes", "ContentType")
+
+    badge_ct = ContentType.objects.using(db).get(app_label="dashboard", model="badge")
+    sitesettings_ct = ContentType.objects.using(db).get(
+        app_label="dashboard",
+        model="sitesettings",
+    )
+
+    edit_global_badge, _ = Permission.objects.using(db).get_or_create(
+        codename="edit_global_badge",
+        content_type=badge_ct,
+        defaults={"name": "Can edit global badges"},
+    )
+    view_site_admin, _ = Permission.objects.using(db).get_or_create(
+        codename="view_site_admin",
+        content_type=sitesettings_ct,
+        defaults={"name": "Can access site admin panel"},
+    )
+
+    group, _ = Group.objects.using(db).get_or_create(name=_SITE_ADMIN_GROUP)
+    group.permissions.add(edit_global_badge, view_site_admin)
+
+
+def _bootstrap_global_user_badges(apps, schema_editor) -> None:
+    """Create global People badges shared across all users."""
+    db = schema_editor.connection.alias
+    Badge = apps.get_model("dashboard", "Badge")
+
+    for spec in _GLOBAL_USER_BADGES:
+        Badge.objects.using(db).get_or_create(
+            profile=None,
+            name=spec["name"],
+            kind="user",
+            defaults={
+                "icon": spec["icon"],
+                "color": spec["color"],
+                "order": spec["order"],
+                "is_protected": False,
+            },
+        )
+
+
+# ── Paste into 0001_initial.py ────────────────────────────────────────────────
+
+# Insert BEFORE CreateModel ops that use PostGIS geography fields:
+BOOTSTRAP_OPERATIONS_PREFIX = [
+    migrations.RunSQL(
+        "CREATE EXTENSION IF NOT EXISTS postgis",
+        reverse_sql=migrations.RunSQL.noop,
+    ),
+]
+
+# Append AFTER all schema operations:
+BOOTSTRAP_OPERATIONS_SUFFIX = [
+    migrations.RunPython(bootstrap, reverse_bootstrap),
+]

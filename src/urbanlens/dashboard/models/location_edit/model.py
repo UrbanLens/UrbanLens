@@ -1,4 +1,4 @@
-"""LocationEdit - records every community edit made to a Location's wiki fields."""
+"""LocationEdit model - community edit history for Location wiki fields."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import logging
 from django.db.models import CASCADE, SET_NULL, BooleanField, ForeignKey, Index, JSONField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.location_edit.queryset import LocationEditManager
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,8 @@ class LocationEdit(abstract.Model):
         blank=True,
         related_name="reverts",
     )
+
+    objects = LocationEditManager()
 
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_location_edits"

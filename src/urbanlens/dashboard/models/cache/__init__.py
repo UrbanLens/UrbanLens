@@ -1,26 +1,4 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    __init__.py                                                                                          *
-*        Path:    /dashboard/models/cache/__init__.py                                                                  *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2024-01-07                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-01-07     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-from urbanlens.dashboard.models.cache.geocoding import GeocodedLocation
+"""Geocoding cache models."""
+
+from urbanlens.dashboard.models.cache.model import GeocodedLocation
+from urbanlens.dashboard.models.cache.queryset import GeocodedLocationManager, GeocodedLocationQuerySet

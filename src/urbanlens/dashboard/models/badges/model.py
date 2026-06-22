@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, BooleanField, CharField, ForeignKey, ImageField, Index, IntegerField, ManyToManyField, TextField
+from django.db.models import (
+    CASCADE,
+    BooleanField,
+    CharField,
+    ForeignKey,
+    ImageField,
+    Index,
+    IntegerField,
+    ManyToManyField,
+    TextField,
+)
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.badges.queryset import BadgeManager

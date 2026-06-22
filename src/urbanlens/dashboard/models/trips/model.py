@@ -1,5 +1,3 @@
-"""Trip models - collaborative trip planning."""
-
 from __future__ import annotations
 
 import logging
@@ -66,16 +64,28 @@ class Trip(abstract.Model):
     ]
 
     allow_add_members = CharField(
-        max_length=20, choices=PERMISSION_CHOICES, default="none", help_text="Who can add new members.",
+        max_length=20,
+        choices=PERMISSION_CHOICES,
+        default="none",
+        help_text="Who can add new members.",
     )
     allow_add_activities = CharField(
-        max_length=20, choices=PERMISSION_CHOICES, default="everyone", help_text="Who can add activities.",
+        max_length=20,
+        choices=PERMISSION_CHOICES,
+        default="everyone",
+        help_text="Who can add activities.",
     )
     allow_edit_activities = CharField(
-        max_length=20, choices=PERMISSION_CHOICES, default="everyone", help_text="Who can edit or delete activities.",
+        max_length=20,
+        choices=PERMISSION_CHOICES,
+        default="everyone",
+        help_text="Who can edit or delete activities.",
     )
     allow_comments = CharField(
-        max_length=20, choices=PERMISSION_CHOICES, default="everyone", help_text="Who can leave comments.",
+        max_length=20,
+        choices=PERMISSION_CHOICES,
+        default="everyone",
+        help_text="Who can leave comments.",
     )
 
     def __str__(self) -> str:
@@ -197,7 +207,8 @@ class TripMembership(abstract.Model):
     )
     rsvp = CharField(max_length=20, choices=RSVP_CHOICES, null=True, blank=True)
     is_organizer = BooleanField(
-        default=False, help_text="Organizers have the same trip-management rights as the creator.",
+        default=False,
+        help_text="Organizers have the same trip-management rights as the creator.",
     )
 
     def __str__(self) -> str:
@@ -287,110 +298,3 @@ class TripActivityVote(abstract.Model):
         indexes = [
             Index(fields=["activity"], name="dashboard_tav_activity_idx"),
         ]
-
-
-AI_PROVIDER_OPENAI = "openai"
-AI_PROVIDER_CLOUDFLARE = "cloudflare"
-AI_PROVIDER_CHOICES = [
-    (AI_PROVIDER_CLOUDFLARE, "Cloudflare Workers AI"),
-    (AI_PROVIDER_OPENAI, "OpenAI"),
-]
-
-SEARCH_PROVIDER_BRAVE = "brave"
-SEARCH_PROVIDER_GOOGLE = "google"
-SEARCH_PROVIDER_CHOICES = [
-    (SEARCH_PROVIDER_BRAVE, "Brave Search"),
-    (SEARCH_PROVIDER_GOOGLE, "Google Custom Search"),
-]
-
-DEFAULT_OPENAI_MODEL = "gpt-5-nano"
-DEFAULT_CLOUDFLARE_MODEL = "@cf/mistral/mistral-7b-instruct-v0.1"
-
-
-class SiteSettings(abstract.Model):
-    """Singleton model for site-wide configurable settings.
-
-    Always access via ``SiteSettings.get_current()``; never instantiate directly.
-    """
-
-    # --- Trip settings ---
-
-    max_trip_members = IntegerField(
-        default=10,
-        help_text="Maximum number of members allowed per trip.",
-    )
-
-    # Chernobyl Exclusion Zone ≈ 2,600 km².  Used as a sanity cap on how large
-    # a user-drawn bounding box for a location can be.
-    max_bbox_area_km2 = FloatField(
-        default=2600.0,
-        help_text="Maximum allowed area (km²) for a location bounding box. Default ≈ Chernobyl Exclusion Zone.",
-    )
-
-    # --- AI - Global controls ---
-
-    ai_enabled = BooleanField(
-        default=True,
-        help_text="Master toggle for all AI features. Disabling this prevents all AI API calls.",
-        verbose_name="AI enabled",
-    )
-    ai_provider = CharField(
-        max_length=20,
-        choices=AI_PROVIDER_CHOICES,
-        default=AI_PROVIDER_CLOUDFLARE,
-        help_text="Which AI provider to use for all AI-powered features.",
-        verbose_name="AI provider",
-    )
-
-    # --- AI - Model selection ---
-
-    openai_model = CharField(
-        max_length=100,
-        default=DEFAULT_OPENAI_MODEL,
-        help_text="OpenAI model name (e.g. gpt-4o, gpt-4o-mini, gpt-5-nano). Only used when provider is OpenAI.",
-        verbose_name="OpenAI model",
-    )
-    cloudflare_model = CharField(
-        max_length=200,
-        default=DEFAULT_CLOUDFLARE_MODEL,
-        help_text="Cloudflare Workers AI model name. Only used when provider is Cloudflare.",
-        verbose_name="Cloudflare model",
-    )
-
-    # --- AI - Feature toggles ---
-
-    ai_category_suggestions_enabled = BooleanField(
-        default=True,
-        help_text="Allow AI to suggest categories for pins and locations based on their metadata.",
-        verbose_name="Category suggestions",
-    )
-
-    # --- Search provider ---
-
-    search_provider = CharField(
-        max_length=20,
-        choices=SEARCH_PROVIDER_CHOICES,
-        default=SEARCH_PROVIDER_BRAVE,
-        help_text="Which web search provider to use for pin news/search results.",
-        verbose_name="Search provider",
-    )
-
-    search_cache_hours = IntegerField(
-        default=24,
-        help_text="How many hours to cache web search results per pin before re-fetching. Set to 0 to disable caching.",
-        verbose_name="Search cache duration (hours)",
-    )
-
-    def __str__(self) -> str:
-        return "Site Settings"
-
-    @classmethod
-    def get_current(cls) -> SiteSettings:
-        """Return (and create if missing) the singleton settings record."""
-        obj, _ = cls.objects.get_or_create(pk=1)
-        return obj
-
-    class Meta(abstract.Model.Meta):
-        db_table = "dashboard_site_settings"
-        verbose_name = "Site Settings"
-        verbose_name_plural = "Site Settings"

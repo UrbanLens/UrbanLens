@@ -178,7 +178,7 @@ class GetSearchGatewayTests(TestCase):
         mock_settings = MagicMock()
         mock_settings.search_provider = "brave"
 
-        with patch("urbanlens.dashboard.models.trips.model.SiteSettings") as MockSiteSettings:
+        with patch("urbanlens.dashboard.models.site_settings.SiteSettings") as MockSiteSettings:
             MockSiteSettings.get_current.return_value = mock_settings
             gateway = get_search_gateway()
 
@@ -191,7 +191,7 @@ class GetSearchGatewayTests(TestCase):
         mock_settings = MagicMock()
         mock_settings.search_provider = "google"
 
-        with patch("urbanlens.dashboard.models.trips.model.SiteSettings") as MockSiteSettings:
+        with patch("urbanlens.dashboard.models.site_settings.SiteSettings") as MockSiteSettings:
             MockSiteSettings.get_current.return_value = mock_settings
             gateway = get_search_gateway()
 
@@ -201,7 +201,7 @@ class GetSearchGatewayTests(TestCase):
         from urbanlens.dashboard.services.brave.search import BraveSearchGateway
         from urbanlens.dashboard.services.search import get_search_gateway
 
-        with patch("urbanlens.dashboard.models.trips.model.SiteSettings") as MockSiteSettings:
+        with patch("urbanlens.dashboard.models.site_settings.SiteSettings") as MockSiteSettings:
             MockSiteSettings.get_current.side_effect = Exception("DB unavailable")
             gateway = get_search_gateway()
 
@@ -213,7 +213,7 @@ class GetSearchGatewayTests(TestCase):
         mock_settings = MagicMock()
         mock_settings.search_provider = "brave"
 
-        with patch("urbanlens.dashboard.models.trips.model.SiteSettings") as MockSiteSettings:
+        with patch("urbanlens.dashboard.models.site_settings.SiteSettings") as MockSiteSettings:
             MockSiteSettings.get_current.return_value = mock_settings
             gateway = get_search_gateway()
 
@@ -226,7 +226,7 @@ class GetSearchGatewayTests(TestCase):
         mock_settings = MagicMock()
         mock_settings.search_provider = "nonexistent_provider"
 
-        with patch("urbanlens.dashboard.models.trips.model.SiteSettings") as MockSiteSettings:
+        with patch("urbanlens.dashboard.models.site_settings.SiteSettings") as MockSiteSettings:
             MockSiteSettings.get_current.return_value = mock_settings
             gateway = get_search_gateway()
 

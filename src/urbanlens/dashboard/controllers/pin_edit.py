@@ -13,7 +13,8 @@ from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.badges.model import Badge
-from urbanlens.dashboard.models.pin.model import Pin, PinNote, PinType
+from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
 
 logger = logging.getLogger(__name__)

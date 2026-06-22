@@ -19,11 +19,11 @@
 *        File:    local.py                                                                                             *
 *        Path:    /UrbanLens/settings/local.py                                                                         *
 *        Project: urbanlens                                                                                            *
-*        Version: 1.0.0                                                                                                *
+*        Version: 0.0.2                                                                                                *
 *        Created: 2023-12-24                                                                                           *
 *        Author:  Jess Mann                                                                                            *
 *        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 - 2024 Urban Lens                                                                          *
+*        Copyright (c) 2026 Jess Mann                                                                                  *
 *                                                                                                                      *
 * -------------------------------------------------------------------------------------------------------------------- *
 *                                                                                                                      *
@@ -187,17 +187,17 @@ CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
 
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.getenv("UL_GOOGLE_CLIENT_ID", "")
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.getenv("UL_GOOGLE_CLIENT_SECRET", "")
-SOCIAL_AUTH_DISCORD_KEY = os.getenv("UL_DISCORD_KEY", "")
-SOCIAL_AUTH_DISCORD_SECRET = os.getenv("UL_DISCORD_SECRET", "")
+SOCIAL_AUTH_DISCORD_KEY = os.getenv("UL_DISCORD_CLIENT_ID", "")
+SOCIAL_AUTH_DISCORD_SECRET = os.getenv("UL_DISCORD_CLIENT_SECRET", "")
 
-# After login/signup, send users to the map (not the non-existent /accounts/profile/)
-LOGIN_REDIRECT_URL = "/dashboard/map/"
+# After login/signup, send users through post-login routing (map or site admin setup).
+LOGIN_REDIRECT_URL = "/accounts/post-login/"
 LOGIN_URL = "/accounts/login/"
 LOGOUT_REDIRECT_URL = "/"
 
 # social-auth redirects after OAuth completion
-SOCIAL_AUTH_LOGIN_REDIRECT_URL = "/dashboard/map/"
-SOCIAL_AUTH_NEW_USER_REDIRECT_URL = "/dashboard/map/"
+SOCIAL_AUTH_LOGIN_REDIRECT_URL = "/accounts/post-login/"
+SOCIAL_AUTH_NEW_USER_REDIRECT_URL = "/accounts/post-login/"
 
 # Email backend - use console in dev, configure via env in production
 EMAIL_BACKEND = os.getenv("UL_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")

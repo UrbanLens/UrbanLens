@@ -33,7 +33,7 @@ def get_gateway(feature: str | None = None, **kwargs) -> LLMGateway | None:
         A configured ``LLMGateway`` subclass instance, or ``None`` if AI is
         globally disabled or the requested feature is turned off.
     """
-    from urbanlens.dashboard.models.trips.model import SiteSettings
+    from urbanlens.dashboard.models.site_settings import SiteSettings
 
     site = SiteSettings.get_current()
 

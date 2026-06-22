@@ -1,4 +1,5 @@
 """Email verification token model for new user registrations."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -7,6 +8,8 @@ import uuid
 from django.contrib.auth.models import User
 from django.db import models
 from django.utils import timezone
+
+from urbanlens.dashboard.models.account.queryset import EmailVerificationManager
 
 
 class EmailVerification(models.Model):
@@ -20,6 +23,8 @@ class EmailVerification(models.Model):
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     created = models.DateTimeField(auto_now_add=True)
     verified_at = models.DateTimeField(null=True, blank=True)
+
+    objects = EmailVerificationManager()
 
     class Meta:
         db_table = "dashboard_email_verification"
