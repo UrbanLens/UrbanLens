@@ -362,7 +362,7 @@ class EditProfileView(LoginRequiredMixin, View):
         return redirect("profile.edit")
 
 
-def _authenticated_profile(request: HttpRequest) -> "Profile":
+def _authenticated_profile(request: HttpRequest) -> Profile:
     """Return the authenticated user's Profile.
 
     LoginRequiredMixin guarantees this path is only reached by authenticated
