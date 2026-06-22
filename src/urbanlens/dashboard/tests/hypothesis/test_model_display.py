@@ -166,7 +166,7 @@ class PinMarkupToJsonTests(TestCase):
 		self.assertIsInstance(self.markup.to_json()["uuid"], str)
 
 	def test_all_required_keys_present(self) -> None:
-		required = {"uuid", "markup_type", "geometry", "label", "color", "stroke_width", "border_color", "fill_opacity", "border_opacity"}
+		required = {"uuid", "markup_type", "geometry", "label", "color", "stroke_width", "border_color", "fill_opacity", "border_opacity", "security_indicator"}
 		self.assertEqual(required, set(self.markup.to_json()))
 
 

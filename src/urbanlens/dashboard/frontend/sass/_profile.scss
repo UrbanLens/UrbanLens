@@ -353,6 +353,9 @@
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
     padding: 1.5rem 2rem;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .profile-section-title {
@@ -456,6 +459,24 @@
     border-radius: $radius-md;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
+
+    @media (min-width: 1024px) {
+        display: grid;
+        grid-template-columns: 240px 1fr;
+        gap: 2rem;
+        align-items: start;
+
+        .settings-section-header {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+            border-right: 1px solid var(--ul-border);
+            padding-right: 2rem;
+            // Sticky within the section so it doesn't scroll away on tall forms
+            position: sticky;
+            top: 1rem;
+        }
+    }
 
     &--placeholder {
         opacity: 0.7;
@@ -1238,11 +1259,6 @@ textarea.edit-textarea {
                 color-mix(in srgb, $primary-color 4%, var(--ul-surface-1)) 100%);
         border-color: color-mix(in srgb, $primary-color 30%, transparent);
     }
-}
-
-.profile-section {
-    border-radius: $radius-md;
-    overflow: hidden;
 }
 
 // ── Private profile annotation panel ─────────────────────────────────────────

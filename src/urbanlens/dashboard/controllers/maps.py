@@ -87,7 +87,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "map_center_lat": map_center[0] if map_center else None,
                 "map_center_lng": map_center[1] if map_center else None,
                 "map_center_mode": profile.map_center_mode,
-                "map_default_zoom": profile.map_default_zoom or 13,
+                "map_default_zoom": (
+                    profile.remembered_map_zoom
+                    if profile.map_center_mode == MapCenterMode.REMEMBER and profile.remembered_map_zoom
+                    else profile.map_default_zoom or 13
+                ),
                 "gps_fallback_lat": gps_fallback[0] if gps_fallback else None,
                 "gps_fallback_lng": gps_fallback[1] if gps_fallback else None,
             },

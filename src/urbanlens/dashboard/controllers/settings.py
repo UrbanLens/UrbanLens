@@ -197,3 +197,36 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
         logger.warning("Nominatim geocoding failed for %r", address, exc_info=True)
 
     return JsonResponse({"error": "Location not found."}, status=404)
+
+
+class SaveMapPositionView(LoginRequiredMixin, View):
+    """POST endpoint to save the user's last map pan/zoom for REMEMBER mode.
+
+    Accepts lat, lng (float strings) and zoom (integer string). Only writes
+    to the profile when map_center_mode is 'remember'; ignores the request
+    silently otherwise so stale JS calls are harmless.
+    """
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        from urbanlens.dashboard.models.profile.model import MapCenterMode
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if profile.map_center_mode != MapCenterMode.REMEMBER:
+            return JsonResponse({"ok": False, "reason": "not in remember mode"})
+
+        try:
+            lat = float(request.POST["lat"])
+            lng = float(request.POST["lng"])
+            zoom = int(request.POST["zoom"])
+        except (KeyError, ValueError, TypeError):
+            return JsonResponse({"error": "lat, lng, zoom required"}, status=400)
+
+        if not (-90 <= lat <= 90) or not (-180 <= lng <= 180) or not (0 <= zoom <= 22):
+            return JsonResponse({"error": "out of range"}, status=400)
+
+        Profile.objects.filter(pk=profile.pk).update(
+            remembered_map_lat=lat,
+            remembered_map_lng=lng,
+            remembered_map_zoom=zoom,
+        )
+        return JsonResponse({"ok": True})

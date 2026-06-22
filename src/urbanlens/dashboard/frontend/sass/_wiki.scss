@@ -147,30 +147,37 @@
     // ── Body grid ─────────────────────────────────────────────────────────
     .wiki-body {
         display: grid;
-        grid-template-columns: 1fr 280px;
-        grid-template-rows: auto;
+        grid-template-columns: 1fr;
         gap: 1rem;
         align-items: start;
 
+        @media (min-width: 768px) {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        @media (min-width: 1280px) {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
         .wiki-meta {
-            grid-column: 1;
+            @media (min-width: 768px) { grid-column: 1; }
         }
 
         .wiki-stats {
-            grid-column: 2;
+            @media (min-width: 768px) { grid-column: 2; }
         }
 
-        .location-map {
+        .location-map,
+        .wiki-tabs-card,
+        .aliases-panel,
+        .wiki-gallery,
+        .comment-panel,
+        #wiki-gallery-panel,
+        #comment-panel {
             grid-column: 1 / -1;
         }
 
-        .wiki-tabs-card {
-            grid-column: 1 / -1;
-        }
-
-        @media (max-width: 700px) {
-            grid-template-columns: 1fr;
-
+        @media (max-width: 767px) {
             .wiki-meta,
             .wiki-stats,
             .location-map,

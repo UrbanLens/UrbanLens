@@ -328,6 +328,7 @@ urlpatterns = [
     ),
     path("settings/", settings.SettingsView.as_view(), name="settings.view"),
     path("settings/geocode/", settings.geocode_address, name="settings.geocode"),
+    path("settings/map-position/", settings.SaveMapPositionView.as_view(), name="settings.save_map_position"),
     path(
         "tags/",
         include(

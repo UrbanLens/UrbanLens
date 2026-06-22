@@ -135,8 +135,13 @@ class WebSearchViewTests(TestCase):
 
     def _make_pin(self) -> Pin:
         from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.profile.model import Profile
         loc = baker.make(Location, name="Test Location", latitude=41.0, longitude=-81.5)
-        pin = baker.make(Pin, location=loc, user=baker.make("auth.User"))
+        user = baker.make("auth.User")
+        # The post_save signal creates a Profile automatically; retrieve it rather
+        # than letting baker create a second one (which would violate the unique constraint).
+        profile = Profile.objects.get(user=user)
+        pin = baker.make(Pin, location=loc, profile=profile)
         return pin
 
     def test_nonexistent_pin_uuid_returns_404(self):

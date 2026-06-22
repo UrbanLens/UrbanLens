@@ -270,6 +270,9 @@
         </div>
     </div>
 
+    {# ── Responsive multi-column grid for secondary panels ───────────── #}
+    <div class="pin-cards-grid ul-grid ul-grid--3col">
+
     {# ── Satellite view ───────────────────────────────────────────────── #}
     <div id="satellite-view-section" class="satellite-view card"
          hx-get="{% url 'pin.satellite_view' pin.uuid %}"
@@ -333,7 +336,7 @@
     {% endif %}
 
     {# ── Photo gallery ────────────────────────────────────────────────── #}
-    <div id="pin-gallery-panel"
+    <div id="pin-gallery-panel" class="ul-grid__full"
          hx-get="{% url 'pin.gallery' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML">
@@ -347,7 +350,7 @@
     </div>
 
     {# ── Comments ─────────────────────────────────────────────────────── #}
-    <div id="comment-panel"
+    <div id="comment-panel" class="ul-grid__full"
          hx-get="{% url 'pin.comments' pin.uuid %}"
          hx-trigger="load"
          hx-swap="outerHTML">
@@ -359,6 +362,8 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
         </div>
     </div>
+
+    </div>{# end .pin-cards-grid #}
 
 </div>
 

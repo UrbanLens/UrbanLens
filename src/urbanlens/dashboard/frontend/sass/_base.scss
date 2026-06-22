@@ -26,8 +26,48 @@ button,
 // - Pages
 .page-content {
     padding: 1.5rem 1rem 3rem;
-    width: 90vw;
+    width: min(90vw, 1600px);
     margin: 0 auto;
+}
+
+// ── Responsive grid utilities ─────────────────────────────────────────────────
+// Apply .ul-grid plus a modifier to get a standard responsive grid.
+// .ul-grid__full inside a grid spans all columns.
+
+.ul-grid {
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: 1fr;
+    align-items: start;
+
+    // 1 → 2 columns at ≥768px
+    &--2col {
+        @media (min-width: 768px) {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    // 1 → 2 → 3 columns at ≥768px → ≥1280px
+    &--3col {
+        @media (min-width: 768px) {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        @media (min-width: 1280px) {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    // Primary + sidebar (2/3 + sidebar) at ≥1024px
+    &--sidebar {
+        @media (min-width: 1024px) {
+            grid-template-columns: 1fr 300px;
+        }
+    }
+}
+
+// Spans all grid columns (place on a .ul-grid child)
+.ul-grid__full {
+    grid-column: 1 / -1;
 }
 
 // ── Confirm dialog ────────────────────────────────────────────────────────────

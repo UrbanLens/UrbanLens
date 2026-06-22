@@ -85,6 +85,7 @@ class MapCenterMode(TextChoices):
     AUTO = "auto", "Center on my pins"
     GPS = "gps", "Use my current location"
     CUSTOM = "custom", "Custom location"
+    REMEMBER = "remember", "Remember last position"
 
 
 class Profile(abstract.Model):
@@ -160,6 +161,11 @@ class Profile(abstract.Model):
     map_custom_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     # Default zoom level applied on every map load (all modes).
     map_default_zoom = IntegerField(default=13)
+
+    # Remembered position (remember mode): last pan/zoom saved by JS.
+    remembered_map_lat = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    remembered_map_lng = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    remembered_map_zoom = IntegerField(null=True, blank=True)
 
     # Default styling for new pin-detail annotations (lines, arrows, shapes, text).
     # Opacity is stored as an integer 0-100 (percent).
@@ -264,6 +270,10 @@ class Profile(abstract.Model):
         if self.map_center_mode == MapCenterMode.CUSTOM:
             if self.map_custom_latitude is not None and self.map_custom_longitude is not None:
                 return float(self.map_custom_latitude), float(self.map_custom_longitude)
+            return None
+        if self.map_center_mode == MapCenterMode.REMEMBER:
+            if self.remembered_map_lat is not None and self.remembered_map_lng is not None:
+                return float(self.remembered_map_lat), float(self.remembered_map_lng)
             return None
         # AUTO mode
         if self.map_center_latitude is not None and self.map_center_longitude is not None:

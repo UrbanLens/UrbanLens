@@ -25,13 +25,18 @@ def _pin(
     effective_name: str | None = None,
     address_basic: str | None = None,
     place_name: str | None = None,
+    route: str | None = None,
     city: str | None = None,
     county: str | None = None,
     state: str | None = None,
     latitude: float | None = None,
     longitude: float | None = None,
 ) -> MagicMock:
-    """Build a mock Pin with the given field values."""
+    """Build a mock Pin with the given field values.
+
+    Sets effective_latitude/effective_longitude (the computed attributes the
+    function reads) and wires pin.location so route doesn't become a MagicMock.
+    """
     pin = MagicMock()
     pin.effective_name = effective_name
     pin.address_basic = address_basic
@@ -39,8 +44,16 @@ def _pin(
     pin.city = city
     pin.county = county
     pin.state = state
-    pin.latitude = latitude
-    pin.longitude = longitude
+    pin.effective_latitude = latitude
+    pin.effective_longitude = longitude
+
+    if route is not None:
+        location_mock = MagicMock()
+        location_mock.route = route
+        pin.location = location_mock
+    else:
+        pin.location = None
+
     return pin
 
 
@@ -165,7 +178,7 @@ class GetSearchGatewayTests(TestCase):
         mock_settings = MagicMock()
         mock_settings.search_provider = "brave"
 
-        with patch("urbanlens.dashboard.services.search.SiteSettings") as MockSiteSettings:
+        with patch("urbanlens.dashboard.models.trips.model.SiteSettings") as MockSiteSettings:
             MockSiteSettings.get_current.return_value = mock_settings
             gateway = get_search_gateway()
 
@@ -178,7 +191,7 @@ class GetSearchGatewayTests(TestCase):
         mock_settings = MagicMock()
         mock_settings.search_provider = "google"
 
-        with patch("urbanlens.dashboard.services.search.SiteSettings") as MockSiteSettings:
+        with patch("urbanlens.dashboard.models.trips.model.SiteSettings") as MockSiteSettings:
             MockSiteSettings.get_current.return_value = mock_settings
             gateway = get_search_gateway()
 
@@ -188,7 +201,7 @@ class GetSearchGatewayTests(TestCase):
         from urbanlens.dashboard.services.brave.search import BraveSearchGateway
         from urbanlens.dashboard.services.search import get_search_gateway
 
-        with patch("urbanlens.dashboard.services.search.SiteSettings") as MockSiteSettings:
+        with patch("urbanlens.dashboard.models.trips.model.SiteSettings") as MockSiteSettings:
             MockSiteSettings.get_current.side_effect = Exception("DB unavailable")
             gateway = get_search_gateway()
 
@@ -200,7 +213,7 @@ class GetSearchGatewayTests(TestCase):
         mock_settings = MagicMock()
         mock_settings.search_provider = "brave"
 
-        with patch("urbanlens.dashboard.services.search.SiteSettings") as MockSiteSettings:
+        with patch("urbanlens.dashboard.models.trips.model.SiteSettings") as MockSiteSettings:
             MockSiteSettings.get_current.return_value = mock_settings
             gateway = get_search_gateway()
 
@@ -213,7 +226,7 @@ class GetSearchGatewayTests(TestCase):
         mock_settings = MagicMock()
         mock_settings.search_provider = "nonexistent_provider"
 
-        with patch("urbanlens.dashboard.services.search.SiteSettings") as MockSiteSettings:
+        with patch("urbanlens.dashboard.models.trips.model.SiteSettings") as MockSiteSettings:
             MockSiteSettings.get_current.return_value = mock_settings
             gateway = get_search_gateway()
 
