@@ -38,7 +38,7 @@
     }
     
     .app-nav {
-        background: var(--ul-surface-9);
+        background-color: #{$color-blue-1700};
     }
 
     .app-nav-link {
@@ -227,6 +227,10 @@
 
     .dialog-overlay {
         background: rgba(0, 0, 0, .7);
+    }
+
+    .page-footer {
+        background-color: #{$color-blue-1700};
     }
 
     footer {
