@@ -156,6 +156,7 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 * User stats page (fun stats about the user: breakdown of pins by continent, etc).
 * Lists (these aren't strictly necessary, due to badges, but could allow users to create lists of unrelated things. Like "my favorite explores in February" or "1 Best Church in Each State").
 * During site setup, tests for features (i.e. "send test email" button)
+* Ensure rotating logs, purging cache data, etc, in the event of hacking incident.
 
 ## Issues requiring architectural solutions
 * Allow users to interact with parts of the app (by invite?) without logging in. For instance, in the case of trip planning. [UL-105]
