@@ -385,7 +385,7 @@ class PostLoginRedirectView(View):
             return HttpResponseRedirect(redirect_to)
 
         if should_redirect_to_site_admin(request.user):
-            return redirect("site_admin")
+            return redirect("setup")
 
         from urbanlens.dashboard.models.profile.model import Profile
 

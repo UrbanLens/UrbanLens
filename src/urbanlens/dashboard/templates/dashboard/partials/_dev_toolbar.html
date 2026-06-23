@@ -8,14 +8,18 @@
     </div>
     <div class="dev-toolbar__body" id="dev-toolbar-body">
         <button type="button"
-                class="dev-toolbar__tool"
+                class="dev-toolbar__tool dev-toolbar__theme-toggle"
                 id="dev-toolbar-theme-toggle"
-                title="Toggle dark mode"
+                title="Toggle theme"
+                aria-label="Toggle theme"
                 hx-post="{% url 'dev_toolbar.toggle_theme' %}"
                 hx-swap="none"
                 hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-            <i class="material-icons">{% if dev_toolbar_theme_mode == 'dark' %}light_mode{% else %}dark_mode{% endif %}</i>
-            <span>{% if dev_toolbar_theme_mode == 'dark' %}Light mode{% else %}Dark mode{% endif %}</span>
+            <span class="dev-toolbar__theme-icons" aria-hidden="true">
+                <i class="material-icons dev-toolbar__theme-icon dev-toolbar__theme-icon--light{% if dev_toolbar_theme_mode == 'light' %} is-active{% endif %}">light_mode</i>
+                <i class="material-icons dev-toolbar__theme-icon dev-toolbar__theme-icon--dark{% if dev_toolbar_theme_mode == 'dark' %} is-active{% endif %}">dark_mode</i>
+            </span>
+            <span class="dev-toolbar__theme-label">{% if dev_toolbar_theme_mode == 'dark' %}Dark{% elif dev_toolbar_theme_mode == 'light' %}Light{% else %}Theme{% endif %}</span>
         </button>
     </div>
 </div>
@@ -59,18 +63,33 @@
         }
     }
 
+    function updateThemeToggle(isDark) {
+        var btn = document.getElementById('dev-toolbar-theme-toggle');
+        if (!btn) return;
+        toolbar.classList.toggle('dev-toolbar--dark-active', isDark);
+        var lightIcon = btn.querySelector('.dev-toolbar__theme-icon--light');
+        var darkIcon = btn.querySelector('.dev-toolbar__theme-icon--dark');
+        var label = btn.querySelector('.dev-toolbar__theme-label');
+        if (lightIcon) lightIcon.classList.toggle('is-active', !isDark);
+        if (darkIcon) darkIcon.classList.toggle('is-active', isDark);
+        if (label) label.textContent = isDark ? 'Dark' : 'Light';
+        btn.title = isDark ? 'Dark mode active — click to switch to light' : 'Light mode active — click to switch to dark';
+    }
+
+    function syncThemeToggleFromDom() {
+        var root = document.getElementById('html-root');
+        var theme = root ? root.getAttribute('data-theme') : 'light';
+        updateThemeToggle(theme === 'dark');
+    }
+
+    syncThemeToggleFromDom();
+
     document.body.addEventListener('devThemeChanged', function (e) {
         var theme = typeof e.detail === 'string' ? e.detail : (e.detail && e.detail.value);
         if (!theme) return;
         applyTheme(theme);
-        var btn = document.getElementById('dev-toolbar-theme-toggle');
-        if (!btn) return;
-        var isDark = theme === 'dark';
-        toolbar.classList.toggle('dev-toolbar--dark-active', isDark);
-        var icon = btn.querySelector('.material-icons');
-        var label = btn.querySelector('span');
-        if (icon) icon.textContent = isDark ? 'light_mode' : 'dark_mode';
-        if (label) label.textContent = isDark ? 'Light mode' : 'Dark mode';
+        var isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        updateThemeToggle(isDark);
     });
 }());
 </script>

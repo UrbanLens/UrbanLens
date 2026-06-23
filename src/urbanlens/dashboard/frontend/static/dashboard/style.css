@@ -25902,12 +25902,44 @@ body.page-about .about-cta-body {
   text-align: left;
   font: inherit;
 }
-.dev-toolbar__tool .material-icons {
-  font-size: 1.1rem !important;
-  opacity: 0.85;
-}
 .dev-toolbar__tool:hover {
   background: var(--ul-hover-bg, #f1f5f9);
+}
+
+.dev-toolbar__theme-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.1rem 0.25rem;
+  border-radius: 6px;
+  background: var(--ul-surface-muted, #f1f5f9);
+}
+
+.dev-toolbar__theme-icon {
+  font-size: 1.1rem !important;
+  opacity: 0.35;
+  color: var(--ul-text-muted, #94a3b8);
+  transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.dev-toolbar__theme-icon.is-active {
+  opacity: 1;
+  color: var(--ul-text, #0f172a);
+  transform: scale(1.05);
+}
+
+.dev-toolbar__theme-label {
+  color: var(--ul-text-muted, #64748b);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.dev-toolbar--dark-active .dev-toolbar__theme-icon--dark.is-active {
+  color: #a5b4fc;
+}
+
+.dev-toolbar:not(.dev-toolbar--dark-active) .dev-toolbar__theme-icon--light.is-active {
+  color: #f59e0b;
 }
 
 html[data-theme=dark] .dev-toolbar {

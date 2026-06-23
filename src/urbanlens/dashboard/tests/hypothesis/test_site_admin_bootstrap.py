@@ -59,14 +59,14 @@ class SiteAdminRedirectTests(TestCase):
         complete_site_admin_onboarding(self.user)
         self.assertFalse(should_redirect_to_site_admin(self.user))
 
-    def test_post_login_redirects_bootstrap_admin_to_site_admin(self) -> None:
+    def test_post_login_redirects_bootstrap_admin_to_setup(self) -> None:
         client = Client()
         client.force_login(self.user)
 
         response = client.get(reverse("post_login"), follow=False)
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], reverse("site_admin"))
+        self.assertEqual(response["Location"], reverse("setup"))
 
     def test_post_login_redirects_to_map_after_onboarding(self) -> None:
         complete_site_admin_onboarding(self.user)
