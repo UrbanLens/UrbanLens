@@ -462,6 +462,7 @@ var parsedData = null;   // {lists, total, badges} from server
 var selectedFiles = [];  // FileList-like array
 var abortCtrl = null;
 var importing = false;
+var needsConfirm = false;
 var allSelected = true;
 
 /* ── DOM references ─────────────────────────────────────────────────── */
@@ -503,6 +504,8 @@ function closeDialog() {
         if (!confirm('Import is still in progress. Leave and stop importing?')) return;
         if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
         importing = false;
+    } else if (needsConfirm) {
+        if (!confirm('Leave the import wizard? Your progress will be lost.')) return;
     }
     if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
     var overlay = $('import-screen');
@@ -513,11 +516,11 @@ function closeDialog() {
 }
 
 function beforeUnloadHandler(e) {
-    if (importing) { e.preventDefault(); e.returnValue = ''; }
+    if (importing || needsConfirm) { e.preventDefault(); e.returnValue = ''; }
 }
 window.addEventListener('beforeunload', beforeUnloadHandler);
 
-$('import-screen').addEventListener('click', function () { if (!importing) closeDialog(); });
+$('import-screen').addEventListener('click', closeDialog);
 $('closeImportDialog').addEventListener('click', closeDialog);
 
 /* ── Step 1: File picking ────────────────────────────────────────────── */
@@ -588,6 +591,7 @@ $('iw-btn-upload').addEventListener('click', async function () {
             throw new Error(err.error || 'Server error ' + res.status);
         }
         parsedData = await res.json();
+        needsConfirm = true;
         $('closeImportDialog').disabled = false;
         renderPreview(parsedData);
         showStep('preview', 1);
@@ -807,7 +811,7 @@ function updateSelectedCount() {
     $('iw-btn-confirm').disabled = n === 0;
 }
 
-$('iw-btn-back').addEventListener('click', function () { showStep('upload', 0); });
+$('iw-btn-back').addEventListener('click', function () { needsConfirm = false; showStep('upload', 0); });
 
 /* ── Step 2 → Step 3: Confirm import ────────────────────────────────── */
 $('iw-btn-confirm').addEventListener('click', async function () {
@@ -917,6 +921,7 @@ function handleProgressEvent(evt) {
             $('iw-progress-header').textContent = 'Import complete';
             $('iw-progress-header').style.color = '#43a047';
             importing = false;
+            needsConfirm = false;
             $('closeImportDialog').disabled = false;
             $('iw-btn-done').hidden = false;
             toastr.success(

@@ -178,6 +178,8 @@ SOCIAL_AUTH_PIPELINE = (
     "urbanlens.dashboard.services.social_auth.pipeline.suppress_last_name_for_new_users",
     # Download and store the provider avatar (or Gravatar) if none exists yet.
     "urbanlens.dashboard.services.social_auth.pipeline.fetch_and_save_avatar",
+    # Flag new SSO users for onboarding (username + avatar selection).
+    "urbanlens.dashboard.services.social_auth.pipeline.mark_new_user_onboarding",
 )
 
 # After login/signup, send users through post-login routing (map or site admin setup).
@@ -196,6 +198,7 @@ EMAIL_PORT = int(os.getenv("UL_EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("UL_EMAIL_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("UL_EMAIL_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("UL_EMAIL_TLS", "True") == "True"
+EMAIL_USE_SSL = os.getenv("UL_EMAIL_USE_SSL", "False") == "True"
 DEFAULT_FROM_EMAIL = os.getenv("UL_FROM_EMAIL", "noreply@urbanlens.org")
 SMITHSONIAN_API_KEY = os.getenv("UL_SMITHSONIAN_API_KEY", "")
 GOOGLE_PLACES_API_KEY = os.getenv("UL_GOOGLE_PLACES_API_KEY", "")

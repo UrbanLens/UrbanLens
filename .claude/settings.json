@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check src/urbanlens/dashboard/controllers/userprofile.py src/urbanlens/dashboard/services/social_auth/pipeline.py src/urbanlens/dashboard/controllers/account.py src/urbanlens/dashboard/controllers/setup.py src/urbanlens/UrbanLens/settings/app.py 2>&1)",
+      "PowerShell(head -40)"
+    ]
+  }
+}

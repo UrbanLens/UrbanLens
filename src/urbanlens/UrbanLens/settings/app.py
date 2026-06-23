@@ -55,9 +55,14 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     time_zone : str = Field(default = 'EST', description = "The time zone")
     use_i18n : bool = Field(default = True, description = "Whether or not to use i18n")
     use_tz : bool = Field(default = True, description = "Whether or not to use tz")
+    email_backend : str = Field(default = 'django.core.mail.backends.console.EmailBackend', description = "Django email backend class path")
     email_from : str = Field(default = 'jess@urbanlens.org', description = "The from email")
     email_host : str = Field(default = 'smtp.gmail.com', description = "The email host")
     email_port : int = Field(default = 587, description = "The email port")
+    email_user : str | None = Field(default = None, description = "SMTP username / sending address")
+    email_password : str | None = Field(default = None, description = "SMTP password or app password")
+    email_tls : bool = Field(default = True, description = "Use STARTTLS (port 587)")
+    email_use_ssl : bool = Field(default = False, description = "Use SSL instead of STARTTLS (port 465)")
     backup_retention : int = Field(default = 30, description = "The number of days to retain backups")
 
     # Classes

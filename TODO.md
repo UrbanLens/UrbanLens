@@ -8,24 +8,17 @@ Features planned for this release.
 * Tweak notifications, and make success/error states more clear. [UL-6]
 * Ensure mobile-first. [UL-7]
 * Loading indicators for all ui actions that take time. (Creating pin, searching map, etc) [UL-8]
-* On main map, the import pin dialog can overflow the height of the screen if the user is zoomed in enough. [UL-108]
 
 ## Smaller Features
 * Cleanup git history, and begin using branches for dev. [UL-14]
 * Properly set up pre-commit hooks for linting, type checking, and security scans. [UL-15]
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
 * Add tooltips to help guide users through the app when my assumptions about what is intuitive are incorrect. [UL-17]
-* Configure SMTP for outgoing emails. [UL-18]
 * Adjust "mark as completed" on trip planning page to show confirmation dialog, and be a little less easy for users to mess up. To make it more clear, the confirmation dialog can allow user to specify a date in the past, which defaults to today. [UL-19]
 
 ## Medium Features
-* Share button on pin details page to share with a specific friend. [UL-20]
-* "Accept" / "Reject" shared pin for the user being shared with. [UL-21]
 * Proper CI/CD pipeline, tags, releases, etc. [UL-25]
-* When creating the community wiki entry for a pin, ensure we're not leaking user data to it that the user expects to be private. For instance, the community wiki entry should probably be titled based on the google place name, not the user's custom title. Perhaps we can offer a choice between the two when the user is creating only a single pin? [UL-26]
 * Implement "hide user", and "mute user" features, alongside the existing "block user" feature. [UL-27]
-* We must allow pins to be marked by a user as 'private', in which case they do not create a location wiki entry. [UL-110]
-* During import pins, consider mapping badges, or other fine-grained control of the import process. (I'm not sure what's needed here... but it's an area to consider improvements) [UL-111]
 
 ## Larger Features
 * Reduce duplicate code, remove legacy code, simplify codebase. [UL-30]
@@ -34,6 +27,8 @@ Features planned for this release.
 ## Bug Fixes
 * User settings don't seem to properly save. [UL-34]
 * When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]
+* After converting a badge type, then switching tabs, the converted badge doesn't appear in the expected list. [UL-123]
+* The pre-populated People badges do not appear on the organize page under the People tab. [UL-124]
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
@@ -41,8 +36,6 @@ Features planned for this release.
 * Cache API results, like Street View and Satellite View images. [UL-113]
 
 ## Project Health
-* Setup JIRA board publicly [UL-2]
-* Setup bug tracking (github issues?) [UL-1]
 * Review AI-created unit tests. Eliminate useless ones to assist code coverage reports. [UL-38]
 * Provide secondary safeguards for permissions. [UL-39]
 * Ensure non-anonymized urls do not exist at all. Users should not be able to access urls we don't want them to access, (like .../profile/2/, instead of the uuid). [UL-40]
@@ -67,6 +60,11 @@ Features planned for this release.
 * Clicking outside of a dialog closes it, which is great. But clicking in the dialog and dragging outside unexpectedly closes it. [UL-32]
 * On the public profile page, when saving a note, the note section is duplicated. [UL-112]
 * When in the main map and the trip details page, drag/drop of a pin shouldn't be as easy at higher zoom levels. Not sure what I want here. Confirmation dialog? Disable at higher zoom? [UL-33]
+* Allow users to specify their username in account creation, and pick an avatar. Defaults will be the options we currently set without their input. [UL-125]
+* We must allow pins to be marked by a user as 'private', in which case they do not create a location wiki entry. [UL-110]
+* During import pins, consider mapping badges, or other fine-grained control of the import process. (I'm not sure what's needed here... but it's an area to consider improvements) [UL-111]
+* Configure SMTP for outgoing emails. [UL-18]
+* When creating the community wiki entry for a pin, ensure we're not leaking user data to it that the user expects to be private. For instance, the community wiki entry should probably be titled based on the google place name, not the user's custom title. Perhaps we can offer a choice between the two when the user is creating only a single pin? [UL-26]
 
 # Future Features
 Features planned for future releases.
@@ -106,6 +104,9 @@ Features planned for future releases.
 * Hypothesis unit tests: Add property-based tests wherever possible. [UL-120]
 * App setup page on first run: configure site name, etc. [UL-121]
 * Discord Integration [UL-29]
+* Setup bug tracking (github issues?) [UL-1]
+* Share button on pin details page to share with a specific friend. [UL-20]
+* "Accept" / "Reject" shared pin for the user being shared with. [UL-21]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
@@ -158,5 +159,5 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 
 ## Code Quality
 ### Fix Generics
-* tags = Badge.objects.tags() (and also .categories()) -> Cannot access attribute "categories" for class "Manager"
-* profile = user.profile -> Cannot access attribute "profile" for class "User"
+* tags = Badge.objects.tags() (and also .categories()) -> Cannot access attribute "categories" for class "Manager" [UL-126]
+* profile = user.profile -> Cannot access attribute "profile" for class "User" [UL-127]

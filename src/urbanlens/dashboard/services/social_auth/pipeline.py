@@ -32,7 +32,7 @@ _ADJECTIVES: tuple[str, ...] = (
     "agile", "amber", "ancient", "bold", "brave", "bright", "calm", "clear",
     "cool", "cosmic", "crisp", "daring", "deep", "deft", "dynamic", "early",
     "earthy", "epic", "fierce", "fleet", "free", "fresh", "golden", "grand",
-    "green", "hardy", "hollow", "humble", "keen", "kind", "large", "late",
+    "green", "hollow", "humble", "keen", "kind", "late",
     "leafy", "light", "lofty", "lone", "loyal", "lucid", "lunar", "misty",
     "noble", "north", "open", "prime", "quick", "quiet", "rapid", "raw",
     "regal", "roaming", "rugged", "sharp", "silent", "silver", "sleek",
@@ -54,6 +54,74 @@ _ANIMALS: tuple[str, ...] = (
 
 _FALLBACK_PREFIX = "explorer"
 _MAX_RETRIES = 20
+
+# ── Avatar helpers ────────────────────────────────────────────────────────────
+
+_ANIMAL_EMOJIS: dict[str, str] = {
+    "badger": "🦡", "bear": "🐻", "beetle": "🪲", "bison": "🦬",
+    "bobcat": "🐱", "buck": "🦌", "crane": "🦢", "crow": "🐦‍⬛",
+    "deer": "🦌", "dove": "🕊️", "duck": "🦆", "eagle": "🦅",
+    "elk": "🫎", "falcon": "🦅", "ferret": "🐾", "finch": "🐦",
+    "fox": "🦊", "gecko": "🦎", "goat": "🐐", "grouse": "🐦",
+    "hawk": "🦅", "heron": "🦢", "ibis": "🦢", "jackal": "🐺",
+    "jaguar": "🐆", "jay": "🐦", "kestrel": "🦅", "kite": "🐦",
+    "lark": "🐦", "linnet": "🐦", "lynx": "🐱", "mink": "🦦",
+    "mole": "🐭", "moose": "🫎", "moth": "🦋", "newt": "🦎",
+    "nighthawk": "🦅", "otter": "🦦", "owl": "🦉", "peregrine": "🦅",
+    "pika": "🐰", "pine": "🌲", "puma": "🦁", "quail": "🐦",
+    "raven": "🐦‍⬛", "robin": "🐦", "salamander": "🦎", "shrew": "🐭",
+    "skunk": "🦨", "snipe": "🐦", "sparrow": "🐦", "starling": "🐦",
+    "stoat": "🐾", "stork": "🦢", "swift": "🐦", "thrush": "🐦",
+    "toad": "🐸", "viper": "🐍", "vole": "🐭", "wagtail": "🐦",
+    "warbler": "🐦", "weasel": "🐾", "whippet": "🐕", "widgeon": "🦆",
+    "wolf": "🐺", "wren": "🐦",
+}
+
+_AVATAR_COLORS: tuple[str, ...] = (
+    "#e57373", "#f06292", "#ba68c8", "#7986cb",
+    "#4fc3f7", "#4dd0e1", "#4db6ac", "#81c784",
+    "#aed581", "#ffb74d", "#ff8a65", "#90a4ae",
+)
+
+
+def generate_emoji_avatar_svg(emoji: str, color: str) -> str:
+    """Return an SVG string: a filled circle with a centered emoji.
+
+    Args:
+        emoji: The Unicode emoji character to render.
+        color: A CSS hex color string for the circle background.
+
+    Returns:
+        UTF-8-safe SVG markup.
+    """
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">'
+        f'<circle cx="100" cy="100" r="100" fill="{color}"/>'
+        '<text x="100" y="140" text-anchor="middle" font-size="110" '
+        'font-family="Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji, sans-serif">'
+        f'{emoji}</text>'
+        '</svg>'
+    )
+
+
+def random_emoji_options(n: int = 4) -> list[dict[str, str]]:
+    """Return *n* random (animal, emoji, color) dicts for the avatar picker.
+
+    Args:
+        n: Number of options to generate.
+
+    Returns:
+        List of dicts with keys ``animal``, ``emoji``, and ``color``.
+    """
+    import random as _random
+    candidates = list(_ANIMAL_EMOJIS.items())
+    chosen = _random.sample(candidates, min(n, len(candidates)))
+    colors = list(_AVATAR_COLORS)
+    _random.shuffle(colors)
+    return [
+        {"animal": animal, "emoji": emoji, "color": colors[i % len(colors)]}
+        for i, (animal, emoji) in enumerate(chosen)
+    ]
 
 
 def generate_sso_username(
@@ -178,6 +246,38 @@ def fetch_and_save_avatar(
     filename = f"sso_avatar_{user.pk}.jpg"
     profile.avatar.save(filename, ContentFile(image_bytes), save=True)
     logger.info("Saved SSO avatar for user %s from %s", user.username, backend.name)
+
+
+# ── Internal helpers ──────────────────────────────────────────────────────────
+
+
+def mark_new_user_onboarding(
+    backend: Any,
+    user: User | None,
+    is_new: bool = False,
+    *args: Any,
+    **kwargs: Any,
+) -> None:
+    """Set profile_setup_complete=False for brand-new SSO users.
+
+    Causes PostLoginRedirectView to send them to /profile/edit/ so they can
+    choose a username and avatar before landing on the map.  Existing users
+    and email-registered users are not affected.
+
+    Args:
+        backend: The social-auth backend in use.
+        user: The Django User, or None if authentication failed earlier.
+        is_new: True when the User was just created in this pipeline run.
+    """
+    if not is_new or user is None:
+        return
+    try:
+        profile = user.profile
+        profile.profile_setup_complete = False
+        profile.save(update_fields=["profile_setup_complete"])
+        logger.debug("Marked onboarding incomplete for new SSO user %s", user.username)
+    except Exception:
+        logger.warning("Could not mark onboarding for new SSO user pk=%s", getattr(user, "pk", "?"))
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────

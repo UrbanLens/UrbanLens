@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import re
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -207,12 +208,36 @@ class ViewProfileView(LoginRequiredMixin, View):
         context["my_profile"] = my_profile
 
 
+_USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
+
+
 class ProfileFieldUpdateView(LoginRequiredMixin, View):
-    """Save a single profile field immediately (auto-save AJAX endpoint)."""
+    """Save a single profile field immediately (auto-save AJAX endpoint).
+
+    GET  ?field=username&value=foo  →  availability check (JSON)
+    POST field=<name> value=<val>   →  save field (JSON)
+    """
 
     _PROFILE_TEXT = frozenset({"bio", "area"})
     _PROFILE_DATES = frozenset({"birth_date", "started_exploring"})
     _USER_FIELDS = frozenset({"first_name", "last_name"})
+
+    def get(self, request: HttpRequest) -> JsonResponse:
+        """Username availability check."""
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Authentication required."}, status=401)
+        field = request.GET.get("field", "")
+        if field != "username":
+            return JsonResponse({"error": "Unsupported."}, status=400)
+        username = request.GET.get("value", "").strip()
+        if not username:
+            return JsonResponse({"available": False, "reason": "Username required"})
+        if not _USERNAME_RE.match(username):
+            return JsonResponse({"available": False, "reason": "3–30 characters: letters, numbers, and underscores only"})
+        taken = User.objects.filter(username__iexact=username).exclude(pk=request.user.pk).exists()
+        if taken:
+            return JsonResponse({"available": False, "reason": "That username is already taken"})
+        return JsonResponse({"available": True})
 
     def post(self, request: HttpRequest) -> JsonResponse:
         if not request.user.is_authenticated:
@@ -225,6 +250,16 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             request.user.save(update_fields=[field])
             return JsonResponse({"ok": True})
 
+        if field == "username":
+            return self._save_username(request)
+
+        if field == "setup_complete":
+            profile, _ = Profile.objects.get_or_create(user=request.user)
+            if not profile.profile_setup_complete:
+                profile.profile_setup_complete = True
+                profile.save(update_fields=["profile_setup_complete"])
+            return JsonResponse({"ok": True})
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if field == "avatar":
@@ -234,6 +269,12 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             profile.avatar = file
             profile.save(update_fields=["avatar"])
             return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
+
+        if field == "avatar_gravatar":
+            return self._save_avatar_gravatar(request, profile)
+
+        if field == "avatar_emoji":
+            return self._save_avatar_emoji(request, profile)
 
         if field in self._PROFILE_TEXT:
             value = request.POST.get("value", "").strip()
@@ -260,6 +301,61 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
 
         return JsonResponse({"error": "Unknown field."}, status=400)
 
+    def _save_username(self, request: HttpRequest) -> JsonResponse:
+        username = request.POST.get("value", "").strip()
+        if not username:
+            return JsonResponse({"error": "Username is required."}, status=400)
+        if not _USERNAME_RE.match(username):
+            return JsonResponse({"error": "3–30 characters: letters, numbers, and underscores only."}, status=400)
+        if User.objects.filter(username__iexact=username).exclude(pk=request.user.pk).exists():
+            return JsonResponse({"error": "That username is already taken."}, status=409)
+        request.user.username = username
+        request.user.save(update_fields=["username"])
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not profile.profile_setup_complete:
+            profile.profile_setup_complete = True
+            profile.save(update_fields=["profile_setup_complete"])
+        return JsonResponse({"ok": True})
+
+    def _save_avatar_gravatar(self, request: HttpRequest, profile: Profile) -> JsonResponse:
+        import hashlib
+
+        from django.core.files.base import ContentFile
+
+        from urbanlens.dashboard.services.social_auth.pipeline import _download_image
+
+        email = request.user.email or ""
+        if not email:
+            return JsonResponse({"error": "No email address on this account."}, status=400)
+        digest = hashlib.md5(email.strip().lower().encode(), usedforsecurity=False).hexdigest()
+        url = f"https://www.gravatar.com/avatar/{digest}?s=256&d=404"
+        img = _download_image(url)
+        if not img:
+            return JsonResponse({"error": "No Gravatar found for your email address."}, status=404)
+        profile.avatar.save(f"gravatar_{request.user.pk}.jpg", ContentFile(img), save=True)
+        return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
+
+    def _save_avatar_emoji(self, request: HttpRequest, profile: Profile) -> JsonResponse:
+        from django.core.files.base import ContentFile
+
+        from urbanlens.dashboard.services.social_auth.pipeline import (
+            _ANIMAL_EMOJIS,
+            generate_emoji_avatar_svg,
+        )
+
+        animal = request.POST.get("animal", "fox")
+        color = request.POST.get("color", "#4CAF50")
+        emoji = _ANIMAL_EMOJIS.get(animal, "🦊")
+        if not color.startswith("#") or len(color) not in {4, 7}:
+            color = "#4CAF50"
+        svg = generate_emoji_avatar_svg(emoji, color)
+        profile.avatar.save(
+            f"emoji_{request.user.pk}.svg",
+            ContentFile(svg.encode("utf-8")),
+            save=True,
+        )
+        return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
+
 
 class EditProfileView(LoginRequiredMixin, View):
     def _build_context(
@@ -269,16 +365,29 @@ class EditProfileView(LoginRequiredMixin, View):
         discord_form: DiscordHandleForm,
         link_error: str = "",
     ) -> dict:
+        import hashlib
+
+        from urbanlens.dashboard.services.social_auth.pipeline import random_emoji_options
         from urbanlens.dashboard.services.social_links import get_profile_links
 
         discord_link = profile.social_links.filter(platform="discord").first()
         if not discord_form.is_bound:
             discord_form = DiscordHandleForm(initial={"discord": discord_link.handle if discord_link else ""})
+
+        email = profile.user.email or ""
+        if email:
+            gh = hashlib.md5(email.strip().lower().encode(), usedforsecurity=False).hexdigest()
+            gravatar_preview_url = f"https://www.gravatar.com/avatar/{gh}?s=200&d=identicon"
+        else:
+            gravatar_preview_url = ""
+
         return {
             "form": form,
             "discord_form": discord_form,
             "social_links": get_profile_links(profile),
             "link_error": link_error,
+            "gravatar_preview_url": gravatar_preview_url,
+            "emoji_options": random_emoji_options(4),
         }
 
     def get(self, request: HttpRequest) -> HttpResponse:

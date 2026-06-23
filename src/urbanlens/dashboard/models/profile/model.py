@@ -65,6 +65,7 @@ class MapCenterMode(TextChoices):
 class Profile(abstract.Model):
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
     avatar = ImageField(upload_to="avatars/", null=True, blank=True)
+    profile_setup_complete = BooleanField(default=True)
     bio = TextField(null=True, blank=True)
     area = CharField(max_length=255, null=True, blank=True)
     birth_date = DateField(null=True, blank=True)

@@ -1,6 +1,119 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block content %}
+<style>
+/* ── Setup banner ─────────────────────────────────────────────────────── */
+.edit-setup-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, #312e81, #4338ca);
+    color: #fff;
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+}
+.setup-banner-icon { font-size: 1.6rem; opacity: .9; flex-shrink: 0; }
+.setup-banner-text { flex: 1; }
+.setup-banner-text strong { display: block; font-size: .95rem; }
+.setup-banner-text span { font-size: .82rem; opacity: .85; }
+.setup-banner-skip {
+    background: rgba(255,255,255,.15);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.3);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: .82rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.setup-banner-skip:hover { background: rgba(255,255,255,.25); }
+
+/* ── Username field ───────────────────────────────────────────────────── */
+.edit-username-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+.edit-username-at {
+    background: var(--ul-surface-1, #f3f4f6);
+    border: 1.5px solid var(--ul-border, #e0e0e0);
+    border-right: none;
+    border-radius: 8px 0 0 8px;
+    padding: 8px 10px;
+    color: #9aa0a6;
+    font-size: .9rem;
+    line-height: 1.4;
+}
+.edit-username-input {
+    border-radius: 0 8px 8px 0 !important;
+    flex: 1;
+}
+.edit-username-hint {
+    font-size: .78rem;
+    margin-left: 8px;
+    white-space: nowrap;
+}
+.edit-username-hint--ok  { color: #43a047; }
+.edit-username-hint--bad { color: #e53935; }
+.edit-field-hint {
+    font-size: .75rem;
+    color: #9aa0a6;
+    margin: 4px 0 0;
+}
+
+/* ── Avatar picker ────────────────────────────────────────────────────── */
+.edit-avatar-layout {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+.edit-avatar-current-wrap { flex-shrink: 0; }
+.edit-avatar-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+}
+.edit-avatar-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 10px;
+    border: 1.5px solid var(--ul-border, #e0e0e0);
+    background: var(--ul-surface-1, #fff);
+    font-size: .75rem;
+    color: #5f6368;
+    min-width: 64px;
+    transition: border-color .15s, box-shadow .15s;
+}
+.edit-avatar-option:hover {
+    border-color: #4338ca;
+    box-shadow: 0 0 0 3px rgba(67,56,202,.12);
+}
+.edit-avatar-option .material-icons { font-size: 1.6rem; color: #9aa0a6; }
+.edit-avatar-option-img {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.edit-avatar-emoji-circle {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    line-height: 1;
+}
+</style>
 {% with date_errors=form.birth_date.errors|add:form.started_exploring.errors %}
 {% if date_errors %}
 <div class="dialog-overlay" id="date-error-overlay"></div>
@@ -21,6 +134,20 @@
 
 <div class="edit-profile-page">
 
+    {# ── Setup / welcome banner (new SSO users only) ───────────────────────── #}
+    {% if not form.instance.profile_setup_complete %}
+    <div class="edit-setup-banner" id="setup-banner">
+        <i class="material-icons setup-banner-icon">waving_hand</i>
+        <div class="setup-banner-text">
+            <strong>Welcome! Set up your profile.</strong>
+            <span>Choose a username and avatar before you start exploring.</span>
+        </div>
+        <button class="setup-banner-skip" id="setup-skip-btn" type="button">
+            Skip for now
+        </button>
+    </div>
+    {% endif %}
+
     <div class="edit-profile-header">
         <a href="{% url 'profile.view' %}" class="edit-back-link">
             <i class="material-icons">arrow_back</i> Back to Profile
@@ -33,22 +160,71 @@
     <section class="edit-card">
         <h2 class="edit-card-title">Profile Info</h2>
 
+        {# Username #}
+        <div class="edit-field">
+            <label class="edit-label">
+                Username
+                <span class="field-status" data-field-status="username"></span>
+            </label>
+            <div class="edit-username-wrap">
+                <span class="edit-username-at">@</span>
+                <input type="text" class="edit-input edit-username-input" id="username-input"
+                       maxlength="30" value="{{ request.user.username }}"
+                       autocomplete="username" spellcheck="false">
+                <span class="edit-username-hint" id="username-hint"></span>
+            </div>
+            <p class="edit-field-hint">3–30 characters: letters, numbers, and underscores only.</p>
+        </div>
+
         {# Avatar #}
         <div class="edit-field edit-avatar-field">
-            <label class="edit-label">Profile Photo <span class="field-status" data-field-status="avatar"></span></label>
-            <div class="edit-avatar-wrap">
-                {% if form.instance.avatar %}
-                <img src="{{ form.instance.avatar.url }}" class="edit-avatar-preview" id="avatar-preview" alt="Avatar">
-                {% else %}
-                <div class="edit-avatar-placeholder" id="avatar-preview">
-                    <i class="material-icons">person</i>
+            <label class="edit-label">Profile Photo</label>
+            <div class="edit-avatar-layout">
+                {# Current avatar display #}
+                <div class="edit-avatar-current-wrap">
+                    {% if form.instance.avatar %}
+                    <img src="{{ form.instance.avatar.url }}" class="edit-avatar-preview" id="avatar-preview" alt="Avatar">
+                    {% else %}
+                    <div class="edit-avatar-placeholder" id="avatar-preview">
+                        <i class="material-icons">person</i>
+                    </div>
+                    {% endif %}
+                    <span class="field-status" data-field-status="avatar" style="display:block;text-align:center;margin-top:4px"></span>
                 </div>
-                {% endif %}
-                <label class="edit-avatar-upload-btn">
-                    <i class="material-icons">photo_camera</i>
-                    <span>Change Photo</span>
-                    <input type="file" accept="image/*" data-autosave="avatar" style="display:none">
-                </label>
+
+                {# Avatar source options #}
+                <div class="edit-avatar-sources">
+
+                    {# Upload #}
+                    <label class="edit-avatar-option" title="Upload your own photo">
+                        <i class="material-icons">upload</i>
+                        <span>Upload</span>
+                        <input type="file" accept="image/*" data-autosave="avatar" style="display:none">
+                    </label>
+
+                    {# Gravatar #}
+                    {% if gravatar_preview_url %}
+                    <button type="button" class="edit-avatar-option" id="avatar-gravatar-btn"
+                            data-gravatar-url="{{ gravatar_preview_url }}" title="Use your Gravatar">
+                        <img src="{{ gravatar_preview_url }}" class="edit-avatar-option-img" alt="Gravatar">
+                        <span>Gravatar</span>
+                    </button>
+                    {% endif %}
+
+                    {# Emoji circles #}
+                    {% for opt in emoji_options %}
+                    <button type="button" class="edit-avatar-option edit-avatar-emoji-opt"
+                            data-animal="{{ opt.animal }}" data-color="{{ opt.color }}"
+                            title="{{ opt.animal|title }} emoji avatar"
+                            style="background:none;border:none;cursor:pointer;padding:0;">
+                        <div class="edit-avatar-emoji-circle" style="background:{{ opt.color }}">
+                            {{ opt.emoji }}
+                        </div>
+                        <span>{{ opt.animal|title }}</span>
+                    </button>
+                    {% endfor %}
+
+                </div>
             </div>
         </div>
 
@@ -286,6 +462,128 @@ function closeDateErrorDialog() {
             el.addEventListener('change', function () { saveField(field, el.value, false); });
         }
     });
+
+    // ── username field: debounced availability check + save on blur ───────────
+    var usernameInput = document.getElementById('username-input');
+    var usernameHint  = document.getElementById('username-hint');
+    var _unameCheckTimer;
+    var _lastChecked = '';
+
+    function checkUsername(username) {
+        if (!username || username === _lastChecked) return;
+        _lastChecked = username;
+        usernameHint.textContent = '';
+        if (!/^[a-zA-Z0-9_]{3,30}$/.test(username)) {
+            usernameHint.className = 'edit-username-hint edit-username-hint--bad';
+            usernameHint.textContent = '3–30 chars: letters, numbers, underscores';
+            return;
+        }
+        fetch(SAVE_URL + '?field=username&value=' + encodeURIComponent(username))
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.available) {
+                    usernameHint.className = 'edit-username-hint edit-username-hint--ok';
+                    usernameHint.textContent = '✓ Available';
+                } else {
+                    usernameHint.className = 'edit-username-hint edit-username-hint--bad';
+                    usernameHint.textContent = d.reason || 'Unavailable';
+                }
+            })
+            .catch(function () {});
+    }
+
+    if (usernameInput) {
+        usernameInput.addEventListener('input', function () {
+            clearTimeout(_unameCheckTimer);
+            var v = usernameInput.value.trim();
+            _unameCheckTimer = setTimeout(function () { checkUsername(v); }, 400);
+        });
+
+        usernameInput.addEventListener('blur', function () {
+            var v = usernameInput.value.trim();
+            if (!v || !/^[a-zA-Z0-9_]{3,30}$/.test(v)) return;
+            saveField('username', v, false);
+        });
+    }
+
+    // ── gravatar button ───────────────────────────────────────────────────────
+    var gravatarBtn = document.getElementById('avatar-gravatar-btn');
+    if (gravatarBtn) {
+        gravatarBtn.addEventListener('click', function () {
+            setStatus('avatar', 'saving', 'Saving…');
+            var fd = new FormData();
+            fd.append('csrfmiddlewaretoken', csrftoken);
+            fd.append('field', 'avatar_gravatar');
+            fetch(SAVE_URL, { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) {
+                        setStatus('avatar', 'saved', '✓ Saved');
+                        updateAvatarPreview(d.avatar_url);
+                    } else {
+                        setStatus('avatar', 'error', '✗');
+                        toastr.error(d.error || 'Could not load Gravatar.');
+                    }
+                })
+                .catch(function () { setStatus('avatar', 'error', 'Failed'); });
+        });
+    }
+
+    // ── emoji circle buttons ──────────────────────────────────────────────────
+    document.querySelectorAll('.edit-avatar-emoji-opt').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var animal = btn.dataset.animal;
+            var color  = btn.dataset.color;
+            setStatus('avatar', 'saving', 'Saving…');
+            var fd = new FormData();
+            fd.append('csrfmiddlewaretoken', csrftoken);
+            fd.append('field', 'avatar_emoji');
+            fd.append('animal', animal);
+            fd.append('color', color);
+            fetch(SAVE_URL, { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) {
+                        setStatus('avatar', 'saved', '✓ Saved');
+                        updateAvatarPreview(d.avatar_url);
+                    } else {
+                        setStatus('avatar', 'error', '✗');
+                        toastr.error(d.error || 'Could not save avatar.');
+                    }
+                })
+                .catch(function () { setStatus('avatar', 'error', 'Failed'); });
+        });
+    });
+
+    function updateAvatarPreview(url) {
+        if (!url) return;
+        var el = document.getElementById('avatar-preview');
+        if (!el) return;
+        if (el.tagName === 'IMG') {
+            el.src = url + '?' + Date.now();
+        } else {
+            var img = document.createElement('img');
+            img.src = url + '?' + Date.now();
+            img.className = 'edit-avatar-preview';
+            img.id = 'avatar-preview';
+            img.alt = 'Avatar';
+            el.parentNode.replaceChild(img, el);
+        }
+    }
+
+    // ── setup banner skip ─────────────────────────────────────────────────────
+    var skipBtn = document.getElementById('setup-skip-btn');
+    var banner  = document.getElementById('setup-banner');
+    if (skipBtn && banner) {
+        skipBtn.addEventListener('click', function () {
+            var fd = new FormData();
+            fd.append('csrfmiddlewaretoken', csrftoken);
+            fd.append('field', 'setup_complete');
+            fetch(SAVE_URL, { method: 'POST', body: fd })
+                .then(function () { banner.remove(); })
+                .catch(function () { banner.remove(); });
+        });
+    }
 
     // ── server-rendered date dialog close wiring ──────────────────────────────
     var overlay = document.getElementById('date-error-overlay');

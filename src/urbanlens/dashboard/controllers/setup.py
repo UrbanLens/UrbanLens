@@ -140,6 +140,24 @@ def _build_feature_groups(app_settings) -> list[dict]:
                 },
             ],
         },
+        {
+            "label": "Email (SMTP)",
+            "icon": "email",
+            "items": [
+                {
+                    "name": "SMTP Server",
+                    "description": "Outbound email for account verification, password resets, and friend invitations",
+                    "env_var": "UL_EMAIL_HOST + UL_EMAIL_USER + UL_EMAIL_PASSWORD",
+                    "configured": bool(app_settings.email_host and app_settings.email_user and app_settings.email_password),
+                },
+                {
+                    "name": "Sender Address",
+                    "description": "The From address shown on outgoing emails",
+                    "env_var": "UL_FROM_EMAIL",
+                    "configured": bool(app_settings.email_from and app_settings.email_from != "jess@urbanlens.org"),
+                },
+            ],
+        },
     ]
 
 

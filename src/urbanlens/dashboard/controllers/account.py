@@ -381,6 +381,13 @@ class PostLoginRedirectView(View):
         if should_redirect_to_site_admin(request.user):
             return redirect("setup")
 
+        try:
+            if not request.user.profile.profile_setup_complete:
+                return redirect("profile.edit")
+        except Exception:
+            # TODO: Is this exception expected? If not, remove this. If yes, catch the specific exception type.
+            logger.exception("Error redirecting user after login")
+
         return redirect("map.view")
 
 

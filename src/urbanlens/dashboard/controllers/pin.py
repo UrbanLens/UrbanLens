@@ -560,7 +560,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "Authentication required."}, status=401)
 
         try:
-            payload = _json.loads(request.body)
+            payload = request.data
             confirmed_lists = payload.get("lists", [])
         except (ValueError, KeyError):
             return JsonResponse({"error": "Invalid JSON payload."}, status=400)
