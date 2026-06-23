@@ -1441,13 +1441,13 @@ class Badge(abstract.Model):
 
     @property
     def effective_name(self) -> str:
-        """Return the user's override name, or fall back to the global name."""
+        """Property that returns the user's override name, or falls back to the global name."""
         c = self._get_customization()
         return (c.name if c and c.name else None) or self.name
 
     @property
     def effective_icon(self) -> str | None:
-        """Return the user's override icon, or fall back to the global icon."""
+        """Property that returns the user's override icon, or falls back to the global icon."""
         c = self._get_customization()
         if c and c.icon is not None:
             return c.icon
@@ -1455,7 +1455,7 @@ class Badge(abstract.Model):
 
     @property
     def effective_color(self) -> str | None:
-        """Return the user's override color, or fall back to the global color."""
+        """Property that returns the user's override color, or falls back to the global color."""
         c = self._get_customization()
         if c and c.color is not None:
             return c.color

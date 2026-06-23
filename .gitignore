@@ -10,6 +10,7 @@ __pycache__/
 node_modules
 package-lock.json
 .venv/
+.venv_windows/
 
 # Temporary files
 *.out
@@ -40,3 +41,4 @@ bin/settings.py
 pgsql
 src/urbanlens/frontend/static/dashboard/images/
 .claude/settings.local.json
+.vscode/settings.json

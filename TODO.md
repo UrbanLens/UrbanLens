@@ -59,10 +59,10 @@ Features planned for this release.
 
 ## Features that need verification
 * password reset. [UL-41]
-* Possible issue with then pulling or displaying visit history entries.
-* On the pin details page, if the smithsonian archive section is empty, then hide it.
-* On the pin details page, there is a notes section and a comments section. But only one is needed. Keep comments, but remove the notes. Attempt to display a street address for the pin, assuming we can figure out what that address would be, and make sure that address is cached so we don't have to contact an external api multiple times.
-* When performing google or brave searches, add the street name, city, and state to the search query as optional keywords, to help disambiguate with unrelated results.
+* Verify Feature: Possible issue with then pulling or displaying visit history entries.
+* Verify Feature: On the pin details page, if the smithsonian archive section is empty, then hide it.
+* Verify Feature: On the pin details page, there is a notes section and a comments section. But only one is needed. Keep comments, but remove the notes. Attempt to display a street address for the pin, assuming we can figure out what that address would be, and make sure that address is cached so we don't have to contact an external api multiple times.
+* Verify Feature: When performing google or brave searches, add the street name, city, and state to the search query as optional keywords, to help disambiguate with unrelated results.
 
 
 # Future Features
@@ -98,6 +98,10 @@ Features planned for future releases.
 * Outside of app error logging. Alerts on certain kinds of errors. [UL-69]
 * Address DDOS, spamming, etc. [UL-70]
 * Saved map searches ("My Bucket List", etc). [UL-71]
+* Allow importing of timeline data to mark pins as Visited
+* Celery / async tasks: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure
+* Hypothesis unit tests: Add property-based tests wherever possible.
+* App setup page on first run: configure site name, etc.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
@@ -137,6 +141,7 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 * Link to (or pull more data from) google maps, openstreetmap, mapquest, etc. [UL-99]
 * Keep track of "encountered" users when using the app. This allows display of a fun stat: "first encountered", allows looking up people you've seen before but didn't connect with, and encourages social interaction. This would also facilitate restricting access to a user's profile unless they have been "encountered" by the current user (i.e. the user could not just type in a url with the user's slug, or be given a url with their uuid. Instead, they'd have to invite a connection with the user first, by email address, and allow the other user to opt in to the interaction.) [UL-100]
 * Consider adding privacy controls to explicitly hide content from certain types of users, which would override the whitelist privacy controls the user set. For instance: "Show pins to users with 1 trip in common" and "hide pins from users with a specific badge" would give more control over privacy and sharing. I'm not sure how to do this in a way where the UI isn't overly complex and clunky. (maybe "advanced privacy controls"?) [UL-101]
+* During import, consider mapping badges, or other fine-grained control of the import process. (I'm not sure what's needed here... but it's an area to consider improvements)
 
 ## Issues I don't think are solvable
 * Encrypting user data so the site admin doesn't have access to it. The only two solutions I can think of are (1) a peer-to-peer sharing system, or (2) separating the app into a "server" and "agent" app, wherein the client app has unencrypted data, but the server only has encrypted data. For (2), users would then be able to set up their own "agent" app on their own server, resulting in full ownership of their data. However, both solutions suffer from significant drawbacks. The latter is more attainable, but in order for the app to be usable for most users, we need a publicly hosted client app anyway, resulting in no privacy gains for most (or possibly for any) users. In addition, both solutions suffer significant performance penalties, and technical complexity, for little to no gain. Finally, almost no users will understand the key differences between this problem being solved and not being solved, and will assume that data is unencrypted and visible to the site admin even if it is not. Therefore, I'm not certain that implementing it really improves user trust, while nonetheless encountering additional drawbacks. The main reason to do it seems to be to tell users we did it... which seems less beneficial than its cost. I'm undecided on this. [UL-102]
