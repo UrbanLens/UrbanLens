@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             else:
                 gps_fallback = profile.compute_map_center()
 
+        site = SiteSettings.get_current()
         return render(
             request,
             "dashboard/pages/map/index.html",
@@ -56,6 +58,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "categories": categories,
                 "filter_badges": filter_badges,
                 "profile_id": profile.id,
+                "profile_uuid": str(profile.uuid),
+                "app_uuid": str(site.instance_uuid),
                 "cluster_radius": profile.cluster_radius,
                 "pin_count": pin_count,
                 "use_pin_cache": profile.use_pin_cache,
@@ -108,6 +112,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             icon = request.POST.get("icon", None)
             tag_ids = request.POST.getlist("tag_ids")
             category_ids = request.POST.getlist("category_ids")
+            is_private = request.POST.get("is_private") in {"1", "true", "on", "True"}
 
             if not latitude or not longitude:
                 if not address:
@@ -119,17 +124,19 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             lat_f = float(latitude)
             lon_f = float(longitude)
 
-            # Link to an existing Location whose bounding box contains this point,
-            # or create a new one. This keeps all pins for the same place connected.
-            all_locations = list(Location.objects.get_all_for_point(lat_f, lon_f))
-            if all_locations:
-                location = all_locations[0]
-            else:
-                location = Location.objects.create(
-                    name=name or "Unnamed Location",
-                    latitude=lat_f,
-                    longitude=lon_f,
-                )
+            location = None
+            all_locations: list[Location] = []
+
+            if not is_private:
+                # Link to an existing Location whose bounding box contains this point,
+                # or create a new one. This keeps all pins for the same place connected.
+                # The Location name must be the canonical place name - never the user's
+                # custom label, which stays on Pin.nickname only.
+                all_locations = list(Location.objects.get_all_for_point(lat_f, lon_f))
+                if all_locations:
+                    location = all_locations[0]
+                else:
+                    location = _create_location_with_canonical_name(lat_f, lon_f)
 
             pin = Pin.objects.create(
                 nickname=name,
@@ -137,6 +144,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 latitude=None,
                 longitude=None,
                 icon=icon,
+                is_private=is_private,
                 profile=request.user.profile,
             )
             if tag_ids:
@@ -236,24 +244,50 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"pins": map_data})
 
     def map_pins_meta(self, request, *args, **kwargs):
-        """Return the latest pin update timestamp for client-side cache invalidation.
+        """Return the latest pin update timestamp and app UUID for client-side cache invalidation.
 
         The client polls this endpoint to detect when the pin collection changed,
-        then calls the full pins endpoint only when necessary.
+        then calls the full pins endpoint only when necessary.  ``app_uuid`` lets
+        the client detect a DB wipe or fresh deployment (new UUID → stale cache).
 
         Returns:
-            JsonResponse: ``{"last_updated": "<ISO timestamp>" | null}``
+            JsonResponse: ``{"last_updated": "<ISO timestamp>" | null, "app_uuid": "<uuid>"}``
         """
         from django.db.models import Max
+
+        from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = Pin.objects.filter(profile=profile).root_pins().aggregate(last_updated=Max("updated"))
         last_updated = result["last_updated"]
+        site = SiteSettings.get_current()
         return JsonResponse(
             {
                 "last_updated": last_updated.isoformat() if last_updated else None,
-            }
+                "app_uuid": str(site.instance_uuid),
+            },
         )
+
+    def map_pin_json(self, request, pin_uuid, *args, **kwargs):
+        """Return JSON data for a single pin — used for targeted cache updates after edits.
+
+        Args:
+            pin_uuid: UUID of the pin to return.
+
+        Returns:
+            JsonResponse: ``{"pin": {...}}`` or 404 if the pin doesn't belong to the user.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        try:
+            pin = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("tags").get(uuid=pin_uuid)
+        except Pin.DoesNotExist:
+            return JsonResponse({"error": "not found"}, status=404)
+        map_data = self.get_map_data(request, Pin.objects.filter(pk=pin.pk).select_related("location").prefetch_related("tags"))
+        if not map_data:
+            return JsonResponse({"error": "not found"}, status=404)
+        pin_dict = map_data[0]
+        pin_dict["viewLocationUrl"] = f"/dashboard/map/pin/{pin.uuid}/"
+        return JsonResponse({"pin": pin_dict})
 
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data(request)
@@ -313,6 +347,39 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 pin["status"] = pin["status"].replace("_", " ").capitalize()
 
         return map_data
+
+
+def _create_location_with_canonical_name(lat: float, lon: float) -> Location:
+    """Create a new Location using its canonical Google place name.
+
+    The user's custom nickname must never be used as a Location name because
+    Location.name is shared across all users and visible on the community wiki.
+    We ask Google for the real place name and fall back to "Unnamed Location"
+    when geocoding is unavailable or returns nothing useful.
+
+    Args:
+        lat: Latitude of the new location.
+        lon: Longitude of the new location.
+
+    Returns:
+        The newly created Location instance.
+    """
+    from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    canonical_name: str = "Unnamed Location"
+    try:
+        result = GoogleGeocodingGateway(api_key=app_settings.google_maps_api_key).get_place_name(lat, lon)
+        if result and result.lower() not in {"no information available", "dropped pin", "null", "none", ""}:
+            canonical_name = result.strip()
+    except Exception:
+        logger.warning("Could not fetch canonical place name for (%s, %s); using placeholder", lat, lon)
+
+    return Location.objects.create(
+        name=canonical_name,
+        latitude=lat,
+        longitude=lon,
+    )
 
 
 @login_required

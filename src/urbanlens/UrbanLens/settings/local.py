@@ -68,6 +68,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 'urbanlens.dashboard.context_processors.add_page_name',
+                'urbanlens.dashboard.context_processors.add_site_settings',
             ],
         },
     },
@@ -155,6 +156,28 @@ SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.getenv("UL_GOOGLE_CLIENT_ID", "")
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.getenv("UL_GOOGLE_CLIENT_SECRET", "")
 SOCIAL_AUTH_DISCORD_KEY = os.getenv("UL_DISCORD_CLIENT_ID", "")
 SOCIAL_AUTH_DISCORD_SECRET = os.getenv("UL_DISCORD_CLIENT_SECRET", "")
+
+# Custom social-auth pipeline.
+# Replaces get_username with a random adjective+animal+number generator.
+# Fetches and saves the provider avatar (or Gravatar) after the user is created.
+# Clears last_name on new accounts to limit personal data exposure.
+SOCIAL_AUTH_PIPELINE = (
+    "social_core.pipeline.social_auth.social_details",
+    "social_core.pipeline.social_auth.social_uid",
+    "social_core.pipeline.social_auth.auth_allowed",
+    "social_core.pipeline.social_auth.social_user",
+    # Generates random username instead of deriving it from provider details.
+    "urbanlens.dashboard.services.social_auth.pipeline.generate_sso_username",
+    "social_core.pipeline.user.create_user",
+    "social_core.pipeline.social_auth.associate_user",
+    "social_core.pipeline.social_auth.load_extra_data",
+    # user_details copies first_name, last_name, email from provider.
+    "social_core.pipeline.user.user_details",
+    # Strip last_name to preserve partial anonymity for new accounts.
+    "urbanlens.dashboard.services.social_auth.pipeline.suppress_last_name_for_new_users",
+    # Download and store the provider avatar (or Gravatar) if none exists yet.
+    "urbanlens.dashboard.services.social_auth.pipeline.fetch_and_save_avatar",
+)
 
 # After login/signup, send users through post-login routing (map or site admin setup).
 LOGIN_REDIRECT_URL = "/accounts/post-login/"

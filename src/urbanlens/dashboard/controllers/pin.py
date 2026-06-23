@@ -104,18 +104,25 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import PinType
 
-        pin = Pin.objects.select_related("location").get(uuid=kwargs["pin_uuid"])
+        try:
+            pin = Pin.objects.select_related("location").get(uuid=kwargs["pin_uuid"])
+        except Pin.DoesNotExist:
+            return render(
+                request,
+                "dashboard/pages/errors/pin_not_found.html",
+                {"pin_uuid": kwargs.get("pin_uuid")},
+                status=404,
+            )
 
         # Auto-link legacy pins that pre-date the Location requirement.
-        if pin.location is None and pin.effective_latitude and pin.effective_longitude:
+        # Private pins are intentionally unlinked - never create a wiki entry for them.
+        if not pin.is_private and pin.location is None and pin.effective_latitude and pin.effective_longitude:
             lat, lon = pin.effective_latitude, pin.effective_longitude
             location = Location.objects.get_for_point(lat, lon)
             if not location:
-                location = Location.objects.create(
-                    name=pin.effective_name or "Unnamed Location",
-                    latitude=lat,
-                    longitude=lon,
-                )
+                from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
+
+                location = _create_location_with_canonical_name(lat, lon)
             pin.location = location
             pin.save(update_fields=["location"])
 
@@ -471,6 +478,101 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 tags=import_tags,
                 tag_by_filename=tag_by_filename,
             ),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
+
+    @action(detail=False, methods=["post"])
+    def parse_for_preview(self, request: HttpRequest):
+        """Parse uploaded files and return pin preview data as JSON without importing."""
+        import json as _json
+
+        from urbanlens.dashboard.models.badges.model import Badge
+        from urbanlens.dashboard.services.archive_extractor import extract_archive, is_archive
+
+        if not isinstance(request.user, User):
+            return JsonResponse({"error": "Authentication required."}, status=401)
+
+        form = UploadDataFile(request.POST, request.FILES)
+        if not form.is_valid():
+            return JsonResponse({"error": "Invalid form."}, status=400)
+
+        uploaded_files = form.cleaned_data["upload_files"]
+
+        all_files: list[tuple[str, bytes]] = []
+        for uploaded_file in uploaded_files:
+            try:
+                data = uploaded_file.read()
+            except Exception as exc:
+                return JsonResponse({"error": f"Failed to read {uploaded_file.name}: {exc}"}, status=400)
+
+            if is_archive(data):
+                try:
+                    extracted = extract_archive(data)
+                except ValueError as exc:
+                    return JsonResponse({"error": str(exc)}, status=400)
+                for entry in extracted:
+                    if is_archive(entry.data):
+                        try:
+                            inner = extract_archive(entry.data)
+                            all_files.extend((x.name, x.data) for x in inner)
+                        except ValueError:
+                            logger.warning("Could not extract nested archive during preview")
+                    else:
+                        all_files.append((entry.name, entry.data))
+            else:
+                all_files.append((uploaded_file.name, data))
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
+
+        lists = gateway.parse_for_preview(all_files, profile)
+        if not lists:
+            return JsonResponse({"error": "No valid location files found in the upload."}, status=400)
+
+        badges = Badge.objects.visible_to(profile).ordered()
+
+        return JsonResponse(
+            {
+                "lists": lists,
+                "total": sum(len(lst["pins"]) for lst in lists),
+                "badges": [
+                    {
+                        "id": b.id,
+                        "name": b.name,
+                        "color": b.color or "",
+                        "icon": b.icon or "",
+                        "kind": b.kind,
+                    }
+                    for b in badges
+                ],
+            },
+        )
+
+    @action(detail=False, methods=["post"])
+    def import_confirmed(self, request: HttpRequest):
+        """Stream SSE import progress for user-confirmed pin selections from the preview step."""
+        import json as _json
+
+        if not isinstance(request.user, User):
+            return JsonResponse({"error": "Authentication required."}, status=401)
+
+        try:
+            payload = _json.loads(request.body)
+            confirmed_lists = payload.get("lists", [])
+        except (ValueError, KeyError):
+            return JsonResponse({"error": "Invalid JSON payload."}, status=400)
+
+        if not confirmed_lists:
+            return JsonResponse({"error": "No lists provided."}, status=400)
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
+
+        response = StreamingHttpResponse(
+            gateway.import_preview_streaming(confirmed_lists, profile),
             content_type="text/event-stream",
         )
         response["Cache-Control"] = "no-cache"

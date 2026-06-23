@@ -330,7 +330,8 @@ const IconPicker = {
             else {
                 const label = item.dataset.label || '';
                 const icon = item.dataset.icon || '';
-                item.style.display = (label.includes(q) || icon === q) ? '' : 'none';
+                const keywords = item.dataset.keywords || '';
+                item.style.display = (label.includes(q) || icon === q || keywords.includes(q)) ? '' : 'none';
             }
         });
     },

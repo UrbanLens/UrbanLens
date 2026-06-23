@@ -1,0 +1,302 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block page_title %}Setup — {{ settings.app_title }}{% endblock %}
+
+{% block content %}
+<div class="setup-wizard">
+    <div class="setup-wizard__layout">
+
+        {# ── Sidebar ────────────────────────────────────────────────────── #}
+        <aside class="setup-wizard__sidebar">
+            <div class="setup-wizard__brand">
+                <i class="material-icons brand-icon">explore</i>
+                <div class="brand-name" id="sidebar-title">{{ settings.app_title }}</div>
+                <div class="brand-label">Setup Wizard</div>
+            </div>
+
+            <ul class="setup-stepper" id="setup-stepper">
+                <li class="setup-stepper__item setup-stepper__item--active" data-step="1">
+                    <span class="step-icon"><span class="step-num">1</span></span>
+                    <span class="step-label">Welcome</span>
+                </li>
+                <li class="setup-stepper__item" data-step="2">
+                    <span class="step-icon"><span class="step-num">2</span></span>
+                    <span class="step-label">Name Your App</span>
+                </li>
+                <li class="setup-stepper__item" data-step="3">
+                    <span class="step-icon"><span class="step-num">3</span></span>
+                    <span class="step-label">Integrations</span>
+                </li>
+                <li class="setup-stepper__item" data-step="4">
+                    <span class="step-icon"><span class="step-num">4</span></span>
+                    <span class="step-label">All Done</span>
+                </li>
+            </ul>
+        </aside>
+
+        {# ── Main content ────────────────────────────────────────────────── #}
+        <div class="setup-wizard__content">
+            <div class="setup-wizard__progress">
+                <div class="progress-bar" id="setup-progress" style="width:25%"></div>
+            </div>
+
+            {# ── Step 1: Welcome ─────────────────────────────────────────── #}
+            <div class="setup-step setup-step--active" data-step="1">
+                <div class="setup-step__eyebrow">Getting started</div>
+                <h1 class="setup-step__title">Welcome to UrbanLens</h1>
+                <p class="setup-step__subtitle">
+                    You're the first registered user, which makes you the administrator of this instance.
+                    This quick wizard will help you personalise your install and see what's available.
+                </p>
+
+                <div class="setup-highlights">
+                    <div class="setup-highlights__item">
+                        <i class="material-icons">map</i>
+                        <div>
+                            <div class="setup-highlights__label">Interactive Map</div>
+                            <div class="setup-highlights__desc">Pin and organise urbex locations with custom markers, notes, and tags.</div>
+                        </div>
+                    </div>
+                    <div class="setup-highlights__item">
+                        <i class="material-icons">group</i>
+                        <div>
+                            <div class="setup-highlights__label">Trips & Friends</div>
+                            <div class="setup-highlights__desc">Plan collaborative trips, share locations, and manage access.</div>
+                        </div>
+                    </div>
+                    <div class="setup-highlights__item">
+                        <i class="material-icons">psychology</i>
+                        <div>
+                            <div class="setup-highlights__label">AI Assistance</div>
+                            <div class="setup-highlights__desc">AI-powered category suggestions and location enrichment via optional API keys.</div>
+                        </div>
+                    </div>
+                    <div class="setup-highlights__item">
+                        <i class="material-icons">photo_library</i>
+                        <div>
+                            <div class="setup-highlights__label">Photo Galleries</div>
+                            <div class="setup-highlights__desc">Upload and browse photos with GPS metadata and location attribution.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setup-step__actions">
+                    <button class="submit-button" onclick="goToStep(2)">
+                        Get Started
+                        <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-left:.25rem">arrow_forward</i>
+                    </button>
+                </div>
+            </div>
+
+            {# ── Step 2: Name Your App ────────────────────────────────────── #}
+            <div class="setup-step" data-step="2">
+                <div class="setup-step__eyebrow">Step 2 of 4</div>
+                <h1 class="setup-step__title">Name Your App</h1>
+                <p class="setup-step__subtitle">
+                    Give your instance a name. It appears in the browser tab and navigation header.
+                    You can always change this later in Site Admin.
+                </p>
+
+                <div class="setup-title-row">
+                    <label for="app-title-input">App name</label>
+                    <input type="text" id="app-title-input" name="app_title"
+                           value="{{ settings.app_title }}" maxlength="100"
+                           placeholder="UrbanLens" autocomplete="off">
+                    <span class="setup-save-status" id="title-save-status">✓ Saved</span>
+                </div>
+
+                <div class="setup-title-preview">
+                    <span class="preview-dot"></span>
+                    <span class="preview-dot"></span>
+                    <span class="preview-dot"></span>
+                    <div class="preview-tab">
+                        <i class="material-icons">explore</i>
+                        <span id="title-preview-value">{{ settings.app_title }}</span>
+                    </div>
+                </div>
+
+                <div class="setup-step__actions">
+                    <button class="btn-ghost" onclick="goToStep(1)">
+                        <i class="material-icons" style="vertical-align:middle;font-size:1rem">arrow_back</i>
+                        Back
+                    </button>
+                    <button class="submit-button" onclick="goToStep(3)">
+                        Next
+                        <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-left:.25rem">arrow_forward</i>
+                    </button>
+                </div>
+            </div>
+
+            {# ── Step 3: Integrations ─────────────────────────────────────── #}
+            <div class="setup-step" data-step="3">
+                <div class="setup-step__eyebrow">Step 3 of 4</div>
+                <h1 class="setup-step__title">Integrations</h1>
+                <p class="setup-step__subtitle">
+                    These optional features activate when you set the corresponding environment variables
+                    in your <code>.env</code> file and restart the app. Unconfigured integrations are
+                    simply hidden from users.
+                </p>
+
+                <div class="setup-feature-scroll">
+                    {% for group in features %}
+                    <div class="setup-feature-group">
+                        <div class="setup-feature-group__header">
+                            <i class="material-icons">{{ group.icon }}</i>
+                            {{ group.label }}
+                        </div>
+                        <div class="setup-feature-grid">
+                            {% for item in group.items %}
+                            <div class="setup-feature-card{% if item.configured %} setup-feature-card--ok{% else %} setup-feature-card--missing{% endif %}">
+                                <div class="setup-feature-card__row">
+                                    <span class="setup-feature-card__name">{{ item.name }}</span>
+                                    <span class="setup-feature-card__badge">
+                                        {% if item.configured %}✓ Configured{% else %}Not set{% endif %}
+                                    </span>
+                                </div>
+                                <div class="setup-feature-card__desc">{{ item.description }}</div>
+                                {% if not item.configured %}
+                                <div class="setup-feature-card__env">{{ item.env_var }}</div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="setup-step__actions">
+                    <button class="btn-ghost" onclick="goToStep(2)">
+                        <i class="material-icons" style="vertical-align:middle;font-size:1rem">arrow_back</i>
+                        Back
+                    </button>
+                    <button class="submit-button" onclick="goToStep(4)">
+                        Next
+                        <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-left:.25rem">arrow_forward</i>
+                    </button>
+                </div>
+            </div>
+
+            {# ── Step 4: Done ─────────────────────────────────────────────── #}
+            <div class="setup-step" data-step="4">
+                <div class="setup-complete">
+                    <div class="setup-complete__icon">
+                        <i class="material-icons">check_circle</i>
+                    </div>
+                    <h1 class="setup-complete__title">You're all set!</h1>
+                    <p class="setup-complete__body">
+                        <strong id="done-app-title">{{ settings.app_title }}</strong> is ready to go.
+                        Head to the map to add your first location, or visit
+                        <a href="{% url 'site_admin' %}">Site Admin</a> to configure more settings.
+                    </p>
+                    <div class="setup-complete__actions">
+                        <button class="btn-ghost" onclick="goToStep(3)">
+                            <i class="material-icons" style="vertical-align:middle;font-size:1rem">arrow_back</i>
+                            Back
+                        </button>
+                        <form method="post" action="{% url 'setup' %}" style="display:inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="complete">
+                            <button type="submit" class="submit-button">
+                                <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-right:.25rem">explore</i>
+                                Open the Map
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+        </div>{# /.setup-wizard__content #}
+    </div>{# /.setup-wizard__layout #}
+</div>{# /.setup-wizard #}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+
+    var CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+    var SETUP_URL = '{% url "setup" %}';
+
+    var currentStep = 1;
+    var TOTAL_STEPS = 4;
+
+    var steps        = document.querySelectorAll('.setup-step');
+    var stepperItems = document.querySelectorAll('.setup-stepper__item');
+    var progressBar  = document.getElementById('setup-progress');
+    var titleInput   = document.getElementById('app-title-input');
+    var saveStatus   = document.getElementById('title-save-status');
+    var titlePreview = document.getElementById('title-preview-value');
+    var sidebarTitle = document.getElementById('sidebar-title');
+    var doneTitle    = document.getElementById('done-app-title');
+    var _saveTimer;
+
+    window.goToStep = function (n) {
+        currentStep = n;
+
+        steps.forEach(function (s) {
+            var active = parseInt(s.dataset.step, 10) === n;
+            s.classList.toggle('setup-step--active', active);
+        });
+
+        stepperItems.forEach(function (item) {
+            var sn = parseInt(item.dataset.step, 10);
+            item.classList.toggle('setup-stepper__item--active', sn === n);
+            item.classList.toggle('setup-stepper__item--done', sn < n);
+
+            // Swap number for check icon on completed steps
+            var numEl = item.querySelector('.step-num');
+            if (numEl) {
+                if (sn < n) {
+                    numEl.className = 'material-icons';
+                    numEl.textContent = 'check';
+                } else {
+                    numEl.className = 'step-num';
+                    numEl.textContent = sn;
+                }
+            }
+        });
+
+        if (progressBar) {
+            progressBar.style.width = (n / TOTAL_STEPS * 100) + '%';
+        }
+    };
+
+    // Live title preview + debounced save
+    if (titleInput) {
+        titleInput.addEventListener('input', function () {
+            var v = this.value.trim() || 'UrbanLens';
+            if (titlePreview) titlePreview.textContent = v;
+            if (sidebarTitle) sidebarTitle.textContent = v;
+            if (doneTitle) doneTitle.textContent = v;
+
+            clearTimeout(_saveTimer);
+            _saveTimer = setTimeout(saveTitle, 900);
+        });
+    }
+
+    function saveTitle() {
+        if (!titleInput) return;
+        var v = titleInput.value.trim();
+        if (!v) return;
+
+        fetch(SETUP_URL, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': CSRF,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'action=save_title&app_title=' + encodeURIComponent(v),
+        }).then(function (r) {
+            if (r.ok && saveStatus) {
+                saveStatus.classList.add('setup-save-status--visible');
+                clearTimeout(saveStatus._t);
+                saveStatus._t = setTimeout(function () {
+                    saveStatus.classList.remove('setup-save-status--visible');
+                }, 2200);
+            }
+        }).catch(function () {});
+    }
+}());
+</script>
+{% endblock %}

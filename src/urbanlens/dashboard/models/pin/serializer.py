@@ -34,6 +34,7 @@ class PinSerializer(serializers.ModelSerializer):
             "longitude",
             "effective_latitude",
             "effective_longitude",
+            "is_private",
             "created",
             "updated",
             "profile",

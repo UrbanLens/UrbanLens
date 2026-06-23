@@ -20,7 +20,7 @@ from django.db.models import (
     UniqueConstraint,
     UUIDField,
 )
-from django.db.models.fields import CharField, DateField, DateTimeField, DecimalField, IntegerField, TextField
+from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, DecimalField, IntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel, TextChoices
@@ -72,6 +72,13 @@ class Pin(abstract.Model):
 
     # Public-facing identifier. Non-sequential so users cannot enumerate other pins.
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
+
+    # When True this pin is entirely personal: it will not be linked to a shared
+    # Location and will never contribute to the community wiki.  User-specific
+    # data (nickname, description, coordinates) must not be surfaced to others
+    # regardless of this flag, but is_private=True is the explicit opt-out from
+    # having any community presence at these coordinates.
+    is_private = BooleanField(default=False)
 
     # User's custom label. None = show location.name instead (see effective_name).
     # Do NOT store canonical place names here - those belong on Location.
@@ -452,6 +459,7 @@ class Pin(abstract.Model):
             Index(fields=["profile"]),
             Index(fields=["profile", "priority"]),
             Index(fields=["profile", "last_visited"]),
+            Index(fields=["profile", "updated"], name="dashboard_pin_profile_updated_idx"),
             Index(fields=["latitude", "longitude"]),
             Index(fields=["parent_pin"]),
             Index(fields=["parent_location"], name="dashboard_pin_parent_loc_idx"),

@@ -50,7 +50,7 @@ class SmithsonianGateway(Gateway):
         images = []
         for record in data.get("response", {}).get("rows", []):
             media_list = record.get("content", {}).get("descriptiveNonRepeating", {}).get("online_media", {}).get(
-                "media"
+                "media",
             ) or [{}]
             first_media = media_list[0]
             image_data = {

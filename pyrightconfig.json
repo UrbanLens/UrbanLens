@@ -3,5 +3,9 @@
 	"extraPaths": ["src"],
 	"venvPath": ".",
 	"venv": ".venv_windows",
-	"pythonVersion": "3.12"
+	"pythonVersion": "3.12",
+	// Disable basedpyright's type-error reporting. Autocomplete and IntelliSense
+	// still work; mypy (via the mypy-type-checker extension) provides diagnostics
+	// using the same django-stubs plugin configuration as CI.
+	"typeCheckingMode": "off"
 }

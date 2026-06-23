@@ -69,3 +69,17 @@ def is_material_icon(value) -> bool:
     Usage: {% if tag.icon|is_material_icon %}
     """
     return bool(value and re.match(r"^[a-z_]+$", str(value)))
+
+
+@register.filter
+def icon_keywords(value) -> str:
+    """Return space-separated search keywords for an emoji icon character.
+
+    Looks up ``value`` in ``ICON_KEYWORDS`` and returns the associated string,
+    or an empty string when no keywords are registered for this emoji.
+
+    Usage: data-keywords="{{ tag.icon|icon_keywords }}"
+    """
+    from urbanlens.dashboard.models.badges.model import ICON_KEYWORDS
+
+    return ICON_KEYWORDS.get(str(value), "")

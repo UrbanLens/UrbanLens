@@ -22,7 +22,7 @@ class HuggingFaceGateway(LLMGateway):
 
     def setup(self, **kwargs):
         raise NotImplementedError(
-            "HuggingFaceGateway is not yet implemented. Implement abstractmethods, and generics, similar to cloudflare.py"
+            "HuggingFaceGateway is not yet implemented. Implement abstractmethods, and generics, similar to cloudflare.py",
         )
 
         if not self.api_url:

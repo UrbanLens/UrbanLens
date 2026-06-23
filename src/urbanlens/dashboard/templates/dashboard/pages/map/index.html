@@ -368,9 +368,12 @@
 {% block scripts %}
 <script>
     // ── Constants ─────────────────────────────────────────────────────────────
-    const _PROFILE_ID  = {{ profile_id|default:0 }};
+    const _PROFILE_ID   = {{ profile_id|default:0 }};
+    const _PROFILE_UUID = '{{ profile_uuid|default:"" }}';
+    const _APP_UUID     = '{{ app_uuid|default:"" }}';   // server instance UUID - changes on DB wipe
     const _USE_CACHE      = {{ use_pin_cache|yesno:"true,false" }};
-    const _CACHE_KEY      = `ul_pins_v4_${_PROFILE_ID}`;
+    // v5: uses profile UUID (not PK) in key, and embeds app_uuid for DB-wipe detection.
+    const _CACHE_KEY      = `ul_pins_v5_${_PROFILE_UUID}`;
     const _CACHE_MAX      = 180 * 24 * 60 * 60 * 1000;  // 6 months: space reclaim for inactive users
     const _POLL_INTERVAL  = 2 * 60 * 1000;               // 2 min: background poll for pin changes
     const _TILE_SIZE   = 0.5;   // degrees per tile edge (~55 km at mid-latitudes)
@@ -547,8 +550,15 @@
             const raw = localStorage.getItem(_CACHE_KEY);
             if (!raw) return null;
             const c = JSON.parse(raw);
-            if (c.v !== 4 || c.profileId !== _PROFILE_ID) return null;
+            if (c.v !== 5 || c.profileUuid !== _PROFILE_UUID) return null;
             if (Date.now() - c.ts > _CACHE_MAX) { localStorage.removeItem(_CACHE_KEY); return null; }
+            // App UUID mismatch = DB was wiped or app was redeployed with a fresh database.
+            // Clear cache so ghost pins from the old DB don't appear on the map.
+            if (_APP_UUID && c.appUuid && c.appUuid !== _APP_UUID) {
+                console.log('[UL] App UUID mismatch - clearing stale cache from previous deployment');
+                localStorage.removeItem(_CACHE_KEY);
+                return null;
+            }
             return c;
         } catch { return null; }
     }
@@ -558,7 +568,7 @@
         const ts = Date.now();
         try {
             const payload = JSON.stringify({
-                v: 4, ts, profileId: _PROFILE_ID,
+                v: 5, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
                 lastUpdated: _lastKnownUpdated,
                 tiles: [..._fetchedTiles],
                 pins: Object.fromEntries([..._pinStore.entries()].map(([k, v]) => [k, _slimPin(v)])),
@@ -578,14 +588,35 @@
     }
     // Flush the cache when the user navigates away so it's always saved
     window.addEventListener('beforeunload', _writeCache);
-    // Purge any leftover oversized v3 entry from the old key
+    // Purge stale keys from old cache versions
     try { localStorage.removeItem(`ul_pins_v3_${_PROFILE_ID}`); } catch {}
+    try { localStorage.removeItem(`ul_pins_v4_${_PROFILE_ID}`); } catch {}
+    if (_PROFILE_UUID) try { localStorage.removeItem(`ul_pins_v4_${_PROFILE_UUID}`); } catch {}
     // Call after any pin mutation (add/delete) to force a fresh fetch next time.
     // Always clears any existing localStorage entry regardless of _USE_CACHE,
     // so disabling and re-enabling caching starts fresh.
     window.invalidatePinCache = function() {
         try { localStorage.removeItem(_CACHE_KEY); } catch {}
         _lastKnownUpdated = null;
+    };
+    // Update a single pin in the local store + map without touching any other pin.
+    // Call this after editing a pin on the detail page so the map marker refreshes
+    // immediately without a full server round-trip for all pins.
+    window.updateCachedPin = function(pinData) {
+        if (!pinData || !pinData.uuid) return;
+        const uuid = pinData.uuid;
+        _pinStore.set(uuid, pinData);
+        if (_markerMap.has(uuid)) {
+            clusterGroup.removeLayer(_markerMap.get(uuid));
+            _markerMap.delete(uuid);
+        }
+        if (!_filterMode) {
+            const m = _buildMarker(pinData);
+            if (m) { _markerMap.set(uuid, m); clusterGroup.addLayer(m); }
+        }
+        _totalPins = _pinStore.size;
+        updatePinCounter();
+        _scheduleCache();
     };
 
     // ── Cache status display ──────────────────────────────────────────────────
@@ -664,12 +695,20 @@
 
     // ── Background polling ────────────────────────────────────────────────────
     // Checks whether any pin has been updated since the cached timestamp.
+    // Also detects mid-session DB wipes via app_uuid mismatch.
     // Only triggers a full refresh when the server signals a change.
     async function _pollForUpdates() {
         try {
             const resp = await fetch('{% url "map.pins.meta" %}', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!resp.ok) return;
             const data = await resp.json();
+            // App UUID changed mid-session (DB wiped while user had the map open).
+            if (_APP_UUID && data.app_uuid && data.app_uuid !== _APP_UUID) {
+                console.log('[UL] App UUID changed mid-session - clearing cache and reloading pins');
+                window.invalidatePinCache();
+                await _refreshAllPins();
+                return;
+            }
             if (data.last_updated) {
                 if (_lastKnownUpdated !== null && data.last_updated !== _lastKnownUpdated) {
                     _lastKnownUpdated = data.last_updated;
@@ -919,7 +958,7 @@
         if (cache?.pins && Object.keys(cache.pins).length) {
             // Restore from cache immediately - no server round-trip, no loading indicator.
             const ageSeconds = Math.round((Date.now() - cache.ts) / 1000);
-            console.log('[UL] Cache HIT - %d pins, age %ds', Object.keys(cache.pins).length, ageSeconds);
+            console.log('[UL] Cache HIT - %d pins, age %ds, app_uuid=%s', Object.keys(cache.pins).length, ageSeconds, cache.appUuid || 'none');
             const layers = [];
             for (const [uuid, pin] of Object.entries(cache.pins)) {
                 _pinStore.set(uuid, pin);
@@ -1726,12 +1765,28 @@
         .then(data => {
             toastr.success('Pin added!');
             closeAddPinDialog();
-            // Optimistically add a placeholder marker so the user sees the pin immediately
+            // Fetch just the new pin's data and inject it into the store/map -
+            // avoids a full reload of all pins on every add.
             const tempMarker = L.marker([pinLat, pinLng]).addTo(map);
             tempMarker.bindPopup(`<strong>${pinName}</strong><br><em>Saving…</em>`);
-            // Refresh pins in the background; replace the temp marker when done
-            if (typeof window.invalidatePinCache === 'function') window.invalidatePinCache();
-            _refreshAllPins().then(() => map.removeLayer(tempMarker)).catch(() => map.removeLayer(tempMarker));
+            if (data && data.pin_uuid) {
+                fetch(`{% url "map.pin.json" pin_uuid="00000000-0000-0000-0000-000000000000" %}`.replace('00000000-0000-0000-0000-000000000000', data.pin_uuid), {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                })
+                .then(r => r.ok ? r.json() : null)
+                .then(d => {
+                    if (d && d.pin) { window.updateCachedPin(d.pin); }
+                    map.removeLayer(tempMarker);
+                })
+                .catch(() => {
+                    // Fallback: full refresh if single-pin fetch fails
+                    window.invalidatePinCache();
+                    _refreshAllPins().then(() => map.removeLayer(tempMarker)).catch(() => map.removeLayer(tempMarker));
+                });
+            } else {
+                window.invalidatePinCache();
+                _refreshAllPins().then(() => map.removeLayer(tempMarker)).catch(() => map.removeLayer(tempMarker));
+            }
             // When multiple locations cover the same coordinates, prompt the user to choose.
             if (data && data.conflicting_locations && data.conflicting_locations.length > 1) {
                 _showLocationConflictPicker(data.pin_uuid, data.conflicting_locations);

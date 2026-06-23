@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>UrbanLens</title>
+    <title>{% block page_title %}{{ site_title|default:"UrbanLens" }}{% endblock %}</title>
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
 
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0" />

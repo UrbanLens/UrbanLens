@@ -49,22 +49,22 @@ jobs:
                   cd $GITHUB_WORKSPACE/src
                   ruff check .
 
-#            - name: Unit Tests
-#              run: |
-#                  cd $GITHUB_WORKSPACE/src
-#                  python manage.py test
+            - name: Unit Tests
+              run: |
+                  cd $GITHUB_WORKSPACE/src
+                  python manage.py test
 
-#    - name: Static Type Checking
-#      run: |
-#        pip install mypy==1.11.2
-#        mypy $GITHUB_WORKSPACE/src
+            - name: Static Type Checking
+              run: |
+                pip install mypy==1.19.1
+                mypy $GITHUB_WORKSPACE/src
+
+            - name: Dependency Vulnerability Check
+              run: |
+                pip install safety==2.3.5
+                safety check -r $GITHUB_WORKSPACE/config/requirements/prod.txt
 
 #    - name: Security Scanning
 #      run: |
 #        pip install bandit==1.7.5
 #        bandit -r -x 'tests,bin' $GITHUB_WORKSPACE/src
-
-#    - name: Dependency Vulnerability Check
-#      run: |
-#        pip install safety==2.3.5
-#        safety check -r $GITHUB_WORKSPACE/config/requirements/prod.txt

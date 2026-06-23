@@ -12,6 +12,7 @@ from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.http import HttpResponseRedirect
@@ -29,6 +30,64 @@ if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
 logger = logging.getLogger(__name__)
+
+
+# ── Login rate limiting helpers ────────────────────────────────────────────────
+
+def _attempts_key(username: str) -> str:
+    """Cache key for the failed-attempt counter for a given username."""
+    return f"login_attempts:{username.strip().lower()}"
+
+
+def _lockout_key(username: str) -> str:
+    """Cache key for the lockout flag for a given username."""
+    return f"login_lockout:{username.strip().lower()}"
+
+
+def _is_locked_out(username: str) -> bool:
+    """Return True if ``username`` is currently locked out."""
+    return bool(cache.get(_lockout_key(username)))
+
+
+def _record_failed_attempt(username: str) -> int:
+    """Increment the failure counter; apply lockout when the limit is reached.
+
+    Args:
+        username: The username that just failed to authenticate.
+
+    Returns:
+        The updated failure count (after incrementing).
+    """
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+    settings = SiteSettings.get_current()
+    max_attempts = settings.login_max_attempts
+    lockout_seconds = settings.login_lockout_minutes * 60
+
+    if max_attempts <= 0:
+        # Rate limiting disabled.
+        return 0
+
+    key = _attempts_key(username)
+    attempts: int = (cache.get(key) or 0) + 1
+    cache.set(key, attempts, timeout=lockout_seconds)
+
+    if attempts >= max_attempts:
+        cache.set(_lockout_key(username), 1, timeout=lockout_seconds)
+        cache.delete(key)
+        logger.warning("Login locked out for username %r after %d failed attempts", username, attempts)
+
+    return attempts
+
+
+def _clear_login_attempts(username: str) -> None:
+    """Remove failure tracking after a successful login.
+
+    Args:
+        username: The username that just authenticated successfully.
+    """
+    cache.delete(_attempts_key(username))
+    cache.delete(_lockout_key(username))
 
 
 # ── Registration form ─────────────────────────────────────────────────────
@@ -230,7 +289,15 @@ def _send_verification_email(request: HttpRequest, user: User, verification: Ema
 
 
 class CustomLoginView(LoginView):
-    """LoginView extended to detect inactive-account failures and offer a resend link."""
+    """LoginView extended with rate limiting and inactive-account detection.
+
+    Rate limiting is based on the username: after ``SiteSettings.login_max_attempts``
+    consecutive failures the account is locked for ``SiteSettings.login_lockout_minutes``
+    minutes.  The lockout state is stored in Django's cache (no extra DB table needed)
+    so it resets automatically when the cache is cleared or expires.
+
+    Setting ``login_max_attempts`` to 0 in site admin disables rate limiting entirely.
+    """
 
     template_name = "registration/login.html"
 
@@ -239,15 +306,46 @@ class CustomLoginView(LoginView):
             return redirect("map.view")
         return super().dispatch(request, *args, **kwargs)
 
+    def post(self, request, *args, **kwargs):
+        username = request.POST.get("username", "").strip()
+        if username and _is_locked_out(username):
+            from urbanlens.dashboard.models.site_settings import SiteSettings
+
+            minutes = SiteSettings.get_current().login_lockout_minutes
+            form = self.get_form()
+            form.errors["__all__"] = form.error_class(
+                [f"Too many failed login attempts. Please try again in {minutes} minute{'s' if minutes != 1 else ''}."],
+            )
+            return self.form_invalid(form)
+        return super().post(request, *args, **kwargs)
+
     def get_success_url(self) -> str:
         redirect_to = self.get_redirect_url()
         if redirect_to:
             return redirect_to
         return reverse("post_login")
 
+    def form_valid(self, form: AuthenticationForm) -> HttpResponse:
+        username = form.cleaned_data.get("username", "")
+        _clear_login_attempts(username)
+        return super().form_valid(form)
+
     def form_invalid(self, form: AuthenticationForm) -> HttpResponse:
         username = form.data.get("username", "").strip()
         if username:
+            # Track failure and check for lockout (only when not already locked).
+            if not _is_locked_out(username):
+                _record_failed_attempt(username)
+                if _is_locked_out(username):
+                    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+                    minutes = SiteSettings.get_current().login_lockout_minutes
+                    form.errors["__all__"] = form.error_class(
+                        [f"Too many failed login attempts. Your account has been locked for {minutes} minute{'s' if minutes != 1 else ''}."],
+                    )
+                    return super().form_invalid(form)
+
+            # Check for unverified account.
             try:
                 user = User.objects.get(username=username)
                 if not user.is_active and hasattr(user, "email_verification"):
@@ -281,7 +379,7 @@ class PostLoginRedirectView(View):
             return HttpResponseRedirect(redirect_to)
 
         if should_redirect_to_site_admin(request.user):
-            return redirect("site_admin")
+            return redirect("setup")
 
         return redirect("map.view")
 

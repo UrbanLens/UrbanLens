@@ -23,6 +23,8 @@
 @use 'wiki';
 @use 'detail-pins';
 @use 'trips';
+@use 'errors';
+@use 'setup';
 @use 'map';
 @use 'auth';
 @use 'homepage';
@@ -30,3 +32,4 @@
 @use 'comments';
 @use 'gallery';
 @use 'markup';
+@use 'tooltips';

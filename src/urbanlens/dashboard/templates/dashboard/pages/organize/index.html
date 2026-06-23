@@ -1042,8 +1042,8 @@ var IconPicker = {
         grid.querySelectorAll('.icon-picker-item').forEach(function(item) {
             if (!q) { item.style.display = ''; }
             else {
-                var label = item.dataset.label || '', icon = item.dataset.icon || '';
-                item.style.display = (label.includes(q) || icon === q) ? '' : 'none';
+                var label = item.dataset.label || '', icon = item.dataset.icon || '', keywords = item.dataset.keywords || '';
+                item.style.display = (label.includes(q) || icon === q || keywords.includes(q)) ? '' : 'none';
             }
         });
     },

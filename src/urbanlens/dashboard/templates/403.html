@@ -1,15 +1,16 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block content %}
-<div class="trip-error-page page-content">
-    <div class="trip-error-icon">
+<div class="error-page page-content">
+    <div class="error-page__code">403</div>
+    <div class="error-page__icon">
         <i class="material-icons">lock</i>
     </div>
-    <h1 class="trip-error-title">Access Denied</h1>
-    <p class="trip-error-body">
+    <h1 class="error-page__title">Access Denied</h1>
+    <p class="error-page__body">
         You don't have permission to view this page.
     </p>
-    <div class="trip-error-actions">
+    <div class="error-page__actions">
         <a href="{% url 'home' %}" class="submit-button">
             <i class="material-icons" style="font-size:1rem;vertical-align:middle">home</i>
             Go Home

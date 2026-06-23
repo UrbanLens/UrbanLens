@@ -1464,52 +1464,6 @@
     white-space: nowrap;
 }
 
-// ── Trip not-found / error page ───────────────────────────────────────────
-
-.trip-error-page {
-    //max-width: 540px;
-    //margin: 5rem auto;
-    //padding: 0 1.5rem;
-    text-align: center;
-}
-
-.trip-error-icon {
-    width: 72px;
-    height: 72px;
-    border-radius: 50%;
-    background: var(--ul-surface-3);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 1.5rem;
-
-    .material-icons {
-        font-size: 2.2rem;
-        color: var(--ul-text-3);
-    }
-}
-
-.trip-error-title {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--ul-text-1);
-    margin: 0 0 .6rem;
-}
-
-.trip-error-body {
-    color: var(--ul-text-2);
-    line-height: 1.6;
-    margin: 0 0 2rem;
-    font-size: .95rem;
-}
-
-.trip-error-actions {
-    display: flex;
-    gap: .75rem;
-    justify-content: center;
-    flex-wrap: wrap;
-}
-
 // ── Site admin page ───────────────────────────────────────────────────────
 
 .site-admin-page {

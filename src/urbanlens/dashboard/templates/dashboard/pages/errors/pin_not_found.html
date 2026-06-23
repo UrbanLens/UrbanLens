@@ -1,0 +1,7 @@
+{% extends 'dashboard/pages/errors/404.html' %}
+
+{% block error_title %}Pin Not Found{% endblock %}
+{% block error_body %}
+    This pin doesn't exist, may have been deleted, or you don't have access to it.
+    {% if pin_uuid %}<br><small style="color:var(--ul-text-3);font-size:.8rem">UUID: {{ pin_uuid }}</small>{% endif %}
+{% endblock %}

@@ -19,6 +19,28 @@
 
     <div class="site-admin-card card">
         <div class="card-header">
+            <i class="material-icons">drive_file_rename_outline</i>
+            <span>Branding</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-branding">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="app-title">App title</label>
+                <p class="form-help">
+                    Shown in the browser tab and navigation. Change this to brand your own instance of UrbanLens.
+                </p>
+                <input type="text" name="app_title" id="app-title"
+                       value="{{ settings.app_title }}" maxlength="100" placeholder="UrbanLens">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="submit-button">Save Settings</button>
+                <span class="admin-autosave-indicator"></span>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card card">
+        <div class="card-header">
             <i class="material-icons">group</i>
             <span>Trip Settings</span>
         </div>
@@ -70,6 +92,37 @@
 
     <div class="site-admin-card card">
         <div class="card-header">
+            <i class="material-icons">lock_clock</i>
+            <span>Login Security</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="login-max-attempts">Max failed login attempts</label>
+                <p class="form-help">
+                    How many consecutive failed login attempts are allowed before the account is
+                    temporarily locked. Set to <strong>0</strong> to disable rate limiting.
+                </p>
+                <input type="number" name="login_max_attempts" id="login-max-attempts"
+                       value="{{ settings.login_max_attempts }}" min="0" max="100" step="1">
+            </div>
+            <div class="form-row">
+                <label for="login-lockout-minutes">Lockout duration (minutes)</label>
+                <p class="form-help">
+                    How many minutes a locked account must wait before login attempts are accepted
+                    again. Minimum 1 minute.
+                </p>
+                <input type="number" name="login_lockout_minutes" id="login-lockout-minutes"
+                       value="{{ settings.login_lockout_minutes }}" min="1" max="1440" step="1">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="submit-button">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card card">
+        <div class="card-header">
             <i class="material-icons">crop_free</i>
             <span>Location Bounding Box</span>
         </div>
@@ -78,8 +131,7 @@
             <div class="form-row">
                 <label for="max-bbox-area">Maximum bounding box area (km²)</label>
                 <p class="form-help">
-                    Largest area a user may draw as a location boundary.
-                    Default is 2,600 km² - approximately the size of the Chernobyl Exclusion Zone.
+                    Largest area a user may draw as a location boundary, in square kilometers.
                 </p>
                 <input type="number" name="max_bbox_area_km2" id="max-bbox-area"
                        value="{{ settings.max_bbox_area_km2 }}" min="0.001" step="any">

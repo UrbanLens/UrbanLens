@@ -397,14 +397,21 @@ class PinRelinkView(LoginRequiredMixin, View):
         else:
             # Detach: create a new bare Location at this pin's coordinates so
             # the pin retains its own independent community wiki page.
+            # Use the existing location's canonical name if available; otherwise
+            # fetch the Google place name.  Never fall back to pin.nickname -
+            # that is personal data and must not become a community wiki title.
             lat = float(pin.effective_latitude or 0)
             lng = float(pin.effective_longitude or 0)
-            name = (pin.location.name if pin.location else None) or pin.nickname or "Unnamed Location"
-            location = Location.objects.create(
-                name=name,
-                latitude=lat,
-                longitude=lng,
-            )
+            if pin.location and pin.location.name and pin.location.name != "Unnamed Location":
+                location = Location.objects.create(
+                    name=pin.location.name,
+                    latitude=lat,
+                    longitude=lng,
+                )
+            else:
+                from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
+
+                location = _create_location_with_canonical_name(lat, lng)
 
         pin.location = location
         pin.save(update_fields=["location"])

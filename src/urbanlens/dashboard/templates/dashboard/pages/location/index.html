@@ -32,7 +32,8 @@
 
             {# ── Map sidebar panel (Details + Photos tabs) ── #}
             <div id="detail-pin-list-panel" class="detail-pin-list-panel" style="display:none">
-                <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle">
+                <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle"
+                        data-tooltip="Show or hide your personal detail markers and annotations for this location.">
                     <i class="material-icons">layers</i>
                     <span id="detail-pin-count-label">0 Layers</span>
                     <i class="material-icons detail-pin-list-chevron" id="detail-pin-list-chevron">expand_more</i>
@@ -59,7 +60,9 @@
 
             {# ── Bottom-left map controls ── #}
             <div class="map-bottom-controls">
-                <button id="edit-campus-btn" class="map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()">
+                <button id="edit-campus-btn" class="map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()"
+                        data-tooltip="Draw or resize the boundary polygon for this location. Pins dropped inside this boundary are automatically linked to this wiki entry."
+                        data-tooltip-pos="below">
                     <i class="material-icons">pentagon</i> Edit Boundary
                 </button>
                 <div id="campus-save-controls" class="map-overlay-btn-group" style="display:none">
@@ -99,7 +102,9 @@
                         </button>
                     </div>
                     <button type="button" class="map-overlay-btn map-overlay-btn--add-detail"
-                            id="add-detail-btn" onclick="toggleAddDetailMenu()">
+                            id="add-detail-btn" onclick="toggleAddDetailMenu()"
+                            data-tooltip="Add a personal detail marker, line, arrow, shape, or text annotation to this location's map. Only you can see your own detail pins."
+                            data-tooltip-pos="below">
                         <i class="material-icons">add_location_alt</i> Add Detail
                         <i class="material-icons add-detail-chevron">expand_less</i>
                     </button>

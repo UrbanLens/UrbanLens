@@ -9,12 +9,10 @@ Features planned for this release.
 * Ensure mobile-first. [UL-7]
 * Loading indicators for all ui actions that take time. (Creating pin, searching map, etc) [UL-8]
 * "Don't leave page" dialog before a settings page is fully saved. [UL-9]
+* On main map, the import pin dialog can overflow the height of the screen if the user is zoomed in enough. [UL-108]
 
 ## Smaller Features
-* Get user avatar during SSO account creation from the SSO provider, or gravatar. [UL-10]
 * Discord SSO [UL-11]
-* Add metadata for emojis (i.e. icons) to aid in searching for them. [UL-12]
-* When creating maps for comments, allow using satellite mode or topographic mode as well as the default view. [UL-13]
 * Cleanup git history, and begin using branches for dev. [UL-14]
 * Properly set up pre-commit hooks for linting, type checking, and security scans. [UL-15]
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
@@ -25,13 +23,11 @@ Features planned for this release.
 ## Medium Features
 * Share button on pin details page to share with a specific friend. [UL-20]
 * "Accept" / "Reject" shared pin for the user being shared with. [UL-21]
-* Support partial cache updates, instead of refreshing the cache for all pins at once. [UL-22]
-* Cache should possibly (maybe?) include some metadata, so that searching on the map is faster. [UL-23]
-* In addition to the above item, there are probably optimizations to be made with the DB to make server-side searching faster. [UL-24]
 * Proper CI/CD pipeline, tags, releases, etc. [UL-25]
 * When creating the community wiki entry for a pin, ensure we're not leaking user data to it that the user expects to be private. For instance, the community wiki entry should probably be titled based on the google place name, not the user's custom title. Perhaps we can offer a choice between the two when the user is creating only a single pin? [UL-26]
 * Implement "hide user", and "mute user" features, alongside the existing "block user" feature. [UL-27]
-* Limit failed login attempts. [UL-28]
+* We must allow pins to be marked by a user as 'private', in which case they do not create a location wiki entry. [UL-110]
+* During import pins, consider mapping badges, or other fine-grained control of the import process. (I'm not sure what's needed here... but it's an area to consider improvements) [UL-111]
 
 ## Larger Features
 * Discord Integration [UL-29]
@@ -43,12 +39,12 @@ Features planned for this release.
 * When in the main map and the trip details page, drag/drop of a pin shouldn't be as easy at higher zoom levels. Not sure what I want here. Confirmation dialog? Disable at higher zoom? [UL-33]
 * User settings don't seem to properly save. [UL-34]
 * When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]
-* On the public profile page, when saving a note, the note section is duplicated.
+* On the public profile page, when saving a note, the note section is duplicated. [UL-112]
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
 * Searching / Filtering the map. [UL-37]
-* Cache API results, like Street View and Satellite View images.
+* Cache API results, like Street View and Satellite View images. [UL-113]
 
 ## Project Health
 * Setup JIRA board publicly [UL-2]
@@ -59,11 +55,19 @@ Features planned for this release.
 
 ## Features that need verification
 * password reset. [UL-41]
-* Verify Feature: Possible issue with then pulling or displaying visit history entries.
-* Verify Feature: On the pin details page, if the smithsonian archive section is empty, then hide it.
-* Verify Feature: On the pin details page, there is a notes section and a comments section. But only one is needed. Keep comments, but remove the notes. Attempt to display a street address for the pin, assuming we can figure out what that address would be, and make sure that address is cached so we don't have to contact an external api multiple times.
-* Verify Feature: When performing google or brave searches, add the street name, city, and state to the search query as optional keywords, to help disambiguate with unrelated results.
-
+* Verify Feature: Possible issue with then pulling or displaying visit history entries. [UL-114]
+* Verify Feature: On the pin details page, if the smithsonian archive section is empty, then hide it. [UL-115]
+* Verify Feature: On the pin details page, there is a notes section and a comments section. But only one is needed. Keep comments, but remove the notes. Attempt to display a street address for the pin, assuming we can figure out what that address would be, and make sure that address is cached so we don't have to contact an external api multiple times. [UL-116]
+* Verify Feature: When performing google or brave searches, add the street name, city, and state to the search query as optional keywords, to help disambiguate with unrelated results. [UL-117]
+* Support partial cache updates, instead of refreshing the cache for all pins at once. [UL-22]
+* Cache should possibly (maybe?) include some metadata, so that searching on the map is faster. [UL-23]
+* In addition to the above item, there are probably optimizations to be made with the DB to make server-side searching faster. [UL-24]
+* When clearing data, or uninstalling and redeploying the app, a user's pins will not exist in the server-side db, but they will still exist in the local browser cache. As a result, when the user loads the map page, pins are shown that don't exist. In this case, the cache should be cleared. We can simplify that process by creating an app uuid when the app is first deployed, and include that uuid in the local cache. The cache should also only apply to a given user, and that user should be specified by uuid, not the PK id, so hackers cannot see the PK user id on the client side. [UL-122]
+* Limit failed login attempts. [UL-28]
+* Get user avatar during SSO account creation from the SSO provider, or gravatar. [UL-10]
+* Add metadata for emojis (i.e. icons) to aid in searching for them. [UL-12]
+* When creating maps for comments, allow using satellite mode or topographic mode as well as the default view. [UL-13]
+* When creating a new account via SSO, do not set the user's last name in order to preserve partial anonimity. Set their username to {random positive adjective}{random animal}{random number}. [UL-109]
 
 # Future Features
 Features planned for future releases.
@@ -98,10 +102,10 @@ Features planned for future releases.
 * Outside of app error logging. Alerts on certain kinds of errors. [UL-69]
 * Address DDOS, spamming, etc. [UL-70]
 * Saved map searches ("My Bucket List", etc). [UL-71]
-* Allow importing of timeline data to mark pins as Visited
-* Celery / async tasks: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure
-* Hypothesis unit tests: Add property-based tests wherever possible.
-* App setup page on first run: configure site name, etc.
+* Allow importing of timeline data to mark pins as Visited [UL-118]
+* Celery / async tasks: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure [UL-119]
+* Hypothesis unit tests: Add property-based tests wherever possible. [UL-120]
+* App setup page on first run: configure site name, etc. [UL-121]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
@@ -141,7 +145,6 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 * Link to (or pull more data from) google maps, openstreetmap, mapquest, etc. [UL-99]
 * Keep track of "encountered" users when using the app. This allows display of a fun stat: "first encountered", allows looking up people you've seen before but didn't connect with, and encourages social interaction. This would also facilitate restricting access to a user's profile unless they have been "encountered" by the current user (i.e. the user could not just type in a url with the user's slug, or be given a url with their uuid. Instead, they'd have to invite a connection with the user first, by email address, and allow the other user to opt in to the interaction.) [UL-100]
 * Consider adding privacy controls to explicitly hide content from certain types of users, which would override the whitelist privacy controls the user set. For instance: "Show pins to users with 1 trip in common" and "hide pins from users with a specific badge" would give more control over privacy and sharing. I'm not sure how to do this in a way where the UI isn't overly complex and clunky. (maybe "advanced privacy controls"?) [UL-101]
-* During import, consider mapping badges, or other fine-grained control of the import process. (I'm not sure what's needed here... but it's an area to consider improvements)
 
 ## Issues I don't think are solvable
 * Encrypting user data so the site admin doesn't have access to it. The only two solutions I can think of are (1) a peer-to-peer sharing system, or (2) separating the app into a "server" and "agent" app, wherein the client app has unencrypted data, but the server only has encrypted data. For (2), users would then be able to set up their own "agent" app on their own server, resulting in full ownership of their data. However, both solutions suffer from significant drawbacks. The latter is more attainable, but in order for the app to be usable for most users, we need a publicly hosted client app anyway, resulting in no privacy gains for most (or possibly for any) users. In addition, both solutions suffer significant performance penalties, and technical complexity, for little to no gain. Finally, almost no users will understand the key differences between this problem being solved and not being solved, and will assume that data is unencrypted and visible to the site admin even if it is not. Therefore, I'm not certain that implementing it really improves user trust, while nonetheless encountering additional drawbacks. The main reason to do it seems to be to tell users we did it... which seems less beneficial than its cost. I'm undecided on this. [UL-102]
@@ -152,3 +155,8 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 * Allow users to interact with parts of the app (by invite?) without logging in. For instance, in the case of trip planning. [UL-105]
 * Allow users to create and import pins without creating a community wiki entry. e.g. "My Girlfriend's House". [UL-106]
 * Prevent users from "testing" if a location is abandoned by creating a test pin for it, then deleting said pin if no community wiki entry exists. Perhaps provide a delay before the community wiki entry is available to the user? Or cap pin creations? [UL-107]
+
+## Code Quality
+### Fix Generics
+* tags = Badge.objects.tags() (and also .categories()) -> Cannot access attribute "categories" for class "Manager"
+* profile = user.profile -> Cannot access attribute "profile" for class "User"

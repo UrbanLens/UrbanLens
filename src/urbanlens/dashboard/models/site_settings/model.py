@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db.models import SET_NULL, CheckConstraint, FloatField, ForeignKey, IntegerField, Q
+from django.db.models import SET_NULL, CheckConstraint, FloatField, ForeignKey, IntegerField, Q, UUIDField
 from django.db.models.fields import BooleanField, CharField
 
 from urbanlens.dashboard.models import abstract
@@ -23,6 +25,11 @@ class SiteSettings(abstract.Model):
 
     Always access via ``SiteSettings.get_current()``; never instantiate directly.
     """
+
+    # Regenerated each time the database is wiped or the app is redeployed from scratch.
+    # Clients embed this in their local pin cache; a mismatch signals a stale cache that
+    # must be cleared (avoids ghost pins appearing after a DB reset).
+    instance_uuid = UUIDField(default=uuid4, unique=True, editable=False)
 
     # --- Trip settings ---
 
@@ -94,6 +101,34 @@ class SiteSettings(abstract.Model):
         verbose_name="Search cache duration (hours)",
     )
 
+    # --- Branding ---
+
+    app_title = CharField(
+        max_length=100,
+        default="UrbanLens",
+        help_text="Name shown in the browser tab and navigation. Change this to brand your own instance.",
+        verbose_name="App title",
+    )
+
+    # --- Login rate limiting ---
+
+    login_max_attempts = IntegerField(
+        default=5,
+        help_text=(
+            "Maximum number of consecutive failed login attempts before an account is temporarily locked. "
+            "Set to 0 to disable rate limiting."
+        ),
+        verbose_name="Max failed login attempts",
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+
+    login_lockout_minutes = IntegerField(
+        default=15,
+        help_text="How many minutes a locked account must wait before login attempts are accepted again.",
+        verbose_name="Lockout duration (minutes)",
+        validators=[MinValueValidator(1), MaxValueValidator(1440)],
+    )
+
     # --- Bootstrap admin ---
 
     bootstrap_admin_user = ForeignKey(
@@ -128,4 +163,6 @@ class SiteSettings(abstract.Model):
             CheckConstraint(condition=Q(max_bbox_area_km2__lte=2600.0), name="max_bbox_area_lte_2600"),
             CheckConstraint(condition=Q(max_trip_members__gte=1), name="max_trip_members_gte_1"),
             CheckConstraint(condition=Q(max_trip_members__lte=100), name="max_trip_members_lte_100"),
+            CheckConstraint(condition=Q(login_max_attempts__gte=0), name="login_max_attempts_gte_0"),
+            CheckConstraint(condition=Q(login_lockout_minutes__gte=1), name="login_lockout_minutes_gte_1"),
         ]

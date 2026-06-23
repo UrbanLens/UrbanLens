@@ -59,6 +59,10 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         except (ValueError, TypeError):
             pass
 
+        app_title = request.POST.get("app_title", "").strip()
+        if app_title:
+            settings.app_title = app_title
+
         valid_providers = {v for v, _ in SEARCH_PROVIDER_CHOICES}
         provider = request.POST.get("search_provider", "")
         if provider in valid_providers:
@@ -67,6 +71,18 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         try:
             cache_hours = int(request.POST.get("search_cache_hours", settings.search_cache_hours))
             settings.search_cache_hours = max(0, cache_hours)
+        except (ValueError, TypeError):
+            pass
+
+        try:
+            max_attempts = int(request.POST.get("login_max_attempts", settings.login_max_attempts))
+            settings.login_max_attempts = max(0, max_attempts)
+        except (ValueError, TypeError):
+            pass
+
+        try:
+            lockout_minutes = int(request.POST.get("login_lockout_minutes", settings.login_lockout_minutes))
+            settings.login_lockout_minutes = max(1, lockout_minutes)
         except (ValueError, TypeError):
             pass
 
