@@ -227,7 +227,7 @@
         border: 1px solid rgba(255, 255, 255, .5);
         border-radius: 8px;
         background: rgba(255, 255, 255, .15);
-        color: #fff;
+        color: var(--ul-text-5);
         font-size: .85rem;
         font-weight: 500;
         cursor: pointer;
@@ -484,7 +484,7 @@
         }
 
         &--reverted {
-            background: #fef3c7;
+            background: var(--ul-accent-amber-bg);
             color: #92400e;
         }
     }
@@ -573,7 +573,7 @@
         gap: .5rem;
         margin: .5rem 1rem .75rem;
         padding: .55rem .75rem;
-        background: #eff6ff;
+        background: var(--ul-surface-1a);
         border-radius: 8px;
         font-size: .82rem;
         color: #1d4ed8;
@@ -599,7 +599,7 @@
             label {
                 font-size: .82rem;
                 font-weight: 600;
-                color: #555;
+                color: var(--ul-text-2);
             }
 
             input,

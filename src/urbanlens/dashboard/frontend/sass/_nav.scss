@@ -507,7 +507,7 @@ nav .brand-logo img {
         }
 
         .notif-item__icon-wrap {
-            background: #ede9fe;
+            background: var(--ul-accent-purple-bg);
 
             .material-icons {
                 color: #6366f1;
@@ -557,7 +557,7 @@ nav .brand-logo img {
     }
 
     &--unread &__icon-wrap--error {
-        background: #fee2e2;
+        background: var(--ul-surface-1a);
 
         .material-icons {
             color: #dc2626;
@@ -565,10 +565,10 @@ nav .brand-logo img {
     }
 
     &--unread &__icon-wrap--warning {
-        background: #fef3c7;
+        background: var(--ul-accent-amber-bg);
 
         .material-icons {
-            color: #d97706;
+            color: var(--ul-accent-amber);
         }
     }
 }
@@ -618,7 +618,7 @@ nav .brand-logo img {
         color: var(--ul-text-2, #475569);
 
         &:hover {
-            background: #fee2e2;
+            background: var(--ul-surface-1a);
             color: #dc2626;
         }
     }

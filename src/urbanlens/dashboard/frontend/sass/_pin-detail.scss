@@ -49,7 +49,7 @@
 
     .wx-time {
         font-size: .65rem;
-        color: #888;
+        color: var(--ul-text-3);
         font-weight: 700;
         line-height: 1.3;
         letter-spacing: .02em;
@@ -71,14 +71,14 @@
         .wx-unit {
             font-size: .6rem;
             font-weight: 400;
-            color: #999;
+            color: var(--ul-text-3);
             vertical-align: super;
         }
     }
 
     .wx-condition {
         font-size: .63rem;
-        color: #666;
+        color: var(--ul-text-2);
         @include truncate;
         max-width: 66px;
     }
@@ -87,7 +87,7 @@
         display: flex;
         gap: .3rem;
         font-size: .6rem;
-        color: #aaa;
+        color: var(--ul-text-3);
         margin-top: .1rem;
 
         span {
@@ -113,7 +113,7 @@
     border: none;
     background: transparent;
     cursor: pointer;
-    color: #666;
+    color: var(--ul-text-2);
     outline: none;
     transition: background .15s, color .15s;
     flex-shrink: 0;
@@ -125,7 +125,7 @@
     &:hover,
     &:focus {
         background: rgba(0, 0, 0, .07);
-        color: #222;
+        color: var(--ul-text-1);
         outline: none;
     }
 }
@@ -150,7 +150,7 @@
     border: 1px solid color-mix(in srgb, var(--tag-color, #6366f1) 30%, transparent);
     font-size: .78rem;
     font-weight: 500;
-    color: #333;
+    color: var(--ul-text-1);
     line-height: 1.3;
 
     .tag-chip-icon {
@@ -170,20 +170,20 @@
         cursor: pointer;
         font-size: .75rem;
         line-height: 1;
-        color: #555;
+        color: var(--ul-text-2);
         transition: background .12s, color .12s;
         padding: 0;
 
         &:hover {
             background: rgba(200, 0, 0, .2);
-            color: #c00;
+            color: var(--ul-color-danger-accent);
         }
     }
 }
 
 .tag-chips-empty {
     font-size: .82rem;
-    color: #aaa;
+    color: var(--ul-text-3);
     font-style: italic;
 }
 
@@ -302,7 +302,7 @@
         flex-shrink: 0;
 
         &--tag {
-            background: #ede9fe;
+            background: var(--ul-accent-purple-bg);
             color: #6d28d9;
         }
 
@@ -326,12 +326,12 @@
     .detail-pin-add-dialog,
     .trip-create-dialog,
     .pin-edit-dialog {
-        background: #1e1e2e;
+        background: var(--ul-surface-5);
         color: #e2e8f0;
 
         .dialog-header {
             border-bottom-color: #334155;
-            background: #1e1e2e;
+            background: var(--ul-surface-5);
         }
 
         .dialog-close {
@@ -358,7 +358,7 @@
 
     .tag-add-dialog {
         .tad-tabs {
-            background: #181825;
+            background: var(--ul-surface-5);
             border-bottom-color: #334155;
         }
 
@@ -421,7 +421,7 @@
 .visit-empty {
     padding: .6rem 1rem;
     font-size: .85rem;
-    color: #999;
+    color: var(--ul-text-3);
     font-style: italic;
 }
 
@@ -457,12 +457,12 @@
 
     .visit-time {
         font-size: .82rem;
-        color: #777;
+        color: var(--ul-text-3);
     }
 
     .visit-source {
         font-size: .75rem;
-        color: #aaa;
+        color: var(--ul-text-3);
         display: inline-flex;
         align-items: center;
         gap: 2px;
@@ -470,7 +470,7 @@
 
     .visit-notes {
         font-size: .82rem;
-        color: #666;
+        color: var(--ul-text-2);
         margin-top: .2rem;
         padding: 0 1rem .35rem;
     }
@@ -480,7 +480,7 @@
         background: none;
         border: none;
         cursor: pointer;
-        color: #ccc;
+        color: var(--ul-text-4);
         padding: 2px;
         border-radius: 4px;
         outline: none;
@@ -488,7 +488,7 @@
         &:hover,
         &:focus {
             color: #dc2626;
-            background: #fee2e2;
+            background: var(--ul-surface-1a);
             outline: none;
         }
 
@@ -516,7 +516,7 @@
         label {
             font-size: .82rem;
             font-weight: 600;
-            color: #555;
+            color: var(--ul-text-2);
         }
 
         input,
@@ -716,13 +716,13 @@
     }
 
     &--some {
-        background: #fef9c3;
+        background: var(--ul-accent-amber-bg);
         color: #854d0e;
         border-color: #fde68a;
     }
 
     &--everywhere {
-        background: #fee2e2;
+        background: var(--ul-surface-1a);
         color: #991b1b;
         border-color: #fca5a5;
     }
@@ -989,7 +989,7 @@ body.page-location-details {
     margin-top: .6rem;
     padding: .55rem .9rem;
     border-radius: 8px;
-    background: #eff6ff;
+    background: var(--ul-surface-1a);
     border: 1px solid #bfdbfe;
     color: #1d4ed8;
     text-decoration: none;
@@ -1406,7 +1406,7 @@ body.page-location-details {
     display: flex;
     align-items: flex-start;
     gap: .75rem;
-    background: #fffbeb;
+    background: var(--ul-surface-1);
     border: 1px solid #fcd34d;
     border-radius: 10px;
     padding: .85rem 1rem;
@@ -1674,7 +1674,7 @@ body.page-location-details {
     &:hover,
     &:focus {
         color: #dc2626;
-        background: #fee2e2;
+        background: var(--ul-surface-1a);
         outline: none;
     }
 }
@@ -1782,7 +1782,7 @@ body.page-location-details div.section {
 
                 .smithsonian-title {
                     font-size: .75rem;
-                    color: #555;
+                    color: var(--ul-text-2);
                 }
             }
         }

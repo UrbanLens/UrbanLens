@@ -301,13 +301,15 @@ class DjangoProjectInitializer:
                 file.write("")
             logger.debug("Created empty file %s", entry)
 
-        self.run_command(["npm", "run", "sass"], "compiling sass", raise_error=False)
-
         match self.environment:
             case "development":
+                sass_command = ["npm", "run", "sass:dev"]
                 command = ["npm", "run", "build"]
             case _:
+                sass_command = ["npm", "run", "sass"]
                 command = ["npm", "run", "deploy"]
+
+        self.run_command(sass_command, "compiling sass", raise_error=False)
 
         self.run_command(command, "building frontend")
         self.run_command(["python", "src/urbanlens/manage.py", "collectstatic", "--noinput"], "collecting static files")

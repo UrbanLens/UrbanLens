@@ -4,11 +4,11 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
-from rest_framework.request import Request
 from django.shortcuts import render
 from requests.exceptions import HTTPError
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.request import Request
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile

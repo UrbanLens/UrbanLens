@@ -22,7 +22,7 @@ body.page-about {
         min-height: 60vh;
         padding: 5rem 6vw 4rem;
         background: linear-gradient(145deg, #1e1b4b 0%, #312e81 50%, #4338ca 80%, #3b82f6 100%);
-        color: #fff;
+        color: var(--ul-text-5);
 
         @media (max-width: 820px) {
             grid-template-columns: 1fr;
@@ -45,7 +45,7 @@ body.page-about {
         font-weight: 800;
         line-height: 1.13;
         letter-spacing: -.03em;
-        color: #fff;
+        color: var(--ul-text-5);
         margin: 0 0 1.1rem;
 
         em {
@@ -94,7 +94,7 @@ body.page-about {
         }
 
         &--primary {
-            background: #fff;
+            background: var(--ul-surface-1);
             color: #4338ca;
 
             &:hover {
@@ -155,7 +155,7 @@ body.page-about {
 
         .material-icons {
             font-size: 1.2rem;
-            color: #fff;
+            color: var(--ul-text-5);
         }
 
         &--1 {
@@ -303,7 +303,7 @@ body.page-about {
 
     .about-value-card {
         padding: 1.75rem;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-1a);
         border: 1px solid var(--ul-border);
         border-radius: 12px;
         position: relative;
@@ -479,13 +479,13 @@ body.page-about {
         background: linear-gradient(135deg, #1e1b4b 0%, #4338ca 100%);
         padding: 5rem 1.5rem;
         text-align: center;
-        color: #fff;
+        color: var(--ul-text-5);
     }
 
     .about-cta-title {
         font-size: clamp(1.75rem, 3.5vw, 2.5rem);
         font-weight: 800;
-        color: #fff;
+        color: var(--ul-text-5);
         margin: 0 0 .75rem;
         letter-spacing: -.025em;
     }

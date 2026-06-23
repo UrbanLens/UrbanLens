@@ -12,19 +12,37 @@ $selected-color: #2196F3;
 
 $section-header-bg: #e3f2fd;
 
-// ── Semantic colors ───────────────────────────────────────────────────────────
+// Define SASS variables for colors so that light mode and dark mode can reference a single source of truth.
+$color-base-1: #ffffff;
+$color-base-1a: #fafafa;
+$color-base-1b: #e0e0e0;
+$color-base-2: #dddddd;
+$color-base-2a: #d6d6d6;
+$color-base-2b: #c0c0c0;
+$color-base-3: #9aa0a6;
+$color-base-3a: #8a8a8a;
+$color-base-3b: #707070;
+$color-base-4: #5f6368;
+$color-base-4a: #505050;
+$color-base-4b: #404040;
+$color-base-5: #1a1a1a;
+$color-base-5a: #151515;
+$color-base-5b: #050505;
 
-$text-primary: #1a1a1a;
-$text-secondary: #5f6368;
-$text-muted: #9aa0a6;
-$border-color: #e0e0e0;
+// ── Semantic colors ───────────────────────────────────────────────────────────
+$text-primary: $color-base-5;
+$text-secondary: $color-base-4;
+$text-muted: $color-base-3;
+$border-color: $color-base-1b;
 $text-color: $text-primary;
 $surface-hover: color.scale($primary-color, $lightness: +5%);
 
 $danger-color: #c0392b;
+$danger-accent: rgba(200, 0, 0, .18);
 $danger-bg: #fdf0ee;
 $danger-border: #e8c2be;
 $success-color: #1e7e34;
+$success-border: #86efac;
 $success-bg: #eaf6ed;
 $warning-color: #856404;
 $warning-bg: #fff3cd;

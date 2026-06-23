@@ -246,9 +246,9 @@
     }
 
     &--mine {
-        background: #ede9fe;
+        background: var(--ul-accent-purple-bg);
         border-color: #a78bfa;
-        color: #5b21b6;
+        color: var(--ul-accent-purple-fg);
     }
 }
 
@@ -258,7 +258,7 @@
     color: #6b7280;
 
     .reaction-pill--mine & {
-        color: #5b21b6;
+        color: var(--ul-accent-purple-fg);
     }
 }
 
@@ -399,7 +399,7 @@
     }
 
     &:hover {
-        background: #ede9fe;
+        background: var(--ul-accent-purple-bg);
         border-color: #a78bfa;
         color: #6d28d9;
     }
@@ -409,12 +409,12 @@
     display: inline-flex;
     align-items: center;
     gap: .35rem;
-    background: #ede9fe;
+    background: var(--ul-accent-purple-bg);
     border: 1px solid #a78bfa;
     border-radius: 6px;
     padding: .2rem .5rem;
     font-size: .78rem;
-    color: #5b21b6;
+    color: var(--ul-accent-purple-fg);
     margin-top: .35rem;
 
     .material-icons {
@@ -721,9 +721,9 @@
     }
 
     &.is-active {
-        background: #ede9fe;
+        background: var(--ul-accent-purple-bg);
         border-color: #a78bfa;
-        color: #5b21b6;
+        color: var(--ul-accent-purple-fg);
     }
 }
 

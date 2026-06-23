@@ -5,20 +5,39 @@
 // [data-theme="dark"].
 
 :root {
-    --ul-surface-1: #ffffff;
-    --ul-surface-2: #dddddd;
-    --ul-surface-3: #9aa0a6;
-    --ul-surface-4: #5f6368;
-    --ul-surface-5: #1a1a1a;
+    // backgrounds 1-5 progress light to dark, along with accent colors (a) and border colors (b).
+    // typically, we'll use a surface color for a background, and its accent color for the background of a container on top of it.
+    --ul-surface-1: $color-base-1;
+    --ul-surface-1a: $color-base-1a;
+    --ul-surface-1b: $color-base-1b;
+    --ul-surface-2: $color-base-2;
+    --ul-surface-2a: $color-base-2a;
+    --ul-surface-2b: $color-base-2b;
+    --ul-surface-3: $color-base-3;
+    --ul-surface-3a: $color-base-3a;
+    --ul-surface-3b: $color-base-3b;
+    --ul-surface-4: $color-base-4;
+    --ul-surface-4a: $color-base-4a;
+    --ul-surface-4b: $color-base-4b;
+    --ul-surface-5: $color-base-5;
+    --ul-surface-5a: $color-base-5a;
+    --ul-surface-5b: $color-base-5b;
 
-    --ul-text-1: #1a1a1a;
-    --ul-text-2: #5f6368;
-    --ul-text-3: #9aa0a6;
-    --ul-text-4: #dddddd;
-    --ul-text-5: #ffffff;
+    // text 1-5 progress dark to light, along with accent colors.
+    --ul-text-1: var(--ul-surface-5);
+    --ul-text-1a: var(--ul-surface-5a);
+    --ul-text-2: var(--ul-surface-4);
+    --ul-text-2a: var(--ul-surface-4a);
+    --ul-text-3: var(--ul-surface-3);
+    --ul-text-3a: var(--ul-surface-3a);
+    --ul-text-4: var(--ul-surface-2);
+    --ul-text-4a: var(--ul-surface-2a);
+    --ul-text-5: var(--ul-surface-1);
+    --ul-text-5a: var(--ul-surface-1a);
 
-    --ul-border: #e0e0e0;
-    --ul-border-strong: #c0c0c0;
+    // Standard borders without specifying lightness. We'll probably replace references to these over time, using --ul-surface...b instead.
+    --ul-border: var(--ul-surface-1b);
+    --ul-border-strong: var(--ul-surface-2b);
 
     --ul-shadow-sm: 0 1px 3px rgba(0, 0, 0, .08);
     --ul-shadow-md: 0 4px 16px rgba(0, 0, 0, .12);
@@ -26,24 +45,33 @@
 
     --ul-hover-bg: rgba(0, 0, 0, .04);
     --ul-hover-bg-primary: rgba(33, 150, 243, .08);
-    --ul-color-accent: #6366f1;
-    --ul-color-accent-bg: #eef2ff;
-    --ul-color-accent-fg: #4f46e5;
+    --ul-color-accent: $accent-purple;
+    --ul-color-accent-bg: $accent-purple-bg;
+    --ul-color-accent-fg: $accent-purple-fg;
     --ul-color-accent-ring: rgba(99, 102, 241, .15);
     --ul-color-button-bg: #{$primary-color};
     --ul-color-button-fg: var(--ul-text-1);
 
-    --ul-color-success-bg: #dcfce7;
-    --ul-color-success-border: #86efac;
+    --ul-color-success-bg: $success-bg;
+    --ul-color-success-border: $success-border;
 
     --ul-color-warning-text: #92400e;
-    --ul-color-warning-bg: #fffbeb;
+    --ul-color-warning-bg: $accent-amber-bg;
     --ul-color-warning-border: #fde68a;
-    --ul-color-warning-icon: #d97706;
+    --ul-color-warning-icon: var(--ul-accent-amber);
 
-    --ul-color-danger-text: #ef4444;
-    --ul-color-danger-border: #fca5a5;
-    --ul-color-danger-bg: #fef2f2;
+    --ul-color-danger-accent: $danger-accent;
+    --ul-color-danger-text: $danger-color;
+    --ul-color-danger-border: $danger-border;
+    --ul-color-danger-bg: $danger-bg;
+
+    // Define sass colors as variables so dark mode can override them.
+    --ul-accent-purple: $accent-purple;
+    --ul-accent-purple-bg: $accent-purple-bg;
+    --ul-accent-purple-fg: $accent-purple-fg;
+    --ul-accent-amber: $accent-amber;
+    --ul-accent-amber-bg: $accent-amber-bg;
+    --ul-accent-amber-fg: $accent-amber-fg;
 }
 
 // ── Dark-mode accent palette ──────────────────────────────────────────────────
@@ -55,20 +83,35 @@ $dk-panel-bg:     #1e2130;    // trip/weather panel background
 $dk-panel-border: #2d3348;    // trip/weather panel border
 
 [data-theme="dark"] {
-    --ul-surface-1: #1a1a1a;
-    --ul-surface-2: #222222;
-    --ul-surface-3: #5a5a5a;
-    --ul-surface-4: #dddddd;
-    --ul-surface-5: #ffffff;
+    --ul-surface-1: $color-base-5;
+    --ul-surface-1a: $color-base-5a;
+    --ul-surface-1b: $color-base-5b;
+    --ul-surface-2: $color-base-4;
+    --ul-surface-2a: $color-base-4a;
+    --ul-surface-2b: $color-base-4b;
+    --ul-surface-3: $color-base-3;
+    --ul-surface-3a: $color-base-3a;
+    --ul-surface-3b: $color-base-3b;
+    --ul-surface-4: $color-base-2;
+    --ul-surface-4a: $color-base-2a;
+    --ul-surface-4b: $color-base-2b;
+    --ul-surface-5: $color-base-1;
+    --ul-surface-5a: $color-base-1a;
+    --ul-surface-5b: $color-base-1b;
 
-    --ul-text-1: #ffffff;
-    --ul-text-2: #dddddd;
-    --ul-text-3: #9aa0a6;
-    --ul-text-4: #5f6368;
-    --ul-text-5: #1a1a1a;
+    --ul-text-1: $color-base-1;
+    --ul-text-1a: $color-base-1a;
+    --ul-text-2: $color-base-2;
+    --ul-text-2a: $color-base-2a;
+    --ul-text-3: $color-base-3;
+    --ul-text-3a: $color-base-3a;
+    --ul-text-4: $color-base-4;
+    --ul-text-4a: $color-base-4a;
+    --ul-text-5: $color-base-5;
+    --ul-text-5a: $color-base-5a;
 
-    --ul-border: #333333;
-    --ul-border-strong: #444444;
+    --ul-border: $color-base-3b;
+    --ul-border-strong: $color-base-4b;
 
     --ul-shadow-sm: 0 1px 3px rgba(0, 0, 0, .3);
     --ul-shadow-md: 0 4px 16px rgba(0, 0, 0, .4);
@@ -1079,7 +1122,7 @@ $dk-panel-border: #2d3348;    // trip/weather panel border
         &--mine {
             background: rgba(124, 58, 237, .15);
             border-color: rgba(124, 58, 237, .4);
-            color: #a78bfa;
+            color: $dk-purple;
         }
 
         .reaction-count {
