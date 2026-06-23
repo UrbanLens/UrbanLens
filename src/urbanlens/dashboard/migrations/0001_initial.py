@@ -2614,7 +2614,7 @@ class Migration(migrations.Migration):
         migrations.AddIndex(
             model_name="pin",
             index=models.Index(
-                fields=["profile", "updated"], name="dashboard_pin_profile_updated_idx",
+                fields=["profile", "updated"], name="dashboard_profile_update_idx",
             ),
         ),
         migrations.AddIndex(
@@ -2632,7 +2632,7 @@ class Migration(migrations.Migration):
         migrations.AddIndex(
             model_name="pin",
             index=models.Index(
-                fields=["parent_location"], name="dashboard_pin_parent_loc_idx",
+                fields=["parent_location"], name="dashboard_parent_loc_idx",
             ),
         ),
         migrations.AddConstraint(

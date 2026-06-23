@@ -459,10 +459,10 @@ class Pin(abstract.Model):
             Index(fields=["profile"]),
             Index(fields=["profile", "priority"]),
             Index(fields=["profile", "last_visited"]),
-            Index(fields=["profile", "updated"], name="dashboard_pin_profile_updated_idx"),
+            Index(fields=["profile", "updated"], name="dashboard_profile_update_idx"),
             Index(fields=["latitude", "longitude"]),
             Index(fields=["parent_pin"]),
-            Index(fields=["parent_location"], name="dashboard_pin_parent_loc_idx"),
+            Index(fields=["parent_location"], name="dashboard_parent_loc_idx"),
         ]
         constraints = [
             UniqueConstraint(
