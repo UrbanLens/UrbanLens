@@ -54,18 +54,6 @@ $color-brown-light: #A1887F;
 $color-brown: #795548;
 $color-brown-dark: #5D4037;
 
-// - Brand palette ─────────────────────────────────────────────────────────────
-
-$primary-color: $color-blue;
-$secondary-color: $color-amber;
-$dark-neutral-color: #424242;
-$light-neutral-color: #FAFAFA;
-$inactive-button-color: #424242;
-$highlight-color: $color-amber;
-$selected-color: $color-blue;
-
-$section-header-bg: #e3f2fd;
-
 // Define SASS variables for colors so that light mode and dark mode can reference a single source of truth.
 // 0-9 progress light to dark, along with accent colors (a) and border colors (b).
 $color-grey-0: #f7f7f7;
@@ -98,6 +86,16 @@ $color-grey-8b: #2f2f2f;
 $color-grey-9: #1f1f1f;
 $color-grey-9a: #272727;
 $color-grey-9b: #171717;
+
+// - Brand palette ─────────────────────────────────────────────────────────────
+$primary-color: $color-blue;
+$secondary-color: $color-amber;
+$dark-neutral-color: $color-grey-8;
+$light-neutral-color: $color-grey-0;
+$inactive-button-color: $color-grey-8;
+$highlight-color: $color-amber-light;
+$selected-color: $color-blue-light;
+$section-header-bg: $color-blue-light;
 
 // ── Semantic colors ───────────────────────────────────────────────────────────
 $text-primary: $color-grey-9;
