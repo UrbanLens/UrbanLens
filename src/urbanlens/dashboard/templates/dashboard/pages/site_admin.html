@@ -40,6 +40,41 @@
 
     <div class="site-admin-card card">
         <div class="card-header">
+            <i class="material-icons">settings_suggest</i>
+            <span>Environment</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-environment">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="environment-override">Environment</label>
+                <p class="form-help">
+                    Controls site-wide behavior such as the admin dev toolbar.
+                    <strong>Default</strong> uses the
+                    <code>UL_ENVIRONMENT</code> variable
+                    {% if env_var_environment %}
+                    (currently <code>{{ env_var_environment }}</code> → {{ effective_environment_label }})
+                    {% else %}
+                    (not set — falls back to local)
+                    {% endif %}.
+                    Choosing another value overrides the variable for this site.
+                </p>
+                <p class="form-help">
+                    Active environment: <strong>{{ effective_environment_label }}</strong>
+                </p>
+                <select name="environment_override" id="environment-override">
+                    {% for value, label in environment_override_choices %}
+                    <option value="{{ value }}"{% if settings.environment_override == value %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="submit-button">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card card">
+        <div class="card-header">
             <i class="material-icons">drive_file_rename_outline</i>
             <span>Branding</span>
         </div>

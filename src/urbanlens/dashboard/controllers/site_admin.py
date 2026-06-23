@@ -10,13 +10,18 @@ import os
 from pathlib import Path
 
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
-from django.http import HttpResponseRedirect
+from django.contrib.auth.views import redirect_to_login
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
-from urbanlens.dashboard.models.site_settings import SEARCH_PROVIDER_CHOICES, SiteSettings
+from urbanlens.dashboard.models.site_settings import (
+    EnvironmentOverrideChoice,
+    SearchProviderChoice,
+    SiteSettings,
+)
 from urbanlens.dashboard.services.site_admin import complete_site_admin_onboarding
 
 logger = logging.getLogger(__name__)
@@ -101,7 +106,10 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "settings": settings,
                 "page_name": "site-admin",
                 "saved": request.GET.get("saved"),
-                "search_provider_choices": SEARCH_PROVIDER_CHOICES,
+                "search_provider_choices": SearchProviderChoice.choices,
+                "environment_override_choices": EnvironmentOverrideChoice.choices,
+                "effective_environment_label": settings.get_effective_environment_label(),
+                "env_var_environment": os.getenv("UL_ENVIRONMENT", ""),
             },
         )
 
@@ -125,7 +133,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if app_title:
             settings.app_title = app_title
 
-        valid_providers = {v for v, _ in SEARCH_PROVIDER_CHOICES}
+        valid_providers = set(SearchProviderChoice.values)
         provider = request.POST.get("search_provider", "")
         if provider in valid_providers:
             settings.search_provider = provider
@@ -148,9 +156,42 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         except (ValueError, TypeError):
             pass
 
+        valid_environments = set(EnvironmentOverrideChoice.values)
+        environment = request.POST.get("environment_override", "")
+        if environment in valid_environments:
+            settings.environment_override = environment
+
         settings.save()
 
         return HttpResponseRedirect(reverse("site_admin") + "?saved=1")
+
+
+class DevToolbarToggleThemeView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Toggle the current user's theme between light and dark (dev toolbar).
+
+    POST /site-admin/dev/toggle-theme/
+    """
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+
+    def post(self, request):
+        from urbanlens.dashboard.models.profile.model import Profile, ThemeChoice
+
+        settings = SiteSettings.get_current()
+        if not settings.is_development_environment():
+            return HttpResponse(status=403)
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if profile.theme_mode == ThemeChoice.DARK:
+            profile.theme_mode = ThemeChoice.LIGHT
+        else:
+            profile.theme_mode = ThemeChoice.DARK
+        profile.save(update_fields=["theme_mode"])
+
+        response = HttpResponse(status=204)
+        response["HX-Trigger"] = json.dumps({"devThemeChanged": profile.theme_mode})
+        return response
 
 
 class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
@@ -161,6 +202,16 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
+
+    def handle_no_permission(self) -> HttpResponse:
+        """Send anonymous users to login; return 403 for authenticated users without permission."""
+        if not self.request.user.is_authenticated:
+            return redirect_to_login(
+                self.request.get_full_path(),
+                login_url=self.get_login_url(),
+                redirect_field_name=self.get_redirect_field_name(),
+            )
+        return super().handle_no_permission()
 
     def get(self, request):
         from django.conf import settings as django_settings

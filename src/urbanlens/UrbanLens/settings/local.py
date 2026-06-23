@@ -69,6 +69,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 'urbanlens.dashboard.context_processors.add_page_name',
                 'urbanlens.dashboard.context_processors.add_site_settings',
+                'urbanlens.dashboard.context_processors.add_dev_toolbar',
             ],
         },
     },

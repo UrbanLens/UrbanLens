@@ -241,10 +241,12 @@
 
     <div id="loading-pins-message" aria-hidden="true" style="display:none"></div>
 
+    {% if show_pin_count %}
     <div id="pin-counter">
         <span id="pin-counter-value">0</span>
         <span id="pin-counter-label">pins</span>
     </div>
+    {% endif %}
     <span id="cache-status" aria-hidden="true"></span>
     <div id="map-body"></div>
 
@@ -477,6 +479,8 @@
     }
 
     function updatePinCounter() {
+        const counter = document.getElementById('pin-counter');
+        if (!counter) return;
         // Show the total pin count for the user, not just what's visible in the current viewport.
         // _totalPins comes from the server at page load and is updated after a full refresh.
         // Once _pinStore has been fully populated (after _refreshAllPins or a '*' tile fetch),

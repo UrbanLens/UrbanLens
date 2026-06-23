@@ -178,6 +178,7 @@ class SiteAdminStatsViewAccessTests(TestCase):
         self.assertEqual(response.status_code, 302)
 
     def test_regular_user_gets_403(self) -> None:
+        baker.make(User)  # first user is auto-promoted to bootstrap site admin
         user: User = baker.make(User)
         client = Client()
         client.force_login(user)

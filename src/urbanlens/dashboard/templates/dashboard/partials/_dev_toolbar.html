@@ -1,0 +1,76 @@
+{# Admin-only dev toolbar — shown when the site environment is Development. #}
+<div id="dev-toolbar" class="dev-toolbar{% if dev_toolbar_theme_mode == 'dark' %} dev-toolbar--dark-active{% endif %}" data-collapsed="false">
+    <div class="dev-toolbar__header">
+        <button type="button" class="dev-toolbar__toggle" id="dev-toolbar-collapse" title="Collapse toolbar" aria-expanded="true">
+            <i class="material-icons dev-toolbar__chevron">expand_more</i>
+            <span class="dev-toolbar__title">Dev Tools</span>
+        </button>
+    </div>
+    <div class="dev-toolbar__body" id="dev-toolbar-body">
+        <button type="button"
+                class="dev-toolbar__tool"
+                id="dev-toolbar-theme-toggle"
+                title="Toggle dark mode"
+                hx-post="{% url 'dev_toolbar.toggle_theme' %}"
+                hx-swap="none"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+            <i class="material-icons">{% if dev_toolbar_theme_mode == 'dark' %}light_mode{% else %}dark_mode{% endif %}</i>
+            <span>{% if dev_toolbar_theme_mode == 'dark' %}Light mode{% else %}Dark mode{% endif %}</span>
+        </button>
+    </div>
+</div>
+<script>
+(function () {
+    var toolbar = document.getElementById('dev-toolbar');
+    if (!toolbar) return;
+
+    var collapseBtn = document.getElementById('dev-toolbar-collapse');
+    var body = document.getElementById('dev-toolbar-body');
+    var storageKey = 'dev-toolbar-collapsed';
+
+    function setCollapsed(collapsed) {
+        toolbar.dataset.collapsed = collapsed ? 'true' : 'false';
+        if (body) body.hidden = collapsed;
+        if (collapseBtn) {
+            collapseBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            collapseBtn.title = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
+        }
+        try { localStorage.setItem(storageKey, collapsed ? '1' : '0'); } catch (_) {}
+    }
+
+    try {
+        if (localStorage.getItem(storageKey) === '1') setCollapsed(true);
+    } catch (_) {}
+
+    if (collapseBtn) {
+        collapseBtn.addEventListener('click', function () {
+            setCollapsed(toolbar.dataset.collapsed !== 'true');
+        });
+    }
+
+    function applyTheme(theme) {
+        var root = document.getElementById('html-root');
+        if (!root) return;
+        if (theme === 'system') {
+            var isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+        } else {
+            root.setAttribute('data-theme', theme);
+        }
+    }
+
+    document.body.addEventListener('devThemeChanged', function (e) {
+        var theme = typeof e.detail === 'string' ? e.detail : (e.detail && e.detail.value);
+        if (!theme) return;
+        applyTheme(theme);
+        var btn = document.getElementById('dev-toolbar-theme-toggle');
+        if (!btn) return;
+        var isDark = theme === 'dark';
+        toolbar.classList.toggle('dev-toolbar--dark-active', isDark);
+        var icon = btn.querySelector('.material-icons');
+        var label = btn.querySelector('span');
+        if (icon) icon.textContent = isDark ? 'light_mode' : 'dark_mode';
+        if (label) label.textContent = isDark ? 'Light mode' : 'Dark mode';
+    });
+}());
+</script>

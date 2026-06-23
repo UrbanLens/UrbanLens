@@ -691,6 +691,11 @@ urlpatterns = [
     path("setup/", setup.SetupWizardView.as_view(), name="setup"),
     path("site-admin/", site_admin.SiteAdminView.as_view(), name="site_admin"),
     path("site-admin/stats/", site_admin.SiteAdminStatsView.as_view(), name="site_admin_stats"),
+    path(
+        "site-admin/dev/toggle-theme/",
+        site_admin.DevToolbarToggleThemeView.as_view(),
+        name="dev_toolbar.toggle_theme",
+    ),
     path("test_ai/", pin.PinController.as_view({"get": "test_ai"}), name="test_ai"),
     path("", include("social_django.urls", namespace="social")),
     re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),

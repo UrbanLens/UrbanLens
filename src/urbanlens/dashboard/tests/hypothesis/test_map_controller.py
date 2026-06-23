@@ -20,11 +20,10 @@ import json
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from urbanlens.core.tests.testcase import TestCase
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import MapCenterMode, Profile
 
@@ -34,7 +33,7 @@ _db_settings = settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
 )
 
-_MAP_URL      = "/dashboard/map/"
+_MAP_URL = "/dashboard/map/"
 _MAP_META_URL = "/dashboard/map/pins/meta/"
 
 
@@ -172,6 +171,51 @@ class ViewMapContextTests(TestCase):
             baker.make(Pin, profile=self.profile, parent_pin=None, parent_location=None)
         resp = self.client.get(_MAP_URL)
         self.assertEqual(resp.context["pin_count"], n)
+
+
+class ShowPinCountTests(TestCase):
+    """Total pin count on the map is visible only to site admins in development."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.models.site_settings import EnvironmentOverrideChoice, SiteSettings
+        from urbanlens.dashboard.services.site_admin import add_user_to_site_admin_group
+
+        self._SiteSettings = SiteSettings
+        self._dev = EnvironmentOverrideChoice.DEVELOPMENT
+        self._prod = EnvironmentOverrideChoice.PRODUCTION
+        self._add_admin = add_user_to_site_admin_group
+
+    def test_hidden_for_regular_user_in_development(self) -> None:
+        baker.make(User)  # bootstrap admin
+        user: User = baker.make(User)
+        self._SiteSettings.objects.filter(pk=1).update(environment_override=self._dev)
+        self.client.force_login(user)
+        resp = self.client.get(_MAP_URL)
+        self.assertFalse(resp.context["show_pin_count"])
+
+    def test_hidden_for_site_admin_in_production(self) -> None:
+        user: User = baker.make(User)
+        self._add_admin(user)
+        self._SiteSettings.objects.filter(pk=1).update(environment_override=self._prod)
+        self.client.force_login(user)
+        resp = self.client.get(_MAP_URL)
+        self.assertFalse(resp.context["show_pin_count"])
+
+    def test_visible_for_site_admin_in_development(self) -> None:
+        user: User = baker.make(User)
+        self._add_admin(user)
+        self._SiteSettings.objects.filter(pk=1).update(environment_override=self._dev)
+        self.client.force_login(user)
+        resp = self.client.get(_MAP_URL)
+        self.assertTrue(resp.context["show_pin_count"])
+
+    def test_visible_for_superuser_in_development(self) -> None:
+        user: User = baker.make(User, is_superuser=True)
+        self._SiteSettings.objects.filter(pk=1).update(environment_override=self._dev)
+        self.client.force_login(user)
+        resp = self.client.get(_MAP_URL)
+        self.assertTrue(resp.context["show_pin_count"])
 
 
 # ── map_pins_meta ─────────────────────────────────────────────────────────────

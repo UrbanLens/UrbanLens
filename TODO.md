@@ -153,6 +153,8 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 * Sync with google maps. Google maps does not allow labelling pins, or adding them to lists via a programmatic interface, and the only way to export data is through the google takeout system. The only way to mimic this would be through web scraping, which would be extremely fragile, and require users to grant way too many permissions to our app. Theoretically, this limitation could change in the future, depending entirely on google. [UL-104]
 * Support non-USA formats for dates, currency, distances via user settings.
 * Support non-English language.
+* User stats page (fun stats about the user: breakdown of pins by continent, etc).
+* Lists (these aren't strictly necessary, due to badges, but could allow users to create lists of unrelated things. Like "my favorite explores in February" or "1 Best Church in Each State").
 
 ## Issues requiring architectural solutions
 * Allow users to interact with parts of the app (by invite?) without logging in. For instance, in the case of trip planning. [UL-105]

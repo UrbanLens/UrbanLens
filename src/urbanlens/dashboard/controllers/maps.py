@@ -49,6 +49,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 gps_fallback = profile.compute_map_center()
 
         site = SiteSettings.get_current()
+        show_pin_count = site.show_dev_admin_features(request.user)
         return render(
             request,
             "dashboard/pages/map/index.html",
@@ -62,6 +63,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "app_uuid": str(site.instance_uuid),
                 "cluster_radius": profile.cluster_radius,
                 "pin_count": pin_count,
+                "show_pin_count": show_pin_count,
                 "use_pin_cache": profile.use_pin_cache,
                 "map_center_lat": map_center[0] if map_center else None,
                 "map_center_lng": map_center[1] if map_center else None,

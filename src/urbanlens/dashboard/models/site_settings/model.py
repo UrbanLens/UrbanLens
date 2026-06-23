@@ -10,14 +10,15 @@ from django.db.models.fields import BooleanField, CharField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.site_settings.meta import (
-    AI_PROVIDER_CHOICES,
-    AI_PROVIDER_CLOUDFLARE,
     DEFAULT_CLOUDFLARE_MODEL,
     DEFAULT_OPENAI_MODEL,
-    SEARCH_PROVIDER_BRAVE,
-    SEARCH_PROVIDER_CHOICES,
+    AiProviderChoice,
+    EnvironmentOverrideChoice,
+    SearchProviderChoice,
 )
 from urbanlens.dashboard.models.site_settings.queryset import SiteSettingsManager
+from urbanlens.UrbanLens.environments.factory import select_environment
+from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 
 class SiteSettings(abstract.Model):
@@ -56,8 +57,8 @@ class SiteSettings(abstract.Model):
     )
     ai_provider = CharField(
         max_length=20,
-        choices=AI_PROVIDER_CHOICES,
-        default=AI_PROVIDER_CLOUDFLARE,
+        choices=AiProviderChoice.choices,
+        default=AiProviderChoice.CLOUDFLARE,
         help_text="Which AI provider to use for all AI-powered features.",
         verbose_name="AI provider",
     )
@@ -89,8 +90,8 @@ class SiteSettings(abstract.Model):
 
     search_provider = CharField(
         max_length=20,
-        choices=SEARCH_PROVIDER_CHOICES,
-        default=SEARCH_PROVIDER_BRAVE,
+        choices=SearchProviderChoice.choices,
+        default=SearchProviderChoice.BRAVE,
         help_text="Which web search provider to use for pin news/search results.",
         verbose_name="Search provider",
     )
@@ -99,6 +100,19 @@ class SiteSettings(abstract.Model):
         default=24,
         help_text="How many hours to cache web search results per pin before re-fetching. Set to 0 to disable caching.",
         verbose_name="Search cache duration (hours)",
+    )
+
+    # --- Environment ---
+
+    environment_override = CharField(
+        max_length=20,
+        choices=EnvironmentOverrideChoice.choices,
+        default=EnvironmentOverrideChoice.DEFAULT,
+        help_text=(
+            "Override the deployment environment. "
+            "Default uses the UL_ENVIRONMENT variable (or local when unset)."
+        ),
+        verbose_name="Environment",
     )
 
     # --- Branding ---
@@ -153,6 +167,55 @@ class SiteSettings(abstract.Model):
     def get_current(cls) -> SiteSettings:
         """Return (and create if missing) the singleton settings record."""
         return cls.objects.get_current()
+
+    def get_effective_environment_type(self) -> EnvironmentTypes:
+        """Return the active environment type, honoring admin override when set.
+
+        When ``environment_override`` is ``default``, the value comes from
+        ``UL_ENVIRONMENT`` (falling back to local when unset).
+
+        Returns:
+            The resolved ``EnvironmentTypes`` value for this site.
+        """
+        if self.environment_override and self.environment_override != EnvironmentOverrideChoice.DEFAULT:
+            env_type = EnvironmentOverrideChoice.to_environment_type(self.environment_override)
+            if env_type is not None:
+                return env_type
+        return select_environment(None).env_type
+
+    def get_effective_environment_label(self) -> str:
+        """Return a human-readable label for the active environment.
+
+        Returns:
+            Display label such as ``Development`` or ``Production``.
+        """
+        if self.environment_override and self.environment_override != EnvironmentOverrideChoice.DEFAULT:
+            return EnvironmentOverrideChoice(self.environment_override).label
+        env = select_environment(None)
+        return env.name.replace("_", " ").title()
+
+    def is_development_environment(self) -> bool:
+        """Return whether the site is running in development mode.
+
+        Returns:
+            True when the effective environment type is ``dev``.
+        """
+        return self.get_effective_environment_type() == EnvironmentTypes.DEV
+
+    def show_dev_admin_features(self, user) -> bool:
+        """Return whether dev-only admin UI should be visible to ``user``.
+
+        Args:
+            user: The current request user.
+
+        Returns:
+            True for site admins when the effective environment is development.
+        """
+        return (
+            user.is_authenticated
+            and user.has_perm("dashboard.view_site_admin")
+            and self.is_development_environment()
+        )
 
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_site_settings"

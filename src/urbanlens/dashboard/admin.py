@@ -30,6 +30,16 @@ class SiteSettingsAdmin(admin.ModelAdmin):
 
     fieldsets = [
         (
+            "Environment",
+            {
+                "fields": ["environment_override"],
+                "description": (
+                    "Override the deployment environment. "
+                    "Default uses the <code>UL_ENVIRONMENT</code> variable."
+                ),
+            },
+        ),
+        (
             "Trip Settings",
             {
                 "fields": ["max_trip_members", "max_bbox_area_km2"],

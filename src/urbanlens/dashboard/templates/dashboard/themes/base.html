@@ -39,6 +39,10 @@
     </div>
     {% include 'dashboard/partials/footer.html' %}
 
+    {% if show_dev_toolbar %}
+    {% include 'dashboard/partials/_dev_toolbar.html' %}
+    {% endif %}
+
     <!--  Scripts-->
     <script>
         var csrftoken = '{{ csrf_token }}';
