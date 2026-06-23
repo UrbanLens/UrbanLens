@@ -1,14 +1,68 @@
 @use "sass:color";
+// - Material Color Options
+// Material palette convention:
+// light = 300
+// main  = 500
+// dark  = 700
 
-// ── Brand palette ─────────────────────────────────────────────────────────────
+$color-red-light: #E57373;
+$color-red: #F44336;
+$color-red-dark: #D32F2F;
+$color-pink-light: #F06292;
+$color-pink: #E91E63;
+$color-pink-dark: #C2185B;
+$color-purple-light: #BA68C8;
+$color-purple: #9C27B0;
+$color-purple-dark: #7B1FA2;
+$color-deep-purple-light: #9575CD;
+$color-deep-purple: #673AB7;
+$color-deep-purple-dark: #512DA8;
+$color-indigo-light: #7986CB;
+$color-indigo: #3F51B5;
+$color-indigo-dark: #303F9F;
+$color-blue-light: #64B5F6;
+$color-blue: #2196F3;
+$color-blue-dark: #1976D2;
+$color-light-blue-light: #4FC3F7;
+$color-light-blue: #03A9F4;
+$color-light-blue-dark: #0288D1;
+$color-cyan-light: #4DD0E1;
+$color-cyan: #00BCD4;
+$color-cyan-dark: #0097A7;
+$color-teal-light: #4DB6AC;
+$color-teal: #009688;
+$color-teal-dark: #00796B;
+$color-green-light: #81C784;
+$color-green: #4CAF50;
+$color-green-dark: #388E3C;
+$color-lime-light: #DCE775;
+$color-lime: #CDDC39;
+$color-lime-dark: #AFB42B;
+$color-yellow-light: #FFF176;
+$color-yellow: #FFEB3B;
+$color-yellow-dark: #FBC02D;
+$color-amber-light: #FFD54F;
+$color-amber: #FFC107;
+$color-amber-dark: #FFA000;
+$color-orange-light: #FFB74D;
+$color-orange: #FF9800;
+$color-orange-dark: #F57C00;
+$color-deep-orange-light: #FF8A65;
+$color-deep-orange: #FF5722;
+$color-deep-orange-dark: #E64A19;
+$color-brown-light: #A1887F;
+$color-brown: #795548;
+$color-brown-dark: #5D4037;
 
-$primary-color: #2196F3;
-$secondary-color: #FFC107;
+// - Brand palette ─────────────────────────────────────────────────────────────
+
+$primary-color: $color-blue;
+$secondary-color: $color-amber;
 $dark-neutral-color: #424242;
 $light-neutral-color: #FAFAFA;
 $inactive-button-color: #424242;
-$highlight-color: #FFC107;
-$selected-color: #2196F3;
+$highlight-color: $color-amber;
+$selected-color: $color-blue;
 
 $section-header-bg: #e3f2fd;
 
@@ -53,25 +107,23 @@ $border-color: $color-grey-0b;
 $text-color: $text-primary;
 $surface-hover: color.scale($primary-color, $lightness: +5%);
 
-$danger-color: #c0392b;
+$danger-color: $color-red;
 $danger-accent: rgba(200, 0, 0, .18);
-$danger-bg: #fdf0ee;
-$danger-border: #e8c2be;
-$success-color: #1e7e34;
-$success-border: #86efac;
-$success-bg: #eaf6ed;
-$warning-color: #856404;
-$warning-bg: #fff3cd;
-$teal-color: #0d6e6e;
-$teal-bg: #e6f7f7;
+$danger-bg: $color-red-light;
+$danger-border: $color-red-dark;
+$success-color: $color-green;
+$success-border: $color-green-dark;
+$success-bg: $color-green-light;
+$warning-color: $color-amber;
+$warning-bg: $color-yellow-light;
 
 // Accent colors used by icon-button modifiers (tags, admin)
-$accent-purple: #7c63d4;
-$accent-purple-bg: #ede9ff;
-$accent-purple-fg: #5b45b0;
-$accent-amber: #d97706;
-$accent-amber-bg: #fef3c7;
-$accent-amber-fg: #b45309;
+$accent-1: $color-deep-purple;
+$accent-1-bg: $color-purple-light;
+$accent-1-fg: $color-purple-dark;
+$accent-2: $color-amber;
+$accent-2-bg: $color-amber-light;
+$accent-2-fg: $color-amber-dark;
 
 // ── Radius ────────────────────────────────────────────────────────────────────
 

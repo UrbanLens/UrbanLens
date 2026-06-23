@@ -210,22 +210,22 @@ input[type="submit"] {
 	}
 
 	&.btn-icon--active {
-		color: $accent-purple;
+		color: $accent-1;
 
 		&:hover,
 		&:focus {
-			background: $accent-purple-bg;
-			color: $accent-purple-fg;
+			background: $accent-1-bg;
+			color: $accent-1-fg;
 		}
 	}
 
 	&.btn-icon--global-edit {
-		color: $accent-amber;
+		color: $accent-2;
 
 		&:hover,
 		&:focus {
-			background: $accent-amber-bg;
-			color: $accent-amber-fg;
+			background: $accent-2-bg;
+			color: $accent-2-fg;
 		}
 	}
 }

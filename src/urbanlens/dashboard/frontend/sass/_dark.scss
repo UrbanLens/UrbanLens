@@ -70,9 +70,9 @@
 
     --ul-hover-bg: rgba(0, 0, 0, .04);
     --ul-hover-bg-primary: rgba(33, 150, 243, .08);
-    --ul-color-accent: $accent-purple;
-    --ul-color-accent-bg: $accent-purple-bg;
-    --ul-color-accent-fg: $accent-purple-fg;
+    --ul-color-accent: $accent-1;
+    --ul-color-accent-bg: $accent-1-bg;
+    --ul-color-accent-fg: $accent-1-fg;
     --ul-color-accent-ring: rgba(99, 102, 241, .15);
     --ul-color-button-bg: #{$primary-color};
     --ul-color-button-fg: var(--ul-text-1);
@@ -81,7 +81,7 @@
     --ul-color-success-border: $success-border;
 
     --ul-color-warning-text: #92400e;
-    --ul-color-warning-bg: $accent-amber-bg;
+    --ul-color-warning-bg: $accent-2-bg;
     --ul-color-warning-border: #fde68a;
     --ul-color-warning-icon: var(--ul-accent-amber);
 
@@ -91,12 +91,12 @@
     --ul-color-danger-bg: $danger-bg;
 
     // Define sass colors as variables so dark mode can override them.
-    --ul-accent-purple: $accent-purple;
-    --ul-accent-purple-bg: $accent-purple-bg;
-    --ul-accent-purple-fg: $accent-purple-fg;
-    --ul-accent-amber: $accent-amber;
-    --ul-accent-amber-bg: $accent-amber-bg;
-    --ul-accent-amber-fg: $accent-amber-fg;
+    --ul-accent-purple: $accent-1;
+    --ul-accent-purple-bg: $accent-1-bg;
+    --ul-accent-purple-fg: $accent-1-fg;
+    --ul-accent-amber: $accent-2;
+    --ul-accent-amber-bg: $accent-2-bg;
+    --ul-accent-amber-fg: $accent-2-fg;
 }
 
 // ── Dark-mode accent palette ──────────────────────────────────────────────────
