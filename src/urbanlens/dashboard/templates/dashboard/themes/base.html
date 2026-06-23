@@ -38,15 +38,6 @@
     {% include 'dashboard/partials/footer.html' %}
 
     <!--  Scripts-->
-    {% if messages %}
-    <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        {% for message in messages %}
-        toastr['{{ message.tags }}']('{{ message.message|escapejs }}');
-        {% endfor %}
-    });
-    </script>
-    {% endif %}
     <script>
         var csrftoken = '{{ csrf_token }}';
         // Include CSRF token in all HTMX requests (needed for DELETE/PUT/PATCH)
@@ -56,10 +47,25 @@
         toastr.options = {
             positionClass: 'toast-bottom-right',
             progressBar: true,
-            timeOut: 4000,
+            timeOut: 4500,
+            extendedTimeOut: 2000,
+            closeButton: true,
             tapToDismiss: true,
             newestOnTop: true,
         };
+
+        {% if messages %}
+        (function () {
+            var _valid = { success: 1, info: 1, warning: 1, error: 1 };
+            {% for message in messages %}
+            (function () {
+                var tag = '{{ message.tags|escapejs }}';
+                var fn = _valid[tag] ? tag : 'info';
+                toastr[fn]('{{ message.message|escapejs }}');
+            }());
+            {% endfor %}
+        }());
+        {% endif %}
 
         // Global: disable submit buttons during HTMX form requests to prevent double-submit
         (function () {

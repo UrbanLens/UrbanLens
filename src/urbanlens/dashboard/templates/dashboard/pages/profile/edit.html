@@ -134,7 +134,7 @@
 
 <div class="edit-profile-page">
 
-    {# ── Setup / welcome banner (new SSO users only) ───────────────────────── #}
+    {# ── Setup / welcome banner (shown to all new users until they complete setup) ── #}
     {% if not form.instance.profile_setup_complete %}
     <div class="edit-setup-banner" id="setup-banner">
         <i class="material-icons setup-banner-icon">waving_hand</i>

@@ -24,6 +24,7 @@ from django.utils.safestring import mark_safe
 from django.views import View, generic
 
 from urbanlens.dashboard.models.account import EmailVerification
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.site_admin import should_redirect_to_site_admin
 
 if TYPE_CHECKING:
@@ -237,6 +238,11 @@ class VerifyEmailView(View):
         user.is_active = True
         user.save(update_fields=["is_active"])
 
+        profile, created = Profile.objects.get_or_create(user=user)
+        if created:
+            profile.profile_setup_complete = False
+            profile.save(update_fields=["profile_setup_complete"])
+
         # Auto-send friend request from any pending email invitations
         _process_pending_invitations(user)
 
@@ -381,12 +387,15 @@ class PostLoginRedirectView(View):
         if should_redirect_to_site_admin(request.user):
             return redirect("site_admin")
 
+        from urbanlens.dashboard.models.profile.model import Profile
+
         try:
-            if not request.user.profile.profile_setup_complete:
-                return redirect("profile.edit")
-        except Exception:
-            # TODO: Is this exception expected? If not, remove this. If yes, catch the specific exception type.
-            logger.exception("Error redirecting user after login")
+            profile = request.user.profile
+        except Profile.DoesNotExist:
+            profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        if not profile.profile_setup_complete:
+            return redirect("profile.edit")
 
         return redirect("map.view")
 
