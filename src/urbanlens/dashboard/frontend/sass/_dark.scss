@@ -3,7 +3,7 @@
 
 [data-theme="dark"] {
     background: var(--ul-surface-0);
-    color: #e0e0e0;
+    color: var(--ul-text-1);
 
     input:not([type]):disabled,
     input:not([type])[readonly=readonly],
