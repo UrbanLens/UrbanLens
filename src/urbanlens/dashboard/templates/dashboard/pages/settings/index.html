@@ -754,14 +754,22 @@ window.updateClusterRadius = function (value) {
     }
 
     function doSave(form) {
+        var guard = window.autosaveGuard;
+        if (guard) guard.saveStarted();
         fetch(form.action || window.location.href, {
             method: 'POST',
             body: new FormData(form),
             headers: { 'X-CSRFToken': getCsrf() },
-        }).then(function () { showSaved(form.id); }).catch(function () {});
+        }).then(function (r) {
+            if (r.ok && guard) guard.markClean();
+            if (r.ok) showSaved(form.id);
+        }).catch(function () {}).finally(function () {
+            if (guard) guard.saveFinished();
+        });
     }
 
     function schedule(form, delay) {
+        if (window.autosaveGuard) window.autosaveGuard.markDirty();
         clearTimeout(_timers[form.id]);
         _timers[form.id] = setTimeout(function () { doSave(form); }, delay !== undefined ? delay : 0);
     }

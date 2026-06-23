@@ -288,17 +288,94 @@
     </script>
 
     <script>
-    // ── Close any <dialog> on backdrop click ──────────────────────────────────
-    document.addEventListener('click', function (e) {
-        if (e.target.tagName !== 'DIALOG' || !e.target.open) return;
-        var rect = e.target.getBoundingClientRect();
-        if (e.clientX < rect.left || e.clientX > rect.right ||
-            e.clientY < rect.top  || e.clientY > rect.bottom) {
+    // ── Unsaved / in-flight auto-save guard ───────────────────────────────────
+    (function () {
+        var _dirty = false;
+        var _inFlight = 0;
+        var _message = 'Changes are still saving. Leave this page anyway?';
+
+        window.autosaveGuard = {
+            markDirty: function () { _dirty = true; },
+            markClean: function () { _dirty = false; },
+            saveStarted: function () { _inFlight++; },
+            saveFinished: function () { _inFlight = Math.max(0, _inFlight - 1); },
+            allowNavigation: function () { _dirty = false; _inFlight = 0; },
+            isBlocked: function () { return _dirty || _inFlight > 0; },
+            setMessage: function (msg) { _message = msg; },
+        };
+
+        window.addEventListener('beforeunload', function (e) {
+            if (!window.autosaveGuard.isBlocked()) return;
+            e.preventDefault();
+            e.returnValue = '';
+        });
+
+        document.body.addEventListener('htmx:confirm', function (e) {
+            if (!window.autosaveGuard.isBlocked()) return;
+            e.preventDefault();
+            var proceed = window.confirmDialog ? window.confirmDialog({
+                title: 'Leave page?',
+                message: _message,
+                confirmLabel: 'Leave anyway',
+                danger: true,
+            }) : Promise.resolve(window.confirm(_message));
+            proceed.then(function (ok) {
+                if (ok) {
+                    window.autosaveGuard.allowNavigation();
+                    e.detail.issueRequest(true);
+                }
+            });
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!window.autosaveGuard.isBlocked()) return;
+            var a = e.target.closest ? e.target.closest('a[href]') : null;
+            if (!a) return;
+            var href = a.getAttribute('href');
+            if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0 || a.target === '_blank') return;
+            e.preventDefault();
+            var proceed = window.confirmDialog ? window.confirmDialog({
+                title: 'Leave page?',
+                message: _message,
+                confirmLabel: 'Leave anyway',
+                danger: true,
+            }) : Promise.resolve(window.confirm(_message));
+            proceed.then(function (ok) {
+                if (ok) {
+                    window.autosaveGuard.allowNavigation();
+                    window.location.href = a.href;
+                }
+            });
+        }, true);
+    }());
+    </script>
+
+    <script>
+    // ── Close any <dialog> on backdrop click (not drag-outside) ───────────────
+    (function () {
+        var _dialogPress = null;
+
+        function _isBackdrop(dialog, x, y) {
+            var rect = dialog.getBoundingClientRect();
+            return x < rect.left || x > rect.right || y < rect.top || y > rect.bottom;
+        }
+
+        document.addEventListener('mousedown', function (e) {
+            var dlg = e.target.closest ? e.target.closest('dialog') : null;
+            if (!dlg || !dlg.open) { _dialogPress = null; return; }
+            _dialogPress = _isBackdrop(dlg, e.clientX, e.clientY) ? 'backdrop' : 'inside';
+        });
+
+        document.addEventListener('click', function (e) {
+            if (e.target.tagName !== 'DIALOG' || !e.target.open) return;
+            if (_dialogPress !== 'backdrop') return;
+            if (!_isBackdrop(e.target, e.clientX, e.clientY)) return;
             var closeFn = e.target.dataset.closefn;
             if (closeFn && window[closeFn]) { window[closeFn](); }
             else { e.target.close(); }
-        }
-    });
+            _dialogPress = null;
+        });
+    }());
     </script>
 
     {# ── Comment map composer dialog ──────────────────────────────────────────── #}

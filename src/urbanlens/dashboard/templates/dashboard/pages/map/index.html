@@ -790,11 +790,32 @@
         if (pin.id) {
             let _savedLat = parseFloat(pin.latitude);
             let _savedLng = parseFloat(pin.longitude);
+            let _dragUnlocked = false;
+            const PIN_DRAG_CONFIRM_ZOOM = 14;
+
             marker.on('dragstart', function () {
+                if (map.getZoom() >= PIN_DRAG_CONFIRM_ZOOM && !_dragUnlocked) {
+                    marker.dragging.disable();
+                    marker.setLatLng([_savedLat, _savedLng]);
+                    window.confirmDialog({
+                        title: 'Move pin?',
+                        message: 'At this zoom level it is easy to move a pin by accident.\n\nDrag again after confirming to reposition it.',
+                        confirmLabel: 'Enable move',
+                        danger: false,
+                    }).then(function (ok) {
+                        if (ok) {
+                            _dragUnlocked = true;
+                            marker.dragging.enable();
+                            toastr.info('Drag the pin to its new location.');
+                        }
+                    });
+                    return;
+                }
                 clusterGroup.removeLayer(marker);
                 marker.addTo(map);
             });
             marker.on('dragend', function () {
+                _dragUnlocked = false;
                 const pos = marker.getLatLng();
                 fetch(`/dashboard/rest/pins/${pin.id}/`, {
                     method: 'PATCH',
@@ -1634,10 +1655,24 @@
         document.getElementById('add-pin-dialog').close();
     }
 
-    // Close dialog on backdrop click
-    document.getElementById('add-pin-dialog').addEventListener('click', function(e) {
-        if (e.target === this) closeAddPinDialog();
-    });
+    // Close dialog on backdrop click (not drag-outside)
+    (function () {
+        var apDlg = document.getElementById('add-pin-dialog');
+        var apPress = null;
+        function apIsBackdrop(dlg, x, y) {
+            var rect = dlg.getBoundingClientRect();
+            return x < rect.left || x > rect.right || y < rect.top || y > rect.bottom;
+        }
+        apDlg.addEventListener('mousedown', function (e) {
+            if (e.target !== apDlg) { apPress = 'inside'; return; }
+            apPress = apIsBackdrop(apDlg, e.clientX, e.clientY) ? 'backdrop' : 'inside';
+        });
+        apDlg.addEventListener('click', function (e) {
+            if (e.target !== apDlg || apPress !== 'backdrop') return;
+            if (apIsBackdrop(apDlg, e.clientX, e.clientY)) closeAddPinDialog();
+            apPress = null;
+        });
+    }());
 
     // Map click: place pin while dialog is open
     map.on('click', function(e) {

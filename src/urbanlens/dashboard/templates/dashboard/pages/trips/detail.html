@@ -564,9 +564,33 @@
                     _markers[actId] = marker;
 
                     if (!isChildTrip && pt.draggable) {
-                        (function (aId) {
+                        (function (aId, m, savedLat, savedLng) {
+                            var dragUnlocked = false;
+                            var PIN_DRAG_CONFIRM_ZOOM = 14;
                             var posUrl = '{% url "trips.activity.position" trip.uuid 0 %}'.replace('/0/', '/' + aId + '/');
-                            marker.on('dragend', function (ev) {
+
+                            m.on('dragstart', function () {
+                                if (_map.getZoom() >= PIN_DRAG_CONFIRM_ZOOM && !dragUnlocked) {
+                                    m.dragging.disable();
+                                    m.setLatLng([savedLat, savedLng]);
+                                    window.confirmDialog({
+                                        title: 'Move activity?',
+                                        message: 'At this zoom level it is easy to move a marker by accident.\n\nDrag again after confirming to reposition it.',
+                                        confirmLabel: 'Enable move',
+                                        danger: false,
+                                    }).then(function (ok) {
+                                        if (ok) {
+                                            dragUnlocked = true;
+                                            m.dragging.enable();
+                                            toastr && toastr.info('Drag the marker to its new location.');
+                                        }
+                                    });
+                                    return;
+                                }
+                            });
+
+                            m.on('dragend', function (ev) {
+                                dragUnlocked = false;
                                 var ll = ev.target.getLatLng();
                                 fetch(posUrl, {
                                     method: 'POST',
@@ -580,7 +604,7 @@
                                     toastr && toastr.error('Could not save new position.');
                                 });
                             });
-                        }(actId));
+                        }(actId, marker, pt.lat, pt.lng));
                     }
                 }
                 marker.addTo(_markersGroup);

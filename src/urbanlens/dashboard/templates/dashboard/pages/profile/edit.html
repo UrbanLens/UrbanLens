@@ -227,7 +227,10 @@ function closeDateErrorDialog() {
 
     // ── core save ─────────────────────────────────────────────────────────────
     function saveField(field, value, isFile) {
+        if (window.autosaveGuard) window.autosaveGuard.markDirty();
         setStatus(field, 'saving', 'Saving…');
+        var guard = window.autosaveGuard;
+        if (guard) guard.saveStarted();
         var fd = new FormData();
         fd.append('csrfmiddlewaretoken', csrftoken);
         fd.append('field', field);
@@ -240,6 +243,7 @@ function closeDateErrorDialog() {
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (data.ok) {
+                    if (guard) guard.markClean();
                     setStatus(field, 'saved', '✓ Saved');
                     if (data.avatar_url) {
                         var el = document.getElementById('avatar-preview');
@@ -267,7 +271,8 @@ function closeDateErrorDialog() {
                     }
                 }
             })
-            .catch(function () { setStatus(field, 'error', 'Save failed.'); });
+            .catch(function () { setStatus(field, 'error', 'Save failed.'); })
+            .finally(function () { if (guard) guard.saveFinished(); });
     }
 
     // ── wire up all autosave inputs ───────────────────────────────────────────

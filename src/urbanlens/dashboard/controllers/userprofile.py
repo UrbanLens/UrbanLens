@@ -472,7 +472,7 @@ def _render_profile_annotation_partial(
 
     return render(
         request,
-        "dashboard/partials/profile_annotation_partial.html",
+        "dashboard/partials/profile_annotation_content.html",
         {
             "subject": subject,
             "viewer_notes": viewer_notes,

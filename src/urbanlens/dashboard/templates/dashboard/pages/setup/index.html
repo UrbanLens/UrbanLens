@@ -270,6 +270,7 @@
             if (sidebarTitle) sidebarTitle.textContent = v;
             if (doneTitle) doneTitle.textContent = v;
 
+            if (window.autosaveGuard) window.autosaveGuard.markDirty();
             clearTimeout(_saveTimer);
             _saveTimer = setTimeout(saveTitle, 900);
         });
@@ -280,6 +281,8 @@
         var v = titleInput.value.trim();
         if (!v) return;
 
+        var guard = window.autosaveGuard;
+        if (guard) guard.saveStarted();
         fetch(SETUP_URL, {
             method: 'POST',
             headers: {
@@ -288,14 +291,19 @@
             },
             body: 'action=save_title&app_title=' + encodeURIComponent(v),
         }).then(function (r) {
-            if (r.ok && saveStatus) {
-                saveStatus.classList.add('setup-save-status--visible');
-                clearTimeout(saveStatus._t);
-                saveStatus._t = setTimeout(function () {
-                    saveStatus.classList.remove('setup-save-status--visible');
-                }, 2200);
+            if (r.ok) {
+                if (guard) guard.markClean();
+                if (saveStatus) {
+                    saveStatus.classList.add('setup-save-status--visible');
+                    clearTimeout(saveStatus._t);
+                    saveStatus._t = setTimeout(function () {
+                        saveStatus.classList.remove('setup-save-status--visible');
+                    }, 2200);
+                }
             }
-        }).catch(function () {});
+        }).catch(function () {}).finally(function () {
+            if (guard) guard.saveFinished();
+        });
     }
 }());
 </script>

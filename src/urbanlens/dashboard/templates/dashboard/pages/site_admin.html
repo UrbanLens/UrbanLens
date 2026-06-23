@@ -164,11 +164,18 @@
     }
 
     function doSave(form, card) {
+        var guard = window.autosaveGuard;
+        if (guard) guard.saveStarted();
         fetch(form.action, {
             method: 'POST',
             body: new FormData(form),
             headers: { 'X-CSRFToken': getCsrf() },
-        }).then(function () { showSaved(card); }).catch(function () {});
+        }).then(function (r) {
+            if (r.ok && guard) guard.markClean();
+            if (r.ok) showSaved(card);
+        }).catch(function () {}).finally(function () {
+            if (guard) guard.saveFinished();
+        });
     }
 
     document.querySelectorAll('.site-admin-card').forEach(function (card) {
@@ -188,6 +195,7 @@
         form.addEventListener('change', function (e) {
             var t = e.target;
             if (t.type === 'hidden') return;
+            if (window.autosaveGuard) window.autosaveGuard.markDirty();
             var delay = (t.type === 'text' || t.type === 'number') ? 1200 : 0;
             var key = form.id || Math.random();
             clearTimeout(_timers[key]);
@@ -197,6 +205,7 @@
         form.addEventListener('input', function (e) {
             var t = e.target;
             if (t.type === 'number' || t.type === 'text') {
+                if (window.autosaveGuard) window.autosaveGuard.markDirty();
                 var key = form.id || Math.random();
                 clearTimeout(_timers[key]);
                 _timers[key] = setTimeout(function () { doSave(form, card); }, 1200);

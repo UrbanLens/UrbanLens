@@ -317,5 +317,15 @@
         if (e.key === 'Escape' && overlay.style.display !== 'none') closeDialog();
     });
 }());
+
+function panToggleEdit(noteId) {
+    var body = document.getElementById('pan-note-body-' + noteId);
+    var edit = document.getElementById('pan-note-edit-' + noteId);
+    if (!body || !edit) return;
+    var isEditing = !edit.hidden;
+    body.hidden = !isEditing;
+    edit.hidden = isEditing;
+    if (!isEditing) edit.querySelector('textarea').focus();
+}
 </script>
 {% endblock %}
