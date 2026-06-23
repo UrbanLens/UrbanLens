@@ -5,7 +5,7 @@ from urbanlens.dashboard.models.location import Location
 
 
 @receiver(post_save, sender=Location, dispatch_uid="location_suggest_categories")
-def suggest_and_add_categories(sender, instance: Location, created, **kwargs):
+def suggest_and_add_categories(sender: type[Location], instance: Location, created: bool, **kwargs) -> None:
     """
     Suggests categories for a newly created Location instance and adds them.
 

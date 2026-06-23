@@ -6,6 +6,7 @@ import contextlib
 import io
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -15,12 +16,17 @@ from django.views import View
 from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Badge
 from urbanlens.dashboard.models.pin.model import Pin
 
+if TYPE_CHECKING:
+    from django.core.files.uploadedfile import UploadedFile
+
+    from urbanlens.dashboard.models.profile.model import Profile
+
 logger = logging.getLogger(__name__)
 
 _ICON_MAX_PX = 256
 
 
-def _resize_custom_icon(uploaded_file):
+def _resize_custom_icon(uploaded_file: UploadedFile) -> UploadedFile:
     """Resize an uploaded icon to at most _ICON_MAX_PX * _ICON_MAX_PX pixels.
 
     Returns the original file unchanged if it is already within bounds or if
@@ -62,7 +68,7 @@ _BASE_CTX = {
 _PERM = "dashboard.edit_global_badge"
 
 
-def _rows_ctx(profile, can_edit_global: bool = False, extra: dict | None = None) -> dict:
+def _rows_ctx(profile: Profile, can_edit_global: bool = False, extra: dict | None = None) -> dict:
     tags = Badge.objects.tags().visible_to(profile).ordered().with_customizations_for(profile).with_pin_counts()
     ctx = {**_BASE_CTX, "tags": tags, "can_edit_global": can_edit_global}
     if extra:

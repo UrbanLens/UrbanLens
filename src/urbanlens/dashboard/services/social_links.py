@@ -15,7 +15,11 @@ Security contract
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlparse
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 # URL template for rendering a stored handle back to a clickable link.
 # None means the platform has no public profile URL (Discord).
@@ -171,7 +175,7 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
     return None
 
 
-def get_profile_links(profile) -> list[dict]:
+def get_profile_links(profile: Profile) -> list[dict]:
     """Return a list of link dicts for all SocialLink rows attached to *profile*.
 
     Each dict contains: ``platform``, ``handle``, ``url`` (may be None for

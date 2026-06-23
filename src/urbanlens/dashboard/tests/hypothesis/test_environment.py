@@ -74,7 +74,7 @@ class BaseEnvironmentEqualityTests(TestCase):
         self.assertEqual(Local(), EnvironmentTypes.LOCAL)
 
     def test_neq_with_different_env_type_enum(self) -> None:
-        self.assertNotEqual(Local(), EnvironmentTypes.PROD)
+        self.assertNotEqual(Local(), EnvironmentTypes.PRODUCTION)
 
     def test_eq_with_matching_lowercase_string(self) -> None:
         self.assertEqual(Local(), "local")
@@ -86,7 +86,7 @@ class BaseEnvironmentEqualityTests(TestCase):
         self.assertEqual(Local(), "LoCaL")
 
     def test_neq_with_different_string(self) -> None:
-        self.assertNotEqual(Local(), "prod")
+        self.assertNotEqual(Local(), "production")
 
     def test_eq_with_same_type_environment(self) -> None:
         self.assertEqual(Local(), Local())
@@ -178,8 +178,8 @@ class ProductionEnvironmentTests(TestCase):
     def test_in_network(self) -> None:
         self.assertTrue(Production().in_network)
 
-    def test_env_type_is_prod(self) -> None:
-        self.assertEqual(Production().env_type, EnvironmentTypes.PROD)
+    def test_env_type_is_production(self) -> None:
+        self.assertEqual(Production().env_type, EnvironmentTypes.PRODUCTION)
 
     def test_debug_override_is_override_off(self) -> None:
         self.assertEqual(Production().debug_override, DebugTypes.OVERRIDE_OFF)
@@ -194,26 +194,26 @@ class SelectEnvironmentTests(TestCase):
     def test_local_returns_local(self) -> None:
         self.assertIsInstance(select_environment(EnvironmentTypes.LOCAL), Local)
 
-    def test_dev_returns_development(self) -> None:
-        self.assertIsInstance(select_environment(EnvironmentTypes.DEV), Development)
+    def test_development_returns_development(self) -> None:
+        self.assertIsInstance(select_environment(EnvironmentTypes.DEVELOPMENT), Development)
 
-    def test_test_returns_testing(self) -> None:
-        self.assertIsInstance(select_environment(EnvironmentTypes.TEST), Testing)
+    def test_testing_returns_testing(self) -> None:
+        self.assertIsInstance(select_environment(EnvironmentTypes.TESTING), Testing)
 
     def test_staging_returns_staging(self) -> None:
         self.assertIsInstance(select_environment(EnvironmentTypes.STAGING), Staging)
 
-    def test_prod_returns_production(self) -> None:
-        self.assertIsInstance(select_environment(EnvironmentTypes.PROD), Production)
+    def test_production_returns_production(self) -> None:
+        self.assertIsInstance(select_environment(EnvironmentTypes.PRODUCTION), Production)
 
     def test_accepts_string_input(self) -> None:
         self.assertIsInstance(select_environment("local"), Local)
 
-    def test_string_dev_returns_development(self) -> None:
-        self.assertIsInstance(select_environment("dev"), Development)
+    def test_string_development_returns_development(self) -> None:
+        self.assertIsInstance(select_environment("development"), Development)
 
     def test_env_var_is_used_when_none_passed(self) -> None:
-        with patch.dict(os.environ, {"UL_ENVIRONMENT": "dev"}):
+        with patch.dict(os.environ, {"UL_ENVIRONMENT": "development"}):
             self.assertIsInstance(select_environment(None), Development)
 
     def test_default_used_when_no_env_var_set(self) -> None:

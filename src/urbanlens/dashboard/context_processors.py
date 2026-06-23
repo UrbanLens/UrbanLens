@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
 
-def add_site_settings(request):
+def add_site_settings(request: HttpRequest) -> dict[str, str]:
     """Inject site-wide settings into every template context.
 
     Args:
@@ -23,7 +27,7 @@ def add_site_settings(request):
         return {"site_title": "UrbanLens"}
 
 
-def add_dev_toolbar(request):
+def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
     """Inject dev toolbar visibility and theme state into template context.
 
     Args:
@@ -55,7 +59,7 @@ def add_dev_toolbar(request):
     }
 
 
-def add_page_name(request):
+def add_page_name(request: HttpRequest) -> dict[str, str]:
     resolver_match = request.resolver_match
     if resolver_match is None:
         return {"page_name": ""}

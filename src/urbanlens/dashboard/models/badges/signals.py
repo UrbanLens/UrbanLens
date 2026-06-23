@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
+
 # Default category names mirror the keys in services/ai/keywords.py so that
 # auto-categorisation can match against badges the user actually owns.
 DEFAULT_CATEGORIES: list[str] = [
@@ -43,7 +48,7 @@ DEFAULT_CATEGORIES: list[str] = [
 ]
 
 
-def create_default_tags(sender, instance, created: bool, **kwargs) -> None:
+def create_default_tags(sender: type[Profile], instance: Profile, created: bool, **kwargs) -> None:
     """Create default personal status and category badges for every new profile.
 
     Status badges:

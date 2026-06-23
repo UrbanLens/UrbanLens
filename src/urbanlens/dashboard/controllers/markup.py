@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
@@ -14,6 +15,9 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup, SecurityIndicatorType
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+
+if TYPE_CHECKING:
+    from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +60,7 @@ _GEOMETRY_TYPES = {
 }
 
 
-def _parse_body(request) -> dict:
+def _parse_body(request: HttpRequest) -> dict:
     """Parse JSON or fall back to POST data."""
     try:
         return json.loads(request.body)

@@ -4,9 +4,9 @@ from enum import StrEnum
 
 
 class EnvironmentTypes(StrEnum):
-    DEV = "dev"
-    TEST = "test"
-    PROD = "prod"
+    DEVELOPMENT = "development"
+    TESTING = "testing"
+    PRODUCTION = "production"
     STAGING = "staging"
     LOCAL = "local"
 

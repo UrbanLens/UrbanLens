@@ -40,7 +40,7 @@ class DjangoProjectInitializer:
         self.db_name = os.environ.get("UL_DB_NAME", "UrbanLens")
         self.db_user = os.environ.get("UL_DB_USER", "postgres")
         self.db_pass = os.environ.get("UL_DB_PASS", "postgres")
-        self.environment = environment or os.environ.get("ENVIRONMENT", "production")
+        self.environment = environment or os.environ.get("UL_ENVIRONMENT", "production")
 
     @property
     def db_host(self) -> str:
@@ -114,7 +114,7 @@ class DjangoProjectInitializer:
     @environment.setter
     def environment(self, value: str):
         # Ensure environment is a known option
-        if value not in {"development", "test", "production"}:
+        if value not in {"development", "testing", "production"}:
             safe_value = re.sub(r"[^a-zA-Z0-9_-]", "", value)
             logger.error("Invalid environment: %s", safe_value)
             raise UnrecoverableError(f"Invalid environment: {safe_value}")
@@ -503,7 +503,7 @@ def main():
     parser.add_argument(
         "--environment",
         "-e",
-        choices=["development", "test", "production"],
+        choices=["development", "testing", "production"],
         help="Set the environment",
     )
     args = parser.parse_args()

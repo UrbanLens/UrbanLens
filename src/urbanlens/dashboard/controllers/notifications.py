@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse
@@ -11,6 +12,9 @@ from django.views import View
 
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +30,7 @@ _PREF_FIELDS = [
 ]
 
 
-def _get_or_create_prefs(profile) -> NotificationPreference:
+def _get_or_create_prefs(profile: Profile) -> NotificationPreference:
     prefs, _ = NotificationPreference.objects.get_or_create(profile=profile)
     return prefs
 

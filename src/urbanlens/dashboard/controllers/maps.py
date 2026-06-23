@@ -387,7 +387,7 @@ def _create_location_with_canonical_name(lat: float, lon: float) -> Location:
 
 
 @login_required
-def get_pin_by_address(address):
+def get_pin_by_address(address: str) -> tuple[float | None, float | None]:
     try:
         geolocator = Nominatim(user_agent="geoapiExercises")
         pin = geolocator.geocode(address)

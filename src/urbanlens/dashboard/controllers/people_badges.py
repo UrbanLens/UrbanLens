@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, HttpResponseForbidden
@@ -11,6 +12,10 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_USER, Badge
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.badges.queryset import BadgeQuerySet
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +26,12 @@ _CTX_BASE = {
 }
 
 
-def _people_badges(profile):
+def _people_badges(profile: Profile) -> BadgeQuerySet:
     """Return the user's visible KIND_USER badges in display order."""
     return Badge.objects.user_badges().visible_to(profile).ordered()
 
 
-def _rows_ctx(profile) -> dict:
+def _rows_ctx(profile: Profile) -> dict:
     """Build template context for the people badge rows partial."""
     return {**_CTX_BASE, "user_badges": _people_badges(profile)}
 

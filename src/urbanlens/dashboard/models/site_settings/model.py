@@ -198,9 +198,9 @@ class SiteSettings(abstract.Model):
         """Return whether the site is running in development mode.
 
         Returns:
-            True when the effective environment type is ``dev``.
+            True when the effective environment type is ``development``.
         """
-        return self.get_effective_environment_type() == EnvironmentTypes.DEV
+        return self.get_effective_environment_type() == EnvironmentTypes.DEVELOPMENT
 
     def show_dev_admin_features(self, user) -> bool:
         """Return whether dev-only admin UI should be visible to ``user``.

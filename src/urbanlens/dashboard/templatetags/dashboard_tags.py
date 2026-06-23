@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING, Any
 
 from django import template
+
+if TYPE_CHECKING:
+    from collections.abc import Collection
+    import datetime
+
+    from urbanlens.dashboard.models.badges.model import Badge
 
 register = template.Library()
 
 
 @register.filter
-def in_list(value, collection) -> bool:
+def in_list(value: Any, collection: Collection[Any]) -> bool:
     """Return True if value is found in collection.
 
     Usage: {{ value|in_list:some_set }}
@@ -19,7 +26,7 @@ def in_list(value, collection) -> bool:
 
 
 @register.filter
-def tag_total_pins(tag) -> int:
+def tag_total_pins(tag: Badge) -> int:
     """Return direct pin count plus all direct children's pin counts.
 
     Uses annotated pin_count when available (set by BadgeQuerySet.with_pin_counts()).
@@ -35,7 +42,7 @@ def tag_total_pins(tag) -> int:
 
 
 @register.filter
-def get_attr(obj, attr: str):
+def get_attr(obj: Any, attr: str) -> Any:
     """Return getattr(obj, attr), useful in loops over field names.
 
     Usage: {{ object|get_attr:field_name }}
@@ -44,7 +51,7 @@ def get_attr(obj, attr: str):
 
 
 @register.filter
-def human_timesince(value) -> str:
+def human_timesince(value: datetime.datetime | datetime.date) -> str:
     """Return a human-friendly relative time string.
 
     Returns 'just now' for times less than 1 minute ago instead of '0 minutes ago'.
@@ -61,7 +68,7 @@ def human_timesince(value) -> str:
 
 
 @register.filter
-def is_material_icon(value) -> bool:
+def is_material_icon(value: str | None) -> bool:
     """Return True if value is a Material Icons name (ASCII letters/underscores only).
 
     Returns False for emoji or other Unicode characters, which are rendered as-is.
@@ -72,7 +79,7 @@ def is_material_icon(value) -> bool:
 
 
 @register.filter
-def icon_keywords(value) -> str:
+def icon_keywords(value: str | None) -> str:
     """Return space-separated search keywords for an emoji icon character.
 
     Looks up ``value`` in ``ICON_KEYWORDS`` and returns the associated string,

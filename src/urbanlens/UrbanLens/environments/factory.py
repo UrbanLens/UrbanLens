@@ -42,13 +42,13 @@ def select_environment(
     match env_type:
         case EnvironmentTypes.LOCAL:
             return Local()
-        case EnvironmentTypes.DEV:
+        case EnvironmentTypes.DEVELOPMENT:
             return Development()
-        case EnvironmentTypes.TEST:
+        case EnvironmentTypes.TESTING:
             return Testing()
         case EnvironmentTypes.STAGING:
             return Staging()
-        case EnvironmentTypes.PROD:
+        case EnvironmentTypes.PRODUCTION:
             return Production()
         case _:
             raise ValueError(f"Unknown environment type: {env_type}")

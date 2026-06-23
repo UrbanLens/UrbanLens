@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -18,6 +19,10 @@ from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORI
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.badges.queryset import BadgeQuerySet
+    from urbanlens.dashboard.models.profile.model import Profile
+
 logger = logging.getLogger(__name__)
 
 _CTX_BASE = {
@@ -27,12 +32,12 @@ _CTX_BASE = {
 }
 
 
-def _all_categories(profile):
+def _all_categories(profile: Profile) -> BadgeQuerySet:
     """Return categories belonging to *profile*, ordered for display with count annotations."""
     return Badge.objects.categories().for_profile(profile).ordered().with_pin_counts()
 
 
-def _rows_ctx(profile, extra: dict | None = None) -> dict:
+def _rows_ctx(profile: Profile, extra: dict | None = None) -> dict:
     """Build template context for category rows partial."""
     ctx = {**_CTX_BASE, "categories": _all_categories(profile)}
     if extra:
@@ -491,12 +496,12 @@ class CategoryMergeView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
 
 
-def _all_badges(profile):
+def _all_badges(profile: Profile) -> BadgeQuerySet:
     """Return all tag/category/status badges visible to *profile*, ordered for the badge picker."""
     return Badge.objects.visible_to(profile).ordered()
 
 
-def _pin_member_ids(pin) -> set[int]:
+def _pin_member_ids(pin: Pin) -> set[int]:
     """Return the set of all badge IDs currently assigned to a pin (all kinds)."""
     return (
         set(pin.categories.values_list("id", flat=True))
@@ -505,7 +510,7 @@ def _pin_member_ids(pin) -> set[int]:
     )
 
 
-def _location_member_ids(location) -> set[int]:
+def _location_member_ids(location: Location) -> set[int]:
     """Return the set of all badge IDs currently assigned to a location (all kinds)."""
     return (
         set(location.categories.values_list("id", flat=True))
@@ -514,7 +519,7 @@ def _location_member_ids(location) -> set[int]:
     )
 
 
-def _apply_badge_to_pin(pin, badge: Badge, action: str) -> None:
+def _apply_badge_to_pin(pin: Pin, badge: Badge, action: str) -> None:
     """Add or remove a badge from the correct M2M field on a pin based on its kind."""
     m2m = {"category": pin.categories, "tag": pin.tags, "status": pin.statuses}.get(badge.kind)
     if m2m is None:
@@ -525,7 +530,7 @@ def _apply_badge_to_pin(pin, badge: Badge, action: str) -> None:
         m2m.remove(badge)
 
 
-def _apply_badge_to_location(location, badge: Badge, action: str) -> None:
+def _apply_badge_to_location(location: Location, badge: Badge, action: str) -> None:
     """Add or remove a badge from the correct M2M field on a location based on its kind."""
     m2m = {"category": location.categories, "tag": location.tags, "status": location.statuses}.get(badge.kind)
     if m2m is None:

@@ -6,7 +6,7 @@ import contextlib
 from decimal import Decimal
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, HttpResponse, JsonResponse
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _get_gps_ifd(image_file):
+def _get_gps_ifd(image_file: IO[bytes]) -> dict[int, Any] | None:
     """Return the raw EXIF GPS IFD for an image file, if present."""
     image_file.seek(0)
     img = PILImage.open(image_file)
@@ -36,7 +36,7 @@ def _get_gps_ifd(image_file):
     return exif.get_ifd(0x8825) or None  # 34853 - GPSInfo IFD tag
 
 
-def _extract_gps_coords(image_file) -> tuple[float, float] | None:
+def _extract_gps_coords(image_file: IO[bytes]) -> tuple[float, float] | None:
     """Return (latitude, longitude) from EXIF GPS tags, or None if not present."""
     try:
         gps_ifd = _get_gps_ifd(image_file)
@@ -57,7 +57,7 @@ def _extract_gps_coords(image_file) -> tuple[float, float] | None:
     return lat, lng
 
 
-def _dms_to_decimal(dms, ref: str) -> float:
+def _dms_to_decimal(dms: tuple[float, ...], ref: str) -> float:
     """Convert a DMS tuple from EXIF to a signed decimal degree."""
     degrees, minutes, seconds = (float(x) for x in dms)
     decimal = degrees + minutes / 60.0 + seconds / 3600.0

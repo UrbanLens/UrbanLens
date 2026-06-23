@@ -42,9 +42,9 @@ class EnvironmentOverrideChoice(TextChoices):
             or unrecognized.
         """
         mapping: dict[str, EnvironmentTypes] = {
-            cls.PRODUCTION: EnvironmentTypes.PROD,
-            cls.DEVELOPMENT: EnvironmentTypes.DEV,
-            cls.TESTING: EnvironmentTypes.TEST,
+            cls.PRODUCTION: EnvironmentTypes.PRODUCTION,
+            cls.DEVELOPMENT: EnvironmentTypes.DEVELOPMENT,
+            cls.TESTING: EnvironmentTypes.TESTING,
             cls.STAGING: EnvironmentTypes.STAGING,
         }
         return mapping.get(value)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -12,6 +13,9 @@ from django.views import View
 
 from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Badge
 from urbanlens.dashboard.models.pin.model import Pin
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +26,7 @@ _BASE_CTX = {
 }
 
 
-def _rows_ctx(profile, extra: dict | None = None) -> dict:
+def _rows_ctx(profile: Profile, extra: dict | None = None) -> dict:
     statuses = (
         Badge.objects.statuses()
         .for_profile(profile)

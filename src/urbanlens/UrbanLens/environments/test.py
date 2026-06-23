@@ -8,7 +8,7 @@ class Testing(BaseEnvironment):
     def __init__(self, **data):
         super().__init__(
             name="testing",
-            env_type=EnvironmentTypes.TEST,
+            env_type=EnvironmentTypes.TESTING,
             in_network=True,
             is_public=False,
             debug_default=True,

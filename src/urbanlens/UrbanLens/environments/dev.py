@@ -8,7 +8,7 @@ class Development(BaseEnvironment):
     def __init__(self, debug_override: DebugTypes = DebugTypes.DEFAULT):
         super().__init__(
             name="development",
-            env_type=EnvironmentTypes.DEV,
+            env_type=EnvironmentTypes.DEVELOPMENT,
             in_network=True,
             is_public=False,
             debug_default=True,

@@ -24,8 +24,8 @@ class SiteSettingsEnvironmentTests(TestCase):
             environment_override=EnvironmentOverrideChoice.DEFAULT,
         )
         self.site.refresh_from_db()
-        with patch.dict(os.environ, {"UL_ENVIRONMENT": "prod"}):
-            self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.PROD)
+        with patch.dict(os.environ, {"UL_ENVIRONMENT": "production"}):
+            self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.PRODUCTION)
 
     def test_default_falls_back_to_local_without_env_var(self) -> None:
         SiteSettings.objects.filter(pk=self.site.pk).update(
@@ -41,8 +41,8 @@ class SiteSettingsEnvironmentTests(TestCase):
             environment_override=EnvironmentOverrideChoice.DEVELOPMENT,
         )
         self.site.refresh_from_db()
-        with patch.dict(os.environ, {"UL_ENVIRONMENT": "prod"}):
-            self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.DEV)
+        with patch.dict(os.environ, {"UL_ENVIRONMENT": "production"}):
+            self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.DEVELOPMENT)
             self.assertTrue(self.site.is_development_environment())
 
     def test_production_override(self) -> None:
@@ -50,7 +50,7 @@ class SiteSettingsEnvironmentTests(TestCase):
             environment_override=EnvironmentOverrideChoice.PRODUCTION,
         )
         self.site.refresh_from_db()
-        self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.PROD)
+        self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.PRODUCTION)
         self.assertFalse(self.site.is_development_environment())
 
     def test_testing_override(self) -> None:
@@ -58,7 +58,7 @@ class SiteSettingsEnvironmentTests(TestCase):
             environment_override=EnvironmentOverrideChoice.TESTING,
         )
         self.site.refresh_from_db()
-        self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.TEST)
+        self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.TESTING)
 
     def test_staging_override(self) -> None:
         SiteSettings.objects.filter(pk=self.site.pk).update(

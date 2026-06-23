@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_invalidate_map_center")
-def invalidate_profile_map_center(sender, instance: Pin, created: bool, **kwargs) -> None:
+def invalidate_profile_map_center(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
     """Clear the cached map center so it is recomputed on the next map load.
 
     Args:
@@ -31,7 +31,7 @@ def invalidate_profile_map_center(sender, instance: Pin, created: bool, **kwargs
 
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_suggest_categories")
-def suggest_and_add_categories(sender, instance: Pin, created, **kwargs):
+def suggest_and_add_categories(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
     """
     Suggests categories for a newly created Pin instance and adds them.
 

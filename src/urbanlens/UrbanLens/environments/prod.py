@@ -10,7 +10,7 @@ class Production(BaseEnvironment):
     def __init__(self, **data):
         super().__init__(
             name="Production",
-            env_type=EnvironmentTypes.PROD,
+            env_type=EnvironmentTypes.PRODUCTION,
             in_network=True,
             is_public=True,
             debug_default=False,
