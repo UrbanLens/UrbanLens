@@ -22,26 +22,30 @@ from urbanlens.UrbanLens.settings.app import settings
 logger = logging.getLogger(__name__)
 
 
+def _format_relative_search_date(dt: datetime) -> str:
+    """Return a short relative display label for a parsed search-result date."""
+    now = datetime.now(tz=UTC)
+    delta = now - dt
+    if delta.days < 1:
+        hours = delta.seconds // 3600
+        return f"{hours}h ago" if hours else "Just now"
+    if delta.days < 7:
+        return f"{delta.days}d ago"
+    if delta.days < 365:
+        return dt.strftime("%b %-d")
+    return dt.strftime("%b %-d, %Y")
+
+
 def _format_search_date(raw: str | None) -> str:
     """Convert an ISO date string or human-readable age string to a short display label."""
     if not raw:
         return ""
-    from datetime import datetime, timezone
 
     for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
         try:
             dt = datetime.strptime(raw[:19].rstrip("Z"), fmt.rstrip("%z"))
             dt = dt.replace(tzinfo=UTC)
-            now = datetime.now(tz=UTC)
-            delta = now - dt
-            if delta.days < 1:
-                hours = delta.seconds // 3600
-                return f"{hours}h ago" if hours else "Just now"
-            if delta.days < 7:
-                return f"{delta.days}d ago"
-            if delta.days < 365:
-                return dt.strftime("%b %-d")
-            return dt.strftime("%b %-d, %Y")
+            return _format_relative_search_date(dt)
         except ValueError:
             continue
     return raw
@@ -309,7 +313,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not pin.has_meaningful_name:
             return HttpResponse("", status=204)
 
-        cache_key = f"web_search_{pin_slug}"
+        cache_key = f"web_search_pin_{pin.pk}"
         site_settings = SiteSettings.get_current()
         cache_hours = site_settings.search_cache_hours
 
@@ -368,6 +372,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         import base64
 
+        from django.core.cache import cache
+
         try:
             pin = Pin.objects.get(slug=kwargs["pin_slug"], profile__user=request.user)
         except Pin.DoesNotExist:
@@ -378,6 +384,17 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if lat is None or lng is None:
             return render(request, "dashboard/pages/location/street_view.html", {"error": "No coordinates available."})
 
+        thirty_days = 30 * 24 * 3600
+        cache_key = f"street_view_{float(lat):.6f}_{float(lng):.6f}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            image_b64, capture_date = cached
+            return render(
+                request,
+                "dashboard/pages/location/street_view.html",
+                {"image_b64": image_b64, "pin": pin, "capture_date": capture_date},
+            )
+
         try:
             google_maps_gateway = GoogleMapsGateway(api_key=settings.google_street_view_api_key or "")
             image_bytes, capture_date = google_maps_gateway.get_street_view(lat, lng)
@@ -385,6 +402,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Exception as exc:
             logger.warning("Street view unavailable for pin %s: %s", kwargs.get("pin_slug"), exc)
             return render(request, "dashboard/pages/location/street_view.html", {"error": "Street view unavailable."})
+
+        cache.set(cache_key, (image_b64, capture_date), thirty_days)
 
         return render(
             request,

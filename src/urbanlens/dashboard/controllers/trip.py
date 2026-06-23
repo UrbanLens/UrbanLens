@@ -619,8 +619,7 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         if completed_date_str:
             try:
                 completed_date = datetime.date.fromisoformat(completed_date_str)
-                if completed_date > today:
-                    completed_date = today
+                completed_date = min(completed_date, today)
             except ValueError:
                 completed_date = today
         else:

@@ -1804,8 +1804,8 @@
             // avoids a full reload of all pins on every add.
             const tempMarker = L.marker([pinLat, pinLng]).addTo(map);
             tempMarker.bindPopup(`<strong>${pinName}</strong><br><em>Saving…</em>`);
-            if (data && data.pin_uuid) {
-                fetch(`{% url "map.pin.json" pin_uuid="00000000-0000-0000-0000-000000000000" %}`.replace('00000000-0000-0000-0000-000000000000', data.pin_uuid), {
+            if (data && data.pin_slug) {
+                fetch(`{% url "map.pin.json" pin_slug="placeholder-slug" %}`.replace('placeholder-slug', data.pin_slug), {
                     headers: { 'X-Requested-With': 'XMLHttpRequest' },
                 })
                 .then(r => r.ok ? r.json() : null)

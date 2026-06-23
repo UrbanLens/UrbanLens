@@ -132,10 +132,16 @@ class Location(abstract.AddressableMixin, abstract.Model):
 
     def get_place_name(self) -> str | None:
         """Fetch the canonical place name from Google and cache it."""
-        result = GoogleGeocodingGateway(api_key=settings.google_maps_api_key).get_place_name(
-            self.latitude,
-            self.longitude,
-        )
+        if self.latitude is None or self.longitude is None or not (-90 <= float(self.latitude) <= 90) or not (-180 <= float(self.longitude) <= 180):
+            return "No Information Available"
+        try:
+            result = GoogleGeocodingGateway(api_key=settings.google_maps_api_key).get_place_name(
+                self.latitude,
+                self.longitude,
+            )
+        except Exception as exc:
+            logger.debug("Google place-name lookup failed for location %s: %s", self.pk or self.name, exc)
+            result = None
         if not result:
             result = "No Information Available"
         if not self.cached_place_name:
@@ -172,8 +178,8 @@ class Location(abstract.AddressableMixin, abstract.Model):
         prompt = ""
         if self.address:
             prompt += f"address: {self.address}\n"
-        if self.has_place_name():
-            prompt += f"google maps description: {self.place_name}\n"
+        if self.cached_place_name and self.has_place_name():
+            prompt += f"google maps description: {self.cached_place_name}\n"
             instructions += "\nThe google maps description may be helpful, but it also may be inaccurate. Use your best judgement.\n"
         if self.name:
             prompt += f"location title: {self.name}\n"

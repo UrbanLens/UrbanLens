@@ -184,7 +184,7 @@ class PeopleBadgeMultiMergeView(LoginRequiredMixin, View):
 
         target = get_object_or_404(Badge, id=target_id, kind=KIND_USER, profile=profile)
         sources = list(
-            Badge.objects.filter(id__in=source_ids, kind=KIND_USER, profile=profile).exclude(id=target_id)
+            Badge.objects.filter(id__in=source_ids, kind=KIND_USER, profile=profile).exclude(id=target_id),
         )
 
         from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment

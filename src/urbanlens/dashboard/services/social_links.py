@@ -88,6 +88,10 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
     if not raw:
         return None
 
+    raw_scheme = urlparse(raw).scheme
+    if raw_scheme not in {"", "http", "https"} and ("://" in raw or raw_scheme in {"javascript", "vbscript", "data", "ftp", "file", "mailto"}):
+        return None
+
     # Add a scheme so urlparse can see the host when the user omitted it.
     url_str = raw if "://" in raw else f"https://{raw}"
 

@@ -15,8 +15,6 @@ Features planned for this release.
 * Add tooltips to help guide users through the app when my assumptions about what is intuitive are incorrect. [UL-17]
 
 ## Medium Features
-* Proper CI/CD pipeline, tags, releases, etc. [UL-25]
-* Implement "hide user", and "mute user" features, alongside the existing "block user" feature. [UL-27]
 
 ## Larger Features
 * Reduce duplicate code, remove legacy code, simplify codebase. [UL-30]
@@ -107,6 +105,8 @@ Features planned for future releases.
 * Setup bug tracking (github issues?) [UL-1]
 * Share button on pin details page to share with a specific friend. [UL-20]
 * "Accept" / "Reject" shared pin for the user being shared with. [UL-21]
+* Implement "hide user", and "mute user" features, alongside the existing "block user" feature. [UL-27]
+* Proper CI/CD pipeline, tags, releases, etc. [UL-25]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

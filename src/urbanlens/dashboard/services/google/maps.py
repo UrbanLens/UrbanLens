@@ -81,6 +81,14 @@ class GoogleMapsGateway(Gateway):
         """
         Get a satellite view image for the given latitude and longitude.
         """
+        from django.core.cache import cache
+
+        THIRTY_DAYS = 30 * 24 * 3600
+        cache_key = f"satellite_view_{float(latitude):.6f}_{float(longitude):.6f}_{zoom}_{size}_{maptype}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         static_map_url = "https://maps.googleapis.com/maps/api/staticmap"
         params = {
             "center": f"{latitude},{longitude}",
@@ -91,7 +99,8 @@ class GoogleMapsGateway(Gateway):
         }
         response = self.session.get(static_map_url, params=params)
         response.raise_for_status()
-        return response.content  # Returns the raw bytes of the image
+        cache.set(cache_key, response.content, THIRTY_DAYS)
+        return response.content
 
     def get_street_view(
         self,
