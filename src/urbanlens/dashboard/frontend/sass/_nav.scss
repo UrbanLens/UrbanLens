@@ -2,13 +2,11 @@
 
 // ── App navigation bar ───────────────────────────────────────────────────────
 
-$nav-bg: #2b2b2b;
-$nav-text: rgba(255, 255, 255, 0.85);
-$nav-text-hover: #fff;
-$nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.1);
+$nav-text: rgba($color-grey-0, 0.85);
+$nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($color-grey-9, 0.1);
 
 .app-nav {
-    background: var(--ul-surface-9);
+    background: #{$dark-primary};
     height: 4rem;
     position: relative;
     z-index: 1100; // must exceed Leaflet's control-container (1000)
@@ -42,7 +40,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
 .app-nav-brand-name {
     font-size: 1rem;
     font-weight: 700;
-    color: $nav-text-hover;
+    color: var(--ul-text-0);
     letter-spacing: -0.01em;
 }
 
@@ -71,7 +69,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
 
     &:hover {
         background: rgba(255, 255, 255, 0.1);
-        color: $nav-text-hover;
+        color: var(--ul-text-0);
     }
 }
 
@@ -142,7 +140,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
 
     &:hover {
         background: rgba(255, 255, 255, 0.1);
-        color: $nav-text-hover;
+        color: var(--ul-text-0);
     }
 
     .nav-is-open &,
@@ -246,17 +244,17 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     }
 
     &--signout {
-        color: #c62828;
+        color: #{$color-red-900};
 
         .material-icons {
-            color: #c62828;
+            color: #{$color-red-900};
         }
 
         &:hover {
             background: var(--ul-surface-0);
 
             .material-icons {
-                color: #c62828;
+                color: #{$color-red-900};
             }
         }
     }
@@ -268,7 +266,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
 }
 
 .page-footer {
-    background-color: $dark-neutral-color;
+    background-color: #{$dark-primary};
     position: sticky;
     bottom: 0;
     z-index: 15; // above div.container (z-index: 1)
@@ -370,7 +368,7 @@ nav .brand-logo img {
     height: 16px;
     padding: 0 4px;
     border-radius: 8px;
-    background: #ef4444;
+    background: #{$color-red-700};
     color: var(--ul-text-4);
     font-size: .68rem;
     font-weight: 700;

@@ -36,6 +36,10 @@
         background: var(--ul-surface-0);
         color: #e0e0e0;
     }
+    
+    .app-nav {
+        background: var(--ul-surface-9);
+    }
 
     .app-nav-link {
         color: rgba(255, 255, 255, .75);
@@ -624,7 +628,7 @@
             background: rgba(124, 58, 237, .15);
 
             .material-icons {
-                color: $color-deep-purple-light;
+                color: $color-deep-purple-300;
             }
         }
     }
@@ -643,7 +647,7 @@
         background: rgba(37, 99, 235, .15);
 
         .material-icons {
-            color: $color-blue;
+            color: $color-blue-500;
         }
     }
 
@@ -687,7 +691,7 @@
     }
 
     .trips-title .material-icons {
-        color: $color-blue;
+        color: $color-blue-500;
     }
 
     .trips-empty .trips-empty-icon {
@@ -703,12 +707,12 @@
         background: $dk-navy;
 
         .material-icons {
-            color: $color-blue;
+            color: $color-blue-500;
         }
     }
 
     .trip-back-link:hover {
-        color: $color-blue;
+        color: $color-blue-500;
     }
 
     .trip-header-btn {
@@ -719,7 +723,7 @@
             &:hover,
             &:focus {
                 background: var(--ul-surface-1);
-                color: $color-blue;
+                color: $color-blue-500;
                 border-color: var(--ul-border);
             }
         }
@@ -757,7 +761,7 @@
         }
 
         &.view-toggle-btn--active {
-            color: $color-blue;
+            color: $color-blue-500;
             box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
         }
     }
@@ -800,7 +804,7 @@
         background: $dk-navy;
 
         .material-icons {
-            color: $color-blue;
+            color: $color-blue-500;
         }
     }
 
@@ -809,7 +813,7 @@
     }
 
     .trip-attr-link:hover {
-        color: $color-deep-purple-light;
+        color: $color-deep-purple-300;
     }
 
     .trip-member-item {
@@ -821,7 +825,7 @@
     }
 
     .trip-member-avatar-initial {
-        color: $color-blue;
+        color: $color-blue-500;
     }
 
     .trip-member-badge {
@@ -833,14 +837,14 @@
 
         &--organizer {
             background: rgba(167, 139, 250, .12);
-            color: $color-deep-purple-light;
+            color: $color-deep-purple-300;
             border-color: rgba(167, 139, 250, .25);
         }
     }
 
     .trip-organizer-btn {
         &--active {
-            color: $color-deep-purple-light !important;
+            color: $color-deep-purple-300 !important;
 
             &:hover {
                 background: rgba(167, 139, 250, .1) !important;
@@ -908,7 +912,7 @@
     }
 
     .trip-comment-input:focus {
-        border-color: $color-blue;
+        border-color: $color-blue-500;
         box-shadow: 0 0 0 3px rgba(96, 165, 250, .12);
     }
 
@@ -949,7 +953,7 @@
         }
 
         &:hover {
-            color: $color-deep-purple-light;
+            color: $color-deep-purple-300;
             background: rgba(124, 58, 237, .08);
         }
     }
@@ -982,7 +986,7 @@
         &--mine {
             background: rgba(124, 58, 237, .15);
             border-color: rgba(124, 58, 237, .4);
-            color: $color-deep-purple-light;
+            color: $color-deep-purple-300;
         }
 
         .reaction-count {
@@ -1022,7 +1026,7 @@
         &:hover,
         &.is-selected {
             background: rgba(124, 58, 237, .08);
-            color: $color-deep-purple-light;
+            color: $color-deep-purple-300;
         }
     }
 
@@ -1035,7 +1039,7 @@
 
         &:hover {
             background: rgba(167, 139, 250, .15);
-            border-color: $color-deep-purple-light;
+            border-color: $color-deep-purple-300;
             color: #c4b5fd;
         }
     }
@@ -1129,7 +1133,7 @@
         &--active {
             background: $dk-navy;
             border-color: #3b82f6;
-            color: $color-blue;
+            color: $color-blue-500;
         }
     }
 
