@@ -13,6 +13,7 @@ $selected-color: #2196F3;
 $section-header-bg: #e3f2fd;
 
 // Define SASS variables for colors so that light mode and dark mode can reference a single source of truth.
+// 1-5 progress light to dark, along with accent colors (a) and border colors (b).
 $color-base-1: #ffffff;
 $color-base-1a: #fafafa;
 $color-base-1b: #e0e0e0;
