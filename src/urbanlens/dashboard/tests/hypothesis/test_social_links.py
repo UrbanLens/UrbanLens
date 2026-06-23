@@ -299,7 +299,7 @@ class WebsiteParserTests(TestCase):
     def test_arbitrary_https_site(self):
         result = parse_social_link("https://mysite.example.com/path")
         self.assertIsNotNone(result)
-        platform, handle = result
+        platform, handle = result  # type: ignore
         self.assertEqual(platform, "website")
         self.assertIn("mysite.example.com", handle)
 
