@@ -324,6 +324,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         return JsonResponse({"error": "Unknown field."}, status=400)
 
     def _save_username(self, request: HttpRequest) -> JsonResponse:
+        if not isinstance(request.user, User):
+            return JsonResponse({"error": "Authentication required."}, status=401)
         username = request.POST.get("value", "").strip()
         if not username:
             return JsonResponse({"error": "Username is required."}, status=400)
@@ -340,6 +342,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True})
 
     def _save_avatar_gravatar(self, request: HttpRequest, profile: Profile) -> JsonResponse:
+        if not isinstance(request.user, User):
+            return JsonResponse({"error": "Authentication required."}, status=401)
         import hashlib
 
         from django.core.files.base import ContentFile

@@ -50,10 +50,12 @@ def _apply_trip_visibility_filter(
     from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
     from urbanlens.dashboard.models.pin.model import Pin
 
-    no_one_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.NO_ONE]
-    common_pin_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_PIN]
-    friends_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.FRIENDS]
-    c_friend_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_FRIEND]
+    # Activities where the adder's account was deleted: treat as most restrictive.
+    hidden_out.update(a.id for a in sensitive if a.added_by is None)
+    no_one_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.NO_ONE]
+    common_pin_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_PIN]
+    friends_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.FRIENDS]
+    c_friend_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_FRIEND]
     # COMMON_TRIP: viewer is already in this trip - treat as visible.
 
     hidden_out.update(act.id for act in no_one_acts)
@@ -111,7 +113,8 @@ def _apply_trip_visibility_filter(
             adder_flat: set[int] = set()
             for pair in adder_friends:
                 adder_flat.update(pair)
-            adder_flat.discard(act.added_by_id)
+            if act.added_by_id is not None:
+                adder_flat.discard(act.added_by_id)
 
             if not (viewer_flat & adder_flat):
                 hidden_out.add(act.id)

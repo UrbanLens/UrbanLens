@@ -521,8 +521,13 @@ def _location_member_ids(location: Location) -> set[int]:
 
 def _apply_badge_to_pin(pin: Pin, badge: Badge, action: str) -> None:
     """Add or remove a badge from the correct M2M field on a pin based on its kind."""
-    m2m = {"category": pin.categories, "tag": pin.tags, "status": pin.statuses}.get(badge.kind)
-    if m2m is None:
+    if badge.kind == "category":
+        m2m = pin.categories
+    elif badge.kind == "tag":
+        m2m = pin.tags
+    elif badge.kind == "status":
+        m2m = pin.statuses
+    else:
         return
     if action == "add":
         m2m.add(badge)
@@ -532,8 +537,13 @@ def _apply_badge_to_pin(pin: Pin, badge: Badge, action: str) -> None:
 
 def _apply_badge_to_location(location: Location, badge: Badge, action: str) -> None:
     """Add or remove a badge from the correct M2M field on a location based on its kind."""
-    m2m = {"category": location.categories, "tag": location.tags, "status": location.statuses}.get(badge.kind)
-    if m2m is None:
+    if badge.kind == "category":
+        m2m = location.categories
+    elif badge.kind == "tag":
+        m2m = location.tags
+    elif badge.kind == "status":
+        m2m = location.statuses
+    else:
         return
     if action == "add":
         m2m.add(badge)

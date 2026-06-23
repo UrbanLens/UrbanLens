@@ -4,6 +4,8 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
+from django.contrib.auth.models import User
+
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
@@ -46,7 +48,7 @@ def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
         logger.exception("Error adding dev toolbar")
 
     theme_mode = ""
-    if show:
+    if show and isinstance(request.user, User):
         try:
             theme_mode = request.user.profile.theme_mode
         except Exception:

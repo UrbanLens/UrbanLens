@@ -4,6 +4,7 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
+from rest_framework.request import Request
 from django.shortcuts import render
 from requests.exceptions import HTTPError
 from rest_framework.decorators import action
@@ -571,7 +572,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         )
 
     @action(detail=False, methods=["post"])
-    def import_confirmed(self, request: HttpRequest):
+    def import_confirmed(self, request: Request):
         """Stream SSE import progress for user-confirmed pin selections from the preview step."""
         import json as _json
 

@@ -41,8 +41,8 @@ def _resize_custom_icon(uploaded_file: UploadedFile) -> UploadedFile:
             uploaded_file.seek(0)
             return uploaded_file
 
-        img = img.convert("RGBA") if img.mode in {"RGBA", "P", "PA"} else img.convert("RGB")
-        img.thumbnail((_ICON_MAX_PX, _ICON_MAX_PX), Image.LANCZOS)
+        img: Image.Image = img.convert("RGBA") if img.mode in {"RGBA", "P", "PA"} else img.convert("RGB")
+        img.thumbnail((_ICON_MAX_PX, _ICON_MAX_PX), Image.Resampling.LANCZOS)
         fmt = "PNG" if img.mode == "RGBA" else "JPEG"
         out = io.BytesIO()
         img.save(out, format=fmt, quality=88, optimize=True)

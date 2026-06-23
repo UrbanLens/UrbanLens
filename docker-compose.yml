@@ -17,10 +17,6 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - GIT_EMAIL=${GIT_EMAIL}
-        - GIT_NAME=${GIT_NAME}
-        - GH_TOKEN=${GH_TOKEN}
-        - SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
         - ENVIRONMENT=${ENVIRONMENT:-production}
         - UL_DATABASE_USER=${UL_DB_USER:-postgres}
         - UL_DATABASE_NAME=${UL_DB_NAME:-postgres}
@@ -48,10 +44,6 @@ services:
           - urbanlens_app
 
     environment:
-      - GIT_EMAIL=${GIT_EMAIL}
-      - GIT_NAME=${GIT_NAME}
-      - GH_TOKEN=${GH_TOKEN}
-      - SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
       - UL_DB_USER=${UL_DB_USER:-postgres}
       - UL_DB_NAME=${UL_DB_NAME:-postgres}
       - UL_DB_PASS=${UL_DB_PASS:-postgres}

@@ -41,7 +41,7 @@ $_warning-bg:  #b36a00;
 
         // Shift content right so the accent bar doesn't overlap the icon
         border-left:        $_border-accent solid transparent;
-        padding:            $space-sm $space-md $space-sm ($space-md + $_border-accent + $space-xs);
+        padding:            $space-sm $space-md $space-sm ($space-md + 1rem + $space-xs);
         background-size:    1rem;
         background-position: 1rem center;
 

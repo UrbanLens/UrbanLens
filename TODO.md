@@ -107,6 +107,16 @@ Features planned for future releases.
 * "Accept" / "Reject" shared pin for the user being shared with. [UL-21]
 * Implement "hide user", and "mute user" features, alongside the existing "block user" feature. [UL-27]
 * Proper CI/CD pipeline, tags, releases, etc. [UL-25]
+* * Support non-USA formats for dates, currency, distances via user settings.
+* Support non-English language.
+* User stats page (fun stats about the user: breakdown of pins by continent, etc).
+* Lists (these aren't strictly necessary, due to badges, but could allow users to create lists of unrelated things. Like "my favorite explores in February" or "1 Best Church in Each State").
+* During site setup, tests for features (i.e. "send test email" button)
+* Ensure rotating logs, purging cache data, etc, in the event of hacking incident.
+* Review API Key restrictions for cloud providers (e.g. referrer restrictions for google, etc)
+* Use remote secret store (maybe?)
+* Automatic backups
+* When changing tabs (e.g. Organize page), change the browser url so that bookmarks and page refreshes work as expected.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
@@ -151,12 +161,6 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 * Encrypting user data so the site admin doesn't have access to it. The only two solutions I can think of are (1) a peer-to-peer sharing system, or (2) separating the app into a "server" and "agent" app, wherein the client app has unencrypted data, but the server only has encrypted data. For (2), users would then be able to set up their own "agent" app on their own server, resulting in full ownership of their data. However, both solutions suffer from significant drawbacks. The latter is more attainable, but in order for the app to be usable for most users, we need a publicly hosted client app anyway, resulting in no privacy gains for most (or possibly for any) users. In addition, both solutions suffer significant performance penalties, and technical complexity, for little to no gain. Finally, almost no users will understand the key differences between this problem being solved and not being solved, and will assume that data is unencrypted and visible to the site admin even if it is not. Therefore, I'm not certain that implementing it really improves user trust, while nonetheless encountering additional drawbacks. The main reason to do it seems to be to tell users we did it... which seems less beneficial than its cost. I'm undecided on this. [UL-102]
 * Considerations about avoiding storing identifying user data. Given SSO, and a need to email the user, I'm not certain that this is solvable. 1-way hashing combined with a "verify your email before..." dialog could help address it, but that would only allow us to hash the email, not avoid storing it altogether, which would still make it crackable via brute force. In addition, it would interfere with our ability to email notifications. Users can give themselves full anonymity already by registering a new email address and choosing not to provide SSO or personal details during account creation. Providing those kinds of instructions might be helpful somewhere, and we could possibly provide a button on the profile page to allow them to anonymize their existing account in that way if they originally created their account the "wrong" way and want full anonymity going forward. [UL-103]
 * Sync with google maps. Google maps does not allow labelling pins, or adding them to lists via a programmatic interface, and the only way to export data is through the google takeout system. The only way to mimic this would be through web scraping, which would be extremely fragile, and require users to grant way too many permissions to our app. Theoretically, this limitation could change in the future, depending entirely on google. [UL-104]
-* Support non-USA formats for dates, currency, distances via user settings.
-* Support non-English language.
-* User stats page (fun stats about the user: breakdown of pins by continent, etc).
-* Lists (these aren't strictly necessary, due to badges, but could allow users to create lists of unrelated things. Like "my favorite explores in February" or "1 Best Church in Each State").
-* During site setup, tests for features (i.e. "send test email" button)
-* Ensure rotating logs, purging cache data, etc, in the event of hacking incident.
 
 ## Issues requiring architectural solutions
 * Allow users to interact with parts of the app (by invite?) without logging in. For instance, in the case of trip planning. [UL-105]
