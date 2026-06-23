@@ -343,5 +343,5 @@ $dk-panel-border: #2d3348;    // trip/weather panel border
     --ul-color-danger-border: rgba(239, 68, 68, .4);
     --ul-color-danger-bg: rgba(239, 68, 68, .08);
     --card-bg: #1e1e1e;
-    --border-color: #333;
+    --border-color: var(--ul-surface-8b);
 }

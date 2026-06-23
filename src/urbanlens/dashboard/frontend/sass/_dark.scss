@@ -52,13 +52,13 @@
     }
 
     .tag-chip {
-        color: #ccc;
+        color: var(--ul-text-7);
     }
 
     .tag-stat {
         background: var(--ul-surface-0);
-        border-color: #444;
-        color: #9e9e9e;
+        border-color: var(--ul-surface-0b);
+        color: var(--ul-text-6);
 
         &.tag-stat--children {
             background: #1a2a3a;
@@ -68,13 +68,13 @@
 
         &.tag-stat--total {
             background: var(--ul-surface-0);
-            border-color: #3a3a3a;
+            border-color: var(--ul-surface-8b);
             color: #7a7a7a;
         }
     }
 
     .tag-view-toggle {
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
     }
 
     .tag-view-btn {
@@ -120,16 +120,16 @@
     .form-input,
     textarea.form-input {
         color: #e0e0e0;
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
     }
 
     .settings-radio-button {
-        border-color: #333;
+        border-color: var(--ul-surface-8b);
         background: rgb(40, 40, 40);
     }
 
     .settings-theme-option {
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
 
         span {
             color: #bbb;
@@ -141,7 +141,7 @@
 
         &:hover:not(.active) {
             background: #333;
-            border-color: #666;
+            border-color: var(--ul-surface-6b);
         }
 
         &.active {
@@ -158,7 +158,7 @@
     .tag-parent-select,
     .tag-parent-option {
         background: var(--ul-surface-0);
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
     }
 
     .tag-parent-option:hover {
@@ -167,7 +167,7 @@
 
     .icon-option {
         color: #ccc;
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
     }
 
     .icon-option:hover {
@@ -184,7 +184,7 @@
     }
 
     .icon-picker-trigger {
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
         color: #e0e0e0;
     }
 
@@ -217,7 +217,7 @@
     }
 
     .icon-custom-upload-btn {
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
         color: #888;
     }
 
@@ -227,7 +227,7 @@
 
     footer {
         background: var(--ul-surface-0);
-        border-color: #333;
+        border-color: var(--ul-surface-8b);
         color: #888;
     }
 
@@ -235,16 +235,16 @@
     input.edit-input,
     textarea.edit-textarea {
         color: #e0e0e0;
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
     }
 
     .edit-avatar-placeholder {
         background: var(--ul-surface-0);
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
     }
 
     .edit-avatar-preview {
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
     }
 
     .edit-avatar-upload-btn {
@@ -258,11 +258,11 @@
 
     .edit-add-link-input {
         color: #e0e0e0;
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
     }
 
     .edit-discord-details {
-        border-color: #333;
+        border-color: var(--ul-surface-8b);
     }
 
     .edit-discord-summary {
@@ -282,11 +282,11 @@
     }
 
     .settings-reset-btn {
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
         color: #aaa;
 
         &:hover {
-            border-color: #666;
+            border-color: var(--ul-surface-6b);
         }
     }
 
@@ -406,7 +406,7 @@
     }
 
     .edit-profile-btn {
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
         color: #aaa;
 
         &:hover {
@@ -417,7 +417,7 @@
     }
 
     .social-link {
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
         color: #aaa;
 
         &:hover {
@@ -427,15 +427,15 @@
     }
 
     .shared-visited-item {
-        border-color: #383838;
+        border-color: var(--ul-surface-8b);
         color: #ccc;
     }
 
     .friend-card {
-        border-color: #383838;
+        border-color: var(--ul-surface-8b);
 
         &:hover {
-            border-color: #555;
+            border-color: var(--ul-surface-6b);
         }
     }
 
@@ -490,7 +490,7 @@
     }
 
     .btn-friend-ignore {
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
         color: #888;
     }
 
@@ -566,12 +566,12 @@
     }
 
     .btn-friend--ignore {
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
         color: #888;
     }
 
     .btn-friend--remove {
-        border-color: #444;
+        border-color: var(--ul-surface-7b);
         color: #888;
 
         &:hover {
