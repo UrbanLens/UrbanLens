@@ -1,8 +1,10 @@
 <!DOCTYPE html>
-<html id="html-root" {% if request.user.is_authenticated and request.user.profile.dark_mode %}data-theme="dark"{% endif %}>
+<html id="html-root"{% if request.user.is_authenticated %}{% with tm=request.user.profile.theme_mode %}{% if tm == "dark" %} data-theme="dark"{% elif tm == "light" %} data-theme="light"{% endif %}{% endwith %}{% endif %}>
 
 <head>
     <meta charset="utf-8">
+    {# Anti-FOUC: when theme_mode is "system" (no server-side attribute), detect OS preference immediately. #}
+    <script>!function(){var e=document.getElementById('html-root');if(!e.getAttribute('data-theme')){var d=window.matchMedia('(prefers-color-scheme: dark)').matches;e.setAttribute('data-theme',d?'dark':'light');window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(c){e.setAttribute('data-theme',c.matches?'dark':'light');});}}();</script>
     <title>{% block page_title %}{{ site_title|default:"UrbanLens" }}{% endblock %}</title>
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
 

@@ -54,9 +54,9 @@ class App(scripts.App):
 
         Examples:
             >>> class Foo(App):
-            >>> 	def change_page(self, *args, **kwargs):
-            >>> 		argument = self.get_argument('page_name', args, kwargs)
-            >>> 		print('page_name = ' + argument)
+            >>>     def change_page(self, *args, **kwargs):
+            >>>         argument = self.get_argument('page_name', args, kwargs)
+            >>>         print('page_name = ' + argument)
             >>> foo = Foo()
             >>> foo.change_page('home')
             page_name = home

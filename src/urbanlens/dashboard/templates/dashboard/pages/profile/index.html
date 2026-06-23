@@ -235,6 +235,55 @@
     </div>
     {% endif %}
 
+    {# ── Contact Info ──────────────────────────────────────────────────────── #}
+    {% if contact_info %}
+    {% with ci=contact_info %}
+    {% if ci.phone_number or ci.signal_username or ci.discord_username or ci.whatsapp_number or ci.telegram_username or ci.matrix_handle %}
+    <div class="profile-section">
+        <h3 class="profile-section-title">Contact</h3>
+        <div class="contact-info-list">
+            {% if ci.phone_number %}
+            <a href="tel:{{ ci.phone_number }}" class="contact-info-item">
+                <i class="material-icons">phone</i>
+                <span>{{ ci.phone_number }}</span>
+            </a>
+            {% endif %}
+            {% if ci.whatsapp_number %}
+            <span class="contact-info-item">
+                <i class="fa-brands fa-whatsapp"></i>
+                <span>{{ ci.whatsapp_number }}</span>
+            </span>
+            {% endif %}
+            {% if ci.signal_username %}
+            <span class="contact-info-item">
+                <i class="fa-brands fa-signal-messenger" title="Signal"></i>
+                <span>{{ ci.signal_username }}</span>
+            </span>
+            {% endif %}
+            {% if ci.telegram_username %}
+            <a href="https://t.me/{{ ci.telegram_username|urlencode }}" class="contact-info-item" target="_blank" rel="noopener noreferrer">
+                <i class="fa-brands fa-telegram"></i>
+                <span>{{ ci.telegram_username }}</span>
+            </a>
+            {% endif %}
+            {% if ci.discord_username %}
+            <span class="contact-info-item">
+                <i class="fa-brands fa-discord"></i>
+                <span>{{ ci.discord_username }}</span>
+            </span>
+            {% endif %}
+            {% if ci.matrix_handle %}
+            <span class="contact-info-item">
+                <i class="material-icons" title="Matrix">chat</i>
+                <span>{{ ci.matrix_handle }}</span>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% endif %}
+
     {# ── Private annotation panel (viewer ≠ profile owner) ─────────────────── #}
     {% if user.is_authenticated and profile.user != request.user %}
     {% include "dashboard/partials/profile_annotation_partial.html" with subject=profile viewer_notes=viewer_notes user_badges=user_badges assigned_badge_ids=assigned_badge_ids %}

@@ -32,6 +32,7 @@ Features planned for this release.
 ## Project Health
 * Review AI-created unit tests. Eliminate useless ones to assist code coverage reports. [UL-38]
 * Provide secondary safeguards for permissions. [UL-39]
+* Prune unnecessary vars from docker-compose, .env, etc
 
 ## Features that need verification
 * password reset. [UL-41]
@@ -44,10 +45,8 @@ Features planned for this release.
 * In addition to the above item, there are probably optimizations to be made with the DB to make server-side searching faster. [UL-24]
 * When clearing data, or uninstalling and redeploying the app, a user's pins will not exist in the server-side db, but they will still exist in the local browser cache. As a result, when the user loads the map page, pins are shown that don't exist. In this case, the cache should be cleared. We can simplify that process by creating an app uuid when the app is first deployed, and include that uuid in the local cache. The cache should also only apply to a given user, and that user should be specified by uuid, not the PK id, so hackers cannot see the PK user id on the client side. [UL-122]
 * Limit failed login attempts. [UL-28]
-* Get user avatar during SSO account creation from the SSO provider, or gravatar. [UL-10]
 * Add metadata for emojis (i.e. icons) to aid in searching for them. [UL-12]
 * When creating maps for comments, allow using satellite mode or topographic mode as well as the default view. [UL-13]
-* When creating a new account via SSO, do not set the user's last name in order to preserve partial anonimity. Set their username to {random positive adjective}{random animal}{random number}. [UL-109]
 * Discord SSO [UL-11]
 * "Don't leave page" dialog before a settings page is fully saved. [UL-9]
 * Clicking outside of a dialog closes it, which is great. But clicking in the dialog and dragging outside unexpectedly closes it. [UL-32]
@@ -63,6 +62,7 @@ Features planned for this release.
 * The pre-populated People badges do not appear on the organize page under the People tab. [UL-124]
 * Ensure non-anonymized urls do not exist at all. Users should not be able to access urls we don't want them to access, (like .../profile/2/, instead of the uuid). [UL-40]
 * Properly set up pre-commit hooks for linting, type checking, and security scans. [UL-15]
+* Password Requirements should be reasonably strong.
 
 # Future Features
 Features planned for future releases.
@@ -151,6 +151,8 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 * Encrypting user data so the site admin doesn't have access to it. The only two solutions I can think of are (1) a peer-to-peer sharing system, or (2) separating the app into a "server" and "agent" app, wherein the client app has unencrypted data, but the server only has encrypted data. For (2), users would then be able to set up their own "agent" app on their own server, resulting in full ownership of their data. However, both solutions suffer from significant drawbacks. The latter is more attainable, but in order for the app to be usable for most users, we need a publicly hosted client app anyway, resulting in no privacy gains for most (or possibly for any) users. In addition, both solutions suffer significant performance penalties, and technical complexity, for little to no gain. Finally, almost no users will understand the key differences between this problem being solved and not being solved, and will assume that data is unencrypted and visible to the site admin even if it is not. Therefore, I'm not certain that implementing it really improves user trust, while nonetheless encountering additional drawbacks. The main reason to do it seems to be to tell users we did it... which seems less beneficial than its cost. I'm undecided on this. [UL-102]
 * Considerations about avoiding storing identifying user data. Given SSO, and a need to email the user, I'm not certain that this is solvable. 1-way hashing combined with a "verify your email before..." dialog could help address it, but that would only allow us to hash the email, not avoid storing it altogether, which would still make it crackable via brute force. In addition, it would interfere with our ability to email notifications. Users can give themselves full anonymity already by registering a new email address and choosing not to provide SSO or personal details during account creation. Providing those kinds of instructions might be helpful somewhere, and we could possibly provide a button on the profile page to allow them to anonymize their existing account in that way if they originally created their account the "wrong" way and want full anonymity going forward. [UL-103]
 * Sync with google maps. Google maps does not allow labelling pins, or adding them to lists via a programmatic interface, and the only way to export data is through the google takeout system. The only way to mimic this would be through web scraping, which would be extremely fragile, and require users to grant way too many permissions to our app. Theoretically, this limitation could change in the future, depending entirely on google. [UL-104]
+* Support non-USA formats for dates, currency, distances via user settings.
+* Support non-English language.
 
 ## Issues requiring architectural solutions
 * Allow users to interact with parts of the app (by invite?) without logging in. For instance, in the case of trip planning. [UL-105]
@@ -161,3 +163,8 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 ### Fix Generics
 * tags = Badge.objects.tags() (and also .categories()) -> Cannot access attribute "categories" for class "Manager" [UL-126]
 * profile = user.profile -> Cannot access attribute "profile" for class "User" [UL-127]
+
+## Inconsistent Behavior
+Behavior that isn't consistent enough to diagnose or fix without looking at it more deeply.
+
+* Sometimes... In the import dialog ui, hovering over the drop files here or browse button has a css hover effect that makes it look clickable, but clicking on it doesn't do anything. The user has to click on the browse link. Clicking anywhere on the button should work just as if the user clicked on the browse link.

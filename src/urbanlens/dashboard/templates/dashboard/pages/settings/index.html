@@ -124,6 +124,49 @@
         </form>
     </section>
 
+    {# ── Contact Methods ───────────────────────────────────────────────────── #}
+    <section class="settings-section">
+        <div class="settings-section-header">
+            <i class="material-icons">contacts</i>
+            <div>
+                <h2 class="settings-section-title">Contact Methods</h2>
+                <p class="settings-section-desc">Optional contact info shown on your profile according to your visibility setting.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="contact-methods-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="contact_methods">
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ contact_methods_form.contact_visibility.id_for_label }}">
+                    {{ contact_methods_form.contact_visibility.label }}
+                </label>
+                <p class="settings-help">{{ contact_methods_form.contact_visibility.help_text }}</p>
+                {{ contact_methods_form.contact_visibility }}
+                {% if contact_methods_form.contact_visibility.errors %}
+                <p class="settings-error">{{ contact_methods_form.contact_visibility.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            {% for field in contact_methods_form %}
+            {% if field.html_name != 'contact_visibility' %}
+            <div class="settings-field">
+                <label class="settings-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}
+                <p class="settings-error">{{ field.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+
     {# ── Style ─────────────────────────────────────────────────────────────── #}
     <section class="settings-section">
         <div class="settings-section-header">
@@ -140,25 +183,30 @@
 
             <div class="settings-field">
                 <label class="settings-label">Color Theme</label>
-                <p class="settings-help">Choose how the app looks.</p>
+                <p class="settings-help">System follows your OS preference automatically.</p>
                 <div class="settings-theme-row">
-                    <label class="settings-theme-option {% if not style_form.dark_mode.value %}active{% endif %}">
-                        <input type="radio" name="dark_mode_choice" value="light"
-                               {% if not style_form.dark_mode.value %}checked{% endif %}
+                    <label class="settings-theme-option {% if style_form.instance.theme_mode == 'system' %}active{% endif %}" id="theme-opt-system">
+                        <input type="radio" name="theme_mode" value="system"
+                               {% if style_form.instance.theme_mode == 'system' %}checked{% endif %}
+                               onchange="applyThemePreview('system')">
+                        <i class="material-icons">brightness_auto</i>
+                        <span>System</span>
+                    </label>
+                    <label class="settings-theme-option {% if style_form.instance.theme_mode == 'light' %}active{% endif %}" id="theme-opt-light">
+                        <input type="radio" name="theme_mode" value="light"
+                               {% if style_form.instance.theme_mode == 'light' %}checked{% endif %}
                                onchange="applyThemePreview('light')">
                         <i class="material-icons">light_mode</i>
                         <span>Light</span>
                     </label>
-                    <label class="settings-theme-option {% if style_form.dark_mode.value %}active{% endif %}">
-                        <input type="radio" name="dark_mode_choice" value="dark"
-                               {% if style_form.dark_mode.value %}checked{% endif %}
+                    <label class="settings-theme-option {% if style_form.instance.theme_mode == 'dark' %}active{% endif %}" id="theme-opt-dark">
+                        <input type="radio" name="theme_mode" value="dark"
+                               {% if style_form.instance.theme_mode == 'dark' %}checked{% endif %}
                                onchange="applyThemePreview('dark')">
                         <i class="material-icons">dark_mode</i>
                         <span>Dark</span>
                     </label>
                 </div>
-                {# hidden checkbox submitted in place of the radio buttons above #}
-                <input type="hidden" name="dark_mode" id="dark-mode-hidden" value="{% if style_form.dark_mode.value %}on{% endif %}">
             </div>
 
             <div class="settings-actions">
@@ -193,6 +241,7 @@
                         {{ radio.tag }}
                         {% if radio.data.value == "satellite" %}<i class="material-icons">satellite_alt</i>
                         {% elif radio.data.value == "topographic" %}<i class="material-icons">terrain</i>
+                        {% elif radio.data.value == "remember" %}<i class="material-icons">history</i>
                         {% else %}<i class="material-icons">map</i>{% endif %}
                         <span>{{ radio.choice_label }}</span>
                     </label>
@@ -247,7 +296,7 @@
 
             <div class="settings-field">
                 <label class="settings-label">{{ map_display_form.cluster_radius.label }}</label>
-                <p class="settings-help">Group pins within this radius. Auto adjusts the radius based on zoom level.</p>
+                <p class="settings-help">Group pins within this radius. "Auto" adjusts the radius based on zoom level.</p>
 
                 {# Actual hidden form field - updated by JS below #}
                 <input type="hidden"
@@ -401,13 +450,19 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 function applyThemePreview(theme) {
-    document.getElementById('html-root').setAttribute('data-theme', theme);
-    document.getElementById('dark-mode-hidden').value = theme === 'dark' ? 'on' : '';
+    var root = document.getElementById('html-root');
+    if (theme === 'system') {
+        var isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    } else {
+        root.setAttribute('data-theme', theme);
+    }
     document.querySelectorAll('.settings-theme-option').forEach(function (el) {
         el.classList.remove('active');
     });
-    var chosen = theme === 'dark' ? 1 : 0;
-    document.querySelectorAll('.settings-theme-option')[chosen].classList.add('active');
+    var optMap = { system: 'theme-opt-system', light: 'theme-opt-light', dark: 'theme-opt-dark' };
+    var opt = document.getElementById(optMap[theme]);
+    if (opt) opt.classList.add('active');
 }
 
 // ── Map Center Preview ────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 from django import forms
 
-from urbanlens.dashboard.models.profile.model import MapCenterMode, MapViewChoice, Profile, VisibilityChoice
+from urbanlens.dashboard.models.profile.model import MapCenterMode, MapViewChoice, Profile, ThemeChoice, VisibilityChoice
 
 
 class MarkupDefaultsForm(forms.ModelForm):
@@ -116,18 +116,77 @@ class ContactSettingsForm(forms.Form):
 
 
 class StyleSettingsForm(forms.ModelForm):
-    """Site-wide appearance - color theme only."""
+    """Site-wide appearance - color theme."""
 
-    dark_mode = forms.BooleanField(
-        required=False,
-        widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
-        label="Dark Mode",
-        help_text="Use a dark color scheme across the app.",
+    theme_mode = forms.ChoiceField(
+        choices=ThemeChoice.choices,
+        widget=forms.RadioSelect(attrs={"class": "settings-radio"}),
+        label="Color Theme",
+        help_text="System follows your OS preference automatically.",
     )
 
     class Meta:
         model = Profile
-        fields = ["dark_mode"]
+        fields = ["theme_mode"]
+
+
+class ContactMethodsForm(forms.ModelForm):
+    """Optional contact methods and their visibility setting."""
+
+    phone_number = forms.CharField(
+        required=False,
+        max_length=30,
+        widget=forms.TextInput(attrs={"class": "settings-input", "placeholder": "+1 555 000 0000"}),
+        label="Phone Number",
+    )
+    signal_username = forms.CharField(
+        required=False,
+        max_length=100,
+        widget=forms.TextInput(attrs={"class": "settings-input", "placeholder": "username or phone"}),
+        label="Signal",
+    )
+    discord_username = forms.CharField(
+        required=False,
+        max_length=100,
+        widget=forms.TextInput(attrs={"class": "settings-input", "placeholder": "username"}),
+        label="Discord",
+    )
+    whatsapp_number = forms.CharField(
+        required=False,
+        max_length=30,
+        widget=forms.TextInput(attrs={"class": "settings-input", "placeholder": "+1 555 000 0000"}),
+        label="WhatsApp",
+    )
+    telegram_username = forms.CharField(
+        required=False,
+        max_length=100,
+        widget=forms.TextInput(attrs={"class": "settings-input", "placeholder": "@username"}),
+        label="Telegram",
+    )
+    matrix_handle = forms.CharField(
+        required=False,
+        max_length=200,
+        widget=forms.TextInput(attrs={"class": "settings-input", "placeholder": "@user:server.org"}),
+        label="Matrix / Element",
+    )
+    contact_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Contact Visibility",
+        help_text="Who can see your contact methods on your profile.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = [
+            "phone_number",
+            "signal_username",
+            "discord_username",
+            "whatsapp_number",
+            "telegram_username",
+            "matrix_handle",
+            "contact_visibility",
+        ]
 
 
 class MapDisplayForm(forms.ModelForm):

@@ -73,6 +73,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 ),
                 "gps_fallback_lat": gps_fallback[0] if gps_fallback else None,
                 "gps_fallback_lng": gps_fallback[1] if gps_fallback else None,
+                "default_map_view": profile.default_map_view,
             },
         )
 

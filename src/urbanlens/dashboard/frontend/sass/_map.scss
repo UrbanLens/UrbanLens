@@ -1028,22 +1028,6 @@
     flex: 1;
 }
 
-.fp-acc-dot {
-    display: none;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #5082ff;
-    flex-shrink: 0;
-}
-
-/* Show dot when this section has an active filter (CSS-only, no JS needed) */
-details.fp-accordion-item:has(input[type=radio]:not([value=""]):checked) .fp-acc-dot,
-details.fp-accordion-item:has(input[type=checkbox]:checked) .fp-acc-dot,
-details.fp-accordion-item:has(input[type=date]:not([value=""])) .fp-acc-dot {
-    display: inline-block;
-}
-
 .fp-acc-arrow {
     font-size: .9rem;
     color: rgba(255, 255, 255, 0.25);
@@ -1180,11 +1164,6 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
-}
-
-/* ── JS-managed active dot (for sliders) ─────────────────────────── */
-details.fp-accordion-item.fp-acc-active .fp-acc-dot {
-    display: inline-block;
 }
 
 /* ── Dual-handle range slider ─────────────────────────────────────── */

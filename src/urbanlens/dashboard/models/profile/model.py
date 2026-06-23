@@ -55,6 +55,7 @@ class MapViewChoice(TextChoices):
     STREET = "street", "Street"
     SATELLITE = "satellite", "Satellite"
     TOPOGRAPHIC = "topographic", "Topographic"
+    REMEMBER = "remember", "Remember"
 
 
 class MapCenterMode(TextChoices):
@@ -62,6 +63,12 @@ class MapCenterMode(TextChoices):
     GPS = "gps", "Use my current location"
     CUSTOM = "custom", "Custom location"
     REMEMBER = "remember", "Remember last position"
+
+
+class ThemeChoice(TextChoices):
+    SYSTEM = "system", "System (follows your OS)"
+    LIGHT = "light", "Light"
+    DARK = "dark", "Dark"
 
 
 class Profile(abstract.Model):
@@ -113,8 +120,26 @@ class Profile(abstract.Model):
         ),
     )
 
+    # Contact information and its visibility
+    phone_number = CharField(max_length=30, blank=True, default="")
+    signal_username = CharField(max_length=100, blank=True, default="")
+    discord_username = CharField(max_length=100, blank=True, default="")
+    whatsapp_number = CharField(max_length=30, blank=True, default="")
+    telegram_username = CharField(max_length=100, blank=True, default="")
+    matrix_handle = CharField(max_length=200, blank=True, default="")
+    contact_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.FRIENDS,
+        help_text="Who can see your contact methods (phone, Signal, Discord, etc.).",
+    )
+
     # Style preferences
-    dark_mode = BooleanField(default=False)
+    theme_mode = CharField(
+        max_length=10,
+        choices=ThemeChoice.choices,
+        default=ThemeChoice.SYSTEM,
+    )
     default_map_view = CharField(
         max_length=20,
         choices=MapViewChoice.choices,
@@ -351,6 +376,63 @@ class Profile(abstract.Model):
             return False
         # This viewer's filter must allow the uploader.
         return _check(self.viewer_photo_filter, self, uploader)
+
+    def can_view_contact_info(self, viewer: Profile | None) -> bool:
+        """Return True if viewer may see this profile's contact methods.
+
+        Args:
+            viewer: The profile requesting access, or None for anonymous visitors.
+
+        Returns:
+            True when the viewer passes the contact_visibility setting.
+        """
+        if viewer is not None and self.pk == viewer.pk:
+            return True
+
+        def _ck(visibility: str, subject: Profile, other: Profile) -> bool:
+            if visibility == VisibilityChoice.ANYONE:
+                return True
+            if visibility == VisibilityChoice.NO_ONE:
+                return False
+            if visibility == VisibilityChoice.FRIENDS:
+                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+                return Friendship.objects.filter(
+                    models.Q(from_profile=subject, to_profile=other) | models.Q(from_profile=other, to_profile=subject),
+                    status=FriendshipStatus.ACCEPTED,
+                ).exists()
+            if visibility == VisibilityChoice.COMMON_PIN:
+                from urbanlens.dashboard.models.pin.model import Pin
+
+                my_locs = set(Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True))
+                their_locs = set(Pin.objects.filter(profile=other, location__isnull=False).values_list("location_id", flat=True))
+                return bool(my_locs & their_locs)
+            if visibility == VisibilityChoice.COMMON_FRIEND:
+                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+                accepted = FriendshipStatus.ACCEPTED
+                my_friends = (
+                    set(Friendship.objects.filter(from_profile=subject, status=accepted).values_list("to_profile_id", flat=True))
+                    | set(Friendship.objects.filter(to_profile=subject, status=accepted).values_list("from_profile_id", flat=True))
+                )
+                their_friends = (
+                    set(Friendship.objects.filter(from_profile=other, status=accepted).values_list("to_profile_id", flat=True))
+                    | set(Friendship.objects.filter(to_profile=other, status=accepted).values_list("from_profile_id", flat=True))
+                )
+                return bool(my_friends & their_friends)
+            if visibility == VisibilityChoice.COMMON_TRIP:
+                from urbanlens.dashboard.models.trips.model import TripMembership
+
+                my_trips = set(TripMembership.objects.filter(profile=subject).values_list("trip_id", flat=True))
+                their_trips = set(TripMembership.objects.filter(profile=other).values_list("trip_id", flat=True))
+                return bool(my_trips & their_trips)
+            return False
+
+        if self.contact_visibility == VisibilityChoice.ANYONE:
+            return True
+        if viewer is None:
+            return False
+        return _ck(self.contact_visibility, self, viewer)
 
     def __str__(self):
         return self.username

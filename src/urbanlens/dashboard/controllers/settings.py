@@ -12,6 +12,7 @@ from django.shortcuts import redirect, render
 from django.views import View
 
 from urbanlens.dashboard.forms.settings_form import (
+    ContactMethodsForm,
     ContactSettingsForm,
     MapCenterForm,
     MapDisplayForm,
@@ -73,6 +74,7 @@ class SettingsView(LoginRequiredMixin, View):
         context = {
             "privacy_form": PrivacySettingsForm(instance=profile),
             "contact_form": ContactSettingsForm(initial={"email": request.user.email}),
+            "contact_methods_form": ContactMethodsForm(instance=profile),
             "style_form": StyleSettingsForm(instance=profile),
             "map_display_form": MapDisplayForm(instance=profile),
             "map_center_form": MapCenterForm(instance=profile),
@@ -90,6 +92,7 @@ class SettingsView(LoginRequiredMixin, View):
 
         privacy_form = PrivacySettingsForm(instance=profile)
         contact_form = ContactSettingsForm(initial={"email": request.user.email})
+        contact_methods_form = ContactMethodsForm(instance=profile)
         style_form = StyleSettingsForm(instance=profile)
         map_display_form = MapDisplayForm(instance=profile)
         map_center_form = MapCenterForm(instance=profile)
@@ -117,6 +120,13 @@ class SettingsView(LoginRequiredMixin, View):
                 messages.success(request, "Contact settings saved.")
                 return redirect("settings.view")
 
+        elif section == "contact_methods":
+            contact_methods_form = ContactMethodsForm(request.POST, instance=profile)
+            if contact_methods_form.is_valid():
+                contact_methods_form.save()
+                messages.success(request, "Contact methods saved.")
+                return redirect("settings.view")
+
         elif section == "style":
             style_form = StyleSettingsForm(request.POST, instance=profile)
             if style_form.is_valid():
@@ -136,6 +146,7 @@ class SettingsView(LoginRequiredMixin, View):
         context = {
             "privacy_form": privacy_form,
             "contact_form": contact_form,
+            "contact_methods_form": contact_methods_form,
             "style_form": style_form,
             "map_display_form": map_display_form,
             "map_center_form": map_center_form,

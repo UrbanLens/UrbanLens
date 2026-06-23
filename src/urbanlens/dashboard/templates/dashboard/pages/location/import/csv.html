@@ -25,6 +25,7 @@
     color: #1a1a1a;
 }
 .iw-step-dots {
+    margin-right: 2em;
     display: flex;
     gap: 6px;
     align-items: center;
@@ -196,7 +197,23 @@
     color: #5f6368;
 }
 .iw-meta-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-.iw-meta-row input[type=checkbox] { accent-color: #2196F3; width: 14px; height: 14px; }
+/* Override Materialize's global checkbox reset inside the wizard */
+.iw-meta-row input[type=checkbox] {
+    appearance: auto !important;
+    -webkit-appearance: checkbox !important;
+    position: static !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    width: 15px !important;
+    height: 15px !important;
+    margin: 0 !important;
+    flex-shrink: 0;
+    accent-color: #2196F3;
+    cursor: pointer;
+}
+/* Suppress the Materialize pseudo-element replacement inside the wizard */
+.iw-meta-row label:before,
+.iw-meta-row label:after { display: none !important; }
 
 /* Badge picker */
 .iw-badge-row {
@@ -283,16 +300,52 @@
     padding: 7px 14px;
     border-bottom: 1px solid rgba(0,0,0,.04);
     transition: background .1s;
+    cursor: pointer;
 }
 .iw-pin-row:last-child { border-bottom: none; }
 .iw-pin-row:hover { background: #f8fafc; }
-.iw-pin-row input[type=checkbox] { accent-color: #2196F3; flex-shrink: 0; }
+/* Override Materialize's global checkbox reset inside the pin list */
+.iw-pin-row input[type=checkbox] {
+    appearance: auto !important;
+    -webkit-appearance: checkbox !important;
+    position: static !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    width: 14px !important;
+    height: 14px !important;
+    margin: 0 !important;
+    flex-shrink: 0;
+    accent-color: #2196F3;
+    cursor: pointer;
+}
 .iw-pin-name { font-size: .85rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.iw-pin-coords { font-size: .75rem; color: #9aa0a6; white-space: nowrap; flex-shrink: 0; }
+
+/* Private toggle button */
+.iw-pin-private-btn {
+    background: none; border: none; cursor: pointer;
+    color: #c8d0d8; padding: 2px 3px; flex-shrink: 0;
+    line-height: 1; border-radius: 4px;
+    transition: color .15s;
+    display: flex; align-items: center;
+}
+.iw-pin-private-btn i { font-size: 1rem; }
+.iw-pin-private-btn:hover { color: #c0392b; }
+.iw-pin-private-btn.is-private { color: #c0392b; }
+.iw-pin-row.is-private { background: rgba(192,57,43,.04); }
 
 /* Deselected row */
-.iw-pin-row.deselected .iw-pin-name,
-.iw-pin-row.deselected .iw-pin-coords { opacity: .4; text-decoration: line-through; }
+.iw-pin-row.deselected .iw-pin-name { opacity: .4; text-decoration: line-through; }
+
+/* Private info banner */
+.iw-private-info-box {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: #fdf0ee; border: 1px solid #e8c2be;
+    border-radius: 8px; padding: 10px 14px;
+    font-size: .82rem; color: #5f6368;
+    margin-top: 12px;
+}
+.iw-private-info-box i { color: #c0392b; font-size: 1.05rem; flex-shrink: 0; margin-top: .1rem; }
+.iw-private-info-box strong { color: #c0392b; }
 
 /* Preview footer count */
 #iw-selected-count { font-size: .85rem; color: #5f6368; }
@@ -420,6 +473,12 @@
                 <a id="iw-toggle-all">Deselect all</a>
             </div>
             <div id="iw-lists-container"></div>
+            <div id="iw-private-info" hidden>
+                <div class="iw-private-info-box">
+                    <i class="material-icons">lock</i>
+                    <span><strong>Private pins</strong> are not linked to the community wiki. Their exact location is only visible to you.</span>
+                </div>
+            </div>
         </div>
         <div class="iw-footer">
             <span id="iw-selected-count" style="margin-right:auto"></span>
@@ -626,7 +685,7 @@ function renderPreview(data) {
         header.innerHTML =
             '<i class="material-icons iw-list-toggle" id="iw-toggle-' + listIdx + '">expand_more</i>' +
             '<span class="iw-list-name">' + escHtml(lst.stem) + '</span>' +
-            '<span class="iw-list-count">' + lst.pins.length + ' pins</span>';
+            '<span class="iw-list-count" id="iw-list-count-' + listIdx + '">' + lst.pins.length + ' pins</span>';
         group.appendChild(header);
 
         /* Meta (always visible) */
@@ -680,6 +739,7 @@ function renderPreview(data) {
         pinList.id = 'iw-pins-' + listIdx;
         lst.pins.forEach(function (pin, pinIdx) {
             pin._selected = true;
+            pin._private  = false;
             var row = document.createElement('li');
             row.className = 'iw-pin-row';
             row.dataset.listIdx = listIdx;
@@ -689,12 +749,24 @@ function renderPreview(data) {
                 '<input type="checkbox" id="' + cbId + '" checked>' +
                 '<label for="' + cbId + '" class="iw-pin-name" title="' + escHtml(pin.name || '(unnamed)') + '">' +
                 escHtml(pin.name || '(unnamed)') + '</label>' +
-                '<span class="iw-pin-coords">' + fmtCoord(pin.lat) + ', ' + fmtCoord(pin.lng) + '</span>';
-            var cb = row.querySelector('input');
+                '<button type="button" class="iw-pin-private-btn" title="Mark as private">' +
+                '<i class="material-icons">lock_open</i></button>';
+            var cb = row.querySelector('input[type=checkbox]');
             cb.addEventListener('change', function () {
                 pin._selected = cb.checked;
                 row.classList.toggle('deselected', !cb.checked);
+                updateListCount(listIdx);
                 updateSelectedCount();
+            });
+            var privBtn = row.querySelector('.iw-pin-private-btn');
+            privBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                pin._private = !pin._private;
+                privBtn.classList.toggle('is-private', pin._private);
+                privBtn.querySelector('i').textContent = pin._private ? 'lock' : 'lock_open';
+                privBtn.title = pin._private ? 'Mark as public' : 'Mark as private';
+                row.classList.toggle('is-private', pin._private);
+                updatePrivateInfo();
             });
             pinList.appendChild(row);
         });
@@ -789,8 +861,9 @@ function toggleBadgeOnList(listIdx, badge) {
 $('iw-toggle-all').addEventListener('click', function () {
     allSelected = !allSelected;
     $('iw-toggle-all').textContent = allSelected ? 'Deselect all' : 'Select all';
-    parsedData.lists.forEach(function (lst) {
+    parsedData.lists.forEach(function (lst, idx) {
         lst.pins.forEach(function (pin) { pin._selected = allSelected; });
+        updateListCount(idx);
     });
     document.querySelectorAll('.iw-pin-row').forEach(function (row) {
         var cb = row.querySelector('input[type=checkbox]');
@@ -799,6 +872,18 @@ $('iw-toggle-all').addEventListener('click', function () {
     });
     updateSelectedCount();
 });
+
+function updateListCount(listIdx) {
+    if (!parsedData) return;
+    var lst = parsedData.lists[listIdx];
+    var total = lst.pins.length;
+    var selected = lst.pins.filter(function (p) { return p._selected; }).length;
+    var el = $('iw-list-count-' + listIdx);
+    if (!el) return;
+    el.textContent = selected === total
+        ? total + ' pin' + (total !== 1 ? 's' : '')
+        : selected + ' / ' + total + ' pins';
+}
 
 function updateSelectedCount() {
     var n = 0;
@@ -809,6 +894,17 @@ function updateSelectedCount() {
     }
     $('iw-selected-count').textContent = n + ' pin' + (n !== 1 ? 's' : '') + ' selected';
     $('iw-btn-confirm').disabled = n === 0;
+    updatePrivateInfo();
+}
+
+function updatePrivateInfo() {
+    var anyPrivate = false;
+    if (parsedData) {
+        parsedData.lists.forEach(function (lst) {
+            lst.pins.forEach(function (p) { if (p._private) anyPrivate = true; });
+        });
+    }
+    $('iw-private-info').hidden = !anyPrivate;
 }
 
 $('iw-btn-back').addEventListener('click', function () { needsConfirm = false; showStep('upload', 0); });
@@ -834,6 +930,7 @@ $('iw-btn-confirm').addEventListener('click', async function () {
                             description: p.description,
                             cid: p.cid,
                             badge_ids: [],
+                            is_private: p._private || false,
                         };
                     }),
             };
@@ -924,6 +1021,7 @@ function handleProgressEvent(evt) {
             needsConfirm = false;
             $('closeImportDialog').disabled = false;
             $('iw-btn-done').hidden = false;
+            document.querySelector('.iw-step-dots').style.display = 'none';
             toastr.success(
                 evt.created + ' created · ' + evt.exists + ' existed · ' + evt.skipped + ' skipped',
                 'Import complete', { timeOut: 8000 }

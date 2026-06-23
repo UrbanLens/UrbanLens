@@ -8,7 +8,28 @@
             Site Administration
         </h1>
         <p class="site-admin-subtitle">Configure site-wide settings.</p>
+        <div style="margin-top:.5rem">
+            <a href="{% url 'site_admin_stats' %}" class="stats-nav-link">
+                <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">bar_chart</i>
+                View Statistics
+            </a>
+        </div>
     </div>
+
+    <style>
+    .stats-nav-link {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        font-size: .85rem;
+        color: var(--ul-accent, #0891b2);
+        text-decoration: none;
+        padding: .25rem .6rem;
+        border: 1px solid var(--ul-border, #e5e7eb);
+        border-radius: 6px;
+    }
+    .stats-nav-link:hover { background: var(--ul-hover-bg, #f1f5f9); }
+    </style>
 
     {% if saved %}
     <div class="site-admin-notice site-admin-notice--success">

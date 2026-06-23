@@ -38,11 +38,33 @@ class ViewProfileView(LoginRequiredMixin, View):
         else:
             profile, _ = Profile.objects.get_or_create(user=request.user)
 
+        import contextlib
+
         from urbanlens.dashboard.services.social_links import get_profile_links
+
+        viewer_profile: Profile | None = None
+        if request.user.is_authenticated and request.user != profile.user:
+            with contextlib.suppress(Profile.DoesNotExist):
+                viewer_profile = Profile.objects.get(user=request.user)
+        elif request.user.is_authenticated and request.user == profile.user:
+            viewer_profile = profile
+
+        can_view_contact = profile.can_view_contact_info(viewer_profile)
+        contact_info = None
+        if can_view_contact:
+            contact_info = {
+                "phone_number": profile.phone_number,
+                "signal_username": profile.signal_username,
+                "discord_username": profile.discord_username,
+                "whatsapp_number": profile.whatsapp_number,
+                "telegram_username": profile.telegram_username,
+                "matrix_handle": profile.matrix_handle,
+            }
 
         context = {
             "profile": profile,
             "social_links": get_profile_links(profile),
+            "contact_info": contact_info,
         }
         self._add_common_context(request, profile, context)
         return render(request, "dashboard/pages/profile/index.html", context)

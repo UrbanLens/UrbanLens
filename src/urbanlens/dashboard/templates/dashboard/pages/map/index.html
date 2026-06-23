@@ -79,7 +79,6 @@
             <details class="fp-accordion-item" id="fp-acc-rating">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Rating</span>
-                    <span class="fp-acc-dot"></span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -107,7 +106,6 @@
             <details class="fp-accordion-item" id="fp-acc-visits">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Visit Status</span>
-                    <span class="fp-acc-dot"></span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -133,7 +131,6 @@
             <details class="fp-accordion-item" id="fp-acc-priority">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Priority</span>
-                    <span class="fp-acc-dot"></span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -163,7 +160,6 @@
             <details class="fp-accordion-item" id="fp-acc-date">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Date Pinned</span>
-                    <span class="fp-acc-dot"></span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -185,7 +181,6 @@
             <details class="fp-accordion-item" id="fp-acc-incl-tags">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Include Badges</span>
-                    <span class="fp-acc-dot"></span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -207,7 +202,6 @@
             <details class="fp-accordion-item" id="fp-acc-excl-tags">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Exclude Badges</span>
-                    <span class="fp-acc-dot"></span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -400,6 +394,9 @@
     const _GPS_FALLBACK_LAT  = {{ gps_fallback_lat|default:"null" }};
     const _GPS_FALLBACK_LNG  = {{ gps_fallback_lng|default:"null" }};
     const _defaultZoom       = {{ map_default_zoom|default:13 }};
+    const _DEFAULT_MAP_VIEW  = '{{ default_map_view|default:"street" }}';
+    // Per-profile key for remembering active layers across sessions.
+    const _LAYER_CACHE_KEY   = `ul_layers_v1_${_PROFILE_UUID}`;
     const _serverCenter      = (_SERVER_CENTER_LAT !== null && _SERVER_CENTER_LNG !== null)
         ? [_SERVER_CENTER_LAT, _SERVER_CENTER_LNG]
         : (_GPS_FALLBACK_LAT !== null ? [_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG] : [40.7128, -74.0060]);
@@ -1024,7 +1021,7 @@
 
     const standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-    }).addTo(map);
+    });
     const topographyLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
     });
@@ -1041,6 +1038,36 @@
         attribution: 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
         layer: 'clouds_new',
     });
+
+    // ── Apply initial base layer from user preference ─────────────────────────
+    // standardLayer is always the bottom-most base; satellite/topo sit on top of it.
+    standardLayer.addTo(map);
+    (function _applyInitialLayers() {
+        let baseView = _DEFAULT_MAP_VIEW;
+        let weatherOn = false;
+
+        if (baseView === 'remember') {
+            try {
+                const saved = JSON.parse(localStorage.getItem(_LAYER_CACHE_KEY) || 'null');
+                if (saved) { baseView = saved.base || 'street'; weatherOn = !!saved.weather; }
+                else { baseView = 'street'; }
+            } catch (_) { baseView = 'street'; }
+        }
+
+        if (baseView === 'satellite') {
+            satelliteLayer.addTo(map);
+            document.querySelector('#satellite-button')?.classList.add('active');
+        } else if (baseView === 'topographic') {
+            topographyLayer.addTo(map);
+            document.querySelector('#topography-button')?.classList.add('active');
+        }
+
+        if (weatherOn) {
+            rainLayer.addTo(map);
+            cloudLayer.addTo(map);
+            document.querySelector('#weather-button')?.classList.add('active');
+        }
+    }());
 
     // ── Tile loading visual feedback ──────────────────────────────────────────
     // Grey-dim the tile pane while map tiles are downloading; restore when done.
@@ -1359,6 +1386,18 @@
         layer.addTo(map);
     }
 
+    // Persist active layers to localStorage when the user has chosen "Remember".
+    function _saveLayerState() {
+        if (_DEFAULT_MAP_VIEW !== 'remember') return;
+        try {
+            const base = map.hasLayer(satelliteLayer) ? 'satellite'
+                       : map.hasLayer(topographyLayer) ? 'topographic'
+                       : 'street';
+            const weather = map.hasLayer(rainLayer) || map.hasLayer(cloudLayer);
+            localStorage.setItem(_LAYER_CACHE_KEY, JSON.stringify({ base, weather }));
+        } catch (_) {}
+    }
+
     function toggleTopographyView() {
         // Satellite and topography are mutually exclusive
         if (map.hasLayer(satelliteLayer)) {
@@ -1367,6 +1406,7 @@
         }
         toggleMapView(topographyLayer);
         document.querySelector('#topography-button').classList.toggle('active', map.hasLayer(topographyLayer));
+        _saveLayerState();
     }
 
     function toggleSatelliteView() {
@@ -1377,20 +1417,19 @@
         }
         toggleMapView(satelliteLayer);
         document.querySelector('#satellite-button').classList.toggle('active', map.hasLayer(satelliteLayer));
+        _saveLayerState();
     }
 
     function toggleWeatherView() {
         if (map.hasLayer(rainLayer) || map.hasLayer(cloudLayer)) {
-            // Turn it off
             map.removeLayer(rainLayer);
             map.removeLayer(cloudLayer);
-            return;
+        } else {
+            rainLayer.addTo(map);
+            cloudLayer.addTo(map);
         }
-
-        // Add the selected layer
-        rainLayer.addTo(map);
-        cloudLayer.addTo(map);
-        document.querySelector('#weather-button').classList.toggle('active');
+        document.querySelector('#weather-button').classList.toggle('active', map.hasLayer(rainLayer));
+        _saveLayerState();
     }
 
     // Update the Leaflet icon URLs
@@ -1487,10 +1526,16 @@
         document.getElementById('search-pins-button').classList.toggle('has-filters', _hasActiveFilters());
     });
 
-    // ── Scroll wheel: prevent filter panel from zooming the map ──────────
+    // ── Prevent filter panel pointer events from reaching the Leaflet map ──
     document.getElementById('filter-panel').addEventListener('wheel', function (e) {
         e.stopPropagation();
     }, { passive: true });
+    document.getElementById('filter-panel').addEventListener('mousedown', function (e) {
+        e.stopPropagation();
+    });
+    document.getElementById('filter-panel').addEventListener('touchstart', function (e) {
+        e.stopPropagation();
+    });
 
     // ── Dual-handle range slider ──────────────────────────────────────────
     function syncDualSlider(name) {
