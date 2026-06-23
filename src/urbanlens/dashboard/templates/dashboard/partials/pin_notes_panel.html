@@ -20,7 +20,7 @@
             <button type="button"
                     class="pin-note-delete-btn"
                     title="Delete note"
-                    hx-delete="{% url 'pin.note.delete' pin.uuid note.id %}"
+                    hx-delete="{% url 'pin.note.delete' pin.slug note.id %}"
                     hx-target="#pin-note-{{ note.id }}"
                     hx-swap="outerHTML"
                     hx-confirm="Delete this note?"
@@ -33,7 +33,7 @@
     {% endif %}
 
     {# ── Add note form ───────────────────────────────────────────────── #}
-    <form hx-post="{% url 'pin.notes' pin.uuid %}"
+    <form hx-post="{% url 'pin.notes' pin.slug %}"
           hx-target="#pin-notes-panel"
           hx-swap="outerHTML"
           hx-on::after-request="if(event.detail.successful){this.reset()}"

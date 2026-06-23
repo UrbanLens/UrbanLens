@@ -30,9 +30,9 @@ if TYPE_CHECKING:
 
 
 class ViewProfileView(LoginRequiredMixin, View):
-    def get(self, request: HttpRequest, profile_uuid: UUID | None = None) -> HttpResponse:
-        if profile_uuid is not None:
-            profile = get_object_or_404(Profile, uuid=profile_uuid)
+    def get(self, request: HttpRequest, profile_slug: UUID | None = None) -> HttpResponse:
+        if profile_slug is not None:
+            profile = get_object_or_404(Profile, slug=profile_slug)
             if not self._can_view_profile(request, profile):
                 raise Http404
         else:
@@ -489,10 +489,10 @@ def _authenticated_profile(request: HttpRequest) -> Profile:
 class ProfileNoteView(LoginRequiredMixin, View):
     """Create a new private note about another profile (HTMX)."""
 
-    def post(self, request: HttpRequest, profile_uuid: UUID) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
-        subject = get_object_or_404(Profile, uuid=profile_uuid)
+        subject = get_object_or_404(Profile, slug=profile_slug)
         author = _authenticated_profile(request)
         if author == subject:
             return HttpResponse("Cannot annotate your own profile.", status=400)
@@ -507,10 +507,10 @@ class ProfileNoteView(LoginRequiredMixin, View):
 class ProfileNoteDeleteView(LoginRequiredMixin, View):
     """Delete one of the viewer's private notes about another profile (HTMX)."""
 
-    def post(self, request: HttpRequest, profile_uuid: UUID, note_id: int) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: UUID, note_id: int) -> HttpResponse:
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
-        subject = get_object_or_404(Profile, uuid=profile_uuid)
+        subject = get_object_or_404(Profile, slug=profile_slug)
         author = _authenticated_profile(request)
         ProfileNote.objects.filter(pk=note_id, author=author, subject=subject).delete()
         return _render_profile_annotation_partial(request, author, subject)
@@ -519,10 +519,10 @@ class ProfileNoteDeleteView(LoginRequiredMixin, View):
 class ProfileNoteEditView(LoginRequiredMixin, View):
     """Edit (PATCH) the content of an existing private note (HTMX)."""
 
-    def post(self, request: HttpRequest, profile_uuid: UUID, note_id: int) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: UUID, note_id: int) -> HttpResponse:
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
-        subject = get_object_or_404(Profile, uuid=profile_uuid)
+        subject = get_object_or_404(Profile, slug=profile_slug)
         author = _authenticated_profile(request)
         content = request.POST.get("content", "").strip()
         ProfileNote.objects.filter(pk=note_id, author=author, subject=subject).update(content=content)
@@ -532,11 +532,11 @@ class ProfileNoteEditView(LoginRequiredMixin, View):
 class ProfileBadgeToggleView(LoginRequiredMixin, View):
     """Toggle a user-type badge on another profile (HTMX - re-renders the badge chips)."""
 
-    def post(self, request: HttpRequest, profile_uuid: UUID, badge_id: int) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: UUID, badge_id: int) -> HttpResponse:
         from urbanlens.dashboard.models.badges.model import KIND_USER, Badge
         from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
 
-        subject = get_object_or_404(Profile, uuid=profile_uuid)
+        subject = get_object_or_404(Profile, slug=profile_slug)
         author = _authenticated_profile(request)
         if author == subject:
             return HttpResponse("Cannot annotate your own profile.", status=400)

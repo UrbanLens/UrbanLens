@@ -505,7 +505,7 @@
                     <span class="org-filter-active-dot"></span>
                 </button>
                 <button type="button" class="btn-primary btn-sm" id="people-badge-create-btn"
-                        hx-get="{% url 'tag.create' %}?kind=user"
+                        hx-get="{% url 'people.create' %}"
                         hx-target="#people-badge-edit-dialog-body"
                         hx-swap="innerHTML"
                         onclick="document.getElementById('people-badge-edit-dialog').showModal()">
@@ -543,61 +543,7 @@
         </div>
 
         <div class="tag-list" id="people-badge-rows">
-            {% for badge in user_badges %}
-            <div class="tag-row org-selectable" id="pbd-{{ badge.id }}"
-                 data-id="{{ badge.id }}"
-                 data-name="{{ badge.name|lower }}"
-                 data-has-icon="{% if badge.icon %}true{% else %}false{% endif %}"
-                 data-has-color="{% if badge.color %}true{% else %}false{% endif %}"
-                 data-color="{{ badge.color|default:'' }}"
-                 data-kind="people">
-                <label class="org-sel-label" title="Select">
-                    <input type="checkbox" class="org-sel-cb people-sel-cb" data-id="{{ badge.id }}" data-name="{{ badge.name }}">
-                </label>
-                <div class="tag-row-icon" {% if badge.color %}style="background:{{ badge.color }}22;border-color:{{ badge.color }}44;"{% endif %}>
-                    {% if badge.icon %}
-                        {% if badge.icon|is_material_icon %}
-                            <i class="material-icons" {% if badge.color %}style="color:{{ badge.color }}"{% endif %}>{{ badge.icon }}</i>
-                        {% else %}
-                            <span class="tag-icon-emoji">{{ badge.icon }}</span>
-                        {% endif %}
-                    {% else %}
-                        <i class="material-icons">person</i>
-                    {% endif %}
-                </div>
-                <div class="tag-row-info">
-                    <span class="tag-row-name">{{ badge.name }}</span>
-                    {% if badge.is_protected %}<span class="tag-global-badge"><i class="material-icons" style="font-size:.75rem;vertical-align:middle">lock</i> protected</span>{% endif %}
-                </div>
-                <div class="tag-row-actions">
-                    {% if not badge.is_protected %}
-                    <button type="button" class="tag-row-action" title="Edit"
-                            hx-get="{% url 'tag.edit' badge.id %}"
-                            hx-target="#people-badge-edit-dialog-body"
-                            hx-swap="innerHTML"
-                            onclick="document.getElementById('people-badge-edit-dialog').showModal()">
-                        <i class="material-icons">edit</i>
-                    </button>
-                    <button type="button" class="tag-row-action" title="Merge into another label"
-                            onclick="peopleMergeSingle({{ badge.id }}, '{{ badge.name|escapejs }}')">
-                        <i class="material-icons">merge</i>
-                    </button>
-                    <button type="button" class="tag-row-action tag-row-action--danger" title="Delete"
-                            hx-post="{% url 'tag.delete' badge.id %}"
-                            hx-confirm="Delete label '{{ badge.name }}'?"
-                            hx-target="#pbd-{{ badge.id }}"
-                            hx-swap="outerHTML">
-                        <i class="material-icons">delete</i>
-                    </button>
-                    {% endif %}
-                </div>
-            </div>
-            {% empty %}
-            <div class="tag-empty" id="people-badge-empty">
-                <i class="material-icons">people_outline</i>
-                <p>No people labels yet. Click <strong>+ New Label</strong> to create one.</p>
-            </div>
-            {% endfor %}
+            {% include "dashboard/partials/people_badge_rows.html" %}
         </div>
 
     </div>{# end #panel-people #}
@@ -1260,6 +1206,32 @@ document.body.addEventListener('htmx:afterSwap', function(e) {
         var sdlg = document.getElementById('status-edit-dialog'); if (sdlg && !sdlg.open) sdlg.showModal();
     }
 });
+
+// ── Kind-changed: refresh destination rows + switch tab after conversion ────
+(function () {
+    var _rowUrls = {
+        'tag': '{% url "tag.rows" %}',
+        'category': '{% url "category.rows" %}',
+        'status': '{% url "status.rows" %}'
+    };
+    var _rowTargets = { 'tag': '#tag-rows', 'category': '#category-rows', 'status': '#status-rows' };
+    var _tabKeys = { 'tag': 'tags', 'category': 'categories', 'status': 'status' };
+
+    document.body.addEventListener('htmx:afterRequest', function (e) {
+        var xhr = e.detail && e.detail.xhr;
+        if (!xhr || !e.detail.successful) return;
+        var kc = xhr.getResponseHeader('X-Kind-Changed');
+        if (!kc) return;
+        var url = _rowUrls[kc], target = _rowTargets[kc], tabKey = _tabKeys[kc];
+        if (url && target) {
+            htmx.ajax('GET', url, { target: target, swap: 'innerHTML' });
+        }
+        if (tabKey) {
+            var tabBtn = document.querySelector('.organize-tab[data-tab="' + tabKey + '"]');
+            if (tabBtn) tabBtn.click();
+        }
+    });
+}());
 </script>
 
 {# ── Tab switching ─────────────────────────────────────────────────────────── #}
@@ -2450,7 +2422,7 @@ window._orgBulkSync = function(n, opts) {
 (function () {
     var _peopleSelected = new Set();
     var _peopleMergeTargetId = null;
-    var _mergeUrl = '{% url "tag.multi_merge" %}';
+    var _mergeUrl = '{% url "people.multi_merge" %}';
 
     function _getCsrf() { var m = document.cookie.match(/csrftoken=([^;]+)/); return m ? m[1] : ''; }
 
@@ -2593,8 +2565,9 @@ window._orgBulkSync = function(n, opts) {
     function _bulkDeletePeople() {
         var ids = Array.from(_peopleSelected);
         var csrfVal = _getCsrf();
+        var baseUrl = '{% url "people.delete" 99999 %}';
         Promise.all(ids.map(function (id) {
-            return fetch('/dashboard/tag/' + id + '/delete/', { method: 'POST', headers: { 'X-CSRFToken': csrfVal } });
+            return fetch(baseUrl.replace('99999', id), { method: 'POST', headers: { 'X-CSRFToken': csrfVal } });
         })).then(function () {
             ids.forEach(function (id) {
                 var row = document.getElementById('pbd-' + id);

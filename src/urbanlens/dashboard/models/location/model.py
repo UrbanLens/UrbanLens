@@ -9,7 +9,8 @@ from uuid import uuid4
 from django.contrib.gis.db.models import PointField, PolygonField
 from django.contrib.gis.geos import Point, Polygon
 from django.db.models import Index, ManyToManyField, UUIDField
-from django.db.models.fields import CharField, DateField, DecimalField, TextField
+from django.db.models.fields import CharField, DateField, DecimalField, SlugField, TextField
+from django.utils.text import slugify
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -56,6 +57,8 @@ class Location(abstract.AddressableMixin, abstract.Model):
     # Public-facing identifier. Non-sequential so users cannot infer location counts
     # or enumerate other locations from a known URL.
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
+    # URL slug - globally unique. Auto-generated from name on first save.
+    slug = SlugField(max_length=255, null=True, blank=True, unique=True)
 
     # Canonical name of the place - NOT a user's personal label (that's Pin.nickname).
     name = CharField(max_length=255)
@@ -226,7 +229,22 @@ class Location(abstract.AddressableMixin, abstract.Model):
             "longitude": float(self.longitude),
         }
 
+    def _generate_slug(self) -> str:
+        """Derive a slug that is globally unique across all locations."""
+        base = slugify(self.name or "location")[:255] or "location"
+        candidate = base
+        n = 2
+        qs = Location.objects.all()
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+        while qs.filter(slug=candidate).exists():
+            candidate = f"{base}-{n}"
+            n += 1
+        return candidate
+
     def save(self, *args, **kwargs) -> None:
+        if not self.slug:
+            self.slug = self._generate_slug()
         if self.latitude is not None and self.longitude is not None:
             self.point = Point(float(self.longitude), float(self.latitude), srid=4326)
             if self.bounding_box is None:

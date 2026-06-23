@@ -326,8 +326,8 @@ class TagMergeView(LoginRequiredMixin, View):
 class TagMembershipView(LoginRequiredMixin, View):
     """Add or remove a tag from a specific pin (HTMX panel on pin detail page)."""
 
-    def get(self, request, pin_uuid, *args, **kwargs):
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+    def get(self, request, pin_slug, *args, **kwargs):
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = request.user.profile
         all_tags = Badge.objects.tags().visible_to(profile).ordered()
         member_ids = set(pin.tags.values_list("id", flat=True))
@@ -341,8 +341,8 @@ class TagMembershipView(LoginRequiredMixin, View):
             },
         )
 
-    def post(self, request, pin_uuid, *args, **kwargs):
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+    def post(self, request, pin_slug, *args, **kwargs):
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         tag_id = request.POST.get("tag_id")
         action = request.POST.get("action")  # "add" or "remove"
 

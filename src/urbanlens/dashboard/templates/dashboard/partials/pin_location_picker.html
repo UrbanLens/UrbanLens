@@ -9,20 +9,20 @@
     </div>
 
     {% for loc in locations %}
-    <div class="pin-loc-option {% if pin.location and loc.uuid == pin.location.uuid %}pin-loc-option--current{% endif %}">
+    <div class="pin-loc-option {% if pin.location and loc.slug == pin.location.slug %}pin-loc-option--current{% endif %}">
         <div class="pin-loc-option-info">
             <span class="pin-loc-option-name">{{ loc.name }}</span>
-            {% if pin.location and loc.uuid == pin.location.uuid %}
+            {% if pin.location and loc.slug == pin.location.slug %}
             <span class="pin-loc-option-badge">Current</span>
             {% endif %}
         </div>
         <div class="pin-loc-option-actions">
-            <a href="{% url 'location.wiki' loc.uuid %}" target="_blank" class="btn-ghost btn-sm" title="Open wiki">
+            <a href="{% url 'location.wiki' loc.slug %}" target="_blank" class="btn-ghost btn-sm" title="Open wiki">
                 <i class="material-icons">open_in_new</i>
             </a>
-            {% if not pin.location or loc.uuid != pin.location.uuid %}
+            {% if not pin.location or loc.slug != pin.location.slug %}
             <button type="button" class="btn-primary btn-sm"
-                    hx-post="{% url 'pin.link.to' pin.uuid loc.uuid %}"
+                    hx-post="{% url 'pin.link.to' pin.slug loc.slug %}"
                     hx-target="#pin-overview"
                     hx-swap="outerHTML"
                     hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'

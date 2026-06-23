@@ -15,10 +15,12 @@ from django.db.models import (
     Index,
     IntegerField,
     OneToOneField,
+    SlugField,
     TextChoices,
     TextField,
     UUIDField,
 )
+from django.utils.text import slugify
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.profile.queryset import Manager
@@ -64,6 +66,8 @@ class MapCenterMode(TextChoices):
 
 class Profile(abstract.Model):
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
+    # URL slug - globally unique. Auto-generated from username on first save.
+    slug = SlugField(max_length=150, null=True, blank=True, unique=True)
     avatar = ImageField(upload_to="avatars/", null=True, blank=True)
     profile_setup_complete = BooleanField(default=True)
     bio = TextField(null=True, blank=True)
@@ -176,6 +180,25 @@ class Profile(abstract.Model):
     @property
     def full_name(self):
         return self.user.get_full_name()
+
+    def _generate_slug(self) -> str:
+        """Derive a slug that is globally unique across all profiles."""
+        base = slugify(self.user.username)[:150] or "user"
+        candidate = base
+        n = 2
+        qs = Profile.objects.all()
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+        while qs.filter(slug=candidate).exists():
+            candidate = f"{base}-{n}"
+            n += 1
+        return candidate
+
+    def save(self, *args, **kwargs) -> None:
+        """Auto-generate a unique slug from the username if not already set."""
+        if not self.slug:
+            self.slug = self._generate_slug()
+        super().save(*args, **kwargs)
 
     def compute_map_center(self) -> tuple[float, float] | None:
         """Find the densest geographic cluster of pins and return its centroid.

@@ -16,7 +16,7 @@
             <button type="button"
                     class="alias-chip-remove"
                     title="Remove alias"
-                    hx-delete="{% url 'location.wiki.alias.delete' location.uuid alias.id %}"
+                    hx-delete="{% url 'location.wiki.alias.delete' location.slug alias.id %}"
                     hx-target="#location-aliases-panel"
                     hx-swap="outerHTML"
                     hx-confirm="Remove alias &ldquo;{{ alias.name }}&rdquo;?">
@@ -30,7 +30,7 @@
     {% endif %}
 
     <form class="alias-add-form"
-          hx-post="{% url 'location.wiki.aliases' location.uuid %}"
+          hx-post="{% url 'location.wiki.aliases' location.slug %}"
           hx-target="#location-aliases-panel"
           hx-swap="outerHTML">
         {% csrf_token %}

@@ -190,17 +190,17 @@ class StatusDeleteView(LoginRequiredMixin, View):
 class StatusMembershipView(LoginRequiredMixin, View):
     """Add or remove a status badge from a specific pin (HTMX panel on pin detail page)."""
 
-    def get(self, request, pin_uuid, *args, **kwargs):
+    def get(self, request, pin_slug, *args, **kwargs):
         """Render the status panel for a pin.
 
         Args:
             request: The HTTP request.
-            pin_uuid: UUID of the target pin.
+            pin_slug: UUID of the target pin.
 
         Returns:
             Rendered status_panel.html partial.
         """
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = request.user.profile
         all_statuses = Badge.objects.statuses().for_profile(profile).ordered()
         member_ids = set(pin.statuses.values_list("id", flat=True))
@@ -210,17 +210,17 @@ class StatusMembershipView(LoginRequiredMixin, View):
             {"pin": pin, "all_statuses": all_statuses, "member_ids": member_ids},
         )
 
-    def post(self, request, pin_uuid, *args, **kwargs):
+    def post(self, request, pin_slug, *args, **kwargs):
         """Toggle a status badge on a pin.
 
         Args:
             request: The HTTP request with POST data (status_id, action).
-            pin_uuid: UUID of the target pin.
+            pin_slug: UUID of the target pin.
 
         Returns:
             Rendered status_panel.html partial.
         """
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         status_id = request.POST.get("status_id")
         action = request.POST.get("action")  # "add" or "remove"
 

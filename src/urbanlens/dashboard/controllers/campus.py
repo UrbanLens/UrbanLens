@@ -28,14 +28,14 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
     is rendered by the pin detail template; these views serve its data calls.
     """
 
-    def get_campus(self, request: HttpRequest, pin_uuid):
+    def get_campus(self, request: HttpRequest, pin_slug):
         """Return the effective campus for a pin's location.
 
         Resolution order: user's personal campus → admin default → null.
         The client should render a circle with default_radius_meters when polygon is null.
         """
         try:
-            pin = Pin.objects.select_related("location").get(uuid=pin_uuid)
+            pin = Pin.objects.select_related("location").get(slug=pin_slug)
         except Pin.DoesNotExist:
             return JsonResponse({"error": "Pin not found"}, status=404)
 
@@ -62,12 +62,12 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    def save_campus(self, request: Request, pin_uuid):
+    def save_campus(self, request: Request, pin_slug):
         """Create or update the current user's campus boundary for a pin's location."""
         from urbanlens.dashboard.models.location.model import Location
 
         try:
-            pin = Pin.objects.select_related("location").get(uuid=pin_uuid)
+            pin = Pin.objects.select_related("location").get(slug=pin_slug)
         except Pin.DoesNotExist:
             return JsonResponse({"error": "Pin not found"}, status=404)
 

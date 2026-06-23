@@ -16,7 +16,7 @@
             <button type="button"
                     class="profile-badge-chip profile-badge-chip--on"
                     style="--badge-color: {{ badge.color|default:'#6b7280' }}"
-                    hx-post="{% url 'profile.badge_toggle' subject.uuid badge.id %}"
+                    hx-post="{% url 'profile.badge_toggle' subject.slug badge.id %}"
                     hx-target="#profile-annotation-inner"
                     hx-swap="innerHTML"
                     title="Remove {{ badge.name }}">
@@ -38,7 +38,7 @@
                     <button type="button"
                             class="profile-badge-chip"
                             style="--badge-color: {{ badge.color|default:'#6b7280' }}"
-                            hx-post="{% url 'profile.badge_toggle' subject.uuid badge.id %}"
+                            hx-post="{% url 'profile.badge_toggle' subject.slug badge.id %}"
                             hx-target="#profile-annotation-inner"
                             hx-swap="innerHTML"
                             title="Add {{ badge.name }}">
@@ -73,7 +73,7 @@
                         <i class="material-icons">edit</i>
                     </button>
                     <button type="button" class="pan-note-delete-btn btn-icon btn-icon--danger"
-                            hx-post="{% url 'profile.note.delete' subject.uuid note.pk %}"
+                            hx-post="{% url 'profile.note.delete' subject.slug note.pk %}"
                             hx-target="#profile-annotation-inner"
                             hx-swap="innerHTML"
                             hx-confirm="Delete this note?"
@@ -87,7 +87,7 @@
             </div>
             <div class="pan-note-edit" id="pan-note-edit-{{ note.pk }}" hidden>
                 <textarea class="pan-note-textarea"
-                          hx-post="{% url 'profile.note.edit' subject.uuid note.pk %}"
+                          hx-post="{% url 'profile.note.edit' subject.slug note.pk %}"
                           hx-trigger="keyup changed delay:700ms"
                           hx-target="#profile-annotation-inner"
                           hx-swap="innerHTML"
@@ -100,7 +100,7 @@
         {% endfor %}
 
         <form class="pan-compose"
-              hx-post="{% url 'profile.note' subject.uuid %}"
+              hx-post="{% url 'profile.note' subject.slug %}"
               hx-target="#profile-annotation-inner"
               hx-swap="innerHTML">
             {% csrf_token %}

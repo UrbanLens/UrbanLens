@@ -80,19 +80,19 @@ def _image_to_json(img: Image, request: HttpRequest, viewer_profile: Profile | N
 class PinGalleryView(LoginRequiredMixin, View):
     """HTML gallery panel for the pin detail page (loaded via HTMX)."""
 
-    def _get_context(self, request: HttpRequest, pin_uuid: str) -> dict:
-        pin = get_object_or_404(Pin, uuid=pin_uuid)
+    def _get_context(self, request: HttpRequest, pin_slug: str) -> dict:
+        pin = get_object_or_404(Pin, slug=pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(pin=pin).select_related("profile").visible_to(profile)
         return {"pin": pin, "images": images, "profile": profile, "context_type": "pin"}
 
-    def get(self, request: HttpRequest, pin_uuid: str) -> HttpResponse:
-        ctx = self._get_context(request, pin_uuid)
+    def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
+        ctx = self._get_context(request, pin_slug)
         return render(request, "dashboard/partials/_photo_gallery.html", ctx)
 
-    def post(self, request: HttpRequest, pin_uuid: str) -> JsonResponse:
+    def post(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
         """Upload an image to a pin."""
-        pin = get_object_or_404(Pin, uuid=pin_uuid)
+        pin = get_object_or_404(Pin, slug=pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
         if not image_file:
@@ -117,8 +117,8 @@ class PinGalleryView(LoginRequiredMixin, View):
 class PinGalleryJsonView(LoginRequiredMixin, View):
     """JSON endpoint for the pin photo map layer."""
 
-    def get(self, request: HttpRequest, pin_uuid: str) -> JsonResponse:
-        pin = get_object_or_404(Pin, uuid=pin_uuid)
+    def get(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
+        pin = get_object_or_404(Pin, slug=pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(pin=pin).select_related("profile").visible_to(profile).with_coords()
         data = [_image_to_json(img, request, profile) for img in images]
@@ -128,12 +128,12 @@ class PinGalleryJsonView(LoginRequiredMixin, View):
 class PinImageView(LoginRequiredMixin, View):
     """Reposition or delete a single image on a pin."""
 
-    def _get_image(self, image_id: int, pin_uuid: str) -> Image:
-        return get_object_or_404(Image, pk=image_id, pin__uuid=pin_uuid)
+    def _get_image(self, image_id: int, pin_slug: str) -> Image:
+        return get_object_or_404(Image, pk=image_id, pin__slug=pin_slug)
 
-    def post(self, request: HttpRequest, pin_uuid: str, image_id: int) -> JsonResponse:
+    def post(self, request: HttpRequest, pin_slug: str, image_id: int) -> JsonResponse:
         """Update lat/lng when the user drags the photo marker on the map."""
-        img = self._get_image(image_id, pin_uuid)
+        img = self._get_image(image_id, pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404
@@ -146,8 +146,8 @@ class PinImageView(LoginRequiredMixin, View):
             return JsonResponse({"error": str(exc)}, status=400)
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
-    def delete(self, request: HttpRequest, pin_uuid: str, image_id: int) -> HttpResponse:
-        img = self._get_image(image_id, pin_uuid)
+    def delete(self, request: HttpRequest, pin_slug: str, image_id: int) -> HttpResponse:
+        img = self._get_image(image_id, pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404
@@ -162,18 +162,18 @@ class PinImageView(LoginRequiredMixin, View):
 class WikiGalleryView(LoginRequiredMixin, View):
     """HTML gallery panel for the location wiki page."""
 
-    def _get_context(self, request: HttpRequest, location_uuid: str) -> dict:
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def _get_context(self, request: HttpRequest, location_slug: str) -> dict:
+        location = get_object_or_404(Location, slug=location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(location=location).select_related("profile").visible_to(profile)
         return {"location": location, "images": images, "profile": profile, "context_type": "wiki"}
 
-    def get(self, request: HttpRequest, location_uuid: str) -> HttpResponse:
-        ctx = self._get_context(request, location_uuid)
+    def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        ctx = self._get_context(request, location_slug)
         return render(request, "dashboard/partials/_photo_gallery.html", ctx)
 
-    def post(self, request: HttpRequest, location_uuid: str) -> JsonResponse:
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
+        location = get_object_or_404(Location, slug=location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
         if not image_file:
@@ -197,8 +197,8 @@ class WikiGalleryView(LoginRequiredMixin, View):
 class WikiGalleryJsonView(LoginRequiredMixin, View):
     """JSON endpoint for the wiki photo map layer."""
 
-    def get(self, request: HttpRequest, location_uuid: str) -> JsonResponse:
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def get(self, request: HttpRequest, location_slug: str) -> JsonResponse:
+        location = get_object_or_404(Location, slug=location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(location=location).select_related("profile").visible_to(profile).with_coords()
         data = [_image_to_json(img, request, profile) for img in images]
@@ -208,11 +208,11 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
 class WikiImageView(LoginRequiredMixin, View):
     """Reposition or delete a single image on a location wiki."""
 
-    def _get_image(self, image_id: int, location_uuid: str) -> Image:
-        return get_object_or_404(Image, pk=image_id, location__uuid=location_uuid)
+    def _get_image(self, image_id: int, location_slug: str) -> Image:
+        return get_object_or_404(Image, pk=image_id, location__slug=location_slug)
 
-    def post(self, request: HttpRequest, location_uuid: str, image_id: int) -> JsonResponse:
-        img = self._get_image(image_id, location_uuid)
+    def post(self, request: HttpRequest, location_slug: str, image_id: int) -> JsonResponse:
+        img = self._get_image(image_id, location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404
@@ -225,8 +225,8 @@ class WikiImageView(LoginRequiredMixin, View):
             return JsonResponse({"error": str(exc)}, status=400)
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
-    def delete(self, request: HttpRequest, location_uuid: str, image_id: int) -> HttpResponse:
-        img = self._get_image(image_id, location_uuid)
+    def delete(self, request: HttpRequest, location_slug: str, image_id: int) -> HttpResponse:
+        img = self._get_image(image_id, location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404

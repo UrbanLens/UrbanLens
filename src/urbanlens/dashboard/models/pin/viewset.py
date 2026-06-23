@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 class PinViewSet(viewsets.ModelViewSet):
     serializer_class = PinSerializer
     basename = "pins"
+    lookup_field = "uuid"
 
     def get_queryset(self):
         if not self.request:

@@ -374,6 +374,33 @@
     </form>
 </dialog>
 
+{# ── Mark as completed dialog ────────────────────────────────────────────── #}
+<dialog id="trip-complete-dialog" class="trip-create-dialog ul-dialog">
+    {% include "dashboard/partials/_dialog_header.html" with title="Mark as Completed" %}
+    <form id="trip-complete-form"
+          hx-post=""
+          hx-target="#trip-activities-panel"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful)document.getElementById('trip-complete-dialog').close()"
+          class="trip-create-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <p style="margin:0 0 .75rem;color:var(--ul-text-muted,#6b7280)">When was this activity completed?</p>
+            <label for="trip-complete-date">Date completed</label>
+            <input type="date" name="completed_date" id="trip-complete-date"
+                   style="width:100%;max-width:240px;margin-top:.25rem">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="submit-button">
+                <i class="material-icons" style="font-size:1rem;vertical-align:middle">check_circle</i>
+                Mark Complete
+            </button>
+            <button type="button" class="btn-ghost"
+                    onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
 {# ── Trip settings dialog ─────────────────────────────────────────────────── #}
 {% if viewer_is_organizer %}
 <dialog id="trip-settings-dialog" class="trip-create-dialog ul-dialog">
@@ -768,7 +795,7 @@ window.tripToggleShowCompleted = function () {
                                 if (lngInput)  lngInput.value  = loc.lng;
                                 if (nameInput) nameInput.value = loc.name;
                             } else {
-                                uuidInput.value = loc.uuid;
+                                uuidInput.value = loc.slug;
                                 if (latInput)  latInput.value  = '';
                                 if (lngInput)  lngInput.value  = '';
                                 if (nameInput) nameInput.value = '';
@@ -1318,6 +1345,23 @@ window.tripSetTab = function (tab) {
 
     // Re-render calendar so the filtered set is reflected there too
     if (window._tripCurrentView === 'calendar') _renderTripCalendar();
+};
+
+// ── Mark-as-completed dialog ─────────────────────────────────────────────
+window.tripOpenCompleteDialog = function (url) {
+    var form = document.getElementById('trip-complete-form');
+    if (form) {
+        form.setAttribute('hx-post', url);
+        htmx.process(form);
+    }
+    var today = new Date().toISOString().slice(0, 10);
+    var dateInput = document.getElementById('trip-complete-date');
+    if (dateInput) {
+        dateInput.value = today;
+        dateInput.max = today;
+    }
+    var dlg = document.getElementById('trip-complete-dialog');
+    if (dlg) dlg.showModal();
 };
 
 // Restore tab + show-completed state after panel swap

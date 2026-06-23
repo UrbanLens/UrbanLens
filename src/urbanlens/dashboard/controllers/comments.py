@@ -92,18 +92,18 @@ def _build_context(comments_qs, profile: Profile, **extra) -> dict:
 class PinCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a Pin."""
 
-    def get(self, request, pin_uuid):
+    def get(self, request, pin_slug):
         from urbanlens.dashboard.models.pin.model import Pin
 
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _profile(request)
         ctx = _build_context(pin.comments.all(), profile, pin=pin, context_type="pin")
         return _render_comments(request, ctx)
 
-    def post(self, request, pin_uuid):
+    def post(self, request, pin_slug):
         from urbanlens.dashboard.models.pin.model import Pin
 
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _profile(request)
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
@@ -127,10 +127,10 @@ class PinCommentsView(LoginRequiredMixin, View):
 class PinCommentDeleteView(LoginRequiredMixin, View):
     """DELETE /map/pin/<uuid>/comments/<int>/delete/"""
 
-    def delete(self, request, pin_uuid, comment_id):
+    def delete(self, request, pin_slug, comment_id):
         from urbanlens.dashboard.models.pin.model import Pin
 
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _profile(request)
         comment = get_object_or_404(Comment, id=comment_id, pin=pin)
         if comment.profile != profile:
@@ -145,26 +145,26 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 class WikiCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a Location wiki."""
 
-    def _get_location_and_profile(self, request, location_uuid):
+    def _get_location_and_profile(self, request, location_slug):
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import Pin
 
-        location = get_object_or_404(Location, uuid=location_uuid)
+        location = get_object_or_404(Location, slug=location_slug)
         profile = _profile(request)
         # Must have this location pinned to comment on its wiki
         if not Pin.objects.filter(profile=profile, location=location).exists():
             return None, None, location
         return profile, location, location
 
-    def get(self, request, location_uuid):
-        profile, location, _loc = self._get_location_and_profile(request, location_uuid)
+    def get(self, request, location_slug):
+        profile, location, _loc = self._get_location_and_profile(request, location_slug)
         if profile is None:
             return HttpResponse("You must have this location pinned to view wiki comments.", status=403)
         ctx = _build_context(location.comments.all(), profile, location=location, context_type="wiki")
         return _render_comments(request, ctx)
 
-    def post(self, request, location_uuid):
-        profile, location, _loc = self._get_location_and_profile(request, location_uuid)
+    def post(self, request, location_slug):
+        profile, location, _loc = self._get_location_and_profile(request, location_slug)
         if profile is None:
             return HttpResponse("You must have this location pinned to leave a comment.", status=403)
         text = request.POST.get("text", "").strip()
@@ -191,10 +191,10 @@ class WikiCommentsView(LoginRequiredMixin, View):
 class WikiCommentDeleteView(LoginRequiredMixin, View):
     """DELETE /location/<uuid>/wiki/comments/<int>/delete/"""
 
-    def delete(self, request, location_uuid, comment_id):
+    def delete(self, request, location_slug, comment_id):
         from urbanlens.dashboard.models.location.model import Location
 
-        location = get_object_or_404(Location, uuid=location_uuid)
+        location = get_object_or_404(Location, slug=location_slug)
         profile = _profile(request)
         comment = get_object_or_404(Comment, id=comment_id, location=location)
         if comment.profile != profile:
@@ -341,11 +341,12 @@ class CommentMapPinsView(LoginRequiredMixin, View):
             results.append(
                 {
                     "uuid": str(pin.uuid),
+                    "slug": pin.slug or str(pin.uuid),
                     "name": name,
                     "lat": float(lat),
                     "lng": float(lng),
-                    "detail_pins_url": f"/map/pin/{pin.uuid}/detail-pins/json/",
-                    "markup_url": f"/map/pin/{pin.uuid}/markup/json/",
+                    "detail_pins_url": f"/map/pin/{pin.slug or pin.uuid}/detail-pins/json/",
+                    "markup_url": f"/map/pin/{pin.slug or pin.uuid}/markup/json/",
                 },
             )
         return JsonResponse({"pins": results})
@@ -383,9 +384,9 @@ def _comment_url(comment) -> str:
         if hasattr(comment, "trip_id") and comment.trip_id:
             return reverse("trips.detail", kwargs={"trip_uuid": comment.trip.uuid}) + anchor
         if hasattr(comment, "pin_id") and comment.pin_id:
-            return reverse("pin.details", kwargs={"pin_uuid": comment.pin.uuid}) + anchor
+            return reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)}) + anchor
         if hasattr(comment, "location_id") and comment.location_id:
-            return reverse("location.wiki", kwargs={"location_uuid": comment.location.uuid}) + anchor
+            return reverse("location.wiki", kwargs={"location_slug": comment.location.slug or str(comment.location.uuid)}) + anchor
     except NoReverseMatch:
         logger.warning("Could not build comment URL for comment %s", comment.id)
     return ""

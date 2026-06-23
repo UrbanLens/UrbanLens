@@ -176,7 +176,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 notification_type=NotificationType.FRIEND_REQUEST,
                 title="New friend request",
                 message=f"{requesting.username} wants to be your friend.",
-                url=reverse("profile.view_user", kwargs={"profile_uuid": requesting.uuid}),
+                url=reverse("profile.view_user", kwargs={"profile_slug": requesting.slug or str(requesting.uuid)}),
                 source_profile=requesting,
             )
 
@@ -209,7 +209,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             notification_type=NotificationType.FRIEND_ACCEPTED,
             title="Friend request accepted",
             message=f"{request.user.profile.username} accepted your friend request.",
-            url=reverse("profile.view_user", kwargs={"profile_uuid": request.user.profile.uuid}),
+            url=reverse("profile.view_user", kwargs={"profile_slug": request.user.profile.slug or str(request.user.profile.uuid)}),
         )
 
         to_profile = Profile.objects.filter(pk=profile_id).first()
@@ -332,7 +332,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             raise Http404
         viewer = request.user.profile if request.user.is_authenticated else None
         if viewer is None or viewer.pk != profile.pk:
-            return redirect("profile.view_user", profile_uuid=profile.uuid)
+            return redirect("profile.view_user", profile_slug=profile.slug or str(profile.uuid))
         return render(
             request,
             "dashboard/pages/profile/friends.html",
@@ -372,7 +372,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                     notification_type=NotificationType.FRIEND_ACCEPTED,
                     title="Friend request accepted",
                     message=f"{viewer_profile.username} accepted your friend request.",
-                    url=reverse("profile.view_user", kwargs={"profile_uuid": viewer_profile.uuid}),
+                    url=reverse("profile.view_user", kwargs={"profile_slug": viewer_profile.slug or str(viewer_profile.uuid)}),
                     source_profile=viewer_profile,
                 )
         else:

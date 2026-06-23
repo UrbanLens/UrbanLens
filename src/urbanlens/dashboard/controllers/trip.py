@@ -229,14 +229,14 @@ def _parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.
 def _resolve_location(body: dict):
     """Resolve a location from POST body fields.
 
-    Priority: location_uuid → geocoded lat/lng → None.
+    Priority: location_slug → geocoded lat/lng → None.
     Creates a new Location row when geocoded coordinates are supplied.
     """
     from urbanlens.dashboard.models.location.model import Location
 
-    location_uuid = (body.get("location_uuid") or "").strip()
-    if location_uuid:
-        return Location.objects.filter(uuid=location_uuid).first()
+    location_slug = (body.get("location_slug") or "").strip()
+    if location_slug:
+        return Location.objects.filter(slug=location_slug).first()
 
     geocoded_lat = (body.get("geocoded_lat") or "").strip()
     geocoded_lng = (body.get("geocoded_lng") or "").strip()
@@ -615,12 +615,21 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
 
         today = datetime.date.today()
-        if activity.scheduled_at is None or activity.scheduled_at.date() > today:
-            activity.scheduled_at = datetime.datetime.combine(
-                today,
-                activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
-            )
+        completed_date_str = request.POST.get("completed_date", "")
+        if completed_date_str:
+            try:
+                completed_date = datetime.date.fromisoformat(completed_date_str)
+                if completed_date > today:
+                    completed_date = today
+            except ValueError:
+                completed_date = today
+        else:
+            completed_date = today
 
+        activity.scheduled_at = datetime.datetime.combine(
+            completed_date,
+            activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
+        )
         activity.status = TripActivity.STATUS_COMPLETED
         activity.save(update_fields=["status", "scheduled_at", "updated"])
 

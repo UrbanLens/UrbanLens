@@ -1824,7 +1824,7 @@
             }
             // When multiple locations cover the same coordinates, prompt the user to choose.
             if (data && data.conflicting_locations && data.conflicting_locations.length > 1) {
-                _showLocationConflictPicker(data.pin_uuid, data.conflicting_locations);
+                _showLocationConflictPicker(data.pin_slug, data.conflicting_locations);
             }
         })
         .catch(err => toastr.error('Failed to add pin: ' + err))
@@ -1832,7 +1832,7 @@
     });
 
     // ── Location conflict picker ───────────────────────────────────────────────
-    function _showLocationConflictPicker(pinUuid, locations) {
+    function _showLocationConflictPicker(pinSlug, locations) {
         var dlg = document.getElementById('loc-conflict-dialog');
         var list = document.getElementById('loc-conflict-list');
         if (!dlg || !list) return;
@@ -1849,7 +1849,7 @@
                 '<div class="loc-conflict-option-actions">' +
                     '<a href="' + loc.wiki_url + '" target="_blank" class="btn-ghost btn-sm">Wiki</a>' +
                     (!loc.is_current
-                        ? '<button class="btn-primary btn-sm loc-conflict-switch-btn" data-uuid="' + loc.uuid + '" data-name="' + (loc.name || '').replace(/"/g, '&quot;') + '">Use this</button>'
+                        ? '<button class="btn-primary btn-sm loc-conflict-switch-btn" data-slug="' + loc.slug + '" data-name="' + (loc.name || '').replace(/"/g, '&quot;') + '">Use this</button>'
                         : '') +
                 '</div>';
             list.appendChild(item);
@@ -1857,11 +1857,11 @@
 
         list.querySelectorAll('.loc-conflict-switch-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
-                var locUuid = btn.dataset.uuid;
+                var locSlug = btn.dataset.slug;
                 var locName = btn.dataset.name;
                 btn.disabled = true;
                 btn.textContent = 'Switching…';
-                fetch('/dashboard/map/pin/' + pinUuid + '/link/' + locUuid + '/', {
+                fetch('/dashboard/map/pin/' + pinSlug + '/link/' + locSlug + '/', {
                     method: 'POST',
                     headers: { 'X-CSRFToken': '{{ csrf_token }}', 'X-Requested-With': 'XMLHttpRequest' },
                 })

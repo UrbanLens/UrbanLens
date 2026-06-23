@@ -40,7 +40,7 @@
                             {% for i in "12345"|make_list %}
                             <button type="button"
                                     class="sr-star-btn {% if pin.priority and forloop.counter <= pin.priority %}sr-star-btn--on{% endif %}"
-                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
                                     hx-target="#pin-overview"
                                     hx-swap="outerHTML"
                                     hx-vals='{"priority": {{ forloop.counter }}}'
@@ -49,7 +49,7 @@
                             {% if pin.priority %}
                             <button type="button"
                                     class="sr-star-clear"
-                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
                                     hx-target="#pin-overview"
                                     hx-swap="outerHTML"
                                     hx-vals='{"priority": 0}'
@@ -65,7 +65,7 @@
                             {% for i in "12345"|make_list %}
                             <button type="button"
                                     class="sr-star-btn {% if pin.rating and forloop.counter <= pin.rating %}sr-star-btn--on{% endif %}"
-                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
                                     hx-target="#pin-overview"
                                     hx-swap="outerHTML"
                                     hx-vals='{"rating": {{ forloop.counter }}}'
@@ -74,7 +74,7 @@
                             {% if pin.rating %}
                             <button type="button"
                                     class="sr-star-clear"
-                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
                                     hx-target="#pin-overview"
                                     hx-swap="outerHTML"
                                     hx-vals='{"rating": 0}'
@@ -90,7 +90,7 @@
                             {% for i in "12345"|make_list %}
                             <button type="button"
                                     class="sr-star-btn {% if pin.vulnerability and forloop.counter <= pin.vulnerability %}sr-star-btn--on{% endif %}"
-                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
                                     hx-target="#pin-overview"
                                     hx-swap="outerHTML"
                                     hx-vals='{"vulnerability": {{ forloop.counter }}}'
@@ -99,7 +99,7 @@
                             {% if pin.vulnerability %}
                             <button type="button"
                                     class="sr-star-clear"
-                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
                                     hx-target="#pin-overview"
                                     hx-swap="outerHTML"
                                     hx-vals='{"vulnerability": 0}'
@@ -160,7 +160,7 @@
                 <i class="material-icons pin-location-icon">public</i>
                 <div class="pin-location-info">
                     <span class="pin-location-label">Community Wiki</span>
-                    <a href="{% url 'location.wiki' pin.location.uuid %}" class="pin-location-name">
+                    <a href="{% url 'location.wiki' pin.location.slug %}" class="pin-location-name">
                         {{ pin.location.name }}
                         <i class="material-icons pin-location-name-icon">open_in_new</i>
                     </a>
@@ -168,7 +168,7 @@
                 <div class="pin-location-actions">
                     {% if overlapping_location_count > 1 %}
                     <button type="button" class="btn-ghost btn-sm pin-loc-change-btn"
-                            hx-get="{% url 'pin.link' pin.uuid %}"
+                            hx-get="{% url 'pin.link' pin.slug %}"
                             hx-target="#pin-location-picker"
                             hx-swap="innerHTML"
                             data-tooltip="Switch this pin to a different shared location. Other users' pins at this place will not be affected."
@@ -178,7 +178,7 @@
                     </button>
                     {% endif %}
                     <button type="button" class="btn-ghost btn-sm pin-loc-detach-btn"
-                            hx-post="{% url 'pin.link' pin.uuid %}"
+                            hx-post="{% url 'pin.link' pin.slug %}"
                             hx-target="#pin-overview"
                             hx-swap="outerHTML"
                             hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
@@ -198,7 +198,7 @@
             <i class="material-icons">link_off</i>
             <span>Not linked to any shared location.</span>
             <button type="button" class="btn-ghost btn-sm pin-loc-change-btn"
-                    hx-get="{% url 'pin.link' pin.uuid %}"
+                    hx-get="{% url 'pin.link' pin.slug %}"
                     hx-target="#pin-location-picker"
                     hx-swap="innerHTML">
                 <i class="material-icons">search</i> Find a location

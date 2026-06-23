@@ -13,7 +13,7 @@
 
     {# ── Title + details (swappable) ──────────────────────────────────── #}
     <div id="pin-overview"
-         hx-get="{% url 'pin.overview' pin.uuid %}"
+         hx-get="{% url 'pin.overview' pin.slug %}"
          hx-trigger="load"
          hx-swap="outerHTML">
         <div class="pin-overview-title-row">
@@ -242,7 +242,7 @@
     {# ── Info row: visits | badges | aliases ──────────────────────────── #}
     <div class="pin-info-row">
 
-        <div hx-get="{% url 'pin.visits' pin.uuid %}"
+        <div hx-get="{% url 'pin.visits' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML"
              class="visit-history card">
@@ -253,7 +253,7 @@
             <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
         </div>
 
-        <div hx-get="{% url 'category.pin' pin.uuid %}"
+        <div hx-get="{% url 'category.pin' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML"
              class="tag-panel">
@@ -264,7 +264,7 @@
             <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
         </div>
 
-        <div hx-get="{% url 'pin.aliases' pin.uuid %}"
+        <div hx-get="{% url 'pin.aliases' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML"
              id="pin-aliases-panel"
@@ -282,7 +282,7 @@
     <div class="pin-media-row">
 
         <div id="satellite-view-section" class="satellite-view card"
-             hx-get="{% url 'pin.satellite_view' pin.uuid %}"
+             hx-get="{% url 'pin.satellite_view' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML">
             <div class="card-header">
@@ -296,7 +296,7 @@
         </div>
 
         <div id="street-view-section" class="street-view card"
-             hx-get="{% url 'pin.street_view' pin.uuid %}"
+             hx-get="{% url 'pin.street_view' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML">
             <div class="card-header">
@@ -315,7 +315,7 @@
     <div class="pin-media-row">
 
         <div id="smithsonian-section" class="smithsonian-images card"
-             hx-get="{% url 'smithsonian_images' pin.uuid %}"
+             hx-get="{% url 'smithsonian_images' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML">
             <div class="card-header">
@@ -330,7 +330,7 @@
 
         {% if pin.has_meaningful_name %}
         <div id="web-search-section" class="web-search card"
-             hx-get="{% url 'pin.web_search' pin.uuid %}"
+             hx-get="{% url 'pin.web_search' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML">
             <div class="card-header">
@@ -348,7 +348,7 @@
 
     {# ── Photo gallery (full width) ────────────────────────────────────── #}
     <div id="pin-gallery-panel"
-         hx-get="{% url 'pin.gallery' pin.uuid %}"
+         hx-get="{% url 'pin.gallery' pin.slug %}"
          hx-trigger="load"
          hx-swap="outerHTML">
         <div class="card">
@@ -362,7 +362,7 @@
 
     {# ── Comments (full width) ─────────────────────────────────────────── #}
     <div id="comment-panel"
-         hx-get="{% url 'pin.comments' pin.uuid %}"
+         hx-get="{% url 'pin.comments' pin.slug %}"
          hx-trigger="load"
          hx-swap="outerHTML">
         <div class="card">
@@ -379,7 +379,7 @@
 {# ── Pin edit dialog ────────────────────────────────────────────────────── #}
 <dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Edit Pin" %}
-    <form hx-post="{% url 'pin.edit' pin.uuid %}"
+    <form hx-post="{% url 'pin.edit' pin.slug %}"
           hx-target="#pin-overview"
           hx-swap="outerHTML"
           hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}"
@@ -739,7 +739,7 @@
     L.control.layers(_baseLayers, _overlays, { position: 'topright', collapsed: true }).addTo(map);
 
     // URL base for detail pin edit/delete: strip the placeholder UUID off the end
-    const _dpEditBase = "{% url 'pin.detail_pin.edit' pin.uuid '00000000-0000-0000-0000-000000000000' %}"
+    const _dpEditBase = "{% url 'pin.detail_pin.edit' pin.slug '00000000-0000-0000-0000-000000000000' %}"
         .replace('00000000-0000-0000-0000-000000000000/', '');
 
     let _detailPins = []; // { uuid, name, pin_type, icon, color, latitude, longitude, marker }
@@ -894,7 +894,7 @@
     });
 
     function loadDetailPins() {
-        fetch("{% url 'pin.detail_pins.json' pin.uuid %}")
+        fetch("{% url 'pin.detail_pins.json' pin.slug %}")
             .then(r => r.json())
             .then(data => {
                 _detailPinLayer.clearLayers();
@@ -942,9 +942,9 @@
     loadDetailPins();
 
     // ── Markup layer ──────────────────────────────────────────────────────────
-    const _markupJsonUrl  = "{% url 'pin.markup.json' pin.uuid %}";
-    const _markupPostUrl  = "{% url 'pin.markup' pin.uuid %}";
-    const _markupEditBase = "{% url 'pin.markup.edit' pin.uuid '00000000-0000-0000-0000-000000000000' %}"
+    const _markupJsonUrl  = "{% url 'pin.markup.json' pin.slug %}";
+    const _markupPostUrl  = "{% url 'pin.markup' pin.slug %}";
+    const _markupEditBase = "{% url 'pin.markup.edit' pin.slug '00000000-0000-0000-0000-000000000000' %}"
         .replace('00000000-0000-0000-0000-000000000000/', '');
 
     // Profile defaults (0-100 percent, converted to 0-1 for Leaflet)
@@ -1350,7 +1350,7 @@
     });
 
     // Load gallery photos on page load
-    fetch("{% url 'pin.gallery.json' pin.uuid %}")
+    fetch("{% url 'pin.gallery.json' pin.slug %}")
         .then(r => r.json())
         .then(data => {
             _photoPanelItems = [];
@@ -1672,7 +1672,7 @@
     }
 
     // ── Campus boundary editor ────────────────────────────────────────────────
-    const campusApiUrl = "{% url 'campus.pin' pin.uuid %}";
+    const campusApiUrl = "{% url 'campus.pin' pin.slug %}";
     const campusItems = new L.FeatureGroup().addTo(map);
     const campusStyle = { color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 };
     let campusDrawControl = null;
@@ -2135,7 +2135,7 @@
             submitBtn.textContent = 'Saving…';
             const data = {};
             new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
-            fetch("{% url 'pin.detail_pins' pin.uuid %}", {
+            fetch("{% url 'pin.detail_pins' pin.slug %}", {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
                 body: JSON.stringify(data),
@@ -2164,7 +2164,7 @@
 
     // ── Photo map layer ───────────────────────────────────────────────────────
     const _photoLayerMarkers = {};  // id → { marker, img }
-    const _photoJsonUrl   = "{% url 'pin.gallery.json' pin.uuid %}";
+    const _photoJsonUrl   = "{% url 'pin.gallery.json' pin.slug %}";
 
     function _photoMarkerHtml(img, size) {
         return `<div class="photo-map-marker" style="width:${size}px;height:${size}px">` +

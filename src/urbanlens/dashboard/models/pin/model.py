@@ -20,7 +20,8 @@ from django.db.models import (
     UniqueConstraint,
     UUIDField,
 )
-from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, DecimalField, IntegerField, TextField
+from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, DecimalField, IntegerField, SlugField, TextField
+from django.utils.text import slugify
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel, TextChoices
@@ -72,6 +73,8 @@ class Pin(abstract.Model):
 
     # Public-facing identifier. Non-sequential so users cannot enumerate other pins.
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
+    # URL slug - unique per (profile, slug). Auto-generated from the effective name on first save.
+    slug = SlugField(max_length=255, null=True, blank=True)
 
     # When True this pin is entirely personal: it will not be linked to a shared
     # Location and will never contribute to the community wiki.  User-specific
@@ -408,6 +411,7 @@ class Pin(abstract.Model):
     def to_json(self) -> dict[str, Any]:
         return {
             "uuid": str(self.uuid),
+            "slug": self.slug or str(self.uuid),
             "name": self.effective_name,
             "icon": self.effective_icon,
             "place_name": self.place_name,
@@ -444,7 +448,22 @@ class Pin(abstract.Model):
             "border_opacity": self.detail_border_opacity,
         }
 
+    def _generate_slug(self) -> str:
+        """Derive a slug that is unique within this user's pins."""
+        base = slugify(self.effective_name)[:200] or "pin"
+        candidate = base
+        n = 2
+        qs = Pin.objects.filter(profile_id=self.profile_id)
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+        while qs.filter(slug=candidate).exists():
+            candidate = f"{base}-{n}"
+            n += 1
+        return candidate
+
     def save(self, *args, **kwargs) -> None:
+        if not self.slug:
+            self.slug = self._generate_slug()
         lat = self.effective_latitude
         lon = self.effective_longitude
         if lat is not None and lon is not None:
@@ -469,6 +488,11 @@ class Pin(abstract.Model):
                 fields=["latitude", "longitude", "profile"],
                 condition=Q(parent_pin__isnull=True, parent_location__isnull=True),
                 name="dashboard_pin_unique_location_per_profile",
+            ),
+            UniqueConstraint(
+                fields=["profile", "slug"],
+                condition=Q(slug__isnull=False),
+                name="dashboard_pin_unique_slug_per_profile",
             ),
         ]
 

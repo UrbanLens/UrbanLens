@@ -4,16 +4,16 @@
         <i class="material-icons">label</i>
         <h3>Badges</h3>
         <button type="button" class="btn-icon-sm" style="margin-left:auto"
-                onclick="document.getElementById('category-loc-dialog-{{ location.uuid }}').showModal()"
+                onclick="document.getElementById('category-loc-dialog-{{ location.slug }}').showModal()"
                 title="Add a badge">
             <i class="material-icons">add</i>
         </button>
     </div>
 
     {# ── Active badge chips ────────────────────────────────────────────────── #}
-    {% include "dashboard/partials/_badge_chips.html" with post_url_name="category.location" obj_uuid=location.uuid panel_id="category-location-panel" empty_text="No badges. Click + to add one." %}
+    {% include "dashboard/partials/_badge_chips.html" with post_url_name="category.location" obj_uuid=location.slug panel_id="category-location-panel" empty_text="No badges. Click + to add one." %}
 
     {# ── Add-badge dialog ─────────────────────────────────────────────────── #}
-    {% include "dashboard/partials/_badge_dialog.html" with dialog_id_prefix="category-loc-dialog-" dialog_id_suffix=location.uuid post_url_name="category.location" obj_uuid=location.uuid panel_id="category-location-panel" %}
+    {% include "dashboard/partials/_badge_dialog.html" with dialog_id_prefix="category-loc-dialog-" dialog_id_suffix=location.slug post_url_name="category.location" obj_uuid=location.slug panel_id="category-location-panel" %}
 </div>
 {% include "dashboard/partials/_badge_dialog_js.html" %}

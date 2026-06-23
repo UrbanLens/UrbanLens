@@ -539,17 +539,17 @@ def _apply_badge_to_location(location, badge: Badge, action: str) -> None:
 class CategoryPinMembershipView(LoginRequiredMixin, View):
     """Add or remove a badge from a pin (HTMX panel on pin detail page)."""
 
-    def get(self, request, pin_uuid, *args, **kwargs):
+    def get(self, request, pin_slug, *args, **kwargs):
         """Render the badge panel for a pin.
 
         Args:
             request: The HTTP request.
-            pin_uuid: The pin UUID.
+            pin_slug: The pin UUID.
 
         Returns:
             Rendered category_panel.html partial.
         """
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = request.user.profile
         return render(
             request,
@@ -561,17 +561,17 @@ class CategoryPinMembershipView(LoginRequiredMixin, View):
             },
         )
 
-    def post(self, request, pin_uuid, *args, **kwargs):
+    def post(self, request, pin_slug, *args, **kwargs):
         """Add or remove a badge from a pin.
 
         Args:
             request: The HTTP request with POST data (category_id, action).
-            pin_uuid: The pin UUID.
+            pin_slug: The pin UUID.
 
         Returns:
             Rendered category_panel.html partial.
         """
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = request.user.profile
         badge_id = request.POST.get("category_id")
         action = request.POST.get("action")
@@ -591,17 +591,17 @@ class CategoryPinMembershipView(LoginRequiredMixin, View):
 class CategoryLocationMembershipView(LoginRequiredMixin, View):
     """Add or remove a badge from a location (HTMX panel on wiki page)."""
 
-    def get(self, request, location_uuid, *args, **kwargs):
+    def get(self, request, location_slug, *args, **kwargs):
         """Render the badge panel for a location.
 
         Args:
             request: The HTTP request.
-            location_uuid: The location UUID.
+            location_slug: The location UUID.
 
         Returns:
             Rendered category_location_panel.html partial.
         """
-        location = get_object_or_404(Location, uuid=location_uuid)
+        location = get_object_or_404(Location, slug=location_slug)
         profile = request.user.profile
         return render(
             request,
@@ -613,17 +613,17 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
             },
         )
 
-    def post(self, request, location_uuid, *args, **kwargs):
+    def post(self, request, location_slug, *args, **kwargs):
         """Add or remove a badge from a location.
 
         Args:
             request: The HTTP request with POST data (category_id, action).
-            location_uuid: The location UUID.
+            location_slug: The location UUID.
 
         Returns:
             Rendered category_location_panel.html partial.
         """
-        location = get_object_or_404(Location, uuid=location_uuid)
+        location = get_object_or_404(Location, slug=location_slug)
         profile = request.user.profile
         badge_id = request.POST.get("category_id")
         action = request.POST.get("action")

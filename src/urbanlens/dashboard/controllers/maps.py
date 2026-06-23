@@ -58,7 +58,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "categories": categories,
                 "filter_badges": filter_badges,
                 "profile_id": profile.id,
-                "profile_uuid": str(profile.uuid),
+                "profile_slug": profile.slug or str(profile.uuid),
                 "app_uuid": str(site.instance_uuid),
                 "cluster_radius": profile.cluster_radius,
                 "pin_count": pin_count,
@@ -76,8 +76,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    def edit_pin(self, request, pin_uuid, *args, **kwargs):
-        pin: Pin = Pin.objects.get(uuid=pin_uuid)
+    def edit_pin(self, request, pin_slug, *args, **kwargs):
+        pin: Pin = Pin.objects.get(slug=pin_slug)
         # Update the pin based on the form data
         pin.nickname = request.POST.get("name")
         pin.description = request.POST.get("description")
@@ -93,8 +93,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         pin.save()
         return HttpResponseRedirect(reverse("map.view"))
 
-    def get_edit_pin(self, request, pin_uuid, *args, **kwargs):
-        pin = Pin.objects.get(uuid=pin_uuid)
+    def get_edit_pin(self, request, pin_slug, *args, **kwargs):
+        pin = Pin.objects.get(slug=pin_slug)
         # Render the edit form
         categories = Badge.objects.categories().ordered()
         return render(request, "dashboard/pages/map/edit_location.html", {"pin": pin, "categories": categories})
@@ -153,7 +153,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 pin.categories.set(Badge.objects.categories().filter(id__in=category_ids))
             pin.save()
 
-            response = {"ok": True, "pin_uuid": str(pin.uuid)}
+            response = {"ok": True, "pin_slug": pin.slug or str(pin.uuid)}
             # When a coordinate falls inside multiple bounding boxes, tell the
             # client so it can offer the user a choice of which location to use.
             if len(all_locations) > 1:
@@ -162,9 +162,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 response["conflicting_locations"] = [
                     {
                         "uuid": str(loc.uuid),
+                        "slug": loc.slug or str(loc.uuid),
                         "name": loc.name,
                         "is_current": loc.pk == location.pk,
-                        "wiki_url": reverse("location.wiki", kwargs={"location_uuid": loc.uuid}),
+                        "wiki_url": reverse("location.wiki", kwargs={"location_slug": loc.slug or str(loc.uuid)}),
                     }
                     for loc in all_locations
                 ]
@@ -191,15 +192,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         logger.error("Invalid search criteria: %s", search_form.errors)
         return HttpResponse(status=400, content="Invalid search criteria.")
 
-    def upload_image(self, request, pin_uuid, *args, **kwargs):
+    def upload_image(self, request, pin_slug, *args, **kwargs):
         image = request.FILES.get("image")
-        pin = Pin.objects.get(uuid=pin_uuid)
+        pin = Pin.objects.get(slug=pin_slug)
         Image.objects.create(image=image, pin=pin)
         return HttpResponse(status=200)
 
-    def change_category(self, request, pin_uuid, *args, **kwargs):
+    def change_category(self, request, pin_slug, *args, **kwargs):
         category_id = request.POST.get("category")
-        pin = Pin.objects.get(uuid=pin_uuid)
+        pin = Pin.objects.get(slug=pin_slug)
         pin.change_category(category_id)
         return HttpResponseRedirect(reverse("view_map"))
 
@@ -239,7 +240,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         map_data = self.get_map_data(request, query)
         for pin_dict in map_data:
-            pin_dict["viewLocationUrl"] = f"/dashboard/map/pin/{pin_dict['uuid']}/"
+            pin_dict["viewLocationUrl"] = f"/dashboard/map/pin/{pin_dict['slug']}/"
 
         return JsonResponse({"pins": map_data})
 
@@ -268,25 +269,25 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    def map_pin_json(self, request, pin_uuid, *args, **kwargs):
+    def map_pin_json(self, request, pin_slug, *args, **kwargs):
         """Return JSON data for a single pin — used for targeted cache updates after edits.
 
         Args:
-            pin_uuid: UUID of the pin to return.
+            pin_slug: Slug of the pin to return.
 
         Returns:
             JsonResponse: ``{"pin": {...}}`` or 404 if the pin doesn't belong to the user.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         try:
-            pin = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("tags").get(uuid=pin_uuid)
+            pin = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("tags").get(slug=pin_slug)
         except Pin.DoesNotExist:
             return JsonResponse({"error": "not found"}, status=404)
         map_data = self.get_map_data(request, Pin.objects.filter(pk=pin.pk).select_related("location").prefetch_related("tags"))
         if not map_data:
             return JsonResponse({"error": "not found"}, status=404)
         pin_dict = map_data[0]
-        pin_dict["viewLocationUrl"] = f"/dashboard/map/pin/{pin.uuid}/"
+        pin_dict["viewLocationUrl"] = f"/dashboard/map/pin/{pin.slug}/"
         return JsonResponse({"pin": pin_dict})
 
     def init_map(self, request, *args, **kwargs):

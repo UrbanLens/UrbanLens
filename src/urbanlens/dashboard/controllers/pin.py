@@ -105,12 +105,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.pin.model import PinType
 
         try:
-            pin = Pin.objects.select_related("location").get(uuid=kwargs["pin_uuid"])
+            pin = Pin.objects.select_related("location").get(slug=kwargs["pin_slug"], profile__user=request.user)
         except Pin.DoesNotExist:
             return render(
                 request,
                 "dashboard/pages/errors/pin_not_found.html",
-                {"pin_uuid": kwargs.get("pin_uuid")},
+                {"pin_slug": kwargs.get("pin_slug")},
                 status=404,
             )
 
@@ -267,13 +267,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         return map_data
 
-    def get_smithsonian_images(self, request: HttpRequest, pin_uuid):
+    def get_smithsonian_images(self, request: HttpRequest, pin_slug):
         """
         Returns the Smithsonian images for a pin.
         """
         # Get the pin
         try:
-            pin: Pin = Pin.objects.get(uuid=pin_uuid)
+            pin: Pin = Pin.objects.get(slug=pin_slug)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -291,7 +291,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    def web_search(self, request: HttpRequest, pin_uuid):
+    def web_search(self, request: HttpRequest, pin_slug):
         """
         Returns the web search results for a pin.
         """
@@ -302,14 +302,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.site_settings import SiteSettings
 
         try:
-            pin: Pin = Pin.objects.get(uuid=pin_uuid)
+            pin: Pin = Pin.objects.get(slug=pin_slug)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
         if not pin.has_meaningful_name:
             return HttpResponse("", status=204)
 
-        cache_key = f"web_search_{pin_uuid}"
+        cache_key = f"web_search_{pin_slug}"
         site_settings = SiteSettings.get_current()
         cache_hours = site_settings.search_cache_hours
 
@@ -347,7 +347,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Returns an HTML fragment with an Esri satellite map for a pin.
         """
         try:
-            pin = Pin.objects.get(uuid=kwargs["pin_uuid"])
+            pin = Pin.objects.get(slug=kwargs["pin_slug"], profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -369,7 +369,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         import base64
 
         try:
-            pin = Pin.objects.get(uuid=kwargs["pin_uuid"])
+            pin = Pin.objects.get(slug=kwargs["pin_slug"], profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -383,7 +383,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             image_bytes, capture_date = google_maps_gateway.get_street_view(lat, lng)
             image_b64 = base64.b64encode(image_bytes).decode("ascii")
         except Exception as exc:
-            logger.warning("Street view unavailable for pin %s: %s", kwargs.get("pin_uuid"), exc)
+            logger.warning("Street view unavailable for pin %s: %s", kwargs.get("pin_slug"), exc)
             return render(request, "dashboard/pages/location/street_view.html", {"error": "Street view unavailable."})
 
         return render(
@@ -579,13 +579,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         response["X-Accel-Buffering"] = "no"
         return response
 
-    def weather_forecast(self, request: HttpRequest, pin_uuid):
+    def weather_forecast(self, request: HttpRequest, pin_slug):
         """
         Returns the weather forecast for a pin.
         """
         # Get the pin
         try:
-            pin: Pin = Pin.objects.get(uuid=pin_uuid)
+            pin: Pin = Pin.objects.get(slug=pin_slug)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 

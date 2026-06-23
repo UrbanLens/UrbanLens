@@ -11,10 +11,8 @@ Features planned for this release.
 
 ## Smaller Features
 * Cleanup git history, and begin using branches for dev. [UL-14]
-* Properly set up pre-commit hooks for linting, type checking, and security scans. [UL-15]
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
 * Add tooltips to help guide users through the app when my assumptions about what is intuitive are incorrect. [UL-17]
-* Adjust "mark as completed" on trip planning page to show confirmation dialog, and be a little less easy for users to mess up. To make it more clear, the confirmation dialog can allow user to specify a date in the past, which defaults to today. [UL-19]
 
 ## Medium Features
 * Proper CI/CD pipeline, tags, releases, etc. [UL-25]
@@ -27,8 +25,6 @@ Features planned for this release.
 ## Bug Fixes
 * User settings don't seem to properly save. [UL-34]
 * When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]
-* After converting a badge type, then switching tabs, the converted badge doesn't appear in the expected list. [UL-123]
-* The pre-populated People badges do not appear on the organize page under the People tab. [UL-124]
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
@@ -38,7 +34,6 @@ Features planned for this release.
 ## Project Health
 * Review AI-created unit tests. Eliminate useless ones to assist code coverage reports. [UL-38]
 * Provide secondary safeguards for permissions. [UL-39]
-* Ensure non-anonymized urls do not exist at all. Users should not be able to access urls we don't want them to access, (like .../profile/2/, instead of the uuid). [UL-40]
 
 ## Features that need verification
 * password reset. [UL-41]
@@ -65,6 +60,11 @@ Features planned for this release.
 * During import pins, consider mapping badges, or other fine-grained control of the import process. (I'm not sure what's needed here... but it's an area to consider improvements) [UL-111]
 * Configure SMTP for outgoing emails. [UL-18]
 * When creating the community wiki entry for a pin, ensure we're not leaking user data to it that the user expects to be private. For instance, the community wiki entry should probably be titled based on the google place name, not the user's custom title. Perhaps we can offer a choice between the two when the user is creating only a single pin? [UL-26]
+* Adjust "mark as completed" on trip planning page to show confirmation dialog, and be a little less easy for users to mess up. To make it more clear, the confirmation dialog can allow user to specify a date in the past, which defaults to today. [UL-19]
+* After converting a badge type, then switching tabs, the converted badge doesn't appear in the expected list. [UL-123]
+* The pre-populated People badges do not appear on the organize page under the People tab. [UL-124]
+* Ensure non-anonymized urls do not exist at all. Users should not be able to access urls we don't want them to access, (like .../profile/2/, instead of the uuid). [UL-40]
+* Properly set up pre-commit hooks for linting, type checking, and security scans. [UL-15]
 
 # Future Features
 Features planned for future releases.

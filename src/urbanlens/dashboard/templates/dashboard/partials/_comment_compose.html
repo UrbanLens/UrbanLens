@@ -1,8 +1,8 @@
 <form class="comment-compose {% if is_reply %}comment-compose--reply{% endif %}"
       {% if context_type == "pin" %}
-      hx-post="{% url 'pin.comments' pin.uuid %}"
+      hx-post="{% url 'pin.comments' pin.slug %}"
       {% elif context_type == "wiki" %}
-      hx-post="{% url 'location.wiki.comments' location.uuid %}"
+      hx-post="{% url 'location.wiki.comments' location.slug %}"
       {% else %}
       hx-post="{% url 'trips.comments' trip.uuid %}"
       {% endif %}
