@@ -8,11 +8,9 @@ Features planned for this release.
 * Tweak notifications, and make success/error states more clear. [UL-6]
 * Ensure mobile-first. [UL-7]
 * Loading indicators for all ui actions that take time. (Creating pin, searching map, etc) [UL-8]
-* "Don't leave page" dialog before a settings page is fully saved. [UL-9]
 * On main map, the import pin dialog can overflow the height of the screen if the user is zoomed in enough. [UL-108]
 
 ## Smaller Features
-* Discord SSO [UL-11]
 * Cleanup git history, and begin using branches for dev. [UL-14]
 * Properly set up pre-commit hooks for linting, type checking, and security scans. [UL-15]
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
@@ -30,16 +28,12 @@ Features planned for this release.
 * During import pins, consider mapping badges, or other fine-grained control of the import process. (I'm not sure what's needed here... but it's an area to consider improvements) [UL-111]
 
 ## Larger Features
-* Discord Integration [UL-29]
 * Reduce duplicate code, remove legacy code, simplify codebase. [UL-30]
 * Run bandit and AI vulnerability scans; integrate with CI/CD. [UL-31]
 
 ## Bug Fixes
-* Clicking outside of a dialog closes it, which is great. But clicking in the dialog and dragging outside unexpectedly closes it. [UL-32]
-* When in the main map and the trip details page, drag/drop of a pin shouldn't be as easy at higher zoom levels. Not sure what I want here. Confirmation dialog? Disable at higher zoom? [UL-33]
 * User settings don't seem to properly save. [UL-34]
 * When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]
-* On the public profile page, when saving a note, the note section is duplicated. [UL-112]
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
@@ -68,6 +62,11 @@ Features planned for this release.
 * Add metadata for emojis (i.e. icons) to aid in searching for them. [UL-12]
 * When creating maps for comments, allow using satellite mode or topographic mode as well as the default view. [UL-13]
 * When creating a new account via SSO, do not set the user's last name in order to preserve partial anonimity. Set their username to {random positive adjective}{random animal}{random number}. [UL-109]
+* Discord SSO [UL-11]
+* "Don't leave page" dialog before a settings page is fully saved. [UL-9]
+* Clicking outside of a dialog closes it, which is great. But clicking in the dialog and dragging outside unexpectedly closes it. [UL-32]
+* On the public profile page, when saving a note, the note section is duplicated. [UL-112]
+* When in the main map and the trip details page, drag/drop of a pin shouldn't be as easy at higher zoom levels. Not sure what I want here. Confirmation dialog? Disable at higher zoom? [UL-33]
 
 # Future Features
 Features planned for future releases.
@@ -106,6 +105,7 @@ Features planned for future releases.
 * Celery / async tasks: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure [UL-119]
 * Hypothesis unit tests: Add property-based tests wherever possible. [UL-120]
 * App setup page on first run: configure site name, etc. [UL-121]
+* Discord Integration [UL-29]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

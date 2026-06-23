@@ -12,6 +12,7 @@ from fastkml import kml
 import requests
 from tqdm import tqdm
 
+from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.services.gateway import Gateway
@@ -242,7 +243,7 @@ class GoogleMapsGateway(Gateway):
                 continue
             try:
                 latitude, longitude = gateway.extract_coordinates_from_url(url)
-            except Exception as exc:
+            except ValueError as exc:
                 logger.warning("Failed to extract coordinates from URL %s: %s", url, exc)
                 yield None
                 continue
@@ -440,6 +441,7 @@ class GoogleMapsGateway(Gateway):
                     for pin in file_pins:
                         pin.tags.add(file_tag)
         except Exception as exc:
+            # TODO: specify exception type
             logger.exception("Unexpected error during streaming import: %s", exc)
             yield sse({"type": "error", "message": f"Import failed unexpectedly: {exc}"})
             return
@@ -493,7 +495,7 @@ class GoogleMapsGateway(Gateway):
                 elif fmt == "kml":
                     raw_pins = self.takeout_kml_to_dict(text, user_profile)
                 elif fmt == "csv":
-                    raw_pins = list(self._csv_row_iter(text, user_profile))
+                    raw_pins = list[dict[str, Any]](self._csv_row_iter(text, user_profile))
                 else:
                     continue
             except Exception as exc:
@@ -545,7 +547,6 @@ class GoogleMapsGateway(Gateway):
             confirmed_lists: User-confirmed selection from the preview step.
             user_profile: Profile to import pins for.
         """
-        from urbanlens.dashboard.models.badges.model import Badge
 
         def sse(data: dict) -> str:
             return f"data: {json.dumps(data)}\n\n"

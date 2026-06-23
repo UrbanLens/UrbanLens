@@ -174,7 +174,7 @@ class Pin(abstract.Model):
         location_id: int | None
         reviews: ReviewManager
 
-    objects = PinManager()
+    objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 
     # ------------------------------------------------------------------
     # Effective values - resolve overrides against the linked Location

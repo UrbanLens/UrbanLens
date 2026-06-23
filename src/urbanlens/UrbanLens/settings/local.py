@@ -156,6 +156,7 @@ SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.getenv("UL_GOOGLE_CLIENT_ID", "")
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.getenv("UL_GOOGLE_CLIENT_SECRET", "")
 SOCIAL_AUTH_DISCORD_KEY = os.getenv("UL_DISCORD_CLIENT_ID", "")
 SOCIAL_AUTH_DISCORD_SECRET = os.getenv("UL_DISCORD_CLIENT_SECRET", "")
+SOCIAL_AUTH_DISCORD_SCOPE = ["identify", "email"]
 
 # Custom social-auth pipeline.
 # Replaces get_username with a random adjective+animal+number generator.

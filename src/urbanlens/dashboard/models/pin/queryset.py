@@ -5,13 +5,14 @@ import contextlib
 from datetime import datetime
 import logging
 import math
+from math import atan2, cos, radians, sin, sqrt
 from typing import TYPE_CHECKING, Self
 
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 
 # Django Imports
-from django.db.models import Q
+from django.db.models import F, Q
 
 # App Imports
 from urbanlens.dashboard.models import abstract
@@ -74,9 +75,6 @@ class PinQuerySet(abstract.QuerySet):
         return self.filter(updated__year=year)
 
     def nearby_pins(self, latitude, longitude, radius):
-        from math import atan2, cos, radians, sin, sqrt
-
-        from django.db.models import F
 
         R = 6371  # radius of the Earth in km
         lat1 = radians(latitude)

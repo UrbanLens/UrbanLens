@@ -716,6 +716,9 @@ preview = true
 
 ignore = [
     # Keep these off
+    "PLW0717", # try has too many statements.
+    "D420",    # ordering of docstring sections
+    "RUF065",  # unnecessary str() conversion
     "TRY300",  # Consider moving to else -- this discourages final unindented returns for future proofing
     "ARG002",  # unused method argument: `kwargs`
     "E501",    # Line too long
