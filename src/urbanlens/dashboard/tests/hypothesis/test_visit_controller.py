@@ -31,7 +31,7 @@ class VisitHistoryControllerTests(TestCase):
         return reverse("pin.visit.delete", kwargs={"pin_uuid": (pin or self.pin).uuid, "visit_id": visit.pk})
 
     def test_post_creates_manual_visit_and_syncs_pin_state(self) -> None:
-        visited_badge = baker.make(Badge, profile=self.profile, kind=KIND_STATUS, name="Visited")
+        visited_badge = Badge.objects.get(profile=self.profile, kind=KIND_STATUS, name="Visited")
 
         response = self.client.post(
             self._visits_url(),
