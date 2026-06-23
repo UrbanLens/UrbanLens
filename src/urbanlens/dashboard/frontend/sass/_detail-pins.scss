@@ -57,7 +57,7 @@
 
     &:hover,
     &:focus {
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
         color: #dc2626;
         outline: none;
     }
@@ -264,7 +264,7 @@
     height: 34px;
     border-radius: 6px;
     border: 1px solid var(--ul-border);
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     cursor: pointer;
     transition: border-color .12s, background .12s;
 
@@ -274,7 +274,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
         border-color: #93c5fd;
     }
 

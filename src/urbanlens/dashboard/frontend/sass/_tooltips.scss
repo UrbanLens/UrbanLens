@@ -21,7 +21,7 @@
 
 		padding: 5px 9px;
 		border-radius: 5px;
-		background: var(--ul-surface-4, #1a1a1a);
+		background: var(--ul-surface-6, #1a1a1a);
 		color: var(--ul-text-1, #f0f0f0);
 		font-size: 11.5px;
 		font-weight: 500;
@@ -49,7 +49,7 @@
 		transform: translateX(-50%);
 		z-index: 9901;
 		border: 5px solid transparent;
-		border-top-color: var(--ul-surface-4, #1a1a1a);
+		border-top-color: var(--ul-surface-6, #1a1a1a);
 		pointer-events: none;
 
 		opacity: 0;
@@ -80,7 +80,7 @@
 			bottom: auto;
 			top: calc(100% + 1px);
 			border-top-color: transparent;
-			border-bottom-color: var(--ul-surface-4, #1a1a1a);
+			border-bottom-color: var(--ul-surface-6, #1a1a1a);
 		}
 	}
 }

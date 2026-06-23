@@ -34,7 +34,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         box-shadow: 0 2px 8px rgba(0, 0, 0, .32);
     }
 
@@ -139,11 +139,11 @@
     transition: background .1s;
 
     &:hover {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
     }
 
     &.is-highlighted {
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
 
         .detail-pin-list-item-name {
             color: #1d4ed8;
@@ -180,7 +180,7 @@
         &:hover,
         &:focus {
             color: #dc2626;
-            background: var(--ul-surface-1a);
+            background: var(--ul-surface-0a);
             outline: none;
         }
     }
@@ -217,13 +217,13 @@
 
     &:hover {
         color: #374151;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
     }
 
     &.is-active {
         color: #2563eb;
         border-bottom-color: #2563eb;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
     }
 }
 
@@ -264,7 +264,7 @@
     border-radius: 6px;
     overflow: hidden;
     cursor: pointer;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 2px solid transparent;
     transition: border-color .12s, box-shadow .12s, transform .12s;
 
@@ -402,7 +402,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
     }
 
     &+& {
@@ -475,7 +475,7 @@
     font-size: .8rem;
     color: #374151;
     width: 100%;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
 
     &:focus {
         border-color: #93c5fd;
@@ -578,7 +578,7 @@
     &.active,
     &:has(input:checked) {
         border-color: #3b82f6;
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
         color: #1e40af;
 
         .material-icons {
@@ -588,7 +588,7 @@
 
     &:hover:not(.active) {
         border-color: #93c5fd;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
     }
 }
 
@@ -648,7 +648,7 @@
     top: 100%;
     left: 0;
     right: 0;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1.5px solid var(--ul-border);
     border-top: none;
     border-radius: 0 0 $radius-sm $radius-sm;
@@ -676,7 +676,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
         color: $primary-color;
     }
 }
@@ -722,7 +722,7 @@
     padding: .28rem .65rem;
     border-radius: 20px;
     border: 1.5px solid var(--ul-border);
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     font-size: .8rem;
     cursor: pointer;
     user-select: none;
@@ -759,7 +759,7 @@
 .map-context-menu {
     position: fixed;
     z-index: 10000;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid var(--ul-border);
     ;
     border-radius: 8px;
@@ -803,7 +803,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         color: #4338ca;
 
         .material-icons {
@@ -1248,7 +1248,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     top: 12px;
     left: 54px;
     width: min(360px, calc(100% - 68px));
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid var(--ul-border);
     border-radius: 24px;
     display: flex;
@@ -1312,7 +1312,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     top: 52px;
     left: 54px;
     width: min(360px, calc(100% - 68px));
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid var(--ul-border);
     border-radius: 12px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, .16);

@@ -20,7 +20,7 @@
 }
 
 .ul-card-header {
-	@include panel-header($bg: var(--ul-surface-2));
+	@include panel-header($bg: var(--ul-surface-1));
 	color: var(--ul-text-1);
 
 	.material-icons {
@@ -43,7 +43,7 @@
 .ul-card-footer {
 	padding: $bar-padding-y $bar-padding-x;
 	border-top: 1px solid var(--ul-border);
-	background: var(--ul-surface-2);
+	background: var(--ul-surface-1);
 }
 
 // ── Dialogs ───────────────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@
 	border-radius: $radius-md;
 	box-shadow: $shadow-dialog;
 	padding: 0;
-	background: var(--ul-surface-1);
+	background: var(--ul-surface-0);
 	color: var(--ul-text-1);
 	width: min(55rem, 90vw);
 	max-width: 90vw;
@@ -107,7 +107,7 @@
 }
 
 .ul-panel-header {
-	@include panel-header($font-size: .9rem, $bg: var(--ul-surface-2));
+	@include panel-header($font-size: .9rem, $bg: var(--ul-surface-1));
 	color: var(--ul-text-1);
 
 	i,
@@ -140,7 +140,7 @@
 	gap: $space-sm;
 	padding: .6rem $space-md;
 	border-top: 1px solid var(--ul-border);
-	background: var(--ul-surface-2);
+	background: var(--ul-surface-1);
 	font-size: .82rem;
 	color: var(--ul-text-2);
 	text-decoration: none;
@@ -206,7 +206,7 @@
 	}
 
 	&--neutral {
-		background: var(--ul-surface-3);
+		background: var(--ul-surface-4);
 		color: var(--ul-text-2);
 		border-color: var(--ul-border);
 	}
@@ -353,7 +353,7 @@
 	border-radius: $radius-full;
 	font-size: .8rem;
 	font-weight: 500;
-	background: var(--ul-surface-3);
+	background: var(--ul-surface-4);
 	border: 1px solid var(--ul-border);
 	color: var(--ul-text-2);
 	line-height: 1.4;
@@ -367,7 +367,7 @@
 		transition: background .12s, border-color .12s;
 
 		&:hover {
-			background: var(--ul-surface-2);
+			background: var(--ul-surface-1);
 			border-color: var(--ul-border-strong);
 		}
 	}

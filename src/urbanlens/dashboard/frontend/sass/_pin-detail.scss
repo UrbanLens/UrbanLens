@@ -198,7 +198,7 @@
         border-bottom: 2px solid var(--ul-border);
         padding: 0 .5rem;
         flex-shrink: 0;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
     }
 
     .tad-tab {
@@ -237,7 +237,7 @@
         box-sizing: border-box;
         outline: none;
         flex-shrink: 0;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         color: inherit;
 
         &:focus {
@@ -326,12 +326,12 @@
     .detail-pin-add-dialog,
     .trip-create-dialog,
     .pin-edit-dialog {
-        background: var(--ul-surface-5);
+        background: var(--ul-surface-9);
         color: #e2e8f0;
 
         .dialog-header {
             border-bottom-color: #334155;
-            background: var(--ul-surface-5);
+            background: var(--ul-surface-9);
         }
 
         .dialog-close {
@@ -358,7 +358,7 @@
 
     .tag-add-dialog {
         .tad-tabs {
-            background: var(--ul-surface-5);
+            background: var(--ul-surface-9);
             border-bottom-color: #334155;
         }
 
@@ -488,7 +488,7 @@
         &:hover,
         &:focus {
             color: #dc2626;
-            background: var(--ul-surface-1a);
+            background: var(--ul-surface-0a);
             outline: none;
         }
 
@@ -722,7 +722,7 @@
     }
 
     &--everywhere {
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
         color: #991b1b;
         border-color: #fca5a5;
     }
@@ -745,13 +745,13 @@
         font-size: .85rem;
         font-weight: 600;
         color: #475569;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border-radius: 8px;
         cursor: pointer;
         user-select: none;
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-surface-0);
         }
 
         &::marker {
@@ -784,7 +784,7 @@
         border: 1px solid var(--ul-border);
         ;
         border-radius: 6px;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
 
         &:focus {
             outline: none;
@@ -905,7 +905,7 @@
 }
 
 .panel-header {
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
 }
 
 // ── Pin details card theming (pin overview / location details page) ────────
@@ -926,7 +926,7 @@ body.page-location-details {
             }
 
             &:nth-child(even) {
-                background: var(--ul-surface-1);
+                background: var(--ul-surface-0);
             }
         }
 
@@ -989,7 +989,7 @@ body.page-location-details {
     margin-top: .6rem;
     padding: .55rem .9rem;
     border-radius: 8px;
-    background: var(--ul-surface-1a);
+    background: var(--ul-surface-0a);
     border: 1px solid #bfdbfe;
     color: #1d4ed8;
     text-decoration: none;
@@ -1131,7 +1131,7 @@ body.page-location-details {
     border: 1px solid var(--ul-border);
     border-radius: 10px;
     overflow: visible;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
 
     &--unlinked {
         display: flex;
@@ -1216,7 +1216,7 @@ body.page-location-details {
     border-color: #fca5a5;
 
     &:hover {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border-color: #dc2626;
     }
 }
@@ -1225,7 +1225,7 @@ body.page-location-details {
 
 .pin-loc-picker {
     border-top: 1px solid var(--ul-border);
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border-radius: 0 0 10px 10px;
 }
 
@@ -1267,7 +1267,7 @@ body.page-location-details {
     gap: .5rem;
 
     &--current {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
     }
 }
 
@@ -1368,7 +1368,7 @@ body.page-location-details {
     gap: .5rem;
 
     &--current {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border-color: #bae6fd;
     }
 }
@@ -1406,7 +1406,7 @@ body.page-location-details {
     display: flex;
     align-items: flex-start;
     gap: .75rem;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid #fcd34d;
     border-radius: 10px;
     padding: .85rem 1rem;
@@ -1442,7 +1442,7 @@ body.page-location-details {
     display: inline-flex;
     align-items: center;
     gap: .3rem;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid #fcd34d;
     border-radius: 8px;
     padding: .2rem .55rem;
@@ -1500,7 +1500,7 @@ body.page-location-details {
     }
 
     .pin-location-panel {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border-color: var(--ul-border);
 
         &--unlinked {
@@ -1536,7 +1536,7 @@ body.page-location-details {
     }
 
     .pin-loc-picker {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border-color: var(--ul-border);
     }
 
@@ -1557,12 +1557,12 @@ body.page-location-details {
     }
 
     .loc-conflict-dialog {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         color: var(--ul-text);
 
         .dialog-header {
             border-color: var(--ul-border);
-            background: var(--ul-surface-1);
+            background: var(--ul-surface-0);
         }
     }
 
@@ -1597,7 +1597,7 @@ body.page-location-details {
     }
 
     .wiki-lcn-item {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border-color: rgba(245, 158, 11, .3);
     }
 
@@ -1634,7 +1634,7 @@ body.page-location-details {
     // Map section: slate
     .location-map.card .card-header {
         @extend .panel-header;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         color: #1e293b;
         border-bottom-color: #e2e8f0;
 
@@ -1674,14 +1674,14 @@ body.page-location-details {
     &:hover,
     &:focus {
         color: #dc2626;
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
         outline: none;
     }
 }
 
 // ── Pin detail page layout ─────────────────────────────────────────────────
 body.page-location-details {
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
 }
 
 body.page-location-details div.section {
@@ -1805,7 +1805,7 @@ body.page-location-details div.section {
             }
 
             &:hover {
-                background: var(--ul-surface-2, #f8fafc);
+                background: var(--ul-surface-1, #f8fafc);
             }
         }
 

@@ -4,7 +4,7 @@
 // ── Pin list membership panel (on pin detail page) ───────────────────────────
 
 .pinlist-panel {
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     overflow: hidden;
@@ -15,7 +15,7 @@
     align-items: center;
     gap: 8px;
     padding: 0.75rem 1rem;
-    background: var(--ul-surface-2);
+    background: var(--ul-surface-1);
     border-bottom: 1px solid var(--ul-border);
     font-weight: 600;
     font-size: 0.9rem;
@@ -50,7 +50,7 @@
     }
 
     &.is-member {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
     }
 }
 
@@ -58,7 +58,7 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -132,7 +132,7 @@
     color: $text-secondary;
     text-decoration: none;
     border-top: 1px solid var(--ul-border);
-    background: var(--ul-surface-2);
+    background: var(--ul-surface-1);
     transition: color 0.12s;
 
     i {
@@ -171,7 +171,7 @@
 
 // Create card
 .tag-create-card {
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     padding: 1.5rem;
@@ -180,7 +180,7 @@
 
 // Tag cards
 .tag-card {
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     margin-bottom: 0.75rem;
@@ -269,7 +269,7 @@
     font-size: 0.78rem;
     font-weight: 500;
     color: $text-secondary;
-    background: var(--ul-surface-3);
+    background: var(--ul-surface-4);
     border-radius: 999px;
     padding: 2px 7px 2px 5px;
     border: 1px solid var(--ul-border);
@@ -281,7 +281,7 @@
 
     &.tag-stat--children {
         color: $primary-color;
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
         border-color: #bfdbfe;
 
         i {
@@ -291,7 +291,7 @@
 
     &.tag-stat--total {
         color: $text-secondary;
-        background: var(--ul-surface-2);
+        background: var(--ul-surface-1);
         border-color: var(--ul-border);
         font-style: italic;
     }
@@ -318,7 +318,7 @@
     font-size: 0.7rem;
     font-weight: 500;
     color: $text-muted;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border-radius: 4px;
     padding: 1px 5px;
 }
@@ -440,7 +440,7 @@
 }
 
 .color-clear {
-    background: var(--ul-surface-1) !important;
+    background: var(--ul-surface-0) !important;
     color: $text-muted;
 
     i {
@@ -477,11 +477,11 @@
     padding: 3px 8px;
     border-radius: 20px;
     border: 1px solid var(--ul-border);
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
 
     &:hover {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
     }
 
     &:has(input:checked) {
@@ -578,7 +578,7 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: var(--ul-surface-2);
+    background: var(--ul-surface-1);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     padding: .75rem 1rem;
@@ -614,7 +614,7 @@
 .tag-merge-warning {
     font-size: .82rem;
     color: var(--ul-accent-amber-fg);
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid var(--ul-accent-amber-bg);
     border-radius: $radius-sm;
     padding: .5rem .75rem;
@@ -632,7 +632,7 @@
 // ── Tag membership panel (on pin detail page) ─────────────────────────────────
 
 .tag-panel {
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     overflow: hidden;
@@ -646,7 +646,7 @@
     font-weight: 600;
     font-size: 0.9rem;
     border-bottom: 1px solid var(--ul-border);
-    background: var(--ul-surface-2);
+    background: var(--ul-surface-1);
 
     i {
         color: $primary-color;
@@ -751,7 +751,7 @@
     color: $text-secondary;
     text-decoration: none;
     border-top: 1px solid var(--ul-border);
-    background: var(--ul-surface-2);
+    background: var(--ul-surface-1);
     transition: color 0.12s;
 
     i {
@@ -784,7 +784,7 @@
     padding: 4px 10px;
     border-radius: 20px;
     border: 2px solid var(--ul-border);
-    background: var(--ul-surface-2);
+    background: var(--ul-surface-1);
     font-size: 0.82rem;
     cursor: pointer;
     transition: border-color 0.12s, background 0.12s;
@@ -808,7 +808,7 @@
 
     &:hover {
         border-color: var(--tag-color, #{$primary-color});
-        background: var(--ul-surface-3);
+        background: var(--ul-surface-4);
     }
 
     &:has(.import-tag-checkbox:checked) {
@@ -850,7 +850,7 @@
 // SortableJS ghost state
 .tag-card--ghost {
     opacity: 0.4;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border-color: $primary-color;
 }
 
@@ -870,7 +870,7 @@
 }
 
 .tag-view-btn {
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: none;
     padding: 5px 9px;
     cursor: pointer;
@@ -890,7 +890,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-3);
+        background: var(--ul-surface-4);
         color: var(--ul-text-1);
     }
 
@@ -1019,7 +1019,7 @@
     transition: background .1s;
 
     &:hover {
-        background: var(--ul-surface-3);
+        background: var(--ul-surface-4);
 
         .cat-select-check {
             border-color: $primary-color;
@@ -1035,7 +1035,7 @@
         height: 18px;
         border: 2px solid #cbd5e1;
         border-radius: 4px;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         flex-shrink: 0;
         display: flex;
         align-items: center;
@@ -1090,12 +1090,12 @@
     border-radius: $radius-md;
     border: 1px solid transparent;
     margin-bottom: 1rem;
-    background: var(--ul-surface-2);
+    background: var(--ul-surface-1);
     border-color: var(--ul-border);
     transition: background .18s, border-color .18s;
 
     &.cat-sel-bar--active {
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
         border-color: #bfdbfe;
     }
 }
@@ -1126,7 +1126,7 @@
     align-items: center;
     gap: .3rem;
     padding: .4rem .8rem;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     font-size: .825rem;
@@ -1140,7 +1140,7 @@
     }
 
     &:hover:not(:disabled) {
-        background: var(--ul-surface-3);
+        background: var(--ul-surface-4);
         border-color: var(--ul-border-strong);
         color: var(--ul-text-1);
     }
@@ -1182,7 +1182,7 @@
 
 .cat-sel-edit-btn {
     &:hover:not(:disabled) {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border-color: $primary-color;
         color: $primary-color;
     }
@@ -1193,7 +1193,7 @@
     color: #dc2626;
 
     &:hover:not(:disabled) {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border-color: #dc2626;
         color: #b91c1c;
     }
@@ -1293,7 +1293,7 @@
     align-items: center;
     gap: .75rem;
     padding: .6rem .75rem;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     transition: border-color .12s;
@@ -1377,7 +1377,7 @@
     flex-direction: column;
     gap: .6rem;
     padding: .75rem;
-    background: var(--ul-surface-2);
+    background: var(--ul-surface-1);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
 
@@ -1688,7 +1688,7 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     padding: .6rem .85rem;
@@ -1705,7 +1705,7 @@
 
     &.priority-item--ghost {
         opacity: .4;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border-color: $primary-color;
     }
 }
@@ -1725,7 +1725,7 @@
     width: 34px;
     height: 34px;
     border-radius: $radius-sm;
-    background: var(--ul-surface-3);
+    background: var(--ul-surface-4);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1797,7 +1797,7 @@
     font-size: .78rem;
     font-weight: 600;
     color: $text-secondary;
-    background: var(--ul-surface-3);
+    background: var(--ul-surface-4);
     border: 1px solid var(--ul-border);
     border-radius: 20px;
     padding: 1px 9px;
@@ -1833,7 +1833,7 @@
             font-size: .875rem;
             font-weight: 500;
             color: $text-secondary;
-            background: var(--ul-surface-2);
+            background: var(--ul-surface-1);
             transition: border-color .13s, background .13s, color .13s;
             height: 2.5em;
 
@@ -1859,7 +1859,7 @@
 
         &:hover span {
             border-color: var(--ul-border-strong);
-            background: var(--ul-surface-3);
+            background: var(--ul-surface-4);
         }
     }
 }
@@ -1882,7 +1882,7 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     padding: .6rem .85rem;
@@ -1902,7 +1902,7 @@
     width: 36px;
     height: 36px;
     border-radius: $radius-sm;
-    background: var(--ul-surface-3);
+    background: var(--ul-surface-4);
     border: 1px solid var(--ul-border);
     display: flex;
     align-items: center;
@@ -1961,12 +1961,12 @@
     }
 
     &:hover {
-        background: var(--ul-surface-3);
+        background: var(--ul-surface-4);
         color: var(--ul-text-1);
     }
 
     &.tag-row-action--danger:hover {
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
         color: #dc2626;
     }
 }
@@ -2035,7 +2035,7 @@
         align-items: flex-start;
         gap: 10px;
         padding: 14px 16px 16px;
-        background: var(--ul-surface-2, #f8fafc);
+        background: var(--ul-surface-1, #f8fafc);
         border: 1px solid var(--ul-border, #e2e8f0);
         border-top: none;
         border-radius: 0 0 12px 12px;
@@ -2054,7 +2054,7 @@
         border: 1.5px solid var(--ul-border, #cbd5e1);
         border-radius: 999px;
         font-size: .82rem;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         color: inherit;
         outline: none;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
@@ -2082,7 +2082,7 @@
         gap: 4px;
         padding: 5px 11px;
         border-radius: 999px;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border: 1.5px solid var(--ul-border, #e2e8f0);
         font-size: .75rem;
         font-weight: 500;
@@ -2119,7 +2119,7 @@
         gap: 5px;
         align-items: center;
         padding: 4px 6px;
-        background: var(--ul-surface-1, #fff);
+        background: var(--ul-surface-0, #fff);
         border: 1.5px solid var(--ul-border, #e2e8f0);
         border-radius: 10px;
     }
@@ -2154,7 +2154,7 @@
         padding: 5px 9px;
         border-radius: 999px;
         border: 1.5px solid var(--ul-border, #e2e8f0);
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         transition: color .12s, border-color .12s, background .12s;
         white-space: nowrap;
 
@@ -2217,7 +2217,7 @@
         padding: 7px 14px;
         border-radius: $radius-sm;
         border: 2px solid var(--ul-border, #e2e8f0);
-        background: var(--ul-surface-2, #f8fafc);
+        background: var(--ul-surface-1, #f8fafc);
         cursor: pointer;
         font-size: .875rem;
         font-weight: 500;
@@ -2234,7 +2234,7 @@
 
         &:hover {
             border-color: var(--ul-border-strong, #94a3b8);
-            background: var(--ul-surface-3, #f1f5f9);
+            background: var(--ul-surface-4, #f1f5f9);
         }
 
         &.active {
@@ -2278,7 +2278,7 @@
     }
 
     .priority-edit-btn:hover {
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
         border-color: #a5b4fc;
         color: #4f46e5;
     }
@@ -2312,7 +2312,7 @@
     height: 34px;
     border-radius: $radius-sm;
     border: 1px solid var(--ul-border, #e2e8f0);
-    background: var(--ul-surface-1, #fff);
+    background: var(--ul-surface-0, #fff);
     cursor: pointer;
     color: var(--ul-text-3, #64748b);
     transition: background .12s, border-color .12s, color .12s;
@@ -2322,13 +2322,13 @@
     }
 
     &:hover {
-        background: var(--ul-surface-3, #f1f5f9);
+        background: var(--ul-surface-4, #f1f5f9);
         border-color: var(--ul-border-strong, #94a3b8);
         color: var(--ul-text-1, #1e293b);
     }
 
     &.deselect-mode {
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
         border-color: #60a5fa;
         color: #2563eb;
     }
@@ -2346,7 +2346,7 @@
     align-items: center;
     gap: 4px;
     padding: 6px 8px;
-    background: var(--ul-surface-2);
+    background: var(--ul-surface-1);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--ul-border);
@@ -2361,7 +2361,7 @@
 
 [data-theme="dark"] .org-bulk-bar {
     // Slightly elevated surface with a visible border so it reads against the dark page
-    background: var(--ul-surface-3);
+    background: var(--ul-surface-4);
     border-color: var(--ul-border-strong);
 }
 

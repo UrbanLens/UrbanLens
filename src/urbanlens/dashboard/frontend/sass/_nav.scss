@@ -8,7 +8,7 @@ $nav-text-hover: #fff;
 $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.1);
 
 .app-nav {
-    background: $nav-bg;
+    background: var(--ul-surface-9);
     height: 4rem;
     position: relative;
     z-index: 1100; // must exceed Leaflet's control-container (1000)
@@ -253,7 +253,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
         }
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-surface-0);
 
             .material-icons {
                 color: #c62828;
@@ -441,7 +441,7 @@ nav .brand-logo img {
     position: relative;
 
     &:hover {
-        background: var(--ul-surface-2);
+        background: var(--ul-surface-1);
     }
 
     // ── Read state: deemphasised ─────────────────────────────────────────
@@ -453,7 +453,7 @@ nav .brand-logo img {
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--ul-surface-3);
+        background: var(--ul-surface-4);
         margin-top: .1rem;
 
         .material-icons {
@@ -499,11 +499,11 @@ nav .brand-logo img {
 
     // ── Unread state: prominent ──────────────────────────────────────────
     &--unread {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border-left-color: #6366f1;
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-surface-0);
         }
 
         .notif-item__icon-wrap {
@@ -557,7 +557,7 @@ nav .brand-logo img {
     }
 
     &--unread &__icon-wrap--error {
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
 
         .material-icons {
             color: #dc2626;
@@ -614,11 +614,11 @@ nav .brand-logo img {
     }
 
     &--decline {
-        background: var(--ul-surface-3, #f1f5f9);
+        background: var(--ul-surface-4, #f1f5f9);
         color: var(--ul-text-2, #475569);
 
         &:hover {
-            background: var(--ul-surface-1a);
+            background: var(--ul-surface-0a);
             color: #dc2626;
         }
     }
@@ -659,7 +659,7 @@ nav .brand-logo img {
         border-bottom: 1px solid #f3f4f6;
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-surface-0);
         }
     }
 

@@ -48,7 +48,7 @@
 	border-radius: $radius-sm;
 	font-size: .9rem;
 	color: var(--ul-text-1);
-	background: var(--ul-surface-1);
+	background: var(--ul-surface-0);
 	box-sizing: border-box;
 	transition: border-color .15s, box-shadow .15s;
 
@@ -69,7 +69,7 @@
 // ── Surfaces ──────────────────────────────────────────────────────────────────
 
 @mixin surface($radius: $radius-md) {
-	background: var(--ul-surface-1);
+	background: var(--ul-surface-0);
 	border: 1px solid var(--ul-border);
 	border-radius: $radius;
 }
@@ -172,7 +172,7 @@
 	box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
 	padding: 0;
 	max-width: 90vw;
-	background: var(--ul-surface-1);
+	background: var(--ul-surface-0);
 
 	&::backdrop {
 		background: rgba(0, 0, 0, .45);
@@ -200,7 +200,7 @@
 	align-items: center;
 	padding: $bar-padding-y $bar-padding-x;
 	border-top: 1px solid var(--ul-border);
-	background: var(--ul-surface-1);
+	background: var(--ul-surface-0);
 }
 
 @mixin empty-state {
@@ -245,7 +245,7 @@
 	}
 
 	&:hover {
-		background: var(--ul-surface-2);
+		background: var(--ul-surface-1);
 
 		.material-icons {
 			color: $primary-color;

@@ -55,7 +55,7 @@
 		color: var(--ul-text-2);
 
 		&:hover {
-			background: var(--ul-surface-2);
+			background: var(--ul-surface-1);
 			color: var(--ul-text-1);
 			border-color: var(--ul-border-strong);
 		}
@@ -252,7 +252,7 @@ input[type="submit"] {
 	line-height: 1;
 
 	&:hover {
-		background: var(--ul-surface-1);
+		background: var(--ul-surface-0);
 		color: $text-primary;
 	}
 

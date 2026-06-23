@@ -3,7 +3,7 @@
 .setup-wizard {
 	max-width: 1000px;
 	margin: 2rem auto;
-	background: var(--ul-surface-1);
+	background: var(--ul-surface-0);
 	border: 1px solid var(--ul-border);
 	border-radius: 16px;
 	overflow: hidden;
@@ -199,7 +199,7 @@
 		align-items: flex-start;
 		gap: 0.6rem;
 		padding: 0.85rem;
-		background: var(--ul-surface-2, #f8fafc);
+		background: var(--ul-surface-1, #f8fafc);
 		border: 1px solid var(--ul-border);
 		border-radius: 10px;
 
@@ -243,7 +243,7 @@
 		padding: 0.6rem 0.85rem;
 		border: 2px solid var(--ul-border);
 		border-radius: 8px;
-		background: var(--ul-surface-1);
+		background: var(--ul-surface-0);
 		color: var(--ul-text);
 		transition: border-color 0.2s;
 		width: 100%;
@@ -270,7 +270,7 @@
 	align-items: center;
 	gap: 0.85rem;
 	padding: 1rem 1.15rem;
-	background: var(--ul-surface-2, #f8fafc);
+	background: var(--ul-surface-1, #f8fafc);
 	border: 1px solid var(--ul-border);
 	border-radius: 10px;
 
@@ -290,7 +290,7 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.3rem 0.75rem;
-		background: var(--ul-surface-1);
+		background: var(--ul-surface-0);
 		border: 1px solid #e2e8f0;
 		border-radius: 6px 6px 0 0;
 		font-size: 0.78rem;
@@ -340,7 +340,7 @@
 	border: 1px solid var(--ul-border);
 	border-radius: 8px;
 	padding: 0.7rem 0.8rem;
-	background: var(--ul-surface-1);
+	background: var(--ul-surface-0);
 	display: flex;
 	flex-direction: column;
 	gap: 0.25rem;
@@ -392,7 +392,7 @@
 
 	&--missing {
 		.setup-feature-card__badge {
-			background: var(--ul-surface-2, #f1f5f9);
+			background: var(--ul-surface-1, #f1f5f9);
 			color: var(--ul-text-3);
 		}
 	}

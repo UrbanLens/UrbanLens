@@ -189,7 +189,7 @@
 
     // ── Card base ─────────────────────────────────────────────────────────
     .wiki-card {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border: 1px solid var(--ul-border);
         ;
         border-radius: 14px;
@@ -203,7 +203,7 @@
         gap: .6rem;
         padding: .85rem 1.1rem;
         border-bottom: 1px solid #e2e8f0;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
 
         .material-icons {
             font-size: 1.1rem;
@@ -331,7 +331,7 @@
         padding: .45rem .9rem;
         border: 1px solid #cbd5e1;
         border-radius: 8px;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         color: #475569;
         font-size: .85rem;
         font-weight: 500;
@@ -343,7 +343,7 @@
         }
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-surface-0);
             border-color: #94a3b8;
         }
 
@@ -365,7 +365,7 @@
         gap: 0;
         border-bottom: 2px solid #e2e8f0;
         padding: 0 1rem;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
     }
 
     .wiki-tab {
@@ -433,12 +433,12 @@
         ;
         border-radius: 10px;
         padding: .75rem 1rem;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         position: relative;
 
         &--reverted {
             opacity: .55;
-            background: var(--ul-surface-1);
+            background: var(--ul-surface-0);
         }
     }
 
@@ -517,7 +517,7 @@
 
     .wiki-change-from {
         color: #b91c1c;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border-radius: 4px;
         padding: .1rem .35rem;
         font-size: .82rem;
@@ -532,7 +532,7 @@
 
     .wiki-change-to {
         color: #15803d;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border-radius: 4px;
         padding: .1rem .35rem;
         font-size: .82rem;
@@ -547,7 +547,7 @@
         padding: .3rem .7rem;
         border: 1px solid #fca5a5;
         border-radius: 6px;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         color: #dc2626;
         font-size: .78rem;
         font-weight: 500;
@@ -560,7 +560,7 @@
         }
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-surface-0);
             border-color: #dc2626;
             opacity: 1;
         }
@@ -573,7 +573,7 @@
         gap: .5rem;
         margin: .5rem 1rem .75rem;
         padding: .55rem .75rem;
-        background: var(--ul-surface-1a);
+        background: var(--ul-surface-0a);
         border-radius: 8px;
         font-size: .82rem;
         color: #1d4ed8;

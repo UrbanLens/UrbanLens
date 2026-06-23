@@ -17,7 +17,7 @@ body.page-auth {
 }
 
 .auth-card {
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border-radius: 20px;
     box-shadow: 0 24px 64px rgba(0, 0, 0, .35);
     width: 100%;
@@ -104,7 +104,7 @@ body.page-auth {
         border-radius: 9px;
         font-size: .95rem;
         color: var(--ul-text-1);
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         transition: border-color .15s, box-shadow .15s, background .15s;
         box-sizing: border-box;
         font-family: inherit;
@@ -112,7 +112,7 @@ body.page-auth {
         &:focus {
             outline: none;
             border-color: #6366f1;
-            background: var(--ul-surface-1);
+            background: var(--ul-surface-0);
             box-shadow: 0 0 0 3px rgba(99, 102, 241, .15);
         }
 
@@ -146,7 +146,7 @@ body.page-auth {
 
 // ── Non-field errors ──────────────────────────────────────────────────────
 .auth-errors {
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid #fecaca;
     border-radius: 9px;
     padding: .75rem 1rem;
@@ -207,7 +207,7 @@ body.page-auth {
         content: '';
         flex: 1;
         height: 1px;
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
     }
 
     span {
@@ -240,12 +240,12 @@ body.page-auth {
     }
 
     &--google {
-        background: var(--ul-surface-1);
+        background: var(--ul-surface-0);
         border-color: var(--ul-border);
         color: #3c4043;
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-surface-0);
             box-shadow: 0 1px 6px rgba(0, 0, 0, .15);
         }
 
@@ -334,7 +334,7 @@ body.page-auth {
 
 // Debug-only verification link block
 .auth-debug-block {
-    background: var(--ul-surface-1);
+    background: var(--ul-surface-0);
     border: 1px solid #bbf7d0;
     border-radius: 9px;
     padding: .85rem 1rem;
