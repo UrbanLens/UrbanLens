@@ -376,9 +376,15 @@ $z-nav: 1100;
     --ul-button-bg: #{$primary-color};
     --ul-button-border: var(--ul-border);
     --ul-button-text: var(--ul-text-0);
-    --ul-button-hover-bg: color.adjust($primary-color, $lightness: -8%);
-    --ul-button-hover-border: color.adjust($primary-color, $lightness: -15%);
-    --ul-button-hover-text: var(--ul-text-0a);
+    --ul-button-hover-bg: color.adjust($primary-color, $lightness: -15%);
+    --ul-button-hover-border: color.adjust($primary-color, $lightness: -20%);
+    --ul-button-hover-text: var(--ul-text-7);
+
+    // Tooltips — intentionally dark in both themes for legibility
+    --ul-tooltip-bg: rgba(14, 17, 26, 0.94);
+    --ul-tooltip-fg: #f0f4fc;
+    --ul-tooltip-border: rgba(255, 255, 255, 0.09);
+    --ul-tooltip-shadow: 0 4px 16px rgba(0, 0, 0, 0.24), 0 1px 4px rgba(0, 0, 0, 0.14);
 }
 
 [data-theme="dark"] {
@@ -459,4 +465,10 @@ $z-nav: 1100;
     --ul-color-danger-bg: rgba(239, 68, 68, .08);
     --card-bg: #1e1e1e;
     --border-color: var(--ul-surface-8b);
+
+    // Tooltips in dark mode: slightly elevated dark blue-grey to stand out from page surface
+    --ul-tooltip-bg: rgba(36, 42, 64, 0.97);
+    --ul-tooltip-fg: #dde5f5;
+    --ul-tooltip-border: rgba(140, 170, 255, 0.13);
+    --ul-tooltip-shadow: 0 6px 24px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.28);
 }

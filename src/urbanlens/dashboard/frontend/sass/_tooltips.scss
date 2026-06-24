@@ -1,267 +1,256 @@
-// ── Tooltip system ────────────────────────────────────────────────────────────
+// ── Tooltip system ─────────────────────────────────────────────────────────────
 //
-// Attach hints to any element:
-//   data-tooltip="Help text"
-//   data-tooltip-pos="below|left|right"   (default: above)
-//   data-tooltip-wide                     (wider bubble for longer copy)
+// Attribute-based (CSS-only, no JS required):
+//   data-tooltip="Hint text"
+//   data-tooltip-pos="above|below|left|right"   (default: above)
+//   data-tooltip-wide                            (280px bubble for longer copy)
 //
-// Reusable components (see dashboard/partials/_tooltip_*.html):
-//   .ul-tooltip-help     — info icon trigger (hover, focus, tap)
-//   .ul-tooltip-label    — inline label + optional help icon
+// JS-portal (escapes overflow:hidden parents — add data-tooltip-float="true"):
+//   Uses .ul-tooltip-float element appended to <body> by _tooltips_script.html
 //
-// Pure CSS tooltips clip inside overflow:hidden parents; place help icons
-// outside those containers or rely on the floating layer (.ul-tooltip-float).
+// Reusable components (dashboard/partials/_tooltip_*.html):
+//   .ul-tooltip-help   — ⓘ icon button trigger
+//   .ul-tooltip-label  — inline label + optional help icon row
 
 @use 'variables' as *;
 
-// ── Shared bubble appearance ──────────────────────────────────────────────────
+// ── Internal mixins ───────────────────────────────────────────────────────────
 
-@mixin _tooltip-bubble {
-	padding: 6px 10px;
-	border-radius: $radius-sm;
-	background: var(--ul-tooltip-bg, var(--ul-surface-6, #1e293b));
-	color: var(--ul-tooltip-fg, var(--ul-text-1, #f8fafc));
-	border: 1px solid var(--ul-tooltip-border, rgba(255, 255, 255, .08));
-	box-shadow: var(--ul-tooltip-shadow, 0 8px 24px rgba(0, 0, 0, .28));
-	font-size: 12px;
-	font-weight: 500;
-	line-height: 1.45;
-	white-space: normal;
-	max-width: var(--ul-tooltip-max, 220px);
-	text-align: center;
-	word-break: break-word;
-	pointer-events: none;
-	z-index: 9900;
+@mixin _bubble {
+    padding: 7px 11px;
+    border-radius: 6px;
+    background: var(--ul-tooltip-bg);
+    color: var(--ul-tooltip-fg);
+    border: 1px solid var(--ul-tooltip-border);
+    box-shadow: var(--ul-tooltip-shadow);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: .01em;
+    white-space: normal;
+    max-width: var(--_tip-max, 220px);
+    text-align: left;
+    word-break: break-word;
+    pointer-events: none;
 }
 
-@mixin _tooltip-arrow($direction: top) {
-	content: '';
-	position: absolute;
-	width: 0;
-	height: 0;
-	border: 5px solid transparent;
-	pointer-events: none;
-	z-index: 9901;
+// $from: which face of the arrow carries color (opposite to pointing direction).
+// e.g. $from: top → base is at top → triangle points down (toward element below).
+@mixin _arrow($from) {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 0;
+    border: 5px solid transparent;
+    pointer-events: none;
 
-	@if $direction == top {
-		border-top-color: var(--ul-tooltip-bg, var(--ul-surface-6, #1e293b));
-	} @else if $direction == bottom {
-		border-bottom-color: var(--ul-tooltip-bg, var(--ul-surface-6, #1e293b));
-	} @else if $direction == left {
-		border-left-color: var(--ul-tooltip-bg, var(--ul-surface-6, #1e293b));
-	} @else if $direction == right {
-		border-right-color: var(--ul-tooltip-bg, var(--ul-surface-6, #1e293b));
-	}
+    @if $from == top    { border-top-color:    var(--ul-tooltip-bg); }
+    @if $from == bottom { border-bottom-color: var(--ul-tooltip-bg); }
+    @if $from == left   { border-left-color:   var(--ul-tooltip-bg); }
+    @if $from == right  { border-right-color:  var(--ul-tooltip-bg); }
 }
 
-@mixin _tooltip-show {
-	opacity: 1;
-	visibility: visible;
-	transform: var(--ul-tooltip-transform-show, translateX(-50%) translateY(0));
-}
-
-// ── Attribute-based triggers ──────────────────────────────────────────────────
+// ── Attribute triggers ────────────────────────────────────────────────────────
 
 [data-tooltip] {
-	position: relative;
-	cursor: inherit;
+    position: relative;
+    cursor: inherit;
 
-	&::after {
-		content: attr(data-tooltip);
-		position: absolute;
-		bottom: calc(100% + 8px);
-		left: 50%;
-		transform: translateX(-50%) translateY(4px);
-		--ul-tooltip-transform-show: translateX(-50%) translateY(0);
+    // Bubble — default position: above trigger
+    &::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        @include _bubble;
+        z-index: 9900;
 
-		@include _tooltip-bubble;
+        bottom: calc(100% + 9px);
+        left: 50%;
 
-		opacity: 0;
-		visibility: hidden;
-		transition:
-			opacity .16s ease,
-			visibility .16s ease,
-			transform .16s ease;
-		transition-delay: .2s;
-	}
+        // --_t-show / --_t-hide encode position-aware entry animation per variant.
+        // Higher-specificity variant rules override these without needing !important.
+        --_t-show: translateX(-50%) translateY(0);
+        --_t-hide: translateX(-50%) translateY(6px);
+        transform: var(--_t-hide);
 
-	&::before {
-		@include _tooltip-arrow(top);
-		bottom: calc(100% + 3px);
-		left: 50%;
-		transform: translateX(-50%);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity .15s ease, visibility .15s ease, transform .15s ease;
+        transition-delay: .18s;
+    }
 
-		opacity: 0;
-		visibility: hidden;
-		transition: opacity .16s ease, visibility .16s ease;
-		transition-delay: .2s;
-	}
+    // Arrow — default: sits just above trigger, points down toward it
+    &::before {
+        @include _arrow(top);
+        position: absolute;
+        bottom: calc(100% + 4px);
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9900;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity .15s ease, visibility .15s ease;
+        transition-delay: .18s;
+    }
 
-	&[data-tooltip-wide]::after {
-		--ul-tooltip-max: 280px;
-		text-align: left;
-	}
+    &[data-tooltip-wide]::after {
+        --_tip-max: 280px;
+    }
 
-	&[data-tooltip-pos='below'] {
-		&::after {
-			bottom: auto;
-			top: calc(100% + 8px);
-			transform: translateX(-50%) translateY(-4px);
-			--ul-tooltip-transform-show: translateX(-50%) translateY(0);
-		}
+    // ── below ──────────────────────────────────────────────────────────────────
+    &[data-tooltip-pos='below'] {
+        &::after {
+            bottom: auto;
+            top: calc(100% + 9px);
+            --_t-show: translateX(-50%) translateY(0);
+            --_t-hide: translateX(-50%) translateY(-6px);
+            transform: var(--_t-hide);
+        }
+        &::before {
+            @include _arrow(bottom);
+            bottom: auto;
+            top: calc(100% + 4px);
+        }
+    }
 
-		&::before {
-			bottom: auto;
-			top: calc(100% + 3px);
-			border-top-color: transparent;
-			@include _tooltip-arrow(bottom);
-		}
-	}
+    // ── left ───────────────────────────────────────────────────────────────────
+    &[data-tooltip-pos='left'] {
+        &::after {
+            bottom: auto;
+            top: 50%;
+            left: auto;
+            right: calc(100% + 9px);
+            --_t-show: translateY(-50%) translateX(0);
+            --_t-hide: translateY(-50%) translateX(6px);
+            transform: var(--_t-hide);
+        }
+        &::before {
+            @include _arrow(left);
+            bottom: auto;
+            top: 50%;
+            left: auto;
+            right: calc(100% + 4px);
+            transform: translateY(-50%);
+        }
+    }
 
-	&[data-tooltip-pos='left'] {
-		&::after {
-			bottom: auto;
-			top: 50%;
-			left: auto;
-			right: calc(100% + 8px);
-			transform: translateY(-50%) translateX(4px);
-			--ul-tooltip-transform-show: translateY(-50%) translateX(0);
-		}
+    // ── right ──────────────────────────────────────────────────────────────────
+    &[data-tooltip-pos='right'] {
+        &::after {
+            bottom: auto;
+            top: 50%;
+            left: calc(100% + 9px);
+            --_t-show: translateY(-50%) translateX(0);
+            --_t-hide: translateY(-50%) translateX(-6px);
+            transform: var(--_t-hide);
+        }
+        &::before {
+            @include _arrow(right);
+            bottom: auto;
+            top: 50%;
+            left: calc(100% + 4px);
+            transform: translateY(-50%);
+        }
+    }
 
-		&::before {
-			bottom: auto;
-			top: 50%;
-			left: auto;
-			right: calc(100% + 3px);
-			transform: translateY(-50%);
-			border-top-color: transparent;
-			@include _tooltip-arrow(left);
-		}
-	}
+    // ── Reveal states ──────────────────────────────────────────────────────────
 
-	&[data-tooltip-pos='right'] {
-		&::after {
-			bottom: auto;
-			top: 50%;
-			left: calc(100% + 8px);
-			transform: translateY(-50%) translateX(-4px);
-			--ul-tooltip-transform-show: translateY(-50%) translateX(0);
-		}
+    @media (hover: hover) and (pointer: fine) {
+        &:hover::after  { opacity: 1; visibility: visible; transform: var(--_t-show); }
+        &:hover::before { opacity: 1; visibility: visible; }
+    }
 
-		&::before {
-			bottom: auto;
-			top: 50%;
-			left: calc(100% + 3px);
-			transform: translateY(-50%);
-			border-top-color: transparent;
-			@include _tooltip-arrow(right);
-		}
-	}
+    &:focus-visible::after,
+    &.is-tooltip-open::after {
+        opacity: 1;
+        visibility: visible;
+        transform: var(--_t-show);
+        transition-delay: 0s;
+    }
 
-	@media (hover: hover) and (pointer: fine) {
-		&:hover::after,
-		&:hover::before {
-			@include _tooltip-show;
-		}
-	}
-
-	&:focus-visible::after,
-	&:focus-visible::before,
-	&.is-tooltip-open::after,
-	&.is-tooltip-open::before {
-		@include _tooltip-show;
-		transition-delay: 0s;
-	}
+    &:focus-visible::before,
+    &.is-tooltip-open::before {
+        opacity: 1;
+        visibility: visible;
+        transition-delay: 0s;
+    }
 }
 
-// Icon-only controls benefit from a help cursor when they carry a tooltip.
 button[data-tooltip],
 a[data-tooltip],
 .ul-tooltip-help {
-	cursor: help;
+    cursor: help;
 }
 
 // ── Info icon trigger ─────────────────────────────────────────────────────────
 
 .ul-tooltip-help {
-	@include icon-btn(18px);
-	flex-shrink: 0;
-	vertical-align: middle;
-	color: var(--ul-text-3, #94a3b8);
-	border-radius: 50%;
-	transition: color .15s, background .15s;
+    @include icon-btn(18px);
+    flex-shrink: 0;
+    vertical-align: middle;
+    color: var(--ul-text-3);
+    border-radius: 50%;
+    transition: color .15s, background .15s;
 
-	.material-icons {
-		font-size: 15px;
-	}
+    .material-icons {
+        font-size: 15px;
+    }
 
-	&:hover,
-	&:focus-visible,
-	&.is-tooltip-open {
-		color: var(--ul-text-1, #f1f5f9);
-		background: var(--ul-hover-bg, rgba(255, 255, 255, .06));
-	}
+    &:hover,
+    &:focus-visible,
+    &.is-tooltip-open {
+        color: var(--ul-text-1);
+        background: var(--ul-hover-bg);
+    }
 
-	// Help icon shows its bubble to the right by default (avoids clipping in headers).
-	&[data-tooltip]:not([data-tooltip-pos]) {
-		&::after {
-			bottom: auto;
-			top: 50%;
-			left: calc(100% + 8px);
-			transform: translateY(-50%) translateX(-4px);
-			--ul-tooltip-transform-show: translateY(-50%) translateX(0);
-		}
-
-		&::before {
-			bottom: auto;
-			top: 50%;
-			left: calc(100% + 3px);
-			transform: translateY(-50%);
-			border-top-color: transparent;
-			@include _tooltip-arrow(right);
-		}
-	}
+    // Default to right-side tooltip — avoids clipping in page headers
+    &[data-tooltip]:not([data-tooltip-pos]) {
+        &::after {
+            bottom: auto;
+            top: 50%;
+            left: calc(100% + 9px);
+            --_t-show: translateY(-50%) translateX(0);
+            --_t-hide: translateY(-50%) translateX(-6px);
+            transform: var(--_t-hide);
+        }
+        &::before {
+            @include _arrow(right);
+            bottom: auto;
+            top: 50%;
+            left: calc(100% + 4px);
+            transform: translateY(-50%);
+        }
+    }
 }
 
 // ── Label + help row ──────────────────────────────────────────────────────────
 
 .ul-tooltip-label {
-	display: inline-flex;
-	align-items: center;
-	gap: .35rem;
-	flex-wrap: wrap;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
 }
 
 // ── Floating tooltip (JS portal — escapes overflow:hidden) ────────────────────
 
 .ul-tooltip-float {
-	position: fixed;
-	z-index: 99999;
-	padding: 6px 10px;
-	border-radius: $radius-sm;
-	background: var(--ul-tooltip-bg, var(--ul-surface-6, #1e293b));
-	color: var(--ul-tooltip-fg, var(--ul-text-1, #f8fafc));
-	border: 1px solid var(--ul-tooltip-border, rgba(255, 255, 255, .08));
-	box-shadow: var(--ul-tooltip-shadow, 0 8px 24px rgba(0, 0, 0, .28));
-	font-size: 12px;
-	font-weight: 500;
-	line-height: 1.45;
-	max-width: min(280px, calc(100vw - 16px));
-	text-align: left;
-	word-break: break-word;
-	pointer-events: none;
-	opacity: 0;
-	visibility: hidden;
-	transform: translateY(4px);
-	transition: opacity .14s ease, visibility .14s ease, transform .14s ease;
+    @include _bubble;
+    position: fixed;
+    z-index: 99999;
+    max-width: min(280px, calc(100vw - 16px));
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(5px);
+    transition: opacity .14s ease, visibility .14s ease, transform .14s ease;
 
-	&.is-visible {
-		opacity: 1;
-		visibility: visible;
-		transform: translateY(0);
-	}
+    &.is-visible {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+    }
 
-	&[data-wide='true'] {
-		max-width: min(320px, calc(100vw - 16px));
-	}
+    &[data-wide='true'] {
+        max-width: min(320px, calc(100vw - 16px));
+    }
 }

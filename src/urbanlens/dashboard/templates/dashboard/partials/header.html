@@ -28,9 +28,7 @@
             {# ── Notification bell ──────────────────────────────────────────── #}
             <div class="nav-notif" id="nav-notif">
                 <button class="nav-notif-btn" id="nav-notif-btn" type="button"
-                        aria-haspopup="true" aria-expanded="false" aria-label="Notifications"
-                        data-tooltip="Friend requests, trip updates, and other alerts"
-                        data-tooltip-pos="below">
+                        aria-haspopup="true" aria-expanded="false" aria-label="Notifications">
                     <i class="material-icons nav-notif-icon">notifications</i>
                     <span id="notif-badge-wrap"
                           hx-get="{% url 'notifications.unread_count' %}"

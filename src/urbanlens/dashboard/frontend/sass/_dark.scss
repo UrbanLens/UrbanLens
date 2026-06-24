@@ -150,8 +150,8 @@
     }
 
     .ul-radio-button {
-        border-color: var(--ul-surface-8b);
-        background: rgb(40, 40, 40);
+        border-color: var(--ul-surface-0b);
+        background: var(--ul-surface-0);
     }
 
     .settings-theme-option {
@@ -1432,5 +1432,10 @@
             border-color: #{$color-indigo-300};
             background: #{$color-indigo-1100};
         }
+    }
+
+    .about-cta-title,
+    .about-title {
+        color: var(--ul-text-0);
     }
 }

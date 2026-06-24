@@ -2,148 +2,146 @@
 (function () {
     'use strict';
 
-    var floatEl = document.createElement('div');
+    const floatEl = document.createElement('div');
     floatEl.className = 'ul-tooltip-float';
     floatEl.setAttribute('role', 'tooltip');
-    floatEl.hidden = true;
+    floatEl.id = 'ul-tip-float';
     document.body.appendChild(floatEl);
 
-    var activeTrigger = null;
-    var hideTimer = null;
-
-    function tooltipText(el) {
-        return el && el.getAttribute('data-tooltip');
-    }
+    let activeTrigger = null;
+    let hideTimer = null;
 
     function usesFloat(el) {
         return el && el.getAttribute('data-tooltip-float') === 'true';
     }
 
-    function closeFloat() {
+    function show(trigger) {
+        clearTimeout(hideTimer);
+        activeTrigger = trigger;
+
+        const text = trigger.getAttribute('data-tooltip') || '';
+        const pos  = trigger.getAttribute('data-tooltip-pos') || 'top';
+        const wide = trigger.hasAttribute('data-tooltip-wide');
+
+        floatEl.textContent = text;
+        floatEl.setAttribute('data-wide', wide ? 'true' : 'false');
+        trigger.setAttribute('aria-describedby', 'ul-tip-float');
+
+        // Position before revealing so we can measure the box
+        floatEl.style.visibility = 'hidden';
+        floatEl.classList.add('is-visible');
+        reposition(trigger, pos);
+        floatEl.style.visibility = '';
+    }
+
+    function reposition(trigger, pos) {
+        const r   = trigger.getBoundingClientRect();
+        const tip = floatEl.getBoundingClientRect();
+        const gap = 10;
+        let top, left;
+
+        if (pos === 'below') {
+            top  = r.bottom + gap;
+            left = r.left + r.width / 2 - tip.width / 2;
+        } else if (pos === 'left') {
+            top  = r.top + r.height / 2 - tip.height / 2;
+            left = r.left - tip.width - gap;
+        } else if (pos === 'right') {
+            top  = r.top + r.height / 2 - tip.height / 2;
+            left = r.right + gap;
+        } else {
+            top  = r.top - tip.height - gap;
+            left = r.left + r.width / 2 - tip.width / 2;
+        }
+
+        floatEl.style.top  = Math.max(8, Math.min(top,  window.innerHeight - tip.height - 8)) + 'px';
+        floatEl.style.left = Math.max(8, Math.min(left, window.innerWidth  - tip.width  - 8)) + 'px';
+    }
+
+    function hide() {
         floatEl.classList.remove('is-visible');
-        floatEl.hidden = true;
+        if (activeTrigger) activeTrigger.removeAttribute('aria-describedby');
         activeTrigger = null;
     }
 
-    function positionFloat(trigger) {
-        var rect = trigger.getBoundingClientRect();
-        var pos = trigger.getAttribute('data-tooltip-pos') || 'top';
-        var wide = trigger.hasAttribute('data-tooltip-wide');
-        floatEl.textContent = tooltipText(trigger);
-        floatEl.setAttribute('data-wide', wide ? 'true' : 'false');
-        floatEl.hidden = false;
-        floatEl.classList.add('is-visible');
-
-        // Measure after content is set.
-        var tipRect = floatEl.getBoundingClientRect();
-        var gap = 8;
-        var top = 0;
-        var left = 0;
-
-        if (pos === 'below') {
-            top = rect.bottom + gap;
-            left = rect.left + (rect.width / 2) - (tipRect.width / 2);
-        } else if (pos === 'left') {
-            top = rect.top + (rect.height / 2) - (tipRect.height / 2);
-            left = rect.left - tipRect.width - gap;
-        } else if (pos === 'right') {
-            top = rect.top + (rect.height / 2) - (tipRect.height / 2);
-            left = rect.right + gap;
-        } else {
-            top = rect.top - tipRect.height - gap;
-            left = rect.left + (rect.width / 2) - (tipRect.width / 2);
-        }
-
-        left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
-        top = Math.max(8, Math.min(top, window.innerHeight - tipRect.height - 8));
-        floatEl.style.top = top + 'px';
-        floatEl.style.left = left + 'px';
-    }
-
-    function openFloat(trigger) {
+    function scheduleHide() {
         clearTimeout(hideTimer);
-        activeTrigger = trigger;
-        positionFloat(trigger);
-    }
-
-    function scheduleClose() {
-        clearTimeout(hideTimer);
-        hideTimer = setTimeout(closeFloat, 80);
+        hideTimer = setTimeout(hide, 80);
     }
 
     function clearOpenClasses() {
-        document.querySelectorAll('[data-tooltip].is-tooltip-open').forEach(function (el) {
+        document.querySelectorAll('[data-tooltip].is-tooltip-open').forEach(el => {
             el.classList.remove('is-tooltip-open');
         });
     }
 
-    document.addEventListener('mouseover', function (e) {
-        var trigger = e.target.closest('[data-tooltip]');
-        if (!trigger || !usesFloat(trigger)) return;
-        openFloat(trigger);
+    // ── Mouse ─────────────────────────────────────────────────────────────────
+    document.addEventListener('mouseover', e => {
+        const trigger = e.target.closest('[data-tooltip]');
+        if (trigger && usesFloat(trigger)) show(trigger);
     });
 
-    document.addEventListener('mouseout', function (e) {
+    document.addEventListener('mouseout', e => {
         if (!activeTrigger || !usesFloat(activeTrigger)) return;
-        var related = e.relatedTarget;
+        const related = e.relatedTarget;
         if (related && (activeTrigger.contains(related) || floatEl.contains(related))) return;
-        scheduleClose();
+        scheduleHide();
     });
 
-    document.addEventListener('focusin', function (e) {
-        var trigger = e.target.closest('[data-tooltip]');
-        if (!trigger || !usesFloat(trigger)) return;
-        openFloat(trigger);
+    // ── Keyboard / focus ──────────────────────────────────────────────────────
+    document.addEventListener('focusin', e => {
+        const trigger = e.target.closest('[data-tooltip]');
+        if (trigger && usesFloat(trigger)) show(trigger);
     });
 
-    document.addEventListener('focusout', function () {
-        if (activeTrigger && usesFloat(activeTrigger)) scheduleClose();
+    document.addEventListener('focusout', () => {
+        if (activeTrigger && usesFloat(activeTrigger)) scheduleHide();
     });
 
-    // Touch / coarse pointer: tap to toggle CSS tooltips.
-    document.addEventListener('click', function (e) {
-        var trigger = e.target.closest('[data-tooltip]');
+    // ── Touch / coarse pointer: tap to toggle ─────────────────────────────────
+    document.addEventListener('click', e => {
+        const trigger = e.target.closest('[data-tooltip]');
+
         if (!trigger) {
             clearOpenClasses();
-            if (activeTrigger) closeFloat();
+            if (activeTrigger) hide();
             return;
         }
 
         if (usesFloat(trigger)) {
             e.preventDefault();
             e.stopPropagation();
-            if (activeTrigger === trigger) {
-                closeFloat();
-            } else {
-                clearOpenClasses();
-                openFloat(trigger);
-            }
+            activeTrigger === trigger ? hide() : show(trigger);
             return;
         }
 
-        var isTouch = window.matchMedia('(hover: none), (pointer: coarse)').matches;
-        if (!isTouch) return;
+        if (!window.matchMedia('(hover: none), (pointer: coarse)').matches) return;
 
         e.preventDefault();
         e.stopPropagation();
-        var wasOpen = trigger.classList.contains('is-tooltip-open');
+        const wasOpen = trigger.classList.contains('is-tooltip-open');
         clearOpenClasses();
         if (!wasOpen) trigger.classList.add('is-tooltip-open');
     });
 
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') {
-            clearOpenClasses();
-            closeFloat();
+    // ── Dismiss ───────────────────────────────────────────────────────────────
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { clearOpenClasses(); hide(); }
+    });
+
+    // ── Reposition on scroll / resize ─────────────────────────────────────────
+    window.addEventListener('scroll', () => {
+        if (activeTrigger) {
+            const pos = activeTrigger.getAttribute('data-tooltip-pos') || 'top';
+            reposition(activeTrigger, pos);
         }
-    });
+    }, { passive: true, capture: true });
 
-    window.addEventListener('scroll', function () {
-        if (activeTrigger) positionFloat(activeTrigger);
-    }, true);
-
-    window.addEventListener('resize', function () {
-        if (activeTrigger) positionFloat(activeTrigger);
-    });
+    window.addEventListener('resize', () => {
+        if (activeTrigger) {
+            const pos = activeTrigger.getAttribute('data-tooltip-pos') || 'top';
+            reposition(activeTrigger, pos);
+        }
+    }, { passive: true });
 }());
 </script>

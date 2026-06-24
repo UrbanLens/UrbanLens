@@ -15,19 +15,16 @@
     <div class="organize-tab-bar" role="tablist">
         <button type="button" class="organize-tab{% if active_tab == 'tags' %} active{% endif %}"
                 role="tab" data-tab="tags" aria-controls="panel-tags"
-                data-tooltip="Flexible labels you attach to pins — road trips, favorites, themes, etc."
                 data-tooltip-pos="below">
             <i class="material-icons">label</i> Tags
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'categories' %} active{% endif %}"
                 role="tab" data-tab="categories" aria-controls="panel-categories"
-                data-tooltip="Pin types such as factory, hospital, or bridge — shown on the map icon."
                 data-tooltip-pos="below">
             <i class="material-icons">category</i> Categories
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'status' %} active{% endif %}"
                 role="tab" data-tab="status" aria-controls="panel-status"
-                data-tooltip="Visit progress labels like Visited, Planned, or Abandoned."
                 data-tooltip-pos="below">
             <i class="material-icons">flag_circle</i> Statuses
         </button>

@@ -45,7 +45,7 @@ body.page-about {
         font-weight: 800;
         line-height: 1.13;
         letter-spacing: -.03em;
-        color: var(--ul-text-1);
+        color: var(--ul-text-9);
         margin: 0 0 1.1rem;
 
         em {
@@ -111,7 +111,7 @@ body.page-about {
 
         .material-icons {
             font-size: 1.2rem;
-            color: var(--ul-text-5);
+            color: var(--ul-text-9);
         }
 
         &--1 {
@@ -441,7 +441,7 @@ body.page-about {
     .about-cta-title {
         font-size: clamp(1.75rem, 3.5vw, 2.5rem);
         font-weight: 800;
-        color: var(--ul-text-5);
+        color: var(--ul-text-9);
         margin: 0 0 .75rem;
         letter-spacing: -.025em;
     }
