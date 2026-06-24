@@ -73,6 +73,15 @@
         }());
         {% endif %}
 
+        // Global: handle HX-Trigger showToast events fired by HTMX responses
+        document.body.addEventListener('showToast', function (evt) {
+            var d = evt.detail;
+            if (!d) return;
+            var level = d.level;
+            var fn = (level === 'success' || level === 'info' || level === 'warning' || level === 'error') ? level : 'info';
+            toastr[fn](d.message || '');
+        });
+
         // Global: disable submit buttons during HTMX form requests to prevent double-submit
         (function () {
             function _submitBtns(el) {

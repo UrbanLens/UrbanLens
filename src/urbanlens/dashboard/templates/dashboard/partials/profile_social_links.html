@@ -2,6 +2,17 @@
 {# Partial: social links list + add/remove forms. Re-rendered via HTMX after every change. #}
 <div id="social-links-content">
 
+    {# When a new known-platform link is added, fire a background check to verify the URL resolves. #}
+    {# hx-trigger="load" fires once when this element enters the DOM via HTMX swap. #}
+    {% if verify_platform and verify_handle %}
+    <span
+        hx-get="{% url 'profile.social.verify' %}?platform={{ verify_platform }}&handle={{ verify_handle|urlencode }}"
+        hx-trigger="load"
+        hx-swap="none"
+        aria-hidden="true"
+        style="display:none"></span>
+    {% endif %}
+
     {% if social_links %}
     <ul class="edit-links-list">
         {% for link in social_links %}
@@ -68,6 +79,6 @@
     </details>
 
     <p class="edit-supported-platforms">
-        Supported: Instagram · Bluesky · UER · Facebook · Flickr · YouTube · TikTok · Reddit · any website URL
+        Supported: {% for label in supported_platforms %}{{ label }}{% if not forloop.last %} · {% endif %}{% endfor %}
     </p>
 </div>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 import re
 from typing import TYPE_CHECKING
 
@@ -411,7 +412,7 @@ class EditProfileView(LoginRequiredMixin, View):
         import hashlib
 
         from urbanlens.dashboard.services.social_auth.pipeline import random_emoji_options
-        from urbanlens.dashboard.services.social_links import get_profile_links
+        from urbanlens.dashboard.services.social_links import URL_INPUT_PLATFORM_LABELS, get_profile_links
 
         discord_link = profile.social_links.filter(platform="discord").first()
         if not discord_form.is_bound:
@@ -431,6 +432,7 @@ class EditProfileView(LoginRequiredMixin, View):
             "discord_form": discord_form,
             "social_links": get_profile_links(profile),
             "link_error": link_error,
+            "supported_platforms": URL_INPUT_PLATFORM_LABELS,
             "gravatar_preview_url": gravatar_preview_url,
             "emoji_options": random_emoji_options(4),
             "contact_visibility_choices": VisibilityChoice.choices,
@@ -487,7 +489,7 @@ class EditProfileView(LoginRequiredMixin, View):
 
     def _add_link(self, request: HttpRequest, profile: Profile) -> HttpResponse:
         from urbanlens.dashboard.models.social_link.model import SocialLink
-        from urbanlens.dashboard.services.social_links import parse_social_link
+        from urbanlens.dashboard.services.social_links import VERIFIABLE_PLATFORMS, parse_social_link
 
         raw = request.POST.get("link_input", "").strip()
         result = parse_social_link(raw) if raw else None
@@ -504,7 +506,14 @@ class EditProfileView(LoginRequiredMixin, View):
             platform=platform,
             defaults={"handle": handle},
         )
-        return self._social_links_response(request, profile, DiscordHandleForm())
+        verify_platform = platform if platform in VERIFIABLE_PLATFORMS else None
+        return self._social_links_response(
+            request,
+            profile,
+            DiscordHandleForm(),
+            verify_platform=verify_platform,
+            verify_handle=handle if verify_platform else None,
+        )
 
     def _remove_link(self, request: HttpRequest, profile: Profile) -> HttpResponse:
         from urbanlens.dashboard.services.social_links import KNOWN_PLATFORMS
@@ -520,11 +529,15 @@ class EditProfileView(LoginRequiredMixin, View):
         profile: Profile,
         discord_form: DiscordHandleForm,
         link_error: str = "",
+        verify_platform: str | None = None,
+        verify_handle: str | None = None,
     ) -> HttpResponse:
         """Return the social-links partial for HTMX requests, or redirect for plain requests."""
         from urbanlens.dashboard.services.social_links import get_profile_links
 
         if request.headers.get("HX-Request"):
+            from urbanlens.dashboard.services.social_links import URL_INPUT_PLATFORM_LABELS
+
             discord_link = profile.social_links.filter(platform="discord").first()
             if not discord_form.is_bound:
                 discord_form = DiscordHandleForm(initial={"discord": discord_link.handle if discord_link else ""})
@@ -535,9 +548,105 @@ class EditProfileView(LoginRequiredMixin, View):
                     "social_links": get_profile_links(profile),
                     "discord_form": discord_form,
                     "link_error": link_error,
+                    "verify_platform": verify_platform,
+                    "verify_handle": verify_handle,
+                    "supported_platforms": URL_INPUT_PLATFORM_LABELS,
                 },
             )
         return redirect("profile.edit")
+
+
+class SocialLinkVerifyView(LoginRequiredMixin, View):
+    """Verify that a just-saved social-link URL resolves to a valid profile page.
+
+    Called automatically by HTMX after a new link is added.  Returns 204 when
+    the link looks fine; returns 200 with an ``HX-Trigger`` toast payload when
+    the remote server indicates the profile does not exist or is unreachable.
+
+    Only verifiable platforms (see ``VERIFIABLE_PLATFORMS``) are checked; the
+    view silently returns 204 for anything else so the client never has to
+    guard against unrecognised platforms.
+    """
+
+    _TIMEOUT_SECONDS = 5
+    _USER_AGENT = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    )
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Verify the platform+handle pair and return an optional toast trigger.
+
+        Args:
+            request: The HTTP request.  Query params: ``platform``, ``handle``.
+
+        Returns:
+            204 when the link appears valid or cannot be determined.
+            200 with ``HX-Trigger`` when the link is demonstrably broken.
+        """
+        from urbanlens.dashboard.services.social_links import (
+            PLATFORM_URL_TEMPLATE,
+            VERIFIABLE_PLATFORMS,
+            validate_handle,
+        )
+
+        platform = request.GET.get("platform", "").strip()
+        handle = request.GET.get("handle", "").strip()
+
+        if platform not in VERIFIABLE_PLATFORMS or not handle:
+            return HttpResponse(status=204)
+
+        if validate_handle(platform, handle) is not None:
+            return HttpResponse(status=204)
+
+        template = PLATFORM_URL_TEMPLATE.get(platform)
+        if not template:
+            return HttpResponse(status=204)
+
+        url = template.format(handle=handle)
+        return self._check_url(url)
+
+    def _check_url(self, url: str) -> HttpResponse:
+        """Fetch *url* and decide whether to surface a warning toast.
+
+        Args:
+            url: The fully-formed profile URL to probe.
+
+        Returns:
+            204 when the URL resolves successfully.
+            200 with ``HX-Trigger`` when a problem is detected.
+        """
+        import requests
+        from requests.exceptions import RequestException
+
+        try:
+            resp = requests.get(
+                url,
+                timeout=self._TIMEOUT_SECONDS,
+                allow_redirects=True,
+                stream=True,
+                headers={"User-Agent": self._USER_AGENT},
+            )
+            resp.close()
+            status_code = resp.status_code
+        except RequestException:
+            # Network error, DNS failure, timeout, SSL problem, etc.
+            # Don't alarm the user — we simply cannot confirm either way.
+            return HttpResponse(status=204)
+
+        if status_code == 404:
+            message = "That profile page returned 'not found' – double-check your username."
+            level = "warning"
+        elif 400 <= status_code < 600:
+            message = f"That link returned an unexpected response (HTTP {status_code}). It may be incorrect."
+            level = "warning"
+        else:
+            return HttpResponse(status=204)
+
+        response = HttpResponse(status=200)
+        response["HX-Trigger"] = json.dumps({"showToast": {"level": level, "message": message}})
+        return response
 
 
 def _authenticated_profile(request: HttpRequest) -> Profile:

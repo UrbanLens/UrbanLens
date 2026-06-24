@@ -233,6 +233,6 @@ class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         if action == "complete":
             complete_site_admin_onboarding(request.user)
-            return HttpResponseRedirect(reverse("map.view"))
+            return HttpResponseRedirect(reverse("site_admin"))
 
         return HttpResponse(status=400)

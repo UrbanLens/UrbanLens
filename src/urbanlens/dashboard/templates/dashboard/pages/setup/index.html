@@ -272,8 +272,7 @@
                     <h1 class="setup-complete__title">You're all set!</h1>
                     <p class="setup-complete__body">
                         <strong id="done-app-title">{{ settings.app_title }}</strong> is ready to go.
-                        Head to the map to add your first location, or visit
-                        <a href="{% url 'site_admin' %}">Site Admin</a> to configure more settings.
+                        Open Site Admin to finish configuring your site.
                     </p>
                     <div class="setup-complete--actions">
                         <button class="btn btn--ghost" onclick="goToStep(4)">
@@ -284,8 +283,8 @@
                             {% csrf_token %}
                             <input type="hidden" name="action" value="complete">
                             <button type="submit" class="submit-button">
-                                <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-right:.25rem">explore</i>
-                                Open the Map
+                                <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-right:.25rem">admin_panel_settings</i>
+                                Open Site Admin
                             </button>
                         </form>
                     </div>

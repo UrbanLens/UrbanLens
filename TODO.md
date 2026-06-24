@@ -11,6 +11,9 @@ Features planned for this release.
 * Cleanup git history, and begin using branches for dev. [UL-14]
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
 * Provide explanation of how to do a google takeout to import pins. (Possible onboarding process?)
+* Ensure fully sanitized user input for pin names, location names, etc, which are passed into external urls. Require strict character sets, min/max lengths, and so on.
+* Per the above, any of that data which gets passed to an AI needs additional safeguards against jailbreaking.
+* Per above, ensure AI sandboxing.
 
 ## Medium Features
 
@@ -120,6 +123,12 @@ Features planned for future releases.
 * When changing tabs (e.g. Organize page), change the browser url so that bookmarks and page refreshes work as expected. [UL-140]
 * Users created with SSO should still get a password so they can login without SSO.
 * Ensure mobile-first. [UL-7]
+* On pin details page: Google Places information section, showing Google's place name, nearby photos, extra street view / 360 / etc views, google reviews, website, etc.
+* If a website exists, check if it is defunct, and check for recent activity.
+* Add google place name, organization name, etc to aliases automatically.
+* Yelp reviews.
+* Notepad import (AI Parsing)
+* XLS import
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

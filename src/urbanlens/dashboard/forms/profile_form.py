@@ -1,10 +1,15 @@
 """Profile info and social-link forms."""
 
 from datetime import UTC, date, datetime
+import re
 
 from django import forms
 
 from urbanlens.dashboard.models.profile.model import Profile
+
+# Discord usernames (new pomelo system): 2-32 chars, letters/digits/underscores/dots.
+# Also allow hyphens and '#' so legacy discriminator-style handles (user#1234) remain valid.
+_DISCORD_HANDLE_RE = re.compile(r"^[a-zA-Z0-9._#-]{2,100}$")
 
 _MIN_AGE_YEARS = 13
 
@@ -78,3 +83,20 @@ class DiscordHandleForm(forms.Form):
             attrs={"class": "edit-input", "placeholder": "Your Discord username"},
         ),
     )
+
+    def clean_discord(self) -> str:
+        """Validate the Discord username against the allowed character set.
+
+        Returns:
+            The stripped handle, or an empty string when blank.
+
+        Raises:
+            forms.ValidationError: When the handle contains disallowed characters
+                or falls outside the allowed length range.
+        """
+        value = self.cleaned_data.get("discord", "").strip()
+        if value and not _DISCORD_HANDLE_RE.match(value):
+            raise forms.ValidationError(
+                "2–100 characters: letters, digits, underscores, dots, hyphens, or #.",
+            )
+        return value
