@@ -49,13 +49,13 @@
                         <div class="friendship-btn-group">
                             <form method="post" action="{% url 'friend.remove' profile.id %}">
                                 {% csrf_token %}
-                                <button type="submit" class="friendship-btn friendship-btn--ghost" title="Remove friend">
+                                <button type="submit" class="friendship-btn friendship-btn btn--ghost" title="Remove friend">
                                     <i class="material-icons">person_remove</i> Remove
                                 </button>
                             </form>
                             <form method="post" action="{% url 'friend.mute' profile.id %}">
                                 {% csrf_token %}
-                                <button type="submit" class="friendship-btn friendship-btn--ghost" title="Mute this user">
+                                <button type="submit" class="friendship-btn friendship-btn btn--ghost" title="Mute this user">
                                     <i class="material-icons">volume_off</i> Mute
                                 </button>
                             </form>
@@ -73,7 +73,7 @@
                         </div>
                         <form method="post" action="{% url 'friend.remove' profile.id %}">
                             {% csrf_token %}
-                            <button type="submit" class="friendship-btn friendship-btn--ghost">
+                            <button type="submit" class="friendship-btn friendship-btn btn--ghost">
                                 <i class="material-icons">cancel</i> Cancel request
                             </button>
                         </form>
@@ -84,13 +84,13 @@
                         <div class="friendship-btn-group">
                             <form method="post" action="{% url 'friend.accept' profile.id %}">
                                 {% csrf_token %}
-                                <button type="submit" class="friendship-btn friendship-btn--primary">
+                                <button type="submit" class="friendship-btn friendship-btn btn--primary">
                                     <i class="material-icons">check</i> Accept
                                 </button>
                             </form>
                             <form method="post" action="{% url 'friend.reject' profile.id %}">
                                 {% csrf_token %}
-                                <button type="submit" class="friendship-btn friendship-btn--ghost">
+                                <button type="submit" class="friendship-btn friendship-btn btn--ghost">
                                     <i class="material-icons">close</i> Decline
                                 </button>
                             </form>
@@ -101,7 +101,7 @@
                         </div>
                         <form method="post" action="{% url 'friend.request' profile.id %}">
                             {% csrf_token %}
-                            <button type="submit" class="friendship-btn friendship-btn--ghost">
+                            <button type="submit" class="friendship-btn friendship-btn btn--ghost">
                                 <i class="material-icons">volume_up</i> Unmute
                             </button>
                         </form>
@@ -111,20 +111,20 @@
                         </div>
                         <form method="post" action="{% url 'friend.remove' profile.id %}">
                             {% csrf_token %}
-                            <button type="submit" class="friendship-btn friendship-btn--ghost">
+                            <button type="submit" class="friendship-btn friendship-btn btn--ghost">
                                 <i class="material-icons">lock_open</i> Unblock
                             </button>
                         </form>
                     {% else %}
                         <form method="post" action="{% url 'friend.request' profile.id %}">
                             {% csrf_token %}
-                            <button type="submit" class="friendship-btn friendship-btn--primary">
+                            <button type="submit" class="friendship-btn friendship-btn btn--primary">
                                 <i class="material-icons">person_add</i> Add Friend
                             </button>
                         </form>
                         <form method="post" action="{% url 'friend.block' profile.id %}">
                             {% csrf_token %}
-                            <button type="submit" class="friendship-btn friendship-btn--ghost" title="Block this user">
+                            <button type="submit" class="friendship-btn friendship-btn btn--ghost" title="Block this user">
                                 <i class="material-icons">block</i> Block
                             </button>
                         </form>
@@ -133,7 +133,7 @@
                 {% endif %}
 
                 {% if profile.user == request.user %}
-                <a href="{% url 'profile.edit' %}" class="edit-profile-btn btn--primary">
+                <a href="{% url 'profile.edit' %}" class="edit-profile-btn btn btn--primary">
                     <i class="material-icons">edit</i> Edit Profile
                 </a>
                 {% endif %}

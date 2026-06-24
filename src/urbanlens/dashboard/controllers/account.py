@@ -175,7 +175,7 @@ class SignupView(generic.CreateView):
             msg = EmailMultiAlternatives(
                 subject=subject,
                 body=text_body,
-                from_email=None,  # Uses DEFAULT_FROM_EMAIL
+                from_email=None,  # Uses UL_EMAIL_FROM
                 to=[user.email],
             )
             msg.attach_alternative(html_body, "text/html")

@@ -167,7 +167,7 @@
                 </div>
                 <div class="pin-location-actions">
                     {% if overlapping_location_count > 1 %}
-                    <button type="button" class="btn--ghost btn--sm pin-loc-change-btn"
+                    <button type="button" class="btn btn--ghost btn--sm pin-loc-change-btn"
                             hx-get="{% url 'pin.link' pin.slug %}"
                             hx-target="#pin-location-picker"
                             hx-swap="innerHTML"
@@ -177,7 +177,7 @@
                         Change
                     </button>
                     {% endif %}
-                    <button type="button" class="btn--ghost btn--sm pin-loc-detach-btn"
+                    <button type="button" class="btn btn--ghost btn--sm pin-loc-detach-btn"
                             hx-post="{% url 'pin.link' pin.slug %}"
                             hx-target="#pin-overview"
                             hx-swap="outerHTML"
@@ -197,7 +197,7 @@
         <div class="pin-location-panel pin-location-panel--unlinked">
             <i class="material-icons">link_off</i>
             <span>Not linked to any shared location.</span>
-            <button type="button" class="btn--ghost btn--sm pin-loc-change-btn"
+            <button type="button" class="btn btn--ghost btn--sm pin-loc-change-btn"
                     hx-get="{% url 'pin.link' pin.slug %}"
                     hx-target="#pin-location-picker"
                     hx-swap="innerHTML">

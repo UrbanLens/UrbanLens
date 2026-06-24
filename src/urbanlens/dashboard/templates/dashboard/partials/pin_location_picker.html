@@ -17,11 +17,11 @@
             {% endif %}
         </div>
         <div class="pin-loc-option-actions">
-            <a href="{% url 'location.wiki' loc.slug %}" target="_blank" class="btn--ghost btn--sm" title="Open wiki">
+            <a href="{% url 'location.wiki' loc.slug %}" target="_blank" class="btn btn--ghost btn--sm" title="Open wiki">
                 <i class="material-icons">open_in_new</i>
             </a>
             {% if not pin.location or loc.slug != pin.location.slug %}
-            <button type="button" class="btn--primary btn--sm"
+            <button type="button" class="btn btn--primary btn--sm"
                     hx-post="{% url 'pin.link.to' pin.slug loc.slug %}"
                     hx-target="#pin-overview"
                     hx-swap="outerHTML"

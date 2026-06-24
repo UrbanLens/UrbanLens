@@ -83,21 +83,21 @@
     line-height: 1.5;
 }
 .iw-file-zone {
-    border: 1.5px dashed #c8d0d8;
+    border: 1.5px dashed var(--ul-border);
     border-radius: 10px;
     padding: 28px 20px;
     text-align: center;
     cursor: pointer;
     transition: border-color .18s, background .18s;
-    background: #f8fafc;
+    background: var(--ul-surface-1);
 }
 .iw-file-zone:hover, .iw-file-zone.drag-over {
-    border-color: #2196F3;
-    background: #e8f4fd;
+    border-color: var(--ul-primary);
+    background: var(--ul-surface-1);
 }
-.iw-file-zone i { font-size: 2.2rem; color: #90caf9; display: block; margin-bottom: 8px; }
+.iw-file-zone i { font-size: 2.2rem; color: var(--ul-primary); display: block; margin-bottom: 8px; }
 .iw-file-zone-label { font-size: .9rem; color: #5f6368; }
-.iw-file-zone-label strong { color: #2196F3; cursor: pointer; }
+.iw-file-zone-label strong { color: var(--ul-primary); cursor: pointer; }
 .iw-file-input { display: none; }
 .iw-selected-files {
     margin-top: 12px;
@@ -109,20 +109,20 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    background: #e8f4fd;
+    background: var(--ul-surface-1);
     border-radius: 6px;
     padding: 5px 10px;
     font-size: .82rem;
-    color: #1a1a1a;
+    color: var(--ul-text-0);
 }
-.iw-file-chip i { font-size: 1rem; color: #2196F3; }
+.iw-file-chip i { font-size: 1rem; color: var(--ul-primary); }
 .iw-file-chip-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .iw-file-chip-remove {
     background: none; border: none; cursor: pointer;
-    color: #9aa0a6; padding: 0; line-height: 1;
+    color: var(--ul-text-2); padding: 0; line-height: 1;
     font-size: .9rem;
 }
-.iw-file-chip-remove:hover { color: #c0392b; }
+.iw-file-chip-remove:hover { color: var(--ul-text-danger); }
 
 /* Parse loading spinner */
 .iw-parsing {
@@ -132,13 +132,13 @@
     justify-content: center;
     padding: 40px 20px;
     gap: 14px;
-    color: #5f6368;
+    color: var(--ul-text-4);
     font-size: .9rem;
 }
 .iw-spinner {
     width: 32px; height: 32px;
-    border: 3px solid #e0e0e0;
-    border-top-color: #2196F3;
+    border: 3px solid var(--ul-border);
+    border-top-color: var(--ul-primary);
     border-radius: 50%;
     animation: iw-spin .7s linear infinite;
 }
@@ -147,7 +147,7 @@
 /* ── Step 2: Preview ─────────────────────────────────────────────────── */
 .iw-preview-summary {
     font-size: .85rem;
-    color: #5f6368;
+    color: var(--ul-text-4);
     margin-bottom: 14px;
     display: flex;
     align-items: center;
@@ -155,14 +155,14 @@
 }
 .iw-preview-summary a {
     font-size: .8rem;
-    color: #2196F3;
+    color: var(--ul-primary);
     text-decoration: none;
     cursor: pointer;
 }
 .iw-preview-summary a:hover { text-decoration: underline; }
 
 .iw-list-group {
-    border: 1px solid var(--ul-border, #e0e0e0);
+    border: 1px solid var(--ul-border);
     border-radius: 10px;
     overflow: hidden;
     margin-bottom: 10px;
@@ -172,19 +172,19 @@
     align-items: center;
     gap: 8px;
     padding: 10px 14px;
-    background: #f8fafc;
+    background: var(--ul-surface-1);
     cursor: pointer;
     user-select: none;
 }
 .iw-list-toggle { color: #5f6368; font-size: 1.1rem; transition: transform .15s; }
 .iw-list-toggle.collapsed { transform: rotate(-90deg); }
 .iw-list-name { font-weight: 600; font-size: .9rem; flex: 1; }
-.iw-list-count { font-size: .78rem; color: #9aa0a6; }
+.iw-list-count { font-size: .78rem; color: var(--ul-text-2); }
 
 .iw-list-meta {
     padding: 10px 14px;
     border-top: 1px solid var(--ul-border, #e0e0e0);
-    background: #fdfdfd;
+    background: var(--ul-surface-0);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -277,19 +277,19 @@
     border-radius: 6px;
     cursor: pointer;
     font-size: .83rem;
-    color: #1a1a1a;
+    color: var(--ul-text-0);
 }
-.iw-badge-dropdown-item:hover { background: #f0f4f8; }
-.iw-badge-dropdown-item.checked { background: #e8f4fd; }
+.iw-badge-dropdown-item:hover { background: var(--ul-surface-1); }
+.iw-badge-dropdown-item.checked { background: var(--ul-surface-1); }
 .iw-badge-dropdown-item i { font-size: 1rem; }
-.iw-badge-dropdown-check { margin-left: auto; color: #2196F3; font-size: .9rem; }
+.iw-badge-dropdown-check { margin-left: auto; color: var(--ul-primary); font-size: .9rem; }
 
 /* Pin list */
 .iw-pin-list {
     list-style: none;
     margin: 0;
     padding: 0;
-    border-top: 1px solid var(--ul-border, #e0e0e0);
+    border-top: 1px solid var(--ul-border);
     max-height: 220px;
     overflow-y: auto;
 }
@@ -298,12 +298,12 @@
     align-items: center;
     gap: 10px;
     padding: 7px 14px;
-    border-bottom: 1px solid rgba(0,0,0,.04);
+    border-bottom: 1px solid var(--ul-border);
     transition: background .1s;
     cursor: pointer;
 }
 .iw-pin-row:last-child { border-bottom: none; }
-.iw-pin-row:hover { background: #f8fafc; }
+.iw-pin-row:hover { background: var(--ul-surface-1); }
 /* Override Materialize's global checkbox reset inside the pin list */
 .iw-pin-row input[type=checkbox] {
     appearance: auto !important;
@@ -315,7 +315,7 @@
     height: 14px !important;
     margin: 0 !important;
     flex-shrink: 0;
-    accent-color: #2196F3;
+    accent-color: var(--ul-primary);
     cursor: pointer;
 }
 .iw-pin-name { font-size: .85rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -323,13 +323,13 @@
 /* Private toggle button */
 .iw-pin-private-btn {
     background: none; border: none; cursor: pointer;
-    color: #c8d0d8; padding: 2px 3px; flex-shrink: 0;
+    color: var(--ul-text-2); padding: 2px 3px; flex-shrink: 0;
     line-height: 1; border-radius: 4px;
     transition: color .15s;
     display: flex; align-items: center;
 }
 .iw-pin-private-btn i { font-size: 1rem; }
-.iw-pin-private-btn:hover { color: #c0392b; }
+.iw-pin-private-btn:hover { color: var(--ul-text-danger); }
 .iw-pin-private-btn.is-private { color: #c0392b; }
 .iw-pin-row.is-private { background: rgba(192,57,43,.04); }
 
@@ -378,9 +378,9 @@
     margin-bottom: 6px;
 }
 .iw-progress-pct { font-size: 1.4rem; font-weight: 700; color: #2196F3; letter-spacing: -.02em; }
-.iw-progress-count { font-size: .83rem; color: #9aa0a6; }
+.iw-progress-count { font-size: .83rem; color: var(--ul-text-2); }
 .iw-current-name {
-    font-size: .82rem; color: #5f6368;
+    font-size: .82rem; color: var(--ul-text-4);
     height: 1.2em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
     margin-bottom: 14px;
 }
@@ -388,12 +388,12 @@
     display: flex;
     gap: 18px;
     font-size: .82rem;
-    color: #666;
+    color: var(--ul-text-2);
     padding: 10px 0;
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--ul-border);
     margin-bottom: 14px;
 }
-.iw-stats strong { color: #1a1a1a; }
+.iw-stats strong { color: var(--ul-text-0); }
 
 /* Per-item log */
 .iw-item-log {
@@ -421,13 +421,13 @@
 </style>
 
 <div class="dialog-overlay" id="import-screen"></div>
-<div class="dialog" id="import-dialog">
+<div class="ul-dialog dialog" id="import-dialog">
     <button class="btn-close" id="closeImportDialog" aria-label="Close">
         <i class="material-icons" style="font-size:1.2rem;vertical-align:middle">close</i>
     </button>
 
     <!-- Header with step indicator -->
-    <div class="iw-header">
+    <div class="iw-header dialog-header">
         <h2 id="iw-title">Import Pins</h2>
         <div class="iw-step-dots">
             <div class="iw-dot active" id="iw-dot-1"></div>
@@ -482,7 +482,7 @@
         </div>
         <div class="iw-footer">
             <span id="iw-selected-count" style="margin-right:auto"></span>
-            <button id="iw-btn-back" class="btn--ghost" style="padding:9px 16px;border-radius:8px;border:1.5px solid #e0e0e0;background:none;cursor:pointer;font-size:.88rem;color:#5f6368;">← Back</button>
+            <button id="iw-btn-back" class="btn btn--ghost" style="padding:9px 16px;border-radius:8px;border:1.5px solid #e0e0e0;background:none;cursor:pointer;font-size:.88rem;color:#5f6368;">← Back</button>
             <button id="iw-btn-confirm" class="submit-button" disabled>Import</button>
         </div>
     </div>

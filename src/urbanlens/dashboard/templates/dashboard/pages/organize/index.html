@@ -61,11 +61,11 @@
                         <i class="material-icons">checklist</i>
                     </button>
                 </div>
-                <button type="button" class="btn--ghost btn--sm" id="tag-filter-btn" title="Filter tags" onclick="toggleOrgFilter('tag')">
+                <button type="button" class="btn btn--ghost btn--sm" id="tag-filter-btn" title="Filter tags" onclick="toggleOrgFilter('tag')">
                     <i class="material-icons">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
                 </button>
-                <button class="btn--primary" id="new-tag-btn" type="button" title="New Tag" style="padding:.4rem .55rem;min-width:0;">
+                <button class="btn btn--primary" id="new-tag-btn" type="button" title="New Tag" style="padding:.4rem .55rem;min-width:0;">
                     <i class="material-icons" style="font-size:1.2rem;">add</i>
                 </button>
             </div>
@@ -163,8 +163,8 @@
                     </div>
                 </div>
                 <div class="tag-form-actions">
-                    <button type="submit" class="btn--primary">Create</button>
-                    <button type="button" class="btn--ghost" onclick="document.getElementById('new-tag-form').style.display='none'">Cancel</button>
+                    <button type="submit" class="btn btn--primary">Create</button>
+                    <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-tag-form').style.display='none'">Cancel</button>
                 </div>
             </form>
         </div>
@@ -202,11 +202,11 @@
                         <i class="material-icons">checklist</i>
                     </button>
                 </div>
-                <button type="button" class="btn--ghost btn--sm" id="cat-filter-btn" title="Filter categories" onclick="toggleOrgFilter('cat')">
+                <button type="button" class="btn btn--ghost btn--sm" id="cat-filter-btn" title="Filter categories" onclick="toggleOrgFilter('cat')">
                     <i class="material-icons">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
                 </button>
-                <button class="btn--primary" id="new-category-btn" type="button" title="New Category" style="padding:.4rem .55rem;min-width:0;">
+                <button class="btn btn--primary" id="new-category-btn" type="button" title="New Category" style="padding:.4rem .55rem;min-width:0;">
                     <i class="material-icons" style="font-size:1.2rem;">add</i>
                 </button>
             </div>
@@ -295,8 +295,8 @@
                     </div>
                 </div>
                 <div class="tag-form-actions">
-                    <button type="submit" class="btn--primary">Create</button>
-                    <button type="button" class="btn--ghost" onclick="document.getElementById('new-category-form').style.display='none'">Cancel</button>
+                    <button type="submit" class="btn btn--primary">Create</button>
+                    <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-category-form').style.display='none'">Cancel</button>
                 </div>
             </form>
         </div>
@@ -331,11 +331,11 @@
                         <i class="material-icons">checklist</i>
                     </button>
                 </div>
-                <button type="button" class="btn--ghost btn--sm" id="status-filter-btn" title="Filter statuses" onclick="toggleOrgFilter('status')">
+                <button type="button" class="btn btn--ghost btn--sm" id="status-filter-btn" title="Filter statuses" onclick="toggleOrgFilter('status')">
                     <i class="material-icons">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
                 </button>
-                <button class="btn--primary" id="new-status-btn" type="button" title="New Status" style="padding:.4rem .55rem;min-width:0;">
+                <button class="btn btn--primary" id="new-status-btn" type="button" title="New Status" style="padding:.4rem .55rem;min-width:0;">
                     <i class="material-icons" style="font-size:1.2rem;">add</i>
                 </button>
             </div>
@@ -408,8 +408,8 @@
                     </div>
                 </div>
                 <div class="tag-form-actions">
-                    <button type="submit" class="btn--primary">Create</button>
-                    <button type="button" class="btn--ghost" onclick="document.getElementById('new-status-form').style.display='none'">Cancel</button>
+                    <button type="submit" class="btn btn--primary">Create</button>
+                    <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-status-form').style.display='none'">Cancel</button>
                 </div>
             </form>
         </div>
@@ -500,11 +500,11 @@
                         <i class="material-icons">checklist</i>
                     </button>
                 </div>
-                <button type="button" class="btn--ghost btn--sm" id="people-filter-btn" title="Filter labels" onclick="toggleOrgFilter('people')">
+                <button type="button" class="btn btn--ghost btn--sm" id="people-filter-btn" title="Filter labels" onclick="toggleOrgFilter('people')">
                     <i class="material-icons">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
                 </button>
-                <button type="button" class="btn--primary btn--sm" id="people-badge-create-btn"
+                <button type="button" class="btn btn--primary btn--sm" id="people-badge-create-btn"
                         hx-get="{% url 'people.create' %}"
                         hx-target="#people-badge-edit-dialog-body"
                         hx-swap="innerHTML"
@@ -571,10 +571,10 @@
                Assignments to the merged labels will transfer to the surviving label. This cannot be undone.</p>
         </div>
         <div class="cat-merge-dialog-footer">
-            <button type="button" id="people-merge-confirm-btn" class="btn--primary">
+            <button type="button" id="people-merge-confirm-btn" class="btn btn--primary">
                 <i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge
             </button>
-            <button type="button" class="btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </dialog>
 
@@ -655,8 +655,8 @@
         <p class="cat-merge-warning"><i class="material-icons">warning</i> All pins will be transferred to the surviving tag. This cannot be undone.</p>
     </div>
     <div class="cat-merge-dialog-footer">
-        <button type="button" id="tag-merge-confirm-btn" class="btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
-        <button type="button" class="btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" id="tag-merge-confirm-btn" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </dialog>
 
@@ -730,8 +730,8 @@
         </div>{# end tag-bulk-main-fields #}
     </div>
     <div class="cat-bulk-edit-footer">
-        <button type="button" id="tag-bulk-edit-confirm" class="btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
-        <button type="button" class="btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" id="tag-bulk-edit-confirm" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </dialog>
 
@@ -794,8 +794,8 @@
         <p class="cat-merge-warning"><i class="material-icons">warning</i> All pins and locations will be transferred to the surviving category. This cannot be undone.</p>
     </div>
     <div class="cat-merge-dialog-footer">
-        <button type="button" id="cat-merge-confirm-btn" class="btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
-        <button type="button" class="btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" id="cat-merge-confirm-btn" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </dialog>
 
@@ -868,8 +868,8 @@
         </div>{# end cat-bulk-main-fields #}
     </div>
     <div class="cat-bulk-edit-footer">
-        <button type="button" id="cat-bulk-edit-confirm" class="btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
-        <button type="button" class="btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" id="cat-bulk-edit-confirm" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </dialog>
 
@@ -920,8 +920,8 @@
         <p class="cat-merge-warning"><i class="material-icons">warning</i> All pin status assignments will be transferred to the surviving status. This cannot be undone.</p>
     </div>
     <div class="cat-merge-dialog-footer">
-        <button type="button" id="status-merge-confirm-btn" class="btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
-        <button type="button" class="btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" id="status-merge-confirm-btn" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </dialog>
 

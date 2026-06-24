@@ -31,6 +31,15 @@
 	background: none;
 	color: var(--ul-text-1);
 
+	&:hover {
+		box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
+	}
+
+	&:active {
+		transform: translateY(1px);
+		box-shadow: none;
+	}
+
 	.material-icons {
 		font-size: 1.05em;
 		flex-shrink: 0;
@@ -217,8 +226,8 @@ input[type="submit"] {
 .btn-close {
 	@include icon-btn(28px);
 	position: absolute;
-	top: 16px;
-	right: 16px;
+	top: 0.5em;
+	right: 0.5em;
 	color: $text-muted;
 	font-size: 1.15rem;
 	line-height: 1;

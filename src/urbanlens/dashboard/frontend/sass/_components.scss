@@ -417,13 +417,15 @@
     align-items: center;
     gap: .3rem;
     padding: .75em 1.25em;
-    border: 2px solid var(--ul-border);
     border-radius: 10px;
     cursor: pointer;
     font-size: .85rem;
     color: var(--ul-text-2);
+	background-color: var(--ul-surface-0);
+    border: 2px solid var(--ul-surface-0b);
     transition: border-color .15s, background .15s;
     min-width: 80px;
+	opacity: 0.8;
 
     input[type="radio"] {
         display: none;
@@ -436,9 +438,8 @@
 
     &.active,
     &:has(input:checked) {
-        border-color: #{$color-indigo-500};
-        background: var(--ul-surface-0a);
         color: #{$color-indigo-500};
+		opacity: 1;
 
         .material-icons {
 			color: #{$color-indigo-500};
@@ -446,7 +447,7 @@
     }
 
     &:hover:not(.active) {
-        border-color: #{$color-indigo-300};
-        background: #{$color-indigo-100};
+		opacity: 1;
+        background: var(--ul-surface-1);
     }
 }

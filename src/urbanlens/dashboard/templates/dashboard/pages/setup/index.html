@@ -45,7 +45,6 @@
                 <div class="setup-step__eyebrow">Getting started</div>
                 <h1 class="setup-step__title">Welcome to UrbanLens</h1>
                 <p class="setup-step__subtitle">
-                    You're the first registered user, which makes you the administrator of this instance.
                     This quick wizard will help you personalise your install and see what's available.
                 </p>
 
@@ -80,7 +79,7 @@
                     </div>
                 </div>
 
-                <div class="setup-step__actions">
+                <div class="setup-step--actions">
                     <button class="submit-button" onclick="goToStep(2)">
                         Get Started
                         <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-left:.25rem">arrow_forward</i>
@@ -115,8 +114,8 @@
                     </div>
                 </div>
 
-                <div class="setup-step__actions">
-                    <button class="btn--ghost" onclick="goToStep(1)">
+                <div class="setup-step--actions">
+                    <button class="btn btn--ghost" onclick="goToStep(1)">
                         <i class="material-icons" style="vertical-align:middle;font-size:1rem">arrow_back</i>
                         Back
                     </button>
@@ -164,8 +163,8 @@
                     {% endfor %}
                 </div>
 
-                <div class="setup-step__actions">
-                    <button class="btn--ghost" onclick="goToStep(2)">
+                <div class="setup-step--actions">
+                    <button class="btn btn--ghost" onclick="goToStep(2)">
                         <i class="material-icons" style="vertical-align:middle;font-size:1rem">arrow_back</i>
                         Back
                     </button>
@@ -188,8 +187,8 @@
                         Head to the map to add your first location, or visit
                         <a href="{% url 'site_admin' %}">Site Admin</a> to configure more settings.
                     </p>
-                    <div class="setup-complete__actions">
-                        <button class="btn--ghost" onclick="goToStep(3)">
+                    <div class="setup-complete--actions">
+                        <button class="btn btn--ghost" onclick="goToStep(3)">
                             <i class="material-icons" style="vertical-align:middle;font-size:1rem">arrow_back</i>
                             Back
                         </button>

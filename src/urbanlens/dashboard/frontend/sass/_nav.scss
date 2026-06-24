@@ -2,7 +2,6 @@
 
 // ── App navigation bar ───────────────────────────────────────────────────────
 
-$nav-text: rgba($color-grey-0, 0.85);
 $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($color-grey-9, 0.1);
 
 .app-nav {
@@ -63,7 +62,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     border-radius: 6px;
     font-size: 0.875rem;
     font-weight: 500;
-    color: $nav-text;
+    color: var(--ul-text-5);
     text-decoration: none;
     transition: background 0.15s, color 0.15s;
 
@@ -135,7 +134,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     border-radius: 8px;
     padding: 4px 8px 4px 4px;
     cursor: pointer;
-    color: $nav-text;
+    color: var(--ul-text-5);
     transition: background 0.15s, border-color 0.15s;
 
     &:hover {
@@ -266,13 +265,13 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
 
 .page-footer {
     background-color: #{$dark-primary};
-    color: $nav-text;
+    color: var(--ul-text-5);
     position: sticky;
     bottom: 0;
     z-index: 15; // above div.container (z-index: 1)
 
     a {
-        color: var(--ul-text-0);
+        color: var(--ul-text-4);
     }
 }
 

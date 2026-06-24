@@ -47,12 +47,12 @@
     </div>
 
     <div class="tag-form-actions">
-        <button type="button" class="btn--primary" data-merge-name="{{ category.name|escapejs }}"
+        <button type="button" class="btn btn--primary" data-merge-name="{{ category.name|escapejs }}"
                 onclick="(async function(btn){ if(await confirmDialog({title:'Merge Category',message:'Merge “'+btn.dataset.mergeName+'” into the selected category?\n\nThis cannot be undone.',confirmLabel:'Merge'})) btn.closest('form').requestSubmit(); })(this)">
             <i class="material-icons" style="font-size:1rem;vertical-align:middle;">merge</i>
             Merge
         </button>
-        <button type="button" class="btn--ghost"
+        <button type="button" class="btn btn--ghost"
                 onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </form>

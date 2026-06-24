@@ -5,6 +5,20 @@
     background: var(--ul-surface-0);
     color: var(--ul-text-1);
 
+    input[type=text],
+    input[type=number],
+    input[type=email],
+    input[type=url],
+    input[type=time],
+    input[type=date],
+    input[type=datetime],
+    input[type=datetime-local],
+    input[type=tel],
+    input[type=search],
+    textarea {
+        color: var(--ul-text-3);
+    }
+
     input:not([type]):disabled,
     input:not([type])[readonly=readonly],
     input[type=text]:not(.browser-default):disabled,
