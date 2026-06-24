@@ -107,7 +107,7 @@ Features planned for future releases.
 * "Accept" / "Reject" shared pin for the user being shared with. [UL-21]
 * Implement "hide user", and "mute user" features, alongside the existing "block user" feature. [UL-27]
 * Proper CI/CD pipeline, tags, releases, etc. [UL-25]
-* * Support non-USA formats for dates, currency, distances via user settings.
+* Support non-USA formats for dates, currency, distances via user settings.
 * Support non-English language.
 * User stats page (fun stats about the user: breakdown of pins by continent, etc).
 * Lists (these aren't strictly necessary, due to badges, but could allow users to create lists of unrelated things. Like "my favorite explores in February" or "1 Best Church in Each State").
@@ -117,6 +117,7 @@ Features planned for future releases.
 * Use remote secret store (maybe?)
 * Automatic backups
 * When changing tabs (e.g. Organize page), change the browser url so that bookmarks and page refreshes work as expected.
+* Bug: Admin Charts page has incorrect "Media Storage" (0). In addition, "Uptime" reflects the server, not the app. Time charts don't display.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

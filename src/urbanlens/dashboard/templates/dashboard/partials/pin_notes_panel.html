@@ -3,7 +3,7 @@
         <i class="material-icons">sticky_note_2</i>
         <span>My Notes</span>
         {% if notes %}<span class="badge">{{ notes|length }}</span>{% endif %}
-        <button type="button" class="btn-icon-sm" style="margin-left:auto" title="Add note"
+        <button type="button" class="btn--icon-sm" style="margin-left:auto" title="Add note"
                 onclick="this.closest('.pin-notes-panel').querySelector('.pin-note-input').focus()">
             <i class="material-icons">add</i>
         </button>

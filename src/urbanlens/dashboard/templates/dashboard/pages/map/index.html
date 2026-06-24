@@ -353,8 +353,8 @@
 
     </div>
     <div class="apdlg-footer">
-        <button type="button" class="btn-ghost" onclick="closeAddPinDialog()">Cancel</button>
-        <button type="button" class="btn-primary" id="apdlg-submit">Add Pin</button>
+        <button type="button" class="btn--ghost" onclick="closeAddPinDialog()">Cancel</button>
+        <button type="button" class="btn--primary" id="apdlg-submit">Add Pin</button>
     </div>
 </dialog>
 <div id="importPinsModal"></div>
@@ -1896,9 +1896,9 @@
                     (loc.is_current ? ' <span class="loc-conflict-badge">Current</span>' : '') +
                 '</div>' +
                 '<div class="loc-conflict-option-actions">' +
-                    '<a href="' + loc.wiki_url + '" target="_blank" class="btn-ghost btn-sm">Wiki</a>' +
+                    '<a href="' + loc.wiki_url + '" target="_blank" class="btn--ghost btn--sm">Wiki</a>' +
                     (!loc.is_current
-                        ? '<button class="btn-primary btn-sm loc-conflict-switch-btn" data-slug="' + loc.slug + '" data-name="' + (loc.name || '').replace(/"/g, '&quot;') + '">Use this</button>'
+                        ? '<button class="btn--primary btn--sm loc-conflict-switch-btn" data-slug="' + loc.slug + '" data-name="' + (loc.name || '').replace(/"/g, '&quot;') + '">Use this</button>'
                         : '') +
                 '</div>';
             list.appendChild(item);

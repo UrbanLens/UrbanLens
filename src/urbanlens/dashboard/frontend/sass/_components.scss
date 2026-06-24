@@ -47,18 +47,17 @@
 }
 
 // ── Dialogs ───────────────────────────────────────────────────────────────────
-
 .ul-dialog {
 	border: none;
 	border-radius: $radius-md;
 	box-shadow: $shadow-dialog;
 	padding: 0;
-	background: var(--ul-surface-0);
-	color: var(--ul-text-1);
 	width: min(55rem, 90vw);
 	max-width: 90vw;
 	overflow: visible;
 	max-height: 90vh;
+	background-color: var(--ul-surface-0);
+	color: var(--ul-text-1);
 
 	&::backdrop {
 		background: rgba(0, 0, 0, .55);
@@ -71,13 +70,52 @@
 		flex-direction: column;
 	}
 
+	label {
+		color: var(--ul-text-1);
+	}
+
 	.panel-header {
 		@include panel-header($spread: true);
 	}
 
+	.dialog-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: .5rem;
+		padding: .75rem 1rem;
+		font-weight: 600;
+		font-size: .95rem;
+		flex-shrink: 0;
+		background-color: var(--ul-surface-2);
+		border-bottom: 1px solid var(--ul-surface-2b);
+	}
+	
 	.dialog-close {
 		@extend .ul-dialog-close;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border-radius: 6px;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		color: var(--ul-text-3);
+		transition: background .15s, color .15s;
+		flex-shrink: 0;
+	
+		.material-icons {
+			font-size: 1.1rem;
+		}
+	
+		&:hover {
+			background: var(--ul-hover-bg);
+			color: var(--ul-text-1);
+		}
 	}
+	
 }
 
 .ul-dialog-header {
@@ -373,4 +411,42 @@
 	}
 }
 
-// About page styles → _about.scss
+.ul-radio-button {
+	display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .3rem;
+    padding: .75em 1.25em;
+    border: 2px solid var(--ul-border);
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: .85rem;
+    color: var(--ul-text-2);
+    transition: border-color .15s, background .15s;
+    min-width: 80px;
+
+    input[type="radio"] {
+        display: none;
+    }
+    .material-icons {
+        font-size: 1.6rem;
+        color: var(--ul-text-3);
+        transition: color .15s;
+    }
+
+    &.active,
+    &:has(input:checked) {
+        border-color: #{$color-indigo-500};
+        background: var(--ul-surface-0a);
+        color: #{$color-indigo-500};
+
+        .material-icons {
+			color: #{$color-indigo-500};
+        }
+    }
+
+    &:hover:not(.active) {
+        border-color: #{$color-indigo-300};
+        background: #{$color-indigo-100};
+    }
+}

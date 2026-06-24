@@ -293,27 +293,28 @@
     .tad-kind-pill {
         display: inline-flex;
         align-items: center;
-        padding: .1rem .45rem;
+        padding: 0.5em 1em;
         border-radius: 999px;
         font-size: .7rem;
         font-weight: 600;
         letter-spacing: .03em;
         text-transform: uppercase;
         flex-shrink: 0;
+        color: $color-grey-0;
 
         &--tag {
-            background: var(--ul-accent-purple-bg);
-            color: #6d28d9;
+            background-color: #{$color-purple-900};
+            color: #{$color-purple-100};
         }
 
         &--category {
-            background: #dbeafe;
-            color: #1d4ed8;
+            background-color: #{$color-blue-900};
+            color: #{$color-blue-100};
         }
 
         &--status {
-            background: #dcfce7;
-            color: #15803d;
+            background-color: #{$color-green-900};
+            color: #{$color-green-100};
         }
     }
 }
@@ -395,23 +396,6 @@
 
             &:hover {
                 background: rgba(129, 140, 248, .12);
-            }
-        }
-
-        .tad-kind-pill {
-            &--tag {
-                background: #2d2060;
-                color: #a78bfa;
-            }
-
-            &--category {
-                background: #1e2f5e;
-                color: #93c5fd;
-            }
-
-            &--status {
-                background: #14382a;
-                color: #6ee7b7;
             }
         }
     }

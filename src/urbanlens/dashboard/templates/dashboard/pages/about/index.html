@@ -14,12 +14,12 @@
         </p>
         <div class="about-hero-actions">
             {% if not user.is_authenticated %}
-            <a href="{% url 'signup' %}" class="about-btn about-btn--primary">
+            <a href="{% url 'signup' %}" class="about-btn btn--primary">
                 <i class="material-icons">person_add</i> Join UrbanLens
             </a>
-            <a href="{% url 'login' %}" class="about-btn about-btn--ghost">Sign in</a>
+            <a href="{% url 'login' %}" class="about-btn btn--ghost">Sign in</a>
             {% else %}
-            <a href="{% url 'map.view' %}" class="about-btn about-btn--primary">
+            <a href="{% url 'map.view' %}" class="about-btn btn--primary">
                 <i class="material-icons">map</i> Open my map
             </a>
             {% endif %}
@@ -262,11 +262,11 @@
         <h2 class="about-cta-title">Start mapping your world.</h2>
         <p class="about-cta-body">It's free, private, and built for people who explore with care.</p>
         {% if not user.is_authenticated %}
-        <a href="{% url 'signup' %}" class="about-btn about-btn--primary about-btn--lg">
+        <a href="{% url 'signup' %}" class="about-btn btn--primary btn--lg">
             <i class="material-icons">rocket_launch</i> Create an account
         </a>
         {% else %}
-        <a href="{% url 'map.view' %}" class="about-btn about-btn--primary about-btn--lg">
+        <a href="{% url 'map.view' %}" class="about-btn btn--primary btn--lg">
             <i class="material-icons">map</i> Open my map
         </a>
         {% endif %}

@@ -77,50 +77,6 @@ body.page-about {
         }
     }
 
-    .about-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: .4rem;
-        padding: .7rem 1.6rem;
-        border-radius: 9px;
-        font-size: .95rem;
-        font-weight: 700;
-        text-decoration: none;
-        transition: background .15s, transform .1s, box-shadow .15s;
-        border: 2px solid transparent;
-
-        .material-icons {
-            font-size: 1.05rem;
-        }
-
-        &--primary {
-            background: var(--ul-surface-0);
-            color: #4338ca;
-
-            &:hover {
-                background: var(--ul-surface-0);
-                transform: translateY(-2px);
-                box-shadow: 0 6px 18px rgba(255, 255, 255, .22);
-            }
-        }
-
-        &--ghost {
-            background: transparent;
-            color: #c7d2fe;
-            border-color: rgba(255, 255, 255, .35);
-
-            &:hover {
-                background: rgba(255, 255, 255, .08);
-                border-color: rgba(255, 255, 255, .55);
-            }
-        }
-
-        &--lg {
-            padding: .9rem 2.2rem;
-            font-size: 1rem;
-        }
-    }
-
     // ── Hero visual (decorative map mock) ─────────────────────────────────────
     .about-hero-visual {
         display: flex;
@@ -257,8 +213,8 @@ body.page-about {
     }
 
     .about-pillar {
-        background: var(--ul-surface-0);
-        border: 1px solid var(--ul-border);
+        background: var(--ul-surface-0a);
+        border: 1px solid var(--ul-surface-3b);
         border-radius: 12px;
         padding: 1.5rem;
     }
@@ -304,7 +260,7 @@ body.page-about {
     .about-value-card {
         padding: 1.75rem;
         background: var(--ul-surface-0a);
-        border: 1px solid var(--ul-border);
+        border: 1px solid var(--ul-surface-3b);
         border-radius: 12px;
         position: relative;
     }
@@ -448,8 +404,8 @@ body.page-about {
 
     .about-audience-card {
         padding: 1.5rem;
-        background: var(--ul-surface-0);
-        border: 1px solid var(--ul-border);
+        background: var(--ul-surface-0a);
+        border: 1px solid var(--ul-surface-3b);
         border-radius: 12px;
         text-align: center;
 

@@ -10,7 +10,7 @@
      data-category-location-count="{{ category.location_count }}"
      data-category-parents="{% for p in category.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
 
-    <div class="tag-card-view" id="cat-view-{{ category.id }}">
+    <div class="tag-card-view ul-section" id="cat-view-{{ category.id }}">
 
         <label class="cat-select-wrap" title="Select">
             <input type="checkbox" class="cat-select-cb" data-cat-id="{{ category.id }}">
@@ -60,7 +60,7 @@
         </div>
 
         <div class="tag-card-actions">
-            <button type="button" class="btn-icon" title="Edit category"
+            <button type="button" class="btn--icon" title="Edit category"
                     hx-get="{% url 'category.edit' category.id %}"
                     hx-target="#category-edit-dialog-body"
                     hx-swap="innerHTML">
@@ -72,7 +72,7 @@
                   hx-confirm="Delete '{{ category.name }}'? Pins and locations will keep their other categories."
                   style="display:inline;">
                 {% csrf_token %}
-                <button type="submit" class="btn-icon btn-icon--danger" title="Delete">
+                <button type="submit" class="btn--icon btn-icon--danger" title="Delete">
                     <i class="material-icons">delete</i>
                 </button>
             </form>

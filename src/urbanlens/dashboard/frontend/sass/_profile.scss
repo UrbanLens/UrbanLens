@@ -71,13 +71,13 @@
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: $primary-color;
-    color: var(--ul-text-5);
+    background: var(--ul-button-bg);
+    color: var(--ul-button-text);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    border: 2px solid var(--ul-border);
+    border: 2px solid var(--ul-button-border);
     transition: background-color 0.15s ease;
 
     .material-icons {
@@ -85,7 +85,7 @@
     }
 
     &:hover {
-        background: color.adjust($primary-color, $lightness: -8%);
+        background: var(--ul-button-hover-bg);
     }
 }
 
@@ -268,18 +268,6 @@
     }
 }
 
-// Highlight stat (used for "in common" when viewing another user)
-.profile-stat--highlight {
-    .stat-value {
-        color: $primary-color;
-    }
-
-    .stat-label {
-        color: $primary-color;
-        opacity: .7;
-    }
-}
-
 .profile-bio {
     font-size: 0.95rem;
     color: $text-primary;
@@ -333,16 +321,28 @@
     .stat-value {
         font-size: 1.8rem;
         font-weight: 700;
-        color: $text-primary;
+        color: var(--ul-text-0a);
         line-height: 1;
     }
 
     .stat-label {
+        color: var(--ul-text-0);
         font-size: 0.78rem;
         text-transform: uppercase;
         letter-spacing: 0.06em;
         color: $text-muted;
         margin-top: 4px;
+    }
+
+    &--highlight {    
+        background: linear-gradient(135deg,
+                color-mix(in srgb, $primary-color 8%, var(--ul-surface-0)) 0%,
+                color-mix(in srgb, $primary-color 4%, var(--ul-surface-0)) 100%);
+        border-color: color-mix(in srgb, $primary-color 30%, transparent);
+
+        .stat-label {
+            opacity: .7;
+        }
     }
 }
 
@@ -450,8 +450,7 @@
 }
 
 .settings-section {
-    background: var(--ul-surface-0);
-    border: 1px solid var(--ul-border);
+    @extend .ul-section;
     border-radius: $radius-md;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
@@ -1241,13 +1240,6 @@ textarea.edit-textarea {
         flex: 1;
         min-width: 100px;
         max-width: 160px;
-    }
-
-    .profile-stat--highlight {
-        background: linear-gradient(135deg,
-                color-mix(in srgb, $primary-color 8%, var(--ul-surface-0)) 0%,
-                color-mix(in srgb, $primary-color 4%, var(--ul-surface-0)) 100%);
-        border-color: color-mix(in srgb, $primary-color 30%, transparent);
     }
 }
 

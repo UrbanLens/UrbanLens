@@ -40,7 +40,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
 .app-nav-brand-name {
     font-size: 1rem;
     font-weight: 700;
-    color: var(--ul-text-0);
+    color: var(--ul-text-9);
     letter-spacing: -0.01em;
 }
 
@@ -140,7 +140,6 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
 
     &:hover {
         background: rgba(255, 255, 255, 0.1);
-        color: var(--ul-text-0);
     }
 
     .nav-is-open &,
@@ -267,9 +266,14 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
 
 .page-footer {
     background-color: #{$dark-primary};
+    color: $nav-text;
     position: sticky;
     bottom: 0;
     z-index: 15; // above div.container (z-index: 1)
+
+    a {
+        color: var(--ul-text-0);
+    }
 }
 
 div.container {

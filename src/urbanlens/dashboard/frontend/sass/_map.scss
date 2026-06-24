@@ -550,48 +550,6 @@
     margin-top: .5rem;
 }
 
-.settings-map-view-option {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: .3rem;
-    padding: .75rem 1.25rem;
-    border: 2px solid var(--ul-border);
-    ;
-    border-radius: 10px;
-    cursor: pointer;
-    font-size: .85rem;
-    color: #475569;
-    transition: border-color .15s, background .15s;
-    min-width: 80px;
-
-    input[type="radio"] {
-        display: none;
-    }
-
-    .material-icons {
-        font-size: 1.6rem;
-        color: #94a3b8;
-        transition: color .15s;
-    }
-
-    &.active,
-    &:has(input:checked) {
-        border-color: #3b82f6;
-        background: var(--ul-surface-0a);
-        color: #1e40af;
-
-        .material-icons {
-            color: #3b82f6;
-        }
-    }
-
-    &:hover:not(.active) {
-        border-color: #93c5fd;
-        background: var(--ul-surface-0);
-    }
-}
-
 // ── Add-Pin dialog ─────────────────────────────────────────────────────────
 
 .add-pin-dialog {

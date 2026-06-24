@@ -214,7 +214,7 @@ $text-color: $text-primary;
 $surface-hover: color.scale($primary-color, $lightness: +5%);
 
 $danger-color: $color-red-500;
-$danger-accent: rgba(200, 0, 0, .18);
+$danger-accent: rgba($color-red-1300, .18);
 $danger-bg: $color-red-300;
 $danger-border: $color-red-700;
 $success-color: $color-green-500;
@@ -232,9 +232,9 @@ $accent-2-bg: $color-amber-300;
 $accent-2-fg: $color-amber-700;
 
 // ── Dark-mode accent palette ──────────────────────────────────────────────────
-$dk-navy:         #1a2540;    // icon backgrounds, calendar cells
-$dk-panel-bg:     #1e2130;    // trip/weather panel background
-$dk-panel-border: #2d3348;    // trip/weather panel border
+$dk-navy:         $color-blue-1500;                  // icon backgrounds, calendar cells
+$dk-panel-bg:     $color-deep-purple-1500;           // trip/weather panel background
+$dk-panel-border: rgba($color-deep-purple-1500, .5); // trip/weather panel border
 
 // ── Radius ────────────────────────────────────────────────────────────────────
 
@@ -365,12 +365,20 @@ $z-nav: 1100;
     --ul-color-danger-bg: #{$danger-bg};
 
     // Define sass colors as variables so dark mode can override them.
+    --ul-primary-color: #{$primary-color};
     --ul-accent-purple: #{$accent-1};
     --ul-accent-purple-bg: #{$accent-1-bg};
     --ul-accent-purple-fg: #{$accent-1-fg};
     --ul-accent-amber: #{$accent-2};
     --ul-accent-amber-bg: #{$accent-2-bg};
     --ul-accent-amber-fg: #{$accent-2-fg};
+
+    --ul-button-bg: #{$primary-color};
+    --ul-button-border: var(--ul-border);
+    --ul-button-text: var(--ul-text-0);
+    --ul-button-hover-bg: color.adjust($primary-color, $lightness: -8%);
+    --ul-button-hover-border: color.adjust($primary-color, $lightness: -15%);
+    --ul-button-hover-text: var(--ul-text-0a);
 }
 
 [data-theme="dark"] {

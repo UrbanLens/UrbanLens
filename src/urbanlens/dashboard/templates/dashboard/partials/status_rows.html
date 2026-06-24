@@ -8,7 +8,7 @@
      data-status-pin-count="{{ badge.pin_count }}"
      data-status-protected="{{ badge.is_protected|yesno:'true,false' }}">
 
-    <div class="tag-card-view" id="status-view-{{ badge.id }}">
+    <div class="tag-card-view ul-section" id="status-view-{{ badge.id }}">
         <div class="cat-select-wrap" title="{% if badge.is_protected %}Select (will be forced as merge target){% else %}Select{% endif %}">
             <input type="checkbox" class="status-select-cb" data-status-id="{{ badge.id }}">
             <span class="cat-select-check"></span>
@@ -48,7 +48,7 @@
         </div>
 
         <div class="tag-card-actions">
-            <button type="button" class="btn-icon" title="Edit"
+            <button type="button" class="btn--icon" title="Edit"
                     hx-get="{% url 'status.edit' badge.id %}"
                     hx-target="#status-edit-dialog-body"
                     hx-swap="innerHTML">
@@ -61,7 +61,7 @@
                   hx-confirm="Delete '{{ badge.name }}'? Pins will keep their other statuses."
                   style="display:inline;">
                 {% csrf_token %}
-                <button type="submit" class="btn-icon btn-icon--danger" title="Delete">
+                <button type="submit" class="btn--icon btn-icon--danger" title="Delete">
                     <i class="material-icons">delete</i>
                 </button>
             </form>

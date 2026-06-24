@@ -40,6 +40,10 @@
     .app-nav {
         background-color: #{$color-blue-1700};
     }
+    
+    .app-nav-brand-name {
+        color: var(--ul-text-0);
+    }
 
     .app-nav-link {
         color: rgba(255, 255, 255, .75);
@@ -53,6 +57,10 @@
     .dialog {
         background: var(--ul-surface-0);
         border-color: var(--ul-border);
+    }
+
+    .page-content > .ul-section {
+        background-color: var(--ul-surface-0a);
     }
 
     .tag-chip {
@@ -127,7 +135,7 @@
         border-color: var(--ul-surface-7b);
     }
 
-    .settings-radio-button {
+    .ul-radio-button {
         border-color: var(--ul-surface-8b);
         background: rgb(40, 40, 40);
     }
@@ -231,10 +239,7 @@
 
     .page-footer {
         background-color: #{$color-blue-1700};
-    }
-
-    footer {
-        color: var(--ul-text-7);
+        color: var(--ul-text-3);
     }
 
     .edit-input,
@@ -401,14 +406,6 @@
     .profile-username,
     .profile-meta-item {
         color: #888;
-    }
-
-    .stat-value {
-        color: #e0e0e0;
-    }
-
-    .stat-label {
-        color: #777;
     }
 
     .edit-profile-btn {
@@ -1234,13 +1231,18 @@
 
     .priority-kind-badge {
         &--tag {
-            background: rgba(29, 78, 216, .2);
-            color: #93c5fd;
+            background-color: #{$color-purple-1100};
+            color: #{$color-purple-300};
         }
 
         &--category {
-            background: rgba(21, 128, 61, .2);
-            color: #6ee7b7;
+            background-color: #{$color-blue-1100};
+            color: #{$color-blue-300};
+        }
+
+        &--status {
+            background-color: #{$color-green-1100};
+            color: #{$color-green-300};
         }
     }
 
@@ -1389,6 +1391,32 @@
             h3 {
                 color: var(--ul-text-1);
             }
+        }
+    }
+
+    .btn {
+        &--primary {
+            &:hover {    
+                box-shadow: 0 6px 18px rgba($color-grey-9, .22);
+            }
+        }
+    }
+
+
+    .ul-radio-button {
+        &.active,
+        &:has(input:checked) {
+            border-color: #{$color-indigo-500};
+            color: #{$color-indigo-100};
+    
+            .material-icons {
+                color: #{$color-indigo-100};
+            }
+        }
+    
+        &:hover:not(.active) {
+            border-color: #{$color-indigo-300};
+            background: #{$color-indigo-1100};
         }
     }
 }

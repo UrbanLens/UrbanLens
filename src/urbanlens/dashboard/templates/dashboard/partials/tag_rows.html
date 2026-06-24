@@ -11,7 +11,7 @@
      data-tag-parents="{% for p in tag.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
 
     {# ── View mode ────────────────────────────────────────────────────── #}
-    <div class="tag-card-view" id="tag-view-{{ tag.id }}">
+    <div class="tag-card-view ul-section" id="tag-view-{{ tag.id }}">
         {% if tag.profile %}
         <label class="cat-select-wrap" title="Select">
             <input type="checkbox" class="tag-select-cb" data-tag-id="{{ tag.id }}">
@@ -73,13 +73,13 @@
 
         {% if tag.profile %}
         <div class="tag-card-actions">
-            <button type="button" class="btn-icon" title="Edit"
+            <button type="button" class="btn--icon" title="Edit"
                     hx-get="{% url 'tag.edit' tag.id %}"
                     hx-target="#tag-edit-dialog-body"
                     hx-swap="innerHTML">
                 <i class="material-icons">edit</i>
             </button>
-            <button type="button" class="btn-icon" title="Merge into another tag"
+            <button type="button" class="btn--icon" title="Merge into another tag"
                     hx-get="{% url 'tag.merge' tag.id %}"
                     hx-target="#tag-edit-dialog-body"
                     hx-swap="innerHTML">
@@ -91,14 +91,14 @@
                   hx-confirm="Delete '{{ tag.name }}'? Pins will keep their other tags."
                   style="display:inline;">
                 {% csrf_token %}
-                <button type="submit" class="btn-icon btn-icon--danger" title="Delete">
+                <button type="submit" class="btn--icon btn-icon--danger" title="Delete">
                     <i class="material-icons">delete</i>
                 </button>
             </form>
         </div>
         {% else %}
         <div class="tag-card-actions">
-            <button type="button" class="btn-icon{% if tag.is_customized %} btn-icon--active{% endif %}"
+            <button type="button" class="btn--icon{% if tag.is_customized %} btn-icon--active{% endif %}"
                     title="Customize your display of this global tag"
                     hx-get="{% url 'tag.customize' tag.id %}"
                     hx-target="#tag-edit-dialog-body"
@@ -106,7 +106,7 @@
                 <i class="material-icons">tune</i>
             </button>
             {% if can_edit_global %}
-            <button type="button" class="btn-icon btn-icon--global-edit" title="Edit global tag"
+            <button type="button" class="btn--icon btn-icon--global-edit" title="Edit global tag"
                     hx-get="{% url 'tag.edit' tag.id %}"
                     hx-target="#tag-edit-dialog-body"
                     hx-swap="innerHTML">
@@ -118,7 +118,7 @@
                   hx-confirm="Delete '{{ tag.name }}'? Pins will keep their other tags."
                   style="display:inline;">
                 {% csrf_token %}
-                <button type="submit" class="btn-icon btn-icon--danger" title="Delete">
+                <button type="submit" class="btn--icon btn-icon--danger" title="Delete">
                     <i class="material-icons">delete</i>
                 </button>
             </form>

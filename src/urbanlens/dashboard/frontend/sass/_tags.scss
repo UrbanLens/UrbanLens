@@ -499,44 +499,6 @@
     }
 }
 
-// ── Global dialog header / close (applies to all <dialog> elements) ───────────
-
-.dialog-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .5rem;
-    padding: .75rem 1rem;
-    border-bottom: 1px solid var(--ul-border);
-    font-weight: 600;
-    font-size: .95rem;
-    flex-shrink: 0;
-}
-
-.dialog-close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    color: var(--ul-text-3);
-    transition: background .15s, color .15s;
-    flex-shrink: 0;
-
-    .material-icons {
-        font-size: 1.1rem;
-    }
-
-    &:hover {
-        background: var(--ul-hover-bg);
-        color: var(--ul-text-1);
-    }
-}
-
 // ── Tag edit dialog ────────────────────────────────────────────────────────────
 .tag-edit-dialog {
     width: min(52em, calc(100vw - 2rem));

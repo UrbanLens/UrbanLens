@@ -461,8 +461,8 @@
         </div>
       </div>
       <div class="dialog-footer">
-        <button type="button" class="btn-ghost" id="comment-map-composer-cancel">Cancel</button>
-        <button type="button" class="btn-primary" id="comment-map-composer-save">Attach map</button>
+        <button type="button" class="btn--ghost" id="comment-map-composer-cancel">Cancel</button>
+        <button type="button" class="btn--primary" id="comment-map-composer-save">Attach map</button>
       </div>
     </dialog>
 
@@ -478,8 +478,8 @@
             <p id="confirm-dialog-message"></p>
         </div>
         <div class="confirm-dialog-footer">
-            <button type="button" class="btn-ghost" id="confirm-dialog-cancel">Cancel</button>
-            <button type="button" class="btn-danger-filled" id="confirm-dialog-ok">Confirm</button>
+            <button type="button" class="btn--ghost" id="confirm-dialog-cancel">Cancel</button>
+            <button type="button" class="btn--danger-filled" id="confirm-dialog-ok">Confirm</button>
         </div>
     </dialog>
     <script>
@@ -506,7 +506,7 @@
             document.getElementById('confirm-dialog-message').innerHTML =
                 (opts.message || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>');
             okBtn.textContent = opts.confirmLabel || 'Confirm';
-            okBtn.className = (opts.danger === false) ? 'btn-primary' : 'btn-danger-filled';
+            okBtn.className = (opts.danger === false) ? 'btn--primary' : 'btn--danger-filled';
             return new Promise(function (resolve) {
                 _resolve = resolve;
                 dlg.showModal();

@@ -133,7 +133,7 @@
         </div>
         <div class="form-actions">
             <button type="submit" class="submit-button">Save Changes</button>
-            <button type="button" class="btn-ghost"
+            <button type="button" class="btn--ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </form>
@@ -159,7 +159,7 @@
             </div>
         </div>
         <div class="form-row" style="margin-bottom:.1rem">
-            <button type="button" class="btn-ghost" id="add-activity-name-toggle"
+            <button type="button" class="btn--ghost" id="add-activity-name-toggle"
                     style="font-size:.8rem;padding:.25rem .5rem"
                     onclick="_toggleAddActivityName()">
                 <i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name
@@ -205,7 +205,7 @@
                 <input type="hidden" name="child_trip_uuid" id="activity-child-trip-uuid">
                 <div id="activity-child-trip-suggestions" class="location-suggestions" hidden></div>
                 <span id="activity-child-trip-display" class="activity-location-display"></span>
-                <button type="button" class="btn-ghost activity-child-trip-clear" id="activity-child-trip-clear"
+                <button type="button" class="btn--ghost activity-child-trip-clear" id="activity-child-trip-clear"
                         style="display:none;margin-top:.25rem;font-size:.8rem;padding:.2rem .5rem"
                         onclick="_clearChildTrip('add')">
                     <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i> Remove
@@ -242,7 +242,7 @@
         </div>
         <div class="form-actions">
             <button type="submit" class="submit-button">Add Activity</button>
-            <button type="button" class="btn-ghost"
+            <button type="button" class="btn--ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </form>
@@ -259,7 +259,7 @@
           class="trip-create-form">
         {% csrf_token %}
         <div class="form-row" style="margin-bottom:.1rem">
-            <button type="button" class="btn-ghost" id="edit-activity-name-toggle"
+            <button type="button" class="btn--ghost" id="edit-activity-name-toggle"
                     style="font-size:.8rem;padding:.25rem .5rem"
                     onclick="_toggleEditActivityName()">
                 <i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name
@@ -285,7 +285,7 @@
                 <div id="edit-activity-location-suggestions" class="location-suggestions" hidden></div>
                 <span id="edit-activity-location-display" class="activity-location-display"></span>
             </div>
-            <button type="button" class="btn-ghost"
+            <button type="button" class="btn--ghost"
                     onclick="_clearEditLocation()" style="margin-top:.35rem;font-size:.8rem;padding:.25rem .6rem">
                 <i class="material-icons" style="font-size:1rem;vertical-align:middle">clear</i> Clear location
             </button>
@@ -296,7 +296,7 @@
             <div class="activity-datetime-row">
                 <input type="date" name="scheduled_date" id="edit-activity-date">
                 <input type="time" name="scheduled_time" id="edit-activity-time">
-                <button type="button" class="btn-ghost"
+                <button type="button" class="btn--ghost"
                         style="font-size:.78rem;padding:.2rem .5rem;white-space:nowrap"
                         onclick="document.getElementById('edit-activity-date').value='';document.getElementById('edit-activity-time').value=''">
                     <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i>
@@ -309,7 +309,7 @@
             <div class="activity-datetime-row">
                 <input type="date" name="scheduled_end_date" id="edit-activity-end-date">
                 <input type="time" name="scheduled_end_time" id="edit-activity-end-time">
-                <button type="button" class="btn-ghost"
+                <button type="button" class="btn--ghost"
                         style="font-size:.78rem;padding:.2rem .5rem;white-space:nowrap"
                         onclick="document.getElementById('edit-activity-end-date').value='';document.getElementById('edit-activity-end-time').value=''">
                     <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i>
@@ -325,7 +325,7 @@
                 <input type="hidden" name="child_trip_uuid" id="edit-activity-child-trip-uuid">
                 <div id="edit-activity-child-trip-suggestions" class="location-suggestions" hidden></div>
                 <span id="edit-activity-child-trip-display" class="activity-location-display"></span>
-                <button type="button" class="btn-ghost activity-child-trip-clear" id="edit-activity-child-trip-clear"
+                <button type="button" class="btn--ghost activity-child-trip-clear" id="edit-activity-child-trip-clear"
                         style="display:none;margin-top:.25rem;font-size:.8rem;padding:.2rem .5rem"
                         onclick="_clearChildTrip('edit')">
                     <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i> Remove
@@ -361,13 +361,13 @@
             <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
         </div>
         <div class="form-actions form-actions--split">
-            <button type="button" class="btn-danger" id="edit-activity-delete-btn"
+            <button type="button" class="btn--danger" id="edit-activity-delete-btn"
                     onclick="_deleteEditActivity()">
                 <i class="material-icons">delete</i> Delete
             </button>
             <div class="form-actions-right">
                 <button type="submit" class="submit-button">Save Changes</button>
-                <button type="button" class="btn-ghost"
+                <button type="button" class="btn--ghost"
                         onclick="this.closest('dialog').close()">Cancel</button>
             </div>
         </div>
@@ -395,7 +395,7 @@
                 <i class="material-icons" style="font-size:1rem;vertical-align:middle">check_circle</i>
                 Mark Complete
             </button>
-            <button type="button" class="btn-ghost"
+            <button type="button" class="btn--ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </form>
@@ -428,7 +428,7 @@
         </div>
         <div class="form-actions">
             <button type="submit" class="submit-button">Add Member</button>
-            <button type="button" class="btn-ghost"
+            <button type="button" class="btn--ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </form>
