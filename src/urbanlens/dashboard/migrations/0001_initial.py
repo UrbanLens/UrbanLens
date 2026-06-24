@@ -8,26 +8,16 @@ import uuid
 from django.conf import settings
 from django.db import migrations, models
 
-# Global People badges (profile=None, kind="user"). Final state after 0105:
-# editable by users, not protected.
-_GLOBAL_USER_BADGES: list[dict[str, object]] = [
-    {"name": "Preservation", "icon": "🌿", "color": "#4CAF50", "order": 40},
-    {"name": "Vandalism", "icon": "⚠️", "color": "#F44336", "order": 30},
-    {"name": "Photography", "icon": "📷", "color": "#2196F3", "order": 20},
-    {"name": "Influencer", "icon": "📣", "color": "#9C27B0", "order": 10},
-]
-
 _SITE_ADMIN_GROUP = "site_admin"
 
 def bootstrap(apps, schema_editor) -> None:
-    """Seed auth groups/permissions and global People badges on a fresh database.
+    """Seed auth groups/permissions on a fresh database.
 
     Args:
         apps: Django apps registry (historical models).
         schema_editor: Active schema editor for the migration connection.
     """
     _bootstrap_site_admin_group(apps, schema_editor)
-    _bootstrap_global_user_badges(apps, schema_editor)
 
 
 def reverse_bootstrap(apps, schema_editor) -> None:
@@ -38,16 +28,8 @@ def reverse_bootstrap(apps, schema_editor) -> None:
         schema_editor: Active schema editor for the migration connection.
     """
     db = schema_editor.connection.alias
-    Badge = apps.get_model("dashboard", "Badge")
     Group = apps.get_model("auth", "Group")
     Permission = apps.get_model("auth", "Permission")
-
-    names = {d["name"] for d in _GLOBAL_USER_BADGES}
-    Badge.objects.using(db).filter(
-        profile__isnull=True,
-        kind="user",
-        name__in=names,
-    ).delete()
 
     Group.objects.using(db).filter(name=_SITE_ADMIN_GROUP).delete()
     Permission.objects.using(db).filter(codename="view_site_admin").delete()
@@ -86,25 +68,6 @@ def _bootstrap_site_admin_group(apps, schema_editor) -> None:
 
     group, _ = Group.objects.using(db).get_or_create(name=_SITE_ADMIN_GROUP)
     group.permissions.add(edit_global_badge, view_site_admin)
-
-
-def _bootstrap_global_user_badges(apps, schema_editor) -> None:
-    """Create global People badges shared across all users."""
-    db = schema_editor.connection.alias
-    Badge = apps.get_model("dashboard", "Badge")
-
-    for spec in _GLOBAL_USER_BADGES:
-        Badge.objects.using(db).get_or_create(
-            profile=None,
-            name=spec["name"],
-            kind="user",
-            defaults={
-                "icon": spec["icon"],
-                "color": spec["color"],
-                "order": spec["order"],
-                "is_protected": False,
-            },
-        )
 
 
 BOOTSTRAP_OPERATIONS_PREFIX = [

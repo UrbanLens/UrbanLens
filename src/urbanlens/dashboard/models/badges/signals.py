@@ -61,7 +61,7 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
     """
     if not created:
         return
-    from urbanlens.dashboard.models.badges.model import KIND_CATEGORY, KIND_STATUS, Badge
+    from urbanlens.dashboard.models.badges.model import KIND_CATEGORY, KIND_STATUS, KIND_USER, Badge
 
     status_defaults = [
         {"name": "Visited", "icon": "✅", "color": "#4CAF50", "order": 100, "is_protected": True},
@@ -85,4 +85,18 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
             name=name,
             kind=KIND_CATEGORY,
             defaults={"order": total - i},
+        )
+
+    people_defaults = [
+        {"name": "Preservation", "icon": "🌿", "color": "#4CAF50", "order": 40},
+        {"name": "Vandalism", "icon": "⚠️", "color": "#F44336", "order": 30},
+        {"name": "Photography", "icon": "📷", "color": "#2196F3", "order": 20},
+        {"name": "Influencer", "icon": "📣", "color": "#9C27B0", "order": 10},
+    ]
+    for d in people_defaults:
+        Badge.objects.get_or_create(
+            profile=instance,
+            name=d["name"],
+            kind=KIND_USER,
+            defaults={"icon": d["icon"], "color": d["color"], "order": d["order"]},
         )

@@ -17,19 +17,21 @@
 // ── Internal mixins ───────────────────────────────────────────────────────────
 
 @mixin _bubble {
-    padding: 7px 11px;
-    border-radius: 6px;
+    padding: 6px 10px;
+    border-radius: 8px;
     background: var(--ul-tooltip-bg);
     color: var(--ul-tooltip-fg);
     border: 1px solid var(--ul-tooltip-border);
     box-shadow: var(--ul-tooltip-shadow);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    font-size: 13px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    font-size: 12.5px;
     font-weight: 500;
-    line-height: 1.4;
-    letter-spacing: .01em;
+    line-height: 1.45;
+    letter-spacing: .012em;
     white-space: normal;
+    // shrink-wrap short labels; long text wraps at max-width
+    width: max-content;
     max-width: var(--_tip-max, 220px);
     text-align: left;
     word-break: break-word;
@@ -56,7 +58,6 @@
 
 [data-tooltip] {
     position: relative;
-    cursor: inherit;
 
     // Bubble — default position: above trigger
     &::after {
@@ -95,7 +96,7 @@
     }
 
     &[data-tooltip-wide]::after {
-        --_tip-max: 280px;
+        --_tip-max: 300px;
     }
 
     // ── below ──────────────────────────────────────────────────────────────────
@@ -177,12 +178,6 @@
     }
 }
 
-button[data-tooltip],
-a[data-tooltip],
-.ul-tooltip-help {
-    cursor: help;
-}
-
 // ── Info icon trigger ─────────────────────────────────────────────────────────
 
 .ul-tooltip-help {
@@ -251,6 +246,6 @@ a[data-tooltip],
     }
 
     &[data-wide='true'] {
-        max-width: min(320px, calc(100vw - 16px));
+        max-width: min(340px, calc(100vw - 16px));
     }
 }
