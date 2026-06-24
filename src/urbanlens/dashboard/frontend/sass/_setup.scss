@@ -226,6 +226,63 @@
 	}
 }
 
+// Username field (step 2)
+.setup-username-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.setup-username-group {
+	display: flex;
+	align-items: stretch;
+	flex: 1;
+	min-width: 0;
+
+	&__prefix {
+		display: flex;
+		align-items: center;
+		flex-shrink: 0;
+		padding: 0 10px;
+		background: var(--ul-surface-1, #f3f4f6);
+		border: 1.5px solid var(--ul-border, #e0e0e0);
+		border-right: none;
+		border-radius: 8px 0 0 8px;
+		color: var(--ul-text-3, #9aa0a6);
+		font-size: .9rem;
+		line-height: 1;
+		box-sizing: border-box;
+	}
+
+	&__input {
+		flex: 1;
+		min-width: 0;
+		box-sizing: border-box;
+		border-radius: 0 8px 8px 0;
+		border: 1.5px solid var(--ul-border, #e0e0e0);
+		border-left: none;
+		padding: 8px 12px;
+		font-size: .9rem;
+		line-height: 1.4;
+		outline: none;
+		background: var(--ul-surface-1, #fff);
+		color: var(--ul-text, #1f2937);
+	}
+
+	&:focus-within {
+		.setup-username-group__prefix,
+		.setup-username-group__input {
+			border-color: var(--ul-accent, #0891b2);
+		}
+	}
+}
+
+.setup-username-hint {
+	font-size: .78rem;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
 // App title step
 .setup-title-row {
 	display: flex;

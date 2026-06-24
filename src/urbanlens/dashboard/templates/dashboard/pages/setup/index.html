@@ -101,16 +101,18 @@
 
                 {# Username #}
                 <div class="setup-field" style="margin-bottom:20px;">
-                    <label class="setup-field-label" for="setup-username-input" style="display:block;font-size:.85rem;font-weight:600;margin-bottom:6px;color:var(--ul-text,#1f2937)">
+                    <label class="setup-field-label" for="setup-username-input" style="display:block;font-size:.85rem;font-weight:600;margin-bottom:6px;color:var(--ul-text-0)">
                         Username
                     </label>
-                    <div style="display:flex;align-items:center;gap:0;">
-                        <span style="background:var(--ul-surface-1,#f3f4f6);border:1.5px solid var(--ul-border,#e0e0e0);border-right:none;border-radius:8px 0 0 8px;padding:8px 10px;color:#9aa0a6;font-size:.9rem;line-height:1.4;">@</span>
-                        <input type="text" id="setup-username-input" maxlength="30"
-                               value="{{ current_username }}"
-                               autocomplete="username" spellcheck="false"
-                               style="flex:1;border-radius:0 8px 8px 0;border:1.5px solid var(--ul-border,#e0e0e0);border-left:none;padding:8px 12px;font-size:.9rem;outline:none;background:var(--ul-surface-1,#fff);color:var(--ul-text,#1f2937);">
-                        <span id="setup-username-hint" style="font-size:.78rem;margin-left:8px;white-space:nowrap;"></span>
+                    <div class="setup-username-row">
+                        <div class="setup-username-group">
+                            <span class="setup-username-group__prefix" aria-hidden="true">@</span>
+                            <input type="text" id="setup-username-input" class="setup-username-group__input"
+                                   maxlength="30"
+                                   value="{{ current_username }}"
+                                   autocomplete="username" spellcheck="false">
+                        </div>
+                        <span id="setup-username-hint" class="setup-username-hint"></span>
                     </div>
                     <p style="font-size:.75rem;color:#9aa0a6;margin:4px 0 0;">3-30 characters: letters, numbers, and underscores only.</p>
                 </div>

@@ -1,7 +1,8 @@
-{# Label text with an optional inline help tooltip.
-   Usage:
-     {% include "dashboard/partials/_tooltip_label.html" with label="Priority" help="How urgently you want to visit." %}
-#}
+{% comment %}
+Label text with an optional inline help tooltip.
+Usage:
+  {% include "dashboard/partials/_tooltip_label.html" with label="Priority" help="How urgently you want to visit." %}
+{% endcomment %}
 <span class="ul-tooltip-label">
     <span>{{ label }}</span>
     {% if help %}
