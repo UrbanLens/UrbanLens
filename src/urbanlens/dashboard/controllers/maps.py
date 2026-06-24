@@ -274,7 +274,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         )
 
     def map_pin_json(self, request, pin_slug, *args, **kwargs):
-        """Return JSON data for a single pin — used for targeted cache updates after edits.
+        """Return JSON data for a single pin - used for targeted cache updates after edits.
 
         Args:
             pin_slug: Slug of the pin to return.

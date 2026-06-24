@@ -39,26 +39,10 @@
 
 // Shared destructive icon button - used in detail pins, trip panels, etc.
 .detail-pin-action-btn {
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    color: #94a3b8;
-    padding: .2rem;
-    border-radius: 4px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    @include icon-btn-danger(28px);
     outline: none;
-    transition: background .12s, color .12s;
 
-    .material-icons {
-        font-size: 1.1rem;
-    }
-
-    &:hover,
     &:focus {
-        background: var(--ul-surface-0a);
-        color: #dc2626;
         outline: none;
     }
 }
@@ -157,7 +141,7 @@
 
 .detail-pin-add-dialog {
     @include dialog-base(520px);
-    // Inner body scrolls — cap slightly tighter than default for this tall form
+    // Inner body scrolls - cap slightly tighter than default for this tall form
     max-height: min(92vh, 900px);
     &::backdrop {
         background: rgba(0, 0, 0, .4);

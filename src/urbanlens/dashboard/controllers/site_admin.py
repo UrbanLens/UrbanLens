@@ -236,7 +236,7 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         total_photos = Image.objects.count()
         total_friendships = Friendship.objects.count()
 
-        # Reviews and trips are optional models — guard against missing tables.
+        # Reviews and trips are optional models - guard against missing tables.
         try:
             from urbanlens.dashboard.models.reviews.model import Review
             total_reviews = Review.objects.count()

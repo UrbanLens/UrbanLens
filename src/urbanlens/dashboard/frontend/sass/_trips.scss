@@ -2028,24 +2028,15 @@
 }
 
 .btn-danger {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
+    @include btn-base;
     padding: .45rem .85rem;
-    border-radius: $radius-sm;
-    border: 1.5px solid #ef5350;
+    border: 1.5px solid $danger-color;
     background: transparent;
-    color: #ef5350;
+    color: $danger-color;
     font-size: .88rem;
-    cursor: pointer;
-    transition: background .15s, color .15s;
-
-    .material-icons {
-        font-size: 1rem;
-    }
 
     &:hover {
-        background: #ef5350;
+        background: $danger-color;
         color: var(--ul-text-4);
     }
 }

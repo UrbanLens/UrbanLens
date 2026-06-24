@@ -1,4 +1,4 @@
-"""Tests for archive_extractor service — ZIP/TGZ extraction with security checks.
+"""Tests for archive_extractor service - ZIP/TGZ extraction with security checks.
 
 Covers:
 - is_archive() magic-byte detection
@@ -202,7 +202,7 @@ class ValidateContentTypeTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# extract_archive — ZIP
+# extract_archive - ZIP
 # ---------------------------------------------------------------------------
 
 class ExtractZipTests(TestCase):
@@ -268,7 +268,7 @@ class ExtractZipTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# extract_archive — TGZ
+# extract_archive - TGZ
 # ---------------------------------------------------------------------------
 
 class ExtractTgzTests(TestCase):
@@ -324,7 +324,7 @@ class ExtractTgzTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# extract_archive — format dispatch
+# extract_archive - format dispatch
 # ---------------------------------------------------------------------------
 
 class ExtractArchiveDispatchTests(TestCase):

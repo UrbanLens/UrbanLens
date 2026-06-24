@@ -891,13 +891,13 @@ window.updateClusterRadius = function (value) {
             ind.className = 'settings-autosave-indicator';
             actions.appendChild(ind);
             _indicators[form.id] = ind;
-            // Hide the save button — auto-save replaces it
+            // Hide the save button - auto-save replaces it
             actions.querySelectorAll('.settings-save-btn').forEach(function (b) { b.style.display = 'none'; });
         }
 
         form.addEventListener('change', function (e) {
             var t = e.target;
-            // Ignore hidden fields (updated programmatically — handled via copUpdate hook)
+            // Ignore hidden fields (updated programmatically - handled via copUpdate hook)
             if (t.type === 'hidden') return;
             var delay = (t.type === 'text' || t.type === 'email' || t.type === 'number') ? 1200 : 0;
             schedule(form, delay);
@@ -911,7 +911,7 @@ window.updateClusterRadius = function (value) {
         });
     });
 
-    // Hook into the color/opacity picker — it updates hidden fields with no DOM event
+    // Hook into the color/opacity picker - it updates hidden fields with no DOM event
     var _orig = window.copUpdate;
     window.copUpdate = function (which) {
         if (_orig) _orig(which);

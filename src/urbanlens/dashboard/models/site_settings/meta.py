@@ -22,7 +22,7 @@ class SearchProviderChoice(TextChoices):
 
 
 class EnvironmentOverrideChoice(TextChoices):
-    """Site environment override — falls back to ``UL_ENVIRONMENT`` when DEFAULT."""
+    """Site environment override - falls back to ``UL_ENVIRONMENT`` when DEFAULT."""
 
     DEFAULT = "default", "Default (from environment variable)"
     PRODUCTION = "production", "Production"

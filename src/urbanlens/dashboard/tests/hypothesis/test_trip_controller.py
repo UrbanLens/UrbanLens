@@ -1,18 +1,18 @@
 """Integration tests for the trip controller HTTP views.
 
 Uses Django's test client to exercise:
-- TripCreateView — POST creates trip, re-renders list partial
-- TripDetailView — GET returns 200 for members, 403 for outsiders, 404 for missing
-- TripDeleteView — DELETE only by creator
-- TripActivitiesView — GET/POST activity management with permission levels
-- TripActivityCompleteView — marks activity complete, caps future dates to today
-- TripActivityVoteView — cast/update/clear votes
-- TripMembersView — GET/POST member management
-- TripMemberRemoveView — DELETE self or via creator
-- TripMemberRSVPView — POST RSVP status
-- TripLeaveView — DELETE leave trip
-- TripSettingsView — POST settings by organizer only
-- TripActivityPositionView — POST lat/lng override
+- TripCreateView - POST creates trip, re-renders list partial
+- TripDetailView - GET returns 200 for members, 403 for outsiders, 404 for missing
+- TripDeleteView - DELETE only by creator
+- TripActivitiesView - GET/POST activity management with permission levels
+- TripActivityCompleteView - marks activity complete, caps future dates to today
+- TripActivityVoteView - cast/update/clear votes
+- TripMembersView - GET/POST member management
+- TripMemberRemoveView - DELETE self or via creator
+- TripMemberRSVPView - POST RSVP status
+- TripLeaveView - DELETE leave trip
+- TripSettingsView - POST settings by organizer only
+- TripActivityPositionView - POST lat/lng override
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def _make_trip(creator_profile: Profile, **kwargs) -> Trip:
 
 
 class TripCreateViewTests(TestCase):
-    """POST /trips/create/ — creates a trip and returns the list partial."""
+    """POST /trips/create/ - creates a trip and returns the list partial."""
 
     def setUp(self):
         super().setUp()
@@ -86,7 +86,7 @@ class TripCreateViewTests(TestCase):
 
 
 class TripDetailViewTests(TestCase):
-    """GET /trips/<uuid>/ — access control and page render."""
+    """GET /trips/<uuid>/ - access control and page render."""
 
     def setUp(self):
         super().setUp()
@@ -132,7 +132,7 @@ class TripDetailViewTests(TestCase):
 
 
 class TripDeleteViewTests(TestCase):
-    """DELETE /trips/<uuid>/delete/ — only creator can delete."""
+    """DELETE /trips/<uuid>/delete/ - only creator can delete."""
 
     def setUp(self):
         super().setUp()
@@ -163,7 +163,7 @@ class TripDeleteViewTests(TestCase):
 
 
 class TripActivitiesViewTests(TestCase):
-    """GET/POST /trips/<uuid>/activities/ — activity listing and creation."""
+    """GET/POST /trips/<uuid>/activities/ - activity listing and creation."""
 
     def setUp(self):
         super().setUp()
@@ -237,7 +237,7 @@ class TripActivitiesViewTests(TestCase):
 
 
 class TripActivityCompleteViewTests(TestCase):
-    """POST /trips/<uuid>/activities/<id>/complete/ — marks activity completed."""
+    """POST /trips/<uuid>/activities/<id>/complete/ - marks activity completed."""
 
     def setUp(self):
         super().setUp()
@@ -283,7 +283,7 @@ class TripActivityCompleteViewTests(TestCase):
 
 
 class TripActivityVoteViewTests(TestCase):
-    """POST /trips/<uuid>/activities/<id>/vote/ — vote cast/update/clear."""
+    """POST /trips/<uuid>/activities/<id>/vote/ - vote cast/update/clear."""
 
     def setUp(self):
         super().setUp()
@@ -351,7 +351,7 @@ class TripActivityVoteViewTests(TestCase):
 
 
 class TripMembersViewTests(TestCase):
-    """GET/POST /trips/<uuid>/members/ — member listing and invitation."""
+    """GET/POST /trips/<uuid>/members/ - member listing and invitation."""
 
     def setUp(self):
         super().setUp()
@@ -397,7 +397,7 @@ class TripMembersViewTests(TestCase):
 
 
 class TripMemberRSVPViewTests(TestCase):
-    """POST /trips/<uuid>/rsvp/ — update RSVP status."""
+    """POST /trips/<uuid>/rsvp/ - update RSVP status."""
 
     def setUp(self):
         super().setUp()
@@ -441,7 +441,7 @@ class TripMemberRSVPViewTests(TestCase):
 
 
 class TripLeaveViewTests(TestCase):
-    """DELETE /trips/<uuid>/leave/ — member exits trip."""
+    """DELETE /trips/<uuid>/leave/ - member exits trip."""
 
     def setUp(self):
         super().setUp()
@@ -473,7 +473,7 @@ class TripLeaveViewTests(TestCase):
 
 
 class TripSettingsViewTests(TestCase):
-    """POST /trips/<uuid>/settings/ — only organizer may change settings."""
+    """POST /trips/<uuid>/settings/ - only organizer may change settings."""
 
     def setUp(self):
         super().setUp()
@@ -523,7 +523,7 @@ class TripSettingsViewTests(TestCase):
 
 
 class TripActivityPositionViewTests(TestCase):
-    """POST /trips/<uuid>/activities/<id>/position/ — saves lat/lng override."""
+    """POST /trips/<uuid>/activities/<id>/position/ - saves lat/lng override."""
 
     def setUp(self):
         super().setUp()

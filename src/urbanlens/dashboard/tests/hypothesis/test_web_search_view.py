@@ -83,7 +83,7 @@ class DomainExtractionTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Location.has_place_name — "No Information Available" sentinel
+# Location.has_place_name - "No Information Available" sentinel
 # ---------------------------------------------------------------------------
 
 class LocationHasPlaceNameTests(TestCase):
@@ -127,7 +127,7 @@ class LocationHasPlaceNameTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# web_search controller — via Django test client
+# web_search controller - via Django test client
 # ---------------------------------------------------------------------------
 
 class WebSearchViewTests(TestCase):

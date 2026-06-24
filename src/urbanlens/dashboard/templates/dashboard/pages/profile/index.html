@@ -168,7 +168,7 @@
     {# ── Stats row ─────────────────────────────────────────────────────────── #}
     <div class="profile-stats-row">
         {% if profile.user == request.user %}
-        {# Own profile — show their own pin count and exploring year #}
+        {# Own profile - show their own pin count and exploring year #}
         <div class="profile-stat ul-section">
             <span class="stat-value">{{ profile.pins.count }}</span>
             <span class="stat-label">Pins</span>
@@ -180,7 +180,7 @@
         </div>
         {% endif %}
         {% else %}
-        {# Viewing another user — show only mutual/shared stats #}
+        {# Viewing another user - show only mutual/shared stats #}
         {% if common_pin_count %}
         <div class="profile-stat profile-stat--highlight ul-section" title="Locations you've both pinned">
             <span class="stat-value">{{ common_pin_count }}</span>
@@ -201,7 +201,7 @@
         {% endif %}
         {% if not common_pin_count and not trips_in_common and not shared_visited %}
         <div class="profile-stat ul-section">
-            <span class="stat-value">—</span>
+            <span class="stat-value">-</span>
             <span class="stat-label">Nothing in Common Yet</span>
         </div>
         {% endif %}

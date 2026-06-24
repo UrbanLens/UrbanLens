@@ -2,8 +2,9 @@
 @use 'variables' as *;
 
 // ── Standard button system ────────────────────────────────────────────────────
-// Prefer `.btn` + BEM modifiers for new markup. Legacy class names are deprecated - (`.btn-primary`,
-// `.btn-ghost`, etc.) extend the same rules so existing templates keep working.
+// Prefer `.btn` + BEM modifiers for new markup. The button appearance is driven
+// by mixins in _mixins.scss so feature files can @include btn-primary/ghost/danger
+// without duplicating rules here.
 
 @keyframes ul-spin {
 	to {
@@ -11,33 +12,11 @@
 	}
 }
 
-
 .btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: .35em;
-	padding: .5rem 1rem;
-	font-size: .95rem;
-	font-weight: 500;
-	line-height: 1.25;
-	border: 1px solid transparent;
-	border-radius: $radius-sm;
-	cursor: pointer;
-	text-decoration: none;
-	white-space: nowrap;
-	user-select: none;
-	transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
-	background: none;
-	color: var(--ul-text-1);
+	@include btn-base;
 
 	&:hover {
 		box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
-	}
-
-	&:active {
-		transform: translateY(1px);
-		box-shadow: none;
 	}
 
 	.material-icons {
@@ -122,11 +101,6 @@
 		.material-icons {
 			font-size: 1.1rem;
 		}
-	}
-
-	&:disabled,
-	&[disabled] {
-		@include btn-disabled;
 	}
 }
 

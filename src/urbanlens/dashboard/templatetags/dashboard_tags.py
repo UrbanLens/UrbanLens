@@ -111,7 +111,7 @@ def tooltip_attrs(
 
     Args:
         text: Tooltip copy shown on hover, focus, or tap.
-        pos: Placement — ``top``, ``below``, ``left``, or ``right``.
+        pos: Placement - ``top``, ``below``, ``left``, or ``right``.
         wide: Use a wider bubble for longer explanatory text.
         float_tip: Render via the floating JS layer (escapes ``overflow:hidden``).
 

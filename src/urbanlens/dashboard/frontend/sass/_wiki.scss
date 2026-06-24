@@ -325,27 +325,10 @@
 
     // ── Action buttons ────────────────────────────────────────────────────
     .wiki-action-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: .35rem;
+        @include btn-ghost;
         padding: .45rem .9rem;
-        border: 1px solid #cbd5e1;
         border-radius: 8px;
-        background: var(--ul-surface-0);
-        color: #475569;
         font-size: .85rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background .15s, border-color .15s, color .15s;
-
-        .material-icons {
-            font-size: 1rem;
-        }
-
-        &:hover {
-            background: var(--ul-surface-0);
-            border-color: #94a3b8;
-        }
 
         &--primary {
             background: #0891b2;
@@ -541,26 +524,16 @@
     }
 
     .wiki-revert-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: .3rem;
+        @include btn-base;
         padding: .3rem .7rem;
-        border: 1px solid #fca5a5;
         border-radius: 6px;
+        border-color: #fca5a5;
         background: var(--ul-surface-0);
         color: #dc2626;
         font-size: .78rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background .15s, border-color .15s;
-        opacity: 0.7;
-
-        .material-icons {
-            font-size: .85rem;
-        }
+        opacity: .7;
 
         &:hover {
-            background: var(--ul-surface-0);
             border-color: #dc2626;
             opacity: 1;
         }

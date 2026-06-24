@@ -54,7 +54,7 @@ class MonthlySeriesLabelTests(TestCase):
             self.assertGreaterEqual(count, 0)
 
     def test_empty_queryset_returns_all_zeros(self) -> None:
-        # Use a fresh DB state — no users created yet.
+        # Use a fresh DB state - no users created yet.
         _, counts = _monthly_series(User.objects.none(), "date_joined")
         self.assertTrue(all(c == 0 for c in counts))
 

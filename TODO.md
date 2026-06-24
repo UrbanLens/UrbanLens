@@ -118,6 +118,7 @@ Features planned for future releases.
 * Use remote secret store (maybe?) [UL-138]
 * Automatic backups [UL-139]
 * When changing tabs (e.g. Organize page), change the browser url so that bookmarks and page refreshes work as expected. [UL-140]
+* Users created with SSO should still get a password so they can login without SSO.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

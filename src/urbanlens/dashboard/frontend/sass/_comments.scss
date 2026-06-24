@@ -122,23 +122,11 @@
 }
 
 .comment-delete-btn {
+    @include icon-btn-danger(20px);
     margin-left: auto;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: #d1d5db;
-    padding: .1rem;
-    border-radius: 3px;
-    display: flex;
-    align-items: center;
-    transition: color .12s;
 
-    .material-icons {
+    i {
         font-size: .85rem;
-    }
-
-    &:hover {
-        color: #ef4444;
     }
 }
 

@@ -1,4 +1,4 @@
-{# Admin-only dev toolbar — shown when the site environment is Development. #}
+{# Admin-only dev toolbar - shown when the site environment is Development. #}
 <div id="dev-toolbar" class="dev-toolbar{% if dev_toolbar_theme_mode == 'dark' %} dev-toolbar--dark-active{% endif %}" data-collapsed="false">
     <div class="dev-toolbar__header">
         <button type="button" class="dev-toolbar__toggle" id="dev-toolbar-collapse" title="Collapse toolbar" aria-expanded="true">
@@ -73,7 +73,7 @@
         if (lightIcon) lightIcon.classList.toggle('is-active', !isDark);
         if (darkIcon) darkIcon.classList.toggle('is-active', isDark);
         if (label) label.textContent = isDark ? 'Dark' : 'Light';
-        btn.title = isDark ? 'Dark mode active — click to switch to light' : 'Light mode active — click to switch to dark';
+        btn.title = isDark ? 'Dark mode active - click to switch to light' : 'Light mode active - click to switch to dark';
     }
 
     function syncThemeToggleFromDom() {

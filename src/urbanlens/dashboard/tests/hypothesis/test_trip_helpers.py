@@ -1,13 +1,13 @@
 """Tests for trip controller helper functions (pure logic, no DB needed where possible).
 
 Covers:
-- _parse_scheduled_at() — date/time string parsing
-- _activity_coords() — coordinate resolution with override/pin/location priority
-- _expand_trip_dates() — trip date range expansion
-- _is_organizer() — organizer detection
-- _can_perform() — permission level checking
-- _compute_activity_index_map() — map-index assignment
-- _build_activity_forecasts() — weather slot matching
+- _parse_scheduled_at() - date/time string parsing
+- _activity_coords() - coordinate resolution with override/pin/location priority
+- _expand_trip_dates() - trip date range expansion
+- _is_organizer() - organizer detection
+- _can_perform() - permission level checking
+- _compute_activity_index_map() - map-index assignment
+- _build_activity_forecasts() - weather slot matching
 """
 from __future__ import annotations
 
@@ -135,7 +135,7 @@ class ActivityCoordsTests(TestCase):
         self.assertIsNone(_activity_coords(act))
 
     def test_partial_override_falls_through(self):
-        # lat_override present but lng_override missing — should not use override
+        # lat_override present but lng_override missing - should not use override
         act = self._make_activity(lat_override=1.0, lng_override=None)
         act.pin = None
         act.location = self._make_location(lat=48.0, lng=2.0)

@@ -1,4 +1,4 @@
-"""Tests for _apply_trip_visibility_filter — the core privacy logic for trip activities.
+"""Tests for _apply_trip_visibility_filter - the core privacy logic for trip activities.
 
 This function hides activities from viewers based on the adder's
 trip_pin_location_visibility setting:
@@ -240,7 +240,7 @@ class CommonFriendVisibilityTests(TestCase):
 
 
 class MultipleActivitiesVisibilityTests(TestCase):
-    """Mixed visibility — only NO_ONE and FRIENDS activities hidden for a non-friend."""
+    """Mixed visibility - only NO_ONE and FRIENDS activities hidden for a non-friend."""
 
     def setUp(self):
         super().setUp()

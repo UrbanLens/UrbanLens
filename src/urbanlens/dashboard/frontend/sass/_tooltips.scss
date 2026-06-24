@@ -5,12 +5,12 @@
 //   data-tooltip-pos="above|below|left|right"   (default: above)
 //   data-tooltip-wide                            (280px bubble for longer copy)
 //
-// JS-portal (escapes overflow:hidden parents — add data-tooltip-float="true"):
+// JS-portal (escapes overflow:hidden parents - add data-tooltip-float="true"):
 //   Uses .ul-tooltip-float element appended to <body> by _tooltips_script.html
 //
 // Reusable components (dashboard/partials/_tooltip_*.html):
-//   .ul-tooltip-help   — ⓘ icon button trigger
-//   .ul-tooltip-label  — inline label + optional help icon row
+//   .ul-tooltip-help   - ⓘ icon button trigger
+//   .ul-tooltip-label  - inline label + optional help icon row
 
 @use 'variables' as *;
 
@@ -59,7 +59,7 @@
 [data-tooltip] {
     position: relative;
 
-    // Bubble — default position: above trigger
+    // Bubble - default position: above trigger
     &::after {
         content: attr(data-tooltip);
         position: absolute;
@@ -81,7 +81,7 @@
         transition-delay: .18s;
     }
 
-    // Arrow — default: sits just above trigger, points down toward it
+    // Arrow - default: sits just above trigger, points down toward it
     &::before {
         @include _arrow(top);
         position: absolute;
@@ -199,7 +199,7 @@
         background: var(--ul-hover-bg);
     }
 
-    // Default to right-side tooltip — avoids clipping in page headers
+    // Default to right-side tooltip - avoids clipping in page headers
     &[data-tooltip]:not([data-tooltip-pos]) {
         &::after {
             bottom: auto;
@@ -227,7 +227,7 @@
     gap: .35rem;
 }
 
-// ── Floating tooltip (JS portal — escapes overflow:hidden) ────────────────────
+// ── Floating tooltip (JS portal - escapes overflow:hidden) ────────────────────
 
 .ul-tooltip-float {
     @include _bubble;

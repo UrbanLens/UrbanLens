@@ -1097,26 +1097,10 @@
 }
 
 .cat-sel-merge-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
+    @include btn-primary;
     padding: .4rem .9rem;
-    background: $primary-color;
-    color: var(--ul-text-4);
-    border: none;
-    border-radius: $radius-sm;
     font-size: .875rem;
     font-weight: 600;
-    cursor: pointer;
-    transition: background .15s, opacity .15s;
-
-    i {
-        font-size: .95rem;
-    }
-
-    &:hover:not(:disabled) {
-        background: color.adjust($primary-color, $lightness: -8%);
-    }
 
     &:disabled {
         background: #94a3b8;
@@ -2315,27 +2299,13 @@
 }
 
 .org-bulk-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+    @include btn-ghost;
     padding: 6px 14px;
     border-radius: 999px;
     font-size: .8rem;
-    font-weight: 500;
-    cursor: pointer;
-    border: 1.5px solid transparent;
-    background: transparent;
-    color: var(--ul-text-2);
-    transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
 
     .material-icons {
         font-size: .95rem;
-    }
-
-    &:hover {
-        background: var(--ul-hover-bg);
-        border-color: var(--ul-border-strong);
-        color: var(--ul-text-1);
     }
 
     &:disabled {

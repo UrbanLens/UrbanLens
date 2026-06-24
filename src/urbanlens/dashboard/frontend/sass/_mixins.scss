@@ -1,4 +1,5 @@
 @use "tokens" as *;
+@use 'sass:color';
 
 // ── Responsive ────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,91 @@
 }
 
 // ── Buttons ───────────────────────────────────────────────────────────────────
+// These mixins are the source of truth for button appearance. The .btn class in
+// _buttons.scss uses them, and feature files can @include them directly in
+// feature-specific button classes so they never need to reimplement button styles.
+
+// Base layout, typography, and transitions shared by all .btn variants.
+@mixin btn-base {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: .35em;
+	padding: .5rem 1rem;
+	font-size: .95rem;
+	font-weight: 500;
+	line-height: 1.25;
+	border: 1px solid transparent;
+	border-radius: $radius-sm;
+	cursor: pointer;
+	text-decoration: none;
+	white-space: nowrap;
+	user-select: none;
+	transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+	background: none;
+	color: var(--ul-text-1);
+
+	&:active {
+		transform: translateY(1px);
+	}
+
+	&:disabled,
+	&[disabled] {
+		@include btn-disabled;
+	}
+}
+
+// Filled primary button (uses --ul-button-* CSS custom properties so dark mode works).
+@mixin btn-primary {
+	@include btn-base;
+	background: var(--ul-button-bg);
+	border-color: var(--ul-button-border);
+	color: var(--ul-button-text);
+
+	&:hover {
+		background: var(--ul-button-hover-bg);
+		border-color: var(--ul-button-hover-border);
+		color: var(--ul-button-hover-text);
+	}
+}
+
+// Outlined / ghost button.
+@mixin btn-ghost {
+	@include btn-base;
+	border-color: var(--ul-border);
+	color: var(--ul-text-2);
+
+	&:hover {
+		background: var(--ul-surface-1);
+		color: var(--ul-text-1);
+		border-color: var(--ul-border-strong);
+	}
+}
+
+// Outlined danger button.
+@mixin btn-danger {
+	@include btn-base;
+	color: $danger-color;
+	border-color: $danger-border;
+	background: $danger-bg;
+
+	&:hover {
+		background: color.scale($danger-bg, $lightness: -4%);
+	}
+}
+
+// Icon button that reveals danger colors on hover.
+// Uses surface-0a (translucent neutral) for the hover background so it works in both
+// light and dark themes; only the icon changes to the danger red.
+@mixin icon-btn-danger($size: 28px) {
+	@include icon-btn($size);
+
+	&:hover,
+	&:focus {
+		background: var(--ul-surface-0a);
+		color: $danger-color;
+	}
+}
 
 @mixin icon-btn($size: 28px) {
 	@include flex-center;

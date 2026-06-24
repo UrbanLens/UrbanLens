@@ -595,19 +595,9 @@
 }
 
 .settings-save-btn {
-    background: $primary-color;
-    color: var(--ul-text-4);
-    border: none;
-    border-radius: $radius-sm;
+    @include btn-primary;
     padding: 10px 24px;
-    font-size: 0.9rem;
     font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-
-    &:hover {
-        background: color.adjust($primary-color, $lightness: -8%);
-    }
 }
 
 .settings-cluster-row {
@@ -744,20 +734,9 @@
 }
 
 .settings-reset-btn {
-    background: none;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
+    @include btn-ghost;
     padding: 6px 12px;
     font-size: .82rem;
-    color: #475569;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background .15s, border-color .15s;
-
-    &:hover {
-        background: var(--ul-surface-0);
-        border-color: #94a3b8;
-    }
 }
 
 .settings-coming-soon {
@@ -1046,19 +1025,9 @@ textarea.edit-textarea {
 }
 
 .edit-save-btn {
-    background: $primary-color;
-    color: var(--ul-text-4);
-    border: none;
-    border-radius: $radius-sm;
+    @include btn-primary;
     padding: 10px 24px;
-    font-size: 0.9rem;
     font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-
-    &:hover {
-        background: color.adjust($primary-color, $lightness: -8%);
-    }
 }
 
 // Social link list inside the edit card
@@ -1174,20 +1143,9 @@ textarea.edit-textarea {
 }
 
 .edit-add-link-btn {
-    background: $primary-color;
-    color: var(--ul-text-4);
-    border: none;
-    border-radius: $radius-sm;
+    @include btn-primary;
     padding: 9px 20px;
-    font-size: 0.9rem;
     font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background 0.2s;
-
-    &:hover {
-        background: color.adjust($primary-color, $lightness: -8%);
-    }
 }
 
 // Discord collapsible
@@ -1542,27 +1500,11 @@ textarea.edit-textarea {
 }
 
 .btn-friend--invite {
+    @include btn-primary;
     margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
     padding: 8px 14px;
-    border-radius: $radius-sm;
-    background: $primary-color;
-    color: var(--ul-text-5);
-    border: none;
-    font-size: 0.85rem;
+    font-size: .85rem;
     font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-
-    .material-icons {
-        font-size: 1.1rem;
-    }
-
-    &:hover {
-        background: color.adjust($primary-color, $lightness: -8%);
-    }
 }
 
 .invite-dialog {
@@ -1705,20 +1647,9 @@ textarea.edit-textarea {
 }
 
 .ext-warn-cancel-btn {
-    background: none;
-    border: 1px solid var(--ul-border);
-    border-radius: $radius-sm;
+    @include btn-ghost;
     padding: 9px 20px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: $text-secondary;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-
-    &:hover {
-        background: var(--ul-hover-bg);
-        color: var(--ul-text-1);
-    }
+    font-size: .875rem;
 }
 
 // ── Pin Lists ────────────────────────────────────────────────────────────────
@@ -2129,26 +2060,11 @@ a.profile-stat--link {
 }
 
 .btn-friend-remove {
+    @include icon-btn-danger(28px);
     margin-left: auto;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--ul-text-4);
-    padding: 2px;
-    border-radius: 4px;
-    flex-shrink: 0;
     outline: none;
-    transition: color .15s, background .15s;
 
-    .material-icons {
-        font-size: 1.1rem;
-        display: block;
-    }
-
-    &:hover,
     &:focus {
-        color: #dc2626;
-        background: var(--ul-surface-0a);
         outline: none;
     }
 }
@@ -2240,16 +2156,12 @@ a.profile-stat--link {
 // ── Friend action buttons ─────────────────────────────────────────────────────
 
 .btn-friend {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
+    @include btn-base;
     padding: .3rem .65rem;
     border-radius: 6px;
     border: 1px solid;
     font-size: .78rem;
     font-weight: 600;
-    cursor: pointer;
-    transition: background .15s, color .15s;
     outline: none;
 
     .material-icons {
@@ -2303,21 +2215,13 @@ a.profile-stat--link {
 .btn-friend-accept,
 .btn-friend-reject,
 .btn-friend-ignore {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 6px;
+    @include icon-btn(30px);
     border: 1px solid;
-    cursor: pointer;
+    border-radius: 6px;
     outline: none;
-    transition: background .15s, color .15s;
-    padding: 0;
 
     .material-icons {
         font-size: 1rem;
-        display: block;
     }
 }
 
@@ -2360,26 +2264,11 @@ a.profile-stat--link {
 }
 
 .btn-add-friend {
-    display: inline-flex;
-    align-items: center;
-    gap: .4rem;
+    @include btn-primary;
     padding: .5rem 1.25rem;
-    background: $primary-color;
-    color: var(--ul-text-4);
-    border: none;
     border-radius: 8px;
     font-size: .88rem;
     font-weight: 600;
-    cursor: pointer;
-    transition: background .15s;
-
-    .material-icons {
-        font-size: 1.05rem;
-    }
-
-    &:hover {
-        background: color.adjust($primary-color, $lightness: -8%);
-    }
 }
 
 .friend-status-badge {

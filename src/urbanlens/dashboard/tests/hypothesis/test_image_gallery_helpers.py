@@ -1,9 +1,9 @@
 """Tests for image_gallery helper functions.
 
 Covers:
-- _dms_to_decimal() — DMS→decimal conversion with N/S/E/W refs
-- _extract_gps_coords() — EXIF GPS extraction with mock PIL
-- _image_to_json() — dict serialisation of Image instances
+- _dms_to_decimal() - DMS→decimal conversion with N/S/E/W refs
+- _extract_gps_coords() - EXIF GPS extraction with mock PIL
+- _image_to_json() - dict serialisation of Image instances
 """
 from __future__ import annotations
 
@@ -89,7 +89,7 @@ class DmsToDecimalTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _extract_gps_coords — via mocked PIL
+# _extract_gps_coords - via mocked PIL
 # ---------------------------------------------------------------------------
 
 class ExtractGpsCoordsMockTests(TestCase):

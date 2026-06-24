@@ -1,6 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 
-{% block page_title %}Setup — {{ settings.app_title }}{% endblock %}
+{% block page_title %}Setup - {{ settings.app_title }}{% endblock %}
 
 {% block content %}
 <div class="setup-wizard">
@@ -393,7 +393,7 @@
         });
     }
 
-    // ── Step 2: Profile — username + avatar ──────────────────────────────────
+    // ── Step 2: Profile - username + avatar ──────────────────────────────────
     var PROFILE_URL = '{% url "profile.field.update" %}';
 
     function setAvatarStatus(text, color) {

@@ -1,4 +1,4 @@
-"""Search provider factory — returns the configured gateway for web search."""
+"""Search provider factory - returns the configured gateway for web search."""
 
 from __future__ import annotations
 

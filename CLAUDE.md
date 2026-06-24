@@ -10,7 +10,7 @@ UrbanLens is a Django-based web mapping application for photographers and urban 
 
 ## Development Environment
 
-- **Development machine**: Windows. Use **PowerShell** for all terminal commands requiring access to project files — the Bash
+- **Development machine**: Windows. Use **PowerShell** for all terminal commands requiring access to project files - the Bash
   tool's WSL sandbox does not have the Windows filesystem mounted (`/mnt/c/` is inaccessible).
 - **Production**: Ubuntu via Docker, managed through Portainer
 - **Docker-compose** is the canonical way to run the full stack locally
@@ -23,8 +23,8 @@ the full path to the venv executable:
 ```powershell
 .venv_windows\Scripts\python.exe  # Python interpreter
 .venv_windows\Scripts\ruff.exe    # Linter (works on Windows)
-.venv_windows\Scripts\mypy.exe    # Type checker (crashes on Windows — use Docker)
-.venv_windows\Scripts\pytest.exe  # Tests (crashes on Windows — use Docker)
+.venv_windows\Scripts\mypy.exe    # Type checker (crashes on Windows - use Docker)
+.venv_windows\Scripts\pytest.exe  # Tests (crashes on Windows - use Docker)
 ```
 
 ## Quick Start
@@ -38,7 +38,7 @@ Full stack: Django app on port 21800, Nginx on 21080, PostgreSQL/PostGIS.
 
 ### Building & Compiling
 
-`bun`, `node`, and `npx` are **not installed on Windows** — these commands only work inside
+`bun`, `node`, and `npx` are **not installed on Windows** - these commands only work inside
 Docker (or a separately-configured WSL Ubuntu instance). Under normal development you do not
 need to run them manually; `docker-compose` handles compilation automatically.
 
@@ -50,19 +50,19 @@ bun run build   # TypeScript/JSX → src/urbanlens/dashboard/frontend/static/das
 
 ### Linting & Type Checking
 
-**Ruff (linting) — works on Windows:**
+**Ruff (linting) - works on Windows:**
 ```powershell
 .venv_windows\Scripts\ruff.exe check --fix src/urbanlens
 ```
 Note: `migrations/`, `settings/`, `tests/`, and `__init__.py` are excluded from ruff by the
 config in `pyproject.toml`.
 
-**Syntax checking a single file — works on Windows:**
+**Syntax checking a single file - works on Windows:**
 ```powershell
 .venv_windows\Scripts\python.exe -m py_compile path/to/file.py
 ```
 
-**mypy (type checking) — Docker only:**
+**mypy (type checking) - Docker only:**
 
 mypy crashes on Windows because GDAL/GeoDjango native libraries are unavailable outside Docker.
 ```powershell
@@ -70,7 +70,7 @@ mypy crashes on Windows because GDAL/GeoDjango native libraries are unavailable 
 docker exec <app_container_name> python -m mypy src/urbanlens
 ```
 
-**pytest (tests) — Docker only:**
+**pytest (tests) - Docker only:**
 
 Same GDAL limitation; tests require a live PostGIS database.
 ```powershell

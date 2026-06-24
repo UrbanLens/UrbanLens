@@ -556,7 +556,7 @@
     @include dialog-base(520px);
     // Full-viewport-aware height: keeps the dialog clear of mobile browser chrome
     max-height: calc(100dvh - 4rem);
-    // Lighter backdrop — the map behind it should remain partially visible
+    // Lighter backdrop - the map behind it should remain partially visible
     &::backdrop {
         background: rgba(0, 0, 0, .4);
         backdrop-filter: blur(1px);
@@ -1473,25 +1473,14 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     color: #a8c8ff;
 }
 
-.delete-button {
-    background: none;
-    border: none;
-    cursor: pointer;
+.popup-actions .delete-button {
+    @include icon-btn-danger(24px);
     color: rgba(255, 100, 100, .5);
-    padding: 2px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    transition: color 0.15s, background 0.15s;
-}
 
-.delete-button:hover {
-    color: #ff7070;
-    background: rgba(255, 70, 70, .12);
-}
-
-.delete-button .material-icons {
-    font-size: 1rem;
+    &:hover {
+        color: #ff7070;
+        background: rgba(255, 70, 70, .12);
+    }
 }
 
 /* ── Marker clusters ──────────────────────────────────────────────── */
