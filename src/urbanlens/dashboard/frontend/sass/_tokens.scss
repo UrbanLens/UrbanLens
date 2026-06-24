@@ -284,7 +284,7 @@ $z-nav: 1100;
 
 :root {
     // backgrounds 0-9 progress light to dark, along with accent colors (a) and border colors (b).
-    // typically, we'll use a surface color for a background, and its accent color for the background of a container on top of it.
+    // typically, we'll use a surface color for a background, and its accent color for a container on top of it.
     --ul-surface-0: #{$color-grey-0};
     --ul-surface-0a: #{$color-grey-0a};
     --ul-surface-0b: #{$color-grey-0b};
@@ -315,9 +315,9 @@ $z-nav: 1100;
     --ul-surface-9: #{$color-grey-9};
     --ul-surface-9a: #{$color-grey-9a};
     --ul-surface-9b: #{$color-grey-9b};
-    --ul-surface-black: #{$color-grey-10};
-    --ul-surface-black-a: #{$color-grey-10a};
-    --ul-surface-black-b: #{$color-grey-10b};
+    --ul-black: #{$color-grey-10};
+    --ul-black-a: #{$color-grey-10a};
+    --ul-black-b: #{$color-grey-10b};
 
     // text 0-9 progress dark to light, along with accent colors (a).
     --ul-text-0: var(--ul-surface-9);
