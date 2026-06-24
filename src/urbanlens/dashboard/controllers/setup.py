@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
@@ -14,7 +16,129 @@ from django.views import View
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.services.site_admin import complete_site_admin_onboarding
 
+if TYPE_CHECKING:
+    from django.contrib.auth.models import User
+    from django.http import HttpRequest
+
 logger = logging.getLogger(__name__)
+
+_OFFICIAL_URBANLENS_HOST = "urbanlens.org"
+_RESERVED_APP_TITLE_NORMALIZED = "urbanlens"
+_TITLE_NORMALIZE_RE = re.compile(r"[^a-zA-Z0-9]+")
+
+
+def _request_host(request) -> str:
+    """Return the request hostname without port or leading ``www.``.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        Lowercase hostname.
+    """
+    host = request.get_host().split(":")[0].lower()
+    if host.startswith("www."):
+        return host[4:]
+    return host
+
+
+def is_official_urbanlens_site(request) -> bool:
+    """Whether this request is served from the canonical UrbanLens domain.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        True when the host is ``urbanlens.org``.
+    """
+    return _request_host(request) == _OFFICIAL_URBANLENS_HOST
+
+
+def normalize_app_title(title: str) -> str:
+    """Strip spaces and punctuation, then lowercase, for reserved-name checks.
+
+    Args:
+        title: Raw app title from the user.
+
+    Returns:
+        Alphanumeric-only lowercase string.
+    """
+    return _TITLE_NORMALIZE_RE.sub("", title.lower())
+
+
+def is_reserved_urbanlens_title(title: str) -> bool:
+    """Whether ``title`` matches the reserved ``UrbanLens`` name.
+
+    Args:
+        title: Raw app title from the user.
+
+    Returns:
+        True when the normalized title is ``urbanlens``.
+    """
+    return normalize_app_title(title) == _RESERVED_APP_TITLE_NORMALIZED
+
+
+def personalized_map_title(user: User) -> str:
+    """Build a default app title from the user's first name or username.
+
+    Args:
+        user: The bootstrap administrator.
+
+    Returns:
+        A title such as ``Jess's Map``.
+    """
+    first = (user.first_name or "").strip()
+    if first:
+        display_name = first.split()[0]
+        if display_name:
+            return f"{display_name}'s Map"
+    return f"{user.username}'s Map"
+
+
+def app_title_name_suggestions(user: User) -> list[str]:
+    """Return alternative app-title ideas for non-official instances.
+
+    Args:
+        user: The bootstrap administrator.
+
+    Returns:
+        Human-readable title suggestions.
+    """
+    first = (user.first_name or "").strip()
+    display = first.split()[0] if first else user.username
+    return [
+        "Private Lens",
+        "Urbex Tracker",
+        "Urban Atlas",
+    ]
+
+
+def setup_app_title_value(request: HttpRequest, user: User, current_title: str) -> str:
+    """Resolve the app title shown in the setup wizard.
+
+    On non-official hosts, replace the factory default ``UrbanLens`` with a
+    personalized suggestion so installers are not nudged toward the reserved name.
+
+    Args:
+        request: The current HttpRequest.
+        user: The bootstrap administrator.
+        current_title: ``SiteSettings.app_title`` from the database.
+
+    Returns:
+        Title string for the setup form.
+    """
+    if is_official_urbanlens_site(request):
+        return current_title
+    if is_reserved_urbanlens_title(current_title):
+        return personalized_map_title(user)
+    return current_title
+
+
+URBANLENS_TITLE_NOTICE = (
+    "UrbanLens is the name of the public project at urbanlens.org. "
+    "For your private instance, please choose a different name so visitors "
+    "are not confused about which site they are on."
+)
 
 
 def _build_feature_groups(app_settings) -> list[dict]:
@@ -198,6 +322,14 @@ class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
             gh = hashlib.md5(email.strip().lower().encode(), usedforsecurity=False).hexdigest()
             gravatar_preview_url = f"https://www.gravatar.com/avatar/{gh}?s=200&d=identicon"
 
+        official_site = is_official_urbanlens_site(request)
+        suggested_title = personalized_map_title(request.user)
+        setup_title = setup_app_title_value(request, request.user, site.app_title)
+        if setup_title != site.app_title:
+            site.app_title = setup_title
+            site.save(update_fields=["app_title"])
+        title_suggestions = app_title_name_suggestions(request.user)
+
         return render(
             request,
             "dashboard/pages/setup/index.html",
@@ -209,6 +341,11 @@ class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "gravatar_preview_url": gravatar_preview_url,
                 "current_username": request.user.username,
                 "current_avatar_url": profile.avatar.url if profile.avatar else "",
+                "is_official_urbanlens_site": official_site,
+                "suggested_app_title": suggested_title,
+                "setup_app_title": setup_title,
+                "app_title_suggestions": title_suggestions,
+                "urbanlens_title_notice": URBANLENS_TITLE_NOTICE,
             },
         )
 
@@ -226,12 +363,29 @@ class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         if action == "save_title":
             title = request.POST.get("app_title", "").strip()
-            if title:
-                site.app_title = title
-                site.save(update_fields=["app_title"])
+            if not title:
+                return HttpResponse(status=400)
+            if not is_official_urbanlens_site(request) and is_reserved_urbanlens_title(title):
+                return JsonResponse(
+                    {
+                        "error": URBANLENS_TITLE_NOTICE,
+                        "suggestions": app_title_name_suggestions(request.user),
+                    },
+                    status=400,
+                )
+            site.app_title = title
+            site.save(update_fields=["app_title"])
             return HttpResponse(status=204)
 
         if action == "complete":
+            if not is_official_urbanlens_site(request) and is_reserved_urbanlens_title(site.app_title):
+                return JsonResponse(
+                    {
+                        "error": URBANLENS_TITLE_NOTICE,
+                        "suggestions": app_title_name_suggestions(request.user),
+                    },
+                    status=400,
+                )
             complete_site_admin_onboarding(request.user)
             return HttpResponseRedirect(reverse("site_admin"))
 

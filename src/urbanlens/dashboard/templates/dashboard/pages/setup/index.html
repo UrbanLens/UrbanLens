@@ -10,7 +10,7 @@
         <aside class="setup-wizard__sidebar">
             <div class="setup-wizard__brand">
                 <i class="material-icons brand-icon">explore</i>
-                <div class="brand-name" id="sidebar-title">{{ settings.app_title }}</div>
+                <div class="brand-name" id="sidebar-title">{{ setup_app_title }}</div>
                 <div class="brand-label">Setup Wizard</div>
             </div>
 
@@ -187,9 +187,26 @@
                 <div class="setup-title-row">
                     <label for="app-title-input">App name</label>
                     <input type="text" id="app-title-input" name="app_title"
-                           value="{{ settings.app_title }}" maxlength="100"
-                           placeholder="UrbanLens" autocomplete="off">
+                           value="{{ setup_app_title }}" maxlength="100"
+                           placeholder="{{ suggested_app_title }}" autocomplete="off">
                     <span class="setup-save-status" id="title-save-status">✓ Saved</span>
+                </div>
+
+                <div class="setup-title-notice" id="title-reserved-notice" hidden>
+                    <i class="material-icons setup-title-notice__icon" aria-hidden="true">info</i>
+                    <div>
+                        <p class="setup-title-notice__message" id="title-reserved-message">{{ urbanlens_title_notice }}</p>
+                        <p class="setup-title-notice__label">Here are a few ideas:</p>
+                        <ul class="setup-title-notice__suggestions" id="title-suggestion-list">
+                            {% for suggestion in app_title_suggestions %}
+                            <li>
+                                <button type="button" class="setup-title-suggestion-btn" data-title="{{ suggestion }}">
+                                    {{ suggestion }}
+                                </button>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
                 </div>
 
                 <div class="setup-title-preview">
@@ -198,7 +215,7 @@
                     <span class="preview-dot"></span>
                     <div class="preview-tab">
                         <i class="material-icons">explore</i>
-                        <span id="title-preview-value">{{ settings.app_title }}</span>
+                        <span id="title-preview-value">{{ setup_app_title }}</span>
                     </div>
                 </div>
 
@@ -271,7 +288,7 @@
                     </div>
                     <h1 class="setup-complete__title">You're all set!</h1>
                     <p class="setup-complete__body">
-                        <strong id="done-app-title">{{ settings.app_title }}</strong> is ready to go.
+                        <strong id="done-app-title">{{ setup_app_title }}</strong> is ready to go.
                         Open Site Admin to finish configuring your site.
                     </p>
                     <div class="setup-complete--actions">
@@ -303,6 +320,9 @@
 
     var CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
     var SETUP_URL = '{% url "setup" %}';
+    var IS_OFFICIAL_SITE = {{ is_official_urbanlens_site|yesno:"true,false" }};
+    var SUGGESTED_APP_TITLE = '{{ suggested_app_title|escapejs }}';
+    var URBANLENS_TITLE_NOTICE = '{{ urbanlens_title_notice|escapejs }}';
 
     var currentStep = 1;
     var TOTAL_STEPS = 5;
@@ -315,9 +335,59 @@
     var titlePreview = document.getElementById('title-preview-value');
     var sidebarTitle = document.getElementById('sidebar-title');
     var doneTitle    = document.getElementById('done-app-title');
+    var titleNotice  = document.getElementById('title-reserved-notice');
     var _saveTimer;
 
+    function normalizeAppTitle(title) {
+        return title.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    }
+
+    function isReservedUrbanlensTitle(title) {
+        return normalizeAppTitle(title) === 'urbanlens';
+    }
+
+    function defaultAppTitleFallback() {
+        return IS_OFFICIAL_SITE ? 'UrbanLens' : SUGGESTED_APP_TITLE;
+    }
+
+    function showTitleReservedNotice() {
+        if (titleNotice) {
+            titleNotice.hidden = false;
+        }
+        if (titleInput) {
+            titleInput.setAttribute('aria-invalid', 'true');
+        }
+    }
+
+    function hideTitleReservedNotice() {
+        if (titleNotice) {
+            titleNotice.hidden = true;
+        }
+        if (titleInput) {
+            titleInput.removeAttribute('aria-invalid');
+        }
+    }
+
+    function validateAppTitle(title) {
+        if (!IS_OFFICIAL_SITE && isReservedUrbanlensTitle(title)) {
+            showTitleReservedNotice();
+            return false;
+        }
+        hideTitleReservedNotice();
+        return true;
+    }
+
     window.goToStep = function (n) {
+        if (n > currentStep && currentStep === 3 && titleInput) {
+            var titleValue = titleInput.value.trim();
+            if (!titleValue || !validateAppTitle(titleValue)) {
+                if (!titleValue) {
+                    titleInput.focus();
+                }
+                return;
+            }
+        }
+
         currentStep = n;
 
         steps.forEach(function (s) {
@@ -351,10 +421,11 @@
     // Live title preview + debounced save
     if (titleInput) {
         titleInput.addEventListener('input', function () {
-            var v = this.value.trim() || 'UrbanLens';
+            var v = this.value.trim() || defaultAppTitleFallback();
             if (titlePreview) titlePreview.textContent = v;
             if (sidebarTitle) sidebarTitle.textContent = v;
             if (doneTitle) doneTitle.textContent = v;
+            validateAppTitle(this.value.trim());
 
             if (window.autosaveGuard) window.autosaveGuard.markDirty();
             clearTimeout(_saveTimer);
@@ -362,10 +433,20 @@
         });
     }
 
+    document.querySelectorAll('.setup-title-suggestion-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (!titleInput) return;
+            titleInput.value = btn.dataset.title || '';
+            titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+            titleInput.focus();
+        });
+    });
+
     function saveTitle() {
         if (!titleInput) return;
         var v = titleInput.value.trim();
         if (!v) return;
+        if (!validateAppTitle(v)) return;
 
         var guard = window.autosaveGuard;
         if (guard) guard.saveStarted();
@@ -386,6 +467,14 @@
                         saveStatus.classList.remove('setup-save-status--visible');
                     }, 2200);
                 }
+            } else if (r.status === 400) {
+                return r.json().then(function (data) {
+                    if (data.error) {
+                        var msg = document.getElementById('title-reserved-message');
+                        if (msg) msg.textContent = data.error;
+                    }
+                    showTitleReservedNotice();
+                });
             }
         }).catch(function () {}).finally(function () {
             if (guard) guard.saveFinished();

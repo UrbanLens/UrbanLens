@@ -324,6 +324,10 @@
 			outline: none;
 			border-color: var(--ul-accent, #0891b2);
 		}
+
+		&[aria-invalid="true"] {
+			border-color: $ui-red-500;
+		}
 	}
 
 	.setup-save-status {
@@ -334,6 +338,62 @@
 		height: 1.1em;
 
 		&--visible { opacity: 1; }
+	}
+}
+
+.setup-title-notice {
+	display: flex;
+	gap: 0.65rem;
+	margin-top: 1rem;
+	padding: 0.85rem 1rem;
+	border-radius: 10px;
+	border: 1px solid rgba($ui-amber-500, 0.45);
+	background: rgba($ui-amber-500, 0.08);
+	color: var(--ul-text);
+
+	&__icon {
+		flex-shrink: 0;
+		font-size: 1.2rem;
+		color: $ui-amber-600;
+		margin-top: 0.1rem;
+	}
+
+	&__message {
+		margin: 0;
+		font-size: 0.86rem;
+		line-height: 1.45;
+	}
+
+	&__label {
+		margin: 0.65rem 0 0.35rem;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--ul-text-2);
+	}
+
+	&__suggestions {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.45rem;
+	}
+}
+
+.setup-title-suggestion-btn {
+	border: 1px solid var(--ul-border);
+	border-radius: 999px;
+	padding: 0.28rem 0.75rem;
+	font-size: 0.78rem;
+	background: var(--ul-surface-0);
+	color: var(--ul-text);
+	cursor: pointer;
+	transition: border-color 0.15s, background-color 0.15s;
+
+	&:hover {
+		border-color: var(--ul-accent, #0891b2);
+		background: var(--ul-surface-1, $ui-slate-50);
 	}
 }
 
