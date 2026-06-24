@@ -24,6 +24,8 @@ from urllib.parse import urlparse
 from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 
+from urbanlens.dashboard.models.colors import MaterialColor
+
 logger = logging.getLogger(__name__)
 
 # ── Username word lists ───────────────────────────────────────────────────────
@@ -77,11 +79,7 @@ _ANIMAL_EMOJIS: dict[str, str] = {
     "wolf": "🐺", "wren": "🐦",
 }
 
-_AVATAR_COLORS: tuple[str, ...] = (
-    "#e57373", "#f06292", "#ba68c8", "#7986cb",
-    "#4fc3f7", "#4dd0e1", "#4db6ac", "#81c784",
-    "#aed581", "#ffb74d", "#ff8a65", "#90a4ae",
-)
+_AVATAR_COLORS: list[str] = list(MaterialColor.values)
 
 
 def generate_emoji_avatar_svg(emoji: str, color: str) -> str:

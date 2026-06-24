@@ -364,6 +364,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
     def _save_avatar_emoji(self, request: HttpRequest, profile: Profile) -> JsonResponse:
         from django.core.files.base import ContentFile
 
+        from urbanlens.dashboard.models.colors import MaterialColor
         from urbanlens.dashboard.services.social_auth.pipeline import (
             _ANIMAL_EMOJIS,
             generate_emoji_avatar_svg,
@@ -372,8 +373,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         animal = request.POST.get("animal", "fox")
         color = request.POST.get("color", "#4CAF50")
         emoji = _ANIMAL_EMOJIS.get(animal, "🦊")
-        if not color.startswith("#") or len(color) not in {4, 7}:
-            color = "#4CAF50"
+        if color.lower() not in {v.lower() for v in MaterialColor.values}:
+            color = MaterialColor.GREY.value
         svg = generate_emoji_avatar_svg(emoji, color)
         profile.avatar.save(
             f"emoji_{request.user.pk}.svg",
