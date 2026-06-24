@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -22,6 +23,9 @@ from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pi
 logger = logging.getLogger(__name__)
 
 _ALLOWED_EMOJIS = {"👍", "👎", "❤️", "😂", "😮", "😢", "🔥", "🏚️"}
+_DEFAULT_MARKUP_COLOR = "#e74c3c"
+_HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+_MAP_SHAPE_TYPES = {"arrow", "circle", "line", "polygon", "rect", "text"}
 
 
 def _profile(request) -> Profile:
@@ -312,9 +316,107 @@ def _parse_map_data(request) -> dict | None:
     if not isinstance(data, dict):
         return None
     # Require at least a center coordinate.
-    if not (isinstance(data.get("center_lat"), int | float) and isinstance(data.get("center_lng"), int | float)):
+    if not (_is_valid_lat(data.get("center_lat")) and _is_valid_lng(data.get("center_lng"))):
         return None
-    return data
+    sanitized = {
+        "center_lat": float(data["center_lat"]),
+        "center_lng": float(data["center_lng"]),
+        "detail_pins": data["detail_pins"] if isinstance(data.get("detail_pins"), list) else [],
+        "markup": _sanitize_markup_shapes(data.get("markup")),
+    }
+    if isinstance(data.get("zoom"), int | float):
+        sanitized["zoom"] = max(1, min(22, int(data["zoom"])))
+    if data.get("layer_mode") in {"standard", "satellite", "topo"}:
+        sanitized["layer_mode"] = data["layer_mode"]
+    return sanitized
+
+
+def _is_valid_lat(value: object) -> bool:
+    """Return True when *value* is a numeric latitude."""
+    return isinstance(value, int | float) and -90 <= float(value) <= 90
+
+
+def _is_valid_lng(value: object) -> bool:
+    """Return True when *value* is a numeric longitude."""
+    return isinstance(value, int | float) and -180 <= float(value) <= 180
+
+
+def _sanitize_markup_color(value: object, *, default: str | None = _DEFAULT_MARKUP_COLOR) -> str | None:
+    """Return a safe hex color, `none`, or the provided default.
+
+    Args:
+        value: User-supplied color value.
+        default: Fallback to use for invalid values.
+
+    Returns:
+        A safe color string or None.
+    """
+    if not isinstance(value, str):
+        return default
+    color = value.strip()
+    if color.lower() == "none":
+        return "none" if default is None else default
+    if _HEX_COLOR_RE.fullmatch(color):
+        return color
+    return default
+
+
+def _sanitize_number(value: object, *, default: float, minimum: float, maximum: float) -> float:
+    """Return *value* clamped to a numeric range, or *default* if invalid."""
+    if not isinstance(value, int | float):
+        return default
+    return max(minimum, min(maximum, float(value)))
+
+
+def _sanitize_latlngs(value: object) -> list[list[float]]:
+    """Return only valid latitude/longitude pairs from a submitted shape."""
+    if not isinstance(value, list):
+        return []
+    points: list[list[float]] = []
+    for point in value:
+        if not isinstance(point, list | tuple) or len(point) != 2:
+            continue
+        lat, lng = point
+        if _is_valid_lat(lat) and _is_valid_lng(lng):
+            points.append([float(lat), float(lng)])
+    return points
+
+
+def _sanitize_markup_shapes(value: object) -> list[dict]:
+    """Return sanitized markup shapes safe to store and render."""
+    if not isinstance(value, list):
+        return []
+    sanitized: list[dict] = []
+    min_points = {"arrow": 2, "circle": 2, "line": 2, "polygon": 3, "rect": 2, "text": 1}
+    for shape in value:
+        if not isinstance(shape, dict):
+            continue
+        shape_type = shape.get("type")
+        if shape_type not in _MAP_SHAPE_TYPES:
+            continue
+        latlngs = _sanitize_latlngs(shape.get("latlngs"))
+        if len(latlngs) < min_points[shape_type]:
+            continue
+        safe_shape = {
+            "type": shape_type,
+            "latlngs": latlngs,
+            "color": _sanitize_markup_color(shape.get("color")),
+        }
+        border_color = _sanitize_markup_color(shape.get("border_color"), default=None)
+        if border_color:
+            safe_shape["border_color"] = border_color
+        if "stroke_width" in shape:
+            safe_shape["stroke_width"] = _sanitize_number(shape["stroke_width"], default=16, minimum=1, maximum=100)
+        if "weight" in shape:
+            safe_shape["weight"] = _sanitize_number(shape["weight"], default=3, minimum=1, maximum=30)
+        if "fill_opacity" in shape:
+            safe_shape["fill_opacity"] = _sanitize_number(shape["fill_opacity"], default=87, minimum=0, maximum=100)
+        if "border_opacity" in shape:
+            safe_shape["border_opacity"] = _sanitize_number(shape["border_opacity"], default=100, minimum=0, maximum=100)
+        if shape_type == "text":
+            safe_shape["label"] = str(shape.get("label", ""))[:100]
+        sanitized.append(safe_shape)
+    return sanitized
 
 
 # ── Comment map pin autocomplete endpoint ────────────────────────────────────

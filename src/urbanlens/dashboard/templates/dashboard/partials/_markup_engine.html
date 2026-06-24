@@ -7,6 +7,29 @@ window.MarkupEngine = (function () {
     'use strict';
 
     // ── Geometry helpers ──────────────────────────────────────────────────────
+    var DEFAULT_COLOR = '#e74c3c';
+    var HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+    function safeColor(value, fallback) {
+        if (typeof value !== 'string') return fallback || DEFAULT_COLOR;
+        var color = value.trim();
+        return HEX_COLOR_RE.test(color) ? color : (fallback || DEFAULT_COLOR);
+    }
+
+    function safeOptionalColor(value) {
+        if (typeof value !== 'string') return null;
+        var color = value.trim();
+        if (color.toLowerCase() === 'none') return 'none';
+        return HEX_COLOR_RE.test(color) ? color : null;
+    }
+
+    function safeNumber(value, fallback, min, max) {
+        var num = Number(value);
+        if (!Number.isFinite(num)) return fallback;
+        if (min != null && num < min) return min;
+        if (max != null && num > max) return max;
+        return num;
+    }
 
     function bearing(from, to) {
         var flat = Array.isArray(from) ? from[0] : from.lat;
@@ -17,8 +40,10 @@ window.MarkupEngine = (function () {
     }
 
     function arrowheadSvg(color, deg, sz, opacity) {
-        sz      = sz || 28;
-        opacity = (opacity == null) ? 1 : +opacity;
+        color = safeColor(color);
+        deg = safeNumber(deg, 0, null, null);
+        sz = safeNumber(sz, 28, 1, 256);
+        opacity = safeNumber((opacity == null) ? 1 : opacity, 1, 0, 1);
         var h   = sz / 2, tip = -(sz * 0.43), bx = sz * 0.36, by = sz * 0.29;
         return '<svg xmlns="http://www.w3.org/2000/svg" width="' + sz + '" height="' + sz + '"' +
             ' viewBox="' + (-h) + ' ' + (-h) + ' ' + sz + ' ' + sz + '"' +
@@ -36,9 +61,9 @@ window.MarkupEngine = (function () {
     }
 
     function textLabelHtml(s) {
-        var color = s.color || '#e53e3e';
-        var sz    = s.stroke_width || 16;
-        var bg    = s.border_color;
+        var color = safeColor(s.color, '#e53e3e');
+        var sz    = safeNumber(s.stroke_width || 16, 16, 1, 100);
+        var bg    = safeOptionalColor(s.border_color);
         var bgVal = (!bg || bg === 'none') ? 'rgba(255,255,255,0.92)' : bg;
         var lbl   = (s.label || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
         return '<span class="markup-text-label" style="color:' + color +
@@ -52,11 +77,11 @@ window.MarkupEngine = (function () {
 
     function renderShape(s, group, zoom) {
         if (typeof L === 'undefined') return;
-        var color  = s.color || '#e74c3c';
-        var weight = s.stroke_width || s.weight || 3;
-        var fillOp   = (s.fill_opacity   != null ? s.fill_opacity   : 87)  / 100;
-        var borderOp = (s.border_opacity != null ? s.border_opacity : 100) / 100;
-        var bc = s.border_color, hasBorder = !!(bc && bc !== 'none');
+        var color  = safeColor(s.color);
+        var weight = safeNumber(s.stroke_width || s.weight || 3, 3, 1, 30);
+        var fillOp   = safeNumber(s.fill_opacity   != null ? s.fill_opacity   : 87, 87, 0, 100)  / 100;
+        var borderOp = safeNumber(s.border_opacity != null ? s.border_opacity : 100, 100, 0, 100) / 100;
+        var bc = safeOptionalColor(s.border_color), hasBorder = !!(bc && bc !== 'none');
         var strokeC = hasBorder ? bc : color;
 
         function shapeOpts() {

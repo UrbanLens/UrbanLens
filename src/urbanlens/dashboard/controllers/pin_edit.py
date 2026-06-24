@@ -52,7 +52,7 @@ def _overview_context(pin: Pin) -> dict:
     return {
         "pin": pin,
         "pin_type_choices": PinType.choices,
-        "all_categories": Badge.objects.categories().ordered(),
+        "all_categories": Badge.objects.categories().for_profile(pin.profile).ordered(),
         "detail_pin_icon_choices": detail_pin_icon_choices,
         "color_choices": COLOR_CHOICES,
         "security_level_choices": SecurityLevel.choices,
@@ -268,13 +268,23 @@ class PinEditView(LoginRequiredMixin, View):
         elif rating == 0:
             Review.objects.filter(user=request.user, pin=pin).delete()
 
-        # Category update: comma-separated names replace all current categories
-        category_raw = (body.get("categories") or "").strip()
-        if category_raw is not None:
-            names = [n.strip().lower() for n in category_raw.split(",") if n.strip()]
+        # Category update: comma-separated names replace all current categories.
+        if "categories" in body:
+            category_raw = (body.get("categories") or "").strip()
+            names = []
+            seen = set()
+            for raw_name in category_raw.split(","):
+                name = raw_name.strip()
+                key = name.lower()
+                if not name or key in seen:
+                    continue
+                names.append(name)
+                seen.add(key)
             pin.categories.clear()
             for name in names:
-                cat, _ = Badge.objects.get_or_create(name=name, kind="category", defaults={"profile": None})
+                cat = Badge.objects.categories().for_profile(pin.profile).filter(name__iexact=name).first()
+                if cat is None:
+                    cat = Badge.objects.create(name=name, kind="category", profile=pin.profile)
                 pin.categories.add(cat)
 
         # Reload from DB so all properties reflect saved state
