@@ -9,7 +9,8 @@ Invariants verified:
     gps_fallback_lat/lng with the pin-cluster centroid when pins exist.
   - GPS mode sets gps_fallback_lat/lng to None when the profile has no pins.
   - CUSTOM mode with stored coordinates sets map_center_lat/lng correctly.
-  - CUSTOM / AUTO modes always set gps_fallback_lat/lng to None.
+  - REMEMBER mode with stored coordinates sets map_center_lat/lng and uses remembered zoom.
+  - CUSTOM / AUTO / REMEMBER modes always set gps_fallback_lat/lng to None.
   - map_pins_meta returns null when the profile has no pins, and an ISO
     timestamp equal to the most-recently-updated pin's timestamp otherwise.
 """
@@ -134,7 +135,7 @@ class ViewMapContextTests(TestCase):
 
 	def test_non_gps_mode_does_not_set_gps_fallback(self) -> None:
 		baker.make(Pin, profile=self.profile, latitude=40.7, longitude=-74.0)
-		for mode in (MapCenterMode.AUTO, MapCenterMode.CUSTOM):
+		for mode in (MapCenterMode.AUTO, MapCenterMode.CUSTOM, MapCenterMode.REMEMBER):
 			with self.subTest(mode=mode):
 				Profile.objects.filter(pk=self.profile.pk).update(map_center_mode=mode)
 				resp = self.client.get(_MAP_URL)
@@ -160,6 +161,34 @@ class ViewMapContextTests(TestCase):
 		resp = self.client.get(_MAP_URL)
 		self.assertIsNone(resp.context["map_center_lat"])
 		self.assertIsNone(resp.context["map_center_lng"])
+
+	def test_remember_mode_with_coords_sets_map_center_in_context(self) -> None:
+		Profile.objects.filter(pk=self.profile.pk).update(
+			map_center_mode=MapCenterMode.REMEMBER,
+			remembered_map_lat=decimal.Decimal("42.650000"),
+			remembered_map_lng=decimal.Decimal("-73.750000"),
+		)
+		resp = self.client.get(_MAP_URL)
+		self.assertAlmostEqual(resp.context["map_center_lat"], 42.65, places=4)
+		self.assertAlmostEqual(resp.context["map_center_lng"], -73.75, places=4)
+
+	def test_remember_mode_uses_remembered_zoom_in_context(self) -> None:
+		Profile.objects.filter(pk=self.profile.pk).update(
+			map_center_mode=MapCenterMode.REMEMBER,
+			map_default_zoom=13,
+			remembered_map_zoom=8,
+		)
+		resp = self.client.get(_MAP_URL)
+		self.assertEqual(resp.context["map_default_zoom"], 8)
+
+	def test_remember_mode_without_remembered_zoom_uses_default_zoom(self) -> None:
+		Profile.objects.filter(pk=self.profile.pk).update(
+			map_center_mode=MapCenterMode.REMEMBER,
+			map_default_zoom=11,
+			remembered_map_zoom=None,
+		)
+		resp = self.client.get(_MAP_URL)
+		self.assertEqual(resp.context["map_default_zoom"], 11)
 
 	@given(n=st.integers(min_value=0, max_value=6))
 	@_db_settings
