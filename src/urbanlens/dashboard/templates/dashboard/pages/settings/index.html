@@ -209,6 +209,40 @@
                 </div>
             </div>
 
+            <div class="settings-field">
+                <label class="settings-label">
+                    Map Dark Mode
+                    {% include "dashboard/partials/_tooltip_help.html" with text="When to switch the base map to a dark tile layer. System follows your OS preference. Satellite and topographic filters are included." %}
+                </label>
+                <p class="settings-help">System follows your OS preference. Satellite is always unaffected.</p>
+                <div class="settings-theme-row">
+                    <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'system' %}active{% endif %}" id="map-dark-opt-system">
+                        <input type="radio" name="map_dark_mode" value="system"
+                               {% if style_form.instance.map_dark_mode == 'system' %}checked{% endif %}
+                               onchange="applyMapDarkPreview('system')">
+                        <i class="material-icons">brightness_auto</i>
+                        <span>System</span>
+                    </label>
+                    <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'light' %}active{% endif %}" id="map-dark-opt-light">
+                        <input type="radio" name="map_dark_mode" value="light"
+                               {% if style_form.instance.map_dark_mode == 'light' %}checked{% endif %}
+                               onchange="applyMapDarkPreview('light')">
+                        <i class="material-icons">light_mode</i>
+                        <span>Always Light</span>
+                    </label>
+                    <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'dark' %}active{% endif %}" id="map-dark-opt-dark">
+                        <input type="radio" name="map_dark_mode" value="dark"
+                               {% if style_form.instance.map_dark_mode == 'dark' %}checked{% endif %}
+                               onchange="applyMapDarkPreview('dark')">
+                        <i class="material-icons">dark_mode</i>
+                        <span>Always Dark</span>
+                    </label>
+                </div>
+                {% if style_form.map_dark_mode.errors %}
+                <p class="settings-error">{{ style_form.map_dark_mode.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
             <div class="settings-actions">
                 <button type="submit" class="settings-save-btn">Save</button>
             </div>
@@ -252,37 +286,6 @@
                 </div>
                 {% if map_display_form.default_map_view.errors %}
                 <p class="settings-error">{{ map_display_form.default_map_view.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
-            <div class="settings-field">
-                <label class="settings-label">
-                    Map Dark Mode
-                    {% include "dashboard/partials/_tooltip_help.html" with text="When to switch the base map to a dark tile layer. System follows your OS preference. Satellite view is always unaffected." %}
-                </label>
-                <p class="settings-help">System follows your OS preference. Satellite is unaffected.</p>
-                <div class="settings-theme-row">
-                    <label class="settings-theme-option {% if map_display_form.instance.map_dark_mode == 'system' %}active{% endif %}" id="map-dark-opt-system">
-                        <input type="radio" name="map_dark_mode" value="system"
-                               {% if map_display_form.instance.map_dark_mode == 'system' %}checked{% endif %}>
-                        <i class="material-icons">brightness_auto</i>
-                        <span>System</span>
-                    </label>
-                    <label class="settings-theme-option {% if map_display_form.instance.map_dark_mode == 'light' %}active{% endif %}" id="map-dark-opt-light">
-                        <input type="radio" name="map_dark_mode" value="light"
-                               {% if map_display_form.instance.map_dark_mode == 'light' %}checked{% endif %}>
-                        <i class="material-icons">light_mode</i>
-                        <span>Always Light</span>
-                    </label>
-                    <label class="settings-theme-option {% if map_display_form.instance.map_dark_mode == 'dark' %}active{% endif %}" id="map-dark-opt-dark">
-                        <input type="radio" name="map_dark_mode" value="dark"
-                               {% if map_display_form.instance.map_dark_mode == 'dark' %}checked{% endif %}>
-                        <i class="material-icons">dark_mode</i>
-                        <span>Always Dark</span>
-                    </label>
-                </div>
-                {% if map_display_form.map_dark_mode.errors %}
-                <p class="settings-error">{{ map_display_form.map_dark_mode.errors|join:", " }}</p>
                 {% endif %}
             </div>
 
@@ -497,11 +500,22 @@ function applyThemePreview(theme) {
     } else {
         root.setAttribute('data-theme', theme);
     }
-    document.querySelectorAll('.settings-theme-option').forEach(function (el) {
-        el.classList.remove('active');
+    ['theme-opt-system', 'theme-opt-light', 'theme-opt-dark'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.remove('active');
     });
     var optMap = { system: 'theme-opt-system', light: 'theme-opt-light', dark: 'theme-opt-dark' };
     var opt = document.getElementById(optMap[theme]);
+    if (opt) opt.classList.add('active');
+}
+
+function applyMapDarkPreview(mode) {
+    ['map-dark-opt-system', 'map-dark-opt-light', 'map-dark-opt-dark'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+    });
+    var optMap = { system: 'map-dark-opt-system', light: 'map-dark-opt-light', dark: 'map-dark-opt-dark' };
+    var opt = document.getElementById(optMap[mode]);
     if (opt) opt.classList.add('active');
 }
 

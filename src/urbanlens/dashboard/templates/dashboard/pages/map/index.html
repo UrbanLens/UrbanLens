@@ -21,44 +21,44 @@
         </button>
         <div class="map-buttons-content">
             <button id="add-pin-button" class="map-btn-icon"
-                    data-tooltip="Drop a new pin on the map."
+                    data-tooltip="Drop a new pin on the map." data-tooltip-float="true"
                     aria-label="Add pin"
                     onclick="openAddPinDialog()">
                 <i class="material-icons">add_location</i>
             </button>
             <button id="search-pins-button" class="map-btn-icon"
-                    data-tooltip="Filter pins by name, rating, visit status, badges, and more."
+                    data-tooltip="Filter pins by name, rating, visit status, badges, and more." data-tooltip-float="true"
                     data-tooltip-pos="below"
                     aria-label="Filter and search pins"
                     onclick="toggleFilterPanel()">
                 <i class="material-icons">search</i>
             </button>
             <button id="topography-button" class="map-btn-icon"
-                    data-tooltip="Switch to topographic terrain view with elevation contours."
+                    data-tooltip="Switch to topographic terrain view with elevation contours." data-tooltip-float="true"
                     aria-label="Topography view"
                     onclick="toggleTopographyView()">
                 <i class="material-icons">terrain</i>
             </button>
             <button id="satellite-button" class="map-btn-icon"
-                    data-tooltip="Switch to satellite imagery."
+                    data-tooltip="Switch to satellite imagery." data-tooltip-float="true"
                     aria-label="Satellite view"
                     onclick="toggleSatelliteView()">
                 <i class="material-icons">satellite_alt</i>
             </button>
             <button id="toggle-pins-button" class="map-btn-icon"
-                    data-tooltip="Show or hide all pin markers without changing filters."
+                    data-tooltip="Show or hide all pin markers without changing filters." data-tooltip-float="true"
                     aria-label="Toggle pins"
                     onclick="togglePins()">
                 <i class="material-icons">push_pin</i>
             </button>
             <button id="weather-button" class="map-btn-icon"
-                    data-tooltip="Overlay current weather conditions on the map."
+                    data-tooltip="Overlay current weather conditions on the map." data-tooltip-float="true"
                     aria-label="Weather view"
                     onclick="toggleWeatherView()">
                 <i class="material-icons">cloud</i>
             </button>
             <button id="import-pins-button" class="map-btn-icon"
-                    data-tooltip="Import pins from Google Takeout."
+                    data-tooltip="Import pins from Google Takeout." data-tooltip-float="true"
                     data-tooltip-pos="below"
                     aria-label="Import pins"
                     hx-get="{% url 'pin.import.form' %}" hx-target="#importPinsModal" hx-swap="innerHTML">
@@ -435,6 +435,9 @@
         : (_GPS_FALLBACK_LAT !== null ? [_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG] : [40.7128, -74.0060]);
 
     const map = L.map('map', { maxZoom: 19 }).setView(_serverCenter, _defaultZoom);
+    // Dedicated pane for topo tiles so the invert filter never touches satellite or street.
+    map.createPane('topoPane');
+    map.getPane('topoPane').style.zIndex = 401;
     window.map = map;
     window.pin = null;
 
@@ -1059,6 +1062,7 @@
     });
     const topographyLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
+        pane: 'topoPane',
     });
     // ESRI Satellite tile layer
     const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -1086,6 +1090,15 @@
         return window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
 
+    // Apply invert filter to the topo pane when dark map mode is active.
+    function _applyTopoFilter() {
+        const pane = map.getPane('topoPane');
+        if (!pane) return;
+        pane.style.filter = (_isDarkMapActive() && map.hasLayer(topographyLayer))
+            ? 'invert(100%) hue-rotate(180deg) brightness(90%)'
+            : '';
+    }
+
     // Swap between standardLayer and darkLayer without touching satellite/topo.
     function _syncBaseLayer() {
         const useDark = _isDarkMapActive();
@@ -1096,7 +1109,13 @@
             if (map.hasLayer(darkLayer)) map.removeLayer(darkLayer);
             if (!map.hasLayer(standardLayer)) standardLayer.addTo(map);
         }
+        _applyTopoFilter();
     }
+
+    // Re-apply topo filter when the topo layer is toggled.
+    map.on('layeradd layerremove', function(e) {
+        if (e.layer === topographyLayer) _applyTopoFilter();
+    });
 
     // In system mode, re-sync whenever the OS preference changes.
     if (_MAP_DARK_MODE === 'system') {

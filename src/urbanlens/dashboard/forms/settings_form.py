@@ -116,7 +116,7 @@ class ContactSettingsForm(forms.Form):
 
 
 class StyleSettingsForm(forms.ModelForm):
-    """Site-wide appearance - color theme."""
+    """Site-wide appearance - color theme and map dark mode."""
 
     theme_mode = forms.ChoiceField(
         choices=ThemeChoice.choices,
@@ -124,10 +124,16 @@ class StyleSettingsForm(forms.ModelForm):
         label="Color Theme",
         help_text="System follows your OS preference automatically.",
     )
+    map_dark_mode = forms.ChoiceField(
+        choices=ThemeChoice.choices,
+        widget=forms.RadioSelect(attrs={"class": "settings-radio"}),
+        label="Map Dark Mode",
+        help_text="When to apply a dark tile layer on the map. System follows your OS preference. Satellite is unaffected.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["theme_mode"]
+        fields = ["theme_mode", "map_dark_mode"]
 
 
 class ContactMethodsForm(forms.ModelForm):
@@ -198,12 +204,6 @@ class MapDisplayForm(forms.ModelForm):
         label="Default Map View",
         help_text="Which map layer to use by default.",
     )
-    map_dark_mode = forms.ChoiceField(
-        choices=ThemeChoice.choices,
-        widget=forms.RadioSelect(attrs={"class": "settings-radio"}),
-        label="Map Dark Mode",
-        help_text="When to apply a dark tile layer on the map. System follows your OS preference. Satellite is unaffected.",
-    )
     cluster_radius = forms.IntegerField(
         required=False,
         min_value=1,
@@ -221,7 +221,7 @@ class MapDisplayForm(forms.ModelForm):
 
     class Meta:
         model = Profile
-        fields = ["default_map_view", "map_dark_mode", "cluster_radius", "use_pin_cache"]
+        fields = ["default_map_view", "cluster_radius", "use_pin_cache"]
 
 
 class MapCenterForm(forms.ModelForm):
