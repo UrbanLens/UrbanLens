@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
-import re
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -25,6 +24,7 @@ from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+from urbanlens.dashboard.services.username import USERNAME_RE, username_is_taken
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -234,9 +234,6 @@ class ViewProfileView(LoginRequiredMixin, View):
         context["my_profile"] = my_profile
 
 
-_USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
-
-
 class ProfileFieldUpdateView(LoginRequiredMixin, View):
     """Save a single profile field immediately (auto-save AJAX endpoint).
 
@@ -259,10 +256,9 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         username = request.GET.get("value", "").strip()
         if not username:
             return JsonResponse({"available": False, "reason": "Username required"})
-        if not _USERNAME_RE.match(username):
+        if not USERNAME_RE.match(username):
             return JsonResponse({"available": False, "reason": "3-30 characters: letters, numbers, and underscores only"})
-        taken = User.objects.filter(username__iexact=username).exclude(pk=request.user.pk).exists()
-        if taken:
+        if username_is_taken(username, exclude_user_id=request.user.pk):
             return JsonResponse({"available": False, "reason": "That username is already taken"})
         return JsonResponse({"available": True})
 
@@ -349,9 +345,9 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         username = request.POST.get("value", "").strip()
         if not username:
             return JsonResponse({"error": "Username is required."}, status=400)
-        if not _USERNAME_RE.match(username):
+        if not USERNAME_RE.match(username):
             return JsonResponse({"error": "3-30 characters: letters, numbers, and underscores only."}, status=400)
-        if User.objects.filter(username__iexact=username).exclude(pk=request.user.pk).exists():
+        if username_is_taken(username, exclude_user_id=request.user.pk):
             return JsonResponse({"error": "That username is already taken."}, status=409)
         request.user.username = username
         request.user.save(update_fields=["username"])
@@ -368,14 +364,14 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
 
         from django.core.files.base import ContentFile
 
-        from urbanlens.dashboard.services.social_auth.pipeline import _download_image
+        from urbanlens.dashboard.services.avatar import AvatarService
 
         email = request.user.email or ""
         if not email:
             return JsonResponse({"error": "No email address on this account."}, status=400)
         digest = hashlib.md5(email.strip().lower().encode(), usedforsecurity=False).hexdigest()
         url = f"https://www.gravatar.com/avatar/{digest}?s=256&d=404"
-        img = _download_image(url)
+        img = AvatarService.download(url)
         if not img:
             return JsonResponse({"error": "No Gravatar found for your email address."}, status=404)
         profile.avatar.save(f"gravatar_{request.user.pk}.jpg", ContentFile(img), save=True)
@@ -385,17 +381,14 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         from django.core.files.base import ContentFile
 
         from urbanlens.dashboard.models.colors import MaterialColor
-        from urbanlens.dashboard.services.social_auth.pipeline import (
-            _ANIMAL_EMOJIS,
-            generate_emoji_avatar_svg,
-        )
+        from urbanlens.dashboard.services.avatar import AvatarService
 
         animal = request.POST.get("animal", "fox")
         color = request.POST.get("color", "#4CAF50")
-        emoji = _ANIMAL_EMOJIS.get(animal, "🦊")
+        emoji = AvatarService.ANIMAL_EMOJIS.get(animal, "🦊")
         if color.lower() not in {v.lower() for v in MaterialColor.values}:
             color = MaterialColor.GREY.value
-        svg = generate_emoji_avatar_svg(emoji, color)
+        svg = AvatarService.generate_emoji_svg(emoji, color)
         profile.avatar.save(
             f"emoji_{request.user.pk}.svg",
             ContentFile(svg.encode("utf-8")),
@@ -414,7 +407,7 @@ class EditProfileView(LoginRequiredMixin, View):
     ) -> dict:
         import hashlib
 
-        from urbanlens.dashboard.services.social_auth.pipeline import random_emoji_options
+        from urbanlens.dashboard.services.avatar import AvatarService
         from urbanlens.dashboard.services.social_links import URL_INPUT_PLATFORM_LABELS, get_profile_links
 
         discord_link = profile.social_links.filter(platform="discord").first()
@@ -437,7 +430,7 @@ class EditProfileView(LoginRequiredMixin, View):
             "link_error": link_error,
             "supported_platforms": URL_INPUT_PLATFORM_LABELS,
             "gravatar_preview_url": gravatar_preview_url,
-            "emoji_options": random_emoji_options(4),
+            "emoji_options": AvatarService.random_options(4),
             "contact_visibility_choices": VisibilityChoice.choices,
         }
 

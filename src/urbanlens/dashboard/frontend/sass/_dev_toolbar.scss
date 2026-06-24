@@ -1,4 +1,5 @@
 // Admin dev toolbar - fixed, collapsible panel for development-mode tooling.
+@use 'variables' as *;
 
 .dev-toolbar {
     position: fixed;

@@ -26,6 +26,7 @@ from django.views import View, generic
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.site_admin import should_redirect_to_site_admin
+from urbanlens.dashboard.services.username import USERNAME_RE, username_is_taken
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -121,6 +122,15 @@ class RegistrationForm(UserCreationForm):
         if User.objects.filter(email__iexact=email).exists():
             raise ValidationError("An account with this email address already exists.")
         return email
+
+    def clean_username(self) -> str:
+        """Reject usernames that collide case- or confusably-insensitively."""
+        username = super().clean_username()
+        if not USERNAME_RE.match(username):
+            raise ValidationError("3-30 characters: letters, numbers, and underscores only.")
+        if username_is_taken(username):
+            raise ValidationError("A user with that username already exists.")
+        return username
 
     def save(self, commit: bool = True) -> User:
         user = super().save(commit=False)

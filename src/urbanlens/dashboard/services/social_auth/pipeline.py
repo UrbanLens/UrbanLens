@@ -15,114 +15,22 @@ keyword arguments that we do not care about.
 
 from __future__ import annotations
 
-import hashlib
 import logging
-import secrets
-from typing import Any
-from urllib.parse import urlparse
+import re
+from typing import TYPE_CHECKING, Any
 
-from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 
-from urbanlens.dashboard.models.colors import MaterialColor
+from urbanlens.dashboard.services.avatar import AvatarService
+from urbanlens.dashboard.services.username import USERNAME_RE, UsernameGenerator, username_is_taken
+
+if TYPE_CHECKING:
+    from django.contrib.auth.models import User
 
 logger = logging.getLogger(__name__)
 
-# ── Username word lists ───────────────────────────────────────────────────────
 
-_ADJECTIVES: tuple[str, ...] = (
-    "agile", "amber", "ancient", "bold", "brave", "bright", "calm", "clear",
-    "cool", "cosmic", "crisp", "daring", "deep", "deft", "dynamic", "early",
-    "earthy", "epic", "fierce", "fleet", "free", "fresh", "golden", "grand",
-    "green", "hollow", "humble", "keen", "kind", "late",
-    "leafy", "light", "lofty", "lone", "loyal", "lucid", "lunar", "misty",
-    "noble", "north", "open", "prime", "quick", "quiet", "rapid", "raw",
-    "regal", "roaming", "rugged", "sharp", "silent", "silver", "sleek",
-    "solar", "stark", "steady", "still", "stone", "stormy", "swift", "tall",
-    "vast", "vivid", "warm", "wide", "wild", "wise", "worthy",
-)
-
-_ANIMALS: tuple[str, ...] = (
-    "badger", "bear", "beetle", "bison", "bobcat", "buck", "crane",
-    "crow", "deer", "dove", "duck", "eagle", "elk", "falcon", "ferret",
-    "finch", "fox", "gecko", "goat", "grouse", "hawk", "heron", "ibis",
-    "jackal", "jaguar", "jay", "kestrel", "kite", "lark", "linnet",
-    "lynx", "mink", "mole", "moose", "moth", "newt", "nighthawk", "otter",
-    "owl", "peregrine", "pika", "pine", "puma", "quail", "raven", "robin",
-    "salamander", "shrew", "skunk", "snipe", "sparrow", "starling",
-    "stoat", "stork", "swift", "thrush", "toad", "viper", "vole",
-    "wagtail", "warbler", "weasel", "whippet", "widgeon", "wolf", "wren",
-)
-
-_FALLBACK_PREFIX = "explorer"
-_MAX_RETRIES = 20
-
-# ── Avatar helpers ────────────────────────────────────────────────────────────
-
-_ANIMAL_EMOJIS: dict[str, str] = {
-    "badger": "🦡", "bear": "🐻", "beetle": "🪲", "bison": "🦬",
-    "bobcat": "🐱", "buck": "🦌", "crane": "🦢", "crow": "🐦‍⬛",
-    "deer": "🦌", "dove": "🕊️", "duck": "🦆", "eagle": "🦅",
-    "elk": "🫎", "falcon": "🦅", "ferret": "🐾", "finch": "🐦",
-    "fox": "🦊", "gecko": "🦎", "goat": "🐐", "grouse": "🐦",
-    "hawk": "🦅", "heron": "🦢", "ibis": "🦢", "jackal": "🐺",
-    "jaguar": "🐆", "jay": "🐦", "kestrel": "🦅", "kite": "🐦",
-    "lark": "🐦", "linnet": "🐦", "lynx": "🐱", "mink": "🦦",
-    "mole": "🐭", "moose": "🫎", "moth": "🦋", "newt": "🦎",
-    "nighthawk": "🦅", "otter": "🦦", "owl": "🦉", "peregrine": "🦅",
-    "pika": "🐰", "pine": "🌲", "puma": "🦁", "quail": "🐦",
-    "raven": "🐦‍⬛", "robin": "🐦", "salamander": "🦎", "shrew": "🐭",
-    "skunk": "🦨", "snipe": "🐦", "sparrow": "🐦", "starling": "🐦",
-    "stoat": "🐾", "stork": "🦢", "swift": "🐦", "thrush": "🐦",
-    "toad": "🐸", "viper": "🐍", "vole": "🐭", "wagtail": "🐦",
-    "warbler": "🐦", "weasel": "🐾", "whippet": "🐕", "widgeon": "🦆",
-    "wolf": "🐺", "wren": "🐦",
-}
-
-_AVATAR_COLORS: list[str] = list(MaterialColor.values)
-
-
-def generate_emoji_avatar_svg(emoji: str, color: str) -> str:
-    """Return an SVG string: a filled circle with a centered emoji.
-
-    Args:
-        emoji: The Unicode emoji character to render.
-        color: A CSS hex color string for the circle background.
-
-    Returns:
-        UTF-8-safe SVG markup.
-    """
-    return (
-        '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">'
-        f'<circle cx="100" cy="100" r="100" fill="{color}"/>'
-        '<text x="100" y="140" text-anchor="middle" font-size="110" '
-        'font-family="Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji, sans-serif">'
-        f'{emoji}</text>'
-        '</svg>'
-    )
-
-
-def random_emoji_options(n: int = 4) -> list[dict[str, str]]:
-    """Return *n* random (animal, emoji, color) dicts for the avatar picker.
-
-    Both animals and colors are sampled without replacement so that no two
-    suggestions share the same animal or the same background color.
-
-    Args:
-        n: Number of options to generate.
-
-    Returns:
-        List of dicts with keys ``animal``, ``emoji``, and ``color``.
-    """
-    import random as _random
-    candidates = list(_ANIMAL_EMOJIS.items())
-    n = min(n, len(candidates), len(_AVATAR_COLORS))
-    chosen_animals = _random.sample(candidates, n)
-    chosen_colors = _random.sample(_AVATAR_COLORS, n)
-    return [
-        {"animal": animal, "emoji": emoji, "color": chosen_colors[i]}
-        for i, (animal, emoji) in enumerate(chosen_animals)
-    ]
+# ── Pipeline steps ────────────────────────────────────────────────────────────
 
 
 def generate_sso_username(
@@ -133,11 +41,14 @@ def generate_sso_username(
     *args: Any,
     **kwargs: Any,
 ) -> dict[str, Any] | None:
-    """Produce a random ``{adjective}{animal}{number}`` username for new SSO users.
+    """Choose an initial username for new SSO users.
 
-    Replaces the default ``social_core.pipeline.user.get_username`` step so
-    that SSO accounts never inherit a real name or email prefix as their
-    username.  Existing users (``user`` is not None) are left unchanged.
+    Prefers the provider handle when it is valid and not already taken:
+    Discord ``username``, or the local part of a Google account email.
+    Otherwise falls back to a random ``{adjective}{animal}{number}`` name.
+
+    Replaces the default ``social_core.pipeline.user.get_username`` step.
+    Existing users (``user`` is not None) are left unchanged.
 
     Args:
         backend: The social-auth backend in use.
@@ -149,22 +60,14 @@ def generate_sso_username(
         Dict with ``username`` key for new users, or None for returning users.
     """
     if user is not None:
-        # Returning user - keep their existing username.
         return {"username": user.username}
 
-    for _ in range(_MAX_RETRIES):
-        adj = secrets.choice(_ADJECTIVES)
-        animal = secrets.choice(_ANIMALS)
-        number = secrets.randbelow(9999) + 1
-        username = f"{adj}{animal}{number}"
-        if not User.objects.filter(username__iexact=username).exists():
-            logger.debug("Generated SSO username: %s", username)
-            return {"username": username}
+    preferred = _provider_username_preference(backend, response, details)
+    if preferred and not username_is_taken(preferred):
+        logger.debug("Using provider SSO username: %s", preferred)
+        return {"username": preferred}
 
-    # Should essentially never happen given the size of the word lists.
-    fallback = f"{_FALLBACK_PREFIX}{secrets.randbelow(90_000) + 10_000}"
-    logger.warning("All username candidates collided; falling back to %s", fallback)
-    return {"username": fallback}
+    return {"username": UsernameGenerator.generate()}
 
 
 def suppress_last_name_for_new_users(
@@ -212,11 +115,6 @@ def fetch_and_save_avatar(
     Only fetches when the profile has no existing avatar so that users who
     upload their own photo are not overwritten on subsequent logins.
 
-    Provider-specific URL resolution:
-    - **Google OAuth2**: ``response['picture']``
-    - **Discord OAuth2**: ``https://cdn.discordapp.com/avatars/{id}/{avatar}.png``
-    - **Gravatar fallback**: ``https://www.gravatar.com/avatar/{md5(email)}``
-
     Args:
         backend: The social-auth backend in use (name is ``backend.name``).
         user: The Django User, or None if authentication failed earlier.
@@ -233,23 +131,19 @@ def fetch_and_save_avatar(
         return
 
     if profile.avatar:
-        # User already has an avatar - don't overwrite.
         return
 
-    avatar_url = _resolve_avatar_url(backend, user, response)
+    avatar_url = AvatarService.resolve_provider_url(backend, user, response)
     if not avatar_url:
         return
 
-    image_bytes = _download_image(avatar_url)
+    image_bytes = AvatarService.download(avatar_url)
     if not image_bytes:
         return
 
     filename = f"sso_avatar_{user.pk}.jpg"
     profile.avatar.save(filename, ContentFile(image_bytes), save=True)
     logger.info("Saved SSO avatar for user %s from %s", user.username, backend.name)
-
-
-# ── Internal helpers ──────────────────────────────────────────────────────────
 
 
 def mark_new_user_onboarding(
@@ -325,75 +219,51 @@ def save_discord_social_link(
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 
-def _resolve_avatar_url(backend: Any, user: User, response: dict[str, Any]) -> str | None:
-    """Return the provider-specific or Gravatar avatar URL for this user.
+def _sanitize_sso_username(raw: str) -> str | None:
+    """Normalize a provider handle to UrbanLens username rules.
+
+    Args:
+        raw: Provider username or email address.
+
+    Returns:
+        A sanitized username, or None when the value cannot be normalized.
+    """
+    local_part = raw.strip().split("@", 1)[0]
+    sanitized = re.sub(r"[^a-zA-Z0-9_]+", "_", local_part)
+    sanitized = re.sub(r"_+", "_", sanitized).strip("_")
+    if len(sanitized) < 3:
+        return None
+    if len(sanitized) > 30:
+        sanitized = sanitized[:30].rstrip("_")
+        if len(sanitized) < 3:
+            return None
+    if not USERNAME_RE.match(sanitized):
+        return None
+    return sanitized
+
+
+def _provider_username_preference(
+    backend: Any,
+    response: dict[str, Any],
+    details: dict[str, Any],
+) -> str | None:
+    """Return a preferred username derived from the OAuth provider, if any.
 
     Args:
         backend: The social-auth backend in use.
-        user: The authenticated Django User.
-        response: Raw OAuth response payload.
+        response: Raw response from the OAuth provider.
+        details: Normalised details dict produced by ``social_details``.
 
     Returns:
-        A URL string or None if no avatar could be determined.
+        Sanitized username candidate, or None when no provider handle is usable.
     """
     name = getattr(backend, "name", "")
-
-    if name == "google-oauth2":
-        url = response.get("picture")
-        if url:
-            # Request a larger size (256 px) than the default.
-            if "=s" in url:
-                url = url.rsplit("=s", 1)[0] + "=s256-c"
-            return url
-
-    elif name == "discord":
-        user_id = response.get("id")
-        avatar_hash = response.get("avatar")
-        if user_id and avatar_hash:
-            ext = "gif" if avatar_hash.startswith("a_") else "png"
-            return f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.{ext}?size=256"
-        # Discord users without a custom avatar have a default - skip rather
-        # than downloading a generic coloured square.
+    if name == "discord":
+        raw = response.get("username")
+    elif name == "google-oauth2":
+        raw = details.get("email") or response.get("email")
+    else:
         return None
-
-    # Gravatar fallback for any provider (including unknown ones).
-    email = user.email or ""
-    if email:
-        # MD5 is required by the Gravatar API spec; not used for security.
-        digest = hashlib.md5(email.strip().lower().encode(), usedforsecurity=False).hexdigest()
-        # ?d=404 means Gravatar returns HTTP 404 if no image exists (vs a default).
-        return f"https://www.gravatar.com/avatar/{digest}?d=404&s=256"
-
-    return None
-
-
-def _download_image(url: str, timeout: int = 5) -> bytes | None:
-    """Fetch image bytes from a URL, returning None on any failure.
-
-    Only http and https URLs are accepted; any other scheme is rejected before
-    the network request is made.
-
-    Args:
-        url: The full URL of the image to download.
-        timeout: Request timeout in seconds.
-
-    Returns:
-        Raw image bytes, or None if the download failed or returned a non-200 status.
-    """
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"}:
-        logger.warning("Rejecting avatar URL with unexpected scheme: %s", parsed.scheme)
+    if not raw:
         return None
-
-    try:
-        import urllib.request
-
-        req = urllib.request.Request(url, headers={"User-Agent": "UrbanLens/1.0"})  # noqa: S310
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
-            if resp.status != 200:
-                return None
-            data = resp.read(512 * 1024)  # cap at 512 KiB
-            return data or None
-    except Exception as exc:
-        logger.debug("Avatar download failed for %s: %s", url, exc)
-        return None
+    return _sanitize_sso_username(str(raw))
