@@ -316,7 +316,7 @@
     grid-template-columns: 1fr;
     align-items: start;
 
-    @media (min-width: 1024px) {
+    @include up($breakpoint-md) {
         grid-template-columns: repeat(2, 1fr);
     }
 }

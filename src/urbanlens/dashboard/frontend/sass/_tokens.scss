@@ -266,10 +266,13 @@ $bar-padding-y: .75rem;
 $bar-padding-x: 1rem;
 
 // ── Breakpoints ─────────────────────────────────────────────────────────────────
+// Use these tokens with the up() and down() mixins in _mixins.scss.
+// Mobile-first: base styles target xs. Enhance upward with up().
 
-$breakpoint-sm: 768px;
-$breakpoint-md: 1024px;
-$breakpoint-lg: 1280px;
+$breakpoint-xs: 480px;  // large phones, small landscape tablets
+$breakpoint-sm: 768px;  // tablets, small laptops
+$breakpoint-md: 1024px; // standard laptops / desktops
+$breakpoint-lg: 1280px; // wide desktops
 
 // ── Z-index scale ─────────────────────────────────────────────────────────────
 

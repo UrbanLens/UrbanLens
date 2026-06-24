@@ -151,20 +151,20 @@
         gap: 1rem;
         align-items: start;
 
-        @media (min-width: 768px) {
+        @include up($breakpoint-sm) {
             grid-template-columns: 1fr 1fr;
         }
 
-        @media (min-width: 1280px) {
+        @include up($breakpoint-lg) {
             grid-template-columns: repeat(3, 1fr);
         }
 
         .wiki-meta {
-            @media (min-width: 768px) { grid-column: 1; }
+            @include up($breakpoint-sm) { grid-column: 1; }
         }
 
         .wiki-stats {
-            @media (min-width: 768px) { grid-column: 2; }
+            @include up($breakpoint-sm) { grid-column: 2; }
         }
 
         .location-map,

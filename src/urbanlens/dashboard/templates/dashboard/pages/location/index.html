@@ -718,6 +718,17 @@
 
     setTimeout(() => map.invalidateSize(), 300);
 
+    // Re-validate map size on resize and orientation change (important on mobile)
+    (function () {
+        let _resizeTimer;
+        function onResize() {
+            clearTimeout(_resizeTimer);
+            _resizeTimer = setTimeout(() => map.invalidateSize(), 150);
+        }
+        window.addEventListener('resize', onResize);
+        window.addEventListener('orientationchange', () => setTimeout(() => map.invalidateSize(), 300));
+    }());
+
     // ── Detail pins layer ─────────────────────────────────────────────────────
     const _detailPinColors = {
         building: '#6b7280', entrance: '#16a34a', poi: '#d97706',

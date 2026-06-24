@@ -409,3 +409,18 @@
 .material-icons.spin {
     animation: spin 1.2s linear infinite;
 }
+
+// ── Map toolbar: ensure 44px touch targets on mobile ─────────────────────────
+
+@include down($breakpoint-sm) {
+    .map-buttons {
+        padding: 6px;
+        gap: 4px;
+
+        #toggle-map-buttons,
+        .map-btn-icon {
+            width: 2.75rem;
+            height: 2.75rem;
+        }
+    }
+}

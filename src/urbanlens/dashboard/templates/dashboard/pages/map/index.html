@@ -1446,6 +1446,19 @@
     });
     map.invalidateSize();
 
+    // Re-validate map size on resize and orientation change (important on mobile)
+    (function () {
+        var _resizeTimer;
+        function onResize() {
+            clearTimeout(_resizeTimer);
+            _resizeTimer = setTimeout(function () { map.invalidateSize(); }, 150);
+        }
+        window.addEventListener('resize', onResize);
+        window.addEventListener('orientationchange', function () {
+            setTimeout(function () { map.invalidateSize(); }, 300);
+        });
+    }());
+
     function togglePins() {
         if (pinsVisible) {
             map.removeLayer(pinsLayerGroup);

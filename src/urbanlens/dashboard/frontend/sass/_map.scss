@@ -1540,6 +1540,43 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     right: calc(272px + 12px);
 }
 
+// ── Mobile-responsive map overrides ──────────────────────────────────────────
+
+@include down($breakpoint-sm) {
+    // Filter panel: full-width bottom sheet on phones instead of 272px side panel
+    #filter-panel {
+        width: 100%;
+        height: 80dvh;
+        top: auto;
+        bottom: 0;
+        right: 0;
+        border-left: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px 16px 0 0;
+        transform: translateY(100%);
+
+        &.open {
+            transform: translateY(0);
+        }
+    }
+
+    // Don't shift map-buttons sideways when filter panel opens (it's bottom now)
+    #map.filter-open .map-buttons {
+        right: 12px;
+    }
+
+    // Ensure address search bar doesn't overflow on very narrow screens
+    #addr-search-bar {
+        left: 10px;
+        width: calc(100% - 20px);
+    }
+
+    #addr-search-suggestions {
+        left: 10px;
+        width: calc(100% - 20px);
+    }
+}
+
 /* ── Pin load overlay (cold start only) ─────────────────────────── */
 #pin-load-overlay {
     position: absolute;

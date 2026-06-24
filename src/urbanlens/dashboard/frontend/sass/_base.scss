@@ -43,14 +43,14 @@ button,
     grid-template-columns: 1fr;
     align-items: start;
 
-    // 1 → 2 columns at ≥768px
+    // 1 → 2 columns at ≥$breakpoint-sm
     &--2col {
         @include up($breakpoint-sm) {
             grid-template-columns: repeat(2, 1fr);
         }
     }
 
-    // 1 → 2 → 3 columns at ≥768px → ≥1280px
+    // 1 → 2 → 3 columns at ≥$breakpoint-sm → ≥$breakpoint-lg
     &--3col {
         @include up($breakpoint-sm) {
             grid-template-columns: repeat(2, 1fr);
@@ -60,7 +60,7 @@ button,
         }
     }
 
-    // Primary + sidebar (2/3 + sidebar) at ≥1024px
+    // Primary + sidebar (2/3 + sidebar) at ≥$breakpoint-md
     &--sidebar {
         @include up($breakpoint-md) {
             grid-template-columns: 1fr 300px;

@@ -37,6 +37,7 @@
     gap: 0;
 }
 .edit-username-at {
+    height: 3rem;
     background: var(--ul-surface-1, #f3f4f6);
     border: 1.5px solid var(--ul-border, #e0e0e0);
     border-right: none;
@@ -47,8 +48,12 @@
     line-height: 1.4;
 }
 .edit-username-input {
-    border-radius: 0 8px 8px 0 !important;
+    height: 3rem;
+    border: 1px solid var(--ul-border);
+    border-left: none;
+    border-radius: 0 8px 8px 0;
     flex: 1;
+    margin-bottom: 0;
 }
 .edit-username-hint {
     font-size: .78rem;
@@ -132,7 +137,7 @@
 {% endif %}
 {% endwith %}
 
-<div class="edit-profile-page">
+<div class="edit-profile-page page-content">
 
     {# ── Setup / welcome banner (shown to all new users until they complete setup) ── #}
     {% if not form.instance.profile_setup_complete %}
@@ -157,7 +162,7 @@
     </div>
 
     {# ── Profile info ──────────────────────────────────────────────────────── #}
-    <section class="edit-card">
+    <section class="edit-card ul-section">
         <h2 class="edit-card-title">Profile Info</h2>
 
         {# Username #}
@@ -287,7 +292,7 @@
     </section>
 
     {# ── Social links ──────────────────────────────────────────────────────── #}
-    <section class="edit-card">
+    <section class="edit-card ul-section">
         <h2 class="edit-card-title">Social Links</h2>
         <p class="edit-card-desc">Paste a profile URL - the platform is detected automatically.</p>
 

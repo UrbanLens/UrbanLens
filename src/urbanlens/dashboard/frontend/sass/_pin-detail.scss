@@ -1562,11 +1562,15 @@ body.page-location-details div.section {
     .location-details {
         .details-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: .35rem .75rem;
             padding: .75rem 1rem;
 
-            @media (min-width: 1024px) {
+            @include up($breakpoint-sm) {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            @include up($breakpoint-md) {
                 grid-template-columns: repeat(3, 1fr);
             }
 
@@ -1782,11 +1786,11 @@ body.page-location-details div.section {
     grid-template-columns: 1fr;
     align-items: start;
 
-    @media (min-width: 640px) {
+    @include up($breakpoint-xs) {
         grid-template-columns: 1fr 1fr;
     }
 
-    @media (min-width: 1024px) {
+    @include up($breakpoint-md) {
         grid-template-columns: 1fr 1fr 1fr;
     }
 }

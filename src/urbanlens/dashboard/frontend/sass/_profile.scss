@@ -22,7 +22,7 @@
     gap: 2rem;
     align-items: flex-start;
 
-    @media (max-width: 600px) {
+    @include down($breakpoint-xs) {
         flex-direction: column;
         align-items: center;
         text-align: center;
@@ -104,7 +104,7 @@
     gap: .75rem 1rem;
     margin-bottom: 0.5rem;
 
-    @media (max-width: 600px) {
+    @include down($breakpoint-xs) {
         flex-direction: column;
         align-items: center;
     }
@@ -444,7 +444,7 @@
     padding: 1.5rem;
     margin-bottom: 1.5rem;
 
-    @media (min-width: 1024px) {
+    @include up($breakpoint-md) {
         display: grid;
         grid-template-columns: 240px 1fr;
         gap: 2rem;
@@ -2405,5 +2405,30 @@ a.profile-stat--link {
 
     .friends-empty-hint {
         font-size: .85rem;
+    }
+}
+
+// ── Profile: mobile-responsive overrides ─────────────────────────────────────
+
+@include down($breakpoint-xs) {
+    // Center friendship action chips/buttons on very narrow screens
+    .profile-friendship-actions {
+        justify-content: center;
+    }
+
+    // Stack friendship button groups vertically on phones
+    .friendship-btn-group {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    // Stack invite form email + button on narrow screens
+    .invite-form-row {
+        flex-direction: column;
+    }
+
+    // Reduce profile hero padding on phones
+    .profile-hero {
+        padding: 1.25rem;
     }
 }
