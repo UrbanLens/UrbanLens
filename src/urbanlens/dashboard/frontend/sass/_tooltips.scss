@@ -182,6 +182,10 @@
 
 .ul-tooltip-help {
     @include icon-btn(18px);
+    // inline-flex overrides the block-level `flex` from icon-btn so the button
+    // participates in the inline flow of its parent (e.g. headings) and sits
+    // visually beside the label text rather than dropping to a new line.
+    display: inline-flex;
     flex-shrink: 0;
     vertical-align: middle;
     color: var(--ul-text-3);
@@ -225,6 +229,17 @@
     display: inline-flex;
     align-items: center;
     gap: .35rem;
+}
+
+// ── "Hide tooltips" user preference ──────────────────────────────────────────
+// Applied via the html.tooltips-disabled class set from the user's profile setting.
+
+html.tooltips-disabled {
+    [data-tooltip] {
+        &::before,
+        &::after { display: none !important; }
+    }
+    .ul-tooltip-float { display: none !important; }
 }
 
 // ── Floating tooltip (JS portal - escapes overflow:hidden) ────────────────────

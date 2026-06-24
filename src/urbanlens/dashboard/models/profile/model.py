@@ -140,6 +140,10 @@ class Profile(abstract.Model):
         choices=ThemeChoice.choices,
         default=ThemeChoice.SYSTEM,
     )
+    hide_tooltips = BooleanField(
+        default=False,
+        help_text="When enabled, hover/focus tooltips are hidden across the entire site.",
+    )
     map_dark_mode = CharField(
         max_length=10,
         choices=ThemeChoice.choices,

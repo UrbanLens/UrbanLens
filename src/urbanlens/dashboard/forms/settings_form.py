@@ -116,7 +116,7 @@ class ContactSettingsForm(forms.Form):
 
 
 class StyleSettingsForm(forms.ModelForm):
-    """Site-wide appearance - color theme and map dark mode."""
+    """Site-wide appearance - color theme, map dark mode, and tooltip visibility."""
 
     theme_mode = forms.ChoiceField(
         choices=ThemeChoice.choices,
@@ -130,10 +130,16 @@ class StyleSettingsForm(forms.ModelForm):
         label="Map Dark Mode",
         help_text="When to apply a dark tile layer on the map. System follows your OS preference. Satellite is unaffected.",
     )
+    hide_tooltips = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
+        label="Hide Tooltips",
+        help_text="Suppress hover and focus tooltips everywhere on the site.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["theme_mode", "map_dark_mode"]
+        fields = ["theme_mode", "map_dark_mode", "hide_tooltips"]
 
 
 class ContactMethodsForm(forms.ModelForm):

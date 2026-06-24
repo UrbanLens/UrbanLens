@@ -2925,4 +2925,12 @@ class Migration(migrations.Migration):
                 max_length=10,
             ),
         ),
+        migrations.AddField(
+            model_name="profile",
+            name="hide_tooltips",
+            field=models.BooleanField(
+                default=False,
+                help_text="When enabled, hover/focus tooltips are hidden across the entire site.",
+            ),
+        ),
     ] + BOOTSTRAP_OPERATIONS_SUFFIX

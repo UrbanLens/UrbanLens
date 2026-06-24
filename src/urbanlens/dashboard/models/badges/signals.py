@@ -7,44 +7,74 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
-# Default category names mirror the keys in services/ai/keywords.py so that
+# Default category definitions mirror the keys in services/ai/keywords.py so that
 # auto-categorisation can match against badges the user actually owns.
-DEFAULT_CATEGORIES: list[str] = [
-    "Airport",
-    "Amusement Park",
-    "Asylum",
-    "Bank",
-    "Bridge",
-    "Bunker",
-    "Cars",
-    "Castle",
-    "Church",
-    "Factory",
-    "Fire Tower",
-    "Firehouse",
-    "Funeral Home",
-    "Graveyard",
-    "Hospital",
-    "Hotel",
-    "House",
-    "Laboratory",
-    "Library",
-    "Lighthouse",
-    "Mall",
-    "Mansion",
-    "Military Base",
-    "Monument",
-    "Police Station",
-    "Power Plant",
-    "Prison",
-    "Resort",
-    "Ruins",
-    "School",
-    "Stadium",
-    "Theater",
-    "Traincar",
-    "Train Station",
-    "Tunnel",
+# Each entry carries an icon (emoji), a hex color, and an optional display order.
+DEFAULT_CATEGORIES: list[dict] = [
+    {"name": "Amusement Park", "icon": "🎢", "color": "#FF9800"},
+    {"name": "Asylum", "icon": "🏚️", "color": "#673AB7"},
+    {"name": "Bank", "icon": "🏦", "color": "#FFC107"},
+    {"name": "Bridge", "icon": "🌉", "color": "#607D8B"},
+    {"name": "Bunker", "icon": "🪖", "color": "#795548"},
+    {"name": "Castle", "icon": "🏰", "color": "#9C27B0"},
+    {"name": "Church", "icon": "⛪", "color": "#3F51B5"},
+    {"name": "Factory", "icon": "🏭", "color": "#607D8B"},
+    {"name": "Fire Tower", "icon": "🗼", "color": "#FF9800"},
+    {"name": "Firehouse", "icon": "🚒", "color": "#F44336"},
+    {"name": "Funeral Home", "icon": "⚰️", "color": "#795548"},
+    {"name": "Graveyard", "icon": "🪦", "color": "#607D8B"},
+    {"name": "Hospital", "icon": "🏥", "color": "#2196F3"},
+    {"name": "Hotel", "icon": "🏨", "color": "#FFC107"},
+    {"name": "House", "icon": "🏠", "color": "#8BC34A"},
+    {"name": "Laboratory", "icon": "🔬", "color": "#00BCD4"},
+    {"name": "Library", "icon": "📚", "color": "#03A9F4"},
+    {"name": "Mall", "icon": "🏬", "color": "#E91E63"},
+    {"name": "Mansion", "icon": "🏡", "color": "#4CAF50"},
+    {"name": "Military Base", "icon": "🪖", "color": "#607D8B"},
+    {"name": "Monument", "icon": "🗽", "color": "#9E9E9E"},
+    {"name": "Park", "icon": "🏞️", "color": "#4CAF50"},
+    {"name": "Police Station", "icon": "🚓", "color": "#3F51B5"},
+    {"name": "Power Plant", "icon": "⚡", "color": "#FF5722"},
+    {"name": "Prison", "icon": "🔒", "color": "#F44336"},
+    {"name": "Resort", "icon": "🌴", "color": "#FFEB3B"},
+    {"name": "Ruins", "icon": "🏛️", "color": "#795548"},
+    {"name": "School", "icon": "🏫", "color": "#03A9F4"},
+    {"name": "Stadium", "icon": "🏟️", "color": "#4CAF50"},
+    {"name": "Theater", "icon": "🎭", "color": "#9C27B0"},
+    {"name": "Train Station", "icon": "🚉", "color": "#607D8B"},
+    {"name": "Tunnel", "icon": "🕳️", "color": "#9E9E9E"},
+]
+
+# Parent → child relationships established after all categories are created.
+# Children are a specialisation or sub-type of the parent, which lets users
+# filter a parent badge and surface pins tagged with any of its descendants.
+CATEGORY_HIERARCHY: list[tuple[str, str]] = [
+    # Healthcare
+    ("Hospital", "Asylum"),       # psychiatric hospitals were often called asylums
+    ("Hospital", "Laboratory"),   # hospital / medical research labs
+    # Residential
+    ("House", "Mansion"),         # a mansion is a grand house
+    # Hospitality
+    ("Hotel", "Resort"),          # resorts typically include hotel accommodation
+    # Military
+    ("Military Base", "Bunker"),  # bunkers are part of military installations
+    # Industrial
+    ("Factory", "Power Plant"),   # power plants are large industrial facilities
+    # Education
+    ("School", "Library"),        # academic / school libraries
+    # Law enforcement
+    ("Police Station", "Prison"),  # prisons are downstream of policing
+    # Religious / memorial
+    ("Church", "Graveyard"),      # churchyard graveyards
+    ("Church", "Funeral Home"),   # funeral homes are often church-affiliated
+    # Emergency services
+    ("Firehouse", "Fire Tower"),  # fire towers are fire-service infrastructure
+    # Recreation
+    ("Park", "Amusement Park"),   # an amusement park is a specialised park
+    # Historical
+    ("Castle", "Ruins"),          # ruined castles are a classic urbex target
+    # Transport
+    ("Train Station", "Tunnel"),  # railway tunnels connect to station networks
 ]
 
 
@@ -56,8 +86,10 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
         "Active", "Abandoned", and "Demolished" are also protected.
 
     Category badges:
-        One badge per entry in DEFAULT_CATEGORIES. Users may delete or rename
-        any of these after creation.
+        One badge per entry in DEFAULT_CATEGORIES, pre-populated with an icon,
+        colour, and display order. Parent-child relationships from CATEGORY_HIERARCHY
+        are wired up via the ``parents`` M2M after all badges exist. Users may delete
+        or rename any category badge after creation.
     """
     if not created:
         return
@@ -79,13 +111,34 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
         )
 
     total = len(DEFAULT_CATEGORIES)
-    for i, name in enumerate(DEFAULT_CATEGORIES):
+    for i, cat in enumerate(DEFAULT_CATEGORIES):
         Badge.objects.get_or_create(
             profile=instance,
-            name=name,
+            name=cat["name"],
             kind=KIND_CATEGORY,
-            defaults={"order": total - i},
+            defaults={
+                "icon": cat["icon"],
+                "color": cat["color"],
+                "order": total - i,
+            },
         )
+
+    # Wire up parent → child badge relationships so that hierarchy-aware
+    # filtering (get_badge_and_descendants) works for new profiles.
+    hierarchy_names = {name for pair in CATEGORY_HIERARCHY for name in pair}
+    badge_by_name: dict[str, Badge] = {
+        b.name: b
+        for b in Badge.objects.filter(
+            profile=instance,
+            kind=KIND_CATEGORY,
+            name__in=hierarchy_names,
+        )
+    }
+    for parent_name, child_name in CATEGORY_HIERARCHY:
+        parent = badge_by_name.get(parent_name)
+        child = badge_by_name.get(child_name)
+        if parent and child:
+            child.parents.add(parent)
 
     people_defaults = [
         {"name": "Preservation", "icon": "🌿", "color": "#4CAF50", "order": 40},

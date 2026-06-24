@@ -322,6 +322,24 @@
     background: var(--ul-surface-0);
     border-radius: 4px;
     padding: 1px 5px;
+
+    // Lock-icon-only variant used for protected system items
+    &--protected {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 3px;
+        opacity: 0.45;
+        transition: opacity .15s;
+
+        .material-icons {
+            font-size: 0.8rem;
+            line-height: 1;
+        }
+
+        &:hover {
+            opacity: 0.75;
+        }
+    }
 }
 
 .tag-customized-badge {

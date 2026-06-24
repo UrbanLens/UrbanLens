@@ -243,6 +243,20 @@
                 {% endif %}
             </div>
 
+            <div class="settings-field settings-field--checkbox">
+                <label class="settings-checkbox-label">
+                    {{ style_form.hide_tooltips }}
+                    <span class="settings-checkbox-materialize"></span>
+                    <span>
+                        <span class="settings-label">{{ style_form.hide_tooltips.label }}</span>
+                        <p class="settings-help">{{ style_form.hide_tooltips.help_text }}</p>
+                    </span>
+                </label>
+                {% if style_form.hide_tooltips.errors %}
+                <p class="settings-error">{{ style_form.hide_tooltips.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
             <div class="settings-actions">
                 <button type="submit" class="settings-save-btn">Save</button>
             </div>

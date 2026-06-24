@@ -30,7 +30,7 @@
             <div class="tag-card-name">
                 {{ badge.name }}
                 {% if badge.is_protected %}
-                <span class="tag-global-badge" title="This status cannot be deleted or renamed">protected</span>
+                <span class="tag-global-badge tag-global-badge--protected" title="This status cannot be deleted or renamed" aria-label="Protected – cannot be deleted or renamed"><i class="material-icons" aria-hidden="true">lock</i></span>
                 {% endif %}
             </div>
             {% if badge.description %}
