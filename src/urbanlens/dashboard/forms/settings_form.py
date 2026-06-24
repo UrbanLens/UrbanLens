@@ -198,6 +198,12 @@ class MapDisplayForm(forms.ModelForm):
         label="Default Map View",
         help_text="Which map layer to use by default.",
     )
+    map_dark_mode = forms.ChoiceField(
+        choices=ThemeChoice.choices,
+        widget=forms.RadioSelect(attrs={"class": "settings-radio"}),
+        label="Map Dark Mode",
+        help_text="When to apply a dark tile layer on the map. System follows your OS preference. Satellite is unaffected.",
+    )
     cluster_radius = forms.IntegerField(
         required=False,
         min_value=1,
@@ -215,7 +221,7 @@ class MapDisplayForm(forms.ModelForm):
 
     class Meta:
         model = Profile
-        fields = ["default_map_view", "cluster_radius", "use_pin_cache"]
+        fields = ["default_map_view", "map_dark_mode", "cluster_radius", "use_pin_cache"]
 
 
 class MapCenterForm(forms.ModelForm):

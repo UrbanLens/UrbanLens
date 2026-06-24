@@ -257,6 +257,37 @@
 
             <div class="settings-field">
                 <label class="settings-label">
+                    Map Dark Mode
+                    {% include "dashboard/partials/_tooltip_help.html" with text="When to switch the base map to a dark tile layer. System follows your OS preference. Satellite view is always unaffected." %}
+                </label>
+                <p class="settings-help">System follows your OS preference. Satellite is unaffected.</p>
+                <div class="settings-theme-row">
+                    <label class="settings-theme-option {% if map_display_form.instance.map_dark_mode == 'system' %}active{% endif %}" id="map-dark-opt-system">
+                        <input type="radio" name="map_dark_mode" value="system"
+                               {% if map_display_form.instance.map_dark_mode == 'system' %}checked{% endif %}>
+                        <i class="material-icons">brightness_auto</i>
+                        <span>System</span>
+                    </label>
+                    <label class="settings-theme-option {% if map_display_form.instance.map_dark_mode == 'light' %}active{% endif %}" id="map-dark-opt-light">
+                        <input type="radio" name="map_dark_mode" value="light"
+                               {% if map_display_form.instance.map_dark_mode == 'light' %}checked{% endif %}>
+                        <i class="material-icons">light_mode</i>
+                        <span>Always Light</span>
+                    </label>
+                    <label class="settings-theme-option {% if map_display_form.instance.map_dark_mode == 'dark' %}active{% endif %}" id="map-dark-opt-dark">
+                        <input type="radio" name="map_dark_mode" value="dark"
+                               {% if map_display_form.instance.map_dark_mode == 'dark' %}checked{% endif %}>
+                        <i class="material-icons">dark_mode</i>
+                        <span>Always Dark</span>
+                    </label>
+                </div>
+                {% if map_display_form.map_dark_mode.errors %}
+                <p class="settings-error">{{ map_display_form.map_dark_mode.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label">
                     Starting Point
                     {% include "dashboard/partials/_tooltip_help.html" with text="Where the map opens when you visit it. My Pins centers on your pin cluster; My Location uses GPS; Remember keeps your last view; Custom uses the address below." wide=True %}
                 </label>

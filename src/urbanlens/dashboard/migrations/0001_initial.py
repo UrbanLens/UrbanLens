@@ -2911,4 +2911,18 @@ class Migration(migrations.Migration):
                 fields=["end_date"], name="dashboard_t_end_dat_1dca64_idx"
             ),
         ),
+        migrations.AddField(
+            model_name="profile",
+            name="map_dark_mode",
+            field=models.CharField(
+                choices=[
+                    ("system", "System (follows your OS)"),
+                    ("light", "Light"),
+                    ("dark", "Dark"),
+                ],
+                default="system",
+                help_text="When to apply a dark tile layer on the map. System follows your OS preference. Satellite is always unaffected.",
+                max_length=10,
+            ),
+        ),
     ] + BOOTSTRAP_OPERATIONS_SUFFIX

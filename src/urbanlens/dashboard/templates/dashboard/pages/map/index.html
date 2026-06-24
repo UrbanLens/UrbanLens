@@ -427,6 +427,7 @@
     const _GPS_FALLBACK_LNG  = {{ gps_fallback_lng|default:"null" }};
     const _defaultZoom       = {{ map_default_zoom|default:13 }};
     const _DEFAULT_MAP_VIEW  = '{{ default_map_view|default:"street" }}';
+    const _MAP_DARK_MODE     = '{{ map_dark_mode|default:"system" }}';
     // Per-profile key for remembering active layers across sessions.
     const _LAYER_CACHE_KEY   = `ul_layers_v1_${_PROFILE_UUID}`;
     const _serverCenter      = (_SERVER_CENTER_LAT !== null && _SERVER_CENTER_LNG !== null)
@@ -1063,6 +1064,11 @@
     const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
     });
+    // CartoDB Dark Matter — used when map dark mode is active (street/topographic base only)
+    const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19,
+    });
     // OpenWeatherMap tile layer
     const rainLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{openweathermap_api_key}}', {
         attribution: 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
@@ -1073,9 +1079,33 @@
         layer: 'clouds_new',
     });
 
+    // ── Dark map mode helpers ─────────────────────────────────────────────────
+    function _isDarkMapActive() {
+        if (_MAP_DARK_MODE === 'dark') return true;
+        if (_MAP_DARK_MODE === 'light') return false;
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    // Swap between standardLayer and darkLayer without touching satellite/topo.
+    function _syncBaseLayer() {
+        const useDark = _isDarkMapActive();
+        if (useDark) {
+            if (map.hasLayer(standardLayer)) map.removeLayer(standardLayer);
+            if (!map.hasLayer(darkLayer)) darkLayer.addTo(map);
+        } else {
+            if (map.hasLayer(darkLayer)) map.removeLayer(darkLayer);
+            if (!map.hasLayer(standardLayer)) standardLayer.addTo(map);
+        }
+    }
+
+    // In system mode, re-sync whenever the OS preference changes.
+    if (_MAP_DARK_MODE === 'system') {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', _syncBaseLayer);
+    }
+
     // ── Apply initial base layer from user preference ─────────────────────────
-    // standardLayer is always the bottom-most base; satellite/topo sit on top of it.
-    standardLayer.addTo(map);
+    // standardLayer / darkLayer is the bottom-most base; satellite/topo sit on top.
+    _syncBaseLayer();
     (function _applyInitialLayers() {
         let baseView = _DEFAULT_MAP_VIEW;
         let weatherOn = false;
@@ -1116,7 +1146,7 @@
         _tileLoadingCount = Math.max(0, _tileLoadingCount - 1);
         if (_tileLoadingCount === 0) document.getElementById('map').classList.remove('tiles-loading');
     }
-    [standardLayer, topographyLayer, satelliteLayer].forEach(layer => {
+    [standardLayer, topographyLayer, satelliteLayer, darkLayer].forEach(layer => {
         layer.on('loading', _onTileLayerLoading);
         layer.on('load',    _onTileLayerLoad);
         layer.on('error',   _onTileLayerLoad);

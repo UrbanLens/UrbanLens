@@ -200,7 +200,7 @@ EMAIL_HOST_USER = os.getenv("UL_EMAIL_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("UL_EMAIL_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("UL_EMAIL_TLS", "True") == "True"
 EMAIL_USE_SSL = os.getenv("UL_EMAIL_USE_SSL", "False") == "True"
-DEFAULT_EMAIL_FROM = os.getenv("UL_EMAIL_FROM", "noreply@yourdomain.org")
+DEFAULT_FROM_EMAIL = os.getenv("UL_EMAIL_FROM", "noreply@yourdomain.org")
 SMITHSONIAN_API_KEY = os.getenv("UL_SMITHSONIAN_API_KEY", "")
 GOOGLE_PLACES_API_KEY = os.getenv("UL_GOOGLE_PLACES_API_KEY", "")
 GOOGLE_MAPS_API_KEY = os.getenv("UL_GOOGLE_MAPS_API_KEY", "")
