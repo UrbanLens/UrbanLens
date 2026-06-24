@@ -6,10 +6,13 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from django import template
+from django.utils.html import format_html, format_html_join
 
 if TYPE_CHECKING:
     from collections.abc import Collection
     import datetime
+
+    from django.utils.safestring import SafeString
 
     from urbanlens.dashboard.models.badges.model import Badge
 
@@ -90,3 +93,72 @@ def icon_keywords(value: str | None) -> str:
     from urbanlens.dashboard.models.badges.model import ICON_KEYWORDS
 
     return ICON_KEYWORDS.get(str(value), "")
+
+
+@register.simple_tag
+def tooltip_attrs(
+    text: str,
+    pos: str = "top",
+    *,
+    wide: bool = False,
+    float_tip: bool = False,
+) -> SafeString:
+    """Return HTML attributes for a ``data-tooltip`` trigger.
+
+    Usage::
+
+        <button type="button" {% tooltip_attrs "Save your changes." pos="below" %}>
+
+    Args:
+        text: Tooltip copy shown on hover, focus, or tap.
+        pos: Placement — ``top``, ``below``, ``left``, or ``right``.
+        wide: Use a wider bubble for longer explanatory text.
+        float_tip: Render via the floating JS layer (escapes ``overflow:hidden``).
+
+    Returns:
+        Safe HTML attribute string for the host element.
+    """
+    parts: list[SafeString] = [format_html('data-tooltip="{}"', text)]
+    if pos and pos != "top":
+        parts.append(format_html('data-tooltip-pos="{}"', pos))
+    if wide:
+        parts.append(format_html("data-tooltip-wide"))
+    if float_tip:
+        parts.append(format_html('data-tooltip-float="true"'))
+    return format_html_join(" ", "{}", ((part,) for part in parts))
+
+
+@register.inclusion_tag("dashboard/partials/_tooltip_help.html")
+def tooltip_help(text: str, pos: str = "", wide: bool = False) -> dict[str, object]:
+    """Render a standard info-icon tooltip trigger.
+
+    Args:
+        text: Tooltip copy.
+        pos: Optional placement override.
+        wide: Wider bubble for longer copy.
+
+    Returns:
+        Context dict for ``_tooltip_help.html``.
+    """
+    return {"text": text, "pos": pos, "wide": wide}
+
+
+@register.inclusion_tag("dashboard/partials/_tooltip_label.html")
+def tooltip_label(
+    label: str,
+    help_text: str = "",
+    pos: str = "",
+    wide: bool = False,
+) -> dict[str, object]:
+    """Render a label with an optional inline help tooltip.
+
+    Args:
+        label: Visible label text.
+        help_text: Optional tooltip copy; omitted when empty.
+        pos: Optional tooltip placement.
+        wide: Wider bubble for longer copy.
+
+    Returns:
+        Context dict for ``_tooltip_label.html``.
+    """
+    return {"label": label, "help": help_text, "pos": pos, "wide": wide}

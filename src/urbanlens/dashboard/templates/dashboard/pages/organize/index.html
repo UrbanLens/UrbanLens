@@ -5,30 +5,42 @@
 <div class="organize-page page-content">
 
     <div class="organize-page-header">
-        <h1 class="organize-page-title">Organize</h1>
+        <h1 class="organize-page-title">Organize
+            {% include "dashboard/partials/_tooltip_help.html" with text="Tags label pins, categories group them by type, statuses track visit progress, and priority controls which icon wins when a pin has several." wide=True %}
+        </h1>
         <p class="organize-page-subtitle">Manage tags, categories, statuses, and display priority.</p>
     </div>
 
     {# ── Tab bar ──────────────────────────────────────────────────────────────── #}
     <div class="organize-tab-bar" role="tablist">
         <button type="button" class="organize-tab{% if active_tab == 'tags' %} active{% endif %}"
-                role="tab" data-tab="tags" aria-controls="panel-tags">
+                role="tab" data-tab="tags" aria-controls="panel-tags"
+                data-tooltip="Flexible labels you attach to pins — road trips, favorites, themes, etc."
+                data-tooltip-pos="below">
             <i class="material-icons">label</i> Tags
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'categories' %} active{% endif %}"
-                role="tab" data-tab="categories" aria-controls="panel-categories">
+                role="tab" data-tab="categories" aria-controls="panel-categories"
+                data-tooltip="Pin types such as factory, hospital, or bridge — shown on the map icon."
+                data-tooltip-pos="below">
             <i class="material-icons">category</i> Categories
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'status' %} active{% endif %}"
-                role="tab" data-tab="status" aria-controls="panel-status">
+                role="tab" data-tab="status" aria-controls="panel-status"
+                data-tooltip="Visit progress labels like Visited, Planned, or Abandoned."
+                data-tooltip-pos="below">
             <i class="material-icons">flag_circle</i> Statuses
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'people' %} active{% endif %}"
-                role="tab" data-tab="people" aria-controls="panel-people">
+                role="tab" data-tab="people" aria-controls="panel-people"
+                data-tooltip="Private labels for other users — only you can see these."
+                data-tooltip-pos="below">
             <i class="material-icons">people</i> People
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
-                role="tab" data-tab="priority" aria-controls="panel-priority">
+                role="tab" data-tab="priority" aria-controls="panel-priority"
+                data-tooltip="Drag to set which badge icon appears when a pin has more than one."
+                data-tooltip-pos="below">
             <i class="material-icons">low_priority</i> Priority
         </button>
     </div>
@@ -107,7 +119,9 @@
                         <input id="new-tag-name" name="name" type="text" class="form-input" placeholder="e.g. Road trip" required>
                     </div>
                     <div class="form-field">
-                        <label class="form-label" for="new-tag-order">Order (higher = higher priority)</label>
+                        <label class="form-label" for="new-tag-order">
+                            {% include "dashboard/partials/_tooltip_label.html" with label="Order (higher = higher priority)" help="When a pin has multiple tags, higher-order tags appear first in lists and can win on the map icon." %}
+                        </label>
                         <input id="new-tag-order" name="order" type="number" class="form-input" value="0">
                     </div>
                 </div>
@@ -148,7 +162,9 @@
                     </div>
                 </div>
                 <div class="form-field">
-                    <label class="form-label">Parent tags (optional)</label>
+                    <label class="form-label">
+                        {% include "dashboard/partials/_tooltip_label.html" with label="Parent tags (optional)" help="Child tags inherit organization from parents. A pin tagged with a child also counts toward the parent in filters and stats." wide=True %}
+                    </label>
                     <input type="text" class="form-input tag-parent-search" placeholder="Search tags…"
                            oninput="filterParentOptions(this,'parent-select-new-tag')" autocomplete="off">
                     <div class="tag-parent-select" id="parent-select-new-tag">

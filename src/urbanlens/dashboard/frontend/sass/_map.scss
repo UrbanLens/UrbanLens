@@ -798,9 +798,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: .5rem;
     padding: 13px 15px 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     flex-shrink: 0;
+
+    .fp-title {
+        margin-right: auto;
+    }
 }
 
 .fp-title {

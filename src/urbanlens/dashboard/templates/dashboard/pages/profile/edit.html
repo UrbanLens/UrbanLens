@@ -173,7 +173,7 @@
                        autocomplete="username" spellcheck="false">
                 <span class="edit-username-hint" id="username-hint"></span>
             </div>
-            <p class="edit-field-hint">3–30 characters: letters, numbers, and underscores only.</p>
+            <p class="edit-field-hint">3-30 characters: letters, numbers, and underscores only.</p>
         </div>
 
         {# Avatar #}
@@ -475,7 +475,7 @@ function closeDateErrorDialog() {
         usernameHint.textContent = '';
         if (!/^[a-zA-Z0-9_]{3,30}$/.test(username)) {
             usernameHint.className = 'edit-username-hint edit-username-hint--bad';
-            usernameHint.textContent = '3–30 chars: letters, numbers, underscores';
+            usernameHint.textContent = '3-30 chars: letters, numbers, underscores';
             return;
         }
         fetch(SAVE_URL + '?field=username&value=' + encodeURIComponent(username))

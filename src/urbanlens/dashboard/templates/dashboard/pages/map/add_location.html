@@ -41,7 +41,6 @@
 
 			    <div class="pin-privacy-toggle" style="margin-top:16px; display:flex; align-items:center; gap:8px;">
 			    <label class="toggle-switch"
-			           data-tooltip="Private pins are stored only on your account. They are never linked to a community wiki page and your nickname, notes, and coordinates remain completely invisible to others."
 			           title="Private pins are kept entirely personal and will not appear on the community wiki.">
 				    <input type="checkbox" id="isPrivate" name="is_private" value="1">
 				    <span class="toggle-slider"></span>
@@ -49,6 +48,7 @@
 			    <span class="pin-privacy-label">
 				    <i class="material-icons" style="font-size:16px; vertical-align:middle;">lock</i>
 				    Private pin
+                    {% include "dashboard/partials/_tooltip_help.html" with text="Private pins are stored only on your account. They are never linked to a community wiki page and your nickname, notes, and coordinates remain invisible to others." wide=True %}
 			    </span>
 			    <span class="pin-privacy-hint" style="font-size:12px; color:var(--text-muted, #888);">
 				    (no community wiki entry)

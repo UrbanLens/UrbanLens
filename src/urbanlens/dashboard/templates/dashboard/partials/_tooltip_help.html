@@ -1,0 +1,13 @@
+{# Reusable info-icon tooltip trigger.
+   Usage:
+     {% include "dashboard/partials/_tooltip_help.html" with text="Explanation here." %}
+     {% include "dashboard/partials/_tooltip_help.html" with text="..." pos="below" wide=True %}
+#}
+<button type="button"
+        class="ul-tooltip-help"
+        data-tooltip="{{ text }}"
+        {% if pos %}data-tooltip-pos="{{ pos }}"{% endif %}
+        {% if wide %}data-tooltip-wide{% endif %}
+        aria-label="More information">
+    <i class="material-icons" aria-hidden="true">info</i>
+</button>

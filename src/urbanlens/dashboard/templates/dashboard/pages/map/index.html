@@ -14,30 +14,53 @@
 {% block content %}
 <div id="map" hx-boost="true">
     <div class="map-buttons" id="map-buttons">
-        <button id="toggle-map-buttons" class="map-btn-icon" title="Toggle controls">
+        <button id="toggle-map-buttons" class="map-btn-icon"
+                data-tooltip="Show or hide map toolbar"
+                aria-label="Toggle map controls">
             <i class="material-icons">menu</i>
         </button>
         <div class="map-buttons-content">
-            <button id="add-pin-button" class="map-btn-icon" title="Add Pin"
+            <button id="add-pin-button" class="map-btn-icon"
+                    data-tooltip="Drop a new pin on the map. Click the map to set coordinates."
+                    aria-label="Add pin"
                     onclick="openAddPinDialog()">
                 <i class="material-icons">add_location</i>
             </button>
-            <button id="search-pins-button" class="map-btn-icon" title="Filter / Search Pins" onclick="toggleFilterPanel()">
+            <button id="search-pins-button" class="map-btn-icon"
+                    data-tooltip="Filter pins by name, rating, visit status, badges, and more."
+                    data-tooltip-pos="below"
+                    aria-label="Filter and search pins"
+                    onclick="toggleFilterPanel()">
                 <i class="material-icons">search</i>
             </button>
-            <button id="topography-button" class="map-btn-icon" title="Topography View" onclick="toggleTopographyView()">
+            <button id="topography-button" class="map-btn-icon"
+                    data-tooltip="Switch to topographic terrain view with elevation contours."
+                    aria-label="Topography view"
+                    onclick="toggleTopographyView()">
                 <i class="material-icons">terrain</i>
             </button>
-            <button id="satellite-button" class="map-btn-icon" title="Satellite View" onclick="toggleSatelliteView()">
+            <button id="satellite-button" class="map-btn-icon"
+                    data-tooltip="Switch to satellite imagery."
+                    aria-label="Satellite view"
+                    onclick="toggleSatelliteView()">
                 <i class="material-icons">satellite_alt</i>
             </button>
-            <button id="toggle-pins-button" class="map-btn-icon" title="Toggle Pins" onclick="togglePins()">
+            <button id="toggle-pins-button" class="map-btn-icon"
+                    data-tooltip="Show or hide all pin markers without changing filters."
+                    aria-label="Toggle pins"
+                    onclick="togglePins()">
                 <i class="material-icons">push_pin</i>
             </button>
-            <button id="weather-button" class="map-btn-icon" title="Weather View" onclick="toggleWeatherView()">
+            <button id="weather-button" class="map-btn-icon"
+                    data-tooltip="Overlay current weather conditions on the map."
+                    aria-label="Weather view"
+                    onclick="toggleWeatherView()">
                 <i class="material-icons">cloud</i>
             </button>
-            <button id="import-pins-button" class="map-btn-icon" title="Import Pins"
+            <button id="import-pins-button" class="map-btn-icon"
+                    data-tooltip="Import pins from CSV or other supported formats."
+                    data-tooltip-pos="below"
+                    aria-label="Import pins"
                     hx-get="{% url 'pin.import.form' %}" hx-target="#importPinsModal" hx-swap="innerHTML">
                 <i class="material-icons">upload</i>
             </button>
@@ -48,9 +71,13 @@
     <div id="addr-search-bar">
         <i class="material-icons addr-search-icon">place</i>
         <input type="text" id="address-search-input" placeholder="Jump to a place…"
+               data-tooltip="Search by address or place name, then press Enter to fly there."
+               data-tooltip-pos="below"
                autocomplete="off" onkeydown="if(event.key==='Enter'){geocodeAddress();event.preventDefault();}">
         <button type="button" class="addr-search-clear" id="addr-search-clear" hidden
-                onclick="clearAddrSearch()" title="Clear">
+                data-tooltip="Clear search"
+                aria-label="Clear search"
+                onclick="clearAddrSearch()">
             <i class="material-icons">close</i>
         </button>
     </div>
@@ -60,7 +87,8 @@
     <div id="filter-panel">
         <div class="fp-header">
             <span class="fp-title">Search &amp; Filter</span>
-            <button class="fp-close" onclick="toggleFilterPanel()" title="Close">✕</button>
+            {% include "dashboard/partials/_tooltip_help.html" with text="Filters apply instantly as you change them. Pins matching all selected criteria stay visible on the map." wide=True %}
+            <button class="fp-close" onclick="toggleFilterPanel()" data-tooltip="Close panel" aria-label="Close">✕</button>
         </div>
 
         <form id="filter-form"
@@ -131,6 +159,7 @@
             <details class="fp-accordion-item" id="fp-acc-priority">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Priority</span>
+                    {% include "dashboard/partials/_tooltip_help.html" with text="Filter by how urgently you want to visit each pin (1-5 stars)." pos="below" %}
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -181,6 +210,7 @@
             <details class="fp-accordion-item" id="fp-acc-incl-tags">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Include Badges</span>
+                    {% include "dashboard/partials/_tooltip_help.html" with text="Show only pins that have at least one of the selected badges." pos="below" %}
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -202,6 +232,7 @@
             <details class="fp-accordion-item" id="fp-acc-excl-tags">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Exclude Badges</span>
+                    {% include "dashboard/partials/_tooltip_help.html" with text="Hide pins that have any of the selected badges." pos="below" %}
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">

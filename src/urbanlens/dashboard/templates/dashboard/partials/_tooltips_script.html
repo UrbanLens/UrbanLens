@@ -1,0 +1,149 @@
+<script>
+(function () {
+    'use strict';
+
+    var floatEl = document.createElement('div');
+    floatEl.className = 'ul-tooltip-float';
+    floatEl.setAttribute('role', 'tooltip');
+    floatEl.hidden = true;
+    document.body.appendChild(floatEl);
+
+    var activeTrigger = null;
+    var hideTimer = null;
+
+    function tooltipText(el) {
+        return el && el.getAttribute('data-tooltip');
+    }
+
+    function usesFloat(el) {
+        return el && el.getAttribute('data-tooltip-float') === 'true';
+    }
+
+    function closeFloat() {
+        floatEl.classList.remove('is-visible');
+        floatEl.hidden = true;
+        activeTrigger = null;
+    }
+
+    function positionFloat(trigger) {
+        var rect = trigger.getBoundingClientRect();
+        var pos = trigger.getAttribute('data-tooltip-pos') || 'top';
+        var wide = trigger.hasAttribute('data-tooltip-wide');
+        floatEl.textContent = tooltipText(trigger);
+        floatEl.setAttribute('data-wide', wide ? 'true' : 'false');
+        floatEl.hidden = false;
+        floatEl.classList.add('is-visible');
+
+        // Measure after content is set.
+        var tipRect = floatEl.getBoundingClientRect();
+        var gap = 8;
+        var top = 0;
+        var left = 0;
+
+        if (pos === 'below') {
+            top = rect.bottom + gap;
+            left = rect.left + (rect.width / 2) - (tipRect.width / 2);
+        } else if (pos === 'left') {
+            top = rect.top + (rect.height / 2) - (tipRect.height / 2);
+            left = rect.left - tipRect.width - gap;
+        } else if (pos === 'right') {
+            top = rect.top + (rect.height / 2) - (tipRect.height / 2);
+            left = rect.right + gap;
+        } else {
+            top = rect.top - tipRect.height - gap;
+            left = rect.left + (rect.width / 2) - (tipRect.width / 2);
+        }
+
+        left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
+        top = Math.max(8, Math.min(top, window.innerHeight - tipRect.height - 8));
+        floatEl.style.top = top + 'px';
+        floatEl.style.left = left + 'px';
+    }
+
+    function openFloat(trigger) {
+        clearTimeout(hideTimer);
+        activeTrigger = trigger;
+        positionFloat(trigger);
+    }
+
+    function scheduleClose() {
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(closeFloat, 80);
+    }
+
+    function clearOpenClasses() {
+        document.querySelectorAll('[data-tooltip].is-tooltip-open').forEach(function (el) {
+            el.classList.remove('is-tooltip-open');
+        });
+    }
+
+    document.addEventListener('mouseover', function (e) {
+        var trigger = e.target.closest('[data-tooltip]');
+        if (!trigger || !usesFloat(trigger)) return;
+        openFloat(trigger);
+    });
+
+    document.addEventListener('mouseout', function (e) {
+        if (!activeTrigger || !usesFloat(activeTrigger)) return;
+        var related = e.relatedTarget;
+        if (related && (activeTrigger.contains(related) || floatEl.contains(related))) return;
+        scheduleClose();
+    });
+
+    document.addEventListener('focusin', function (e) {
+        var trigger = e.target.closest('[data-tooltip]');
+        if (!trigger || !usesFloat(trigger)) return;
+        openFloat(trigger);
+    });
+
+    document.addEventListener('focusout', function () {
+        if (activeTrigger && usesFloat(activeTrigger)) scheduleClose();
+    });
+
+    // Touch / coarse pointer: tap to toggle CSS tooltips.
+    document.addEventListener('click', function (e) {
+        var trigger = e.target.closest('[data-tooltip]');
+        if (!trigger) {
+            clearOpenClasses();
+            if (activeTrigger) closeFloat();
+            return;
+        }
+
+        if (usesFloat(trigger)) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (activeTrigger === trigger) {
+                closeFloat();
+            } else {
+                clearOpenClasses();
+                openFloat(trigger);
+            }
+            return;
+        }
+
+        var isTouch = window.matchMedia('(hover: none), (pointer: coarse)').matches;
+        if (!isTouch) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        var wasOpen = trigger.classList.contains('is-tooltip-open');
+        clearOpenClasses();
+        if (!wasOpen) trigger.classList.add('is-tooltip-open');
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            clearOpenClasses();
+            closeFloat();
+        }
+    });
+
+    window.addEventListener('scroll', function () {
+        if (activeTrigger) positionFloat(activeTrigger);
+    }, true);
+
+    window.addEventListener('resize', function () {
+        if (activeTrigger) positionFloat(activeTrigger);
+    });
+}());
+</script>

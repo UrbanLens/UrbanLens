@@ -117,6 +117,10 @@ BOOTSTRAP_OPERATIONS_PREFIX = [
     ),
 ]
 
+BOOTSTRAP_OPERATIONS_SUFFIX = [
+    migrations.RunPython(bootstrap, reverse_bootstrap),
+]
+
 
 class Migration(migrations.Migration):
 
@@ -126,7 +130,7 @@ class Migration(migrations.Migration):
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
-    operations = [
+    operations = BOOTSTRAP_OPERATIONS_PREFIX + [
         migrations.CreateModel(
             name="Badge",
             fields=[
@@ -2856,9 +2860,4 @@ class Migration(migrations.Migration):
                 fields=["end_date"], name="dashboard_t_end_dat_1dca64_idx",
             ),
         ),
-    ]
-
-
-BOOTSTRAP_OPERATIONS_SUFFIX = [
-    migrations.RunPython(bootstrap, reverse_bootstrap),
-]
+    ] + BOOTSTRAP_OPERATIONS_SUFFIX

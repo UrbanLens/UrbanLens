@@ -4,7 +4,6 @@ Features planned for this release.
 ## UI Adjustments
 * Notification bar modernization (read/unread are not clear) [UL-3]
 * Color tweaks throughout app for both light and dark mode. [UL-4]
-* Tooltip UI [UL-5]
 * Tweak notifications, and make success/error states more clear. [UL-6]
 * Ensure mobile-first. [UL-7]
 * Loading indicators for all ui actions that take time. (Creating pin, searching map, etc) [UL-8]
@@ -12,7 +11,6 @@ Features planned for this release.
 ## Smaller Features
 * Cleanup git history, and begin using branches for dev. [UL-14]
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
-* Add tooltips to help guide users through the app when my assumptions about what is intuitive are incorrect. [UL-17]
 
 ## Medium Features
 
@@ -21,7 +19,6 @@ Features planned for this release.
 * Run bandit and AI vulnerability scans; integrate with CI/CD. [UL-31]
 
 ## Bug Fixes
-* User settings don't seem to properly save. [UL-34]
 * When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]
 
 ## Optimizations / Latency
@@ -32,7 +29,7 @@ Features planned for this release.
 ## Project Health
 * Review AI-created unit tests. Eliminate useless ones to assist code coverage reports. [UL-38]
 * Provide secondary safeguards for permissions. [UL-39]
-* Prune unnecessary vars from docker-compose, .env, etc
+* Prune unnecessary vars from docker-compose, .env, etc [UL-129]
 
 ## Features that need verification
 * password reset. [UL-41]
@@ -62,7 +59,10 @@ Features planned for this release.
 * The pre-populated People badges do not appear on the organize page under the People tab. [UL-124]
 * Ensure non-anonymized urls do not exist at all. Users should not be able to access urls we don't want them to access, (like .../profile/2/, instead of the uuid). [UL-40]
 * Properly set up pre-commit hooks for linting, type checking, and security scans. [UL-15]
-* Password Requirements should be reasonably strong.
+* Password Requirements should be reasonably strong. [UL-130]
+* User settings don't seem to properly save. [UL-34]
+* Tooltip UI [UL-5]
+* Add tooltips to help guide users through the app when my assumptions about what is intuitive are incorrect. [UL-17]
 
 # Future Features
 Features planned for future releases.
@@ -107,17 +107,16 @@ Features planned for future releases.
 * "Accept" / "Reject" shared pin for the user being shared with. [UL-21]
 * Implement "hide user", and "mute user" features, alongside the existing "block user" feature. [UL-27]
 * Proper CI/CD pipeline, tags, releases, etc. [UL-25]
-* Support non-USA formats for dates, currency, distances via user settings.
-* Support non-English language.
-* User stats page (fun stats about the user: breakdown of pins by continent, etc).
-* Lists (these aren't strictly necessary, due to badges, but could allow users to create lists of unrelated things. Like "my favorite explores in February" or "1 Best Church in Each State").
-* During site setup, tests for features (i.e. "send test email" button)
-* Ensure rotating logs, purging cache data, etc, in the event of hacking incident.
-* Review API Key restrictions for cloud providers (e.g. referrer restrictions for google, etc)
-* Use remote secret store (maybe?)
-* Automatic backups
-* When changing tabs (e.g. Organize page), change the browser url so that bookmarks and page refreshes work as expected.
-* Bug: Admin Charts page has incorrect "Media Storage" (0). In addition, "Uptime" reflects the server, not the app. Time charts don't display.
+* Support non-USA formats for dates, currency, distances via user settings. [UL-131]
+* Support non-English language. [UL-132]
+* User stats page (fun stats about the user: breakdown of pins by continent, etc). [UL-133]
+* Lists (these aren't strictly necessary, due to badges, but could allow users to create lists of unrelated things. Like "my favorite explores in February" or "1 Best Church in Each State"). [UL-134]
+* During site setup, tests for features (i.e. "send test email" button) [UL-135]
+* Ensure rotating logs, purging cache data, etc, in the event of hacking incident. [UL-136]
+* Review API Key restrictions for cloud providers (e.g. referrer restrictions for google, etc) [UL-137]
+* Use remote secret store (maybe?) [UL-138]
+* Automatic backups [UL-139]
+* When changing tabs (e.g. Organize page), change the browser url so that bookmarks and page refreshes work as expected. [UL-140]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
@@ -176,4 +175,4 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 ## Inconsistent Behavior
 Behavior that isn't consistent enough to diagnose or fix without looking at it more deeply.
 
-* Sometimes... In the import dialog ui, hovering over the drop files here or browse button has a css hover effect that makes it look clickable, but clicking on it doesn't do anything. The user has to click on the browse link. Clicking anywhere on the button should work just as if the user clicked on the browse link.
+* Sometimes... In the import dialog ui, hovering over the drop files here or browse button has a css hover effect that makes it look clickable, but clicking on it doesn't do anything. The user has to click on the browse link. Clicking anywhere on the button should work just as if the user clicked on the browse link. [UL-141]

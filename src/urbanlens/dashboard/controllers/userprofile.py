@@ -255,7 +255,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         if not username:
             return JsonResponse({"available": False, "reason": "Username required"})
         if not _USERNAME_RE.match(username):
-            return JsonResponse({"available": False, "reason": "3–30 characters: letters, numbers, and underscores only"})
+            return JsonResponse({"available": False, "reason": "3-30 characters: letters, numbers, and underscores only"})
         taken = User.objects.filter(username__iexact=username).exclude(pk=request.user.pk).exists()
         if taken:
             return JsonResponse({"available": False, "reason": "That username is already taken"})
@@ -330,7 +330,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         if not username:
             return JsonResponse({"error": "Username is required."}, status=400)
         if not _USERNAME_RE.match(username):
-            return JsonResponse({"error": "3–30 characters: letters, numbers, and underscores only."}, status=400)
+            return JsonResponse({"error": "3-30 characters: letters, numbers, and underscores only."}, status=400)
         if User.objects.filter(username__iexact=username).exclude(pk=request.user.pk).exists():
             return JsonResponse({"error": "That username is already taken."}, status=409)
         request.user.username = username

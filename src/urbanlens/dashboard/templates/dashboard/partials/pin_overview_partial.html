@@ -34,7 +34,9 @@
                 </div>
                 {% endif %}
                 <div class="pin-stat-item">
-                    <span class="field-label">Priority</span>
+                    <span class="field-label">
+                        {% include "dashboard/partials/_tooltip_label.html" with label="Priority" help="How urgently you want to visit this pin (1 = low, 5 = must visit soon)." %}
+                    </span>
                     <span class="field-value">
                         <span class="star-rating-interactive star-rating-interactive--priority">
                             {% for i in "12345"|make_list %}
@@ -59,7 +61,9 @@
                     </span>
                 </div>
                 <div class="pin-stat-item">
-                    <span class="field-label">Rating</span>
+                    <span class="field-label">
+                        {% include "dashboard/partials/_tooltip_label.html" with label="Rating" help="Your personal quality rating for this location (1-5 stars)." %}
+                    </span>
                     <span class="field-value">
                         <span class="star-rating-interactive">
                             {% for i in "12345"|make_list %}
@@ -84,7 +88,9 @@
                     </span>
                 </div>
                 <div class="pin-stat-item">
-                    <span class="field-label">Vulnerability</span>
+                    <span class="field-label">
+                        {% include "dashboard/partials/_tooltip_label.html" with label="Vulnerability" help="How at-risk or fragile this site feels — useful for planning and sharing responsibly." wide=True %}
+                    </span>
                     <span class="field-value">
                         <span class="star-rating-interactive star-rating-interactive--vulnerability">
                             {% for i in "12345"|make_list %}

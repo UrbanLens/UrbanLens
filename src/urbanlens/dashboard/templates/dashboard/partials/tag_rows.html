@@ -36,8 +36,12 @@
         <div class="tag-card-body">
             <div class="tag-card-name">
                 {{ tag.effective_name }}
-                {% if not tag.profile %}<span class="tag-global-badge">global</span>{% endif %}
-                {% if tag.is_customized %}<span class="tag-customized-badge" title="You have customized this tag's display">custom</span>{% endif %}
+                {% if not tag.profile %}<span class="tag-global-badge"
+                    data-tooltip="Shared tag managed site-wide. You can customize how it looks on your pins without changing it for others."
+                    data-tooltip-pos="below">global</span>{% endif %}
+                {% if tag.is_customized %}<span class="tag-customized-badge"
+                    data-tooltip="You changed this tag's icon, color, or name for your own pins only."
+                    data-tooltip-pos="below">custom</span>{% endif %}
             </div>
             {% if tag.description %}
             <div class="tag-card-desc">{{ tag.description }}</div>
@@ -100,6 +104,8 @@
         <div class="tag-card-actions">
             <button type="button" class="btn--icon{% if tag.is_customized %} btn-icon--active{% endif %}"
                     title="Customize your display of this global tag"
+                    data-tooltip="Change icon, color, or name for this tag on your pins only."
+                    data-tooltip-pos="left"
                     hx-get="{% url 'tag.customize' tag.id %}"
                     hx-target="#tag-edit-dialog-body"
                     hx-swap="innerHTML">
