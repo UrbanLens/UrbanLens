@@ -336,7 +336,7 @@ def _sanitize_latlngs(raw: object) -> list[list[float]]:
         return []
     result = []
     for item in raw:
-        if isinstance(item, (list, tuple)) and len(item) >= 2:
+        if isinstance(item, list | tuple) and len(item) >= 2:
             lat, lng = item[0], item[1]
             if _is_valid_lat(lat) and _is_valid_lng(lng):
                 result.append([float(lat), float(lng)])
