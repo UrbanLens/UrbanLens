@@ -3,6 +3,7 @@
 Invariants verified:
   - GPS mode always returns None regardless of stored coordinates.
   - CUSTOM mode returns stored coordinates as floats, or None when either is unset.
+  - REMEMBER mode returns the last saved map coordinates as floats, or None when either is unset.
   - AUTO mode returns the cached centroid without touching the DB; falls back to
     compute_map_center() when the cache is empty.
   - compute_map_center() finds the densest cluster of pins and returns its centroid,
@@ -139,6 +140,77 @@ class GetMapCenterCustomModeTests(TestCase):
 			MapCenterMode.CUSTOM,
 			map_custom_latitude=lat,
 			map_custom_longitude=lng,
+		)
+		result = profile.get_map_center()
+		self.assertIsNotNone(result)
+		assert result is not None
+		self.assertAlmostEqual(result[0], float(lat), places=5)
+		self.assertAlmostEqual(result[1], float(lng), places=5)
+
+
+# ── REMEMBER mode ─────────────────────────────────────────────────────────────
+
+class GetMapCenterRememberModeTests(TestCase):
+	"""REMEMBER mode returns the stored last map coordinates, or None when incomplete."""
+
+	def test_remember_mode_returns_tuple_when_both_coords_are_set(self) -> None:
+		profile = _profile_with_mode(
+			MapCenterMode.REMEMBER,
+			remembered_map_lat=decimal.Decimal("42.650000"),
+			remembered_map_lng=decimal.Decimal("-73.750000"),
+		)
+		result = profile.get_map_center()
+		self.assertIsNotNone(result)
+		assert result is not None
+		self.assertAlmostEqual(result[0], 42.65, places=4)
+		self.assertAlmostEqual(result[1], -73.75, places=4)
+
+	def test_remember_mode_returns_floats_not_decimals(self) -> None:
+		profile = _profile_with_mode(
+			MapCenterMode.REMEMBER,
+			remembered_map_lat=decimal.Decimal("10.000000"),
+			remembered_map_lng=decimal.Decimal("20.000000"),
+		)
+		result = profile.get_map_center()
+		assert result is not None
+		self.assertIsInstance(result[0], float)
+		self.assertIsInstance(result[1], float)
+
+	def test_remember_mode_returns_none_when_only_latitude_is_set(self) -> None:
+		profile = _profile_with_mode(
+			MapCenterMode.REMEMBER,
+			remembered_map_lat=decimal.Decimal("42.65"),
+			remembered_map_lng=None,
+		)
+		self.assertIsNone(profile.get_map_center())
+
+	def test_remember_mode_returns_none_when_only_longitude_is_set(self) -> None:
+		profile = _profile_with_mode(
+			MapCenterMode.REMEMBER,
+			remembered_map_lat=None,
+			remembered_map_lng=decimal.Decimal("-73.75"),
+		)
+		self.assertIsNone(profile.get_map_center())
+
+	def test_remember_mode_does_not_compute_pin_centroid(self) -> None:
+		profile = _profile_with_mode(
+			MapCenterMode.REMEMBER,
+			remembered_map_lat=decimal.Decimal("42.650000"),
+			remembered_map_lng=decimal.Decimal("-73.750000"),
+		)
+		with patch.object(profile, "compute_map_center") as mock_compute:
+			profile.get_map_center()
+		mock_compute.assert_not_called()
+
+	@given(lat=latitude, lng=longitude)
+	@_db_settings
+	def test_remember_mode_returns_stored_values_exactly(
+		self, lat: decimal.Decimal, lng: decimal.Decimal
+	) -> None:
+		profile = _profile_with_mode(
+			MapCenterMode.REMEMBER,
+			remembered_map_lat=lat,
+			remembered_map_lng=lng,
 		)
 		result = profile.get_map_center()
 		self.assertIsNotNone(result)

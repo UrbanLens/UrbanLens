@@ -85,7 +85,7 @@ class MapCenterFormZoomCleanTests(TestCase):
 # ── MapCenterForm - mode choices ──────────────────────────────────────────────
 
 class MapCenterFormModeTests(TestCase):
-	"""All three MapCenterMode values must be accepted by the form."""
+	"""All MapCenterMode values must be accepted by the form."""
 
 	def test_auto_mode_is_valid(self) -> None:
 		profile = _profile()
@@ -107,6 +107,11 @@ class MapCenterFormModeTests(TestCase):
 			},
 			instance=profile,
 		)
+		self.assertTrue(form.is_valid(), form.errors)
+
+	def test_remember_mode_is_valid(self) -> None:
+		profile = _profile()
+		form = MapCenterForm(data={"map_center_mode": MapCenterMode.REMEMBER}, instance=profile)
 		self.assertTrue(form.is_valid(), form.errors)
 
 	def test_invalid_mode_is_rejected(self) -> None:
