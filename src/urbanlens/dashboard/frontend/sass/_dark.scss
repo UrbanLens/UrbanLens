@@ -417,17 +417,6 @@
         color: #888;
     }
 
-    .edit-profile-btn {
-        border-color: var(--ul-surface-7b);
-        color: #aaa;
-
-        &:hover {
-            border-color: $primary-color;
-            color: $primary-color;
-            background-color: rgba($primary-color, 0.08);
-        }
-    }
-
     .social-link {
         border-color: var(--ul-surface-7b);
         color: #aaa;
@@ -1401,6 +1390,7 @@
         &--primary {
             &:hover {    
                 box-shadow: 0 6px 18px rgba($color-grey-9, .22);
+                background-color: var(--ul-hover-bg-primary);
             }
         }
     }

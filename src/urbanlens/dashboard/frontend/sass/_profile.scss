@@ -83,10 +83,6 @@
     .material-icons {
         font-size: 15px;
     }
-
-    &:hover {
-        background: var(--ul-button-hover-bg);
-    }
 }
 
 .avatar-upload-form {
@@ -144,12 +140,6 @@
 
     .material-icons {
         font-size: 15px;
-    }
-
-    &:hover {
-        border-color: $primary-color;
-        color: $primary-color;
-        background-color: rgba(33, 150, 243, 0.05);
     }
 }
 
