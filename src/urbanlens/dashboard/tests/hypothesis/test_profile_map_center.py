@@ -275,7 +275,7 @@ class GetMapCenterAutoColdTests(TestCase):
 
 	def test_auto_mode_returns_computed_centroid_when_pins_exist(self) -> None:
 		profile = _profile_with_mode(MapCenterMode.AUTO)
-		location = baker.make(Location, latitude=40.0, longitude=-74.0)
+		location = baker.make(Location, latitude=40.0, longitude=-74.0, cached_place_name="No Information Available")
 		baker.make(Pin, profile=profile, location=location, latitude=40.0, longitude=-74.0)
 		result = profile.get_map_center()
 		self.assertIsNotNone(result)
@@ -335,7 +335,7 @@ class ComputeMapCenterTests(TestCase):
 		self.assertIsInstance(result[1], float)
 
 	def test_falls_back_to_location_coordinates_when_pin_has_no_override(self) -> None:
-		location = baker.make(Location, latitude=50.0, longitude=10.0)
+		location = baker.make(Location, latitude=50.0, longitude=10.0, cached_place_name="No Information Available")
 		# Pin has no coordinate override - Coalesce must use location coords.
 		baker.make(Pin, profile=self.profile, location=location, latitude=None, longitude=None)
 		result = self.profile.compute_map_center()
