@@ -5,12 +5,12 @@ Features planned for this release.
 * Notification bar modernization (read/unread are not clear) [UL-3]
 * Color tweaks throughout app for both light and dark mode. [UL-4]
 * Tweak notifications, and make success/error states more clear. [UL-6]
-* Ensure mobile-first. [UL-7]
 * Loading indicators for all ui actions that take time. (Creating pin, searching map, etc) [UL-8]
 
 ## Smaller Features
 * Cleanup git history, and begin using branches for dev. [UL-14]
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
+* Provide explanation of how to do a google takeout to import pins. (Possible onboarding process?)
 
 ## Medium Features
 
@@ -119,6 +119,7 @@ Features planned for future releases.
 * Automatic backups [UL-139]
 * When changing tabs (e.g. Organize page), change the browser url so that bookmarks and page refreshes work as expected. [UL-140]
 * Users created with SSO should still get a password so they can login without SSO.
+* Ensure mobile-first. [UL-7]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

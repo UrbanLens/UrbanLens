@@ -241,6 +241,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
     """
 
     _PROFILE_TEXT = frozenset({"bio", "area"})
+    _PROFILE_CONTACT = frozenset({"phone_number", "signal_username", "discord_username", "whatsapp_number", "telegram_username", "matrix_handle"})
     _PROFILE_DATES = frozenset({"birth_date", "started_exploring"})
     _USER_FIELDS = frozenset({"first_name", "last_name"})
 
@@ -297,6 +298,21 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
 
         if field == "avatar_emoji":
             return self._save_avatar_emoji(request, profile)
+
+        if field in self._PROFILE_CONTACT:
+            value = request.POST.get("value", "").strip()
+            setattr(profile, field, value)
+            profile.save(update_fields=[field])
+            return JsonResponse({"ok": True})
+
+        if field == "contact_visibility":
+            from urbanlens.dashboard.models.profile.model import VisibilityChoice
+            value = request.POST.get("value", "").strip()
+            if value not in VisibilityChoice.values:
+                return JsonResponse({"error": "Invalid visibility option."}, status=400)
+            profile.contact_visibility = value
+            profile.save(update_fields=["contact_visibility"])
+            return JsonResponse({"ok": True})
 
         if field in self._PROFILE_TEXT:
             value = request.POST.get("value", "").strip()
@@ -408,6 +424,8 @@ class EditProfileView(LoginRequiredMixin, View):
         else:
             gravatar_preview_url = ""
 
+        from urbanlens.dashboard.models.profile.model import VisibilityChoice
+
         return {
             "form": form,
             "discord_form": discord_form,
@@ -415,6 +433,7 @@ class EditProfileView(LoginRequiredMixin, View):
             "link_error": link_error,
             "gravatar_preview_url": gravatar_preview_url,
             "emoji_options": random_emoji_options(4),
+            "contact_visibility_choices": VisibilityChoice.choices,
         }
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -463,9 +482,8 @@ class EditProfileView(LoginRequiredMixin, View):
                 )
             else:
                 profile.social_links.filter(platform="discord").delete()
-            return redirect("profile.edit")
-        context = self._build_context(profile, ProfileForm(instance=profile), discord_form)
-        return render(request, "dashboard/pages/profile/edit.html", context)
+            return self._social_links_response(request, profile, DiscordHandleForm())
+        return self._social_links_response(request, profile, discord_form)
 
     def _add_link(self, request: HttpRequest, profile: Profile) -> HttpResponse:
         from urbanlens.dashboard.models.social_link.model import SocialLink
@@ -474,20 +492,19 @@ class EditProfileView(LoginRequiredMixin, View):
         raw = request.POST.get("link_input", "").strip()
         result = parse_social_link(raw) if raw else None
         if not result:
-            context = self._build_context(
+            return self._social_links_response(
+                request,
                 profile,
-                ProfileForm(instance=profile),
                 DiscordHandleForm(),
                 link_error="Couldn't recognise that URL. Try pasting the full profile link.",
             )
-            return render(request, "dashboard/pages/profile/edit.html", context)
         platform, handle = result
         SocialLink.objects.update_or_create(
             profile=profile,
             platform=platform,
             defaults={"handle": handle},
         )
-        return redirect("profile.edit")
+        return self._social_links_response(request, profile, DiscordHandleForm())
 
     def _remove_link(self, request: HttpRequest, profile: Profile) -> HttpResponse:
         from urbanlens.dashboard.services.social_links import KNOWN_PLATFORMS
@@ -495,6 +512,31 @@ class EditProfileView(LoginRequiredMixin, View):
         platform = request.POST.get("remove_platform", "")
         if platform in KNOWN_PLATFORMS:
             profile.social_links.filter(platform=platform).delete()
+        return self._social_links_response(request, profile, DiscordHandleForm())
+
+    def _social_links_response(
+        self,
+        request: HttpRequest,
+        profile: Profile,
+        discord_form: DiscordHandleForm,
+        link_error: str = "",
+    ) -> HttpResponse:
+        """Return the social-links partial for HTMX requests, or redirect for plain requests."""
+        from urbanlens.dashboard.services.social_links import get_profile_links
+
+        if request.headers.get("HX-Request"):
+            discord_link = profile.social_links.filter(platform="discord").first()
+            if not discord_form.is_bound:
+                discord_form = DiscordHandleForm(initial={"discord": discord_link.handle if discord_link else ""})
+            return render(
+                request,
+                "dashboard/partials/profile_social_links.html",
+                {
+                    "social_links": get_profile_links(profile),
+                    "discord_form": discord_form,
+                    "link_error": link_error,
+                },
+            )
         return redirect("profile.edit")
 
 

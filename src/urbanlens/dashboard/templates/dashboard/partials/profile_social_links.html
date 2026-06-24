@@ -1,0 +1,73 @@
+{% load static %}
+{# Partial: social links list + add/remove forms. Re-rendered via HTMX after every change. #}
+<div id="social-links-content">
+
+    {% if social_links %}
+    <ul class="edit-links-list">
+        {% for link in social_links %}
+        <li class="edit-link-row">
+            <i class="{{ link.icon }} edit-link-icon"></i>
+            <span class="edit-link-platform">{{ link.display_name }}</span>
+            {% if link.url %}
+            <a href="{{ link.url }}" class="edit-link-handle" target="_blank" rel="noopener">{{ link.handle }}</a>
+            {% else %}
+            <span class="edit-link-handle">{{ link.handle }}</span>
+            {% endif %}
+            <form class="edit-link-remove-form"
+                  hx-post="{% url 'profile.edit' %}"
+                  hx-target="#social-links-content"
+                  hx-swap="outerHTML">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="remove_link">
+                <input type="hidden" name="remove_platform" value="{{ link.platform }}">
+                <button type="submit" class="edit-link-remove-btn" title="Remove">
+                    <i class="material-icons">close</i>
+                </button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <form class="edit-add-link-form"
+          hx-post="{% url 'profile.edit' %}"
+          hx-target="#social-links-content"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){ this.querySelector('[name=link_input]').value=''; }">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_link">
+        <div class="edit-add-link-row">
+            <input type="text" name="link_input"
+                   class="edit-add-link-input{% if link_error %} edit-add-link-input--error{% endif %}"
+                   placeholder="https://instagram.com/you  ·  https://reddit.com/u/you  ·  etc.">
+            <button type="submit" class="edit-add-link-btn">Add</button>
+        </div>
+        {% if link_error %}
+        <p class="edit-error edit-error--link">{{ link_error }}</p>
+        {% endif %}
+    </form>
+
+    <details class="edit-discord-details">
+        <summary class="edit-discord-summary">
+            <i class="fa-brands fa-discord"></i> Set Discord username
+        </summary>
+        <form class="edit-discord-form"
+              hx-post="{% url 'profile.edit' %}"
+              hx-target="#social-links-content"
+              hx-swap="outerHTML">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_discord">
+            <div class="edit-add-link-row">
+                {{ discord_form.discord }}
+                <button type="submit" class="edit-add-link-btn">Save</button>
+            </div>
+            {% if discord_form.discord.errors %}
+            <p class="edit-error">{{ discord_form.discord.errors|join:", " }}</p>
+            {% endif %}
+        </form>
+    </details>
+
+    <p class="edit-supported-platforms">
+        Supported: Instagram · Bluesky · UER · Facebook · Flickr · YouTube · TikTok · Reddit · any website URL
+    </p>
+</div>

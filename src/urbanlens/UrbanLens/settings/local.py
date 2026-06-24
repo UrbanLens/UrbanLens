@@ -186,6 +186,8 @@ SOCIAL_AUTH_PIPELINE = (
     "urbanlens.dashboard.services.social_auth.pipeline.fetch_and_save_avatar",
     # Flag new SSO users for onboarding (username + avatar selection).
     "urbanlens.dashboard.services.social_auth.pipeline.mark_new_user_onboarding",
+    # Save Discord username as a social link for Discord SSO users.
+    "urbanlens.dashboard.services.social_auth.pipeline.save_discord_social_link",
 )
 
 # After login/signup, send users through post-login routing (map or site admin setup).

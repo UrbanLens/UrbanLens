@@ -105,6 +105,9 @@ def generate_emoji_avatar_svg(emoji: str, color: str) -> str:
 def random_emoji_options(n: int = 4) -> list[dict[str, str]]:
     """Return *n* random (animal, emoji, color) dicts for the avatar picker.
 
+    Both animals and colors are sampled without replacement so that no two
+    suggestions share the same animal or the same background color.
+
     Args:
         n: Number of options to generate.
 
@@ -113,12 +116,12 @@ def random_emoji_options(n: int = 4) -> list[dict[str, str]]:
     """
     import random as _random
     candidates = list(_ANIMAL_EMOJIS.items())
-    chosen = _random.sample(candidates, min(n, len(candidates)))
-    colors = list(_AVATAR_COLORS)
-    _random.shuffle(colors)
+    n = min(n, len(candidates), len(_AVATAR_COLORS))
+    chosen_animals = _random.sample(candidates, n)
+    chosen_colors = _random.sample(_AVATAR_COLORS, n)
     return [
-        {"animal": animal, "emoji": emoji, "color": colors[i % len(colors)]}
-        for i, (animal, emoji) in enumerate(chosen)
+        {"animal": animal, "emoji": emoji, "color": chosen_colors[i]}
+        for i, (animal, emoji) in enumerate(chosen_animals)
     ]
 
 
@@ -276,6 +279,47 @@ def mark_new_user_onboarding(
         logger.debug("Marked onboarding incomplete for new SSO user %s", user.username)
     except Exception:
         logger.warning("Could not mark onboarding for new SSO user pk=%s", getattr(user, "pk", "?"))
+
+
+def save_discord_social_link(
+    backend: Any,
+    user: User | None,
+    response: dict[str, Any],
+    *args: Any,
+    **kwargs: Any,
+) -> None:
+    """Store the Discord username as a SocialLink for Discord SSO users.
+
+    Runs for every Discord login so that username changes on Discord are
+    reflected in UrbanLens.  Only overwrites the stored handle; does not
+    remove the link if the response is missing a username.
+
+    Args:
+        backend: The social-auth backend in use.
+        user: The Django User, or None if authentication failed earlier.
+        response: Raw OAuth response payload from Discord.
+    """
+    if user is None or getattr(backend, "name", "") != "discord":
+        return
+
+    username = response.get("username")
+    if not username:
+        return
+
+    try:
+        profile = user.profile
+    except Exception:
+        logger.warning("No profile found for user %s; skipping Discord social link", user.pk)
+        return
+
+    from urbanlens.dashboard.models.social_link.model import SocialLink
+
+    SocialLink.objects.update_or_create(
+        profile=profile,
+        platform="discord",
+        defaults={"handle": username},
+    )
+    logger.debug("Saved Discord social link for user %s: %s", user.username, username)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────

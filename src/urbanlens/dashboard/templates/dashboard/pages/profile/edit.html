@@ -36,24 +36,26 @@
     align-items: center;
     gap: 0;
 }
+body .edit-profile-page .edit-username-input,
 .edit-username-at {
     height: 3rem;
-    background: var(--ul-surface-1, #f3f4f6);
-    border: 1.5px solid var(--ul-border, #e0e0e0);
+    border: 1px solid var(--ul-border);
+    border-radius: 8px;
+    flex: 1;
+    margin-bottom: 0;
+    background-color: var(--ul-surface-1);
+}
+
+.edit-username-at {
     border-right: none;
     border-radius: 8px 0 0 8px;
     padding: 8px 10px;
-    color: #9aa0a6;
     font-size: .9rem;
     line-height: 1.4;
 }
-.edit-username-input {
-    height: 3rem;
-    border: 1px solid var(--ul-border);
+body .edit-profile-page .edit-username-input {
     border-left: none;
     border-radius: 0 8px 8px 0;
-    flex: 1;
-    margin-bottom: 0;
 }
 .edit-username-hint {
     font-size: .78rem;
@@ -295,66 +297,92 @@
     <section class="edit-card ul-section">
         <h2 class="edit-card-title">Social Links</h2>
         <p class="edit-card-desc">Paste a profile URL - the platform is detected automatically.</p>
+        {% include "dashboard/partials/profile_social_links.html" %}
+    </section>
 
-        {% if social_links %}
-        <ul class="edit-links-list">
-            {% for link in social_links %}
-            <li class="edit-link-row">
-                <i class="{{ link.icon }} edit-link-icon"></i>
-                <span class="edit-link-platform">{{ link.display_name }}</span>
-                {% if link.url %}
-                <a href="{{ link.url }}" class="edit-link-handle" target="_blank" rel="noopener">{{ link.handle }}</a>
-                {% else %}
-                <span class="edit-link-handle">{{ link.handle }}</span>
-                {% endif %}
-                <form method="post" action="{% url 'profile.edit' %}" class="edit-link-remove-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="remove_link">
-                    <input type="hidden" name="remove_platform" value="{{ link.platform }}">
-                    <button type="submit" class="edit-link-remove-btn" title="Remove">
-                        <i class="material-icons">close</i>
-                    </button>
-                </form>
-            </li>
-            {% endfor %}
-        </ul>
-        {% endif %}
+    {# ── Contact Information ────────────────────────────────────────────────── #}
+    <section class="edit-card ul-section">
+        <h2 class="edit-card-title">Contact Information</h2>
+        <p class="edit-card-desc">Private contact details - shown according to your contact visibility setting below.</p>
 
-        <form method="post" action="{% url 'profile.edit' %}" class="edit-add-link-form">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="add_link">
-            <div class="edit-add-link-row">
-                <input type="text" name="link_input"
-                       class="edit-add-link-input{% if link_error %} edit-add-link-input--error{% endif %}"
-                       placeholder="https://instagram.com/you  ·  https://reddit.com/u/you  ·  etc."
-                       autofocus>
-                <button type="submit" class="edit-add-link-btn">Add</button>
+        <div class="edit-field-row">
+            <div class="edit-field">
+                <label class="edit-label">
+                    Phone Number
+                    <span class="field-status" data-field-status="phone_number"></span>
+                </label>
+                <input type="tel" class="edit-input" maxlength="30"
+                       value="{{ form.instance.phone_number }}"
+                       placeholder="+1 555 000 0000"
+                       data-autosave="phone_number">
             </div>
-            {% if link_error %}
-            <p class="edit-error edit-error--link">{{ link_error }}</p>
-            {% endif %}
-        </form>
+            <div class="edit-field">
+                <label class="edit-label">
+                    WhatsApp Number
+                    <span class="field-status" data-field-status="whatsapp_number"></span>
+                </label>
+                <input type="tel" class="edit-input" maxlength="30"
+                       value="{{ form.instance.whatsapp_number }}"
+                       placeholder="+1 555 000 0000"
+                       data-autosave="whatsapp_number">
+            </div>
+        </div>
 
-        <details class="edit-discord-details">
-            <summary class="edit-discord-summary">
-                <i class="fa-brands fa-discord"></i> Set Discord username
-            </summary>
-            <form method="post" action="{% url 'profile.edit' %}" class="edit-discord-form">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="save_discord">
-                <div class="edit-add-link-row">
-                    {{ discord_form.discord }}
-                    <button type="submit" class="edit-add-link-btn">Save</button>
-                </div>
-                {% if discord_form.discord.errors %}
-                <p class="edit-error">{{ discord_form.discord.errors|join:", " }}</p>
-                {% endif %}
-            </form>
-        </details>
+        <div class="edit-field-row">
+            <div class="edit-field">
+                <label class="edit-label">
+                    Signal Username
+                    <span class="field-status" data-field-status="signal_username"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="100"
+                       value="{{ form.instance.signal_username }}"
+                       placeholder="signal.01"
+                       data-autosave="signal_username">
+            </div>
+            <div class="edit-field">
+                <label class="edit-label">
+                    Discord Username
+                    <span class="field-status" data-field-status="discord_username"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="100"
+                       value="{{ form.instance.discord_username }}"
+                       placeholder="username"
+                       data-autosave="discord_username">
+            </div>
+        </div>
 
-        <p class="edit-supported-platforms">
-            Supported: Instagram · Bluesky · UER · Facebook · Flickr · YouTube · Twitch · Reddit · any website URL
-        </p>
+        <div class="edit-field-row">
+            <div class="edit-field">
+                <label class="edit-label">
+                    Telegram Username
+                    <span class="field-status" data-field-status="telegram_username"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="100"
+                       value="{{ form.instance.telegram_username }}"
+                       placeholder="@username"
+                       data-autosave="telegram_username">
+            </div>
+            <div class="edit-field">
+                <label class="edit-label">
+                    Matrix Handle
+                    <span class="field-status" data-field-status="matrix_handle"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="200"
+                       value="{{ form.instance.matrix_handle }}"
+                       placeholder="@user:server.org"
+                       data-autosave="matrix_handle">
+            </div>
+        </div>
+
+        <div class="edit-field">
+            <label class="edit-label">Contact Visibility</label>
+            <p class="edit-field-hint">Who can see your contact methods above.</p>
+            <select class="edit-input" data-autosave="contact_visibility">
+                {% for val, label in contact_visibility_choices %}
+                <option value="{{ val }}"{% if form.instance.contact_visibility == val %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
     </section>
 
 </div>
