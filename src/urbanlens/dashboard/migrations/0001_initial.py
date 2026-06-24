@@ -2933,4 +2933,62 @@ class Migration(migrations.Migration):
                 help_text="When enabled, hover/focus tooltips are hidden across the entire site.",
             ),
         ),
+        
+        migrations.CreateModel(
+            name="ProfileTrust",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created", models.DateTimeField(auto_now_add=True)),
+                ("updated", models.DateTimeField(auto_now=True)),
+                (
+                    "rating",
+                    models.IntegerField(
+                        help_text="Trust level from 1 (low) to 5 (high).",
+                        validators=[
+                            django.core.validators.MinValueValidator(1),
+                            django.core.validators.MaxValueValidator(5),
+                        ],
+                    ),
+                ),
+                (
+                    "author",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="authored_trust_ratings",
+                        to="dashboard.profile",
+                    ),
+                ),
+                (
+                    "subject",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="received_trust_ratings",
+                        to="dashboard.profile",
+                    ),
+                ),
+            ],
+            options={
+                "ordering": ["-created"],
+                "abstract": False,
+            },
+        ),
+        migrations.AddConstraint(
+            model_name="profiletrust",
+            constraint=models.UniqueConstraint(
+                fields=["author", "subject"],
+                name="unique_profile_trust_rating",
+            ),
+        ),
+        migrations.AlterModelOptions(
+            name="profiletrust",
+            options={},
+        ),
     ] + BOOTSTRAP_OPERATIONS_SUFFIX

@@ -198,6 +198,177 @@ $color-grey-10a: #121212;
 $color-grey-10: #090909;
 $color-grey-10b: #000000;
 
+// ── Supplementary UI colour palette ──────────────────────────────────────────
+// Tailwind-CSS-inspired palette for UI components. Named with the `$ui-` prefix
+// to avoid conflicts with the Material Design scale above.
+
+// Blue
+$ui-blue-50:  #eff6ff;
+$ui-blue-100: #dbeafe;
+$ui-blue-200: #bfdbfe;
+$ui-blue-300: #93c5fd;
+$ui-blue-400: #60a5fa;
+$ui-blue-500: #3b82f6;
+$ui-blue-600: #2563eb;
+$ui-blue-700: #1d4ed8;
+$ui-blue-800: #1e40af;
+$ui-blue-900: #1e3a8a;
+
+// Indigo
+$ui-indigo-50:  #eef2ff;
+$ui-indigo-100: #e0e7ff;
+$ui-indigo-200: #c7d2fe;
+$ui-indigo-300: #a5b4fc;
+$ui-indigo-400: #818cf8;
+$ui-indigo-500: #6366f1;
+$ui-indigo-600: #4f46e5;
+$ui-indigo-700: #4338ca;
+$ui-indigo-800: #3730a3;
+$ui-indigo-900: #312e81;
+$ui-indigo-950: #1e1b4b;
+
+// Violet
+$ui-violet-300: #c4b5fd;
+$ui-violet-400: #a78bfa;
+$ui-violet-600: #7c3aed;
+$ui-violet-700: #6d28d9;
+$ui-violet-900: #4c1d95;
+
+// Green (Tailwind)
+$ui-green-50:  #f0fdf4;
+$ui-green-100: #dcfce7;
+$ui-green-200: #bbf7d0;
+$ui-green-300: #86efac;
+$ui-green-400: #4ade80;
+$ui-green-500: #22c55e;
+$ui-green-600: #16a34a;
+$ui-green-700: #15803d;
+$ui-green-800: #166534;
+$ui-green-900: #14532d;
+
+// Red (Tailwind)
+$ui-red-50:  #fef2f2;
+$ui-red-100: #fee2e2;
+$ui-red-200: #fecaca;
+$ui-red-300: #fca5a5;
+$ui-red-400: #f87171;
+$ui-red-500: #ef4444;
+$ui-red-600: #dc2626;
+$ui-red-700: #b91c1c;
+$ui-red-800: #991b1b;
+$ui-red-900: #7f1d1d;
+
+// Amber (Tailwind)
+$ui-amber-100: #fef3c7;
+$ui-amber-200: #fde68a;
+$ui-amber-300: #fcd34d;
+$ui-amber-400: #fbbf24;
+$ui-amber-500: #f59e0b;
+$ui-amber-600: #d97706;
+$ui-amber-700: #b45309;
+$ui-amber-800: #92400e;
+$ui-amber-900: #78350f;
+
+// Orange (Tailwind)
+$ui-orange-400: #fb923c;
+$ui-orange-500: #f97316;
+
+// Pink (Tailwind)
+$ui-pink-50:  #fdf2f8;
+$ui-pink-100: #fce7f3;
+$ui-pink-500: #ec4899;
+$ui-pink-600: #db2777;
+$ui-pink-700: #be185d;
+
+// Cyan (Tailwind)
+$ui-cyan-300: #67e8f9;
+$ui-cyan-400: #22d3ee;
+$ui-cyan-500: #06b6d4;
+$ui-cyan-600: #0891b2;
+$ui-cyan-700: #0e7490;
+$ui-cyan-800: #155e75;
+$ui-cyan-900: #164e63;
+
+// Sky (Tailwind)
+$ui-sky-50:  #f0f9ff;
+$ui-sky-100: #e0f2fe;
+$ui-sky-200: #bae6fd;
+$ui-sky-600: #0284c7;
+$ui-sky-700: #0369a1;
+
+// Cyan light
+$ui-cyan-50: #ecfeff;
+
+// Slate (Tailwind)
+$ui-slate-50:  #f8fafc;
+$ui-slate-100: #f1f5f9;
+$ui-slate-200: #e2e8f0;
+$ui-slate-300: #cbd5e1;
+$ui-slate-400: #94a3b8;
+$ui-slate-500: #64748b;
+$ui-slate-600: #475569;
+$ui-slate-700: #334155;
+$ui-slate-800: #1e293b;
+$ui-slate-900: #0f172a;
+
+// Gray (Tailwind)
+$ui-gray-50:  #f9fafb;
+$ui-gray-100: #f3f4f6;
+$ui-gray-200: #e5e7eb;
+$ui-gray-300: #d1d5db;
+$ui-gray-400: #9ca3af;
+$ui-gray-500: #6b7280;
+$ui-gray-600: #4b5563;
+$ui-gray-700: #374151;
+$ui-gray-800: #1f2937;
+$ui-gray-900: #111827;
+
+// ── Material Blue interpolations ───────────────────────────────────────────────
+// Fills gaps between the existing 300/500/700 Material steps
+$color-blue-50:  #e3f2fd;   // Material Blue 50
+$color-blue-400: #42a5f5;   // used in error-page gradient
+$color-blue-800: #1565c0;   // map button hover text
+
+// ── Map filter-panel & cluster-marker colours ────────────────────────────────
+// Intentionally static — filter panel and map clusters always render on dark
+// backdrops and must not invert in dark mode.
+$ui-fp-active:   #5082ff;   // filter panel active accent / range-slider fill
+$ui-fp-spinner:  #5a8fff;   // progress spinner / dot glow
+$ui-fp-chip-txt: #c8d8ff;   // active-chip label on dark panel
+
+// ── Toast-notification backgrounds ────────────────────────────────────────────
+// Dark saturated colours designed for legibility against white/light text.
+$toast-success-bg: #1c6e35;
+$toast-error-bg:   #b02d20;
+$toast-info-bg:    #1558b0;
+$toast-warning-bg: #b36a00;
+
+// ── Neutral avatar placeholder ─────────────────────────────────────────────────
+$ui-avatar-neutral: #9aa0a6;
+
+// ── Material colour interpolations (missing from base scale) ───────────────────
+$color-green-800: #2e7d32;   // Material Green 800
+$color-red-800:   #c62828;   // Material Red 800
+
+// ── Star / trust-rating gold ────────────────────────────────────────────────────
+$ui-star-gold: #f5a623;
+
+// ── Tailwind Yellow 300 ─────────────────────────────────────────────────────────
+$ui-yellow-300: #fde047;
+
+// ── Link colour on always-dark surfaces (map popups, overlays) ─────────────────
+$ui-link-on-dark:       #7eb0ff;
+$ui-link-on-dark-hover: #a8c8ff;
+
+// ── Pin cluster marker gradients ────────────────────────────────────────────────
+// Always rendered on the map; these colours never invert with dark mode.
+$cluster-s-start: #3b70e8;
+$cluster-s-end:   #2250c2;
+$cluster-m-start: $ui-violet-600;
+$cluster-m-end:   #5418b8;
+$cluster-l-start: $ui-pink-600;
+$cluster-l-end:   #9c124a;
+
 // - Brand palette ─────────────────────────────────────────────────────────────
 $primary-color: $color-blue-500;
 $secondary-color: $color-amber-500;
@@ -239,6 +410,47 @@ $accent-2-fg: $color-amber-700;
 $dk-navy:         $color-blue-1500;                  // icon backgrounds, calendar cells
 $dk-panel-bg:     $color-deep-purple-1500;           // trip/weather panel background
 $dk-panel-border: rgba($color-deep-purple-1500, .5); // trip/weather panel border
+
+// Extended dark-mode surface/state tokens
+$dk-nav-bg:             #040a14;   // always-dark nav/footer background
+$dk-info-link:          #7cb9e8;   // muted informational link on dark surfaces
+$dk-success-bg:         #1a2e1a;   // accept/friend-request dark background
+$dk-accept-border:      #2d6a2d;   // accept/friend-request dark border
+$dk-accept-hover:       #1f3a1f;   // accept/friend-request dark hover
+$dk-reject-bg:          #2e1a1a;   // reject/danger dark background
+$dk-reject-border:      #6a2d2d;   // reject/danger dark border
+$dk-reject-hover:       #3a2020;   // reject/danger dark hover
+$dk-friend-remove-hover: #3a1a1a;  // friend remove hover background
+$dk-warning-amber-bg:   #1e1a0e;   // amber-warning dark background (friend requests)
+$dk-warning-amber-bd:   #4a3a10;   // amber-warning dark border
+$dk-warning-amber-txt:  #d4a44c;   // amber-warning dark text
+$dk-pending-bg:         #2a1e08;   // pending-status dark background
+$dk-pending-border:     #5a3e10;   // pending-status dark border
+$dk-notif-unread-bg:    #1e1a30;   // unread notification background
+$dk-notif-unread-hover: #221d38;   // unread notification hover
+$dk-comment-avatar-bg:  #1e1936;   // comment avatar placeholder background
+$dk-comment-avatar-txt: #7c6fcd;   // comment avatar placeholder text
+$dk-cal-event-bg:       #192030;   // calendar has-events cell background
+$dk-panel-bg-alt:       #1a2a3a;   // avatar-upload-btn & tag-stat-children bg
+$dk-tag-stat-border:    #2a4a6a;   // tag-stat--children border
+$dk-danger-text:        #ef9a9a;   // sign-out and danger muted text (Material Red 200)
+
+// ── Supplementary Tailwind colours ────────────────────────────────────────────
+$ui-pink-400:       #f472b6;   // Tailwind pink-400 (notification icons, hover)
+$color-green-400:   #66bb6a;   // Material Green 400 (field-status saved in dark)
+
+// ── Tailwind Emerald ──────────────────────────────────────────────────────────
+$ui-emerald-400: #34d399;
+$ui-emerald-500: #10b981;
+$ui-emerald-600: #059669;
+
+// ── Third-party brand colours ─────────────────────────────────────────────────
+$discord-brand:       #5865f2;   // Discord blurple
+$discord-brand-hover: #4752c4;   // Discord blurple hover
+$google-text:         #3c4043;   // Google button text (Material Bluegrey 700)
+
+// ── Gallery / dark canvas ─────────────────────────────────────────────────────
+$dk-true-black: #0a0a0a;   // near-black canvas background for full-screen gallery
 
 // ── Radius ────────────────────────────────────────────────────────────────────
 

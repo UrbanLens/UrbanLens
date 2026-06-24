@@ -43,6 +43,138 @@
     </div>
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
+    {# CATEGORIES PANEL                                                          #}
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    <div class="organize-panel tag-page" id="panel-categories" role="tabpanel"
+         {% if active_tab != 'categories' %}hidden{% endif %}>
+
+        <div class="tag-header">
+            <div>
+                <h2 class="tag-title">Categories</h2>
+                <p class="tag-subtitle">Your personal categories - organize pins and locations by type.</p>
+            </div>
+            <div class="tag-header-right">
+                <div class="tag-view-toggle" role="group" aria-label="Category view mode">
+                    <button type="button" class="tag-view-btn tag-view-btn--cats active" data-view="list" title="List view">
+                        <i class="material-icons">view_list</i>
+                    </button>
+                    <button type="button" class="tag-view-btn tag-view-btn--cats" data-view="gallery" title="Gallery view">
+                        <i class="material-icons">grid_view</i>
+                    </button>
+                    <button type="button" class="tag-view-btn tag-view-btn--cats" data-view="tree" title="Tree view">
+                        <i class="material-icons">account_tree</i>
+                    </button>
+                </div>
+                <div class="tag-view-toggle--sel">
+                    <button type="button" class="tag-view-btn--sel" id="cat-sel-all" title="Select all categories">
+                        <i class="material-icons">checklist</i>
+                    </button>
+                </div>
+                <button type="button" class="btn btn--ghost btn--sm" id="cat-filter-btn" title="Filter categories" onclick="toggleOrgFilter('cat')">
+                    <i class="material-icons">filter_list</i> Filter
+                    <span class="org-filter-active-dot"></span>
+                </button>
+                <button class="btn btn--primary" id="new-category-btn" type="button" title="New Category" style="padding:.4rem .55rem;min-width:0;">
+                    <i class="material-icons" style="font-size:1.2rem;">add</i>
+                </button>
+            </div>
+        </div>
+
+        <div id="cat-filter-bar" class="org-filter-bar">
+            <input type="search" id="cat-filter-search" class="org-filter-search" placeholder="Search categories…" oninput="applyOrgFilter('cat')" autocomplete="off">
+            <div class="org-filter-chips">
+                <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">image</i> Has icon</button>
+                <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">hide_image</i> No icon</button>
+                <button type="button" class="org-filter-chip" data-filter="has-children" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">account_tree</i> Has children</button>
+                <button type="button" class="org-filter-chip" data-filter="has-parents" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">call_merge</i> Has parents</button>
+                <div class="org-filter-color-row">
+                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color" data-mutex="no-color"
+                            title="Show only items with a color" onclick="toggleOrgChip(this,'cat')">
+                        <i class="material-icons">palette</i>
+                    </button>
+                    {% for hex, label in color_choices %}
+                    <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
+                            style="background:{{ hex }};" onclick="toggleOrgChip(this,'cat')"></button>
+                    {% endfor %}
+                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color" data-mutex="has-color"
+                            title="Show only items without a color" onclick="toggleOrgChip(this,'cat')">
+                        <i class="material-icons">block</i>
+                    </button>
+                </div>
+                <button type="button" class="org-filter-clear" onclick="clearOrgFilter('cat')">✕ Clear</button>
+            </div>
+        </div>
+
+        <div class="tag-create-card" id="new-category-form" style="display:none;">
+            <form hx-post="{% url 'category.create' %}" hx-target="#category-rows" hx-swap="innerHTML"
+                  class="tag-form"
+                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-category-form').style.display='none'; toastr.success('Category created.'); }">
+                {% csrf_token %}
+                <div class="tag-form-grid">
+                    <div class="form-field">
+                        <label class="form-label" for="new-cat-name">Category name</label>
+                        <input id="new-cat-name" name="name" type="text" class="form-input" placeholder="e.g. Hospital" required>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="new-cat-order">Order (higher = higher priority)</label>
+                        <input id="new-cat-order" name="order" type="number" class="form-input" value="0">
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="new-cat-desc">Description (optional)</label>
+                    <textarea id="new-cat-desc" name="description" class="form-input" rows="2" placeholder="What type of place is this?"></textarea>
+                </div>
+                <div class="tag-icon-color-row">
+                    <div class="form-field">
+                        <label class="form-label">Icon</label>
+                        <div class="icon-picker-wrap">
+                            {% with picker_id="new-cat" current_icon="" field_name="icon" %}
+                            {% include 'dashboard/partials/_icon_picker.html' %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label">Color</label>
+                        <div class="color-picker" id="new-cat-color-picker">
+                            <input type="hidden" name="color" id="new-cat-color-value">
+                            {% for hex, label in color_choices %}
+                            <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
+                                    onclick="pickColor('new-cat-color-picker','new-cat-color-value','{{ hex }}',this)"></button>
+                            {% endfor %}
+                            <button type="button" class="color-swatch color-clear" title="No color"
+                                    onclick="pickColor('new-cat-color-picker','new-cat-color-value','',this)">
+                                <i class="material-icons" style="font-size:1rem;">block</i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Parent categories (optional)</label>
+                    <input type="text" class="form-input tag-parent-search" placeholder="Search categories…"
+                           oninput="filterParentOptions(this,'parent-select-new-cat')" autocomplete="off">
+                    <div class="tag-parent-select" id="parent-select-new-cat">
+                        {% for cat in categories %}
+                        <label class="tag-parent-option">
+                            <input type="checkbox" name="parent_ids" value="{{ cat.id }}">
+                            {% if cat.icon %}{% if cat.icon|is_material_icon %}<i class="material-icons" {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</i>{% else %}<span>{{ cat.icon }}</span>{% endif %}{% endif %}
+                            {{ cat.name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="tag-form-actions">
+                    <button type="submit" class="btn btn--primary">Create</button>
+                    <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-category-form').style.display='none'">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="category-rows">
+            {% include 'dashboard/partials/category_rows.html' %}
+        </div>
+    </div>{# end #panel-categories #}
+
+    {# ══════════════════════════════════════════════════════════════════════════ #}
     {# TAGS PANEL                                                                #}
     {# ══════════════════════════════════════════════════════════════════════════ #}
     <div class="organize-panel tag-page" id="panel-tags" role="tabpanel"
@@ -186,138 +318,6 @@
             {% include 'dashboard/partials/tag_rows.html' %}
         </div>
     </div>{# end #panel-tags #}
-
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# CATEGORIES PANEL                                                          #}
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    <div class="organize-panel tag-page" id="panel-categories" role="tabpanel"
-         {% if active_tab != 'categories' %}hidden{% endif %}>
-
-        <div class="tag-header">
-            <div>
-                <h2 class="tag-title">Categories</h2>
-                <p class="tag-subtitle">Your personal categories - organize pins and locations by type.</p>
-            </div>
-            <div class="tag-header-right">
-                <div class="tag-view-toggle" role="group" aria-label="Category view mode">
-                    <button type="button" class="tag-view-btn tag-view-btn--cats active" data-view="list" title="List view">
-                        <i class="material-icons">view_list</i>
-                    </button>
-                    <button type="button" class="tag-view-btn tag-view-btn--cats" data-view="gallery" title="Gallery view">
-                        <i class="material-icons">grid_view</i>
-                    </button>
-                    <button type="button" class="tag-view-btn tag-view-btn--cats" data-view="tree" title="Tree view">
-                        <i class="material-icons">account_tree</i>
-                    </button>
-                </div>
-                <div class="tag-view-toggle--sel">
-                    <button type="button" class="tag-view-btn--sel" id="cat-sel-all" title="Select all categories">
-                        <i class="material-icons">checklist</i>
-                    </button>
-                </div>
-                <button type="button" class="btn btn--ghost btn--sm" id="cat-filter-btn" title="Filter categories" onclick="toggleOrgFilter('cat')">
-                    <i class="material-icons">filter_list</i> Filter
-                    <span class="org-filter-active-dot"></span>
-                </button>
-                <button class="btn btn--primary" id="new-category-btn" type="button" title="New Category" style="padding:.4rem .55rem;min-width:0;">
-                    <i class="material-icons" style="font-size:1.2rem;">add</i>
-                </button>
-            </div>
-        </div>
-
-        <div id="cat-filter-bar" class="org-filter-bar">
-            <input type="search" id="cat-filter-search" class="org-filter-search" placeholder="Search categories…" oninput="applyOrgFilter('cat')" autocomplete="off">
-            <div class="org-filter-chips">
-                <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">image</i> Has icon</button>
-                <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">hide_image</i> No icon</button>
-                <button type="button" class="org-filter-chip" data-filter="has-children" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">account_tree</i> Has children</button>
-                <button type="button" class="org-filter-chip" data-filter="has-parents" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">call_merge</i> Has parents</button>
-                <div class="org-filter-color-row">
-                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color" data-mutex="no-color"
-                            title="Show only items with a color" onclick="toggleOrgChip(this,'cat')">
-                        <i class="material-icons">palette</i>
-                    </button>
-                    {% for hex, label in color_choices %}
-                    <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
-                            style="background:{{ hex }};" onclick="toggleOrgChip(this,'cat')"></button>
-                    {% endfor %}
-                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color" data-mutex="has-color"
-                            title="Show only items without a color" onclick="toggleOrgChip(this,'cat')">
-                        <i class="material-icons">block</i>
-                    </button>
-                </div>
-                <button type="button" class="org-filter-clear" onclick="clearOrgFilter('cat')">✕ Clear</button>
-            </div>
-        </div>
-
-        <div class="tag-create-card" id="new-category-form" style="display:none;">
-            <form hx-post="{% url 'category.create' %}" hx-target="#category-rows" hx-swap="innerHTML"
-                  class="tag-form"
-                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-category-form').style.display='none'; toastr.success('Category created.'); }">
-                {% csrf_token %}
-                <div class="tag-form-grid">
-                    <div class="form-field">
-                        <label class="form-label" for="new-cat-name">Category name</label>
-                        <input id="new-cat-name" name="name" type="text" class="form-input" placeholder="e.g. Hospital" required>
-                    </div>
-                    <div class="form-field">
-                        <label class="form-label" for="new-cat-order">Order (higher = higher priority)</label>
-                        <input id="new-cat-order" name="order" type="number" class="form-input" value="0">
-                    </div>
-                </div>
-                <div class="form-field">
-                    <label class="form-label" for="new-cat-desc">Description (optional)</label>
-                    <textarea id="new-cat-desc" name="description" class="form-input" rows="2" placeholder="What type of place is this?"></textarea>
-                </div>
-                <div class="tag-icon-color-row">
-                    <div class="form-field">
-                        <label class="form-label">Icon</label>
-                        <div class="icon-picker-wrap">
-                            {% with picker_id="new-cat" current_icon="" field_name="icon" %}
-                            {% include 'dashboard/partials/_icon_picker.html' %}
-                            {% endwith %}
-                        </div>
-                    </div>
-                    <div class="form-field">
-                        <label class="form-label">Color</label>
-                        <div class="color-picker" id="new-cat-color-picker">
-                            <input type="hidden" name="color" id="new-cat-color-value">
-                            {% for hex, label in color_choices %}
-                            <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
-                                    onclick="pickColor('new-cat-color-picker','new-cat-color-value','{{ hex }}',this)"></button>
-                            {% endfor %}
-                            <button type="button" class="color-swatch color-clear" title="No color"
-                                    onclick="pickColor('new-cat-color-picker','new-cat-color-value','',this)">
-                                <i class="material-icons" style="font-size:1rem;">block</i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-field">
-                    <label class="form-label">Parent categories (optional)</label>
-                    <input type="text" class="form-input tag-parent-search" placeholder="Search categories…"
-                           oninput="filterParentOptions(this,'parent-select-new-cat')" autocomplete="off">
-                    <div class="tag-parent-select" id="parent-select-new-cat">
-                        {% for cat in categories %}
-                        <label class="tag-parent-option">
-                            <input type="checkbox" name="parent_ids" value="{{ cat.id }}">
-                            {% if cat.icon %}{% if cat.icon|is_material_icon %}<i class="material-icons" {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</i>{% else %}<span>{{ cat.icon }}</span>{% endif %}{% endif %}
-                            {{ cat.name }}
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
-                <div class="tag-form-actions">
-                    <button type="submit" class="btn btn--primary">Create</button>
-                    <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-category-form').style.display='none'">Cancel</button>
-                </div>
-            </form>
-        </div>
-
-        <div id="category-rows">
-            {% include 'dashboard/partials/category_rows.html' %}
-        </div>
-    </div>{# end #panel-categories #}
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
     {# STATUS PANEL                                                              #}

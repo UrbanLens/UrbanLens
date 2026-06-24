@@ -15,10 +15,10 @@ $_max-width:      360px;
 
 // ── Semantic toast colors ─────────────────────────────────────────────────────
 
-$_success-bg:  #1c6e35;
-$_error-bg:    #b02d20;
-$_info-bg:     #1558b0;
-$_warning-bg:  #b36a00;
+$_success-bg:  $toast-success-bg;
+$_error-bg:    $toast-error-bg;
+$_info-bg:     $toast-info-bg;
+$_warning-bg:  $toast-warning-bg;
 
 // ── Container ─────────────────────────────────────────────────────────────────
 

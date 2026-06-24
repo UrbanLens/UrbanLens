@@ -114,13 +114,13 @@
 
 .dev-toolbar--dark-active {
     .dev-toolbar__theme-icon--dark.is-active {
-        color: #a5b4fc;
+        color: $ui-indigo-300;
     }
 }
 
 .dev-toolbar:not(.dev-toolbar--dark-active) {
     .dev-toolbar__theme-icon--light.is-active {
-        color: #f59e0b;
+        color: $ui-amber-500;
     }
 }
 

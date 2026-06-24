@@ -333,6 +333,11 @@ urlpatterns = [
                     userprofile.ProfileBadgeToggleView.as_view(),
                     name="profile.badge_toggle",
                 ),
+                path(
+                    "<slug:profile_slug>/trust/",
+                    userprofile.ProfileTrustView.as_view(),
+                    name="profile.trust",
+                ),
             ],
         ),
     ),

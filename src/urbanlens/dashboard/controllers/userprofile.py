@@ -216,10 +216,11 @@ class ViewProfileView(LoginRequiredMixin, View):
             from urbanlens.dashboard.models.trips.model import Trip
             context["trips_in_common"] = Trip.objects.none()
 
-        # Private annotations (notes + user badges) - only when viewing someone else
+        # Private annotations (notes, user badges, trust rating) - only when viewing someone else
         from urbanlens.dashboard.models.badges.model import Badge
         from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
         from urbanlens.dashboard.models.profile.note import ProfileNote
+        from urbanlens.dashboard.models.profile.trust import ProfileTrust
 
         context["viewer_notes"] = ProfileNote.objects.filter(author=my_profile, subject=profile)
         context["user_badges"] = Badge.objects.user_badges().visible_to(my_profile).ordered()
@@ -228,6 +229,8 @@ class ViewProfileView(LoginRequiredMixin, View):
                 "badge_id", flat=True,
             ),
         )
+        trust = ProfileTrust.objects.filter(author=my_profile, subject=profile).first()
+        context["trust_rating"] = trust.rating if trust else 0
         context["my_profile"] = my_profile
 
 
@@ -732,6 +735,38 @@ class ProfileBadgeToggleView(LoginRequiredMixin, View):
         return _render_profile_annotation_partial(request, author, subject)
 
 
+class ProfileTrustView(LoginRequiredMixin, View):
+    """Set or clear the viewer's private trust rating for another profile (HTMX).
+
+    POST with ``rating`` (int 1-5) to set/update; POST with ``rating=0`` or
+    omit ``rating`` to clear an existing rating.
+    """
+
+    def post(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
+        from urbanlens.dashboard.models.profile.trust import ProfileTrust
+
+        subject = get_object_or_404(Profile, slug=profile_slug)
+        author = _authenticated_profile(request)
+        if author == subject:
+            return HttpResponse("Cannot rate your own profile.", status=400)
+
+        try:
+            rating = int(request.POST.get("rating", 0))
+        except (TypeError, ValueError):
+            rating = 0
+
+        if 1 <= rating <= 5:
+            ProfileTrust.objects.update_or_create(
+                author=author,
+                subject=subject,
+                defaults={"rating": rating},
+            )
+        else:
+            ProfileTrust.objects.filter(author=author, subject=subject).delete()
+
+        return _render_profile_annotation_partial(request, author, subject)
+
+
 def _render_profile_annotation_partial(
     request: HttpRequest,
     author: Profile,
@@ -750,12 +785,14 @@ def _render_profile_annotation_partial(
     from urbanlens.dashboard.models.badges.model import KIND_USER, Badge
     from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
     from urbanlens.dashboard.models.profile.note import ProfileNote
+    from urbanlens.dashboard.models.profile.trust import ProfileTrust
 
     viewer_notes = ProfileNote.objects.filter(author=author, subject=subject)
     user_badges = Badge.objects.user_badges().visible_to(author).ordered()
     assigned_ids = set(
         ProfileBadgeAssignment.objects.filter(author=author, subject=subject).values_list("badge_id", flat=True),
     )
+    trust = ProfileTrust.objects.filter(author=author, subject=subject).first()
 
     return render(
         request,
@@ -765,5 +802,6 @@ def _render_profile_annotation_partial(
             "viewer_notes": viewer_notes,
             "user_badges": user_badges,
             "assigned_badge_ids": assigned_ids,
+            "trust_rating": trust.rating if trust else 0,
         },
     )

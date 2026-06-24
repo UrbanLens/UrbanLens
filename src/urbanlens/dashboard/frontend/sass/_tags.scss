@@ -103,7 +103,7 @@
     }
 
     &:hover {
-        background: #e3f2fd;
+        background: $color-blue-50;
         color: $primary-color;
     }
 
@@ -283,7 +283,7 @@
     &.tag-stat--children {
         color: $primary-color;
         background: var(--ul-surface-0a);
-        border-color: #bfdbfe;
+        border-color: $ui-blue-200;
 
         i {
             opacity: 1;
@@ -504,9 +504,9 @@
     }
 
     &:has(input:checked) {
-        background: #dbeafe;
-        border-color: #93c5fd;
-        color: #1d4ed8;
+        background: $ui-blue-100;
+        border-color: $ui-blue-300;
+        color: $ui-blue-700;
         font-weight: 600;
         box-shadow: 0 0 0 2px rgba(59, 130, 246, .15);
     }
@@ -514,7 +514,7 @@
     input {
         margin: 0;
         cursor: pointer;
-        accent-color: #1d4ed8;
+        accent-color: $ui-blue-700;
     }
 }
 
@@ -996,7 +996,7 @@
     .cat-select-check {
         width: 18px;
         height: 18px;
-        border: 2px solid #cbd5e1;
+        border: 2px solid $ui-slate-300;
         border-radius: 4px;
         background: var(--ul-surface-0);
         flex-shrink: 0;
@@ -1059,7 +1059,7 @@
 
     &.cat-sel-bar--active {
         background: var(--ul-surface-0a);
-        border-color: #bfdbfe;
+        border-color: $ui-blue-200;
     }
 }
 
@@ -1073,7 +1073,7 @@
     font-size: .875rem;
     font-weight: 600;
     color: $primary-color;
-    background: #dbeafe;
+    background: $ui-blue-100;
     padding: 2px 10px;
     border-radius: 20px;
 }
@@ -1121,7 +1121,7 @@
     font-weight: 600;
 
     &:disabled {
-        background: #94a3b8;
+        background: $ui-slate-400;
         cursor: not-allowed;
         opacity: .6;
     }
@@ -1136,13 +1136,13 @@
 }
 
 .cat-sel-delete-btn {
-    border-color: #fca5a5;
-    color: #dc2626;
+    border-color: $ui-red-300;
+    color: $ui-red-600;
 
     &:hover:not(:disabled) {
         background: var(--ul-surface-0);
-        border-color: #dc2626;
-        color: #b91c1c;
+        border-color: $ui-red-600;
+        color: $ui-red-700;
     }
 }
 
@@ -1492,7 +1492,7 @@
 }
 
 .sr-star--on {
-    color: #f59e0b;
+    color: $ui-amber-500;
 }
 
 // Emoji icon display (tag cards, map pins)
@@ -1680,13 +1680,13 @@
     margin-left: 3px;
 
     &.priority-kind-badge--tag {
-        background: #dbeafe;
-        color: #1d4ed8;
+        background: $ui-blue-100;
+        color: $ui-blue-700;
     }
 
     &.priority-kind-badge--category {
-        background: #dcfce7;
-        color: #15803d;
+        background: $ui-green-100;
+        color: $ui-green-700;
     }
 }
 
@@ -1864,7 +1864,7 @@
 
     &.tag-row-action--danger:hover {
         background: var(--ul-surface-0a);
-        color: #dc2626;
+        color: $ui-red-600;
     }
 }
 
@@ -1932,8 +1932,8 @@
         align-items: flex-start;
         gap: 10px;
         padding: 14px 16px 16px;
-        background: var(--ul-surface-1, #f8fafc);
-        border: 1px solid var(--ul-border, #e2e8f0);
+        background: var(--ul-surface-1, $ui-slate-50);
+        border: 1px solid var(--ul-border, $ui-slate-200);
         border-top: none;
         border-radius: 0 0 12px 12px;
         margin-bottom: 1rem;
@@ -1948,7 +1948,7 @@
         flex: 1 1 220px;
         min-width: 180px;
         padding: 7px 12px 7px 36px;
-        border: 1.5px solid var(--ul-border, #cbd5e1);
+        border: 1.5px solid var(--ul-border, $ui-slate-300);
         border-radius: 999px;
         font-size: .82rem;
         background: var(--ul-surface-0);
@@ -1980,7 +1980,7 @@
         padding: 5px 11px;
         border-radius: 999px;
         background: var(--ul-surface-0);
-        border: 1.5px solid var(--ul-border, #e2e8f0);
+        border: 1.5px solid var(--ul-border, $ui-slate-200);
         font-size: .75rem;
         font-weight: 500;
         cursor: pointer;
@@ -2017,7 +2017,7 @@
         align-items: center;
         padding: 4px 6px;
         background: var(--ul-surface-0, #fff);
-        border: 1.5px solid var(--ul-border, #e2e8f0);
+        border: 1.5px solid var(--ul-border, $ui-slate-200);
         border-radius: 10px;
     }
 
@@ -2050,7 +2050,7 @@
         cursor: pointer;
         padding: 5px 9px;
         border-radius: 999px;
-        border: 1.5px solid var(--ul-border, #e2e8f0);
+        border: 1.5px solid var(--ul-border, $ui-slate-200);
         background: var(--ul-surface-0);
         transition: color .12s, border-color .12s, background .12s;
         white-space: nowrap;
@@ -2113,12 +2113,12 @@
         gap: 6px;
         padding: 7px 14px;
         border-radius: $radius-sm;
-        border: 2px solid var(--ul-border, #e2e8f0);
-        background: var(--ul-surface-1, #f8fafc);
+        border: 2px solid var(--ul-border, $ui-slate-200);
+        background: var(--ul-surface-1, $ui-slate-50);
         cursor: pointer;
         font-size: .875rem;
         font-weight: 500;
-        color: var(--ul-text-2, #475569);
+        color: var(--ul-text-2, $ui-slate-600);
         transition: border-color .13s, background .13s, color .13s, box-shadow .13s;
         white-space: nowrap;
         height: 2.5em;
@@ -2130,14 +2130,14 @@
         }
 
         &:hover {
-            border-color: var(--ul-border-strong, #94a3b8);
-            background: var(--ul-surface-4, #f1f5f9);
+            border-color: var(--ul-border-strong, $ui-slate-400);
+            background: var(--ul-surface-4, $ui-slate-100);
         }
 
         &.active {
-            border-color: #6366f1;
-            background: color-mix(in srgb, #6366f1 10%, white);
-            color: #4f46e5;
+            border-color: $ui-indigo-500;
+            background: color-mix(in srgb, $ui-indigo-500 10%, white);
+            color: $ui-indigo-600;
             font-weight: 600;
 
             .material-icons {
@@ -2176,8 +2176,8 @@
 
     .priority-edit-btn:hover {
         background: var(--ul-surface-0a);
-        border-color: #a5b4fc;
-        color: #4f46e5;
+        border-color: $ui-indigo-300;
+        color: $ui-indigo-600;
     }
 
     .priority-edit-btn .material-icons {
@@ -2208,10 +2208,10 @@
     width: 34px;
     height: 34px;
     border-radius: $radius-sm;
-    border: 1px solid var(--ul-border, #e2e8f0);
+    border: 1px solid var(--ul-border, $ui-slate-200);
     background: var(--ul-surface-0, #fff);
     cursor: pointer;
-    color: var(--ul-text-3, #64748b);
+    color: var(--ul-text-3, $ui-slate-500);
     transition: background .12s, border-color .12s, color .12s;
 
     .material-icons {
@@ -2219,15 +2219,15 @@
     }
 
     &:hover {
-        background: var(--ul-surface-4, #f1f5f9);
-        border-color: var(--ul-border-strong, #94a3b8);
-        color: var(--ul-text-1, #1e293b);
+        background: var(--ul-surface-4, $ui-slate-100);
+        border-color: var(--ul-border-strong, $ui-slate-400);
+        color: var(--ul-text-1, $ui-slate-800);
     }
 
     &.deselect-mode {
         background: var(--ul-surface-0a);
-        border-color: #60a5fa;
-        color: #2563eb;
+        border-color: $ui-blue-400;
+        color: $ui-blue-600;
     }
 }
 
@@ -2273,7 +2273,7 @@
     align-items: center;
     font-size: .8rem;
     font-weight: 700;
-    color: #3b82f6;
+    color: $ui-blue-500;
     padding: 4px 12px;
     background: rgba(59, 130, 246, .1);
     border-radius: 999px;
@@ -2303,7 +2303,7 @@
 
     &:hover {
         background: rgba(220, 38, 38, .12);
-        color: #dc2626;
+        color: $ui-red-600;
     }
 }
 
@@ -2335,18 +2335,18 @@
 .org-bulk-btn--edit:hover {
     background: var(--ul-hover-bg-primary);
     border-color: rgba(59, 130, 246, .4);
-    color: #3b82f6;
+    color: $ui-blue-500;
 }
 
 .org-bulk-btn--merge {
-    background: #6366f1;
+    background: $ui-indigo-500;
     color: var(--ul-text-5);
-    border-color: #6366f1;
+    border-color: $ui-indigo-500;
     box-shadow: 0 1px 4px rgba(99, 102, 241, .3);
 
     &:hover:not(:disabled) {
-        background: #4f46e5;
-        border-color: #4f46e5;
+        background: $ui-indigo-600;
+        border-color: $ui-indigo-600;
         box-shadow: 0 2px 8px rgba(99, 102, 241, .4);
     }
 
@@ -2360,12 +2360,12 @@
 }
 
 .org-bulk-btn--delete {
-    color: #ef4444;
+    color: $ui-red-500;
 
     &:hover {
         background: rgba(239, 68, 68, .1);
         border-color: rgba(239, 68, 68, .3);
-        color: #dc2626;
+        color: $ui-red-600;
     }
 }
 

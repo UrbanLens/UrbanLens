@@ -201,6 +201,7 @@
     &.is-tooltip-open {
         color: var(--ul-text-1);
         background: var(--ul-hover-bg);
+        cursor: pointer;
     }
 
     // Default to right-side tooltip - avoids clipping in page headers

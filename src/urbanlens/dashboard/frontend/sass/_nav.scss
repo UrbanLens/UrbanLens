@@ -117,7 +117,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #9aa0a6;
+    background: $ui-avatar-neutral;
 }
 
 // Top-level so it works inside .nav-avatar, .nav-dropdown-avatar, and any other circular container
@@ -221,7 +221,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #9aa0a6;
+    background: $ui-avatar-neutral;
 }
 
 .nav-dropdown-user-text {
@@ -520,14 +520,14 @@ nav .brand-logo img {
         width: 7px;
         height: 7px;
         border-radius: 50%;
-        background: #6366f1;
+        background: $ui-indigo-500;
         margin-top: .45rem;
     }
 
     // ── Unread state: prominent ──────────────────────────────────────────
     &--unread {
         background: var(--ul-surface-0);
-        border-left-color: #6366f1;
+        border-left-color: $ui-indigo-500;
 
         &:hover {
             background: var(--ul-surface-0);
@@ -537,7 +537,7 @@ nav .brand-logo img {
             background: var(--ul-accent-purple-bg);
 
             .material-icons {
-                color: #6366f1;
+                color: $ui-indigo-500;
             }
         }
 
@@ -558,28 +558,28 @@ nav .brand-logo img {
     // ── Icon colour variants by type ────────────────────────────────────
     &--unread &__icon-wrap--friend_request,
     &--unread &__icon-wrap--friend_accepted {
-        background: #dcfce7;
+        background: $ui-green-100;
 
         .material-icons {
-            color: #16a34a;
+            color: $ui-green-600;
         }
     }
 
     &--unread &__icon-wrap--added_to_trip,
     &--unread &__icon-wrap--trip_updated {
-        background: #dbeafe;
+        background: $ui-blue-100;
 
         .material-icons {
-            color: #2563eb;
+            color: $ui-blue-600;
         }
     }
 
     &--unread &__icon-wrap--comment_reply,
     &--unread &__icon-wrap--comment_liked {
-        background: #fce7f3;
+        background: $ui-pink-100;
 
         .material-icons {
-            color: #db2777;
+            color: $ui-pink-600;
         }
     }
 
@@ -587,7 +587,7 @@ nav .brand-logo img {
         background: var(--ul-surface-0a);
 
         .material-icons {
-            color: #dc2626;
+            color: $ui-red-600;
         }
     }
 
@@ -632,11 +632,11 @@ nav .brand-logo img {
     }
 
     &--accept {
-        background: #dcfce7;
-        color: #15803d;
+        background: $ui-green-100;
+        color: $ui-green-700;
 
         &:hover {
-            background: #bbf7d0;
+            background: $ui-green-200;
         }
     }
 
@@ -646,7 +646,7 @@ nav .brand-logo img {
 
         &:hover {
             background: var(--ul-surface-0a);
-            color: #dc2626;
+            color: $ui-red-600;
         }
     }
 }
@@ -655,8 +655,8 @@ nav .brand-logo img {
 
 .notif-prefs {
     &__saved {
-        background: #dcfce7;
-        color: #166534;
+        background: $ui-green-100;
+        color: $ui-green-800;
         border-radius: 6px;
         padding: .5rem .85rem;
         font-size: .84rem;
@@ -671,7 +671,7 @@ nav .brand-logo img {
         th {
             padding: .4rem .6rem;
             text-align: center;
-            color: #6b7280;
+            color: $ui-gray-500;
             font-weight: 600;
             font-size: .78rem;
             border-bottom: 1px solid var(--ul-border);
@@ -683,7 +683,7 @@ nav .brand-logo img {
     }
 
     &__row {
-        border-bottom: 1px solid #f3f4f6;
+        border-bottom: 1px solid $ui-gray-100;
 
         &:hover {
             background: var(--ul-surface-0);
@@ -692,7 +692,7 @@ nav .brand-logo img {
 
     &__label {
         padding: .5rem .6rem;
-        color: #374151;
+        color: $ui-gray-700;
         font-weight: 500;
     }
 

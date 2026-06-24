@@ -15,25 +15,21 @@ DEFAULT_CATEGORIES: list[dict] = [
     {"name": "Asylum", "icon": "🏚️", "color": "#673AB7"},
     {"name": "Bank", "icon": "🏦", "color": "#FFC107"},
     {"name": "Bridge", "icon": "🌉", "color": "#607D8B"},
-    {"name": "Bunker", "icon": "🪖", "color": "#795548"},
+    {"name": "Cave", "icon": "🪨", "color": "#795548"},
     {"name": "Castle", "icon": "🏰", "color": "#9C27B0"},
     {"name": "Church", "icon": "⛪", "color": "#3F51B5"},
     {"name": "Factory", "icon": "🏭", "color": "#607D8B"},
     {"name": "Fire Tower", "icon": "🗼", "color": "#FF9800"},
-    {"name": "Firehouse", "icon": "🚒", "color": "#F44336"},
-    {"name": "Funeral Home", "icon": "⚰️", "color": "#795548"},
     {"name": "Graveyard", "icon": "🪦", "color": "#607D8B"},
     {"name": "Hospital", "icon": "🏥", "color": "#2196F3"},
     {"name": "Hotel", "icon": "🏨", "color": "#FFC107"},
     {"name": "House", "icon": "🏠", "color": "#8BC34A"},
     {"name": "Laboratory", "icon": "🔬", "color": "#00BCD4"},
-    {"name": "Library", "icon": "📚", "color": "#03A9F4"},
     {"name": "Mall", "icon": "🏬", "color": "#E91E63"},
     {"name": "Mansion", "icon": "🏡", "color": "#4CAF50"},
-    {"name": "Military Base", "icon": "🪖", "color": "#607D8B"},
     {"name": "Monument", "icon": "🗽", "color": "#9E9E9E"},
+    {"name": "Morgue", "icon": "💀", "color": "#795548"},
     {"name": "Park", "icon": "🏞️", "color": "#4CAF50"},
-    {"name": "Police Station", "icon": "🚓", "color": "#3F51B5"},
     {"name": "Power Plant", "icon": "⚡", "color": "#FF5722"},
     {"name": "Prison", "icon": "🔒", "color": "#F44336"},
     {"name": "Resort", "icon": "🌴", "color": "#FFEB3B"},
@@ -51,30 +47,14 @@ DEFAULT_CATEGORIES: list[dict] = [
 CATEGORY_HIERARCHY: list[tuple[str, str]] = [
     # Healthcare
     ("Hospital", "Asylum"),       # psychiatric hospitals were often called asylums
-    ("Hospital", "Laboratory"),   # hospital / medical research labs
     # Residential
     ("House", "Mansion"),         # a mansion is a grand house
     # Hospitality
     ("Hotel", "Resort"),          # resorts typically include hotel accommodation
-    # Military
-    ("Military Base", "Bunker"),  # bunkers are part of military installations
     # Industrial
     ("Factory", "Power Plant"),   # power plants are large industrial facilities
-    # Education
-    ("School", "Library"),        # academic / school libraries
-    # Law enforcement
-    ("Police Station", "Prison"),  # prisons are downstream of policing
-    # Religious / memorial
-    ("Church", "Graveyard"),      # churchyard graveyards
-    ("Church", "Funeral Home"),   # funeral homes are often church-affiliated
-    # Emergency services
-    ("Firehouse", "Fire Tower"),  # fire towers are fire-service infrastructure
     # Recreation
     ("Park", "Amusement Park"),   # an amusement park is a specialised park
-    # Historical
-    ("Castle", "Ruins"),          # ruined castles are a classic urbex target
-    # Transport
-    ("Train Station", "Tunnel"),  # railway tunnels connect to station networks
 ]
 
 

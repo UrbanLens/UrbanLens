@@ -150,7 +150,7 @@
     }
 
     &.selected {
-        background: #e3f2fd;
+        background: $color-blue-50;
         border-color: $primary-color;
     }
 }
@@ -195,10 +195,10 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    border: 1px solid var(--ul-border, #e2e8f0);
+    border: 1px solid var(--ul-border, $ui-slate-200);
     background: transparent;
     cursor: pointer;
-    color: var(--ul-text-muted, #94a3b8);
+    color: var(--ul-text-muted, $ui-slate-400);
     transition: background .12s, border-color .12s, color .12s;
     flex-shrink: 0;
 
@@ -208,8 +208,8 @@
 
     &:hover {
         background: var(--ul-surface-0);
-        border-color: #fca5a5;
-        color: #dc2626;
+        border-color: $ui-red-300;
+        color: $ui-red-600;
     }
 }
 
@@ -268,7 +268,7 @@
 
     &.selected {
         border-color: $primary-color;
-        background: #e3f2fd;
+        background: $color-blue-50;
     }
 }
 

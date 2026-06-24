@@ -14,7 +14,7 @@
         align-items: flex-start;
         justify-content: space-between;
         gap: 1.5rem;
-        background: linear-gradient(135deg, #0e7490 0%, #0891b2 50%, #06b6d4 100%);
+        background: linear-gradient(135deg, $ui-cyan-700 0%, $ui-cyan-600 50%, $ui-cyan-500 100%);
         border-radius: 16px;
         padding: 1.75rem 2rem;
         color: var(--ul-text-4);
@@ -202,12 +202,12 @@
         align-items: center;
         gap: .6rem;
         padding: .85rem 1.1rem;
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid $ui-slate-200;
         background: var(--ul-surface-0);
 
         .material-icons {
             font-size: 1.1rem;
-            color: #0891b2;
+            color: $ui-cyan-600;
         }
 
         h2 {
@@ -215,7 +215,7 @@
             font-size: .95rem;
             font-weight: 600;
             flex: 1;
-            color: #0f172a;
+            color: $ui-slate-900;
         }
     }
 
@@ -246,7 +246,7 @@
     .wiki-card-desc {
         padding: .75rem 1.1rem;
         font-size: .83rem;
-        color: #64748b;
+        color: $ui-slate-500;
         margin: 0;
         border-bottom: 1px solid var(--ul-border);
     }
@@ -274,14 +274,14 @@
         dt {
             font-size: .78rem;
             font-weight: 600;
-            color: #64748b;
+            color: $ui-slate-500;
             text-transform: uppercase;
             letter-spacing: .04em;
         }
 
         dd {
             font-size: .9rem;
-            color: #1e293b;
+            color: $ui-slate-800;
             margin: 0;
         }
     }
@@ -303,13 +303,13 @@
     .wiki-stat-value {
         font-size: 1.6rem;
         font-weight: 700;
-        color: #0891b2;
+        color: $ui-cyan-600;
         line-height: 1;
     }
 
     .wiki-stat-label {
         font-size: .8rem;
-        color: #64748b;
+        color: $ui-slate-500;
     }
 
     // ── Location map card ─────────────────────────────────────────────────
@@ -331,13 +331,13 @@
         font-size: .85rem;
 
         &--primary {
-            background: #0891b2;
-            border-color: #0891b2;
+            background: $ui-cyan-600;
+            border-color: $ui-cyan-600;
             color: var(--ul-text-4);
 
             &:hover {
-                background: #0e7490;
-                border-color: #0e7490;
+                background: $ui-cyan-700;
+                border-color: $ui-cyan-700;
             }
         }
     }
@@ -346,7 +346,7 @@
     .wiki-tabs {
         display: flex;
         gap: 0;
-        border-bottom: 2px solid #e2e8f0;
+        border-bottom: 2px solid $ui-slate-200;
         padding: 0 1rem;
         background: var(--ul-surface-0);
     }
@@ -362,7 +362,7 @@
         background: transparent;
         font-size: .88rem;
         font-weight: 500;
-        color: #64748b;
+        color: $ui-slate-500;
         cursor: pointer;
         transition: color .15s, border-color .15s;
 
@@ -372,8 +372,8 @@
 
         &--active,
         &:hover {
-            color: #0891b2;
-            border-bottom-color: #0891b2;
+            color: $ui-cyan-600;
+            border-bottom-color: $ui-cyan-600;
         }
     }
 
@@ -386,7 +386,7 @@
         display: flex;
         align-items: center;
         gap: .5rem;
-        color: #94a3b8;
+        color: $ui-slate-400;
         font-size: .88rem;
 
         .material-icons {
@@ -397,7 +397,7 @@
     // ── Edit history ──────────────────────────────────────────────────────
     .wiki-history-empty {
         font-size: .85rem;
-        color: #94a3b8;
+        color: $ui-slate-400;
         font-style: italic;
         margin: 0;
     }
@@ -439,17 +439,17 @@
         gap: .25rem;
         font-size: .83rem;
         font-weight: 600;
-        color: #1e293b;
+        color: $ui-slate-800;
 
         .material-icons {
             font-size: .9rem;
-            color: #94a3b8;
+            color: $ui-slate-400;
         }
     }
 
     .wiki-history-date {
         font-size: .78rem;
-        color: #94a3b8;
+        color: $ui-slate-400;
         margin-left: auto;
     }
 
@@ -468,7 +468,7 @@
 
         &--reverted {
             background: var(--ul-accent-amber-bg);
-            color: #92400e;
+            color: $ui-amber-800;
         }
     }
 
@@ -491,7 +491,7 @@
 
     .wiki-change-field {
         font-weight: 600;
-        color: #475569;
+        color: $ui-slate-600;
         min-width: 80px;
         font-size: .78rem;
         text-transform: uppercase;
@@ -499,7 +499,7 @@
     }
 
     .wiki-change-from {
-        color: #b91c1c;
+        color: $ui-red-700;
         background: var(--ul-surface-0);
         border-radius: 4px;
         padding: .1rem .35rem;
@@ -510,11 +510,11 @@
 
     .wiki-change-arrow {
         font-size: .85rem;
-        color: #94a3b8;
+        color: $ui-slate-400;
     }
 
     .wiki-change-to {
-        color: #15803d;
+        color: $ui-green-700;
         background: var(--ul-surface-0);
         border-radius: 4px;
         padding: .1rem .35rem;
@@ -527,14 +527,14 @@
         @include btn-base;
         padding: .3rem .7rem;
         border-radius: 6px;
-        border-color: #fca5a5;
+        border-color: $ui-red-300;
         background: var(--ul-surface-0);
-        color: #dc2626;
+        color: $ui-red-600;
         font-size: .78rem;
         opacity: .7;
 
         &:hover {
-            border-color: #dc2626;
+            border-color: $ui-red-600;
             opacity: 1;
         }
     }
@@ -549,7 +549,7 @@
         background: var(--ul-surface-0a);
         border-radius: 8px;
         font-size: .82rem;
-        color: #1d4ed8;
+        color: $ui-blue-700;
 
         .material-icons {
             font-size: .95rem;
@@ -586,7 +586,7 @@
                 box-sizing: border-box;
 
                 &:focus {
-                    border-color: #0891b2;
+                    border-color: $ui-cyan-600;
                     box-shadow: 0 0 0 3px rgba(8, 145, 178, .12);
                 }
             }

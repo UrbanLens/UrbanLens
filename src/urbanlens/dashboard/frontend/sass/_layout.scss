@@ -32,7 +32,7 @@
         position: absolute;
         bottom: 0;
         right: 0;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, .5);
         color: $light-neutral-color;
         padding: 5px;
         border-radius: 50%;
@@ -60,7 +60,7 @@
     }
 
     label {
-        color: gold;
+        color: $ui-amber-400;
         font-size: 20px;
         padding: 0 1px;
 
@@ -70,32 +70,32 @@
     }
 
     input:checked~label {
-        color: lightgrey;
+        color: $ui-gray-300;
     }
 
 
     input:checked+label {
-        color: gold;
+        color: $ui-amber-400;
     }
 
     input:hover+label {
-        color: red;
+        color: $ui-red-500;
     }
 
     &.rating-undefined,
     &.rating-0 {
         label {
-            color: lightgrey;
+            color: $ui-gray-300;
         }
     }
 
     &:hover {
         label {
-            color: red;
+            color: $ui-red-500;
         }
 
         label:hover~label {
-            color: lightgrey;
+            color: $ui-gray-300;
         }
     }
 }
@@ -245,7 +245,7 @@
 
     &:hover {
         opacity: 1;
-        background: rgba(255, 255, 255, 0.92);
+        background: rgba(255, 255, 255, .92);
         box-shadow: 0 2px 8px rgba(0, 0, 0, .14), 0 0 0 1px rgba(0, 0, 0, .06);
     }
 
@@ -267,8 +267,8 @@
 
         &:hover,
         &:focus {
-            background-color: rgba(33, 150, 243, 0.08);
-            border-color: rgba(33, 150, 243, 0.25);
+            background-color: rgba($color-blue-500, .08);
+            border-color: rgba($color-blue-500, .25);
         }
     }
 
@@ -312,18 +312,18 @@
         &:hover,
         &:focus {
             opacity: 1;
-            color: #1565c0;
-            background-color: rgba(33, 150, 243, 0.09);
-            border-color: rgba(33, 150, 243, 0.28);
+            color: $color-blue-800;
+            background-color: rgba($color-blue-500, .09);
+            border-color: rgba($color-blue-500, .28);
             outline: none;
         }
 
         &:active,
         &.active {
             opacity: 1;
-            color: #1976d2;
-            background-color: rgba(33, 150, 243, 0.18);
-            border-color: rgba(33, 150, 243, 0.45);
+            color: $color-blue-700;
+            background-color: rgba($color-blue-500, .18);
+            border-color: rgba($color-blue-500, .45);
         }
     }
 }
@@ -391,12 +391,12 @@
     gap: .35rem;
     padding: .35rem .6rem;
     font-size: .78rem;
-    color: #6b7280;
+    color: $ui-gray-500;
     border-top: 1px solid var(--ul-border);
 
     .material-icons {
         font-size: 1rem;
-        color: #9ca3af;
+        color: $ui-gray-400;
     }
 }
 

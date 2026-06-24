@@ -7,6 +7,39 @@
         <span class="profile-annotation-badge">Only visible to you</span>
     </div>
 
+    {# ── Trust rating ────────────────────────────────────────────────────────── #}
+    <div class="profile-annotation-trust">
+        <p class="profile-annotation-label">Trust</p>
+        <div class="pat-stars">
+            {% for i in "12345" %}
+            {% with star=forloop.counter %}
+            <button type="button"
+                    class="pat-star{% if star <= trust_rating %} pat-star--on{% endif %}"
+                    name="rating"
+                    value="{{ star }}"
+                    hx-vals='{"rating": "{{ star }}"}'
+                    hx-post="{% url 'profile.trust' subject.slug %}"
+                    hx-target="#profile-annotation-inner"
+                    hx-swap="innerHTML"
+                    title="{% if star <= trust_rating and trust_rating == star %}Clear trust rating{% else %}Set trust to {{ star }}{% endif %}">
+                <i class="material-icons">{% if star <= trust_rating %}star{% else %}star_border{% endif %}</i>
+            </button>
+            {% endwith %}
+            {% endfor %}
+            {% if trust_rating %}
+            <button type="button"
+                    class="pat-clear"
+                    hx-vals='{"rating": "0"}'
+                    hx-post="{% url 'profile.trust' subject.slug %}"
+                    hx-target="#profile-annotation-inner"
+                    hx-swap="innerHTML"
+                    title="Clear trust rating">
+                <i class="material-icons">close</i>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
     {# ── People badges ──────────────────────────────────────────────────────── #}
     <div class="profile-annotation-badges">
         <p class="profile-annotation-label">Labels</p>
