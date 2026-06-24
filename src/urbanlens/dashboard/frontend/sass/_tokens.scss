@@ -386,7 +386,7 @@ $z-nav: 1100;
     --ul-button-bg: #{$primary-color};
     --ul-button-border: var(--ul-border);
     --ul-button-text: var(--ul-text-0);
-    --ul-button-hover-bg: #{$ul-accent-purple-bg};
+    --ul-button-hover-bg: var(--ul-accent-purple-bg);
     --ul-button-hover-border: var(--ul-border-strong);
     --ul-button-hover-text: var(--ul-text-7);
 
