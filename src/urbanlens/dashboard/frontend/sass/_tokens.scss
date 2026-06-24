@@ -392,6 +392,12 @@ $z-nav: 1100;
     --ul-tooltip-fg: #f0f4fc;
     --ul-tooltip-border: rgba(255, 255, 255, 0.09);
     --ul-tooltip-shadow: 0 4px 16px rgba(0, 0, 0, 0.24), 0 1px 4px rgba(0, 0, 0, 0.14);
+
+    // Convenience aliases for scattered references that use shorthand names.
+    --ul-text:    var(--ul-text-1);
+    --ul-accent:  var(--ul-color-accent);
+    --ul-muted:   var(--ul-text-3);
+    --ul-primary: var(--ul-primary-color);
 }
 
 [data-theme="dark"] {

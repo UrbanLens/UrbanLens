@@ -145,6 +145,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 protocols = ['http://', 'https://']
 domains = ['urbanlens.org', 'localhost', 'localhost:21080']
 subdomains = ['www.', '']
+# Trust the X-Forwarded-Proto header set by Nginx so Django builds https:// URLs
+# when sitting behind a reverse proxy that terminates SSL.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+
 CORS_ALLOWED_ORIGINS = [
     f'{protocol}{subdomain}{domain}'
     for protocol in protocols 

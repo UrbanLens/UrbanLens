@@ -490,22 +490,7 @@
 // ── Comment map viewer dialog ─────────────────────────────────────────────────
 
 .comment-map-view-dialog {
-    width: min(90vw, 820px);
-    max-height: 90vh;
-    padding: 0;
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
-    overflow: hidden;
-
-    .dialog-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: .75rem 1rem;
-        border-bottom: 1px solid var(--ul-border);
-        font-weight: 600;
-    }
+    @include dialog-base(820px);
 }
 
 .comment-map-view-body {
@@ -516,40 +501,14 @@
 // ── Comment map composer dialog ───────────────────────────────────────────────
 
 .comment-map-composer-dialog {
-    width: min(95vw, 900px);
+    @include dialog-base(900px);
     max-height: 95vh;
-    padding: 0;
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
-    overflow: hidden;
 
     &[open] {
-        display: flex;
-        flex-direction: column;
         // Explicit height so flex children (body, map) have a real reference to
         // grow into. Without this, flex: 1 on the body resolves to flex-basis: 0
         // and Leaflet reads a 0px container height.
         height: min(95vh, 680px);
-    }
-
-    .dialog-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: .75rem 1rem;
-        border-bottom: 1px solid var(--ul-border);
-        font-weight: 600;
-        flex-shrink: 0;
-    }
-
-    .dialog-footer {
-        display: flex;
-        justify-content: flex-end;
-        gap: .6rem;
-        padding: .75rem 1rem;
-        border-top: 1px solid var(--ul-border);
-        flex-shrink: 0;
     }
 }
 

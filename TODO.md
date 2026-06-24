@@ -125,7 +125,7 @@ Features planned for future releases.
 * Social media features (sharing content, stories, etc), allowing users to share content they want other explorers to see, but don't want to be publicly available on the internet to a non-exploring audience. [UL-74]
 * Buffer features (maybe using their api?) for buffer-like functionality that's tailored toward exploring workflows. (This may be straying too much from the core app purpose) [UL-75]
 * Look into decentralized stuff. [UL-76]
-* Sync with some other service. (I don't think google maps is possible - see the "issues I don't think are solvable" section - but other services may be possible). This would provide a portion of a backup strategy for user data [UL-77]
+* Sync with some other service. (I don't think google maps is possible - see the section "issues I don't think are solvable" - but other services may be possible). This would provide a portion of a backup strategy for user data [UL-77]
 * Kubernetes [UL-78]
 * More API access for finding vintage photos and documents, location details, alerts, etc. [UL-79]
 * Reduce reliance on javascript further by migrating more of it to HTMX. [UL-80]

@@ -68,11 +68,6 @@
         color: var(--ul-text-4);
     }
 
-    .dialog {
-        background: var(--ul-surface-0);
-        border-color: var(--ul-border);
-    }
-
     .page-content > .ul-section {
         background-color: var(--ul-surface-0a);
     }
@@ -1074,12 +1069,6 @@
         }
     }
 
-    .comment-map-view-dialog,
-    .comment-map-composer-dialog {
-        background: var(--ul-surface-0);
-        color: var(--ul-text-1);
-    }
-
     .comment-map-composer-controls {
         border-color: var(--ul-border);
     }
@@ -1432,10 +1421,5 @@
             border-color: #{$color-indigo-300};
             background: #{$color-indigo-1100};
         }
-    }
-
-    .about-cta-title,
-    .about-title {
-        color: var(--ul-text-0);
     }
 }

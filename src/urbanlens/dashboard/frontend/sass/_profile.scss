@@ -1576,17 +1576,7 @@ textarea.edit-textarea {
 }
 
 .invite-dialog {
-    max-width: 460px;
-    width: 100%;
-    border-radius: $radius-md;
-    border: 1px solid var(--ul-border);
-    background: var(--ul-surface-0);
-    color: var(--ul-text);
-    padding: 0;
-
-    &::backdrop {
-        background: rgba(0, 0, 0, 0.45);
-    }
+    @include dialog-base(460px);
 }
 
 .invite-dialog-inner {

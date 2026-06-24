@@ -501,27 +501,9 @@
 }
 
 // ── Tag edit dialog ────────────────────────────────────────────────────────────
+// overflow: visible is provided by @include dialog-base, keeping icon-picker panels visible.
 .tag-edit-dialog {
-    width: min(52em, calc(100vw - 2rem));
-    max-height: 90vh;
-    border-radius: $radius-md;
-    border: none;
-    padding: 0;
-    box-shadow: $shadow-dialog;
-    // visible so icon picker panel (position:absolute) is not clipped by the dialog
-    overflow: visible;
-
-    // Flex column so header stays fixed and body scrolls
-    &[open] {
-        display: flex;
-        flex-direction: column;
-    }
-
-    &::backdrop {
-        background: rgba(0, 0, 0, .55);
-        backdrop-filter: blur(2px);
-        -webkit-backdrop-filter: blur(2px);
-    }
+    @include dialog-base(52em);
 }
 
 .tag-edit-dialog-body {
@@ -1165,25 +1147,7 @@
 // ── Multi-merge dialog ────────────────────────────────────────────────────────
 
 .cat-merge-dialog {
-    width: min(520px, 95vw);
-    max-height: 90vh;
-    overflow: hidden;
-    border: none;
-    border-radius: $radius-md;
-    box-shadow: 0 8px 40px rgba(0, 0, 0, .2);
-    padding: 0;
-    // do NOT set display here - the browser hides dialog:not([open]) via UA stylesheet
-
-    &[open] {
-        display: flex;
-        flex-direction: column;
-    }
-
-    &::backdrop {
-        background: rgba(0, 0, 0, .55);
-        backdrop-filter: blur(2px);
-        -webkit-backdrop-filter: blur(2px);
-    }
+    @include dialog-base(520px);
 }
 
 .cat-merge-dialog-body {
@@ -1406,51 +1370,19 @@
 }
 
 .cat-merge-dialog-footer {
-    display: flex;
-    gap: .75rem;
-    align-items: center;
-    padding: 1rem 1.5rem 1.25rem;
-    border-top: 1px solid var(--ul-border);
-    flex-shrink: 0;
-}
-
-@keyframes cat-spin {
-    to {
-        transform: rotate(360deg);
-    }
+    @include dialog-footer;
+    align-items: center;  // vertically aligns the spinner with action buttons
 }
 
 .cat-merge-spinner {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    border: 2px solid rgba(255, 255, 255, .35);
-    border-top-color: var(--ul-text-4);
-    border-radius: 50%;
-    animation: cat-spin .65s linear infinite;
-    vertical-align: middle;
-    flex-shrink: 0;
+    @include spinner;
 }
 
 // ── Bulk-edit dialog ──────────────────────────────────────────────────────────
 
 .cat-bulk-edit-dialog {
-    width: min(520px, 95vw);
+    @include dialog-base(520px);
     max-height: 85vh;
-    border: none;
-    border-radius: $radius-md;
-    box-shadow: $shadow-dialog;
-    padding: 0;
-    overflow: hidden;
-
-    &[open] {
-        display: flex;
-        flex-direction: column;
-    }
-
-    &::backdrop {
-        background: rgba(0, 0, 0, .45);
-    }
 }
 
 .cat-bulk-edit-body {

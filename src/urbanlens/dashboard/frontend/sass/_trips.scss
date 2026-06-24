@@ -974,11 +974,8 @@
 
 // ── Create/edit trip dialog ───────────────────────────────────────────────
 
-// Override width for trip dialogs (more content than tag dialogs)
 .trip-create-dialog {
-    width: min(480px, 95vw);
-    max-height: 90vh;
-    overflow-y: auto;
+    @include dialog-base(480px);
 
     .trip-create-form {
         padding: 1.25rem 1.5rem 1.5rem;

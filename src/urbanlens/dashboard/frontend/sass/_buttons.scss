@@ -166,7 +166,9 @@ input[type="submit"] {
 	@extend .submit-button;
 }
 
-// Icon-only buttons (legacy `.btn-icon` + modern `.ul-icon-btn`)
+// ── Icon-only buttons ─────────────────────────────────────────────────────────
+// .ul-icon-btn is canonical. .btn-icon is a legacy alias that shares the same
+// base styles so existing templates keep working without changes.
 .btn-icon,
 .ul-icon-btn {
 	@include icon-btn(30px);
@@ -223,19 +225,13 @@ input[type="submit"] {
 	}
 }
 
+// Absolutely-positioned corner close button used in legacy card/panel contexts.
+// Extends .ul-icon-btn for the base appearance; position overrides make it stick to its container.
 .btn-close {
-	@include icon-btn(28px);
+	@extend .ul-icon-btn;
 	position: absolute;
 	top: 0.5em;
 	right: 0.5em;
-	color: $text-muted;
-	font-size: 1.15rem;
-	line-height: 1;
-
-	&:hover {
-		background: var(--ul-surface-0);
-		color: $text-primary;
-	}
 
 	&:disabled {
 		opacity: 0.35;

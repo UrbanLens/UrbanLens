@@ -46,29 +46,62 @@
 	background: var(--ul-surface-1);
 }
 
-// ── Dialogs ───────────────────────────────────────────────────────────────────
+// ── Global dialog utility classes ─────────────────────────────────────────────
+// These standalone classes are shared by all native <dialog> elements and do
+// not depend on .ul-dialog being a parent.
+
+.dialog-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: .5rem;
+	padding: .75rem 1rem;
+	font-weight: 600;
+	font-size: .95rem;
+	flex-shrink: 0;
+	border-bottom: 1px solid var(--ul-surface-2b);
+}
+
+.dialog-footer {
+	@include dialog-footer;
+}
+
+// Link shown at the bottom of dialogs pointing to a management page.
+// Was previously defined only in dark-mode overrides — now has a light-mode base.
+.dialog-manage-link {
+	font-size: .8rem;
+	color: var(--ul-text-3);
+	text-decoration: none;
+	margin-right: auto;
+
+	&:hover {
+		color: var(--ul-text-1);
+		text-decoration: underline;
+	}
+}
+
+.dialog-close {
+	@include icon-btn(28px);
+	outline: none;
+}
+
+.ul-form-row {
+	@include form-row;
+}
+
+.ul-form-row--two-col {
+	@include form-row;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: $space-sm $space-md;
+}
+
+// ── Dialog component ──────────────────────────────────────────────────────────
+// Base class for all native <dialog> elements. Feature dialogs set their own
+// width via @include dialog-base($width) and add only feature-specific rules.
+
 .ul-dialog {
-	border: none;
-	border-radius: $radius-md;
-	box-shadow: $shadow-dialog;
-	padding: 0;
-	width: min(55rem, 90vw);
-	max-width: 90vw;
-	overflow: visible;
-	max-height: 90vh;
-	background-color: var(--ul-surface-0);
-	color: var(--ul-text-1);
-
-	&::backdrop {
-		background: rgba(0, 0, 0, .55);
-		backdrop-filter: blur(2px);
-		-webkit-backdrop-filter: blur(2px);
-	}
-
-	&[open] {
-		display: flex;
-		flex-direction: column;
-	}
+	@include dialog-base;
 
 	label {
 		color: var(--ul-text-1);
@@ -78,49 +111,10 @@
 		@include panel-header($spread: true);
 	}
 
+	// Tinted header background is specific to the .ul-dialog shell.
 	.dialog-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: .5rem;
-		padding: .75rem 1rem;
-		font-weight: 600;
-		font-size: .95rem;
-		flex-shrink: 0;
 		background-color: var(--ul-surface-2);
-		border-bottom: 1px solid var(--ul-surface-2b);
 	}
-	
-	.dialog-close {
-		@extend .ul-dialog-close;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 28px;
-		height: 28px;
-		border-radius: 6px;
-		border: none;
-		background: transparent;
-		cursor: pointer;
-		color: var(--ul-text-3);
-		transition: background .15s, color .15s;
-		flex-shrink: 0;
-	
-		.material-icons {
-			font-size: 1.1rem;
-		}
-	
-		&:hover {
-			background: var(--ul-hover-bg);
-			color: var(--ul-text-1);
-		}
-	}
-	
-}
-
-.ul-dialog-header {
-	@include panel-header($spread: true);
-	color: var(--ul-text-1);
 }
 
 .ul-dialog-body {
@@ -133,6 +127,7 @@
 	@include dialog-footer;
 }
 
+// Alias kept for backwards-compatibility; prefer .dialog-close going forward.
 .ul-dialog-close {
 	@include icon-btn(28px);
 	outline: none;
@@ -203,6 +198,14 @@
 	a {
 		color: $primary-color;
 	}
+}
+
+// ── Spinner ───────────────────────────────────────────────────────────────────
+// Reusable inline spinner for loading states outside of button contexts.
+// For button loading states, use @mixin btn-loading-spinner from _mixins.scss.
+
+.ul-spinner {
+	@include spinner;
 }
 
 // ── Badges ────────────────────────────────────────────────────────────────────

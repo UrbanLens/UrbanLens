@@ -319,52 +319,18 @@
     }
 }
 
-// ── Dark mode: badge dialog ──────────────────────────────────────────────────
+// ── Dark mode: tag-add-dialog feature colors ─────────────────────────────────
+// Structural colors (background, text, border) are now fully token-driven via
+// @include dialog-base and var(--ul-*) custom properties. Only the feature-
+// specific indigo accent colours need explicit dark overrides here.
 [data-theme="dark"] {
-
-    .tag-add-dialog,
-    .visit-add-dialog,
-    .detail-pin-add-dialog,
-    .trip-create-dialog,
-    .pin-edit-dialog {
-        background: var(--ul-surface-9);
-        color: #e2e8f0;
-
-        .dialog-header {
-            border-bottom-color: #334155;
-            background: var(--ul-surface-9);
-        }
-
-        .dialog-close {
-            color: #94a3b8;
-
-            &:hover {
-                background: rgba(255, 255, 255, .08);
-                color: #e2e8f0;
-            }
-        }
-
-        .dialog-footer {
-            border-top-color: #334155;
-
-            .dialog-manage-link {
-                color: #64748b;
-
-                &:hover {
-                    color: #94a3b8;
-                }
-            }
-        }
-    }
-
     .tag-add-dialog {
         .tad-tabs {
-            background: var(--ul-surface-9);
-            border-bottom-color: #334155;
+            border-bottom-color: var(--ul-border);
         }
 
         .tad-tab {
-            color: #64748b;
+            color: var(--ul-text-3);
 
             &:hover {
                 color: #818cf8;
@@ -377,23 +343,16 @@
         }
 
         .dialog-search {
-            background: #0f0f1a;
-            border-color: #334155;
-            color: #e2e8f0;
+            background: var(--ul-surface-1);
+            border-color: var(--ul-border);
 
             &:focus {
                 border-color: #818cf8;
                 box-shadow: 0 0 0 3px rgba(129, 140, 248, .15);
             }
-
-            &::placeholder {
-                color: #475569;
-            }
         }
 
         .tag-dialog-btn {
-            color: #e2e8f0;
-
             &:hover {
                 background: rgba(129, 140, 248, .12);
             }
@@ -493,31 +452,7 @@
     }
 
     .form-row {
-        display: flex;
-        flex-direction: column;
-        gap: .3rem;
-
-        label {
-            font-size: .82rem;
-            font-weight: 600;
-            color: var(--ul-text-2);
-        }
-
-        input,
-        textarea {
-            padding: .45rem .65rem;
-            border: 1px solid var(--ul-border);
-            border-radius: 8px;
-            font-size: .88rem;
-            outline: none;
-            width: 100%;
-            box-sizing: border-box;
-
-            &:focus {
-                border-color: #6366f1;
-                box-shadow: 0 0 0 3px rgba(99, 102, 241, .12);
-            }
-        }
+        @include form-row;
 
         textarea {
             resize: vertical;
@@ -1304,25 +1239,11 @@ body.page-location-details {
 // ── Location conflict dialog (map page) ───────────────────────────────────────
 
 .loc-conflict-dialog {
-    width: min(90vw, 520px);
-    padding: 0;
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 16px 48px rgba(0, 0, 0, .25);
-    overflow: hidden;
+    @include dialog-base(520px);
 
-    .dialog-header {
-        display: flex;
-        align-items: center;
-        gap: .45rem;
-        padding: .75rem 1rem;
-        border-bottom: 1px solid var(--ul-border);
-        font-weight: 600;
-        font-size: .9rem;
-
-        .dialog-close {
-            margin-left: auto;
-        }
+    // dialog-close inside header sits at the right edge
+    .dialog-header .dialog-close {
+        margin-left: auto;
     }
 }
 
@@ -1538,16 +1459,6 @@ body.page-location-details {
 
     .pin-loc-option-name {
         color: var(--ul-text);
-    }
-
-    .loc-conflict-dialog {
-        background: var(--ul-surface-0);
-        color: var(--ul-text);
-
-        .dialog-header {
-            border-color: var(--ul-border);
-            background: var(--ul-surface-0);
-        }
     }
 
     .loc-conflict-intro {

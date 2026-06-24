@@ -156,19 +156,9 @@
 }
 
 .detail-pin-add-dialog {
-    border: none;
-    border-radius: 12px;
-    padding: 0;
-    width: min(520px, 96vw);
-    // Constrain to viewport - the inner body scrolls, not the dialog itself
+    @include dialog-base(520px);
+    // Inner body scrolls — cap slightly tighter than default for this tall form
     max-height: min(92vh, 900px);
-    overflow: hidden;
-
-    &[open] {
-        display: flex;
-        flex-direction: column;
-    }
-
     &::backdrop {
         background: rgba(0, 0, 0, .4);
     }
@@ -201,38 +191,14 @@
         padding: 0 1.25rem 1.25rem;
 
         .form-row {
-            display: flex;
-            flex-direction: column;
-            gap: .3rem;
+            @include form-row;
             margin-bottom: .8rem;
-
-            label {
-                font-size: .82rem;
-                font-weight: 600;
-                color: var(--ul-text-2);
-            }
-
-            input,
-            select,
-            textarea {
-                width: 100%;
-                box-sizing: border-box;
-                border: 1px solid var(--ul-border);
-                border-radius: 6px;
-                padding: .45rem .6rem;
-                font-size: .9rem;
-
-                &:focus {
-                    outline: 2px solid #2563eb;
-                    border-color: transparent;
-                }
-            }
 
             &.form-row--coords {
                 flex-direction: row;
                 gap: .75rem;
 
-                >div {
+                > div {
                     flex: 1;
                     display: flex;
                     flex-direction: column;
@@ -529,18 +495,7 @@
 
 // Shared wiki dialog uses the same base as tag/visit dialogs.
 .wiki-edit-dialog {
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
-    padding: 0;
-    width: min(480px, 95vw);
-    max-height: 90vh;
-    overflow: hidden;
-
-    &[open] {
-        display: flex;
-        flex-direction: column;
-    }
+    @include dialog-base(480px);
 
     .wiki-edit-form {
         flex: 1;

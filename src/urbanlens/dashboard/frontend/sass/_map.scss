@@ -553,19 +553,10 @@
 // ── Add-Pin dialog ─────────────────────────────────────────────────────────
 
 .add-pin-dialog {
-    border: none;
-    border-radius: $radius-md;
-    box-shadow: 0 8px 40px rgba(0, 0, 0, .22);
-    padding: 0;
-    width: min(520px, calc(100vw - 2rem));
+    @include dialog-base(520px);
+    // Full-viewport-aware height: keeps the dialog clear of mobile browser chrome
     max-height: calc(100dvh - 4rem);
-    overflow: hidden;
-
-    &[open] {
-        display: flex;
-        flex-direction: column;
-    }
-
+    // Lighter backdrop — the map behind it should remain partially visible
     &::backdrop {
         background: rgba(0, 0, 0, .4);
         backdrop-filter: blur(1px);

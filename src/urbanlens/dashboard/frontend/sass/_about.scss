@@ -3,7 +3,7 @@
 
 // ── About page ────────────────────────────────────────────────────────────────
 
-body.page-about {
+.page-about {
 
     // Shared inner width
     .about-section-inner,
@@ -450,5 +450,16 @@ body.page-about {
         font-size: 1.05rem;
         color: #c7d2fe;
         margin: 0 0 2rem;
+    }
+}
+
+
+[data-theme="dark"] {
+    .page-about {
+        .about-cta-title,
+        .about-title,
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--ul-text-0);
+        }
     }
 }
