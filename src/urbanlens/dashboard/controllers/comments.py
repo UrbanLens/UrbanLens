@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -292,14 +293,96 @@ def _aggregate_reactions(reactions_qs) -> dict[str, _ReactionData]:
     return result
 
 
+_HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+_ALLOWED_SHAPE_TYPES = {"line", "arrow", "circle", "rect", "polygon", "text"}
+
+
+def _is_valid_lat(v: object) -> bool:
+    return isinstance(v, int | float) and -90 <= v <= 90
+
+
+def _is_valid_lng(v: object) -> bool:
+    return isinstance(v, int | float) and -180 <= v <= 180
+
+
+def _sanitize_markup_color(v: object, fallback: str = "#e74c3c") -> str:
+    """Return v if it is a 6-digit hex color, otherwise return fallback."""
+    if isinstance(v, str) and _HEX_COLOR_RE.match(v):
+        return v
+    return fallback
+
+
+def _sanitize_optional_color(v: object) -> str | None:
+    """Return v if hex color or the string 'none', otherwise None."""
+    if v == "none":
+        return "none"
+    if isinstance(v, str) and _HEX_COLOR_RE.match(v):
+        return v
+    return None
+
+
+def _sanitize_number(v: object, lo: float, hi: float, default: float) -> float:
+    """Clamp v to [lo, hi] if numeric, else return default."""
+    try:
+        n = float(v)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, n))
+
+
+def _sanitize_latlngs(raw: object) -> list[list[float]]:
+    """Return only valid [lat, lng] pairs from raw."""
+    if not isinstance(raw, list):
+        return []
+    result = []
+    for item in raw:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            lat, lng = item[0], item[1]
+            if _is_valid_lat(lat) and _is_valid_lng(lng):
+                result.append([float(lat), float(lng)])
+    return result
+
+
+def _sanitize_markup_shapes(shapes: object) -> list[dict]:
+    """Return cleaned shape dicts, dropping malformed or unknown-typed entries."""
+    if not isinstance(shapes, list):
+        return []
+    clean: list[dict] = []
+    for s in shapes:
+        if not isinstance(s, dict):
+            continue
+        shape_type = s.get("type")
+        if shape_type not in _ALLOWED_SHAPE_TYPES:
+            continue
+        latlngs = _sanitize_latlngs(s.get("latlngs"))
+        if not latlngs:
+            continue
+        entry: dict = {
+            "type": shape_type,
+            "latlngs": latlngs,
+            "color": _sanitize_markup_color(s.get("color")),
+            "stroke_width": _sanitize_number(s.get("stroke_width"), 1, 50, 3),
+            "fill_opacity": _sanitize_number(s.get("fill_opacity"), 0, 100, 87),
+            "border_opacity": _sanitize_number(s.get("border_opacity"), 0, 100, 100),
+        }
+        bc = _sanitize_optional_color(s.get("border_color"))
+        if bc is not None:
+            entry["border_color"] = bc
+        if shape_type == "text":
+            label = s.get("label", "")
+            entry["label"] = str(label)[:500] if isinstance(label, str) else ""
+        clean.append(entry)
+    return clean
+
+
 def _parse_map_data(request) -> dict | None:
-    """Extract and validate the map_data JSON blob from a comment POST.
+    """Extract, validate, and sanitize the map_data JSON blob from a comment POST.
 
     Args:
         request: The HTTP request.
 
     Returns:
-        Parsed dict if valid map_data was submitted, else None.
+        Sanitized dict if valid map_data was submitted, else None.
     """
     raw = request.POST.get("map_data", "").strip()
     if not raw:
@@ -311,10 +394,17 @@ def _parse_map_data(request) -> dict | None:
         return None
     if not isinstance(data, dict):
         return None
-    # Require at least a center coordinate.
-    if not (isinstance(data.get("center_lat"), int | float) and isinstance(data.get("center_lng"), int | float)):
+    center_lat = data.get("center_lat")
+    center_lng = data.get("center_lng")
+    if not (_is_valid_lat(center_lat) and _is_valid_lng(center_lng)):
         return None
-    return data
+    sanitized: dict = {
+        "center_lat": float(center_lat),  # type: ignore[arg-type]
+        "center_lng": float(center_lng),  # type: ignore[arg-type]
+        "zoom": _sanitize_number(data.get("zoom"), 1, 22, 13),
+        "shapes": _sanitize_markup_shapes(data.get("shapes")),
+    }
+    return sanitized
 
 
 # ── Comment map pin autocomplete endpoint ────────────────────────────────────

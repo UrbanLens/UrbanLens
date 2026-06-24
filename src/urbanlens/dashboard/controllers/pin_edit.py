@@ -268,13 +268,21 @@ class PinEditView(LoginRequiredMixin, View):
         elif rating == 0:
             Review.objects.filter(user=request.user, pin=pin).delete()
 
-        # Category update: comma-separated names replace all current categories
-        category_raw = (body.get("categories") or "").strip()
-        if category_raw is not None:
+        # Category update: only runs when the field was explicitly submitted (partial requests preserve existing)
+        if "categories" in body:
+            category_raw = (body.get("categories") or "").strip()
             names = [n.strip().lower() for n in category_raw.split(",") if n.strip()]
+            seen_names: set[str] = set()
             pin.categories.clear()
             for name in names:
-                cat, _ = Badge.objects.get_or_create(name=name, kind="category", defaults={"profile": None})
+                if name in seen_names:
+                    continue
+                seen_names.add(name)
+                cat = Badge.objects.filter(name__iexact=name, kind="category", profile=pin.profile).first()
+                if cat is None:
+                    cat, _ = Badge.objects.get_or_create(
+                        name=name, kind="category", profile=pin.profile,
+                    )
                 pin.categories.add(cat)
 
         # Reload from DB so all properties reflect saved state
