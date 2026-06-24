@@ -13,7 +13,6 @@ Features planned for this release.
 * Provide explanation of how to do a google takeout to import pins. (Possible onboarding process?)
 * Ensure fully sanitized user input for pin names, location names, etc, which are passed into external urls. Require strict character sets, min/max lengths, and so on.
 * Per the above, any of that data which gets passed to an AI needs additional safeguards against jailbreaking.
-* Per above, ensure AI sandboxing.
 
 ## Medium Features
 
@@ -129,6 +128,8 @@ Features planned for future releases.
 * Yelp reviews.
 * Notepad import (AI Parsing)
 * XLS import
+* Ensure AI sandboxing. This isn't really necessary now, but would be necessary prior to any MCP usage for security reasons, and would also allow for local AI models. (ollama, etc)
+* Create separate logged-in homepage (small map, widgets, links to other pages, commonly visited pins, etc)
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

@@ -427,7 +427,7 @@
     const _GPS_FALLBACK_LNG  = {{ gps_fallback_lng|default:"null" }};
     const _defaultZoom       = {{ map_default_zoom|default:13 }};
     const _DEFAULT_MAP_VIEW  = '{{ default_map_view|default:"street" }}';
-    const _MAP_DARK_MODE     = '{{ map_dark_mode|default:"system" }}';
+    const _MAP_DARK_MODE     = '{{ map_dark_mode|default:"light" }}';
     // Per-profile key for remembering active layers across sessions.
     const _LAYER_CACHE_KEY   = `ul_layers_v1_${_PROFILE_UUID}`;
     const _serverCenter      = (_SERVER_CENTER_LAT !== null && _SERVER_CENTER_LNG !== null)

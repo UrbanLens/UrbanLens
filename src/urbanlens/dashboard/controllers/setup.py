@@ -105,7 +105,7 @@ def app_title_name_suggestions(user: User) -> list[str]:
         Human-readable title suggestions.
     """
     first = (user.first_name or "").strip()
-    display = first.split()[0] if first else user.username
+    first.split()[0] if first else user.username
     return [
         "Private Lens",
         "Urbex Tracker",

@@ -147,7 +147,7 @@ class Profile(abstract.Model):
     map_dark_mode = CharField(
         max_length=10,
         choices=ThemeChoice.choices,
-        default=ThemeChoice.SYSTEM,
+        default=ThemeChoice.LIGHT,
         help_text="When to apply a dark tile layer on the map. System follows your OS preference. Satellite is always unaffected.",
     )
     default_map_view = CharField(

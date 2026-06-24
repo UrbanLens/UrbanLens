@@ -212,7 +212,7 @@
             <div class="settings-field">
                 <label class="settings-label">
                     Map Dark Mode
-                    {% include "dashboard/partials/_tooltip_help.html" with text="When to switch the base map to a dark tile layer. System follows your OS preference. Satellite and topographic filters are included." %}
+                    {% include "dashboard/partials/_tooltip_help.html" with text="When to switch the base map to a dark tile layer. System follows your OS preference. Topographic filter is included." %}
                 </label>
                 <p class="settings-help">System follows your OS preference. Satellite is always unaffected.</p>
                 <div class="settings-theme-row">
@@ -228,14 +228,14 @@
                                {% if style_form.instance.map_dark_mode == 'light' %}checked{% endif %}
                                onchange="applyMapDarkPreview('light')">
                         <i class="material-icons">light_mode</i>
-                        <span>Always Light</span>
+                        <span>Light</span>
                     </label>
                     <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'dark' %}active{% endif %}" id="map-dark-opt-dark">
                         <input type="radio" name="map_dark_mode" value="dark"
                                {% if style_form.instance.map_dark_mode == 'dark' %}checked{% endif %}
                                onchange="applyMapDarkPreview('dark')">
                         <i class="material-icons">dark_mode</i>
-                        <span>Always Dark</span>
+                        <span>Dark</span>
                     </label>
                 </div>
                 {% if style_form.map_dark_mode.errors %}

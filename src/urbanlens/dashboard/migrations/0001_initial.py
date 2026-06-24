@@ -2920,7 +2920,7 @@ class Migration(migrations.Migration):
                     ("light", "Light"),
                     ("dark", "Dark"),
                 ],
-                default="system",
+                default="light",
                 help_text="When to apply a dark tile layer on the map. System follows your OS preference. Satellite is always unaffected.",
                 max_length=10,
             ),

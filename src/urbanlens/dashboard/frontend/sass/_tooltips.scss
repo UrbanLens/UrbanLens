@@ -241,6 +241,7 @@ html.tooltips-disabled {
         &::after { display: none !important; }
     }
     .ul-tooltip-float { display: none !important; }
+    .ul-tooltip-help { display: none !important; }
 }
 
 // ── Floating tooltip (JS portal - escapes overflow:hidden) ────────────────────
