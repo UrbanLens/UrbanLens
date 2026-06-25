@@ -18,12 +18,11 @@ from datetime import date, timedelta
 from typing import Any
 
 from django.contrib.auth.models import User
-from urbanlens.core.tests.testcase import TestCase
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.dashboard.models.badges.model import Badge, KIND_TAG
+from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.badges.model import KIND_TAG, Badge
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reviews.model import Review
@@ -33,7 +32,6 @@ _db_settings = settings(
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
 )
-
 
 
 class FilterByCriteriaHasVisitsTests(TestCase):
@@ -189,8 +187,8 @@ class FilterByCriteriaRatingTests(TestCase):
 
     @given(
         bounds=st.tuples(st.integers(min_value=1, max_value=5), st.integers(min_value=1, max_value=5)).map(
-            lambda t: (min(t), max(t))
-        )
+            lambda t: (min(t), max(t)),
+        ),
     )
     @_db_settings
     def test_rating_band_returns_only_pins_in_range(self, bounds: tuple[int, int]) -> None:
@@ -312,7 +310,7 @@ class FilterByCriteriaTagTests(TestCase):
         self.profile = baker.make(User).profile
         self.tag = baker.make(Badge, kind=KIND_TAG, profile=None, name="urban-exploration")
         self.tagged_pin = baker.make(Pin, profile=self.profile)
-        self.tagged_pin.tags.add(self.tag)
+        self.tagged_pin.badges.add(self.tag)
         self.untagged_pin = baker.make(Pin, profile=self.profile)
 
     def _base_qs(self):
@@ -333,7 +331,7 @@ class FilterByCriteriaTagTests(TestCase):
         child_tag = baker.make(Badge, kind=KIND_TAG, profile=None, name="abandoned-urbex")
         child_tag.parents.add(self.tag)
         child_pin = baker.make(Pin, profile=self.profile)
-        child_pin.tags.add(child_tag)
+        child_pin.badges.add(child_tag)
         qs = self._base_qs().filter_by_criteria({"tags": [self.tag]})
         result_ids = set(qs.values_list("pk", flat=True))
         self.assertIn(child_pin.pk, result_ids)

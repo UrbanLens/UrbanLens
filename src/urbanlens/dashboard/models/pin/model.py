@@ -114,24 +114,10 @@ class Pin(abstract.Model):
         blank=True,
         related_name="pins",
     )
-    # TODO: Consider this 3 foreign key approach vs 1 foreign key with indexes and queryset methods.
-    categories = ManyToManyField(
-        "dashboard.Badge",
-        blank=True,
-        related_name="categorized_pins",
-        limit_choices_to={"kind": "category"},
-    )
-    tags = ManyToManyField(
+    badges = ManyToManyField(
         "dashboard.Badge",
         blank=True,
         related_name="pins",
-        limit_choices_to={"kind": "tag"},
-    )
-    statuses = ManyToManyField(
-        "dashboard.Badge",
-        blank=True,
-        related_name="status_pins",
-        limit_choices_to={"kind": "status"},
     )
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
     # when the user explicitly picks a color in the dialog.
@@ -200,11 +186,11 @@ class Pin(abstract.Model):
             return self.custom_icon.url
         if self.icon:
             return self.icon
-        for tag in self.tags.order_by("-order"):
-            if tag.custom_icon:
-                return tag.custom_icon.url
-            if tag.icon:
-                return tag.icon
+        for badge in self.badges.filter(kind="tag").order_by("-order"):
+            if badge.custom_icon:
+                return badge.custom_icon.url
+            if badge.icon:
+                return badge.icon
         return None
 
     @property
@@ -213,9 +199,9 @@ class Pin(abstract.Model):
 
         Prefetch tags when calling in bulk (e.g. get_map_data).
         """
-        for tag in self.tags.order_by("-order"):
-            if tag.color:
-                return tag.color
+        for badge in self.badges.filter(kind="tag").order_by("-order"):
+            if badge.color:
+                return badge.color
         return None
 
     # Names produced by Google Maps when a place has no real identity. A pin
@@ -328,8 +314,8 @@ class Pin(abstract.Model):
         from urbanlens.dashboard.models.badges.model import Badge
 
         category = Badge.objects.get(id=category_id, kind="category")
-        self.categories.clear()
-        self.categories.add(category)
+        self.badges.remove(*self.badges.filter(kind="category"))
+        self.badges.add(category)
         self.save()
 
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
@@ -387,7 +373,7 @@ class Pin(abstract.Model):
         try:
             category, _ = Badge.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
             if category:
-                self.categories.add(category)
+                self.badges.add(category)
                 if save:
                     self.save()
                 return category
@@ -400,7 +386,7 @@ class Pin(abstract.Model):
     # ------------------------------------------------------------------
 
     def __str__(self) -> str:
-        status_labels = ", ".join(s.name for s in self.statuses.all()) or "None"
+        status_labels = ", ".join(s.name for s in self.badges.filter(kind="status")) or "None"
         return (
             f"Name: {self.effective_name}\n"
             f"Description: {self.description or ''}\n"
@@ -425,11 +411,11 @@ class Pin(abstract.Model):
             "last_visited": self.last_visited.isoformat() if self.last_visited else "never",
             "latitude": self.effective_latitude,
             "longitude": self.effective_longitude,
-            "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.statuses.all()],
+            "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.badges.filter(kind="status")],
             "profile": self.profile.id,
             "rating": self.rating,
             "color": self.effective_color,
-            "tags": [{"id": t.id, "name": t.name, "color": t.color, "icon": t.icon} for t in self.tags.all()],
+            "tags": [{"id": t.id, "name": t.name, "color": t.color, "icon": t.icon} for t in self.badges.filter(kind="tag")],
         }
 
     def to_detail_json(self) -> dict:

@@ -8,20 +8,23 @@ All tests require the database.
 """
 from __future__ import annotations
 
-import math
 from datetime import date
+import math
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
-from urbanlens.core.tests.testcase import TestCase
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reviews.model import Review
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 # ── root_pins / detail_pins / location_detail_pins ───────────────────────────
+
 
 class PinQuerySetStructureTests(TestCase):
     """root_pins / detail_pins / location_detail_pins partition pins by parent FK."""
@@ -150,13 +153,13 @@ class PinQuerySetByTagTests(TestCase):
 
         loc = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         self.pin_parent = baker.make(Pin, profile=self.profile, location=loc)
-        self.pin_parent.tags.add(self.parent_tag)
+        self.pin_parent.badges.add(self.parent_tag)
 
         self.pin_child = baker.make(Pin, profile=self.profile, location=loc)
-        self.pin_child.tags.add(self.child_tag)
+        self.pin_child.badges.add(self.child_tag)
 
         self.pin_other = baker.make(Pin, profile=self.profile, location=loc)
-        self.pin_other.tags.add(self.other_tag)
+        self.pin_other.badges.add(self.other_tag)
 
         self.pin_none = baker.make(Pin, profile=self.profile, location=loc)
 
@@ -230,7 +233,7 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
     def test_distant_point_creates_new_pin(self) -> None:
         loc: Location = baker.make(Location, latitude="51.5", longitude="-0.1")
         pin, created = Pin.objects.get_nearby_or_create(
-            51.5, -0.1, self.profile, defaults={"location": loc}
+            51.5, -0.1, self.profile, defaults={"location": loc},
         )
         self.assertTrue(created)
         self.assertNotEqual(pin.pk, self.existing.pk)
@@ -238,7 +241,7 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
     def test_created_pin_is_persisted(self) -> None:
         loc: Location = baker.make(Location, latitude="51.5", longitude="-0.1")
         pin, created = Pin.objects.get_nearby_or_create(
-            51.5, -0.1, self.profile, defaults={"location": loc}
+            51.5, -0.1, self.profile, defaults={"location": loc},
         )
         self.assertTrue(created)
         self.assertTrue(Pin.objects.filter(pk=pin.pk).exists())

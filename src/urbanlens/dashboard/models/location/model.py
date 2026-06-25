@@ -90,25 +90,11 @@ class Location(abstract.AddressableMixin, abstract.Model):
     date_abandoned = DateField(null=True, blank=True)
     date_last_active = DateField(null=True, blank=True)
 
-    # Shared taxonomy - these represent the real-world place's type, not a user's classification.
-    # Users apply their own categories/tags via the Pin's M2M fields.
-    categories = ManyToManyField(
-        "dashboard.Badge",
-        blank=True,
-        related_name="categorized_locations",
-        limit_choices_to={"kind": "category"},
-    )
-    tags = ManyToManyField(
+    # Shared taxonomy - represents the real-world place's type, visible to all users.
+    badges = ManyToManyField(
         "dashboard.Badge",
         blank=True,
         related_name="locations",
-        limit_choices_to={"kind": "tag"},
-    )
-    statuses = ManyToManyField(
-        "dashboard.Badge",
-        blank=True,
-        related_name="status_locations",
-        limit_choices_to={"kind": "status"},
     )
 
     objects = LocationManager()
@@ -159,8 +145,8 @@ class Location(abstract.AddressableMixin, abstract.Model):
         from urbanlens.dashboard.models.badges.model import Badge
 
         category = Badge.objects.get(id=category_id, kind="category")
-        self.categories.clear()
-        self.categories.add(category)
+        self.badges.remove(*self.badges.filter(kind="category"))
+        self.badges.add(category)
         self.save()
 
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
@@ -207,7 +193,7 @@ class Location(abstract.AddressableMixin, abstract.Model):
         try:
             category, _created = Badge.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
             if category:
-                self.categories.add(category)
+                self.badges.add(category)
                 if save:
                     self.save()
                 return category

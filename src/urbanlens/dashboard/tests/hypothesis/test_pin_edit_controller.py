@@ -26,7 +26,7 @@ class PinEditCategoryUpdateTests(TestCase):
         self.existing_cat = baker.make(
             Badge, name="existing", kind="category", profile=self.profile,
         )
-        self.pin.categories.add(self.existing_cat)
+        self.pin.badges.add(self.existing_cat)
 
     def _post(self, body: dict) -> object:
         req = self.factory.post(
@@ -38,12 +38,15 @@ class PinEditCategoryUpdateTests(TestCase):
         with patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
+    def _categories(self):
+        return self.pin.badges.filter(kind="category")
+
     def test_partial_priority_update_preserves_existing_categories(self) -> None:
         """Submitting only priority must not clear the pin's categories."""
         response = self._post({"priority": 3})
         self.assertEqual(response.status_code, 200)
         self.pin.refresh_from_db()
-        category_ids = list(self.pin.categories.values_list("id", flat=True))
+        category_ids = list(self._categories().values_list("id", flat=True))
         self.assertIn(
             self.existing_cat.id,
             category_ids,
@@ -56,7 +59,7 @@ class PinEditCategoryUpdateTests(TestCase):
         response = self._post({"categories": new_cat_name})
         self.assertEqual(response.status_code, 200)
         self.pin.refresh_from_db()
-        cats = list(self.pin.categories.all())
+        cats = list(self._categories())
         self.assertEqual(len(cats), 1)
         self.assertEqual(cats[0].name, new_cat_name)
         # Must be owned by the pin's profile, not global
@@ -67,11 +70,11 @@ class PinEditCategoryUpdateTests(TestCase):
         response = self._post({"categories": ""})
         self.assertEqual(response.status_code, 200)
         self.pin.refresh_from_db()
-        self.assertEqual(self.pin.categories.count(), 0)
+        self.assertEqual(self._categories().count(), 0)
 
     def test_duplicate_category_names_are_deduplicated(self) -> None:
         """Comma-separated list with duplicates should not create two badges."""
         response = self._post({"categories": "nature,nature,Nature"})
         self.assertEqual(response.status_code, 200)
         self.pin.refresh_from_db()
-        self.assertEqual(self.pin.categories.count(), 1)
+        self.assertEqual(self._categories().count(), 1)

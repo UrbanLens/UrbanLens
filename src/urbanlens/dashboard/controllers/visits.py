@@ -27,8 +27,8 @@ def _add_visited_status(pin: Pin) -> None:
     visited_badge = (
         Badge.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
     )
-    if visited_badge and not pin.statuses.filter(pk=visited_badge.pk).exists():
-        pin.statuses.add(visited_badge)
+    if visited_badge and not pin.badges.filter(pk=visited_badge.pk).exists():
+        pin.badges.add(visited_badge)
 
 
 def _sync_last_visited(pin: Pin) -> None:

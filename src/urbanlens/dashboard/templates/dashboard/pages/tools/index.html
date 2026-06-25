@@ -1,0 +1,301 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="tools-page page-content">
+
+    <div class="tools-header">
+        <h1 class="tools-title">Tools</h1>
+        <p class="tools-subtitle">Utilities for managing your UrbanLens data.</p>
+    </div>
+
+    <div class="tools-grid">
+
+        {# ── Export card ─────────────────────────────────────────────────────── #}
+        <div class="ul-card tools-card" id="export-card">
+            <div class="ul-card-header">
+                <i class="material-icons">download</i>
+                <h3>Export Data</h3>
+            </div>
+
+            <div class="ul-card-body">
+                <p class="tools-card-desc">
+                    Download a copy of your UrbanLens data as a ZIP archive.
+                    Pins are exported in Google Takeout&ndash;compatible CSV format.
+                </p>
+
+                {# Form - hidden once export starts #}
+                <div id="export-form-wrap">
+                    <form
+                        hx-post="{% url 'tools.export.start' %}"
+                        hx-target="#export-status-area"
+                        hx-swap="innerHTML"
+                        hx-indicator="#export-submit-btn"
+                        hx-disabled-elt="#export-submit-btn"
+                        id="export-form"
+                    >
+                        {% csrf_token %}
+
+                        <div class="export-options">
+                            <label class="export-select-all">
+                                <input type="checkbox" id="export-select-all" checked>
+                                <span class="export-select-all-label">Select all</span>
+                            </label>
+
+                            <div class="export-checkboxes">
+                                <label class="export-checkbox-item">
+                                    <input type="checkbox" name="export_types" value="profile" class="export-type-cb" checked>
+                                    <i class="material-icons">person</i>
+                                    <span>Profile</span>
+                                </label>
+                                <label class="export-checkbox-item">
+                                    <input type="checkbox" name="export_types" value="pins" class="export-type-cb" checked>
+                                    <i class="material-icons">place</i>
+                                    <span>Pins</span>
+                                </label>
+                                <label class="export-checkbox-item">
+                                    <input type="checkbox" name="export_types" value="comments" class="export-type-cb" checked>
+                                    <i class="material-icons">comment</i>
+                                    <span>Comments</span>
+                                </label>
+                                <label class="export-checkbox-item">
+                                    <input type="checkbox" name="export_types" value="photos" class="export-type-cb" checked>
+                                    <i class="material-icons">photo_library</i>
+                                    <span>Photos</span>
+                                </label>
+                                <label class="export-checkbox-item">
+                                    <input type="checkbox" name="export_types" value="trips" class="export-type-cb" checked>
+                                    <i class="material-icons">directions_car</i>
+                                    <span>Trips</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="export-actions">
+                            <button type="submit" class="btn btn-primary export-submit-btn" id="export-submit-btn">
+                                <i class="material-icons">download</i>
+                                <span>Export</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                {# Status area - HTMX swaps the progress partial in here #}
+                <div id="export-status-area"></div>
+            </div>
+        </div>
+
+    </div>{# /tools-grid #}
+</div>
+
+<style>
+.tools-page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+}
+
+.tools-header {
+    margin-bottom: 2rem;
+}
+
+.tools-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0 0 .35rem;
+    color: var(--ul-grey-9);
+}
+
+.tools-subtitle {
+    margin: 0;
+    color: var(--ul-grey-6);
+    font-size: .95rem;
+}
+
+.tools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 1.5rem;
+}
+
+.tools-card {
+    border-radius: 10px;
+}
+
+.tools-card-desc {
+    color: var(--ul-grey-6);
+    font-size: .9rem;
+    margin: 0 0 1.25rem;
+    line-height: 1.5;
+}
+
+/* Export options */
+.export-options {
+    margin-bottom: 1.25rem;
+}
+
+.export-select-all {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    cursor: pointer;
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--ul-grey-7);
+    margin-bottom: .75rem;
+    user-select: none;
+}
+
+.export-select-all-label {
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-size: .75rem;
+}
+
+.export-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+.export-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    cursor: pointer;
+    padding: .5rem .65rem;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    transition: background .15s, border-color .15s;
+    font-size: .9rem;
+    color: var(--ul-grey-8);
+    user-select: none;
+}
+
+.export-checkbox-item:hover {
+    background: var(--ul-grey-1);
+    border-color: var(--ul-border);
+}
+
+.export-checkbox-item input[type=checkbox] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--ul-primary, #1976D2);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.export-checkbox-item .material-icons {
+    font-size: 1.1rem;
+    color: var(--ul-grey-5);
+}
+
+.export-actions {
+    padding-top: .75rem;
+    border-top: 1px solid var(--ul-border);
+}
+
+.export-submit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+/* Progress area */
+.export-progress-wrap {
+    margin-top: 1rem;
+}
+
+.export-progress-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: .5rem;
+    font-size: .875rem;
+    color: var(--ul-grey-7);
+}
+
+.export-progress-pct {
+    font-weight: 600;
+    color: var(--ul-grey-8);
+}
+
+.export-progress-track {
+    height: 8px;
+    background: var(--ul-grey-2);
+    border-radius: 99px;
+    overflow: hidden;
+}
+
+.export-progress-bar {
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #1976D2, #42A5F5);
+    transition: width .4s ease;
+    min-width: 4px;
+}
+
+.export-progress-bar--done {
+    background: linear-gradient(90deg, #388E3C, #66BB6A);
+}
+
+.export-progress-bar--error {
+    background: linear-gradient(90deg, #D32F2F, #EF5350);
+}
+
+.export-status-msg {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin-top: .6rem;
+    font-size: .875rem;
+    color: var(--ul-grey-6);
+}
+
+.export-status-msg .material-icons {
+    font-size: 1rem;
+}
+
+.export-done-actions {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+}
+
+.export-error-msg {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    color: #D32F2F;
+    font-size: .875rem;
+    margin-top: .75rem;
+}
+</style>
+
+<script>
+(function () {
+    const selectAll = document.getElementById('export-select-all');
+    const checkboxes = document.querySelectorAll('.export-type-cb');
+
+    selectAll.addEventListener('change', function () {
+        checkboxes.forEach(cb => { cb.checked = selectAll.checked; });
+    });
+
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', function () {
+            selectAll.checked = Array.from(checkboxes).every(c => c.checked);
+            selectAll.indeterminate = !selectAll.checked && Array.from(checkboxes).some(c => c.checked);
+        });
+    });
+
+    // Hide the form once HTMX swaps in the progress panel
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+        if (evt.detail.target.id === 'export-status-area') {
+            const form = document.getElementById('export-form-wrap');
+            if (form) form.style.display = 'none';
+        }
+    });
+})();
+</script>
+{% endblock %}

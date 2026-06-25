@@ -273,7 +273,7 @@ class PinEditView(LoginRequiredMixin, View):
             category_raw = (body.get("categories") or "").strip()
             names = [n.strip().lower() for n in category_raw.split(",") if n.strip()]
             seen_names: set[str] = set()
-            pin.categories.clear()
+            pin.badges.remove(*pin.badges.filter(kind="category"))
             for name in names:
                 if name in seen_names:
                     continue
@@ -283,11 +283,11 @@ class PinEditView(LoginRequiredMixin, View):
                     cat, _ = Badge.objects.get_or_create(
                         name=name, kind="category", profile=pin.profile,
                     )
-                pin.categories.add(cat)
+                pin.badges.add(cat)
 
         # Reload from DB so all properties reflect saved state
         pin.refresh_from_db()
-        pin.categories.all()  # prime M2M cache
+        pin.badges.filter(kind="category")  # prime M2M cache
 
         return render(request, "dashboard/partials/pin_overview_partial.html", _overview_context(pin))
 

@@ -9,13 +9,13 @@ Features planned for this release.
 ## Smaller Features
 * Cleanup git history, and begin using branches for dev. [UL-14]
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
-* Provide explanation of how to do a google takeout to import pins. (Possible onboarding process?)
-* Ensure fully sanitized user input for pin names, location names, etc, which are passed into external urls. Require strict character sets, min/max lengths, and so on.
-* Per the above, any of that data which gets passed to an AI needs additional safeguards against jailbreaking.
-* Limit username changes to prevent users from pretending to be someone else in comments, etc.
-* UI: Edit category dialog
-* UI: Bulk edit category dialog (buttons are awful)
-* Organize page: Remove a bunch of text ("Manage tags, categories...", "Your personal categories...")
+* Provide explanation of how to do a google takeout to import pins. (Possible onboarding process?) [UL-142]
+* Ensure fully sanitized user input for pin names, location names, etc, which are passed into external urls. Require strict character sets, min/max lengths, and so on. [UL-143]
+* Per the above, any of that data which gets passed to an AI needs additional safeguards against jailbreaking. [UL-144]
+* Limit username changes to prevent users from pretending to be someone else in comments, etc. [UL-145]
+* UI: Edit category dialog [UL-146]
+* UI: Bulk edit category dialog (buttons are awful) [UL-147]
+* Organize page: Remove a bunch of text ("Manage tags, categories...", "Your personal categories...") [UL-148]
 
 ## Medium Features
 
@@ -25,12 +25,12 @@ Features planned for this release.
 
 ## Bug Fixes
 * When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]
-* On admin stats page: Uptime is incorrect (tracking server uptime, not app uptime). Time charts don't display.
-* During import pins, checking "create badge", the badge is created, but the pins aren't added to it. (They are added to already existing badges you select, though)
-* UI Bug: Multi-select toolbar in dark mode
-* When changing a category to a tag, the tag is visually shown twice in the list until page refresh.
-* Organize > Categories Tab -> Merge button is missing from rows.
-* Organize > Categories Tab -> Edit / merge / delete button should be hidden when not in hover
+* On admin stats page: Uptime is incorrect (tracking server uptime, not app uptime). Time charts don't display. [UL-149]
+* During import pins, checking "create badge", the badge is created, but the pins aren't added to it. (They are added to already existing badges you select, though) [UL-150]
+* UI Bug: Multi-select toolbar in dark mode [UL-151]
+* When changing a category to a tag, the tag is visually shown twice in the list until page refresh. [UL-152]
+* Organize > Categories Tab -> Merge button is missing from rows. [UL-153]
+* Organize > Categories Tab -> Edit / merge / delete button should be hidden when not in hover [UL-154]
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
@@ -74,7 +74,7 @@ Features planned for this release.
 * User settings don't seem to properly save. [UL-34]
 * Tooltip UI [UL-5]
 * Add tooltips to help guide users through the app when my assumptions about what is intuitive are incorrect. [UL-17]
-* Verify the UX for changing the kind of a badge (do other properties get updated too, and is that clear?)
+* Verify the UX for changing the kind of a badge (do other properties get updated too, and is that clear?) [UL-155]
 
 # Future Features
 Features planned for future releases.
@@ -129,30 +129,30 @@ Features planned for future releases.
 * Use remote secret store (maybe?) [UL-138]
 * Automatic backups [UL-139]
 * When changing tabs (e.g. Organize page), change the browser url so that bookmarks and page refreshes work as expected. [UL-140]
-* Users created with SSO should still get a password so they can login without SSO.
+* Users created with SSO should still get a password so they can login without SSO. [UL-156]
 * Ensure mobile-first. [UL-7]
-* On pin details page: Google Places information section, showing Google's place name, nearby photos, extra street view / 360 / etc views, google reviews, website, etc.
-* If a website exists, check if it is defunct, and check for recent activity.
-* Add google place name, organization name, etc to aliases automatically.
-* Yelp reviews.
-* Notepad import (AI Parsing)
-* XLS import
-* Ensure AI sandboxing. This isn't really necessary now, but would be necessary prior to any MCP usage for security reasons, and would also allow for local AI models. (ollama, etc)
-* Create separate logged-in homepage (small map, widgets, links to other pages, commonly visited pins, etc)
-* "View my profile as..." feature to help explain to user's how privacy settings are being applied.
-* Organize page -> Priority Tab: Send to bottom / Send to top.
-* Badges that are created automatically: start them in a sensible priority order
-* During import dialog: some method of checking all "create badge" checkboxes
-* Organize Page: Move badge to child of another just by dragging (maybe??)
-* Better emojis for: legal stuff (admission ticket, museum), underground, tunnel, sewer grate, hardhat. Verify we have: religions, languages, countries, urbex gear (boots, flashlight, backpack), photography stuff, time/calendar stuff (seasons?), greek letters
-* UI: Toast notifications on bottom right of screen, and the close button is placed incorrectly (and isn't needed at all, frankly).
-* "Recently used emojis" to make selecting them easier.
-* Pre-populate example tags for new users (to help explain usage of site).
-* dashboard/models/badges/model.py > Icons should probably be organized elsewhere. We probably want more elegant solution for defining all 3 traits for all of them (emoji, name, keywords). Many don't have keywords currently.
-* When creating badges (or editing them), consider adding another section to choose badges as children as well as parents. This could make it easier for users to make a large number of changes more quickly.
-* When creating new badges during pin import, allow an AI to select an emoji and color for it.
-* More (or all?) vector emojis that can change color.
-* On the map: icons with a color are surrounded by a circle of that color. Icons without a color are not. (consider: foreground colors and background colors? That might be overkill.)
+* On pin details page: Google Places information section, showing Google's place name, nearby photos, extra street view / 360 / etc views, google reviews, website, etc. [UL-157]
+* If a website exists, check if it is defunct, and check for recent activity. [UL-158]
+* Add google place name, organization name, etc to aliases automatically. [UL-159]
+* Yelp reviews. [UL-160]
+* Notepad import (AI Parsing) [UL-161]
+* XLS import [UL-162]
+* Ensure AI sandboxing. This isn't really necessary now, but would be necessary prior to any MCP usage for security reasons, and would also allow for local AI models. (ollama, etc) [UL-163]
+* Create separate logged-in homepage (small map, widgets, links to other pages, commonly visited pins, etc) [UL-164]
+* "View my profile as..." feature to help explain to user's how privacy settings are being applied. [UL-165]
+* Organize page -> Priority Tab: Send to bottom / Send to top. [UL-166]
+* Badges that are created automatically: start them in a sensible priority order [UL-167]
+* During import dialog: some method of checking all "create badge" checkboxes [UL-168]
+* Organize Page: Move badge to child of another just by dragging (maybe??) [UL-169]
+* Better emojis for: legal stuff (admission ticket, museum), underground, tunnel, sewer grate, hardhat. Verify we have: religions, languages, countries, urbex gear (boots, flashlight, backpack), photography stuff, time/calendar stuff (seasons?), greek letters [UL-170]
+* UI: Toast notifications on bottom right of screen, and the close button is placed incorrectly (and isn't needed at all, frankly). [UL-171]
+* "Recently used emojis" to make selecting them easier. [UL-172]
+* Pre-populate example tags for new users (to help explain usage of site). [UL-173]
+* dashboard/models/badges/model.py > Icons should probably be organized elsewhere. We probably want more elegant solution for defining all 3 traits for all of them (emoji, name, keywords). Many don't have keywords currently. [UL-174]
+* When creating badges (or editing them), consider adding another section to choose badges as children as well as parents. This could make it easier for users to make a large number of changes more quickly. [UL-175]
+* When creating new badges during pin import, allow an AI to select an emoji and color for it. [UL-176]
+* More (or all?) vector emojis that can change color. [UL-177]
+* On the map: icons with a color are surrounded by a circle of that color. Icons without a color are not. (consider: foreground colors and background colors? That might be overkill.) [UL-178]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

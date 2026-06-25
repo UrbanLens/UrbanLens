@@ -71,24 +71,26 @@
     </div>
 
     <div class="form-field">
-        <label class="form-label">Parent categories</label>
+        <label class="form-label">Parent badges (optional)</label>
+        <p class="form-hint">Placing this category under a parent badge creates emergent behavior — e.g. a category under "Visited" will cause its pins to appear in visit filters.</p>
         <input type="text" class="form-input tag-parent-search"
-               placeholder="Search categories…"
+               placeholder="Search badges…"
                oninput="filterParentOptions(this, 'parent-select-edit-cat-{{ category.id }}')"
                autocomplete="off">
         <div class="tag-parent-select" id="parent-select-edit-cat-{{ category.id }}">
-            {% for cat in available_parents %}
+            {% for b in available_parents %}
             <label class="tag-parent-option">
-                <input type="checkbox" name="parent_ids" value="{{ cat.id }}"
-                       {% if cat.id|in_list:parent_ids %}checked{% endif %}>
-                {% if cat.icon %}
-                    {% if cat.icon|is_material_icon %}
-                    <i class="material-icons" {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</i>
+                <input type="checkbox" name="parent_ids" value="{{ b.id }}"
+                       {% if b.id|in_list:parent_ids %}checked{% endif %}>
+                {% if b.icon %}
+                    {% if b.icon|is_material_icon %}
+                    <i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>
                     {% else %}
-                    <span>{{ cat.icon }}</span>
+                    <span>{{ b.icon }}</span>
                     {% endif %}
                 {% endif %}
-                {{ cat.name }}
+                {{ b.name }}
+                <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
             </label>
             {% endfor %}
         </div>

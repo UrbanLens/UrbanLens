@@ -81,6 +81,10 @@ class StatusCreateView(LoginRequiredMixin, View):
             color=request.POST.get("color") or None,
             order=int(request.POST.get("order", 0)),
         )
+        parent_ids = request.POST.getlist("parent_ids")
+        if parent_ids:
+            valid_parents = Badge.objects.visible_to(profile).filter(id__in=parent_ids).exclude(id=badge.id)
+            badge.parents.set(valid_parents)
         return render(
             request,
             "dashboard/partials/status_rows.html",
@@ -104,10 +108,12 @@ class StatusEditView(LoginRequiredMixin, View):
         badge = get_object_or_404(Badge, id=status_id, kind="status")
         if badge.profile is None or badge.profile.user != request.user:
             return HttpResponseForbidden()
+        available_parents = Badge.objects.visible_to(request.user.profile).ordered().exclude(id=status_id)
+        parent_ids = set(badge.parents.values_list("id", flat=True))
         return render(
             request,
             "dashboard/partials/status_edit_form.html",
-            {**_BASE_CTX, "badge": badge},
+            {**_BASE_CTX, "badge": badge, "available_parents": available_parents, "parent_ids": parent_ids},
         )
 
     def post(self, request, status_id, *args, **kwargs):
@@ -147,21 +153,22 @@ class StatusEditView(LoginRequiredMixin, View):
         profile = request.user.profile
 
         if kind_changed and new_kind == "tag":
-            # Migrate status → tag: remove from pin.statuses, add to pin.tags.
-            for pin in Pin.objects.filter(statuses=badge, profile=profile):
-                pin.tags.add(badge)
-                pin.statuses.remove(badge)
             badge.kind = "tag"
             badge.profile = profile
-
         elif kind_changed and new_kind == "category":
-            # Migrate status → category: remove from pin.statuses, add to pin.categories.
-            for pin in Pin.objects.filter(statuses=badge, profile=profile):
-                pin.categories.add(badge)
-                pin.statuses.remove(badge)
             badge.kind = "category"
 
         badge.save()
+
+        if kind_changed:
+            badge.parents.clear()
+        else:
+            parent_ids = request.POST.getlist("parent_ids")
+            if parent_ids:
+                valid_parents = Badge.objects.visible_to(profile).filter(id__in=parent_ids).exclude(id=status_id)
+                badge.parents.set(valid_parents)
+            else:
+                badge.parents.clear()
 
         response = render(request, "dashboard/partials/status_rows.html", _rows_ctx(request.user.profile))
         if kind_changed:
@@ -207,7 +214,7 @@ class StatusMembershipView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = request.user.profile
         all_statuses = Badge.objects.statuses().for_profile(profile).ordered()
-        member_ids = set(pin.statuses.values_list("id", flat=True))
+        member_ids = set(pin.badges.filter(kind="status").values_list("id", flat=True))
         return render(
             request,
             "dashboard/partials/status_panel.html",
@@ -232,12 +239,12 @@ class StatusMembershipView(LoginRequiredMixin, View):
         badge = get_object_or_404(Badge.objects.statuses().for_profile(profile), id=status_id)
 
         if action == "add":
-            pin.statuses.add(badge)
+            pin.badges.add(badge)
         elif action == "remove":
-            pin.statuses.remove(badge)
+            pin.badges.remove(badge)
 
         all_statuses = Badge.objects.statuses().for_profile(profile).ordered()
-        member_ids = set(pin.statuses.values_list("id", flat=True))
+        member_ids = set(pin.badges.filter(kind="status").values_list("id", flat=True))
         return render(
             request,
             "dashboard/partials/status_panel.html",
@@ -272,9 +279,7 @@ class StatusMultiMergeView(LoginRequiredMixin, View):
         sources = Badge.objects.filter(id__in=source_ids, kind="status", profile=profile, is_protected=False)
 
         for src in sources:
-            for pin in Pin.objects.filter(statuses=src, profile=profile):
-                pin.statuses.add(target)
-                pin.statuses.remove(src)
+            target.pins.add(*src.pins.all())
             src.delete()
 
         return render(request, "dashboard/partials/status_rows.html", _rows_ctx(profile))

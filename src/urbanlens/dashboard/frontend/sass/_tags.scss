@@ -518,6 +518,24 @@
     }
 }
 
+// ── Badge kind chip (shown in parent selectors to distinguish tag / category / status) ──
+.badge-kind-chip {
+    display: inline-block;
+    margin-left: auto;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    line-height: 1.6;
+    flex-shrink: 0;
+
+    &--tag      { background: #dbeafe; color: #1d4ed8; }
+    &--category { background: #dcfce7; color: #15803d; }
+    &--status   { background: #fef3c7; color: #b45309; }
+}
+
 // ── Tag edit dialog ────────────────────────────────────────────────────────────
 // overflow: visible is provided by @include dialog-base, keeping icon-picker panels visible.
 .tag-edit-dialog {
@@ -946,17 +964,6 @@
     >.tag-card {
         margin-bottom: .35rem;
     }
-}
-
-// Connector dot on tree branch items
-.tag-tree-children>.tag-tree-item::before {
-    content: '';
-    position: absolute;
-    left: -1.15rem;
-    top: 1.25rem;
-    width: .65rem;
-    height: 2px;
-    background: var(--ul-border);
 }
 
 #tag-rows.tag-view--tree,

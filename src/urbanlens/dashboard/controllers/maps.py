@@ -90,7 +90,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         tags = request.POST.get("tags").split(",")
         for tag_name in tags:
             tag, _created = Badge.objects.get_or_create(name=tag_name)
-            pin.tags.add(tag)
+            pin.badges.add(tag)
         icon = request.FILES.get("icon", None)
         if icon:
             pin.icon = icon
@@ -152,9 +152,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 profile=request.user.profile,
             )
             if tag_ids:
-                pin.tags.set(Badge.objects.tags().filter(id__in=tag_ids))
+                pin.badges.remove(*pin.badges.filter(kind="tag"))
+                pin.badges.add(*Badge.objects.tags().filter(id__in=tag_ids))
             if category_ids:
-                pin.categories.set(Badge.objects.categories().filter(id__in=category_ids))
+                pin.badges.remove(*pin.badges.filter(kind="category"))
+                pin.badges.add(*Badge.objects.categories().filter(id__in=category_ids))
             pin.save()
 
             try:
@@ -234,7 +236,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         from django.contrib.gis.geos import Polygon
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        query = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related("tags")
+        query = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related("badges")
 
         bbox_str = request.GET.get("bbox", "").strip()
         if bbox_str:
@@ -290,10 +292,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         try:
-            pin = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("tags").get(slug=pin_slug)
+            pin = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("badges").get(slug=pin_slug)
         except Pin.DoesNotExist:
             return JsonResponse({"error": "not found"}, status=404)
-        map_data = self.get_map_data(request, Pin.objects.filter(pk=pin.pk).select_related("location").prefetch_related("tags"))
+        map_data = self.get_map_data(request, Pin.objects.filter(pk=pin.pk).select_related("location").prefetch_related("badges"))
         if not map_data:
             return JsonResponse({"error": "not found"}, status=404)
         pin_dict = map_data[0]
@@ -310,7 +312,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             profile, _ = Profile.objects.get_or_create(user=request.user)
             query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
 
-        query = query.prefetch_related("tags")
+        query = query.prefetch_related("badges")
 
         map_data: list[dict[str, Any]] = []
         for pin in query:

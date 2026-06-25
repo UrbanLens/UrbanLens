@@ -408,7 +408,7 @@ class GoogleMapsGateway(Gateway):
                                 else:
                                     exists_count += 1
                                 if tags:
-                                    pin.tags.add(*tags)
+                                    pin.badges.add(*tags)
                                 if file_pins is not None:
                                     file_pins.append(pin)
                                 # Backfill: if the import carried a CID but no existing
@@ -448,7 +448,7 @@ class GoogleMapsGateway(Gateway):
                         name__iexact=tag_name,
                     ).first() or Badge.objects.create(profile=user_profile, name=tag_name)
                     for pin in file_pins:
-                        pin.tags.add(file_tag)
+                        pin.badges.add(file_tag)
         except Exception as exc:
             # TODO: specify exception type
             logger.exception("Unexpected error during streaming import: %s", exc)
@@ -646,13 +646,13 @@ class GoogleMapsGateway(Gateway):
                                 exists_count += 1
 
                             if list_badges:
-                                pin.tags.add(*list_badges)
+                                pin.badges.add(*list_badges)
                             if category_badge:
-                                pin.categories.add(category_badge)
+                                pin.badges.add(category_badge)
                             if pin_badge_ids:
                                 extra = list(Badge.objects.filter(id__in=pin_badge_ids))
                                 if extra:
-                                    pin.tags.add(*extra)
+                                    pin.badges.add(*extra)
 
                             if cid and not location and pin.location_id and not pin.location.cid:
                                 pin.location.cid = cid

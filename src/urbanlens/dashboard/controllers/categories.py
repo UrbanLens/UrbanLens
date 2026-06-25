@@ -93,7 +93,7 @@ class CategoryCreateView(LoginRequiredMixin, View):
             order=order,
         )
         if parent_ids:
-            valid_parents = Badge.objects.categories().for_profile(profile).filter(id__in=parent_ids)
+            valid_parents = Badge.objects.visible_to(profile).filter(id__in=parent_ids).exclude(id=category.id)
             category.parents.set(valid_parents)
 
         return render(
@@ -116,7 +116,7 @@ class CategoryEditView(LoginRequiredMixin, View):
         """
         profile = request.user.profile
         category = get_object_or_404(Badge, id=cat_id, kind="category", profile=profile)
-        available_parents = Badge.objects.categories().for_profile(profile).ordered().exclude(id=cat_id)
+        available_parents = Badge.objects.visible_to(profile).ordered().exclude(id=cat_id)
         parent_ids = set(category.parents.values_list("id", flat=True))
         return render(
             request,
@@ -158,22 +158,9 @@ class CategoryEditView(LoginRequiredMixin, View):
         category.order = int(request.POST.get("order", category.order))
 
         if kind_changed and new_kind == "tag":
-            # Migrate category → tag: move pin.categories → pin.tags and
-            # location.categories → location.tags.
-            for pin in Pin.objects.filter(categories=category):
-                pin.tags.add(category)
-                pin.categories.remove(category)
-            for loc in Location.objects.filter(categories=category):
-                loc.tags.add(category)
-                loc.categories.remove(category)
             category.kind = "tag"
 
         elif kind_changed and new_kind == "status":
-            # Migrate category → status: remove from pin.categories, add to pin.statuses.
-            # Location memberships are dropped (statuses are per-pin, not per-location).
-            for pin in Pin.objects.filter(categories=category, profile=profile):
-                pin.statuses.add(category)
-                pin.categories.remove(category)
             category.kind = "status"
 
         category.save()
@@ -183,9 +170,7 @@ class CategoryEditView(LoginRequiredMixin, View):
         else:
             parent_ids = request.POST.getlist("parent_ids")
             if parent_ids:
-                valid_parents = (
-                    Badge.objects.categories().for_profile(profile).filter(id__in=parent_ids).exclude(id=cat_id)
-                )
+                valid_parents = Badge.objects.visible_to(profile).filter(id__in=parent_ids).exclude(id=cat_id)
                 category.parents.set(valid_parents)
             else:
                 category.parents.clear()
@@ -327,7 +312,7 @@ class CategoryBulkEditView(LoginRequiredMixin, View):
                 cat.save(update_fields=update_fields)
 
         if add_parent_ids:
-            valid_parents = list(Badge.objects.categories().for_profile(profile).filter(id__in=add_parent_ids))
+            valid_parents = list(Badge.objects.visible_to(profile).filter(id__in=add_parent_ids))
             for cat in categories:
                 cat.parents.add(*[p for p in valid_parents if p.id != cat.id])
 
@@ -358,12 +343,6 @@ class CategoryBulkConvertView(LoginRequiredMixin, View):
         profile = request.user.profile
         cats_to_convert = list(Badge.objects.filter(id__in=ids, kind="category", profile=profile))
         for category in cats_to_convert:
-            for pin in Pin.objects.filter(categories=category):
-                pin.tags.add(category)
-                pin.categories.remove(category)
-            for loc in Location.objects.filter(categories=category):
-                loc.tags.add(category)
-                loc.categories.remove(category)
             category.kind = "tag"
             category.parents.clear()
             category.save()
@@ -395,9 +374,6 @@ class CategoryBulkConvertToStatusView(LoginRequiredMixin, View):
         profile = request.user.profile
         cats_to_convert = list(Badge.objects.filter(id__in=ids, kind="category", profile=profile))
         for category in cats_to_convert:
-            for pin in Pin.objects.filter(categories=category, profile=profile):
-                pin.statuses.add(category)
-                pin.categories.remove(category)
             category.kind = "status"
             category.parents.clear()
             category.save()
@@ -436,8 +412,8 @@ class CategoryMultiMergeView(LoginRequiredMixin, View):
             return HttpResponse("No valid source categories.", status=400)
 
         for source in sources:
-            target.categorized_pins.add(*source.categorized_pins.all())
-            target.categorized_locations.add(*source.categorized_locations.all())
+            target.pins.add(*source.pins.all())
+            target.locations.add(*source.locations.all())
             source.delete()
 
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
@@ -489,8 +465,8 @@ class CategoryMergeView(LoginRequiredMixin, View):
         if target.id == source.id:
             return HttpResponse("Cannot merge a category into itself.", status=400)
 
-        target.categorized_pins.add(*source.categorized_pins.all())
-        target.categorized_locations.add(*source.categorized_locations.all())
+        target.pins.add(*source.pins.all())
+        target.locations.add(*source.locations.all())
         source.delete()
 
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
@@ -502,53 +478,29 @@ def _all_badges(profile: Profile) -> BadgeQuerySet:
 
 
 def _pin_member_ids(pin: Pin) -> set[int]:
-    """Return the set of all badge IDs currently assigned to a pin (all kinds)."""
-    return (
-        set(pin.categories.values_list("id", flat=True))
-        | set(pin.tags.values_list("id", flat=True))
-        | set(pin.statuses.values_list("id", flat=True))
-    )
+    """Return the set of all badge IDs currently assigned to a pin."""
+    return set(pin.badges.values_list("id", flat=True))
 
 
 def _location_member_ids(location: Location) -> set[int]:
-    """Return the set of all badge IDs currently assigned to a location (all kinds)."""
-    return (
-        set(location.categories.values_list("id", flat=True))
-        | set(location.tags.values_list("id", flat=True))
-        | set(location.statuses.values_list("id", flat=True))
-    )
+    """Return the set of all badge IDs currently assigned to a location."""
+    return set(location.badges.values_list("id", flat=True))
 
 
 def _apply_badge_to_pin(pin: Pin, badge: Badge, action: str) -> None:
-    """Add or remove a badge from the correct M2M field on a pin based on its kind."""
-    if badge.kind == "category":
-        m2m = pin.categories
-    elif badge.kind == "tag":
-        m2m = pin.tags
-    elif badge.kind == "status":
-        m2m = pin.statuses
-    else:
-        return
+    """Add or remove a badge from a pin."""
     if action == "add":
-        m2m.add(badge)
+        pin.badges.add(badge)
     elif action == "remove":
-        m2m.remove(badge)
+        pin.badges.remove(badge)
 
 
 def _apply_badge_to_location(location: Location, badge: Badge, action: str) -> None:
-    """Add or remove a badge from the correct M2M field on a location based on its kind."""
-    if badge.kind == "category":
-        m2m = location.categories
-    elif badge.kind == "tag":
-        m2m = location.tags
-    elif badge.kind == "status":
-        m2m = location.statuses
-    else:
-        return
+    """Add or remove a badge from a location."""
     if action == "add":
-        m2m.add(badge)
+        location.badges.add(badge)
     elif action == "remove":
-        m2m.remove(badge)
+        location.badges.remove(badge)
 
 
 class CategoryPinMembershipView(LoginRequiredMixin, View):
@@ -674,7 +626,7 @@ class CategoryCustomizeView(LoginRequiredMixin, View):
         """
         profile = request.user.profile
         category = get_object_or_404(Badge, id=cat_id, kind="category", profile=profile)
-        available_parents = Badge.objects.categories().for_profile(profile).ordered().exclude(id=cat_id)
+        available_parents = Badge.objects.visible_to(profile).ordered().exclude(id=cat_id)
         parent_ids = set(category.parents.values_list("id", flat=True))
         return render(
             request,

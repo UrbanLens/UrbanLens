@@ -1,7 +1,7 @@
 """Additional Pin model tests covering methods not in test_pin_properties.py.
 
 Covers:
-- effective_color  (mock-based, tags M2M)
+- effective_color  (mock-based, badges M2M filtered by kind=tag)
 - has_meaningful_name  (pure)
 - rating  (DB, requires Review)
 - add_category / change_category  (DB)
@@ -11,16 +11,16 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from urbanlens.core.tests.testcase import TestCase
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
-
 
 # ── effective_color ────────────────────────────────────────────────────────────
 
+
 class PinEffectiveColorTests(TestCase):
-    """effective_color returns the color of the highest-order tag that has one."""
+    """effective_color returns the color of the highest-order tag badge that has one."""
 
     def _make_pin(self) -> Pin:
         pin = Pin()
@@ -29,41 +29,41 @@ class PinEffectiveColorTests(TestCase):
         pin.color = None
         return pin
 
-    @patch.object(Pin, "tags")
-    def test_returns_none_when_no_tags(self, mock_tags: MagicMock) -> None:
-        mock_tags.order_by.return_value = iter([])
+    @patch.object(Pin, "badges")
+    def test_returns_none_when_no_tags(self, mock_badges: MagicMock) -> None:
+        mock_badges.filter.return_value.order_by.return_value = iter([])
         self.assertIsNone(self._make_pin().effective_color)
 
-    @patch.object(Pin, "tags")
-    def test_returns_none_when_tags_have_no_color(self, mock_tags: MagicMock) -> None:
+    @patch.object(Pin, "badges")
+    def test_returns_none_when_tags_have_no_color(self, mock_badges: MagicMock) -> None:
         tag = MagicMock()
         tag.color = None
-        mock_tags.order_by.return_value = iter([tag])
+        mock_badges.filter.return_value.order_by.return_value = iter([tag])
         self.assertIsNone(self._make_pin().effective_color)
 
-    @patch.object(Pin, "tags")
-    def test_returns_first_tag_color(self, mock_tags: MagicMock) -> None:
+    @patch.object(Pin, "badges")
+    def test_returns_first_tag_color(self, mock_badges: MagicMock) -> None:
         tag = MagicMock()
         tag.color = "#ff0000"
-        mock_tags.order_by.return_value = iter([tag])
+        mock_badges.filter.return_value.order_by.return_value = iter([tag])
         self.assertEqual(self._make_pin().effective_color, "#ff0000")
 
-    @patch.object(Pin, "tags")
-    def test_skips_tag_without_color_uses_next(self, mock_tags: MagicMock) -> None:
+    @patch.object(Pin, "badges")
+    def test_skips_tag_without_color_uses_next(self, mock_badges: MagicMock) -> None:
         tag_no_color = MagicMock()
         tag_no_color.color = None
         tag_with_color = MagicMock()
         tag_with_color.color = "#00ff00"
-        mock_tags.order_by.return_value = iter([tag_no_color, tag_with_color])
+        mock_badges.filter.return_value.order_by.return_value = iter([tag_no_color, tag_with_color])
         self.assertEqual(self._make_pin().effective_color, "#00ff00")
 
-    @patch.object(Pin, "tags")
-    def test_first_tag_color_wins_over_later_tags(self, mock_tags: MagicMock) -> None:
+    @patch.object(Pin, "badges")
+    def test_first_tag_color_wins_over_later_tags(self, mock_badges: MagicMock) -> None:
         tag1 = MagicMock()
         tag1.color = "#0000ff"
         tag2 = MagicMock()
         tag2.color = "#ffffff"
-        mock_tags.order_by.return_value = iter([tag1, tag2])
+        mock_badges.filter.return_value.order_by.return_value = iter([tag1, tag2])
         self.assertEqual(self._make_pin().effective_color, "#0000ff")
 
 
@@ -152,7 +152,7 @@ class PinAddCategoryTests(TestCase):
     def test_add_category_links_badge_to_pin(self) -> None:
         self.pin.add_category("school")
         self.pin.refresh_from_db()
-        names = list(self.pin.categories.values_list("name", flat=True))
+        names = list(self.pin.badges.filter(kind="category").values_list("name", flat=True))
         self.assertIn("school", names)
 
     def test_add_category_normalises_to_lowercase(self) -> None:
@@ -170,17 +170,17 @@ class PinChangeCategoryTests(TestCase):
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location)
         self.old_cat = baker.make("dashboard.Badge", name="old", kind="category", profile=None)
         self.new_cat = baker.make("dashboard.Badge", name="new_cat", kind="category", profile=None)
-        self.pin.categories.add(self.old_cat)
+        self.pin.badges.add(self.old_cat)
 
     def test_change_category_sets_new_category(self) -> None:
         self.pin.change_category(self.new_cat.id)
         self.pin.refresh_from_db()
-        self.assertIn(self.new_cat, self.pin.categories.all())
+        self.assertIn(self.new_cat, self.pin.badges.filter(kind="category"))
 
     def test_change_category_removes_old_category(self) -> None:
         self.pin.change_category(self.new_cat.id)
         self.pin.refresh_from_db()
-        self.assertNotIn(self.old_cat, self.pin.categories.all())
+        self.assertNotIn(self.old_cat, self.pin.badges.filter(kind="category"))
 
 
 # ── to_json / to_detail_json ──────────────────────────────────────────────────
@@ -234,7 +234,7 @@ class PinToDetailJsonTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.location = baker.make(
-            "dashboard.Location", latitude="41.000000", longitude="-73.000000"
+            "dashboard.Location", latitude="41.000000", longitude="-73.000000",
         )
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location)
 

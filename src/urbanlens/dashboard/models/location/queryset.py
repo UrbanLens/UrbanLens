@@ -24,7 +24,7 @@ class LocationQuerySet(abstract.QuerySet):
     """
 
     def by_category(self, category):
-        return self.filter(categories__name=category)
+        return self.filter(badges__name=category, badges__kind="category")
 
     def by_priority(self, priority):
         return self.filter(priority=priority)
@@ -78,7 +78,7 @@ class LocationQuerySet(abstract.QuerySet):
         if criteria.get("tags"):
             tags = criteria["tags"].split(",")
             for tag in tags:
-                query &= Q(tags__name__in=[tag])
+                query &= Q(badges__name__in=[tag], badges__kind="tag")
         return self.filter(query)
 
 

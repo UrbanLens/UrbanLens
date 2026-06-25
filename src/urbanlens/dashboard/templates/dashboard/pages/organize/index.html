@@ -148,15 +148,17 @@
                     </div>
                 </div>
                 <div class="form-field">
-                    <label class="form-label">Parent categories (optional)</label>
-                    <input type="text" class="form-input tag-parent-search" placeholder="Search categories…"
+                    <label class="form-label">Parent badges (optional)</label>
+                    <p class="form-hint">Placing this category under a parent badge creates emergent behavior — e.g. under "Visited" its pins appear in visit filters.</p>
+                    <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
                            oninput="filterParentOptions(this,'parent-select-new-cat')" autocomplete="off">
                     <div class="tag-parent-select" id="parent-select-new-cat">
-                        {% for cat in categories %}
+                        {% for b in priority_items %}
                         <label class="tag-parent-option">
-                            <input type="checkbox" name="parent_ids" value="{{ cat.id }}">
-                            {% if cat.icon %}{% if cat.icon|is_material_icon %}<i class="material-icons" {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</i>{% else %}<span>{{ cat.icon }}</span>{% endif %}{% endif %}
-                            {{ cat.name }}
+                            <input type="checkbox" name="parent_ids" value="{{ b.id }}">
+                            {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
+                            {{ b.name }}
+                            <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
                         </label>
                         {% endfor %}
                     </div>
@@ -290,17 +292,17 @@
                 </div>
                 <div class="form-field">
                     <label class="form-label">
-                        {% include "dashboard/partials/_tooltip_label.html" with label="Parent tags (optional)" help="Child tags inherit organization from parents. A pin tagged with a child also counts toward the parent in filters and stats." wide=True %}
+                        {% include "dashboard/partials/_tooltip_label.html" with label="Parent badges (optional)" help="Child tags inherit organization from parents. Placing a tag under a parent badge creates emergent behavior — e.g. under 'Visited' its pins appear in visit filters." wide=True %}
                     </label>
-                    <input type="text" class="form-input tag-parent-search" placeholder="Search tags…"
+                    <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
                            oninput="filterParentOptions(this,'parent-select-new-tag')" autocomplete="off">
                     <div class="tag-parent-select" id="parent-select-new-tag">
-                        {% for t in tags %}
+                        {% for b in priority_items %}
                         <label class="tag-parent-option">
-                            <input type="checkbox" name="parent_ids" value="{{ t.id }}">
-                            {% if t.custom_icon %}<img src="{{ t.custom_icon.url }}" class="tag-parent-icon-img" alt="">
-                            {% elif t.icon %}{% if t.icon|is_material_icon %}<i class="material-icons" {% if t.color %}style="color:{{ t.color }}"{% endif %}>{{ t.icon }}</i>{% else %}<span>{{ t.icon }}</span>{% endif %}{% endif %}
-                            {{ t.name }}
+                            <input type="checkbox" name="parent_ids" value="{{ b.id }}">
+                            {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
+                            {{ b.name }}
+                            <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
                         </label>
                         {% endfor %}
                     </div>
@@ -415,6 +417,22 @@
                                 <i class="material-icons" style="font-size:1rem;">block</i>
                             </button>
                         </div>
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Parent badges (optional)</label>
+                    <p class="form-hint">Placing this status under a parent badge creates emergent behavior — e.g. under "Visited" its pins appear in visit filters.</p>
+                    <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
+                           oninput="filterParentOptions(this,'parent-select-new-status')" autocomplete="off">
+                    <div class="tag-parent-select" id="parent-select-new-status">
+                        {% for b in priority_items %}
+                        <label class="tag-parent-option">
+                            <input type="checkbox" name="parent_ids" value="{{ b.id }}">
+                            {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
+                            {{ b.name }}
+                            <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
+                        </label>
+                        {% endfor %}
                     </div>
                 </div>
                 <div class="tag-form-actions">
@@ -721,17 +739,17 @@
             </label>
         </div>
         <div class="cat-bulk-field">
-            <label class="form-label">Add parent tags</label>
-            <p class="cat-bulk-parents-hint">Checked tags will be <strong>added</strong> as parents. Existing parents are not removed.</p>
-            <input type="text" class="form-input tag-parent-search" placeholder="Search tags…"
+            <label class="form-label">Add parent badges</label>
+            <p class="cat-bulk-parents-hint">Checked badges will be <strong>added</strong> as parents. Existing parents are not removed. Cross-kind parents enable emergent behavior.</p>
+            <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
                    oninput="filterParentOptions(this,'tag-bulk-parent-select')" autocomplete="off">
             <div class="tag-parent-select" id="tag-bulk-parent-select">
-                {% for t in tags %}
+                {% for b in priority_items %}
                 <label class="tag-parent-option">
-                    <input type="checkbox" class="tag-bulk-parent-cb" value="{{ t.id }}">
-                    {% if t.custom_icon %}<img src="{{ t.custom_icon.url }}" class="tag-parent-icon-img" alt="">
-                    {% elif t.icon %}{% if t.icon|is_material_icon %}<i class="material-icons" {% if t.color %}style="color:{{ t.color }}"{% endif %}>{{ t.icon }}</i>{% else %}<span>{{ t.icon }}</span>{% endif %}{% endif %}
-                    {{ t.name }}
+                    <input type="checkbox" class="tag-bulk-parent-cb" value="{{ b.id }}">
+                    {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
+                    {{ b.name }}
+                    <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
                 </label>
                 {% endfor %}
             </div>
@@ -860,16 +878,17 @@
             </label>
         </div>
         <div class="cat-bulk-field">
-            <label class="form-label">Add parent categories</label>
-            <p class="cat-bulk-parents-hint">Checked categories will be <strong>added</strong> as parents. Existing parents are not removed.</p>
-            <input type="text" class="form-input tag-parent-search" placeholder="Search categories…"
+            <label class="form-label">Add parent badges</label>
+            <p class="cat-bulk-parents-hint">Checked badges will be <strong>added</strong> as parents. Existing parents are not removed. Cross-kind parents enable emergent behavior.</p>
+            <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
                    oninput="filterParentOptions(this,'cat-bulk-parent-select')" autocomplete="off">
             <div class="tag-parent-select" id="cat-bulk-parent-select">
-                {% for cat in categories %}
+                {% for b in priority_items %}
                 <label class="tag-parent-option">
-                    <input type="checkbox" class="cat-bulk-parent-cb" value="{{ cat.id }}">
-                    {% if cat.icon %}{% if cat.icon|is_material_icon %}<i class="material-icons" {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</i>{% else %}<span>{{ cat.icon }}</span>{% endif %}{% endif %}
-                    {{ cat.name }}
+                    <input type="checkbox" class="cat-bulk-parent-cb" value="{{ b.id }}">
+                    {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
+                    {{ b.name }}
+                    <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
                 </label>
                 {% endfor %}
             </div>
