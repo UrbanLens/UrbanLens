@@ -239,6 +239,7 @@ class PrivacySettingsFormTests(TestCase):
             "photo_upload_visibility": VisibilityChoice.ANYONE,
             "viewer_photo_filter": VisibilityChoice.ANYONE,
             "trip_pin_location_visibility": VisibilityChoice.ANYONE,
+            "contact_visibility": VisibilityChoice.FRIENDS,
             **overrides,
         }
 

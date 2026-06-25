@@ -86,80 +86,17 @@
                 <p class="settings-error">{{ privacy_form.trip_pin_location_visibility.errors|join:", " }}</p>
                 {% endif %}
             </div>
-
-            <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save</button>
-            </div>
-        </form>
-    </section>
-
-    {# ── Contact ───────────────────────────────────────────────────────────── #}
-    <section class="settings-section ul-section">
-        <div class="settings-section-header">
-            <i class="material-icons">mail</i>
-            <div>
-                <h2 class="settings-section-title">Contact</h2>
-                <p class="settings-section-desc">Manage your contact information.</p>
-            </div>
-        </div>
-
-        <form method="post" class="settings-form" id="contact-form">
-            {% csrf_token %}
-            <input type="hidden" name="section" value="contact">
-
+            
             <div class="settings-field">
-                <label class="settings-label" for="{{ contact_form.email.id_for_label }}">
-                    {{ contact_form.email.label }}
+                <label class="settings-label" for="{{ privacy_form.contact_visibility.id_for_label }}">
+                    {{ privacy_form.contact_visibility.label }}
                 </label>
-                <p class="settings-help">{{ contact_form.email.help_text }}</p>
-                {{ contact_form.email }}
-                {% if contact_form.email.errors %}
-                <p class="settings-error">{{ contact_form.email.errors|join:", " }}</p>
+                <p class="settings-help">{{ privacy_form.contact_visibility.help_text }}</p>
+                {{ privacy_form.contact_visibility }}
+                {% if privacy_form.contact_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.contact_visibility.errors|join:", " }}</p>
                 {% endif %}
             </div>
-
-            <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save</button>
-            </div>
-        </form>
-    </section>
-
-    {# ── Contact Methods ───────────────────────────────────────────────────── #}
-    <section class="settings-section ul-section">
-        <div class="settings-section-header">
-            <i class="material-icons">contacts</i>
-            <div>
-                <h2 class="settings-section-title">Contact Methods</h2>
-                <p class="settings-section-desc">Optional contact info shown on your profile according to your visibility setting.</p>
-            </div>
-        </div>
-
-        <form method="post" class="settings-form" id="contact-methods-form">
-            {% csrf_token %}
-            <input type="hidden" name="section" value="contact_methods">
-
-            <div class="settings-field">
-                <label class="settings-label" for="{{ contact_methods_form.contact_visibility.id_for_label }}">
-                    {{ contact_methods_form.contact_visibility.label }}
-                </label>
-                <p class="settings-help">{{ contact_methods_form.contact_visibility.help_text }}</p>
-                {{ contact_methods_form.contact_visibility }}
-                {% if contact_methods_form.contact_visibility.errors %}
-                <p class="settings-error">{{ contact_methods_form.contact_visibility.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
-            {% for field in contact_methods_form %}
-            {% if field.html_name != 'contact_visibility' %}
-            <div class="settings-field">
-                <label class="settings-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-                {% if field.errors %}
-                <p class="settings-error">{{ field.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-            {% endif %}
-            {% endfor %}
 
             <div class="settings-actions">
                 <button type="submit" class="settings-save-btn">Save</button>
@@ -493,6 +430,27 @@
                 <p class="settings-section-desc">How you receive alerts.</p>
             </div>
         </div>
+
+        <form method="post" class="settings-form" id="contact-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="contact">
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ contact_form.email.id_for_label }}">
+                    {{ contact_form.email.label }}
+                </label>
+                <p class="settings-help">{{ contact_form.email.help_text }}</p>
+                {{ contact_form.email }}
+                {% if contact_form.email.errors %}
+                <p class="settings-error">{{ contact_form.email.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+
         <div hx-get="{% url 'notifications.preferences' %}"
              hx-trigger="load"
              hx-swap="outerHTML">

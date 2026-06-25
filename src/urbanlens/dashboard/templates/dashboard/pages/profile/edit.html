@@ -182,7 +182,19 @@
     {# ── Contact Information ────────────────────────────────────────────────── #}
     <section class="edit-card ul-section">
         <h2 class="edit-card-title">Contact Information</h2>
-        <p class="edit-card-desc">Private contact details - shown according to your contact visibility setting below.</p>
+
+        <div class="edit-field">
+            <label class="edit-label">
+                Email Address
+                <span class="field-status" data-field-status="email"></span>
+            </label>
+            <input type="email" class="edit-input" maxlength="254"
+                   value="{{ request.user.email }}"
+                   placeholder="your@email.com"
+                   autocomplete="email"
+                   data-autosave="email">
+            <p class="edit-field-hint">Used for account recovery and notifications.</p>
+        </div>
 
         <div class="edit-field-row">
             <div class="edit-field">
@@ -251,16 +263,6 @@
                        placeholder="@user:server.org"
                        data-autosave="matrix_handle">
             </div>
-        </div>
-
-        <div class="edit-field">
-            <label class="edit-label">Contact Visibility</label>
-            <p class="edit-field-hint">Who can see your contact methods above.</p>
-            <select class="edit-input" data-autosave="contact_visibility">
-                {% for val, label in contact_visibility_choices %}
-                <option value="{{ val }}"{% if form.instance.contact_visibility == val %} selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
         </div>
     </section>
 

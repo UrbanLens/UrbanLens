@@ -13,6 +13,7 @@ Features planned for this release.
 * Provide explanation of how to do a google takeout to import pins. (Possible onboarding process?)
 * Ensure fully sanitized user input for pin names, location names, etc, which are passed into external urls. Require strict character sets, min/max lengths, and so on.
 * Per the above, any of that data which gets passed to an AI needs additional safeguards against jailbreaking.
+* Limit username changes to prevent users from pretending to be someone else in comments, etc.
 
 ## Medium Features
 

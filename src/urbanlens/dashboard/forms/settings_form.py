@@ -45,7 +45,7 @@ _FRIEND_REQUEST_CHOICES = [(k, v) for k, v in VisibilityChoice.choices if k != V
 
 
 class PrivacySettingsForm(forms.ModelForm):
-    """Controls who can see this user's profile, comments, photos, and friend requests."""
+    """Controls who can see this user's profile, comments, photos, contact info, and friend requests."""
 
     profile_visibility = forms.ChoiceField(
         choices=VisibilityChoice.choices,
@@ -85,6 +85,12 @@ class PrivacySettingsForm(forms.ModelForm):
         label="Show Photos From",
         help_text="Photos you want to see. Other photos will be blurred.",
     )
+    contact_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Contact Visibility",
+        help_text="Who can see your contact methods on your profile.",
+    )
 
     class Meta:
         model = Profile
@@ -95,6 +101,7 @@ class PrivacySettingsForm(forms.ModelForm):
             "photo_upload_visibility",
             "viewer_photo_filter",
             "trip_pin_location_visibility",
+            "contact_visibility",
         ]
 
 
@@ -142,7 +149,7 @@ class StyleSettingsForm(forms.ModelForm):
 
 
 class ContactMethodsForm(forms.ModelForm):
-    """Optional contact methods and their visibility setting."""
+    """Optional contact methods stored on the profile."""
 
     phone_number = forms.CharField(
         required=False,
@@ -180,12 +187,6 @@ class ContactMethodsForm(forms.ModelForm):
         widget=forms.TextInput(attrs={"class": "settings-input", "placeholder": "@user:server.org"}),
         label="Matrix / Element",
     )
-    contact_visibility = forms.ChoiceField(
-        choices=VisibilityChoice.choices,
-        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
-        label="Contact Visibility",
-        help_text="Who can see your contact methods on your profile.",
-    )
 
     class Meta:
         model = Profile
@@ -196,7 +197,6 @@ class ContactMethodsForm(forms.ModelForm):
             "whatsapp_number",
             "telegram_username",
             "matrix_handle",
-            "contact_visibility",
         ]
 
 

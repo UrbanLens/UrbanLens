@@ -3,6 +3,7 @@
 Covers:
 - Profile contact field defaults
 - ContactMethodsForm validation and DB persistence
+- PrivacySettingsForm contact_visibility persistence
 - Profile.can_view_contact_info() for each VisibilityChoice
 """
 from __future__ import annotations
@@ -11,7 +12,7 @@ from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.forms.settings_form import ContactMethodsForm
+from urbanlens.dashboard.forms.settings_form import ContactMethodsForm, PrivacySettingsForm
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.location.model import Location
@@ -76,39 +77,20 @@ class ContactFieldDefaultsTests(TestCase):
 
 
 class ContactMethodsFormValidationTests(TestCase):
-    """All contact fields are optional; contact_visibility is required."""
+    """All contact fields are optional."""
 
     def _profile(self) -> Profile:
         return _profile()
 
-    def test_empty_form_with_visibility_is_valid(self) -> None:
-        profile = self._profile()
-        form = ContactMethodsForm(
-            data={"contact_visibility": VisibilityChoice.ANYONE},
-            instance=profile,
-        )
-        self.assertTrue(form.is_valid(), form.errors)
-
-    def test_form_without_visibility_is_invalid(self) -> None:
+    def test_empty_form_is_valid(self) -> None:
         profile = self._profile()
         form = ContactMethodsForm(data={}, instance=profile)
-        self.assertFalse(form.is_valid())
-        self.assertIn("contact_visibility", form.errors)
-
-    def test_invalid_visibility_choice_rejected(self) -> None:
-        profile = self._profile()
-        form = ContactMethodsForm(
-            data={"contact_visibility": "everyone_on_earth"},
-            instance=profile,
-        )
-        self.assertFalse(form.is_valid())
-        self.assertIn("contact_visibility", form.errors)
+        self.assertTrue(form.is_valid(), form.errors)
 
     def test_all_fields_filled_is_valid(self) -> None:
         profile = self._profile()
         form = ContactMethodsForm(
             data={
-                "contact_visibility": VisibilityChoice.FRIENDS,
                 "phone_number": "+1 555 000 0000",
                 "signal_username": "alice",
                 "discord_username": "alice#1234",
@@ -123,21 +105,51 @@ class ContactMethodsFormValidationTests(TestCase):
     def test_phone_number_too_long_is_invalid(self) -> None:
         profile = self._profile()
         form = ContactMethodsForm(
-            data={
-                "contact_visibility": VisibilityChoice.ANYONE,
-                "phone_number": "1" * 31,
-            },
+            data={"phone_number": "1" * 31},
             instance=profile,
         )
         self.assertFalse(form.is_valid())
         self.assertIn("phone_number", form.errors)
 
+
+class PrivacySettingsFormContactVisibilityTests(TestCase):
+    """contact_visibility is saved via PrivacySettingsForm."""
+
+    def _privacy_data(self, **overrides) -> dict:
+        return {
+            "profile_visibility": VisibilityChoice.ANYONE,
+            "comment_visibility": VisibilityChoice.ANYONE,
+            "friend_request_visibility": VisibilityChoice.ANYONE,
+            "photo_upload_visibility": VisibilityChoice.ANYONE,
+            "viewer_photo_filter": VisibilityChoice.ANYONE,
+            "trip_pin_location_visibility": VisibilityChoice.ANYONE,
+            "contact_visibility": VisibilityChoice.FRIENDS,
+            **overrides,
+        }
+
+    def test_form_without_visibility_is_invalid(self) -> None:
+        profile = _profile()
+        data = self._privacy_data()
+        del data["contact_visibility"]
+        form = PrivacySettingsForm(data=data, instance=profile)
+        self.assertFalse(form.is_valid())
+        self.assertIn("contact_visibility", form.errors)
+
+    def test_invalid_visibility_choice_rejected(self) -> None:
+        profile = _profile()
+        form = PrivacySettingsForm(
+            data=self._privacy_data(contact_visibility="everyone_on_earth"),
+            instance=profile,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("contact_visibility", form.errors)
+
     @given(_visibility_choices)
     @_db_settings
     def test_every_visibility_choice_is_accepted(self, choice: str) -> None:
         profile = _profile()
-        form = ContactMethodsForm(
-            data={"contact_visibility": choice},
+        form = PrivacySettingsForm(
+            data=self._privacy_data(contact_visibility=choice),
             instance=profile,
         )
         self.assertTrue(form.is_valid(), form.errors)
@@ -149,7 +161,7 @@ class ContactMethodsFormSaveTests(TestCase):
     def test_save_phone_number_persists(self) -> None:
         profile = _profile()
         form = ContactMethodsForm(
-            data={"contact_visibility": VisibilityChoice.ANYONE, "phone_number": "+1 555 123 4567"},
+            data={"phone_number": "+1 555 123 4567"},
             instance=profile,
         )
         self.assertTrue(form.is_valid(), form.errors)
@@ -159,8 +171,16 @@ class ContactMethodsFormSaveTests(TestCase):
 
     def test_save_visibility_persists(self) -> None:
         profile = _profile()
-        form = ContactMethodsForm(
-            data={"contact_visibility": VisibilityChoice.NO_ONE},
+        form = PrivacySettingsForm(
+            data={
+                "profile_visibility": VisibilityChoice.ANYONE,
+                "comment_visibility": VisibilityChoice.ANYONE,
+                "friend_request_visibility": VisibilityChoice.ANYONE,
+                "photo_upload_visibility": VisibilityChoice.ANYONE,
+                "viewer_photo_filter": VisibilityChoice.ANYONE,
+                "trip_pin_location_visibility": VisibilityChoice.ANYONE,
+                "contact_visibility": VisibilityChoice.NO_ONE,
+            },
             instance=profile,
         )
         self.assertTrue(form.is_valid(), form.errors)
@@ -171,7 +191,6 @@ class ContactMethodsFormSaveTests(TestCase):
     def test_save_all_fields_persist(self) -> None:
         profile = _profile()
         payload = {
-            "contact_visibility": VisibilityChoice.FRIENDS,
             "phone_number": "+44 20 0000 0000",
             "signal_username": "urbanexplorer",
             "discord_username": "urbex#9999",

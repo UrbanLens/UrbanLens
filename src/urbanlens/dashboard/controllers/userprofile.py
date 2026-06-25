@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.validators import validate_email
 from django.db.models import Q
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -273,6 +274,18 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             request.user.save(update_fields=[field])
             return JsonResponse({"ok": True})
 
+        if field == "email":
+            value = request.POST.get("value", "").strip()
+            if not value:
+                return JsonResponse({"error": "Email address is required."}, status=400)
+            try:
+                validate_email(value)
+            except ValidationError:
+                return JsonResponse({"error": "Enter a valid email address."}, status=400)
+            request.user.email = value
+            request.user.save(update_fields=["email"])
+            return JsonResponse({"ok": True})
+
         if field == "username":
             return self._save_username(request)
 
@@ -303,15 +316,6 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             value = request.POST.get("value", "").strip()
             setattr(profile, field, value)
             profile.save(update_fields=[field])
-            return JsonResponse({"ok": True})
-
-        if field == "contact_visibility":
-            from urbanlens.dashboard.models.profile.model import VisibilityChoice
-            value = request.POST.get("value", "").strip()
-            if value not in VisibilityChoice.values:
-                return JsonResponse({"error": "Invalid visibility option."}, status=400)
-            profile.contact_visibility = value
-            profile.save(update_fields=["contact_visibility"])
             return JsonResponse({"ok": True})
 
         if field in self._PROFILE_TEXT:
@@ -421,8 +425,6 @@ class EditProfileView(LoginRequiredMixin, View):
         else:
             gravatar_preview_url = ""
 
-        from urbanlens.dashboard.models.profile.model import VisibilityChoice
-
         return {
             "form": form,
             "discord_form": discord_form,
@@ -431,7 +433,6 @@ class EditProfileView(LoginRequiredMixin, View):
             "supported_platforms": URL_INPUT_PLATFORM_LABELS,
             "gravatar_preview_url": gravatar_preview_url,
             "emoji_options": AvatarService.random_options(4),
-            "contact_visibility_choices": VisibilityChoice.choices,
         }
 
     def get(self, request: HttpRequest) -> HttpResponse:

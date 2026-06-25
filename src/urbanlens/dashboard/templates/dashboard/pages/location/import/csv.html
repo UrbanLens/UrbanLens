@@ -40,6 +40,18 @@
 .iw-dot.active { background: #2196F3; }
 .iw-dot.done   { background: #43a047; }
 
+/* Step wrappers must be flex columns so .iw-body can scroll within the dialog */
+#iw-step-1,
+#iw-step-parsing,
+#iw-step-2,
+#iw-step-3 {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
 /* Step bodies */
 .iw-body {
     padding: 20px 24px;
@@ -355,7 +367,7 @@
     font-size: .92rem;
     font-weight: 600;
     margin-bottom: 14px;
-    color: #1a1a1a;
+    color: var(--ul-grey-9);
 }
 .iw-progress-bar-track {
     background: #f0f0f0;
@@ -402,6 +414,7 @@
     border: 1px solid var(--ul-border, #e0e0e0);
     border-radius: 8px;
     font-size: .8rem;
+    background-color: var(--ul-grey-2);
 }
 .iw-log-row {
     display: flex;
@@ -416,7 +429,7 @@
 .iw-log-icon.created { color: #43a047; }
 .iw-log-icon.existed { color: #9aa0a6; }
 .iw-log-icon.skipped { color: #e57373; }
-.iw-log-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #333; }
+.iw-log-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ul-grey-0); }
 .iw-log-status { font-size: .72rem; color: #9aa0a6; flex-shrink: 0; }
 </style>
 
