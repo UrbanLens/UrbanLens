@@ -166,6 +166,39 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         return HttpResponseRedirect(reverse("site_admin") + "?saved=1")
 
 
+class SiteAdminUIComponentsView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Development-only UI component showcase for site admins.
+
+    GET /site-admin/ui-components/  → visual reference for reusable UI classes.
+
+    Returns 403 when the effective environment is not development.
+    """
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+
+    def handle_no_permission(self) -> HttpResponse:
+        """Send anonymous users to login; return 403 for authenticated users without permission."""
+        if not self.request.user.is_authenticated:
+            return redirect_to_login(
+                self.request.get_full_path(),
+                login_url=self.get_login_url(),
+                redirect_field_name=self.get_redirect_field_name(),
+            )
+        return super().handle_no_permission()
+
+    def get(self, request):
+        settings = SiteSettings.get_current()
+        if not settings.is_development_environment():
+            return HttpResponse(status=403)
+
+        return render(
+            request,
+            "dashboard/pages/site_admin_ui_components.html",
+            {"page_name": "site-admin-ui-components"},
+        )
+
+
 class DevToolbarToggleThemeView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """Toggle the current user's theme between light and dark (dev toolbar).
 

@@ -93,8 +93,9 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     transition: background 0.15s, color 0.15s;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: var(--ul-text-9);
+        background: rgba(255, 255, 255, 0.3);
+        color: var(--ul-black);
+        border: 1px solid var(--ul-surface-9);
     }
 }
 

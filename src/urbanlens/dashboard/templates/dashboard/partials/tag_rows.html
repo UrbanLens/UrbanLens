@@ -77,13 +77,13 @@
 
         {% if tag.profile %}
         <div class="tag-card-actions">
-            <button type="button" class="btn--icon" title="Edit"
+            <button type="button" class="btn btn--icon" title="Edit"
                     hx-get="{% url 'tag.edit' tag.id %}"
                     hx-target="#tag-edit-dialog-body"
                     hx-swap="innerHTML">
                 <i class="material-icons">edit</i>
             </button>
-            <button type="button" class="btn--icon" title="Merge into another tag"
+            <button type="button" class="btn btn--icon" title="Merge into another tag"
                     hx-get="{% url 'tag.merge' tag.id %}"
                     hx-target="#tag-edit-dialog-body"
                     hx-swap="innerHTML">

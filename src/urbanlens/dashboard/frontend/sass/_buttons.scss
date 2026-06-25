@@ -16,7 +16,7 @@
 	@include btn-base;
 
 	&:hover {
-		box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
+		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
 	}
 
 	.material-icons {
@@ -33,7 +33,6 @@
 			background-color: var(--ul-button-hover-bg);
 			border-color: var(--ul-button-hover-border);
 			color: var(--ul-button-hover-text);
-			box-shadow: 0 6px 18px rgba($color-grey-0, .22);
 		}
 
 		&:active {

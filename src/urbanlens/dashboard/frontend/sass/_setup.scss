@@ -351,6 +351,11 @@
 	background: rgba($ui-amber-500, 0.08);
 	color: var(--ul-text);
 
+	// display:flex overrides the HTML [hidden] attribute — be explicit
+	&[hidden] {
+		display: none !important;
+	}
+
 	&__icon {
 		flex-shrink: 0;
 		font-size: 1.2rem;

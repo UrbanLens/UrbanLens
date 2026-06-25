@@ -99,6 +99,24 @@ class SetupWizardAppTitleTests(TestCase):
         settings = SiteSettings.get_current()
         self.assertEqual(settings.app_title, "UrbanLens")
 
+    def test_setup_get_hides_title_notice_on_official_host(self) -> None:
+        response = self.client.get(reverse("setup"), HTTP_HOST="urbanlens.org")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "title-reserved-notice")
+        self.assertNotContains(
+            response,
+            "please choose a different name",
+        )
+
+    def test_setup_get_shows_title_notice_element_on_non_official_host(self) -> None:
+        response = self.client.get(reverse("setup"), HTTP_HOST="maps.example.com")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="title-reserved-notice" hidden')
+        self.assertContains(response, "please choose a different name")
+        self.assertContains(response, '<p class="setup-title-notice__message" id="title-reserved-message"></p>')
+
     def test_complete_rejects_urbanlens_on_non_official_host(self) -> None:
         response = self.client.post(
             reverse("setup"),

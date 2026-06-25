@@ -59,15 +59,6 @@
         color: var(--ul-text-0);
     }
 
-    .app-nav-link {
-        color: rgba(255, 255, 255, .75);
-    }
-
-    .app-nav-link:hover,
-    .app-nav-link.active {
-        color: var(--ul-text-4);
-    }
-
     .page-content > .ul-section {
         background-color: var(--ul-surface-0a);
     }
@@ -124,7 +115,7 @@
     .settings-label,
     .settings-toggle-label,
     .tag-card-name,
-    .tag-title {
+    .badge-title {
         color: $color-grey-1;
     }
 
@@ -1224,17 +1215,17 @@
     .priority-kind-badge {
         &--tag {
             background-color: #{$color-purple-1100};
-            color: #{$color-purple-300};
+            color: #{$color-purple-1300};
         }
 
         &--category {
             background-color: #{$color-blue-1100};
-            color: #{$color-blue-300};
+            color: #{$color-blue-1300};
         }
 
         &--status {
             background-color: #{$color-green-1100};
-            color: #{$color-green-300};
+            color: #{$color-green-1300};
         }
     }
 
@@ -1385,16 +1376,6 @@
             }
         }
     }
-
-    .btn {
-        &--primary {
-            &:hover {    
-                box-shadow: 0 6px 18px rgba($color-grey-9, .22);
-                background-color: var(--ul-hover-bg-primary);
-            }
-        }
-    }
-
 
     .ul-radio-button {
         &.active,

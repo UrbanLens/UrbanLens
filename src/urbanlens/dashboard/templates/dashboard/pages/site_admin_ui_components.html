@@ -1,0 +1,432 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block page_title %}UI Components - {{ site_title }}{% endblock %}
+
+{% block content %}
+<style>
+.ui-kit-page { max-width: 960px; margin: 0 auto; padding: 0 1rem 3rem; }
+.ui-kit-header { margin-bottom: 1.75rem; }
+.ui-kit-grid { display: flex; flex-direction: column; gap: 1.5rem; }
+.ui-kit-section { background: var(--ul-surface-0); border: 1px solid var(--ul-border); border-radius: 8px; overflow: hidden; }
+.ui-kit-section__header { display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; padding: .75rem 1rem; border-bottom: 1px solid var(--ul-border); background: var(--ul-surface-1); font-weight: 600; }
+.ui-kit-section__header h2 { margin: 0; font-size: 1rem; font-weight: 600; color: var(--ul-text-1); }
+.ui-kit-section__header p { margin: 0; font-size: .82rem; font-weight: 400; color: var(--ul-text-3); }
+.ui-kit-section__body { padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+.ui-kit-row { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; }
+.ui-kit-row--start { align-items: flex-start; }
+.ui-kit-label { display: block; font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--ul-text-3); margin-bottom: .35rem; }
+.ui-kit-demo-panel { max-width: 320px; }
+.ui-kit-demo-dropdown { position: relative; display: inline-block; }
+.ui-kit-demo-dropdown.is-open > .ul-dropdown { position: absolute; top: calc(100% + 4px); left: 0; min-width: 180px; opacity: 1; transform: translateY(0); pointer-events: auto; }
+.ui-kit-dialog-demo.ul-dialog { border: none; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,.18); padding: 0; width: min(28rem, 90vw); max-width: 90vw; max-height: 90vh; background: var(--ul-surface-0); color: var(--ul-text-1); }
+.ui-kit-dialog-demo.ul-dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
+.ui-kit-dialog-demo.ul-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+.site-admin-nav-links { display: flex; flex-wrap: wrap; gap: .5rem; }
+</style>
+<div class="ui-kit-page page-content">
+    <div class="ui-kit-header site-admin-header">
+        <h1 class="site-admin-title">
+            <i class="material-icons">palette</i>
+            UI Components
+        </h1>
+        <p class="site-admin-subtitle">
+            Visual reference for reusable classes from
+            <code>_buttons.scss</code>, <code>_mixins.scss</code>,
+            <code>_components.scss</code>, and <code>_toastr.scss</code>.
+            Development environment only.
+        </p>
+        <div class="site-admin-nav-links" style="margin-top:.5rem">
+            <a href="{% url 'site_admin' %}" class="btn btn--ghost btn--sm">
+                <i class="material-icons">arrow_back</i>
+                Site Administration
+            </a>
+        </div>
+    </div>
+
+    <div class="ui-kit-grid">
+
+        {# ── Buttons ─────────────────────────────────────────────────────── #}
+        <section class="ui-kit-section">
+            <div class="ui-kit-section__header">
+                <h2>Buttons</h2>
+                <p><code>.btn</code> variants, legacy submit buttons, and icon buttons</p>
+            </div>
+            <div class="ui-kit-section__body">
+                <div>
+                    <span class="ui-kit-label">Standard variants</span>
+                    <div class="ui-kit-row">
+                        <button type="button" class="btn btn--primary">Primary</button>
+                        <button type="button" class="btn btn--ghost">Ghost</button>
+                        <button type="button" class="btn btn--link">Link</button>
+                        <button type="button" class="btn btn--danger">Danger</button>
+                        <button type="button" class="btn btn--danger-filled">Danger filled</button>
+                    </div>
+                </div>
+                <div>
+                    <span class="ui-kit-label">Sizes &amp; states</span>
+                    <div class="ui-kit-row">
+                        <button type="button" class="btn btn--primary btn--sm">Small</button>
+                        <button type="button" class="btn btn--primary">Default</button>
+                        <button type="button" class="btn btn--primary btn--lg">Large</button>
+                        <button type="button" class="btn btn--primary" disabled>Disabled</button>
+                        <button type="button" class="btn btn--primary is-loading">Loading</button>
+                    </div>
+                </div>
+                <div>
+                    <span class="ui-kit-label">With icons</span>
+                    <div class="ui-kit-row">
+                        <button type="button" class="btn btn--primary">
+                            <i class="material-icons">add</i>
+                            Add pin
+                        </button>
+                        <button type="button" class="btn btn--ghost btn--icon" title="Settings">
+                            <i class="material-icons">settings</i>
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <span class="ui-kit-label">Legacy &amp; icon-only</span>
+                    <div class="ui-kit-row">
+                        <button type="button" class="submit-button">Submit button</button>
+                        <button type="button" class="ul-icon-btn" title="Edit">
+                            <i class="material-icons">edit</i>
+                        </button>
+                        <button type="button" class="ul-icon-btn ul-icon-btn--primary" title="Primary">
+                            <i class="material-icons">star</i>
+                        </button>
+                        <button type="button" class="ul-icon-btn ul-icon-btn--danger" title="Delete">
+                            <i class="material-icons">delete</i>
+                        </button>
+                        <button type="button" class="btn-icon btn-icon--active" title="Active">
+                            <i class="material-icons">favorite</i>
+                        </button>
+                        <button type="button" class="btn-icon btn-icon--global-edit" title="Global edit">
+                            <i class="material-icons">public</i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        {# ── Forms ───────────────────────────────────────────────────────── #}
+        <section class="ui-kit-section">
+            <div class="ui-kit-section__header">
+                <h2>Form inputs</h2>
+                <p><code>.ul-form-row</code> and the <code>ul-input</code> mixin</p>
+            </div>
+            <div class="ui-kit-section__body">
+                <div class="ul-form-row" style="max-width:360px">
+                    <label for="ui-kit-text">Text input</label>
+                    <input type="text" id="ui-kit-text" placeholder="Placeholder text">
+                </div>
+                <div class="ul-form-row ul-form-row--two-col">
+                    <div>
+                        <label for="ui-kit-email">Email</label>
+                        <input type="email" id="ui-kit-email" value="user@example.com">
+                    </div>
+                    <div>
+                        <label for="ui-kit-number">Number</label>
+                        <input type="number" id="ui-kit-number" value="42">
+                    </div>
+                </div>
+                <div class="ul-form-row" style="max-width:360px">
+                    <label for="ui-kit-select">Select</label>
+                    <select id="ui-kit-select">
+                        <option>Option one</option>
+                        <option>Option two</option>
+                    </select>
+                </div>
+                <div class="ul-form-row" style="max-width:360px">
+                    <label for="ui-kit-textarea">Textarea</label>
+                    <textarea id="ui-kit-textarea" rows="3">Multi-line content.</textarea>
+                </div>
+            </div>
+        </section>
+
+        {# ── Cards & panels ──────────────────────────────────────────────── #}
+        <section class="ui-kit-section">
+            <div class="ui-kit-section__header">
+                <h2>Cards &amp; panels</h2>
+                <p><code>.ul-card</code> and <code>.ul-panel</code></p>
+            </div>
+            <div class="ui-kit-section__body ui-kit-row ui-kit-row--start">
+                <div class="ul-card ui-kit-demo-panel">
+                    <div class="ul-card-header">
+                        <i class="material-icons">info</i>
+                        <h3>Card title</h3>
+                    </div>
+                    <div class="ul-card-body">
+                        Card body content with surface styling and shadow.
+                    </div>
+                    <div class="ul-card-footer">
+                        <button type="button" class="btn btn--primary btn--sm">Action</button>
+                    </div>
+                </div>
+                <div class="ul-panel ui-kit-demo-panel">
+                    <div class="ul-panel-header">
+                        <i class="material-icons">list</i>
+                        Panel list
+                    </div>
+                    <ul class="ul-panel-list">
+                        <li class="ul-panel-item">
+                            <i class="material-icons">place</i>
+                            First item
+                        </li>
+                        <li class="ul-panel-item">
+                            <i class="material-icons">place</i>
+                            Second item
+                        </li>
+                    </ul>
+                    <a href="#" class="ul-panel-footer" onclick="return false">
+                        <i class="material-icons">open_in_new</i>
+                        Manage all
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        {# ── Badges, chips, tabs ─────────────────────────────────────────── #}
+        <section class="ui-kit-section">
+            <div class="ui-kit-section__header">
+                <h2>Badges, chips &amp; tabs</h2>
+                <p><code>.ul-badge</code>, <code>.ul-chip</code>, <code>.ul-tab-bar</code></p>
+            </div>
+            <div class="ui-kit-section__body">
+                <div>
+                    <span class="ui-kit-label">Badges</span>
+                    <div class="ui-kit-row">
+                        <span class="ul-badge ul-badge--primary">Primary</span>
+                        <span class="ul-badge ul-badge--success">Success</span>
+                        <span class="ul-badge ul-badge--warning">Warning</span>
+                        <span class="ul-badge ul-badge--danger">Danger</span>
+                        <span class="ul-badge ul-badge--neutral">Neutral</span>
+                    </div>
+                </div>
+                <div>
+                    <span class="ui-kit-label">Chips</span>
+                    <div class="ui-kit-row">
+                        <span class="ul-chip">
+                            <i class="material-icons">label</i>
+                            Static chip
+                        </span>
+                        <button type="button" class="ul-chip ul-chip--interactive">
+                            <i class="material-icons">close</i>
+                            Interactive
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <span class="ui-kit-label">Tab bar</span>
+                    <div class="ul-tab-bar" role="tablist">
+                        <button type="button" class="ul-tab ul-tab--active" data-ui-kit-tab="1">Overview</button>
+                        <button type="button" class="ul-tab" data-ui-kit-tab="2">
+                            <i class="material-icons">photo</i>
+                            Photos
+                        </button>
+                        <button type="button" class="ul-tab" data-ui-kit-tab="3">Notes</button>
+                    </div>
+                </div>
+                <div>
+                    <span class="ui-kit-label">Radio buttons</span>
+                    <div class="ui-kit-row">
+                        <label class="ul-radio-button active">
+                            <input type="radio" name="ui-kit-radio" checked>
+                            <i class="material-icons">light_mode</i>
+                            Light
+                        </label>
+                        <label class="ul-radio-button">
+                            <input type="radio" name="ui-kit-radio">
+                            <i class="material-icons">dark_mode</i>
+                            Dark
+                        </label>
+                        <label class="ul-radio-button">
+                            <input type="radio" name="ui-kit-radio">
+                            <i class="material-icons">settings_brightness</i>
+                            System
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        {# ── Notices & empty state ───────────────────────────────────────── #}
+        <section class="ui-kit-section">
+            <div class="ui-kit-section__header">
+                <h2>Notices &amp; empty states</h2>
+                <p><code>.ul-notice</code> and <code>.ul-empty</code></p>
+            </div>
+            <div class="ui-kit-section__body">
+                <div class="ul-notice ul-notice--info">
+                    <i class="material-icons">info</i>
+                    <span>Informational notice for tips and context.</span>
+                </div>
+                <div class="ul-notice ul-notice--success">
+                    <i class="material-icons">check_circle</i>
+                    <span>Success notice after a completed action.</span>
+                </div>
+                <div class="ul-notice ul-notice--warning">
+                    <i class="material-icons">warning</i>
+                    <span>Warning notice for reversible issues.</span>
+                </div>
+                <div class="ul-notice ul-notice--danger">
+                    <i class="material-icons">error</i>
+                    <span>Danger notice for errors or destructive actions.</span>
+                </div>
+                <div class="ul-empty">
+                    <i class="material-icons">inbox</i>
+                    <p>No items yet. Add your first pin to get started.</p>
+                    <button type="button" class="btn btn--primary btn--sm">Add pin</button>
+                </div>
+            </div>
+        </section>
+
+        {# ── Dropdown & dialog ───────────────────────────────────────────── #}
+        <section class="ui-kit-section">
+            <div class="ui-kit-section__header">
+                <h2>Dropdown &amp; dialog</h2>
+                <p><code>.ul-dropdown</code> and native <code>&lt;dialog&gt;</code></p>
+            </div>
+            <div class="ui-kit-section__body">
+                <div class="ui-kit-row">
+                    <div class="ui-kit-demo-dropdown" id="ui-kit-dropdown">
+                        <button type="button" class="btn btn--ghost" id="ui-kit-dropdown-toggle">
+                            Open menu
+                            <i class="material-icons">expand_more</i>
+                        </button>
+                        <div class="ul-dropdown">
+                            <button type="button" class="ul-dropdown-item">
+                                <i class="material-icons">edit</i>
+                                Edit
+                            </button>
+                            <button type="button" class="ul-dropdown-item">
+                                <i class="material-icons">share</i>
+                                Share
+                            </button>
+                            <div class="ul-dropdown-sep"></div>
+                            <button type="button" class="ul-dropdown-item ul-dropdown-item--danger">
+                                <i class="material-icons">delete</i>
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn--primary" id="ui-kit-dialog-open">
+                        Open dialog
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        {# ── Loading & toasts ────────────────────────────────────────────── #}
+        <section class="ui-kit-section">
+            <div class="ui-kit-section__header">
+                <h2>Loading &amp; toasts</h2>
+                <p><code>.ul-spinner</code> and toastr.js notifications</p>
+            </div>
+            <div class="ui-kit-section__body">
+                <div class="ui-kit-row">
+                    <span class="ul-spinner" aria-hidden="true"></span>
+                    <span style="color:var(--ul-text-2);font-size:.875rem">Inline spinner</span>
+                </div>
+                <div>
+                    <span class="ui-kit-label">Toast triggers</span>
+                    <div class="ui-kit-row">
+                        <button type="button" class="btn btn--ghost btn--sm" data-toast="success">Success toast</button>
+                        <button type="button" class="btn btn--ghost btn--sm" data-toast="error">Error toast</button>
+                        <button type="button" class="btn btn--ghost btn--sm" data-toast="info">Info toast</button>
+                        <button type="button" class="btn btn--ghost btn--sm" data-toast="warning">Warning toast</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+</div>
+
+<dialog class="ul-dialog ui-kit-dialog-demo" id="ui-kit-dialog">
+    <div class="dialog-header">
+        <span>Example dialog</span>
+        <button type="button" class="dialog-close" id="ui-kit-dialog-close" aria-label="Close">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div class="ul-dialog-body">
+        <div class="ul-form-row">
+            <label for="ui-kit-dialog-input">Name</label>
+            <input type="text" id="ui-kit-dialog-input" placeholder="Enter a value">
+        </div>
+        <p style="margin:.75rem 0 0;font-size:.875rem;color:var(--ul-text-2)">
+            Dialogs use <code>.ul-dialog</code>, <code>.dialog-header</code>, and <code>.ul-dialog-footer</code>.
+        </p>
+    </div>
+    <div class="ul-dialog-footer">
+        <a href="#" class="dialog-manage-link" onclick="return false">Manage settings</a>
+        <button type="button" class="btn btn--ghost" id="ui-kit-dialog-cancel">Cancel</button>
+        <button type="button" class="btn btn--primary" id="ui-kit-dialog-save">Save</button>
+    </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    document.querySelectorAll('[data-ui-kit-tab]').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            tab.closest('.ul-tab-bar').querySelectorAll('.ul-tab').forEach(function (t) {
+                t.classList.remove('ul-tab--active', 'active');
+            });
+            tab.classList.add('ul-tab--active');
+        });
+    });
+
+    document.querySelectorAll('.ul-radio-button').forEach(function (label) {
+        label.addEventListener('click', function () {
+            document.querySelectorAll('.ul-radio-button').forEach(function (l) {
+                l.classList.remove('active');
+            });
+            label.classList.add('active');
+        });
+    });
+
+    var dropdown = document.getElementById('ui-kit-dropdown');
+    var dropdownToggle = document.getElementById('ui-kit-dropdown-toggle');
+    if (dropdown && dropdownToggle) {
+        dropdownToggle.addEventListener('click', function () {
+            dropdown.classList.toggle('is-open');
+        });
+        document.addEventListener('click', function (e) {
+            if (!dropdown.contains(e.target)) {
+                dropdown.classList.remove('is-open');
+            }
+        });
+    }
+
+    var dialog = document.getElementById('ui-kit-dialog');
+    var openBtn = document.getElementById('ui-kit-dialog-open');
+    function closeDialog() {
+        if (dialog) dialog.close();
+    }
+    if (openBtn && dialog) {
+        openBtn.addEventListener('click', function () { dialog.showModal(); });
+    }
+    ['ui-kit-dialog-close', 'ui-kit-dialog-cancel', 'ui-kit-dialog-save'].forEach(function (id) {
+        var btn = document.getElementById(id);
+        if (btn) btn.addEventListener('click', closeDialog);
+    });
+
+    document.querySelectorAll('[data-toast]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var type = btn.getAttribute('data-toast');
+            var messages = {
+                success: 'Changes saved successfully.',
+                error: 'Something went wrong.',
+                info: 'Here is some helpful context.',
+                warning: 'Please review before continuing.',
+            };
+            if (window.toastr && messages[type]) {
+                toastr[type](messages[type]);
+            }
+        });
+    });
+}());
+</script>
+{% endblock %}

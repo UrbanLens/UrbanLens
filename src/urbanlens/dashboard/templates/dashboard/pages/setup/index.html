@@ -192,10 +192,11 @@
                     <span class="setup-save-status" id="title-save-status">✓ Saved</span>
                 </div>
 
+                {% if not is_official_urbanlens_site %}
                 <div class="setup-title-notice" id="title-reserved-notice" hidden>
                     <i class="material-icons setup-title-notice__icon" aria-hidden="true">info</i>
                     <div>
-                        <p class="setup-title-notice__message" id="title-reserved-message">{{ urbanlens_title_notice }}</p>
+                        <p class="setup-title-notice__message" id="title-reserved-message"></p>
                         <p class="setup-title-notice__label">Here are a few ideas:</p>
                         <ul class="setup-title-notice__suggestions" id="title-suggestion-list">
                             {% for suggestion in app_title_suggestions %}
@@ -208,6 +209,7 @@
                         </ul>
                     </div>
                 </div>
+                {% endif %}
 
                 <div class="setup-title-preview">
                     <span class="preview-dot"></span>
@@ -336,21 +338,30 @@
     var sidebarTitle = document.getElementById('sidebar-title');
     var doneTitle    = document.getElementById('done-app-title');
     var titleNotice  = document.getElementById('title-reserved-notice');
+    var titleNoticeMessage = document.getElementById('title-reserved-message');
     var _saveTimer;
 
     function normalizeAppTitle(title) {
-        return title.toLowerCase().replace(/[^a-z0-9]+/g, '');
+        return title.toLowerCase().replace(/[^a-z]+/g, '');
     }
 
     function isReservedUrbanlensTitle(title) {
         return normalizeAppTitle(title) === 'urbanlens';
     }
 
+    function shouldShowTitleReservedNotice(title) {
+        var trimmed = title.trim();
+        return !IS_OFFICIAL_SITE && trimmed !== '' && isReservedUrbanlensTitle(trimmed);
+    }
+
     function defaultAppTitleFallback() {
         return IS_OFFICIAL_SITE ? 'UrbanLens' : SUGGESTED_APP_TITLE;
     }
 
-    function showTitleReservedNotice() {
+    function showTitleReservedNotice(message) {
+        if (titleNoticeMessage) {
+            titleNoticeMessage.textContent = message || URBANLENS_TITLE_NOTICE;
+        }
         if (titleNotice) {
             titleNotice.hidden = false;
         }
@@ -369,8 +380,8 @@
     }
 
     function validateAppTitle(title) {
-        if (!IS_OFFICIAL_SITE && isReservedUrbanlensTitle(title)) {
-            showTitleReservedNotice();
+        if (shouldShowTitleReservedNotice(title)) {
+            showTitleReservedNotice(URBANLENS_TITLE_NOTICE);
             return false;
         }
         hideTitleReservedNotice();
@@ -420,6 +431,9 @@
 
     // Live title preview + debounced save
     if (titleInput) {
+        hideTitleReservedNotice();
+        validateAppTitle(titleInput.value);
+
         titleInput.addEventListener('input', function () {
             var v = this.value.trim() || defaultAppTitleFallback();
             if (titlePreview) titlePreview.textContent = v;
@@ -467,13 +481,9 @@
                         saveStatus.classList.remove('setup-save-status--visible');
                     }, 2200);
                 }
-            } else if (r.status === 400) {
+            } else if (r.status === 400 && !IS_OFFICIAL_SITE) {
                 return r.json().then(function (data) {
-                    if (data.error) {
-                        var msg = document.getElementById('title-reserved-message');
-                        if (msg) msg.textContent = data.error;
-                    }
-                    showTitleReservedNotice();
+                    showTitleReservedNotice(data.error || URBANLENS_TITLE_NOTICE);
                 });
             }
         }).catch(function () {}).finally(function () {

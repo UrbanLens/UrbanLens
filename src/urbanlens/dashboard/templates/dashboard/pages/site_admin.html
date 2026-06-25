@@ -8,15 +8,27 @@
             Site Administration
         </h1>
         <p class="site-admin-subtitle">Configure site-wide settings.</p>
-        <div style="margin-top:.5rem">
+        <div class="site-admin-nav-links">
             <a href="{% url 'site_admin_stats' %}" class="stats-nav-link btn btn--primary">
                 <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">bar_chart</i>
                 View Statistics
             </a>
+            {% if show_dev_toolbar %}
+            <a href="{% url 'site_admin_ui_components' %}" class="stats-nav-link btn btn--ghost">
+                <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">palette</i>
+                UI Components
+            </a>
+            {% endif %}
         </div>
     </div>
 
     <style>
+    .site-admin-nav-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        margin-top: .5rem;
+    }
     .stats-nav-link {
         display: inline-flex;
         align-items: center;

@@ -698,6 +698,11 @@ urlpatterns = [
     path("site-admin/", site_admin.SiteAdminView.as_view(), name="site_admin"),
     path("site-admin/stats/", site_admin.SiteAdminStatsView.as_view(), name="site_admin_stats"),
     path(
+        "site-admin/ui-components/",
+        site_admin.SiteAdminUIComponentsView.as_view(),
+        name="site_admin_ui_components",
+    ),
+    path(
         "site-admin/dev/toggle-theme/",
         site_admin.DevToolbarToggleThemeView.as_view(),
         name="dev_toolbar.toggle_theme",
