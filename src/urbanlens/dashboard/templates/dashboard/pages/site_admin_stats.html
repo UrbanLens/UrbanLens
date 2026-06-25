@@ -84,6 +84,29 @@
             </div>
         </div>
 
+
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(59,130,246,.12)">
+                <i class="material-icons" style="color:#3b82f6">workspace_premium</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">{{ total_subscriptions }}</div>
+                <div class="stats-kpi-label">Subscriptions</div>
+                <div class="stats-kpi-sub">active grants</div>
+            </div>
+        </div>
+
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(239,68,68,.12)">
+                <i class="material-icons" style="color:#ef4444">admin_panel_settings</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">{{ total_site_admins }}</div>
+                <div class="stats-kpi-label">Site Admins</div>
+                <div class="stats-kpi-sub">members of site_admin</div>
+            </div>
+        </div>
+
         {% if total_reviews is not None %}
         <div class="stats-kpi-card">
             <div class="stats-kpi-icon" style="background:rgba(251,191,36,.12)">
@@ -176,7 +199,7 @@
                 <i class="material-icons stats-health-icon" style="color:#16a34a">timer</i>
                 <div>
                     <div class="stats-health-value">{{ uptime }}</div>
-                    <div class="stats-health-label">Uptime</div>
+                    <div class="stats-health-label">App Uptime</div>
                 </div>
             </div>
             {% endif %}
@@ -263,8 +286,8 @@
         });
     }
 
-    makeBar('chart-users',     {{ chart_user_labels }},     {{ chart_user_counts }},     '#0891b2');
-    makeBar('chart-locations', {{ chart_location_labels }}, {{ chart_location_counts }}, '#7c3aed');
+    makeBar('chart-users',     {{ chart_user_labels|safe }},     {{ chart_user_counts|safe }},     '#0891b2');
+    makeBar('chart-locations', {{ chart_location_labels|safe }}, {{ chart_location_counts|safe }}, '#7c3aed');
 }());
 </script>
 

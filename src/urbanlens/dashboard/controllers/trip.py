@@ -233,17 +233,26 @@ def _parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.
     return datetime.datetime.combine(d, t)
 
 
-def _resolve_location(body: dict[str, Any]) -> Location | None:
-    """Resolve a location from POST body fields.
+def _resolve_activity_place(body: dict[str, Any], profile: Profile) -> tuple[Location | None, Any | None]:
+    """Resolve an activity target from submitted location fields.
 
-    Priority: location_slug → geocoded lat/lng → None.
-    Creates a new Location row when geocoded coordinates are supplied.
+    Priority: selected pin → selected shared location → supplied coordinates/address.
+    Geocoded or raw coordinate entries create a Location row for the activity.
     """
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.pin.model import Pin
 
-    location_slug = (body.get("location_slug") or "").strip()
-    if location_slug:
-        return Location.objects.filter(slug=location_slug).first()
+    pin_uuid = (body.get("pin_uuid") or "").strip()
+    if pin_uuid:
+        pin = Pin.objects.filter(profile=profile, uuid=pin_uuid).select_related("location").first()
+        if pin is not None:
+            return pin.location, pin
+
+    location_ref = (body.get("location_uuid") or body.get("location_slug") or "").strip()
+    if location_ref:
+        location = Location.objects.filter(uuid=location_ref).first() or Location.objects.filter(slug=location_ref).first()
+        if location is not None:
+            return location, None
 
     geocoded_lat = (body.get("geocoded_lat") or "").strip()
     geocoded_lng = (body.get("geocoded_lng") or "").strip()
@@ -251,14 +260,14 @@ def _resolve_location(body: dict[str, Any]) -> Location | None:
         try:
             lat = float(geocoded_lat)
             lng = float(geocoded_lng)
-            name = (
-                body.get("geocoded_name") or body.get("title") or "Activity Location"
-            ).strip() or "Activity Location"
-            return Location.objects.create(name=name, latitude=lat, longitude=lng)
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                return None, None
+            name = (body.get("geocoded_name") or body.get("title") or f"{lat:.6f}, {lng:.6f}").strip()
+            return Location.objects.create(name=name or "Activity Location", latitude=lat, longitude=lng), None
         except (ValueError, TypeError):
             pass
 
-    return None
+    return None, None
 
 
 def _is_organizer(profile: Profile, trip: Trip) -> bool:
@@ -507,7 +516,7 @@ class TripActivitiesView(LoginRequiredMixin, View):
         notes = (body.get("notes") or "").strip() or None
         scheduled_at = _parse_scheduled_at(body.get("scheduled_date"), body.get("scheduled_time"))
         scheduled_end = _parse_scheduled_at(body.get("scheduled_end_date"), body.get("scheduled_end_time"))
-        location = _resolve_location(body)
+        location, pin = _resolve_activity_place(body, profile)
 
         child_trip_uuid = (body.get("child_trip_uuid") or "").strip()
         child_trip = Trip.objects.filter(uuid=child_trip_uuid).first() if child_trip_uuid else None
@@ -521,6 +530,7 @@ class TripActivitiesView(LoginRequiredMixin, View):
         TripActivity.objects.create(
             trip=trip,
             location=location,
+            pin=pin,
             added_by=profile,
             title=title,
             notes=notes,
@@ -562,7 +572,7 @@ class TripActivityEditView(LoginRequiredMixin, View):
         activity.notes = (body.get("notes") or "").strip() or None
         activity.scheduled_at = _parse_scheduled_at(body.get("scheduled_date"), body.get("scheduled_time"))
         activity.scheduled_end = _parse_scheduled_at(body.get("scheduled_end_date"), body.get("scheduled_end_time"))
-        activity.location = _resolve_location(body)
+        activity.location, activity.pin = _resolve_activity_place(body, profile)
         new_status = (body.get("status") or "").strip()
         if new_status in {"proposed", "confirmed"}:
             activity.status = new_status
@@ -934,7 +944,37 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         if len(q) < 2:
             return JsonResponse({"results": []})
 
+        import re
+
+        from django.db.models import Q
+
         from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        coordinate_match = re.match(r"^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$", q)
+        coordinate_results: list[dict] = []
+        if coordinate_match:
+            lat = float(coordinate_match.group(1))
+            lng = float(coordinate_match.group(2))
+            if -90 <= lat <= 90 and -180 <= lng <= 180:
+                coordinate_results.append({"name": f"{lat:.6f}, {lng:.6f}", "lat": lat, "lng": lng, "type": "coordinates"})
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        pin_rows = list(
+            Pin.objects.filter(profile=profile)
+            .filter(Q(nickname__icontains=q) | Q(location__name__icontains=q) | Q(description__icontains=q))
+            .select_related("location")[:5],
+        )
+        pin_results = [
+            {
+                "uuid": str(pin.uuid),
+                "name": pin.effective_name or "Untitled pin",
+                "locality": pin.locality,
+                "administrative_area_level_1": pin.administrative_area_level_1,
+                "type": "pin",
+            }
+            for pin in pin_rows
+        ]
 
         db_rows = list(
             Location.objects.filter(name__icontains=q).values(
@@ -974,7 +1014,7 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         except Exception as exc:
             logger.debug("Nominatim geocoding failed for %r: %s", q, exc)
 
-        return JsonResponse({"results": db_results + geocoded_results})
+        return JsonResponse({"results": coordinate_results + pin_results + db_results + geocoded_results})
 
 
 class TripMapDataView(LoginRequiredMixin, View):
@@ -1445,7 +1485,7 @@ class TripWeatherView(LoginRequiredMixin, View):
             if not activities:
                 pass  # no upcoming activities - leave error/grouped empty to hide the section
             else:
-                try:
+                try:  # noqa: PLW0717
                     gateway = WeatherForecastGateway()
                     activity_forecasts = _build_activity_forecasts(activities, gateway)
 
