@@ -7,7 +7,7 @@ from datetime import timedelta
 import json
 import logging
 import os
-from pathlib import Path
+import time
 
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.views import redirect_to_login
@@ -22,9 +22,10 @@ from urbanlens.dashboard.models.site_settings import (
     SearchProviderChoice,
     SiteSettings,
 )
-from urbanlens.dashboard.services.site_admin import complete_site_admin_onboarding
+from urbanlens.dashboard.services.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
 
 logger = logging.getLogger(__name__)
+_APP_STARTED_MONOTONIC = time.monotonic()
 
 
 def _monthly_series(queryset, date_field: str, months: int = 12) -> tuple[list[str], list[int]]:
@@ -60,16 +61,21 @@ def _monthly_series(queryset, date_field: str, months: int = 12) -> tuple[list[s
     return labels, counts
 
 
+def _format_duration(seconds: float) -> str:
+    days = int(seconds // 86400)
+    hours = int((seconds % 86400) // 3600)
+    minutes = int((seconds % 3600) // 60)
+    return f"{days}d {hours}h {minutes}m"
+
+
+def _app_uptime() -> str:
+    """Return uptime for the current Django app process, not the host server."""
+    return _format_duration(max(0, time.monotonic() - _APP_STARTED_MONOTONIC))
+
+
 def _server_uptime() -> str:
-    """Return a human-readable uptime string, or an empty string if unavailable."""
-    try:
-        seconds = float(Path("/proc/uptime").read_text(encoding="ascii").split()[0])
-        days = int(seconds // 86400)
-        hours = int((seconds % 86400) // 3600)
-        minutes = int((seconds % 3600) // 60)
-        return f"{days}d {hours}h {minutes}m"
-    except (OSError, ValueError):
-        return ""
+    """Backward-compatible alias for the app uptime metric."""
+    return _app_uptime()
 
 
 def _dir_size_mb(path: str) -> float:
@@ -263,11 +269,14 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         total_users = User.objects.count()
         active_users_30d = User.objects.filter(last_login__gte=thirty_days_ago).count()
         new_users_30d = User.objects.filter(date_joined__gte=thirty_days_ago).count()
-        total_locations = Location.objects.count()
-        new_locations_30d = Location.objects.filter(created__gte=thirty_days_ago).count()
+        total_locations = Location.objects.filter(pins__isnull=False).distinct().count()
+        new_locations_30d = Location.objects.filter(pins__isnull=False, created__gte=thirty_days_ago).distinct().count()
         total_pins = Pin.objects.count()
         total_photos = Image.objects.count()
         total_friendships = Friendship.objects.count()
+        from urbanlens.dashboard.models.subscriptions import UserSubscription
+        total_subscriptions = UserSubscription.objects.filter(revoked_at__isnull=True).count()
+        total_site_admins = User.objects.filter(groups__name=SITE_ADMIN_GROUP_NAME).distinct().count()
 
         # Reviews and trips are optional models - guard against missing tables.
         try:
@@ -288,7 +297,7 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         # Top locations by pin count
         top_locations = list(
-            Location.objects.annotate_pin_count()
+            Location.objects.filter(pins__isnull=False).distinct().annotate_pin_count()
             .order_by("-pin_count")[:10]
             .values("name", "slug", "pin_count"),
         ) if hasattr(Location.objects, "annotate_pin_count") else []
@@ -298,7 +307,7 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         location_labels, location_counts = _monthly_series(Location.objects, "created")
 
         # ── Server stats ──────────────────────────────────────────────────────
-        uptime = _server_uptime()
+        uptime = _app_uptime()
         media_root = getattr(django_settings, "MEDIA_ROOT", "")
         media_size_mb = _dir_size_mb(media_root) if media_root else None
 
@@ -319,6 +328,8 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             "total_pins": total_pins,
             "total_photos": total_photos,
             "total_friendships": total_friendships,
+            "total_subscriptions": total_subscriptions,
+            "total_site_admins": total_site_admins,
             "total_reviews": total_reviews,
             "total_trips": total_trips,
             "new_trips_30d": new_trips_30d,
