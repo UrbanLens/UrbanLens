@@ -183,6 +183,9 @@ Features planned for future releases.
 * BUG: Map import dialog, existing pins still show "new" in the row. [UL-206]
 * Verify: User imports pins without names, then imports "Labelled Places.json" with the same pins, the names of the originally created pins are updated. [UL-207]
 * on client browser, const _PROFILE_ID = 1; is unnecessary and hints at vulnerabilities. [UL-208]
+* Main map: add pin dialog -> tags and categories picker has them in 2 sections, instead of standardized picker with other badge kinds and a search. Icon section is empty (no options). No option to make it private. Overall: This dialog should reuse existing components instead of redefining the dialog features. [UL-210]
+* During pin cache refresh, site is less responsive. This relates to needing to implement Celery tasks. [UL-211]
+* BUG: Something I did caused a new pin to be created with a badge named "Unknown". My workflow started with the creation of a new pin by right-clicking on the main map. [UL-212]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
