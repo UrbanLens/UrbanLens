@@ -15,7 +15,9 @@ Features planned for this release.
 * UI: Edit category dialog [UL-146]
 * UI: Bulk edit category dialog (buttons are awful) [UL-147]
 * Organize page: Remove a bunch of text ("Manage tags, categories...", "Your personal categories...") [UL-148]
-* Add descriptions to badges that are pre-populated.
+* Add descriptions to badges that are pre-populated. [UL-245]
+* Cleanup Github readme roadmap. [UL-246]
+* Remove work account from github project. [UL-247]
 
 ## Medium Features
 
@@ -215,6 +217,7 @@ Features planned for future releases.
 * After accepting friend request, the old friend request notification shouldn't have accept or reject buttons anymore. [UL-241]
 * When all notifications are marked read, the notification counter above the bell doesn't update until page refresh. [UL-242]
 * When you are friends with a user, the "add friend" button on their profile shouldn't show up. Instead, it should be "remove friend". Implement the remove friend feature for this. [UL-243]
+* Add site admin setting to make the site invite only, and suspend public signups. [UL-244]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
