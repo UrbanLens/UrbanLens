@@ -12,7 +12,6 @@ Features planned for this release.
 * Provide explanation of how to do a google takeout to import pins. (Possible onboarding process?) [UL-142]
 * Ensure fully sanitized user input for pin names, location names, etc, which are passed into external urls. Require strict character sets, min/max lengths, and so on. [UL-143]
 * Per the above, any of that data which gets passed to an AI needs additional safeguards against jailbreaking. [UL-144]
-* Limit username changes to prevent users from pretending to be someone else in comments, etc. [UL-145]
 * UI: Edit category dialog [UL-146]
 * UI: Bulk edit category dialog (buttons are awful) [UL-147]
 * Organize page: Remove a bunch of text ("Manage tags, categories...", "Your personal categories...") [UL-148]
@@ -153,6 +152,7 @@ Features planned for future releases.
 * When creating new badges during pin import, allow an AI to select an emoji and color for it. [UL-176]
 * More (or all?) vector emojis that can change color. [UL-177]
 * On the map: icons with a color are surrounded by a circle of that color. Icons without a color are not. (consider: foreground colors and background colors? That might be overkill.) [UL-178]
+* Limit username changes to prevent users from pretending to be someone else in comments, etc. [UL-145]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
