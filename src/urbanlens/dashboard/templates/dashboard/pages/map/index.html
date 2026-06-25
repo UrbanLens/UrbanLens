@@ -898,7 +898,7 @@
             marker.on('dragend', function () {
                 _dragUnlocked = false;
                 const pos = marker.getLatLng();
-                fetch(`/dashboard/rest/pins/${pin.id}/`, {
+                fetch(`/dashboard/rest/pins/${pin.uuid}/`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
                     body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
@@ -1332,7 +1332,7 @@
 
                 function saveInputValue() {
                     let value = input.value;
-                    const pinId = popup.dataset.id;
+                    const pinUuid = popup.dataset.uuid;
                     const data = {};
                     if (name === 'last_visited') {
                         if (value === '' || value === 'never' || value === undefined) {
@@ -1348,7 +1348,7 @@
                         return;
                     }
 
-                    fetch(`/dashboard/rest/pins/${pinId}/`, {
+                    fetch(`/dashboard/rest/pins/${pinUuid}/`, {
                         method: 'PATCH',
                         headers: {
                             'Content-Type': 'application/json',
@@ -1411,10 +1411,10 @@
                         input.focus();
                         function saveInputValue() {
                             const value = this.value;
-                            const pinId = this.closest('.pin-popup').dataset.id;
+                            const pinUuid = this.closest('.pin-popup').dataset.uuid;
                             const data = {};
                             data[this.name] = value;
-                            fetch(`/dashboard/rest/pins/${pinId}/`, {
+                            fetch(`/dashboard/rest/pins/${pinUuid}/`, {
                                 method: 'PATCH',
                                 headers: {
                                     'Content-Type': 'application/json',
@@ -1588,9 +1588,8 @@
 
     function deletePin(button) {
         const popup = button.closest('.pin-popup');
-        const pinId = popup.dataset.id;
         const pinUuid = popup.dataset.uuid;
-        fetch(`/dashboard/rest/pins/${pinId}/`, {
+        fetch(`/dashboard/rest/pins/${pinUuid}/`, {
             method: 'DELETE',
             headers: { 'X-CSRFToken': '{{ csrf_token }}' },
         })

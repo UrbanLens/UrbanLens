@@ -696,14 +696,14 @@
     });
     L.Marker.prototype.options.icon = markerIcon;
 
-    const pinDbId = {{ pin.pk }};
+    const pinUuid = '{{ pin.uuid }}';
     let _pinMarkerLat = pinLat, _pinMarkerLng = pinLng;
 
     // Main pin marker - hidden when a campus boundary exists
     let _pinMarker = L.marker([pinLat, pinLng], { draggable: true }).addTo(map);
     _pinMarker.on('dragend', function () {
         const pos = _pinMarker.getLatLng();
-        fetch(`/dashboard/rest/pins/${pinDbId}/`, {
+        fetch(`/dashboard/rest/pins/${pinUuid}/`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
             body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
