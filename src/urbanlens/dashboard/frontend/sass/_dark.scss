@@ -2,7 +2,7 @@
 @use 'variables' as *;
 
 @mixin standard-section {
-    background: var(--ul-grey-0);
+    background-color: var(--ul-grey-0a);
     border-color: var(--ul-black);
     box-shadow: 3px 3px 10px rgba(0,0,0,.2);
 }
