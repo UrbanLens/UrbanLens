@@ -34,6 +34,8 @@ Features planned for this release.
 * On pin details page, add badge dialog, the search bar doesn't work. [UL-195]
 * Organize Page: After editing a badge, the edit button for other rows no longer opens the edit dialog. [UL-197]
 * Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]
+* On pin details page, clicking edit, the dialog doesn't scroll when overflowing page height. [UL-215]
+* BUG: On main map: "Failed to delete pin" on a pin I created by right clicking. [UL-216]
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
@@ -148,7 +150,7 @@ Features planned for future releases.
 * Badges that are created automatically: start them in a sensible priority order [UL-167]
 * During import dialog: some method of checking all "create badge" checkboxes [UL-168]
 * Organize Page: Move badge to child of another just by dragging (maybe??) [UL-169]
-* Better emojis for: legal stuff (admission ticket, museum), underground, tunnel, sewer grate, hardhat. Verify we have: religions, languages, countries, urbex gear (boots, flashlight, backpack), photography stuff, time/calendar stuff (seasons?), greek letters, shapes (square, triangle, etc), ceramic tile (mosaic, etc), eyeglasses, book, magnifying glass, share symbol, muscle icon, weights, ninja, gavel, snake eating itself, better "repeat" arrow, "tag" icon (i.e. 'labelled'), save symbol [UL-170]
+* Better emojis for: legal stuff (admission ticket, museum), underground, tunnel, sewer grate, hardhat. Verify we have: religions, languages, countries, urbex gear (boots, flashlight, backpack), photography stuff, time/calendar stuff (seasons?), greek letters, shapes (square, triangle, etc), ceramic tile (mosaic, etc), eyeglasses, book, magnifying glass, share symbol, muscle icon, weights, ninja, gavel, snake eating itself, better "repeat" arrow, "tag" icon (i.e. 'labelled'), save symbol, fleur d'lis [UL-170]
 * UI: Toast notifications on bottom right of screen, and the close button is placed incorrectly (and isn't needed at all, frankly). [UL-171]
 * "Recently used emojis" to make selecting them easier. [UL-172]
 * Pre-populate example tags for new users (to help explain usage of site). "Notable", "Graffiti", "Photography", "Dangerous", "Popular" [UL-173]
@@ -156,7 +158,6 @@ Features planned for future releases.
 * When creating badges (or editing them), consider adding another section to choose badges as children as well as parents. This could make it easier for users to make a large number of changes more quickly. [UL-175]
 * When creating new badges during pin import, allow an AI to select an emoji and color for it. [UL-176]
 * More (or all?) vector emojis that can change color. [UL-177]
-* On the map: icons with a color are surrounded by a circle of that color. Icons without a color are not. (consider: foreground colors and background colors? That might be overkill.) [UL-178]
 * Limit username changes to prevent users from pretending to be someone else in comments, etc. (Perhaps track historical usernames and display them on the public profile? I'm not sure about this.) [UL-145]
 * BUG: Very first login form on first site install says "welcome back" [UL-179]
 * UI: Login form SSO buttons text color [UL-180]
@@ -186,6 +187,8 @@ Features planned for future releases.
 * Main map: add pin dialog -> tags and categories picker has them in 2 sections, instead of standardized picker with other badge kinds and a search. Icon section is empty (no options). No option to make it private. Overall: This dialog should reuse existing components instead of redefining the dialog features. [UL-210]
 * During pin cache refresh, site is less responsive. This relates to needing to implement Celery tasks. [UL-211]
 * BUG: Something I did caused a new pin to be created with a badge named "Unknown". My workflow started with the creation of a new pin by right-clicking on the main map. [UL-212]
+* BUG: Developer toolbar only shows up when the ui admin setting for environment is set to development, but not when the env var is set to development and the ui setting is default. [UL-213]
+* Pin details page: There should be a button to delete the pin. [UL-214]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
