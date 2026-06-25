@@ -764,14 +764,25 @@
         return `rgba(${r},${g},${b},${alpha})`;
     }
 
+    function _resolvePinColor(pin) {
+        const bad = v => !v || v === 'None' || v === 'null';
+        if (!bad(pin.color)) return pin.color;
+        const tags = pin.tags_data || [];
+        const iconTag = tags.find(t => t.icon && t.icon === pin.icon);
+        if (iconTag && !bad(iconTag.color)) return iconTag.color;
+        const colored = tags.find(t => !bad(t.color));
+        return colored ? colored.color : null;
+    }
+
     function _buildMarker(pin) {
         if (!pin.latitude || !pin.longitude) return null;
         const coords = [parseFloat(pin.latitude), parseFloat(pin.longitude)];
         const marker = L.marker(coords, { draggable: true });
 
         if (pin.icon && pin.icon !== 'undefined' && pin.icon !== 'null') {
-            const hasColor = pin.color && pin.color !== 'None' && pin.color !== 'null' && pin.color !== '';
-            const color = hasColor ? pin.color : '#555555';
+            const resolvedColor = _resolvePinColor(pin);
+            const hasColor = !!resolvedColor;
+            const color = hasColor ? resolvedColor : '#555555';
             let iconHtml;
             if (/^[a-z_]+$/.test(pin.icon)) {
                 iconHtml = `<i class="material-icons map-pin-icon" style="color:${color};">${pin.icon}</i>`;

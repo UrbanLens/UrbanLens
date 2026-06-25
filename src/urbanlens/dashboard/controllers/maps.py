@@ -5,6 +5,7 @@ from typing import Any
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Prefetch
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -236,7 +237,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         from django.contrib.gis.geos import Polygon
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        query = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related("badges")
+        query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
 
         bbox_str = request.GET.get("bbox", "").strip()
         if bbox_str:
@@ -248,6 +249,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     bbox_poly.srid = 4326
                     query = query.filter(point__within=bbox_poly)
             except Exception as e:
+                # TODO: Handle specific exception type.
                 logger.warning("Invalid bbox parameter: %s -> %s", bbox_str, e)
 
         map_data = self.get_map_data(request, query)
@@ -292,10 +294,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         try:
-            pin = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("badges").get(slug=pin_slug)
+            pin = Pin.objects.filter(profile=profile).select_related("location").get(slug=pin_slug)
         except Pin.DoesNotExist:
             return JsonResponse({"error": "not found"}, status=404)
-        map_data = self.get_map_data(request, Pin.objects.filter(pk=pin.pk).select_related("location").prefetch_related("badges"))
+        map_data = self.get_map_data(request, Pin.objects.filter(pk=pin.pk).select_related("location"))
         if not map_data:
             return JsonResponse({"error": "not found"}, status=404)
         pin_dict = map_data[0]
@@ -308,11 +310,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return render(request, "dashboard/pages/map/data.html", {"map_data": map_data})
 
     def get_map_data(self, request, query: PinQuerySet | None = None):
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
         if query is None:
-            profile, _ = Profile.objects.get_or_create(user=request.user)
             query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
 
-        query = query.prefetch_related("badges")
+        query = query.prefetch_related(
+            Prefetch("badges", queryset=Badge.objects.with_customizations_for(profile)),
+        )
 
         map_data: list[dict[str, Any]] = []
         for pin in query:

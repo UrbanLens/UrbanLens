@@ -170,6 +170,26 @@ class Pin(abstract.Model):
     # Effective values - resolve overrides against the linked Location
     # ------------------------------------------------------------------
 
+    def _display_badges(self):
+        """Badges that participate in map icon/color priority (tags, categories, statuses).
+
+        Prefetch badges (with customizations) when calling in bulk (e.g. get_map_data).
+        """
+        from urbanlens.dashboard.models.badges.model import KIND_USER
+
+        return self.badges.exclude(kind=KIND_USER).order_by("-order")
+
+    def _winning_display_badge(self) -> Badge | None:
+        """Badge supplying the map icon, when the icon is inherited from a badge."""
+        if self.custom_icon or self.icon:
+            return None
+        for badge in self._display_badges():
+            if badge.custom_icon and not badge.icon_is_overridden:
+                return badge
+            if badge.effective_icon:
+                return badge
+        return None
+
     @property
     def effective_icon(self) -> str | None:
         """Icon to display for this pin following the priority chain.
@@ -177,31 +197,35 @@ class Pin(abstract.Model):
         Priority:
         1. custom_icon uploaded directly for this pin (returns URL)
         2. standard icon key selected for this pin
-        3. highest-order tag that has any icon (custom_icon beats icon)
-        4. None - caller should fall back to location category or default marker
+        3. highest-order tag/category/status that has any icon (custom_icon beats icon)
+        4. None - caller should fall back to the default marker
 
-        Prefetch tags when calling in bulk (e.g. get_map_data).
+        Prefetch badges when calling in bulk (e.g. get_map_data).
         """
         if self.custom_icon:
             return self.custom_icon.url
         if self.icon:
             return self.icon
-        for badge in self.badges.filter(kind="tag").order_by("-order"):
-            if badge.custom_icon:
+        for badge in self._display_badges():
+            if badge.custom_icon and not badge.icon_is_overridden:
                 return badge.custom_icon.url
-            if badge.icon:
-                return badge.icon
+            icon = badge.effective_icon
+            if icon:
+                return icon
         return None
 
     @property
     def effective_color(self) -> str | None:
-        """Color hex string for this pin, inherited from the highest-order tag with a color.
+        """Color hex string for this pin, from the icon-winning badge or next badge with a color.
 
-        Prefetch tags when calling in bulk (e.g. get_map_data).
+        Prefetch badges (with customizations) when calling in bulk (e.g. get_map_data).
         """
-        for badge in self.badges.filter(kind="tag").order_by("-order"):
-            if badge.color:
-                return badge.color
+        winning = self._winning_display_badge()
+        if winning and winning.effective_color:
+            return winning.effective_color
+        for badge in self._display_badges():
+            if badge.effective_color:
+                return badge.effective_color
         return None
 
     # Names produced by Google Maps when a place has no real identity. A pin
@@ -414,8 +438,11 @@ class Pin(abstract.Model):
             "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.badges.filter(kind="status")],
             "profile": self.profile.id,
             "rating": self.rating,
-            "color": self.effective_color,
-            "tags": [{"id": t.id, "name": t.name, "color": t.color, "icon": t.icon} for t in self.badges.filter(kind="tag")],
+            "color": self.color or self.effective_color,
+            "tags": [
+                {"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon}
+                for t in self.badges.filter(kind="tag")
+            ],
         }
 
     def to_detail_json(self) -> dict:

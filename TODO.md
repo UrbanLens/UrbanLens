@@ -182,6 +182,7 @@ Features planned for future releases.
 * Create task to ensure vestigial assets are deleted (e.g. if they were supposed to be deleted already, but there was an error - such as for pin imports, exports, etc). [UL-205]
 * BUG: Map import dialog, existing pins still show "new" in the row. [UL-206]
 * Verify: User imports pins without names, then imports "Labelled Places.json" with the same pins, the names of the originally created pins are updated. [UL-207]
+* on client browser, const _PROFILE_ID = 1; is unnecessary and hints at vulnerabilities. [UL-208]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
