@@ -1,5 +1,57 @@
 @use 'variables' as *;
 
+
+// Map pin icon (Material Icons rendered via Leaflet divIcon)
+.map-pin-icon-wrap {
+    background: none !important;
+    border: none !important;
+}
+
+.map-pin-icon {
+    font-size: 24px !important;
+    display: block !important;
+    line-height: 1 !important;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+    transition: filter 0.15s;
+
+    &:hover {
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7)) brightness(1.15);
+    }
+}
+
+.map-pin-custom-img {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    border-radius: 50%;
+    display: block;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+
+.map-pin-with-circle {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+}
+
+.map-pin-color-circle {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    z-index: 0;
+}
+
+.map-pin-with-circle .map-pin-icon,
+.map-pin-with-circle .map-pin-custom-img,
+.map-pin-with-circle .map-pin-emoji {
+    position: relative;
+    z-index: 1;
+}
+
 // ── Map bottom-left overlay controls ──────────────────────────────────────
 
 .map-bottom-controls {

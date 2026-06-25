@@ -284,6 +284,11 @@
 
     &.collapsed {
         opacity: 0.45;
+
+        &:focus,
+        &:hover {
+            opacity: 1;
+        }
         
         .map-buttons-content {
             max-width: 0;

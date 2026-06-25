@@ -755,13 +755,23 @@
     }
 
     // ── Marker builder ────────────────────────────────────────────────────────
+    function _hexToRgba(hex, alpha) {
+        let h = String(hex).replace('#', '');
+        if (h.length === 3) h = h.split('').map(c => c + c).join('');
+        const r = parseInt(h.slice(0, 2), 16);
+        const g = parseInt(h.slice(2, 4), 16);
+        const b = parseInt(h.slice(4, 6), 16);
+        return `rgba(${r},${g},${b},${alpha})`;
+    }
+
     function _buildMarker(pin) {
         if (!pin.latitude || !pin.longitude) return null;
         const coords = [parseFloat(pin.latitude), parseFloat(pin.longitude)];
         const marker = L.marker(coords, { draggable: true });
 
         if (pin.icon && pin.icon !== 'undefined' && pin.icon !== 'null') {
-            const color = (pin.color && pin.color !== 'None') ? pin.color : '#555555';
+            const hasColor = pin.color && pin.color !== 'None' && pin.color !== 'null' && pin.color !== '';
+            const color = hasColor ? pin.color : '#555555';
             let iconHtml;
             if (/^[a-z_]+$/.test(pin.icon)) {
                 iconHtml = `<i class="material-icons map-pin-icon" style="color:${color};">${pin.icon}</i>`;
@@ -770,7 +780,12 @@
             } else {
                 iconHtml = `<span class="map-pin-emoji">${pin.icon}</span>`;
             }
-            marker.setIcon(L.divIcon({ className: 'map-pin-icon-wrap', html: iconHtml, iconSize: [28,28], iconAnchor: [14,14] }));
+            if (hasColor) {
+                iconHtml = `<span class="map-pin-with-circle" style="position:relative;display:flex;align-items:center;justify-content:center;width:36px;height:36px;"><span class="map-pin-color-circle" style="position:absolute;width:32px;height:32px;border-radius:50%;z-index:0;background:${_hexToRgba(color, 0.8)};"></span><span style="position:relative;z-index:1;display:flex;align-items:center;justify-content:center;">${iconHtml}</span></span>`;
+            }
+            const iconSize = hasColor ? [36, 36] : [28, 28];
+            const iconAnchor = hasColor ? [18, 18] : [14, 14];
+            marker.setIcon(L.divIcon({ className: 'map-pin-icon-wrap', html: iconHtml, iconSize, iconAnchor }));
         }
 
         // Build tag chips: prefer full tag objects (color/icon), fall back to CSV names
