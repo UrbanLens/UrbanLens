@@ -132,6 +132,10 @@ Features planned for future releases.
 * Ensure AI sandboxing. This isn't really necessary now, but would be necessary prior to any MCP usage for security reasons, and would also allow for local AI models. (ollama, etc)
 * Create separate logged-in homepage (small map, widgets, links to other pages, commonly visited pins, etc)
 * "View my profile as..." feature to help explain to user's how privacy settings are being applied.
+* Organize page -> Priority Tab: Send to bottom / Send to top.
+* Badges that are created automatically: start them in a sensible priority order
+* During import dialog: some method of checking all "create badge" checkboxes
+* During import dialog: auto tag starts unchecked (for now)
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
