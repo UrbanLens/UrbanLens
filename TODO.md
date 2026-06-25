@@ -191,6 +191,8 @@ Features planned for future releases.
 * Pin details page: There should be a button to delete the pin. [UL-214]
 * Add FAQ to about page. [UL-217]
 * Export Feature: Additional method of delivery in case the page is reloaded or closed. [UL-218]
+* Handle case where user has a comment, someone else replies to it, and then the original comment is deleted. [UL-219]
+* New Site Tool -> Delete My Data: Fully removes all the user's submitted data from everywhere on the site. [UL-220]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
