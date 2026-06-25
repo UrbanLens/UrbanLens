@@ -13,6 +13,8 @@ Features planned for this release.
 * Ensure fully sanitized user input for pin names, location names, etc, which are passed into external urls. Require strict character sets, min/max lengths, and so on.
 * Per the above, any of that data which gets passed to an AI needs additional safeguards against jailbreaking.
 * Limit username changes to prevent users from pretending to be someone else in comments, etc.
+* UI: Edit category dialog
+* UI: Bulk edit category dialog (buttons are awful)
 
 ## Medium Features
 
@@ -24,6 +26,10 @@ Features planned for this release.
 * When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]
 * On admin stats page: Uptime is incorrect (tracking server uptime, not app uptime). Time charts don't display.
 * During import pins, checking "create badge", the badge is created, but the pins aren't added to it. (They are added to already existing badges you select, though)
+* UI Bug: Multi-select toolbar in dark mode
+* When changing a category to a tag, the tag is visually shown twice in the list until page refresh.
+* Organize > Categories Tab -> Merge button is missing from rows.
+* Organize > Categories Tab -> Edit / merge / delete button should be hidden when not in hover
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]

@@ -114,6 +114,7 @@ class Pin(abstract.Model):
         blank=True,
         related_name="pins",
     )
+    # TODO: Consider this 3 foreign key approach vs 1 foreign key with indexes and queryset methods.
     categories = ManyToManyField(
         "dashboard.Badge",
         blank=True,
