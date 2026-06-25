@@ -1,19 +1,20 @@
 {% if not error and not grouped %}<div id="trip-weather-panel" hidden></div>{% else %}
-<div id="trip-weather-panel" class="trip-weather-panel">
+<div id="trip-weather-panel" class="trip-panel card">
 
-    <div class="trip-weather-header">
+    <div class="card-header">
         <i class="material-icons">wb_cloudy</i>
-        <h3 class="trip-weather-title">Weather</h3>
+        <span>Weather</span>
     </div>
 
     {% if error %}
-    <p class="trip-weather-empty">
+    <p class="trip-panel-empty">
         <i class="material-icons">info_outline</i>
         {{ error }}
     </p>
 
     {% else %}
 
+    <div class="trip-weather-body">
     <div class="trip-weather-days">
         {% for day, entries in grouped %}
             {% if day %}
@@ -81,6 +82,7 @@
             </div>
             {% endif %}
         {% endfor %}
+    </div>
     </div>
 
     {% endif %}
