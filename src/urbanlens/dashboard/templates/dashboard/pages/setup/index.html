@@ -84,7 +84,7 @@
                 </div>
 
                 <div class="setup-step--actions">
-                    <button class="submit-button" onclick="goToStep(2)">
+                    <button class="submit-button btn btn--primary btn--lg" onclick="goToStep(2)">
                         Get Started
                         <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-left:.25rem">arrow_forward</i>
                     </button>
@@ -168,7 +168,7 @@
                         <i class="material-icons" style="vertical-align:middle;font-size:1rem">arrow_back</i>
                         Back
                     </button>
-                    <button class="submit-button" onclick="goToStep(3)">
+                    <button class="submit-button btn btn--primary btn--lg" onclick="goToStep(3)">
                         Next
                         <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-left:.25rem">arrow_forward</i>
                     </button>
@@ -226,7 +226,7 @@
                         <i class="material-icons" style="vertical-align:middle;font-size:1rem">arrow_back</i>
                         Back
                     </button>
-                    <button class="submit-button" onclick="goToStep(4)">
+                    <button class="submit-button btn btn--primary btn--lg" onclick="goToStep(4)">
                         Next
                         <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-left:.25rem">arrow_forward</i>
                     </button>
@@ -275,7 +275,7 @@
                         <i class="material-icons" style="vertical-align:middle;font-size:1rem">arrow_back</i>
                         Back
                     </button>
-                    <button class="submit-button" onclick="goToStep(5)">
+                    <button class="submit-button btn btn--primary btn--lg" onclick="goToStep(5)">
                         Next
                         <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-left:.25rem">arrow_forward</i>
                     </button>
@@ -301,7 +301,7 @@
                         <form method="post" action="{% url 'setup' %}" style="display:inline">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="complete">
-                            <button type="submit" class="submit-button">
+                            <button type="submit" class="submit-button btn btn--primary btn--lg">
                                 <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-right:.25rem">admin_panel_settings</i>
                                 Open Site Admin
                             </button>

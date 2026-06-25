@@ -223,32 +223,32 @@
 	white-space: nowrap;
 
 	&--primary {
-		background: rgba($primary-color, .12);
-		color: $primary-color;
-		border-color: rgba($primary-color, .25);
+		background: $primary-color;
+		color: $color-blue-1700;
+		border-color: color.scale($primary-color, $lightness: -10%);
 	}
 
 	&--success {
 		background: $success-bg;
-		color: $success-color;
-		border-color: color.adjust($success-bg, $lightness: -12%);
+		color: $color-green-1700;
+		border-color: color.adjust($success-bg, $lightness: -10%);
 	}
 
 	&--warning {
 		background: $warning-bg;
-		color: $warning-color;
-		border-color: color.adjust($warning-bg, $lightness: -12%);
+		color: $color-amber-1700;
+		border-color: color.adjust($warning-bg, $lightness: -10%);
 	}
 
 	&--danger {
 		background: $danger-bg;
-		color: $danger-color;
-		border-color: $danger-border;
+		color: $color-red-1700;
+		border-color: color.scale($danger-color, $lightness: -10%);
 	}
 
 	&--neutral {
 		background: var(--ul-surface-4);
-		color: var(--ul-text-2);
+		color: var(--ul-black);
 		border-color: var(--ul-border);
 	}
 }
@@ -360,27 +360,27 @@
 	}
 
 	&--info {
-		background: rgba($primary-color, .08);
-		color: $primary-color;
-		border-color: rgba($primary-color, .2);
+		background: $color-blue-100;
+		color: $color-blue-1700;
+		border-color: $color-blue-300;
 	}
 
 	&--success {
-		background: $success-bg;
-		color: $success-color;
-		border-color: color.adjust($success-bg, $lightness: -12%);
+		background: $color-green-100;
+		color: $color-green-1700;
+		border-color: $color-green-300;
 	}
 
 	&--warning {
-		background: $warning-bg;
-		color: $warning-color;
-		border-color: color.adjust($warning-bg, $lightness: -12%);
+		background: $color-amber-100;
+		color: $color-amber-1700;
+		border-color: $color-amber-300;
 	}
 
 	&--danger {
-		background: $danger-bg;
-		color: $danger-color;
-		border-color: $danger-border;
+		background: $color-red-100;
+		color: $color-red-1700;
+		border-color: $color-red-300;
 	}
 }
 

@@ -15,6 +15,7 @@
 .btn {
 	@include btn-base;
 
+	&:focus,
 	&:hover {
 		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
 	}
@@ -29,6 +30,7 @@
 		border-color: var(--ul-button-border);
 		color: var(--ul-button-text);
 
+		&:focus,
 		&:hover {
 			background-color: var(--ul-button-hover-bg);
 			border-color: var(--ul-button-hover-border);
@@ -41,30 +43,33 @@
 	}
 
 	&--ghost {
-		border-color: var(--ul-border);
+		border-color: var(--ul-surface-2b);
 		color: var(--ul-text-2);
 
+		&:focus,
 		&:hover {
 			background: var(--ul-surface-1);
 			color: var(--ul-text-1);
-			border-color: var(--ul-border-strong);
 		}
 	}
 
 	&--link {
-		color: $primary-color;
+		color: var(--ul-primary-color);
 		padding-inline: .5rem;
+		border-color: var(--ul-surface-2b);
 
+		&:focus,
 		&:hover {
 			background: var(--ul-hover-bg-primary);
 		}
 	}
 
 	&--danger {
-		color: $danger-color;
+		color: $color-red-1300;
 		border-color: $danger-border;
 		background: $danger-bg;
 
+		&:focus,
 		&:hover {
 			background: color.scale($danger-bg, $lightness: -4%);
 		}
@@ -72,9 +77,10 @@
 
 	&--danger-filled {
 		background: $danger-color;
-		border-color: $danger-color;
-		color: var(--ul-text-4);
+		border-color: color.scale($danger-color, $lightness: -10%);
+		color: var(--ul-text-0);
 
+		&:focus,
 		&:hover {
 			background: color.adjust($danger-color, $lightness: -8%);
 			border-color: color.adjust($danger-color, $lightness: -8%);
@@ -87,7 +93,7 @@
 	}
 
 	&--lg {
-		padding: .65rem 1.35rem;
+		padding: 0.6rem 1.25rem;
 		font-size: 1rem;
 	}
 
@@ -108,24 +114,7 @@
 .file-button {
 	@extend .btn;
 	@extend .btn--primary;
-	padding: 9px 20px;
-	font-weight: 500;
-	letter-spacing: 0.01em;
-
-	&:hover {
-		box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
-	}
-
-	&:active {
-		transform: translateY(1px);
-		box-shadow: none;
-	}
-
-	&:disabled,
-	&[disabled] {
-		transform: none;
-		box-shadow: none;
-	}
+	@extend .btn--lg;
 
 	&.is-loading {
 		opacity: .78;
@@ -157,15 +146,16 @@ input[type="submit"] {
 }
 
 .btn-icon {
-	&.btn-icon--danger {
-		&:hover,
-		&:focus {
-			background: $danger-bg;
-			color: $danger-color;
+	&--danger {
+
+		&:hover {
+			color: $color-red-1300;
+			border-color: color.scale($danger-color, $lightness: -10%);
+			background: $danger-color;
 		}
 	}
 
-	&.btn-icon--active {
+	&--active {
 		color: $accent-1;
 
 		&:hover,
@@ -175,13 +165,13 @@ input[type="submit"] {
 		}
 	}
 
-	&.btn-icon--global-edit {
+	&--global-edit {
 		color: $accent-2;
 
 		&:hover,
 		&:focus {
 			background: $accent-2-bg;
-			color: $accent-2-fg;
+			color: var(--ul-black);
 		}
 	}
 }

@@ -595,10 +595,10 @@ $z-nav: 1100;
     --ul-accent-amber-fg: #{$accent-2-fg};
 
     --ul-button-bg: #{$primary-color};
-    --ul-button-border: var(--ul-border);
+    --ul-button-border: color.scale($primary-color, $lightness: -10%);
     --ul-button-text: var(--ul-text-0);
     --ul-button-hover-bg: var(--ul-accent-purple-bg);
-    --ul-button-hover-border: var(--ul-border-strong);
+    --ul-button-hover-border: color.scale($accent-1-bg, $lightness: -10%);
     --ul-button-hover-text: var(--ul-text-0);
 
     // Tooltips - intentionally dark in both themes for legibility
