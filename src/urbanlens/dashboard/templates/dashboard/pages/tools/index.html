@@ -37,33 +37,51 @@
 
                         <div class="export-options">
                             <label class="export-select-all">
-                                <input type="checkbox" id="export-select-all" checked>
+                                <span class="cat-select-wrap">
+                                    <input type="checkbox" id="export-select-all" checked>
+                                    <span class="cat-select-check"></span>
+                                </span>
                                 <span class="export-select-all-label">Select all</span>
                             </label>
 
                             <div class="export-checkboxes">
                                 <label class="export-checkbox-item">
-                                    <input type="checkbox" name="export_types" value="profile" class="export-type-cb" checked>
+                                    <span class="cat-select-wrap">
+                                        <input type="checkbox" name="export_types" value="profile" class="export-type-cb" checked>
+                                        <span class="cat-select-check"></span>
+                                    </span>
                                     <i class="material-icons">person</i>
                                     <span>Profile</span>
                                 </label>
                                 <label class="export-checkbox-item">
-                                    <input type="checkbox" name="export_types" value="pins" class="export-type-cb" checked>
+                                    <span class="cat-select-wrap">
+                                        <input type="checkbox" name="export_types" value="pins" class="export-type-cb" checked>
+                                        <span class="cat-select-check"></span>
+                                    </span>
                                     <i class="material-icons">place</i>
                                     <span>Pins</span>
                                 </label>
                                 <label class="export-checkbox-item">
-                                    <input type="checkbox" name="export_types" value="comments" class="export-type-cb" checked>
+                                    <span class="cat-select-wrap">
+                                        <input type="checkbox" name="export_types" value="comments" class="export-type-cb" checked>
+                                        <span class="cat-select-check"></span>
+                                    </span>
                                     <i class="material-icons">comment</i>
                                     <span>Comments</span>
                                 </label>
                                 <label class="export-checkbox-item">
-                                    <input type="checkbox" name="export_types" value="photos" class="export-type-cb" checked>
+                                    <span class="cat-select-wrap">
+                                        <input type="checkbox" name="export_types" value="photos" class="export-type-cb" checked>
+                                        <span class="cat-select-check"></span>
+                                    </span>
                                     <i class="material-icons">photo_library</i>
                                     <span>Photos</span>
                                 </label>
                                 <label class="export-checkbox-item">
-                                    <input type="checkbox" name="export_types" value="trips" class="export-type-cb" checked>
+                                    <span class="cat-select-wrap">
+                                        <input type="checkbox" name="export_types" value="trips" class="export-type-cb" checked>
+                                        <span class="cat-select-check"></span>
+                                    </span>
                                     <i class="material-icons">directions_car</i>
                                     <span>Trips</span>
                                 </label>
@@ -71,7 +89,7 @@
                         </div>
 
                         <div class="export-actions">
-                            <button type="submit" class="btn btn-primary export-submit-btn" id="export-submit-btn">
+                            <button type="submit" class="btn btn--primary export-submit-btn" id="export-submit-btn">
                                 <i class="material-icons">download</i>
                                 <span>Export</span>
                             </button>
@@ -113,12 +131,15 @@
 
 .tools-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
     gap: 1.5rem;
 }
 
 .tools-card {
     border-radius: 10px;
+    width: 100%;
+    max-width: 480px;
+    justify-self: center;
 }
 
 .tools-card-desc {
@@ -136,13 +157,34 @@
 .export-select-all {
     display: flex;
     align-items: center;
-    gap: .5rem;
+    gap: .35rem;
     cursor: pointer;
     font-size: .85rem;
     font-weight: 600;
     color: var(--ul-grey-7);
     margin-bottom: .75rem;
     user-select: none;
+}
+
+.export-select-all .cat-select-wrap {
+    width: 26px;
+    height: 26px;
+}
+
+.export-select-all input:indeterminate ~ .cat-select-check {
+    background: var(--ul-primary, #1976D2);
+    border-color: var(--ul-primary, #1976D2);
+}
+
+.export-select-all input:indeterminate ~ .cat-select-check::after {
+    opacity: 1;
+    width: 10px;
+    height: 0;
+    border-left: 0;
+    border-right: 0;
+    border-top: 0;
+    border-bottom: 2px solid #fff;
+    transform: none;
 }
 
 .export-select-all-label {
@@ -176,11 +218,9 @@
     border-color: var(--ul-border);
 }
 
-.export-checkbox-item input[type=checkbox] {
-    width: 16px;
-    height: 16px;
-    accent-color: var(--ul-primary, #1976D2);
-    cursor: pointer;
+.export-checkbox-item .cat-select-wrap {
+    width: 26px;
+    height: 26px;
     flex-shrink: 0;
 }
 
@@ -277,6 +317,7 @@
 (function () {
     const selectAll = document.getElementById('export-select-all');
     const checkboxes = document.querySelectorAll('.export-type-cb');
+    const EXPORT_LEAVE_MSG = 'An export is still in progress. Leaving now will stop the export and you may lose your download.';
 
     selectAll.addEventListener('change', function () {
         checkboxes.forEach(cb => { cb.checked = selectAll.checked; });
@@ -289,11 +330,47 @@
         });
     });
 
+    function isExportInProgress() {
+        const poll = document.getElementById('export-status-poll');
+        return !!(poll && poll.hasAttribute('hx-get'));
+    }
+
+    function beforeUnloadHandler(e) {
+        if (!isExportInProgress()) return;
+        e.preventDefault();
+        e.returnValue = '';
+    }
+
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+
+    document.addEventListener('click', function (e) {
+        if (!isExportInProgress()) return;
+        const a = e.target.closest('a[href]');
+        if (!a) return;
+        const href = a.getAttribute('href');
+        if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0 || a.target === '_blank') return;
+        e.preventDefault();
+        const proceed = window.confirmDialog
+            ? window.confirmDialog({
+                title: 'Leave page?',
+                message: EXPORT_LEAVE_MSG,
+                confirmLabel: 'Leave anyway',
+                danger: true,
+            })
+            : Promise.resolve(window.confirm(EXPORT_LEAVE_MSG));
+        proceed.then(function (ok) {
+            if (ok) window.location.href = a.href;
+        });
+    }, true);
+
     // Hide the form once HTMX swaps in the progress panel
     document.body.addEventListener('htmx:afterSwap', function (evt) {
-        if (evt.detail.target.id === 'export-status-area') {
-            const form = document.getElementById('export-form-wrap');
-            if (form) form.style.display = 'none';
+        const targetId = evt.detail.target.id;
+        if (targetId === 'export-status-area' || targetId === 'export-status-poll') {
+            if (targetId === 'export-status-area') {
+                const form = document.getElementById('export-form-wrap');
+                if (form) form.style.display = 'none';
+            }
         }
     });
 })();

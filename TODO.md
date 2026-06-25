@@ -189,6 +189,8 @@ Features planned for future releases.
 * BUG: Something I did caused a new pin to be created with a badge named "Unknown". My workflow started with the creation of a new pin by right-clicking on the main map. [UL-212]
 * BUG: Developer toolbar only shows up when the ui admin setting for environment is set to development, but not when the env var is set to development and the ui setting is default. [UL-213]
 * Pin details page: There should be a button to delete the pin. [UL-214]
+* Add FAQ to about page. [UL-217]
+* Export Feature: Additional method of delivery in case the page is reloaded or closed. [UL-218]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
