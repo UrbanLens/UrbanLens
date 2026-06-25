@@ -30,6 +30,7 @@ DEFAULT_CATEGORIES: list[dict] = [
     {"name": "Monument", "icon": "🗽", "color": "#9E9E9E"},
     {"name": "Morgue", "icon": "💀", "color": "#795548"},
     {"name": "Park", "icon": "🏞️", "color": "#4CAF50"},
+    {"name": "Parking", "icon": "🅿️", "color": "#607D8B"},
     {"name": "Power Plant", "icon": "⚡", "color": "#FF5722"},
     {"name": "Prison", "icon": "🔒", "color": "#F44336"},
     {"name": "Resort", "icon": "🌴", "color": "#FFEB3B"},

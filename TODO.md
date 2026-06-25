@@ -15,6 +15,7 @@ Features planned for this release.
 * UI: Edit category dialog [UL-146]
 * UI: Bulk edit category dialog (buttons are awful) [UL-147]
 * Organize page: Remove a bunch of text ("Manage tags, categories...", "Your personal categories...") [UL-148]
+* Add descriptions to badges that are pre-populated.
 
 ## Medium Features
 
@@ -30,6 +31,9 @@ Features planned for this release.
 * When changing a category to a tag, the tag is visually shown twice in the list until page refresh. [UL-152]
 * Organize > Categories Tab -> Merge button is missing from rows. [UL-153]
 * Organize > Categories Tab -> Edit / merge / delete button should be hidden when not in hover [UL-154]
+* On pin details page, add badge dialog, the search bar doesn't work. [UL-195]
+* Organize Page: After editing a badge, the edit button for other rows no longer opens the edit dialog. [UL-197]
+* Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
@@ -144,10 +148,10 @@ Features planned for future releases.
 * Badges that are created automatically: start them in a sensible priority order [UL-167]
 * During import dialog: some method of checking all "create badge" checkboxes [UL-168]
 * Organize Page: Move badge to child of another just by dragging (maybe??) [UL-169]
-* Better emojis for: legal stuff (admission ticket, museum), underground, tunnel, sewer grate, hardhat. Verify we have: religions, languages, countries, urbex gear (boots, flashlight, backpack), photography stuff, time/calendar stuff (seasons?), greek letters [UL-170]
+* Better emojis for: legal stuff (admission ticket, museum), underground, tunnel, sewer grate, hardhat. Verify we have: religions, languages, countries, urbex gear (boots, flashlight, backpack), photography stuff, time/calendar stuff (seasons?), greek letters, shapes (square, triangle, etc), ceramic tile (mosaic, etc), eyeglasses, book, magnifying glass, share symbol, muscle icon, weights, ninja, gavel, snake eating itself, better "repeat" arrow, "tag" icon (i.e. 'labelled'), save symbol [UL-170]
 * UI: Toast notifications on bottom right of screen, and the close button is placed incorrectly (and isn't needed at all, frankly). [UL-171]
 * "Recently used emojis" to make selecting them easier. [UL-172]
-* Pre-populate example tags for new users (to help explain usage of site). [UL-173]
+* Pre-populate example tags for new users (to help explain usage of site). "Notable", "Graffiti", "Photography", "Dangerous", "Popular" [UL-173]
 * dashboard/models/badges/model.py > Icons should probably be organized elsewhere. We probably want more elegant solution for defining all 3 traits for all of them (emoji, name, keywords). Many don't have keywords currently. [UL-174]
 * When creating badges (or editing them), consider adding another section to choose badges as children as well as parents. This could make it easier for users to make a large number of changes more quickly. [UL-175]
 * When creating new badges during pin import, allow an AI to select an emoji and color for it. [UL-176]
@@ -166,6 +170,18 @@ Features planned for future releases.
 * Organize Page: Create a new badge should probably open a dialog rather than an element inline. [UL-188]
 * Create badge dialog -> We can put the "upload custom icon" in the choose icon dropdown, so it doesn't look like it's a separate thing. [UL-189]
 * UI Bug: Bulk edit dialog -> visual bug for parent categories without an icon with respect to the tag chip and selector. [UL-190]
+* Organize page: Confirm before deleting badge with pins. [UL-192]
+* Bulk editing pins (based on search, badges, etc). For instance: Bulk set rating. [UL-193]
+* Main Map: When searching, show loading overlay [UL-194]
+* Main map: Way to show pins as a list (particularly when searching). [UL-196]
+* Organize > Merge Dialog -> Make an effort to choose the best merge candidate. (The one with an icon, then most pins). Is this done already?? [UL-198]
+* Organize Page -> Allow reordering kind tabs somehow, to make understanding the feature set more accessible. [UL-200]
+* Organize Page > Edit Badge -> The first parent badges to show are the ones already selected. [UL-201]
+* BUG: Not able to read all takeout files. For example: Parking.csv [UL-203]
+* Support importing kmz [UL-204]
+* Create task to ensure vestigial assets are deleted (e.g. if they were supposed to be deleted already, but there was an error - such as for pin imports, exports, etc). [UL-205]
+* BUG: Map import dialog, existing pins still show "new" in the row. [UL-206]
+* Verify: User imports pins without names, then imports "Labelled Places.json" with the same pins, the names of the originally created pins are updated. [UL-207]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

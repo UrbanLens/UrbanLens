@@ -709,7 +709,7 @@ document.getElementById('cat-sel-delete').addEventListener('click', async functi
     var n = _selected.size;
     if (n === 0) return;
     var msg = (n === 1 ? 'Delete 1 category?' : 'Delete ' + n + ' categories?')
-            + '\nPins and locations will keep their other categories.';
+            + '\nPins and locations will NOT be deleted.';
     if (!await confirmDialog({title:'Delete Categories', message:msg, confirmLabel:'Delete'})) return;
 
     var ids = Array.from(_selected).map(function(id) { return parseInt(id, 10); });

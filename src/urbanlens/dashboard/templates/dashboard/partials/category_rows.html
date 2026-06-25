@@ -69,7 +69,7 @@
             <form hx-post="{% url 'category.delete' category.id %}"
                   hx-target="#category-rows"
                   hx-swap="innerHTML"
-                  hx-confirm="Delete '{{ category.name }}'? Pins and locations will keep their other categories."
+                  hx-confirm="Delete '{{ category.name }}'? Pins and locations will NOT be deleted."
                   style="display:inline;">
                 {% csrf_token %}
                 <button type="submit" class="btn-icon btn-icon--danger" title="Delete">

@@ -14,30 +14,23 @@
     {# ── Tab bar ──────────────────────────────────────────────────────────────── #}
     <div class="organize-tab-bar" role="tablist">
         <button type="button" class="organize-tab{% if active_tab == 'tags' %} active{% endif %}"
-                role="tab" data-tab="tags" aria-controls="panel-tags"
-                data-tooltip-pos="below">
+                role="tab" data-tab="tags" aria-controls="panel-tags">
             <i class="material-icons">label</i> Tags
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'categories' %} active{% endif %}"
-                role="tab" data-tab="categories" aria-controls="panel-categories"
-                data-tooltip-pos="below">
+                role="tab" data-tab="categories" aria-controls="panel-categories">
             <i class="material-icons">category</i> Categories
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'status' %} active{% endif %}"
-                role="tab" data-tab="status" aria-controls="panel-status"
-                data-tooltip-pos="below">
+                role="tab" data-tab="status" aria-controls="panel-status">
             <i class="material-icons">flag_circle</i> Statuses
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'people' %} active{% endif %}"
-                role="tab" data-tab="people" aria-controls="panel-people"
-                data-tooltip="Private labels for other users - only you can see these."
-                data-tooltip-pos="below">
+                role="tab" data-tab="people" aria-controls="panel-people">
             <i class="material-icons">people</i> People
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
-                role="tab" data-tab="priority" aria-controls="panel-priority"
-                data-tooltip="Drag to set which badge icon appears when a pin has more than one."
-                data-tooltip-pos="below">
+                role="tab" data-tab="priority" aria-controls="panel-priority">
             <i class="material-icons">low_priority</i> Priority
         </button>
     </div>
@@ -1603,7 +1596,7 @@ window._orgBulkSync = function(n, opts) {
     // ── Bulk delete ───────────────────────────────────────────────────────────
     async function _tagBulkDelete() {
         var n = _tagSelected.size; if (!n) return;
-        if (!await confirmDialog({title:'Delete Tags',message:(n===1?'Delete 1 tag?':'Delete '+n+' tags?')+'\nPins will keep their other tags.',confirmLabel:'Delete'})) return;
+        if (!await confirmDialog({title:'Delete Tags',message:(n===1?'Delete 1 tag?':'Delete '+n+' tags?')+'\nPins will NOT be deleted.',confirmLabel:'Delete'})) return;
         var ids = Array.from(_tagSelected).map(function(id){return parseInt(id,10);});
         fetch('{% url "tag.bulk_delete" %}', {
             method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
@@ -2011,7 +2004,7 @@ window._orgBulkSync = function(n, opts) {
     // ── Bulk delete ───────────────────────────────────────────────────────────
     async function _catBulkDelete() {
         var n=_catSelected.size; if(!n)return;
-        if(!await confirmDialog({title:'Delete Categories',message:(n===1?'Delete 1 category?':'Delete '+n+' categories?')+'\nPins and locations will keep their other categories.',confirmLabel:'Delete'}))return;
+        if(!await confirmDialog({title:'Delete Categories',message:(n===1?'Delete 1 category?':'Delete '+n+' categories?')+'\nPins and locations will NOT be deleted.',confirmLabel:'Delete'}))return;
         var ids=Array.from(_catSelected).map(function(id){return parseInt(id,10);});
         fetch('{% url "category.bulk_delete" %}', {
             method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},

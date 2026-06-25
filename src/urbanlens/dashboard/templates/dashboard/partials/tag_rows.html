@@ -92,7 +92,7 @@
             <form hx-post="{% url 'tag.delete' tag.id %}"
                   hx-target="#tag-rows"
                   hx-swap="innerHTML"
-                  hx-confirm="Delete '{{ tag.name }}'? Pins will keep their other tags."
+                  hx-confirm="Delete '{{ tag.name }}'? Pins will NOT be deleted."
                   style="display:inline;">
                 {% csrf_token %}
                 <button type="submit" class="btn-icon btn-icon--danger" title="Delete">
@@ -121,7 +121,7 @@
             <form hx-post="{% url 'tag.delete' tag.id %}"
                   hx-target="#tag-rows"
                   hx-swap="innerHTML"
-                  hx-confirm="Delete '{{ tag.name }}'? Pins will keep their other tags."
+                  hx-confirm="Delete '{{ tag.name }}'? Pins will NOT be deleted."
                   style="display:inline;">
                 {% csrf_token %}
                 <button type="submit" class="btn-icon btn-icon--danger" title="Delete">
