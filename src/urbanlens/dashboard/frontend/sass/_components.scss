@@ -85,8 +85,9 @@
 	outline: none;
 }
 
-.ul-form-row {
+.form-row {
 	@include form-row;
+
 	&--two-col {
 		@include form-row;
 		display: grid;
