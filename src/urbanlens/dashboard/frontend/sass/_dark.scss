@@ -1,12 +1,10 @@
 @use 'sass:color';
 @use 'variables' as *;
 
-$section-shadow: 3px 3px 10px rgba(0,0,0,.2);
-
 @mixin standard-section {
     background: var(--ul-grey-0);
     border-color: var(--ul-black);
-    box-shadow: $section-shadow;
+    box-shadow: 3px 3px 10px rgba(0,0,0,.2);
 }
 
 [data-theme="dark"] {
@@ -963,6 +961,7 @@ $section-shadow: 3px 3px 10px rgba(0,0,0,.2);
     .card {
         .comment-input {
             background-color: var(--ul-grey-0a);
+        }
     }
 
     .reaction-pill {
