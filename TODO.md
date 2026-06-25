@@ -37,7 +37,6 @@ Features planned for this release.
 * Organize Page: After editing a badge, the edit button for other rows no longer opens the edit dialog. [UL-197]
 * Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]
 * On pin details page, clicking edit, the dialog doesn't scroll when overflowing page height. [UL-215]
-* BUG: On main map: "Failed to delete pin" on a pin I created by right clicking. [UL-216]
 * Trip Details > Adding Pin: The suggestions are only geocoded, not pin searches. [UL-227]
 
 ## Optimizations / Latency
