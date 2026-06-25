@@ -1715,3 +1715,12 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 #cache-status.refreshing {
     color: rgba($ui-fp-spinner, 0.55);
 }
+
+// - Dark Mode
+[data-theme="dark"] {
+    .pin-cluster {
+        color: var(--ul-grey-9);
+        border: 1px solid var(--ul-grey-1);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, .4), 0 0 0 2px var(--ul-grey-0);
+    }
+}

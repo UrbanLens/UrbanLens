@@ -153,6 +153,14 @@ Features planned for future releases.
 * More (or all?) vector emojis that can change color. [UL-177]
 * On the map: icons with a color are surrounded by a circle of that color. Icons without a color are not. (consider: foreground colors and background colors? That might be overkill.) [UL-178]
 * Limit username changes to prevent users from pretending to be someone else in comments, etc. [UL-145]
+* BUG: Very first login form on first site install says "welcome back" [UL-179]
+* UI: Login form SSO buttons text color [UL-180]
+* Onboarding: first map load -> "This is your first time using the map. Would you like to import any pins?" [UL-181]
+* Pin import dialog in dark mode: Section header and pin rows blend too much. They should be separately conceptually (indent, border, bg color, etc) [UL-182]
+* Allow bulk-selecting pins to add them to a campus as detail pins. [UL-183]
+* UI: Tiny "saved" notice on settings pages should be better distinguished. [UL-184]
+* Map Layer: Show/Hide Street Details (otherwise does not show on sat view) [UL-185]
+* UI Bug: Map cluster groups in dark mode need more contrasting color (white?) [UL-186]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
