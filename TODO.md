@@ -206,6 +206,15 @@ Features planned for future releases.
 * Replace "added by {username}" with nothing or "added by you" for the same user in order to reduce text and simplify the ui. [UL-232]
 * UI Bug: Trip Details Page > Activity section: When no confirmed activities exist, and you click on the activity tab, the content section seems to disappear, rather than existing with no content. [UL-233]
 * Implement a few extra "undos". For instance: pin deletion, etc. [UL-234]
+* Handle case where a user is invited via one email address, but joins the site using a different email. [UL-235]
+* When a user signs up from an email invite link, they shouldn't need to verify their email again (assuming they provide the same email as the invite link was sent out to). [UL-236]
+* Friend request pipeline needs UX work. Clicking notification does nothing, and the notification doesn't include an accept/reject button. Going to your profile, you see the accept/reject buttons there... great! clicking accept makes the section go away (great!) but the friends section isn't refreshed to show the new connection, so the user is left confused if it worked or not. Dotted line is distracting. Add label dropdown isn't closed when clicking somewhere else. Hovering over stars doesn't show the filled in stars (this must reuse existing components, not reinvent the wheel). [UL-237]
+* On the public profile page, if "nothing in common yet", then hide the section. Buttons need ui work in dark mode. Private notes section needs stand-out color to distinguish it. [UL-238]
+* When logging out and then logging in as a new user, the cache was reused for that new user's map. That shouldn't happen. The cache needs to be tied to the current user and only used when that user is logged in. [UL-239]
+* After accepting a friend request, mark the friend request notification read. This should probably happen when you view the friend request on your profile page at all. [UL-240]
+* After accepting friend request, the old friend request notification shouldn't have accept or reject buttons anymore. [UL-241]
+* When all notifications are marked read, the notification counter above the bell doesn't update until page refresh. [UL-242]
+* When you are friends with a user, the "add friend" button on their profile shouldn't show up. Instead, it should be "remove friend". Implement the remove friend feature for this. [UL-243]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
