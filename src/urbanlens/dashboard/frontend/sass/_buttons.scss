@@ -161,8 +161,8 @@ input[type="submit"] {
 
 		&:hover {
 			color: $color-red-1300;
-			border-color: color.scale($danger-color, $lightness: -10%);
-			background: $danger-color;
+			border-color: $color-red-1500;
+			background: $color-red-500;
 		}
 	}
 
