@@ -345,6 +345,8 @@ class ExportStartView(LoginRequiredMixin, View):
             daemon=True,
         )
         thread.start()
+        
+        logger.info("Export started for user %s", request.user.pk)
 
         return render(
             request,
@@ -369,15 +371,19 @@ class ExportStatusView(LoginRequiredMixin, View):
         try:
             uuid.UUID(job_id)
         except ValueError:
+            logger.error("Invalid job ID: %s", job_id)  # noqa: TRY400
             return HttpResponse("Invalid job ID", status=400)
 
         exp_dir = _export_dir(job_id)
         data = _read_status(exp_dir)
 
         if not data:
+            logger.debug("Job not found or expired: job %s, user %s", job_id, request.user.pk)
             return HttpResponse("Job not found or expired", status=404)
 
         if data.get("user_id") != request.user.pk:
+            # TODO: Candidate for sending out a notice
+            logger.warning("Attempting to view export for unauthorized user: job %s, user %s", job_id, request.user.pk)
             return HttpResponse("Forbidden", status=403)
 
         return render(request, "dashboard/partials/export_progress.html", {"job_id": job_id, **data})
@@ -399,20 +405,27 @@ class ExportDownloadView(LoginRequiredMixin, View):
         try:
             uuid.UUID(job_id)
         except ValueError:
+            logger.error("Invalid job ID: %s", job_id)  # noqa: TRY400
             return redirect("tools.index")
 
         exp_dir = _export_dir(job_id)
         data = _read_status(exp_dir)
 
         if not data or data.get("user_id") != request.user.pk:
+            # TODO: Candidate for sending out a notice
+            logger.warning("Attempting to download export for unauthorized user: job %s, user %s", job_id, request.user.pk)
             return redirect("tools.index")
 
         if data.get("status") != "done":
+            logger.warning("Attempting to download export prior to being ready: job %s, user %s", job_id, request.user.pk)
             return redirect("tools.index")
 
         zip_path = os.path.join(exp_dir, "export.zip")
         if not os.path.exists(zip_path):
+            logger.warning("Export file not found: job %s, user %s", job_id, request.user.pk)
             return redirect("tools.index")
+
+        logger.info("Export complete, serving file: job %s, user %s", job_id, request.user.pk)
 
         today = date.today().isoformat()
         fh = open(zip_path, "rb")  # noqa: SIM115 — FileResponse takes ownership and closes the handle

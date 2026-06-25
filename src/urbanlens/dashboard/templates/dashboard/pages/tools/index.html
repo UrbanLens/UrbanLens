@@ -224,6 +224,14 @@
     flex-shrink: 0;
 }
 
+
+.export-select-all [type=checkbox]+span:not(.lever):before, 
+.export-select-all [type=checkbox]:not(.filled-in)+span:not(.lever):after,
+.export-checkbox-item [type=checkbox]+span:not(.lever):before, 
+.export-checkbox-item [type=checkbox]:not(.filled-in)+span:not(.lever):after {
+    display: none;
+}
+
 .export-checkbox-item .material-icons {
     font-size: 1.1rem;
     color: var(--ul-grey-5);
