@@ -136,6 +136,7 @@ Features planned for future releases.
 * Badges that are created automatically: start them in a sensible priority order
 * During import dialog: some method of checking all "create badge" checkboxes
 * During import dialog: auto tag starts unchecked (for now)
+* Organize Page: Move badge to child of another just by dragging (maybe??)
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
