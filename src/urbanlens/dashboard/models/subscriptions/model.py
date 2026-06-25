@@ -1,0 +1,129 @@
+"""Subscription role models and feature access helpers."""
+
+from __future__ import annotations
+
+from datetime import timedelta
+
+from django.contrib.auth.models import User
+from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, Q, TextChoices, UniqueConstraint
+from django.utils import timezone
+
+from urbanlens.dashboard.models import abstract
+
+
+class SiteFeature(TextChoices):
+    """Feature flags that can be unlocked by subscription roles."""
+
+    AI = "ai", "AI features"
+
+
+class SubscriptionRole(abstract.Model):
+    """Extensible role definition that grants a set of site features."""
+
+    slug = CharField(max_length=50, unique=True, db_index=True)
+    name = CharField(max_length=100)
+    description = CharField(max_length=255, blank=True)
+    features = CharField(max_length=500, blank=True, help_text="Comma-separated SiteFeature values.")
+
+    class Meta(abstract.Model.Meta):
+        ordering = ["name"]
+
+    @classmethod
+    def ensure_defaults(cls) -> None:
+        """Create built-in roles without overwriting future custom roles."""
+        cls.objects.get_or_create(
+            slug="vip",
+            defaults={
+                "name": "VIP",
+                "description": "Grants access to AI-assisted features.",
+                "features": SiteFeature.AI,
+            },
+        )
+
+    @property
+    def feature_set(self) -> set[str]:
+        return {feature.strip() for feature in (self.features or "").split(",") if feature.strip()}
+
+    def grants(self, feature: SiteFeature | str) -> bool:
+        return str(feature) in self.feature_set
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class UserSubscription(abstract.Model):
+    """Subscription role granted to a user by a site administrator."""
+
+    user = ForeignKey(User, on_delete=CASCADE, related_name="subscriptions")
+    role = ForeignKey(SubscriptionRole, on_delete=CASCADE, related_name="user_subscriptions")
+    granted_by = ForeignKey(User, on_delete=CASCADE, related_name="granted_subscriptions")
+    expires_at = DateTimeField(null=True, blank=True)
+    revoked_at = DateTimeField(null=True, blank=True)
+
+    class Meta(abstract.Model.Meta):
+        ordering = ["-created"]
+        constraints = [
+            UniqueConstraint(
+                fields=["user", "role"],
+                condition=Q(revoked_at__isnull=True),
+                name="unique_active_user_subscription_role",
+            ),
+        ]
+
+    @property
+    def is_indefinite(self) -> bool:
+        return self.expires_at is None
+
+    def is_active(self) -> bool:
+        return self.revoked_at is None and (self.expires_at is None or self.expires_at > timezone.now())
+
+    def set_duration_months(self, months: int | None) -> None:
+        self.expires_at = None if months is None else timezone.now() + timedelta(days=months * 30)
+
+    def revoke(self) -> None:
+        self.revoked_at = timezone.now()
+        self.save(update_fields=["revoked_at", "updated"])
+
+    def __str__(self) -> str:
+        return f"{self.user} → {self.role}"
+
+
+class PendingSubscriptionGrant(abstract.Model):
+    """Subscription grant attached to an invite for a user who has not joined yet."""
+
+    invitation = ForeignKey("dashboard.FriendInvitation", on_delete=CASCADE, related_name="pending_subscription_grants")
+    role = ForeignKey(SubscriptionRole, on_delete=CASCADE, related_name="pending_grants")
+    granted_by = ForeignKey(User, on_delete=CASCADE, related_name="pending_subscription_grants")
+    duration_months = CharField(max_length=20, blank=True, help_text="Blank means indefinite.")
+
+    class Meta(abstract.Model.Meta):
+        ordering = ["-created"]
+
+    def duration_as_int(self) -> int | None:
+        if not self.duration_months:
+            return None
+        return int(self.duration_months)
+
+
+def user_has_feature(user: User, feature: SiteFeature | str) -> bool:
+    """Return whether the user has an active role granting the feature."""
+    if not user or not user.is_authenticated:
+        return False
+    now = timezone.now()
+    subscriptions = UserSubscription.objects.filter(
+        user=user,
+        revoked_at__isnull=True,
+    ).filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now)).select_related("role")
+    return any(subscription.role.grants(feature) for subscription in subscriptions)
+
+
+def grant_subscription(user: User, role: SubscriptionRole, granted_by: User, months: int | None) -> UserSubscription:
+    """Create or update an active grant for a user and role."""
+    subscription = UserSubscription.objects.filter(user=user, role=role, revoked_at__isnull=True).first()
+    if subscription is None:
+        subscription = UserSubscription(user=user, role=role, granted_by=granted_by)
+    subscription.set_duration_months(months)
+    subscription.granted_by = granted_by
+    subscription.revoked_at = None
+    subscription.save()
+    return subscription

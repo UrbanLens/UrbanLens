@@ -160,11 +160,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 pin.badges.add(*Badge.objects.categories().filter(id__in=category_ids))
             pin.save()
 
-            try:
-                pin.suggest_category(append_suggestion=True)
-            except Exception:
-                # TODO: Handle specific exception type.
-                logger.warning("suggest_category failed for pin %s", pin.pk, exc_info=True)
+            from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+
+            if user_has_feature(request.user, SiteFeature.AI):
+                try:
+                    pin.suggest_category(append_suggestion=True)
+                except Exception:
+                    # TODO: Handle specific exception type.
+                    logger.warning("suggest_category failed for pin %s", pin.pk, exc_info=True)
 
             response = {"ok": True, "pin_slug": pin.slug or str(pin.uuid)}
             # When a coordinate falls inside multiple bounding boxes, tell the

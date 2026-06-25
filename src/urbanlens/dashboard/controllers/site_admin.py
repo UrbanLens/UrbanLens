@@ -337,3 +337,66 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             "server_time": now,
         }
         return render(request, "dashboard/pages/site_admin_stats.html", context)
+
+
+class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Manage subscription grants without exposing a general user directory."""
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+
+    def get(self, request):
+        from urbanlens.dashboard.models.subscriptions import SubscriptionRole, UserSubscription
+
+        SubscriptionRole.ensure_defaults()
+        grants = UserSubscription.objects.filter(granted_by=request.user, revoked_at__isnull=True).select_related("user", "role")
+        return render(
+            request,
+            "dashboard/pages/site_admin_subscriptions.html",
+            {
+                "page_name": "site-admin-subscriptions",
+                "roles": SubscriptionRole.objects.all(),
+                "grants": grants,
+                "saved": request.GET.get("saved"),
+                "error": request.GET.get("error"),
+            },
+        )
+
+    def post(self, request):
+        from urllib.parse import urlencode
+
+        from django.contrib.auth.models import User
+        from django.db.models import Q
+
+        from urbanlens.dashboard.models.subscriptions import SubscriptionRole, UserSubscription, grant_subscription
+
+        SubscriptionRole.ensure_defaults()
+        action = request.POST.get("action", "grant")
+        if action == "revoke":
+            UserSubscription.objects.filter(pk=request.POST.get("subscription_id"), granted_by=request.user).update(revoked_at=timezone.now())
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=revoked")
+
+        if action == "update":
+            sub = UserSubscription.objects.filter(pk=request.POST.get("subscription_id"), granted_by=request.user).first()
+            if sub:
+                sub.set_duration_months(_parse_duration_months(request.POST.get("duration_months")))
+                sub.save(update_fields=["expires_at", "updated"])
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=updated")
+
+        identifier = request.POST.get("user_identifier", "").strip()
+        role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
+        user = User.objects.filter(Q(username__iexact=identifier) | Q(email__iexact=identifier), is_active=True).first()
+        if not identifier or not role or not user:
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "User or role not found."}))
+        grant_subscription(user, role, request.user, _parse_duration_months(request.POST.get("duration_months")))
+        return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=granted")
+
+
+def _parse_duration_months(raw: str | None) -> int | None:
+    """Parse form duration; blank/indefinite means no expiry."""
+    if not raw or raw == "indefinite":
+        return None
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return None

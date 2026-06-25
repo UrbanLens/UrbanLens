@@ -438,6 +438,14 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Please enter a valid email address.", status=400)
 
         inviter = request.user.profile
+        subscription_role_slug = request.POST.get("subscription_role", "").strip()
+        subscription_duration = request.POST.get("subscription_duration", "")
+        subscription_role = None
+        if subscription_role_slug and request.user.has_perm("dashboard.view_site_admin"):
+            from urbanlens.dashboard.models.subscriptions import SubscriptionRole
+
+            SubscriptionRole.ensure_defaults()
+            subscription_role = SubscriptionRole.objects.filter(slug=subscription_role_slug).first()
 
         # Check if a registered user already has this email
         existing_user = User.objects.filter(email__iexact=email, is_active=True).select_related("profile").first()
@@ -459,6 +467,11 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 return HttpResponse("Could not send friend request.", status=400)
 
             notify_friend_request(inviter, to_profile)
+            if subscription_role is not None:
+                from urbanlens.dashboard.controllers.site_admin import _parse_duration_months
+                from urbanlens.dashboard.models.subscriptions import grant_subscription
+
+                grant_subscription(existing_user, subscription_role, request.user, _parse_duration_months(subscription_duration))
 
             return render(
                 request,
@@ -476,6 +489,15 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
 
         invitation = FriendInvitation(inviter=inviter, email=email)
         invitation.save()
+        if subscription_role is not None:
+            from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant
+
+            PendingSubscriptionGrant.objects.create(
+                invitation=invitation,
+                role=subscription_role,
+                granted_by=request.user,
+                duration_months="" if subscription_duration == "indefinite" else subscription_duration,
+            )
 
         signup_url = request.build_absolute_uri(
             f"/signup/?invite={invitation.token}",

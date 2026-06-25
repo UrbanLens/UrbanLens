@@ -69,3 +69,13 @@ def add_page_name(request: HttpRequest) -> dict[str, str]:
     # This will be a className, so replace anything that would trip up css
     page_name = re.sub(r"[^a-zA-Z0-9]", "-", page_name)
     return {"page_name": page_name}
+
+
+def add_feature_access(request: HttpRequest) -> dict[str, bool]:
+    """Expose subscription-gated feature visibility to templates."""
+    try:
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+
+        return {"can_use_ai_features": user_has_feature(request.user, SiteFeature.AI)}
+    except Exception:
+        return {"can_use_ai_features": False}

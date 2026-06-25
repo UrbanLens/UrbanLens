@@ -1,3 +1,27 @@
+
+<style>
+.invite-subscription-panel {
+    display: grid;
+    grid-template-columns: 1fr minmax(8rem, auto) minmax(8rem, auto);
+    gap: .5rem;
+    align-items: center;
+    width: 100%;
+    margin: .75rem 0;
+    padding: .75rem;
+    border: 1px solid rgba(99, 102, 241, .22);
+    border-radius: 1rem;
+    background: linear-gradient(135deg, rgba(99, 102, 241, .08), rgba(6, 182, 212, .08));
+}
+.invite-subscription-panel label {
+    display: inline-flex;
+    gap: .35rem;
+    align-items: center;
+    font-weight: 700;
+}
+@media (max-width: 700px) {
+    .invite-subscription-panel { grid-template-columns: 1fr; }
+}
+</style>
 <dialog id="{{ dialog_id|default:'invite-friend-dialog' }}" class="dialog invite-dialog">
     <div class="invite-dialog-inner">
         <div class="dialog-header">
@@ -19,6 +43,13 @@
                 <div class="invite-form-row">
                     <input type="email" name="email" class="invite-email-input"
                         placeholder="friend@example.com" required autocomplete="email">
+                    {% if perms.dashboard.view_site_admin %}
+                    <div class="invite-subscription-panel">
+                        <label><i class="material-icons">workspace_premium</i> Optional subscription</label>
+                        <select name="subscription_role"><option value="">No subscription</option><option value="vip">VIP - AI features</option></select>
+                        <select name="subscription_duration"><option value="indefinite">Indefinite</option><option value="1">1 month</option><option value="3">3 months</option><option value="6">6 months</option><option value="12">12 months</option></select>
+                    </div>
+                    {% endif %}
                     <button type="submit" class="btn btn--primary">
                         <i class="material-icons">send</i> Send
                     </button>
