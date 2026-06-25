@@ -15,6 +15,7 @@ Features planned for this release.
 * Limit username changes to prevent users from pretending to be someone else in comments, etc.
 * UI: Edit category dialog
 * UI: Bulk edit category dialog (buttons are awful)
+* Organize page: Remove a bunch of text ("Manage tags, categories...", "Your personal categories...")
 
 ## Medium Features
 
@@ -143,6 +144,15 @@ Features planned for future releases.
 * Badges that are created automatically: start them in a sensible priority order
 * During import dialog: some method of checking all "create badge" checkboxes
 * Organize Page: Move badge to child of another just by dragging (maybe??)
+* Better emojis for: legal stuff (admission ticket, museum), underground, tunnel, sewer grate, hardhat. Verify we have: religions, languages, countries, urbex gear (boots, flashlight, backpack), photography stuff, time/calendar stuff (seasons?), greek letters
+* UI: Toast notifications on bottom right of screen, and the close button is placed incorrectly (and isn't needed at all, frankly).
+* "Recently used emojis" to make selecting them easier.
+* Pre-populate example tags for new users (to help explain usage of site).
+* dashboard/models/badges/model.py > Icons should probably be organized elsewhere. We probably want more elegant solution for defining all 3 traits for all of them (emoji, name, keywords). Many don't have keywords currently.
+* When creating badges (or editing them), consider adding another section to choose badges as children as well as parents. This could make it easier for users to make a large number of changes more quickly.
+* When creating new badges during pin import, allow an AI to select an emoji and color for it.
+* More (or all?) vector emojis that can change color.
+* On the map: icons with a color are surrounded by a circle of that color. Icons without a color are not. (consider: foreground colors and background colors? That might be overkill.)
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
