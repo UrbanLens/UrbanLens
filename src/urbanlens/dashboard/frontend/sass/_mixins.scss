@@ -56,8 +56,8 @@
 	border: 1px solid var(--ul-border);
 	border-radius: $radius-sm;
 	font-size: .9rem;
-	color: var(--ul-text-1);
-	background: var(--ul-surface-0);
+	color: var(--ul-grey-8);
+	background: var(--ul-grey-0);
 	box-sizing: border-box;
 	transition: border-color .15s, box-shadow .15s;
 
@@ -66,7 +66,7 @@
 	}
 
 	&::placeholder {
-		color: var(--ul-text-3);
+		color: var(--ul-grey-6);
 	}
 
 	&:disabled {
@@ -78,7 +78,7 @@
 // ── Surfaces ──────────────────────────────────────────────────────────────────
 
 @mixin surface($radius: $radius-md) {
-	background: var(--ul-surface-0);
+	background: var(--ul-grey-0);
 	border: 1px solid var(--ul-border);
 	border-radius: $radius;
 }
@@ -111,7 +111,8 @@
 	user-select: none;
 	transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
 	background: none;
-	color: var(--ul-text-1);
+	color: var(--ul-grey-8);
+	text-transform: none;
 
 	&:active {
 		transform: translateY(1px);
@@ -141,11 +142,11 @@
 @mixin btn-ghost {
 	@include btn-base;
 	border-color: var(--ul-border);
-	color: var(--ul-text-2);
+	color: var(--ul-grey-7);
 
 	&:hover {
-		background: var(--ul-surface-1);
-		color: var(--ul-text-1);
+		background: var(--ul-grey-1);
+		color: var(--ul-grey-8);
 		border-color: var(--ul-border-strong);
 	}
 }
@@ -170,7 +171,7 @@
 
 	&:hover,
 	&:focus {
-		background: var(--ul-surface-0a);
+		background: var(--ul-grey-0a);
 		color: $danger-color;
 	}
 }
@@ -184,7 +185,7 @@
 	background: transparent;
 	cursor: pointer;
 	flex-shrink: 0;
-	color: var(--ul-text-3);
+	color: var(--ul-grey-6);
 	padding: 0;
 	transition: background .12s, color .12s;
 
@@ -194,7 +195,7 @@
 
 	&:hover {
 		background: var(--ul-hover-bg);
-		color: var(--ul-text-1);
+		color: var(--ul-grey-8);
 	}
 }
 
@@ -210,7 +211,7 @@
 	width: $size;
 	height: $size;
 	border: 2px solid rgba(255, 255, 255, .35);
-	border-top-color: var(--ul-text-4);
+	border-top-color: var(--ul-grey-5);
 	border-radius: 50%;
 	animation: ul-spin .65s linear infinite;
 	vertical-align: middle;
@@ -276,8 +277,8 @@
 	max-width: 90vw;
 	max-height: 90vh;
 	overflow: visible;
-	background: var(--ul-surface-0);
-	color: var(--ul-text-1);
+	background: var(--ul-grey-0);
+	color: var(--ul-grey-8);
 
 	&::backdrop {
 		background: rgba(0, 0, 0, .55);
@@ -312,7 +313,7 @@
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: .04em;
-		color: var(--ul-text-3);
+		color: var(--ul-grey-6);
 	}
 
 	input[type="text"],
@@ -331,7 +332,7 @@
 	align-items: center;
 	padding: $bar-padding-y $bar-padding-x;
 	border-top: 1px solid var(--ul-border);
-	background: var(--ul-surface-0);
+	background: var(--ul-grey-0);
 }
 
 @mixin empty-state {
@@ -341,7 +342,7 @@
 	justify-content: center;
 	gap: $space-sm;
 	padding: $space-xl;
-	color: var(--ul-text-3);
+	color: var(--ul-grey-6);
 	text-align: center;
 
 	.material-icons {
@@ -360,7 +361,7 @@
 	padding: 8px 14px;
 	font-size: .875rem;
 	font-weight: 500;
-	color: var(--ul-text-1);
+	color: var(--ul-grey-8);
 	text-decoration: none;
 	background: none;
 	border: none;
@@ -371,12 +372,12 @@
 
 	.material-icons {
 		font-size: 1.05rem;
-		color: var(--ul-text-2);
+		color: var(--ul-grey-7);
 		flex-shrink: 0;
 	}
 
 	&:hover {
-		background: var(--ul-surface-1);
+		background: var(--ul-grey-1);
 
 		.material-icons {
 			color: $primary-color;

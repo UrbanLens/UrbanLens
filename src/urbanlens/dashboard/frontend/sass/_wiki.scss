@@ -17,7 +17,7 @@
         background: linear-gradient(135deg, $ui-cyan-700 0%, $ui-cyan-600 50%, $ui-cyan-500 100%);
         border-radius: 16px;
         padding: 1.75rem 2rem;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
         margin-bottom: 1.5rem;
         flex-wrap: wrap;
     }
@@ -101,7 +101,7 @@
         padding: .45rem .9rem;
         font-size: .85rem;
         font-weight: 500;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
         text-decoration: none;
         transition: background .15s;
 
@@ -120,7 +120,7 @@
 
         .wiki-description {
             font-size: .9rem;
-            color: var(--ul-text-1);
+            color: var(--ul-grey-8);
             margin: 0 0 .6rem;
             line-height: 1.55;
         }
@@ -136,7 +136,7 @@
             align-items: center;
             gap: .3rem;
             font-size: .78rem;
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
 
             .material-icons {
                 font-size: .9rem;
@@ -189,7 +189,7 @@
 
     // ── Card base ─────────────────────────────────────────────────────────
     .wiki-card {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border: 1px solid var(--ul-border);
         ;
         border-radius: 14px;
@@ -203,7 +203,7 @@
         gap: .6rem;
         padding: .85rem 1.1rem;
         border-bottom: 1px solid $ui-slate-200;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
 
         .material-icons {
             font-size: 1.1rem;
@@ -227,7 +227,7 @@
         border: 1px solid rgba(255, 255, 255, .5);
         border-radius: 8px;
         background: rgba(255, 255, 255, .15);
-        color: var(--ul-text-5);
+        color: var(--ul-grey-4);
         font-size: .85rem;
         font-weight: 500;
         cursor: pointer;
@@ -333,7 +333,7 @@
         &--primary {
             background: $ui-cyan-600;
             border-color: $ui-cyan-600;
-            color: var(--ul-text-4);
+            color: var(--ul-grey-5);
 
             &:hover {
                 background: $ui-cyan-700;
@@ -348,7 +348,7 @@
         gap: 0;
         border-bottom: 2px solid $ui-slate-200;
         padding: 0 1rem;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     .wiki-tab {
@@ -416,12 +416,12 @@
         ;
         border-radius: 10px;
         padding: .75rem 1rem;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         position: relative;
 
         &--reverted {
             opacity: .55;
-            background: var(--ul-surface-0);
+            background: var(--ul-grey-0);
         }
     }
 
@@ -500,7 +500,7 @@
 
     .wiki-change-from {
         color: $ui-red-700;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-radius: 4px;
         padding: .1rem .35rem;
         font-size: .82rem;
@@ -515,7 +515,7 @@
 
     .wiki-change-to {
         color: $ui-green-700;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-radius: 4px;
         padding: .1rem .35rem;
         font-size: .82rem;
@@ -528,7 +528,7 @@
         padding: .3rem .7rem;
         border-radius: 6px;
         border-color: $ui-red-300;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         color: $ui-red-600;
         font-size: .78rem;
         opacity: .7;
@@ -546,7 +546,7 @@
         gap: .5rem;
         margin: .5rem 1rem .75rem;
         padding: .55rem .75rem;
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
         border-radius: 8px;
         font-size: .82rem;
         color: $ui-blue-700;
@@ -572,7 +572,7 @@
             label {
                 font-size: .82rem;
                 font-weight: 600;
-                color: var(--ul-text-2);
+                color: var(--ul-grey-7);
             }
 
             input,

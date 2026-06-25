@@ -26,7 +26,7 @@
 	width: 72px;
 	height: 72px;
 	border-radius: 50%;
-	background: var(--ul-surface-4, #f3f4f6);
+	background: var(--ul-grey-4, #f3f4f6);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -34,19 +34,19 @@
 
 	.material-icons {
 		font-size: 2.2rem;
-		color: var(--ul-text-3, #9ca3af);
+		color: var(--ul-grey-6, #9ca3af);
 	}
 }
 
 .error-page__title {
 	font-size: 1.5rem;
 	font-weight: 700;
-	color: var(--ul-text-1, #111827);
+	color: var(--ul-grey-8, #111827);
 	margin: 0 0 .6rem;
 }
 
 .error-page__body {
-	color: var(--ul-text-2, #6b7280);
+	color: var(--ul-grey-7, #6b7280);
 	line-height: 1.6;
 	margin: 0 0 2rem;
 	font-size: .95rem;

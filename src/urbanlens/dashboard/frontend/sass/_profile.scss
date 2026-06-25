@@ -13,7 +13,7 @@
 
 // Hero card - avatar + identity side by side
 .profile-hero {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
@@ -54,7 +54,7 @@
     height: 96px;
     border-radius: 50%;
     background: linear-gradient(135deg, $primary-color 0%, color.adjust($primary-color, $lightness: -15%) 100%);
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -168,7 +168,7 @@
     }
 
     &--muted {
-        background: var(--ul-surface-4);
+        background: var(--ul-grey-4);
         border-color: var(--ul-border);
         color: $text-muted;
     }
@@ -206,7 +206,7 @@
     &--primary {
         background: $primary-color;
         border-color: $primary-color;
-        color: var(--ul-text-5);
+        color: var(--ul-grey-4);
 
         &:hover {
             background: color-mix(in srgb, $primary-color 85%, black);
@@ -215,14 +215,14 @@
     }
 
     &--ghost {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: var(--ul-border);
         color: $text-secondary;
 
         &:hover {
             border-color: var(--ul-border-strong);
-            color: var(--ul-text-1);
-            background: var(--ul-surface-4);
+            color: var(--ul-grey-8);
+            background: var(--ul-grey-4);
         }
     }
 
@@ -279,7 +279,7 @@
 }
 
 .profile-stat {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
@@ -292,12 +292,12 @@
     .stat-value {
         font-size: 1.8rem;
         font-weight: 700;
-        color: var(--ul-text-0a);
+        color: var(--ul-grey-9a);
         line-height: 1;
     }
 
     .stat-label {
-        color: var(--ul-text-0);
+        color: var(--ul-grey-9);
         font-size: 0.78rem;
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -307,8 +307,8 @@
 
     &--highlight {    
         background: linear-gradient(135deg,
-                color-mix(in srgb, $primary-color 8%, var(--ul-surface-0)) 0%,
-                color-mix(in srgb, $primary-color 4%, var(--ul-surface-0)) 100%);
+                color-mix(in srgb, $primary-color 8%, var(--ul-grey-0)) 0%,
+                color-mix(in srgb, $primary-color 4%, var(--ul-grey-0)) 100%);
         border-color: color-mix(in srgb, $primary-color 30%, transparent);
 
         .stat-label {
@@ -319,7 +319,7 @@
 
 // Generic profile section card
 .profile-section {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
@@ -389,7 +389,7 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     font-size: 0.95rem;
@@ -522,7 +522,7 @@
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     appearance: auto;
 
     &:focus {
@@ -640,7 +640,7 @@
         linear-gradient(-45deg, transparent 75%, #ccc 75%);
     background-size: 10px 10px;
     background-position: 0 0, 0 5px, 5px -5px, -5px 0px;
-    background-color: var(--ul-text-4);
+    background-color: var(--ul-grey-5);
 }
 
 .cop-preview {
@@ -735,7 +735,7 @@
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
 
     &:focus {
         outline: none;
@@ -758,7 +758,7 @@
     padding: 1rem 2rem;
     border: 2px solid var(--ul-border);
     border-radius: $radius-md;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
 
@@ -794,7 +794,7 @@
 
     &:hover:not(.active) {
         border-color: $text-muted;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 }
 
@@ -840,7 +840,7 @@
 }
 
 .edit-card {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     padding: 1.5rem;
@@ -930,7 +930,7 @@
     width: 80px;
     height: 80px;
     border-radius: 50%;
-    background: var(--ul-surface-4);
+    background: var(--ul-grey-4);
     border: 2px solid var(--ul-border);
     display: flex;
     align-items: center;
@@ -947,7 +947,7 @@
     align-items: center;
     gap: 6px;
     padding: 8px 16px;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid $primary-color;
     border-radius: $radius-sm;
     font-size: 0.875rem;
@@ -974,7 +974,7 @@ textarea.edit-textarea {
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     box-sizing: border-box;
 
     &:focus {
@@ -1026,7 +1026,7 @@ textarea.edit-textarea {
     align-items: center;
     gap: 10px;
     padding: 9px 12px;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
 }
@@ -1102,7 +1102,7 @@ textarea.edit-textarea {
     border-radius: $radius-sm;
     font-size: 0.9rem;
     color: $text-color;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
 
     &::placeholder {
         color: color.adjust($text-secondary, $lightness: 15%);
@@ -1153,7 +1153,7 @@ textarea.edit-textarea {
 // ── Profile page modernization ────────────────────────────────────────────────
 
 .profile-hero {
-    background: linear-gradient(135deg, var(--ul-surface-0) 0%, var(--ul-surface-1) 100%);
+    background: linear-gradient(135deg, var(--ul-grey-0) 0%, var(--ul-grey-1) 100%);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     box-shadow: 0 2px 12px rgba(0, 0, 0, .08);
@@ -1174,7 +1174,7 @@ textarea.edit-textarea {
 // ── Private profile annotation panel ─────────────────────────────────────────
 
 .profile-annotation-panel {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-left: 3px solid color-mix(in srgb, $primary-color 50%, transparent);
     border-radius: $radius-md;
@@ -1205,7 +1205,7 @@ textarea.edit-textarea {
     font-size: 0.7rem;
     font-weight: 600;
     color: $text-secondary;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     border: 1px solid var(--ul-border);
     border-radius: 999px;
     padding: 2px 8px;
@@ -1308,7 +1308,7 @@ textarea.edit-textarea {
     top: calc(100% + 4px);
     left: 0;
     z-index: 50;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
@@ -1327,7 +1327,7 @@ textarea.edit-textarea {
     resize: vertical;
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     color: var(--ul-text);
     font-size: 0.875rem;
     padding: 0.6rem 0.75rem;
@@ -1427,7 +1427,7 @@ textarea.edit-textarea {
 }
 
 .pan-note {
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     overflow: hidden;
@@ -1439,7 +1439,7 @@ textarea.edit-textarea {
     justify-content: space-between;
     padding: .4rem .65rem;
     border-bottom: 1px solid var(--ul-border);
-    background: var(--ul-surface-4);
+    background: var(--ul-grey-4);
 }
 
 .pan-note-date {
@@ -1481,7 +1481,7 @@ textarea.edit-textarea {
     resize: vertical;
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     color: var(--ul-text);
     font-size: 0.875rem;
     padding: 0.55rem 0.7rem;
@@ -1520,7 +1520,7 @@ textarea.edit-textarea {
     gap: .3rem;
     padding: .3rem .75rem;
     background: $primary-color;
-    color: var(--ul-text-4);
+    color: var(--ul-grey-5);
     border: none;
     border-radius: $radius-sm;
     font-size: .8rem;
@@ -1582,7 +1582,7 @@ textarea.edit-textarea {
     padding: 9px 12px;
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     color: var(--ul-text);
     font-size: 0.875rem;
 
@@ -1676,7 +1676,7 @@ textarea.edit-textarea {
 .ext-warn-url {
     font-size: 0.85rem;
     color: $text-color;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     padding: 8px 12px;
@@ -1741,7 +1741,7 @@ textarea.edit-textarea {
 
     &:hover,
     &:focus {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
         color: $ui-red-600;
         outline: none;
     }
@@ -1749,7 +1749,7 @@ textarea.edit-textarea {
 
 // Create card
 .pinlist-create-card {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     padding: 1.5rem;
@@ -1759,7 +1759,7 @@ textarea.edit-textarea {
 
 // List cards
 .pinlist-card {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     margin-bottom: 0.75rem;
@@ -1781,7 +1781,7 @@ textarea.edit-textarea {
     width: 44px;
     height: 44px;
     border-radius: 50%;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1842,7 +1842,7 @@ textarea.edit-textarea {
 }
 
 .pinlist-order-badge {
-    background: var(--ul-surface-4);
+    background: var(--ul-grey-4);
     border-radius: 20px;
     padding: 1px 8px;
 }
@@ -1886,7 +1886,7 @@ textarea.edit-textarea {
     padding: 8px 12px;
     font-size: 0.9rem;
     color: $text-primary;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     transition: border-color 0.15s;
 
     &:focus {
@@ -2002,7 +2002,7 @@ a.profile-stat--link {
     padding: .5rem .65rem;
     border-radius: 10px;
     border: 1px solid var(--ul-border);
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     transition: border-color .15s, box-shadow .15s;
 
     &:hover {
@@ -2049,7 +2049,7 @@ a.profile-stat--link {
 
 .friend-avatar-placeholder {
     background: $primary-color;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2071,7 +2071,7 @@ a.profile-stat--link {
 
     &.friend-avatar-placeholder {
         background: $primary-color;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
     }
 }
 
@@ -2119,7 +2119,7 @@ a.profile-stat--link {
 // ── Friend requests section (partial) ────────────────────────────────────────
 
 .friend-requests-section {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid $ui-amber-200;
     border-radius: 10px;
     padding: .75rem 1rem;
@@ -2216,7 +2216,7 @@ a.profile-stat--link {
     }
 
     &--accept {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: $ui-green-300;
         color: $ui-green-800;
 
@@ -2226,22 +2226,22 @@ a.profile-stat--link {
     }
 
     &--reject {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: $ui-red-300;
         color: $ui-red-800;
 
         &:hover {
-            background: var(--ul-surface-0a);
+            background: var(--ul-grey-0a);
         }
     }
 
     &--ignore {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: $ui-slate-200;
         color: $ui-slate-500;
 
         &:hover {
-            background: var(--ul-surface-0);
+            background: var(--ul-grey-0);
         }
     }
 
@@ -2252,7 +2252,7 @@ a.profile-stat--link {
         padding: .25rem .5rem;
 
         &:hover {
-            background: var(--ul-surface-0a);
+            background: var(--ul-grey-0a);
             border-color: $ui-red-300;
             color: $ui-red-800;
         }
@@ -2273,7 +2273,7 @@ a.profile-stat--link {
 }
 
 .btn-friend-accept {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border-color: $ui-green-300;
     color: $ui-green-800;
 
@@ -2283,22 +2283,22 @@ a.profile-stat--link {
 }
 
 .btn-friend-reject {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border-color: $ui-red-300;
     color: $ui-red-800;
 
     &:hover {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
     }
 }
 
 .btn-friend-ignore {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border-color: $ui-slate-200;
     color: $ui-slate-500;
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 }
 

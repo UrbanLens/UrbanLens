@@ -2,8 +2,8 @@
 @use 'variables' as *;
 
 [data-theme="dark"] {
-    background: var(--ul-surface-1);
-    color: var(--ul-text-1);
+    background: var(--ul-grey-1);
+    color: var(--ul-grey-8);
 
     input[type=text],
     input[type=number],
@@ -16,7 +16,7 @@
     input[type=tel],
     input[type=search],
     textarea {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
     }
 
     input:not([type]):disabled,
@@ -43,11 +43,11 @@
     input[type=number]:not(.browser-default)[readonly=readonly],
     input[type=search]:not(.browser-default):disabled,
     input[type=search]:not(.browser-default)[readonly=readonly] {
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 
     body {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         color: $color-grey-1;
     }
     
@@ -56,21 +56,21 @@
     }
     
     .app-nav-brand-name {
-        color: var(--ul-text-0);
+        color: var(--ul-grey-9);
     }
 
     .page-content > .ul-section {
-        background-color: var(--ul-surface-0a);
+        background-color: var(--ul-grey-0a);
     }
 
     .tag-chip {
-        color: var(--ul-text-7);
+        color: var(--ul-grey-2);
     }
 
     .tag-stat {
-        background: var(--ul-surface-0);
-        border-color: var(--ul-surface-0b);
-        color: var(--ul-text-6);
+        background: var(--ul-grey-0);
+        border-color: var(--ul-grey-0b);
+        color: var(--ul-grey-3);
 
         &.tag-stat--children {
             background: $dk-panel-bg-alt;
@@ -79,14 +79,14 @@
         }
 
         &.tag-stat--total {
-            background: var(--ul-surface-0);
-            border-color: var(--ul-surface-8b);
+            background: var(--ul-grey-0);
+            border-color: var(--ul-grey-8b);
             color: $color-grey-5;
         }
     }
 
     .tag-view-toggle {
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
     }
 
     .tag-view-btn {
@@ -94,7 +94,7 @@
         border-right-color: $color-grey-7b;
 
         &:hover {
-            background: var(--ul-surface-0);
+            background: var(--ul-grey-0);
             color: $color-grey-1;
         }
     }
@@ -108,7 +108,7 @@
     }
 
     .settings-title {
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 
     .settings-section-title,
@@ -132,16 +132,16 @@
     .form-input,
     textarea.form-input {
         color: $color-grey-1;
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
     }
 
     .ul-radio-button {
-        border-color: var(--ul-surface-0b);
-        background: var(--ul-surface-0);
+        border-color: var(--ul-grey-0b);
+        background: var(--ul-grey-0);
     }
 
     .settings-theme-option {
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
 
         span {
             color: $color-grey-3a;
@@ -153,7 +153,7 @@
 
         &:hover:not(.active) {
             background: $color-grey-8a;
-            border-color: var(--ul-surface-6b);
+            border-color: var(--ul-grey-6b);
         }
 
         &.active {
@@ -169,8 +169,8 @@
 
     .tag-parent-select,
     .tag-parent-option {
-        background: var(--ul-surface-0);
-        border-color: var(--ul-surface-7b);
+        background: var(--ul-grey-0);
+        border-color: var(--ul-grey-7b);
     }
 
     .tag-parent-option:hover {
@@ -179,7 +179,7 @@
 
     .icon-option {
         color: $color-grey-2;
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
     }
 
     .icon-option:hover {
@@ -196,7 +196,7 @@
     }
 
     .icon-picker-trigger {
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
         color: $color-grey-1;
     }
 
@@ -229,7 +229,7 @@
     }
 
     .icon-custom-upload-btn {
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
         color: $color-grey-5a;
     }
 
@@ -239,23 +239,23 @@
 
     .page-footer {
         background-color: $dk-nav-bg;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
     }
 
     .edit-input,
     input.edit-input,
     textarea.edit-textarea {
         color: $color-grey-1;
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
     }
 
     .edit-avatar-placeholder {
-        background: var(--ul-surface-0);
-        border-color: var(--ul-surface-7b);
+        background: var(--ul-grey-0);
+        border-color: var(--ul-grey-7b);
     }
 
     .edit-avatar-preview {
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
     }
 
     .edit-avatar-upload-btn {
@@ -264,20 +264,20 @@
     }
 
     .edit-link-row {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     .edit-add-link-input {
         color: $color-grey-1;
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
     }
 
     .edit-discord-details {
-        border-color: var(--ul-surface-8b);
+        border-color: var(--ul-grey-8b);
     }
 
     .edit-discord-summary {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     .field-status--saved {
@@ -285,7 +285,7 @@
     }
 
     .settings-cluster-value {
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
     }
 
     .settings-cluster-slider-wrap input[type="range"] {
@@ -293,11 +293,11 @@
     }
 
     .settings-reset-btn {
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
         color: $color-grey-3b;
 
         &:hover {
-            border-color: var(--ul-surface-6b);
+            border-color: var(--ul-grey-6b);
         }
     }
 
@@ -322,7 +322,7 @@
         &:hover {
             background: $color-red-800;
             border-color: $color-red-800;
-            color: var(--ul-text-4);
+            color: var(--ul-grey-5);
         }
     }
 
@@ -388,7 +388,7 @@
     }
 
     .profile-hero {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     .profile-full-name {
@@ -409,7 +409,7 @@
     }
 
     .social-link {
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
         color: $color-grey-3b;
 
         &:hover {
@@ -419,15 +419,15 @@
     }
 
     .shared-visited-item {
-        border-color: var(--ul-surface-8b);
+        border-color: var(--ul-grey-8b);
         color: $color-grey-2;
     }
 
     .friend-card {
-        border-color: var(--ul-surface-8b);
+        border-color: var(--ul-grey-8b);
 
         &:hover {
-            border-color: var(--ul-surface-6b);
+            border-color: var(--ul-grey-6b);
         }
     }
 
@@ -482,7 +482,7 @@
     }
 
     .btn-friend-ignore {
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
         color: $color-grey-5a;
     }
 
@@ -558,12 +558,12 @@
     }
 
     .btn-friend--ignore {
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
         color: $color-grey-5a;
     }
 
     .btn-friend--remove {
-        border-color: var(--ul-surface-7b);
+        border-color: var(--ul-grey-7b);
         color: $color-grey-5a;
 
         &:hover {
@@ -685,7 +685,7 @@
     }
 
     .trips-empty .trips-empty-icon {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
     }
 
     .trip-card:hover {
@@ -712,14 +712,14 @@
 
             &:hover,
             &:focus {
-                background: var(--ul-surface-1);
+                background: var(--ul-grey-1);
                 color: $color-blue-500;
                 border-color: var(--ul-border);
             }
         }
 
         &--delete {
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
 
             &:hover,
             &:focus {
@@ -734,20 +734,20 @@
         border-bottom-color: var(--ul-border);
 
         .badge {
-            background: var(--ul-surface-4);
-            color: var(--ul-text-2);
+            background: var(--ul-grey-4);
+            color: var(--ul-grey-7);
         }
     }
 
     .view-toggle-group {
-        background: var(--ul-surface-4);
+        background: var(--ul-grey-4);
     }
 
     .view-toggle-btn {
 
         &:hover {
-            background: var(--ul-surface-1);
-            color: var(--ul-text-2);
+            background: var(--ul-grey-1);
+            color: var(--ul-grey-7);
         }
 
         &.view-toggle-btn--active {
@@ -759,7 +759,7 @@
     .cal-nav-btn {
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-1);
         }
     }
 
@@ -779,7 +779,7 @@
     }
 
     .cal-day-num {
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
     }
 
     .trip-activity-item {
@@ -799,7 +799,7 @@
     }
 
     .trip-activity-num {
-        border-color: var(--ul-surface-1);
+        border-color: var(--ul-grey-1);
     }
 
     .trip-attr-link:hover {
@@ -847,10 +847,10 @@
     }
 
     .rsvp-popup-opt {
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-1);
         }
 
         &--yes {
@@ -878,7 +878,7 @@
         }
 
         &--clear {
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
         }
     }
 
@@ -898,7 +898,7 @@
     }
 
     .trip-comment-text {
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
     }
 
     .trip-comment-input:focus {
@@ -910,16 +910,16 @@
         border-bottom-color: var(--ul-border);
 
         &--reply {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-1);
         }
     }
 
     .comment-date {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
     }
 
     .comment-text {
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
     }
 
     .comment-avatar-initial {
@@ -928,7 +928,7 @@
     }
 
     .comment-delete-btn {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
 
         &:hover {
             color: $ui-red-400;
@@ -936,10 +936,10 @@
     }
 
     .comment-reply-btn {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
 
         .reply-count {
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
         }
 
         &:hover {
@@ -953,11 +953,11 @@
     }
 
     .comment-input {
-        background: var(--ul-surface-1);
-        color: var(--ul-text-1);
+        background: var(--ul-grey-1);
+        color: var(--ul-grey-8);
 
         &::placeholder {
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
         }
 
         &:focus {
@@ -967,10 +967,10 @@
     }
 
     .reaction-pill {
-        background: var(--ul-surface-4);
+        background: var(--ul-grey-4);
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-1);
         }
 
         &--mine {
@@ -980,16 +980,16 @@
         }
 
         .reaction-count {
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
         }
     }
 
     .reaction-add-btn {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
 
         &:hover {
-            background: var(--ul-surface-1);
-            color: var(--ul-text-2);
+            background: var(--ul-grey-1);
+            color: var(--ul-grey-7);
         }
     }
 
@@ -998,11 +998,11 @@
     }
 
     .reaction-picker-emoji:hover {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-1);
     }
 
     .comment-empty {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
     }
 
     .mention-dropdown {
@@ -1010,7 +1010,7 @@
     }
 
     .mention-option {
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         border-bottom-color: var(--ul-border);
 
         &:hover,
@@ -1021,11 +1021,11 @@
     }
 
     .comment-image-label {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
     }
 
     .comment-map-btn {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
 
         &:hover {
             background: rgba(167, 139, 250, .15);
@@ -1042,7 +1042,7 @@
 
     .comment-map-expand-btn {
         background: rgba(30, 30, 40, .9);
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
 
         &:hover {
             background: rgba(40, 40, 55, 1);
@@ -1058,16 +1058,16 @@
     }
 
     .cmcc-label {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
     }
 
     .cmcc-pin-search {
-        background: var(--ul-surface-1);
-        color: var(--ul-text-1);
+        background: var(--ul-grey-1);
+        color: var(--ul-grey-8);
     }
 
     .cmcc-pin-option {
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
 
         &:hover {
             background: var(--ul-hover-bg);
@@ -1078,7 +1078,7 @@
     .cmc-tool-btn,
     .cmc-undo-btn,
     .cmc-clear-btn {
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
 
         &:hover {
             background: var(--ul-hover-bg);
@@ -1096,21 +1096,21 @@
     }
 
     .cmc-toolbar-label {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
     }
 
     .cmc-color-wrap {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
 
         input[type="color"] {
-            background: var(--ul-surface-0);
+            background: var(--ul-grey-0);
         }
     }
 
     .trip-setting-pill {
 
         &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-1);
             border-color: var(--ul-border-strong);
         }
 
@@ -1124,16 +1124,16 @@
     .trip-create-dialog {
 
         .location-suggestion-item:hover {
-            background: var(--ul-surface-4);
+            background: var(--ul-grey-4);
         }
     }
 
     .organize-title {
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
     }
 
     .organize-subtitle {
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
     }
 
     .organize-tab.active {
@@ -1155,7 +1155,7 @@
         border-color: var(--ul-border-strong);
 
         &:hover:not(:disabled) {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-1);
         }
     }
 
@@ -1171,7 +1171,7 @@
 
     .cat-select-wrap {
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-1);
         }
 
         .cat-select-check {
@@ -1196,20 +1196,20 @@
     }
 
     .priority-item-icon {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-1);
 
         i {
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
         }
     }
 
     .priority-item-name {
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
     }
 
     .priority-order-badge {
-        background: var(--ul-surface-1);
-        color: var(--ul-text-2);
+        background: var(--ul-grey-1);
+        color: var(--ul-grey-7);
     }
 
     .priority-kind-badge {
@@ -1236,7 +1236,7 @@
     }
 
     .site-admin-form input[type="number"] {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-1);
         border-color: var(--ul-border-strong);
 
         &:focus {
@@ -1246,55 +1246,55 @@
 
     .wiki-page {
         .wiki-card-header {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-1);
             border-bottom-color: var(--ul-border);
 
             h2 {
-                color: var(--ul-text-1);
+                color: var(--ul-grey-8);
             }
         }
 
         .wiki-card-desc {
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
         }
 
         .wiki-dl-row {
 
             dt {
-                color: var(--ul-text-3);
+                color: var(--ul-grey-6);
             }
 
             dd {
-                color: var(--ul-text-1);
+                color: var(--ul-grey-8);
             }
         }
 
         .wiki-stat-label {
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
         }
 
         .wiki-bbox-controls {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-1);
             border-top-color: var(--ul-border);
         }
 
         .wiki-action-btn {
             border-color: var(--ul-border-strong);
-            color: var(--ul-text-1);
+            color: var(--ul-grey-8);
 
             &:hover {
-                background: var(--ul-surface-1);
+                background: var(--ul-grey-1);
                 border-color: var(--ul-border-strong);
             }
         }
 
         .wiki-tabs {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-1);
             border-bottom-color: var(--ul-border);
         }
 
         .wiki-tab {
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
 
             &--active,
             &:hover {
@@ -1304,22 +1304,22 @@
         }
 
         .wiki-loading {
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
         }
 
         .wiki-history-item {
 
             &--reverted {
-                background: var(--ul-surface-1);
+                background: var(--ul-grey-1);
             }
         }
 
         .wiki-history-editor {
-            color: var(--ul-text-1);
+            color: var(--ul-grey-8);
         }
 
         .wiki-history-date {
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
         }
 
         .wiki-history-badge--reverted {
@@ -1328,11 +1328,11 @@
         }
 
         .wiki-change-field {
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
         }
 
         .wiki-change-arrow {
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
         }
 
         .wiki-change-from {
@@ -1356,23 +1356,23 @@
         }
 
         .wiki-history-empty {
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
         }
     }
 
     body.page-location-details {
         .location-map.card .card-header {
-            background: var(--ul-surface-1);
-            color: var(--ul-text-1);
+            background: var(--ul-grey-1);
+            color: var(--ul-grey-8);
             border-bottom-color: var(--ul-border);
 
             .material-icons {
-                color: var(--ul-text-2);
+                color: var(--ul-grey-7);
             }
 
             span,
             h3 {
-                color: var(--ul-text-1);
+                color: var(--ul-grey-8);
             }
         }
     }

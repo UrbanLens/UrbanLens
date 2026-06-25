@@ -55,7 +55,7 @@
     justify-content: flex-end;
     gap: 10px;
     flex-shrink: 0;
-    background: var(--ul-surface-1, #fff);
+    background: var(--ul-grey-1, #fff);
 }
 
 /* Close button override */
@@ -89,11 +89,11 @@
     text-align: center;
     cursor: pointer;
     transition: border-color .18s, background .18s;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
 }
 .iw-file-zone:hover, .iw-file-zone.drag-over {
     border-color: var(--ul-primary);
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
 }
 .iw-file-zone i { font-size: 2.2rem; color: var(--ul-primary); display: block; margin-bottom: 8px; }
 .iw-file-zone-label { font-size: .9rem; color: #5f6368; }
@@ -109,17 +109,17 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     border-radius: 6px;
     padding: 5px 10px;
     font-size: .82rem;
-    color: var(--ul-text-0);
+    color: var(--ul-grey-9);
 }
 .iw-file-chip i { font-size: 1rem; color: var(--ul-primary); }
 .iw-file-chip-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .iw-file-chip-remove {
     background: none; border: none; cursor: pointer;
-    color: var(--ul-text-2); padding: 0; line-height: 1;
+    color: var(--ul-grey-7); padding: 0; line-height: 1;
     font-size: .9rem;
 }
 .iw-file-chip-remove:hover { color: var(--ul-text-danger); }
@@ -132,7 +132,7 @@
     justify-content: center;
     padding: 40px 20px;
     gap: 14px;
-    color: var(--ul-text-4);
+    color: var(--ul-grey-5);
     font-size: .9rem;
 }
 .iw-spinner {
@@ -147,7 +147,7 @@
 /* ── Step 2: Preview ─────────────────────────────────────────────────── */
 .iw-preview-summary {
     font-size: .85rem;
-    color: var(--ul-text-4);
+    color: var(--ul-grey-5);
     margin-bottom: 14px;
     display: flex;
     align-items: center;
@@ -172,19 +172,19 @@
     align-items: center;
     gap: 8px;
     padding: 10px 14px;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     cursor: pointer;
     user-select: none;
 }
 .iw-list-toggle { color: #5f6368; font-size: 1.1rem; transition: transform .15s; }
 .iw-list-toggle.collapsed { transform: rotate(-90deg); }
 .iw-list-name { font-weight: 600; font-size: .9rem; flex: 1; }
-.iw-list-count { font-size: .78rem; color: var(--ul-text-2); }
+.iw-list-count { font-size: .78rem; color: var(--ul-grey-7); }
 
 .iw-list-meta {
     padding: 10px 14px;
     border-top: 1px solid var(--ul-border, #e0e0e0);
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -260,7 +260,7 @@
 .iw-badge-dropdown {
     position: absolute;
     z-index: 9999;
-    background: var(--ul-surface-1, #fff);
+    background: var(--ul-grey-1, #fff);
     border: 1px solid var(--ul-border, #e0e0e0);
     border-radius: 10px;
     box-shadow: 0 8px 24px rgba(0,0,0,.14);
@@ -277,10 +277,10 @@
     border-radius: 6px;
     cursor: pointer;
     font-size: .83rem;
-    color: var(--ul-text-0);
+    color: var(--ul-grey-9);
 }
-.iw-badge-dropdown-item:hover { background: var(--ul-surface-1); }
-.iw-badge-dropdown-item.checked { background: var(--ul-surface-1); }
+.iw-badge-dropdown-item:hover { background: var(--ul-grey-1); }
+.iw-badge-dropdown-item.checked { background: var(--ul-grey-1); }
 .iw-badge-dropdown-item i { font-size: 1rem; }
 .iw-badge-dropdown-check { margin-left: auto; color: var(--ul-primary); font-size: .9rem; }
 
@@ -303,7 +303,7 @@
     cursor: pointer;
 }
 .iw-pin-row:last-child { border-bottom: none; }
-.iw-pin-row:hover { background: var(--ul-surface-1); }
+.iw-pin-row:hover { background: var(--ul-grey-1); }
 /* Override Materialize's global checkbox reset inside the pin list */
 .iw-pin-row input[type=checkbox] {
     appearance: auto !important;
@@ -323,7 +323,7 @@
 /* Private toggle button */
 .iw-pin-private-btn {
     background: none; border: none; cursor: pointer;
-    color: var(--ul-text-2); padding: 2px 3px; flex-shrink: 0;
+    color: var(--ul-grey-7); padding: 2px 3px; flex-shrink: 0;
     line-height: 1; border-radius: 4px;
     transition: color .15s;
     display: flex; align-items: center;
@@ -378,9 +378,9 @@
     margin-bottom: 6px;
 }
 .iw-progress-pct { font-size: 1.4rem; font-weight: 700; color: #2196F3; letter-spacing: -.02em; }
-.iw-progress-count { font-size: .83rem; color: var(--ul-text-2); }
+.iw-progress-count { font-size: .83rem; color: var(--ul-grey-7); }
 .iw-current-name {
-    font-size: .82rem; color: var(--ul-text-4);
+    font-size: .82rem; color: var(--ul-grey-5);
     height: 1.2em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
     margin-bottom: 14px;
 }
@@ -388,12 +388,12 @@
     display: flex;
     gap: 18px;
     font-size: .82rem;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     padding: 10px 0;
     border-top: 1px solid var(--ul-border);
     margin-bottom: 14px;
 }
-.iw-stats strong { color: var(--ul-text-0); }
+.iw-stats strong { color: var(--ul-grey-9); }
 
 /* Per-item log */
 .iw-item-log {

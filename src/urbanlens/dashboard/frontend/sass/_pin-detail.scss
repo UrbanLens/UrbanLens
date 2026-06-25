@@ -49,7 +49,7 @@
 
     .wx-time {
         font-size: .65rem;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         font-weight: 700;
         line-height: 1.3;
         letter-spacing: .02em;
@@ -71,14 +71,14 @@
         .wx-unit {
             font-size: .6rem;
             font-weight: 400;
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
             vertical-align: super;
         }
     }
 
     .wx-condition {
         font-size: .63rem;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         @include truncate;
         max-width: 66px;
     }
@@ -87,7 +87,7 @@
         display: flex;
         gap: .3rem;
         font-size: .6rem;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         margin-top: .1rem;
 
         span {
@@ -113,7 +113,7 @@
     border: none;
     background: transparent;
     cursor: pointer;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     outline: none;
     transition: background .15s, color .15s;
     flex-shrink: 0;
@@ -125,7 +125,7 @@
     &:hover,
     &:focus {
         background: rgba(0, 0, 0, .07);
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
         outline: none;
     }
 }
@@ -150,7 +150,7 @@
     border: 1px solid color-mix(in srgb, var(--tag-color, #6366f1) 30%, transparent);
     font-size: .78rem;
     font-weight: 500;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     line-height: 1.3;
 
     .tag-chip-icon {
@@ -170,7 +170,7 @@
         cursor: pointer;
         font-size: .75rem;
         line-height: 1;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         transition: background .12s, color .12s;
         padding: 0;
 
@@ -183,7 +183,7 @@
 
 .tag-chips-empty {
     font-size: .82rem;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     font-style: italic;
 }
 
@@ -198,7 +198,7 @@
         border-bottom: 2px solid var(--ul-border);
         padding: 0 .5rem;
         flex-shrink: 0;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     .tad-tab {
@@ -237,7 +237,7 @@
         box-sizing: border-box;
         outline: none;
         flex-shrink: 0;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         color: inherit;
 
         &:focus {
@@ -330,7 +330,7 @@
         }
 
         .tad-tab {
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
 
             &:hover {
                 color: $ui-indigo-400;
@@ -343,7 +343,7 @@
         }
 
         .dialog-search {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-1);
             border-color: var(--ul-border);
 
             &:focus {
@@ -364,7 +364,7 @@
 .visit-empty {
     padding: .6rem 1rem;
     font-size: .85rem;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     font-style: italic;
 }
 
@@ -400,12 +400,12 @@
 
     .visit-time {
         font-size: .82rem;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
     }
 
     .visit-source {
         font-size: .75rem;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         display: inline-flex;
         align-items: center;
         gap: 2px;
@@ -413,7 +413,7 @@
 
     .visit-notes {
         font-size: .82rem;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         margin-top: .2rem;
         padding: 0 1rem .35rem;
     }
@@ -527,7 +527,7 @@
     white-space: nowrap;
     padding: .3rem .7rem;
     background: $ui-cyan-600;
-    color: var(--ul-text-4);
+    color: var(--ul-grey-5);
     border-radius: 7px;
     font-size: .8rem;
     font-weight: 600;
@@ -628,7 +628,7 @@
     }
 
     &--everywhere {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
         color: -red-800;
         border-color: $ui-red-300;
     }
@@ -651,13 +651,13 @@
         font-size: .85rem;
         font-weight: 600;
         color: $ui-slate-600;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-radius: 8px;
         cursor: pointer;
         user-select: none;
 
         &:hover {
-            background: var(--ul-surface-0);
+            background: var(--ul-grey-0);
         }
 
         &::marker {
@@ -690,7 +690,7 @@
         border: 1px solid var(--ul-border);
         ;
         border-radius: 6px;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
 
         &:focus {
             outline: none;
@@ -811,7 +811,7 @@
 }
 
 .panel-header {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
 }
 
 // ── Pin details card theming (pin overview / location details page) ────────
@@ -832,7 +832,7 @@ body.page-location-details {
             }
 
             &:nth-child(even) {
-                background: var(--ul-surface-0);
+                background: var(--ul-grey-0);
             }
         }
 
@@ -895,7 +895,7 @@ body.page-location-details {
     margin-top: .6rem;
     padding: .55rem .9rem;
     border-radius: 8px;
-    background: var(--ul-surface-0a);
+    background: var(--ul-grey-0a);
     border: 1px solid $ui-blue-200;
     color: $ui-blue-700;
     text-decoration: none;
@@ -1037,7 +1037,7 @@ body.page-location-details {
     border: 1px solid var(--ul-border);
     border-radius: 10px;
     overflow: visible;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
 
     &--unlinked {
         display: flex;
@@ -1122,7 +1122,7 @@ body.page-location-details {
     border-color: $ui-red-300;
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: $ui-red-600;
     }
 }
@@ -1131,7 +1131,7 @@ body.page-location-details {
 
 .pin-loc-picker {
     border-top: 1px solid var(--ul-border);
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border-radius: 0 0 10px 10px;
 }
 
@@ -1173,7 +1173,7 @@ body.page-location-details {
     gap: .5rem;
 
     &--current {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 }
 
@@ -1188,7 +1188,7 @@ body.page-location-details {
 .pin-loc-option-name {
     font-size: .84rem;
     font-weight: 500;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     @include truncate;
 }
 
@@ -1260,7 +1260,7 @@ body.page-location-details {
     gap: .5rem;
 
     &--current {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: $ui-sky-200;
     }
 }
@@ -1268,7 +1268,7 @@ body.page-location-details {
 .loc-conflict-option-name {
     font-size: .86rem;
     font-weight: 500;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     flex: 1;
     min-width: 0;
     @include truncate;
@@ -1298,7 +1298,7 @@ body.page-location-details {
     display: flex;
     align-items: flex-start;
     gap: .75rem;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid $ui-amber-300;
     border-radius: 10px;
     padding: .85rem 1rem;
@@ -1334,7 +1334,7 @@ body.page-location-details {
     display: inline-flex;
     align-items: center;
     gap: .3rem;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid $ui-amber-300;
     border-radius: 8px;
     padding: .2rem .55rem;
@@ -1392,7 +1392,7 @@ body.page-location-details {
     }
 
     .pin-location-panel {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: var(--ul-border);
 
         &--unlinked {
@@ -1428,7 +1428,7 @@ body.page-location-details {
     }
 
     .pin-loc-picker {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: var(--ul-border);
     }
 
@@ -1479,7 +1479,7 @@ body.page-location-details {
     }
 
     .wiki-lcn-item {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: rgba(245, 158, 11, .3);
     }
 
@@ -1516,7 +1516,7 @@ body.page-location-details {
     // Map section: slate
     .location-map.card .card-header {
         @extend .panel-header;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         color: $ui-slate-800;
         border-bottom-color: $ui-slate-200;
 
@@ -1546,7 +1546,7 @@ body.page-location-details {
 
 // ── Pin detail page layout ─────────────────────────────────────────────────
 body.page-location-details {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
 }
 
 body.page-location-details div.section {
@@ -1602,13 +1602,13 @@ body.page-location-details div.section {
                 font-size: .7rem;
                 text-transform: uppercase;
                 letter-spacing: .05em;
-                color: var(--ul-text-3, #9ca3af);
+                color: var(--ul-grey-6, #9ca3af);
                 font-weight: 600;
             }
 
             .field-value {
                 font-size: .92rem;
-                color: var(--ul-text-1, #1e293b);
+                color: var(--ul-grey-8, #1e293b);
             }
         }
     }
@@ -1651,7 +1651,7 @@ body.page-location-details div.section {
 
                 .smithsonian-title {
                     font-size: .75rem;
-                    color: var(--ul-text-2);
+                    color: var(--ul-grey-7);
                 }
             }
         }
@@ -1674,7 +1674,7 @@ body.page-location-details div.section {
             }
 
             &:hover {
-                background: var(--ul-surface-1, #f8fafc);
+                background: var(--ul-grey-1, #f8fafc);
             }
         }
 
@@ -1721,7 +1721,7 @@ body.page-location-details div.section {
             gap: .25rem;
             font-size: .72rem;
             font-weight: 500;
-            color: var(--ul-text-3, #6b7280);
+            color: var(--ul-grey-6, #6b7280);
             letter-spacing: .01em;
         }
 
@@ -1767,7 +1767,7 @@ body.page-location-details div.section {
 
         .search-result-snippet {
             font-size: .8rem;
-            color: var(--ul-text-2, #555);
+            color: var(--ul-grey-7, #555);
             margin: 0;
             line-height: 1.5;
             display: -webkit-box;

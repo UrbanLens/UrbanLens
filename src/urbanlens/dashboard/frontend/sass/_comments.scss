@@ -29,7 +29,7 @@
     }
 
     &--reply {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         padding-left: 1.2rem;
     }
 }
@@ -42,7 +42,7 @@
     .comment-item {
         padding-left: .75rem;
         border-bottom: none;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-radius: 6px;
         margin-bottom: .3rem;
     }
@@ -103,7 +103,7 @@
 .comment-author {
     font-size: .82rem;
     font-weight: 600;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
 
     &--link {
         text-decoration: none;
@@ -199,7 +199,7 @@
 
     &:hover {
         color: $ui-indigo-600;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 }
 
@@ -223,14 +223,14 @@
     gap: .2rem;
     padding: .15rem .5rem;
     border-radius: 20px;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     font-size: .8rem;
     cursor: pointer;
     transition: background .1s, border-color .1s;
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     &--mine {
@@ -272,7 +272,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         color: $ui-gray-700;
     }
 }
@@ -281,7 +281,7 @@
     position: absolute;
     bottom: calc(100% + 4px);
     left: 0;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: 10px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
@@ -306,7 +306,7 @@
     transition: background .1s, transform .1s;
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         transform: scale(1.2);
     }
 }
@@ -558,7 +558,7 @@
     padding: .3rem .5rem;
     border: 1px solid var(--ul-border);
     border-radius: 6px;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     color: $ui-gray-700;
     cursor: pointer;
     flex-shrink: 0;
@@ -571,7 +571,7 @@
     &:hover {
         background: $ui-indigo-500;
         border-color: $ui-indigo-500;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 }
 
@@ -581,7 +581,7 @@
     left: 0;
     right: 0;
     width: 100%;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: 8px;
     box-shadow: 0 6px 24px rgba(0, 0, 0, .1);
@@ -601,7 +601,7 @@
     color: $ui-gray-700;
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 }
 
@@ -632,7 +632,7 @@
 .cmc-toolbar-sep {
     width: 1px;
     height: 20px;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     margin: 0 .1rem;
 }
 
@@ -664,7 +664,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     &.is-active {
@@ -754,7 +754,7 @@
     top: 100%;
     left: 0;
     right: 0;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: 8px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .1);
@@ -780,7 +780,7 @@
 
     &:hover,
     &.is-selected {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         color: $ui-indigo-700;
     }
 

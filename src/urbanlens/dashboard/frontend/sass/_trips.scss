@@ -20,7 +20,7 @@
     display: flex;
     align-items: center;
     gap: .4rem;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
 
     .material-icons {
         font-size: 1.7rem;
@@ -30,7 +30,7 @@
 
 .trips-subtitle {
     margin: 0;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     font-size: .9rem;
 }
 
@@ -42,7 +42,7 @@
 .trips-empty {
     text-align: center;
     padding: 4rem 2rem;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
 
     .trips-empty-icon {
         font-size: 4rem;
@@ -79,7 +79,7 @@
 }
 
 .trip-card {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: 10px;
     transition: box-shadow .15s, border-color .15s;
@@ -103,7 +103,7 @@
     width: 44px;
     height: 44px;
     border-radius: 50%;
-    background: var(--ul-surface-0a);
+    background: var(--ul-grey-0a);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -126,12 +126,12 @@
 .trip-card-name {
     font-weight: 600;
     font-size: 1rem;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
 }
 
 .trip-card-desc {
     font-size: .85rem;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     @include truncate;
 }
 
@@ -146,7 +146,7 @@
         align-items: center;
         gap: .25rem;
         font-size: .78rem;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
 
         .material-icons {
             font-size: 1rem;
@@ -182,7 +182,7 @@
     align-items: center;
     gap: .25rem;
     font-size: .85rem;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     text-decoration: none;
     margin-bottom: .5rem;
 
@@ -199,12 +199,12 @@
     font-size: 1.8rem;
     font-weight: 700;
     margin: 0 0 .35rem;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
 }
 
 .trip-detail-description {
     margin: 0 0 .5rem;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
 }
 
 .trip-detail-dates {
@@ -212,7 +212,7 @@
     align-items: center;
     gap: .3rem;
     font-size: .88rem;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
 
     .material-icons {
         font-size: 1.1rem;
@@ -250,11 +250,11 @@
     }
 
     &--edit {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
 
         &:hover,
         &:focus {
-            background: var(--ul-surface-4);
+            background: var(--ul-grey-4);
             color: $ui-blue-500;
             border-color: var(--ul-border);
             outline: none;
@@ -262,11 +262,11 @@
     }
 
     &--settings {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
 
         &:hover,
         &:focus {
-            background: var(--ul-surface-4);
+            background: var(--ul-grey-4);
             color: $ui-blue-500;
             border-color: var(--ul-border);
             outline: none;
@@ -278,7 +278,7 @@
 
         &:hover,
         &:focus {
-            background: var(--ul-surface-0a);
+            background: var(--ul-grey-0a);
             color: $ui-red-600;
             border-color: $ui-red-300;
             outline: none;
@@ -337,7 +337,7 @@
     &--chosen {
         .trip-section-grip {
             opacity: 1;
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
         }
     }
 }
@@ -350,7 +350,7 @@
     cursor: grab;
     opacity: 0;
     transition: opacity 0.15s;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     margin-bottom: -4px;
 
     .material-icons {
@@ -362,7 +362,7 @@
     }
 
     &:hover {
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
     }
 }
 
@@ -378,13 +378,13 @@
         align-items: center;
         gap: .4rem;
         padding: .75rem 1rem;
-        border-bottom: 1px solid var(--ul-surface-4);
+        border-bottom: 1px solid var(--ul-grey-4);
         font-weight: 600;
         font-size: .9rem;
 
         .badge {
             background: var(--ul-border);
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
             border-radius: 99px;
             font-size: .72rem;
             font-weight: 700;
@@ -405,7 +405,7 @@
 .view-toggle-group {
     display: flex;
     gap: 1px;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     border-radius: 7px;
     padding: 2px;
 }
@@ -419,7 +419,7 @@
     border-radius: 5px;
     border: none;
     background: transparent;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     cursor: pointer;
     transition: background .15s, color .15s;
 
@@ -429,11 +429,11 @@
 
     &:hover {
         background: var(--ul-border);
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
     }
 
     &.view-toggle-btn--active {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         color: $ui-blue-500;
         box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
     }
@@ -455,7 +455,7 @@
 .cal-month-label {
     font-weight: 600;
     font-size: .95rem;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
 }
 
 .cal-nav-btn {
@@ -468,7 +468,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     transition: background .15s, color .15s;
 
     .material-icons {
@@ -476,8 +476,8 @@
     }
 
     &:hover {
-        background: var(--ul-surface-4);
-        color: var(--ul-text-1);
+        background: var(--ul-grey-4);
+        color: var(--ul-grey-8);
     }
 }
 
@@ -500,26 +500,26 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .05em;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         text-align: center;
         padding: .2rem 0 .35rem;
     }
 
     &--empty {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-1);
         opacity: .4;
     }
 
     &--has-events {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     &--today {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
 
         .cal-day-num {
             background: $ui-blue-500;
-            color: var(--ul-text-4);
+            color: var(--ul-grey-5);
         }
     }
 }
@@ -533,7 +533,7 @@
     border-radius: 50%;
     font-size: .75rem;
     font-weight: 500;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     margin-bottom: .15rem;
 }
 
@@ -549,7 +549,7 @@
     gap: 3px;
     font-size: .66rem;
     background: $ui-blue-500;
-    color: var(--ul-text-4);
+    color: var(--ul-grey-5);
     border-radius: 3px;
     padding: 1px 4px;
     cursor: pointer;
@@ -577,7 +577,7 @@
 
 .trip-panel-empty {
     padding: 1.25rem 1rem;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     font-size: .85rem;
     font-style: italic;
     margin: 0;
@@ -588,7 +588,7 @@
     display: flex;
     align-items: center;
     gap: .5rem;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     font-size: .85rem;
 }
 
@@ -609,7 +609,7 @@
     align-items: flex-start;
     gap: .75rem;
     padding: .85rem 1rem;
-    border-bottom: 1px solid var(--ul-surface-4);
+    border-bottom: 1px solid var(--ul-grey-4);
     transition: opacity .2s, background .15s;
 
     &:last-child {
@@ -622,7 +622,7 @@
     }
 
     &.trip-activity--highlighted {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
         border-left: 3px solid $ui-blue-500;
         padding-left: calc(1rem - 3px);
     }
@@ -637,7 +637,7 @@
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -654,7 +654,7 @@
     height: 28px;
     border-radius: 50%;
     background: $ui-blue-500;
-    color: var(--ul-text-4);
+    color: var(--ul-grey-5);
     font-size: .78rem;
     font-weight: 700;
     display: flex;
@@ -685,7 +685,7 @@
 .trip-activity-name {
     font-weight: 600;
     font-size: .9rem;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
 }
 
 .trip-activity-time {
@@ -693,7 +693,7 @@
     align-items: center;
     gap: .2rem;
     font-size: .78rem;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
 
     .material-icons {
         font-size: .95rem;
@@ -702,12 +702,12 @@
 
 .trip-activity-notes {
     font-size: .82rem;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
 }
 
 .trip-activity-attr {
     font-size: .75rem;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
 }
 
 .trip-attr-link {
@@ -733,7 +733,7 @@
     align-items: center;
     gap: .65rem;
     padding: .6rem 1rem;
-    border-bottom: 1px solid var(--ul-surface-4);
+    border-bottom: 1px solid var(--ul-grey-4);
     transition: opacity .2s;
 
     &:last-child {
@@ -780,7 +780,7 @@
 .trip-member-name {
     font-weight: 600;
     font-size: .88rem;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
 
     &--link {
         text-decoration: none;
@@ -795,7 +795,7 @@
 
 .trip-member-username {
     font-size: .78rem;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
 }
 
 .trip-member-badge {
@@ -820,7 +820,7 @@
 }
 
 .trip-organizer-btn {
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
 
     &--active {
         color: $ui-violet-600 !important;
@@ -846,7 +846,7 @@
     align-items: flex-start;
     gap: .75rem;
     padding: .875rem 1rem;
-    border-bottom: 1px solid var(--ul-surface-4);
+    border-bottom: 1px solid var(--ul-grey-4);
     transition: opacity .2s, background .15s;
 
     &:last-child {
@@ -854,7 +854,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
 
         .detail-pin-action-btn {
             opacity: 1;
@@ -896,19 +896,19 @@
 .trip-comment-author {
     font-weight: 600;
     font-size: .875rem;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
 }
 
 .trip-comment-date {
     font-size: .75rem;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     letter-spacing: .01em;
 }
 
 .trip-comment-text {
     margin: 0;
     font-size: .875rem;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-word;
@@ -921,7 +921,7 @@
 .trip-comment-form {
     padding: .875rem 1rem;
     border-top: 1px solid var(--ul-border);
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     border-radius: 0 0 $radius-md $radius-md;
 }
 
@@ -951,8 +951,8 @@
     resize: vertical;
     font-family: inherit;
     box-sizing: border-box;
-    background: var(--ul-surface-0);
-    color: var(--ul-text-1);
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
     transition: border-color .15s, box-shadow .15s;
 
     &:focus {
@@ -962,7 +962,7 @@
     }
 
     &::placeholder {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
     }
 }
 
@@ -996,7 +996,7 @@
     top: 100%;
     left: 0;
     right: 0;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     ;
     border-top: none;
@@ -1018,10 +1018,10 @@
     padding: .5rem .75rem;
     font-size: .88rem;
     cursor: pointer;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 }
 
@@ -1051,7 +1051,7 @@
     .trip-map-empty {
         padding: 1.25rem;
         text-align: center;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         font-size: .88rem;
         margin: 0;
     }
@@ -1073,7 +1073,7 @@
 }
 
 .trip-map-past-btn {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 2px solid rgba(0, 0, 0, .2);
     border-radius: 4px;
     width: 34px;
@@ -1082,7 +1082,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     transition: background .15s, color .15s, border-color .15s;
     padding: 0;
 
@@ -1091,14 +1091,14 @@
     }
 
     &:hover {
-        background: var(--ul-surface-1);
-        color: var(--ul-text-1);
+        background: var(--ul-grey-1);
+        color: var(--ul-grey-8);
     }
 
     &--active {
         background: $ui-blue-500;
         border-color: $ui-blue-600;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
 
         &:hover {
             background: $ui-blue-600;
@@ -1109,12 +1109,12 @@
 // ── Activity status (proposed = grey, confirmed = blue) ───────────────────
 
 .trip-activity-num--proposed {
-    background: var(--ul-text-3) !important;
+    background: var(--ul-grey-6) !important;
     box-shadow: 0 1px 4px rgba($ui-slate-400, .4) !important;
 }
 
 .trip-map-marker--proposed:not(.trip-map-marker--highlighted) {
-    background: var(--ul-text-3);
+    background: var(--ul-grey-6);
     box-shadow: 0 2px 6px rgba($ui-slate-400, .5);
     opacity: 0.75;
 }
@@ -1124,7 +1124,7 @@
     transition: opacity .15s;
 
     &--proposed {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
     }
 
     &--confirmed {
@@ -1144,7 +1144,7 @@
 
     .trip-activity-name {
         text-decoration: line-through;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
     }
 }
 
@@ -1189,13 +1189,13 @@
     background: none;
     border: none;
     border-bottom: 2px solid transparent;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     cursor: pointer;
     transition: color .15s, border-color .15s;
     margin-bottom: -1px;
 
     &:hover {
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
     }
 
     &--active {
@@ -1207,10 +1207,10 @@
 // ── Calendar event status ─────────────────────────────────────────────────
 
 .cal-event--proposed {
-    background: var(--ul-text-3);
+    background: var(--ul-grey-6);
 
     &:hover {
-        background: var(--ul-text-2);
+        background: var(--ul-grey-7);
     }
 }
 
@@ -1241,7 +1241,7 @@
     }
 
     &--no {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
         color: $ui-red-600;
         border: 1px solid $ui-red-200;
     }
@@ -1253,8 +1253,8 @@
     }
 
     &--none {
-        background: var(--ul-surface-4);
-        color: var(--ul-text-3);
+        background: var(--ul-grey-4);
+        color: var(--ul-grey-6);
         border: 1px solid var(--ul-border);
         ;
     }
@@ -1289,7 +1289,7 @@
     position: absolute;
     right: 0;
     top: calc(100% + 4px);
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     box-shadow: $shadow-md;
@@ -1319,7 +1319,7 @@
     color: $text-primary;
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     &--yes {
@@ -1334,7 +1334,7 @@
         color: $ui-red-600;
 
         &:hover {
-            background: var(--ul-surface-0a);
+            background: var(--ul-grey-0a);
         }
     }
 
@@ -1372,8 +1372,8 @@
     border: 1.5px solid var(--ul-border);
     ;
     border-radius: 6px;
-    background: var(--ul-surface-0);
-    color: var(--ul-text-1);
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
     cursor: pointer;
     outline: none;
     transition: border-color .15s;
@@ -1389,7 +1389,7 @@
 
     &:hover {
         color: $ui-red-600;
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
     }
 }
 
@@ -1401,7 +1401,7 @@
     ;
     border-radius: 8px;
     overflow: hidden;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
 }
 
 .status-pill-btn {
@@ -1411,7 +1411,7 @@
     background: transparent;
     border: none;
     cursor: pointer;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     transition: background .15s, color .15s;
     display: flex;
     align-items: center;
@@ -1427,18 +1427,18 @@
     }
 
     &:hover {
-        color: var(--ul-text-2);
-        background: var(--ul-surface-4);
+        color: var(--ul-grey-7);
+        background: var(--ul-grey-4);
     }
 
     &.is-active[data-value="proposed"] {
-        background: var(--ul-text-2);
-        color: var(--ul-text-4);
+        background: var(--ul-grey-7);
+        color: var(--ul-grey-5);
     }
 
     &.is-active[data-value="confirmed"] {
         background: $ui-blue-500;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 }
 
@@ -1449,7 +1449,7 @@
     align-items: center;
     gap: .75rem;
     padding: .55rem 1rem;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     border-bottom: 1px solid var(--ul-border);
     flex-wrap: wrap;
 }
@@ -1457,7 +1457,7 @@
 .trip-your-rsvp-label {
     font-size: .8rem;
     font-weight: 600;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     white-space: nowrap;
 }
 
@@ -1479,7 +1479,7 @@
     display: flex;
     align-items: center;
     gap: .4rem;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     margin: 0 0 .25rem;
 
     .material-icons {
@@ -1489,7 +1489,7 @@
 }
 
 .site-admin-subtitle {
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     font-size: .9rem;
     margin: 0;
 }
@@ -1530,7 +1530,7 @@
         display: block;
         font-size: .8rem;
         font-weight: 600;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         text-transform: uppercase;
         letter-spacing: .06em;
         margin-bottom: .35rem;
@@ -1538,7 +1538,7 @@
 
     .form-help {
         font-size: .82rem;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         margin: 0 0 .45rem;
     }
 
@@ -1549,7 +1549,7 @@
         ;
         border-radius: 8px;
         font-size: .9rem;
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
         outline: none;
         transition: border-color .15s;
 
@@ -1580,7 +1580,7 @@
         justify-content: center;
         font-size: 11px;
         font-weight: 700;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
         line-height: 1;
     }
 
@@ -1599,9 +1599,9 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .06em;
-    color: var(--ul-text-3);
-    background: var(--ul-surface-1);
-    border-bottom: 1px solid var(--ul-surface-4);
+    color: var(--ul-grey-6);
+    background: var(--ul-grey-1);
+    border-bottom: 1px solid var(--ul-grey-4);
     cursor: default;
 }
 
@@ -1619,7 +1619,7 @@
 }
 
 .location-suggestion-empty {
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     font-style: italic;
     cursor: default;
 
@@ -1644,38 +1644,38 @@
     border: 1.5px solid var(--ul-border);
     ;
     background: transparent;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     cursor: pointer;
     transition: background .12s, border-color .12s, color .12s;
 
     &:hover {
-        border-color: var(--ul-text-3);
-        background: var(--ul-surface-1);
+        border-color: var(--ul-grey-6);
+        background: var(--ul-grey-1);
     }
 
     &.is-active {
         &[data-rsvp="yes"] {
             background: $ui-green-500;
             border-color: $ui-green-500;
-            color: var(--ul-text-4);
+            color: var(--ul-grey-5);
         }
 
         &[data-rsvp="no"] {
             background: $ui-red-500;
             border-color: $ui-red-500;
-            color: var(--ul-text-4);
+            color: var(--ul-grey-5);
         }
 
         &[data-rsvp="maybe"] {
             background: $ui-amber-500;
             border-color: $ui-amber-500;
-            color: var(--ul-text-4);
+            color: var(--ul-grey-5);
         }
 
         &[data-rsvp=""] {
-            background: var(--ul-text-3);
-            border-color: var(--ul-text-3);
-            color: var(--ul-text-4);
+            background: var(--ul-grey-6);
+            border-color: var(--ul-grey-6);
+            color: var(--ul-grey-5);
         }
     }
 }
@@ -1704,7 +1704,7 @@
 
 .trip-setting-desc {
     font-size: .78rem;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     font-weight: 400;
 }
 
@@ -1724,7 +1724,7 @@
     ;
     font-size: .78rem;
     font-weight: 500;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     cursor: pointer;
     transition: background .1s, border-color .1s, color .1s;
     white-space: nowrap;
@@ -1734,12 +1734,12 @@
     }
 
     &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
-        background: var(--ul-surface-4);
+        background: var(--ul-grey-4);
         border-color: var(--ul-border);
     }
 
     &--active {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
         border-color: $ui-blue-500;
         color: $ui-blue-700;
     }
@@ -1757,7 +1757,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .06em;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     text-align: center;
     padding: .9rem 0 .3rem;
 }
@@ -2037,7 +2037,7 @@
 
     &:hover {
         background: $danger-color;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 }
 
@@ -2068,7 +2068,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-4);
+        background: var(--ul-grey-4);
         color: $text-secondary;
     }
 
@@ -2081,7 +2081,7 @@
         }
 
         &.activity-vote-btn--down {
-            background: var(--ul-surface-0a);
+            background: var(--ul-grey-0a);
             color: $ui-red-600;
         }
     }
@@ -2092,7 +2092,7 @@
         padding: .2rem .3rem;
 
         &:hover {
-            background: var(--ul-surface-0);
+            background: var(--ul-grey-0);
             color: $text-secondary;
         }
     }
@@ -2143,7 +2143,7 @@
 .trip-map-ctx-menu {
     position: absolute;
     z-index: 1200;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
@@ -2221,19 +2221,19 @@
     &:has(input:checked),
     &.active {
         border-color: $primary-color;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         color: $primary-color;
         font-weight: 500;
     }
 
     &:hover:not(:has(input:checked)) {
         border-color: color.adjust($primary-color, $lightness: 20%);
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     // Dark mode
     [data-theme="dark"] & {
-        background: var(--ul-surface-9);
+        background: var(--ul-grey-9);
         border-color: var(--ul-border);
         color: var(--ul-border);
 

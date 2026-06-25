@@ -4,7 +4,7 @@
 // ── Pin list membership panel (on pin detail page) ───────────────────────────
 
 .pinlist-panel {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     overflow: hidden;
@@ -15,11 +15,11 @@
     align-items: center;
     gap: 8px;
     padding: 0.75rem 1rem;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     border-bottom: 1px solid var(--ul-border);
     font-weight: 600;
     font-size: 0.9rem;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
 
     i {
         font-size: 1.1rem;
@@ -50,7 +50,7 @@
     }
 
     &.is-member {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 }
 
@@ -58,7 +58,7 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -132,7 +132,7 @@
     color: $text-secondary;
     text-decoration: none;
     border-top: 1px solid var(--ul-border);
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     transition: color 0.12s;
 
     i {
@@ -158,7 +158,7 @@
     .badge-title {
         font-size: 1.6rem;
         font-weight: 700;
-        color: var(--ul-text-0);
+        color: var(--ul-grey-9);
         margin: 0 0 0.25rem;
     }
 
@@ -171,8 +171,8 @@
 
 // Create card
 .tag-create-card {
-    background: var(--ul-surface-0);
-    border: 1px solid var(--ul-surface-0b);
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-0b);
     border-radius: $radius-md;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
@@ -180,8 +180,8 @@
 
 // Tag cards
 .tag-card {
-    background: var(--ul-surface-0);
-    border: 1px solid var(--ul-surface-0b);
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-0b);
     border-radius: $radius-md;
     margin-bottom: 0.75rem;
     overflow: hidden;
@@ -192,7 +192,7 @@
     align-items: center;
     gap: 1rem;
     padding: 0.9rem 1rem;
-    background: var(--ul-surface-0a);
+    background: var(--ul-grey-0a);
 }
 
 .tag-card-icon {
@@ -270,7 +270,7 @@
     font-size: 0.78rem;
     font-weight: 500;
     color: $text-secondary;
-    background: var(--ul-surface-4);
+    background: var(--ul-grey-4);
     border-radius: 999px;
     padding: 2px 7px 2px 5px;
     border: 1px solid var(--ul-border);
@@ -282,7 +282,7 @@
 
     &.tag-stat--children {
         color: $primary-color;
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
         border-color: $ui-blue-200;
 
         i {
@@ -292,7 +292,7 @@
 
     &.tag-stat--total {
         color: $text-secondary;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-1);
         border-color: var(--ul-border);
         font-style: italic;
     }
@@ -319,7 +319,7 @@
     font-size: 0.7rem;
     font-weight: 500;
     color: $text-muted;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border-radius: 4px;
     padding: 1px 5px;
 
@@ -345,7 +345,7 @@
 .tag-customized-badge {
     font-size: 0.7rem;
     font-weight: 500;
-    color: var(--ul-text-4);
+    color: var(--ul-grey-5);
     background: var(--ul-accent-purple);
     border-radius: 4px;
     padding: 1px 5px;
@@ -459,7 +459,7 @@
 }
 
 .color-clear {
-    background: var(--ul-surface-0) !important;
+    background: var(--ul-grey-0) !important;
     color: $text-muted;
 
     i {
@@ -496,11 +496,11 @@
     padding: 3px 8px;
     border-radius: 20px;
     border: 1px solid var(--ul-border);
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     &:has(input:checked) {
@@ -541,7 +541,7 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     padding: .75rem 1rem;
@@ -577,7 +577,7 @@
 .tag-merge-warning {
     font-size: .82rem;
     color: var(--ul-accent-amber-fg);
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-accent-amber-bg);
     border-radius: $radius-sm;
     padding: .5rem .75rem;
@@ -595,7 +595,7 @@
 // ── Tag membership panel (on pin detail page) ─────────────────────────────────
 
 .tag-panel {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     overflow: hidden;
@@ -609,7 +609,7 @@
     font-weight: 600;
     font-size: 0.9rem;
     border-bottom: 1px solid var(--ul-border);
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
 
     i {
         color: $primary-color;
@@ -714,7 +714,7 @@
     color: $text-secondary;
     text-decoration: none;
     border-top: 1px solid var(--ul-border);
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     transition: color 0.12s;
 
     i {
@@ -747,7 +747,7 @@
     padding: 4px 10px;
     border-radius: 20px;
     border: 2px solid var(--ul-border);
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     font-size: 0.82rem;
     cursor: pointer;
     transition: border-color 0.12s, background 0.12s;
@@ -771,7 +771,7 @@
 
     &:hover {
         border-color: var(--tag-color, #{$primary-color});
-        background: var(--ul-surface-4);
+        background: var(--ul-grey-4);
     }
 
     &:has(.import-tag-checkbox:checked) {
@@ -813,7 +813,7 @@
 // SortableJS ghost state
 .tag-card--ghost {
     opacity: 0.4;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border-color: $primary-color;
 }
 
@@ -833,7 +833,7 @@
 }
 
 .tag-view-btn {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: none;
     padding: 5px 9px;
     cursor: pointer;
@@ -853,13 +853,13 @@
     }
 
     &:hover {
-        background: var(--ul-surface-4);
-        color: var(--ul-text-1);
+        background: var(--ul-grey-4);
+        color: var(--ul-grey-8);
     }
 
     &.active {
         background: $primary-color;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 }
 
@@ -982,7 +982,7 @@
     transition: background .1s;
 
     &:hover {
-        background: var(--ul-surface-4);
+        background: var(--ul-grey-4);
 
         .cat-select-check {
             border-color: $primary-color;
@@ -998,7 +998,7 @@
         height: 18px;
         border: 2px solid $ui-slate-300;
         border-radius: 4px;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         flex-shrink: 0;
         display: flex;
         align-items: center;
@@ -1053,12 +1053,12 @@
     border-radius: $radius-md;
     border: 1px solid transparent;
     margin-bottom: 1rem;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     border-color: var(--ul-border);
     transition: background .18s, border-color .18s;
 
     &.cat-sel-bar--active {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
         border-color: $ui-blue-200;
     }
 }
@@ -1089,12 +1089,12 @@
     align-items: center;
     gap: .3rem;
     padding: .4rem .8rem;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     font-size: .825rem;
     font-weight: 500;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     cursor: pointer;
     transition: background .12s, border-color .12s, color .12s, opacity .12s;
 
@@ -1103,9 +1103,9 @@
     }
 
     &:hover:not(:disabled) {
-        background: var(--ul-surface-4);
+        background: var(--ul-grey-4);
         border-color: var(--ul-border-strong);
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
     }
 
     &:disabled {
@@ -1129,7 +1129,7 @@
 
 .cat-sel-edit-btn {
     &:hover:not(:disabled) {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: $primary-color;
         color: $primary-color;
     }
@@ -1140,7 +1140,7 @@
     color: $ui-red-600;
 
     &:hover:not(:disabled) {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: $ui-red-600;
         color: $ui-red-700;
     }
@@ -1222,7 +1222,7 @@
     align-items: center;
     gap: .75rem;
     padding: .6rem .75rem;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     transition: border-color .12s;
@@ -1306,7 +1306,7 @@
     flex-direction: column;
     gap: .6rem;
     padding: .75rem;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
 
@@ -1547,7 +1547,7 @@
     padding: .6rem 1.25rem;
     font-size: .9rem;
     font-weight: 500;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     border: none;
     background: none;
     cursor: pointer;
@@ -1563,7 +1563,7 @@
     }
 
     &:hover {
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
     }
 
     &.active {
@@ -1585,8 +1585,8 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: var(--ul-surface-0a);
-    border: 1px solid var(--ul-surface-0b);
+    background: var(--ul-grey-0a);
+    border: 1px solid var(--ul-grey-0b);
     border-radius: $radius-md;
     padding: .6rem .85rem;
     cursor: grab;
@@ -1602,7 +1602,7 @@
 
     &.priority-item--ghost {
         opacity: .4;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: $primary-color;
     }
 }
@@ -1622,7 +1622,7 @@
     width: 34px;
     height: 34px;
     border-radius: $radius-sm;
-    background: var(--ul-surface-4);
+    background: var(--ul-grey-4);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1699,7 +1699,7 @@
     font-size: .78rem;
     font-weight: 600;
     color: $text-secondary;
-    background: var(--ul-surface-4);
+    background: var(--ul-grey-4);
     border: 1px solid var(--ul-border);
     border-radius: 20px;
     padding: 1px 9px;
@@ -1735,7 +1735,7 @@
             font-size: .875rem;
             font-weight: 500;
             color: $text-secondary;
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-1);
             transition: border-color .13s, background .13s, color .13s;
             height: 2.5em;
 
@@ -1761,7 +1761,7 @@
 
         &:hover span {
             border-color: var(--ul-border-strong);
-            background: var(--ul-surface-4);
+            background: var(--ul-grey-4);
         }
     }
 }
@@ -1784,8 +1784,8 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: var(--ul-surface-0a);
-    border: 1px solid var(--ul-surface-0b);
+    background: var(--ul-grey-0a);
+    border: 1px solid var(--ul-grey-0b);
     border-radius: $radius-md;
     padding: .6rem .85rem;
     transition: box-shadow .12s;
@@ -1804,7 +1804,7 @@
     width: 36px;
     height: 36px;
     border-radius: $radius-sm;
-    background: var(--ul-surface-4);
+    background: var(--ul-grey-4);
     border: 1px solid var(--ul-border);
     display: flex;
     align-items: center;
@@ -1828,7 +1828,7 @@
 .tag-row-name {
     font-size: .95rem;
     font-weight: 500;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     @include truncate;
 }
 
@@ -1863,12 +1863,12 @@
     }
 
     &:hover {
-        background: var(--ul-surface-4);
-        color: var(--ul-text-1);
+        background: var(--ul-grey-4);
+        color: var(--ul-grey-8);
     }
 
     &.tag-row-action--danger:hover {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
         color: $ui-red-600;
     }
 }
@@ -1918,7 +1918,7 @@
         }
 
         &:hover {
-            color: var(--ul-text-1);
+            color: var(--ul-grey-8);
         }
     }
 
@@ -1937,7 +1937,7 @@
         align-items: flex-start;
         gap: 10px;
         padding: 14px 16px 16px;
-        background: var(--ul-surface-1, $ui-slate-50);
+        background: var(--ul-grey-1, $ui-slate-50);
         border: 1px solid var(--ul-border, $ui-slate-200);
         border-top: none;
         border-radius: 0 0 12px 12px;
@@ -1956,7 +1956,7 @@
         border: 1.5px solid var(--ul-border, $ui-slate-300);
         border-radius: 999px;
         font-size: .82rem;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         color: inherit;
         outline: none;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
@@ -1984,12 +1984,12 @@
         gap: 4px;
         padding: 5px 11px;
         border-radius: 999px;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border: 1.5px solid var(--ul-border, $ui-slate-200);
         font-size: .75rem;
         font-weight: 500;
         cursor: pointer;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         transition: background .13s, border-color .13s, color .13s, box-shadow .13s;
         user-select: none;
         white-space: nowrap;
@@ -2021,7 +2021,7 @@
         gap: 5px;
         align-items: center;
         padding: 4px 6px;
-        background: var(--ul-surface-0, #fff);
+        background: var(--ul-grey-0, #fff);
         border: 1.5px solid var(--ul-border, $ui-slate-200);
         border-radius: 10px;
     }
@@ -2040,7 +2040,7 @@
         }
 
         &.active {
-            border-color: var(--ul-text-1);
+            border-color: var(--ul-grey-8);
             box-shadow: 0 0 0 2px rgba(255, 255, 255, .7), 0 0 0 4px var(--ul-color-accent);
             transform: scale(1.15);
         }
@@ -2051,12 +2051,12 @@
         align-items: center;
         gap: 3px;
         font-size: .73rem;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         cursor: pointer;
         padding: 5px 9px;
         border-radius: 999px;
         border: 1.5px solid var(--ul-border, $ui-slate-200);
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         transition: color .12s, border-color .12s, background .12s;
         white-space: nowrap;
 
@@ -2119,11 +2119,11 @@
         padding: 7px 14px;
         border-radius: $radius-sm;
         border: 2px solid var(--ul-border, $ui-slate-200);
-        background: var(--ul-surface-1, $ui-slate-50);
+        background: var(--ul-grey-1, $ui-slate-50);
         cursor: pointer;
         font-size: .875rem;
         font-weight: 500;
-        color: var(--ul-text-2, $ui-slate-600);
+        color: var(--ul-grey-7, $ui-slate-600);
         transition: border-color .13s, background .13s, color .13s, box-shadow .13s;
         white-space: nowrap;
         height: 2.5em;
@@ -2136,7 +2136,7 @@
 
         &:hover {
             border-color: var(--ul-border-strong, $ui-slate-400);
-            background: var(--ul-surface-4, $ui-slate-100);
+            background: var(--ul-grey-4, $ui-slate-100);
         }
 
         &.active {
@@ -2168,7 +2168,7 @@
         border: 1px solid transparent;
         background: transparent;
         cursor: pointer;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         transition: background .13s, border-color .13s, color .13s;
         opacity: 0;
         pointer-events: none;
@@ -2180,7 +2180,7 @@
     }
 
     .priority-edit-btn:hover {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
         border-color: $ui-indigo-300;
         color: $ui-indigo-600;
     }
@@ -2214,9 +2214,9 @@
     height: 34px;
     border-radius: $radius-sm;
     border: 1px solid var(--ul-border, $ui-slate-200);
-    background: var(--ul-surface-0, #fff);
+    background: var(--ul-grey-0, #fff);
     cursor: pointer;
-    color: var(--ul-text-3, $ui-slate-500);
+    color: var(--ul-grey-6, $ui-slate-500);
     transition: background .12s, border-color .12s, color .12s;
 
     .material-icons {
@@ -2224,13 +2224,13 @@
     }
 
     &:hover {
-        background: var(--ul-surface-4, $ui-slate-100);
+        background: var(--ul-grey-4, $ui-slate-100);
         border-color: var(--ul-border-strong, $ui-slate-400);
-        color: var(--ul-text-1, $ui-slate-800);
+        color: var(--ul-grey-8, $ui-slate-800);
     }
 
     &.deselect-mode {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
         border-color: $ui-blue-400;
         color: $ui-blue-600;
     }
@@ -2248,7 +2248,7 @@
     align-items: center;
     gap: 4px;
     padding: 6px 8px;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-1);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--ul-border);
@@ -2263,7 +2263,7 @@
 
 [data-theme="dark"] .org-bulk-bar {
     // Slightly elevated surface with a visible border so it reads against the dark page
-    background: var(--ul-surface-4);
+    background: var(--ul-grey-4);
     border-color: var(--ul-border-strong);
 }
 
@@ -2298,7 +2298,7 @@
     border: none;
     background: transparent;
     cursor: pointer;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     transition: background .12s, color .12s;
     flex-shrink: 0;
 
@@ -2345,7 +2345,7 @@
 
 .org-bulk-btn--merge {
     background: $ui-indigo-500;
-    color: var(--ul-text-5);
+    color: var(--ul-grey-4);
     border-color: $ui-indigo-500;
     box-shadow: 0 1px 4px rgba(99, 102, 241, .3);
 

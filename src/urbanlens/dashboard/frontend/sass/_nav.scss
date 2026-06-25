@@ -39,7 +39,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
 .app-nav-brand-name {
     font-size: 1rem;
     font-weight: 700;
-    color: var(--ul-text-9);
+    color: var(--ul-grey-0);
     letter-spacing: -0.01em;
 }
 
@@ -88,14 +88,14 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     border-radius: 6px;
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--ul-text-6);
+    color: var(--ul-grey-3);
     text-decoration: none;
     transition: background 0.15s, color 0.15s;
 
     &:hover {
         background: rgba(255, 255, 255, 0.3);
         color: var(--ul-black);
-        border: 1px solid var(--ul-surface-9);
+        border: 1px solid var(--ul-grey-9);
     }
 }
 
@@ -137,7 +137,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     height: 100%;
     font-size: 0.8rem;
     font-weight: 700;
-    color: var(--ul-text-4);
+    color: var(--ul-grey-5);
     text-transform: uppercase;
     user-select: none;
 
@@ -161,7 +161,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     border-radius: 8px;
     padding: 4px 8px 4px 4px;
     cursor: pointer;
-    color: var(--ul-text-5);
+    color: var(--ul-grey-4);
     transition: background 0.15s, border-color 0.15s;
 
     &:hover {
@@ -238,13 +238,13 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
 .nav-dropdown-fullname {
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     @include truncate;
 }
 
 .nav-dropdown-username {
     font-size: 0.8rem;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     @include truncate;
 }
 
@@ -276,7 +276,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
         }
 
         &:hover {
-            background: var(--ul-surface-0);
+            background: var(--ul-grey-0);
 
             .material-icons {
                 color: #{$color-red-900};
@@ -292,13 +292,13 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
 
 .page-footer {
     background-color: #{$dark-primary};
-    color: var(--ul-text-5);
+    color: var(--ul-grey-4);
     position: sticky;
     bottom: 0;
     z-index: 15; // above div.container (z-index: 1)
 
     a {
-        color: var(--ul-text-6);
+        color: var(--ul-grey-3);
     }
 }
 
@@ -377,12 +377,12 @@ nav .brand-logo img {
 
     &:hover {
         background: rgba(255, 255, 255, .12);
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 
     &[aria-expanded="true"] {
         background: rgba(255, 255, 255, .14);
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 
     .nav-notif-icon {
@@ -399,7 +399,7 @@ nav .brand-logo img {
     padding: 0 4px;
     border-radius: 8px;
     background: #{$color-red-700};
-    color: var(--ul-text-4);
+    color: var(--ul-grey-5);
     font-size: .68rem;
     font-weight: 700;
     line-height: 16px;
@@ -433,7 +433,7 @@ nav .brand-logo img {
     &__title {
         font-size: .9rem;
         font-weight: 600;
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
     }
 }
 
@@ -469,7 +469,7 @@ nav .brand-logo img {
     position: relative;
 
     &:hover {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-1);
     }
 
     // ── Read state: deemphasised ─────────────────────────────────────────
@@ -481,12 +481,12 @@ nav .brand-logo img {
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--ul-surface-4);
+        background: var(--ul-grey-4);
         margin-top: .1rem;
 
         .material-icons {
             font-size: 1rem;
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
         }
     }
 
@@ -498,21 +498,21 @@ nav .brand-logo img {
     &__title {
         font-size: .84rem;
         font-weight: 400;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         margin: 0 0 .15rem;
         @include truncate;
     }
 
     &__msg {
         font-size: .79rem;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         margin: 0 0 .2rem;
         @include truncate;
     }
 
     &__time {
         font-size: .7rem;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         margin: 0;
     }
 
@@ -527,11 +527,11 @@ nav .brand-logo img {
 
     // ── Unread state: prominent ──────────────────────────────────────────
     &--unread {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-left-color: $ui-indigo-500;
 
         &:hover {
-            background: var(--ul-surface-0);
+            background: var(--ul-grey-0);
         }
 
         .notif-item__icon-wrap {
@@ -544,15 +544,15 @@ nav .brand-logo img {
 
         .notif-item__title {
             font-weight: 600;
-            color: var(--ul-text-1);
+            color: var(--ul-grey-8);
         }
 
         .notif-item__msg {
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
         }
 
         .notif-item__time {
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
         }
     }
 
@@ -585,7 +585,7 @@ nav .brand-logo img {
     }
 
     &--unread &__icon-wrap--error {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
 
         .material-icons {
             color: $ui-red-600;
@@ -605,7 +605,7 @@ nav .brand-logo img {
     padding: 1.5rem 1rem;
     text-align: center;
     font-size: .84rem;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     margin: 0;
 }
 
@@ -642,11 +642,11 @@ nav .brand-logo img {
     }
 
     &--decline {
-        background: var(--ul-surface-4, #f1f5f9);
-        color: var(--ul-text-2, #475569);
+        background: var(--ul-grey-4, #f1f5f9);
+        color: var(--ul-grey-7, #475569);
 
         &:hover {
-            background: var(--ul-surface-0a);
+            background: var(--ul-grey-0a);
             color: $ui-red-600;
         }
     }
@@ -687,7 +687,7 @@ nav .brand-logo img {
         border-bottom: 1px solid $ui-gray-100;
 
         &:hover {
-            background: var(--ul-surface-0);
+            background: var(--ul-grey-0);
         }
     }
 
@@ -760,14 +760,14 @@ nav .brand-logo img {
         border-radius: 6px;
         font-size: 0.95rem;
         font-weight: 500;
-        color: var(--ul-text-5);
+        color: var(--ul-grey-4);
         text-decoration: none;
         transition: background 0.15s, color 0.15s;
 
         &:hover,
         &:focus {
             background: rgba(255, 255, 255, 0.1);
-            color: var(--ul-text-0);
+            color: var(--ul-grey-9);
         }
     }
 }

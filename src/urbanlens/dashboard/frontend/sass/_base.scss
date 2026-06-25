@@ -29,7 +29,7 @@ button,
     margin: 0 auto;
     
     > .ul-section {
-        background-color: var(--ul-surface-0a);
+        background-color: var(--ul-grey-0a);
     }
 }
 
@@ -121,7 +121,7 @@ button,
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border-radius: $radius-md;
     box-shadow: $shadow-dialog;
     width: calc(100% - 2rem);
@@ -164,7 +164,7 @@ button,
             font-size: 0.9rem;
             border: 1.5px solid var(--ul-border) !important;
             border-radius: $radius-sm !important;
-            background: var(--ul-surface-0);
+            background: var(--ul-grey-0);
             color: $text-primary;
             outline: none;
             transition: border-color 0.15s ease, box-shadow 0.15s ease;

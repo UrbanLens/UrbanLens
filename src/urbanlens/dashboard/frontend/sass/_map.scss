@@ -34,7 +34,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         box-shadow: 0 2px 8px rgba(0, 0, 0, .32);
     }
 
@@ -139,11 +139,11 @@
     transition: background .1s;
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     &.is-highlighted {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
 
         .detail-pin-list-item-name {
             color: $ui-blue-700;
@@ -180,7 +180,7 @@
         &:hover,
         &:focus {
             color: $ui-red-600;
-            background: var(--ul-surface-0a);
+            background: var(--ul-grey-0a);
             outline: none;
         }
     }
@@ -217,13 +217,13 @@
 
     &:hover {
         color: $ui-gray-700;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     &.is-active {
         color: $ui-blue-600;
         border-bottom-color: $ui-blue-600;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 }
 
@@ -232,7 +232,7 @@
     top: 2px;
     right: 4px;
     background: $ui-blue-600;
-    color: var(--ul-text-5);
+    color: var(--ul-grey-4);
     border-radius: 8px;
     font-size: .6rem;
     font-weight: 700;
@@ -264,7 +264,7 @@
     border-radius: 6px;
     overflow: hidden;
     cursor: pointer;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 2px solid transparent;
     transition: border-color .12s, box-shadow .12s, transform .12s;
 
@@ -402,7 +402,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     &+& {
@@ -475,7 +475,7 @@
     font-size: .8rem;
     color: $ui-gray-700;
     width: 100%;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
 
     &:focus {
         border-color: $ui-blue-300;
@@ -597,7 +597,7 @@
     top: 100%;
     left: 0;
     right: 0;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1.5px solid var(--ul-border);
     border-top: none;
     border-radius: 0 0 $radius-sm $radius-sm;
@@ -625,7 +625,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-0a);
+        background: var(--ul-grey-0a);
         color: $primary-color;
     }
 }
@@ -671,7 +671,7 @@
     padding: .28rem .65rem;
     border-radius: 20px;
     border: 1.5px solid var(--ul-border);
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     font-size: .8rem;
     cursor: pointer;
     user-select: none;
@@ -708,7 +708,7 @@
 .map-context-menu {
     position: fixed;
     z-index: 10000;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     ;
     border-radius: 8px;
@@ -752,7 +752,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         color: $ui-indigo-700;
 
         .material-icons {
@@ -820,7 +820,7 @@
 }
 
 .fp-close:hover {
-    color: var(--ul-text-5);
+    color: var(--ul-grey-4);
     background: rgba(255, 255, 255, 0.1);
 }
 
@@ -850,7 +850,7 @@
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.11);
     border-radius: 8px;
-    color: var(--ul-text-5);
+    color: var(--ul-grey-4);
     padding: 7px 11px;
     font-size: 0.82rem;
     outline: none;
@@ -891,7 +891,7 @@
 
 .fp-chip:hover {
     background: rgba(255, 255, 255, 0.11);
-    color: var(--ul-text-5);
+    color: var(--ul-grey-4);
 }
 
 .fp-chip input {
@@ -975,7 +975,7 @@
 }
 
 .fp-accordion-summary:hover {
-    color: var(--ul-text-5);
+    color: var(--ul-grey-4);
 }
 
 .fp-accordion-label {
@@ -1038,7 +1038,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.11);
     border-radius: 7px;
-    color: var(--ul-text-5);
+    color: var(--ul-grey-4);
     padding: 6px 8px;
     font-size: .8rem;
     outline: none;
@@ -1077,7 +1077,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.11);
     border-radius: 7px;
-    color: var(--ul-text-5);
+    color: var(--ul-grey-4);
     padding: 5px 7px;
     font-size: .74rem;
     outline: none;
@@ -1097,7 +1097,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.11);
     border-radius: 7px;
-    color: var(--ul-text-5);
+    color: var(--ul-grey-4);
     padding: 5px 9px;
     font-size: .78rem;
     outline: none;
@@ -1202,7 +1202,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     top: 12px;
     left: 54px;
     width: min(360px, calc(100% - 68px));
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: 24px;
     display: flex;
@@ -1221,7 +1221,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 
 .addr-search-icon {
     font-size: 1rem;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     flex-shrink: 0;
 }
 
@@ -1230,19 +1230,19 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: transparent;
     border: none;
     outline: none;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     font-size: 0.84rem;
     padding: 10px 0;
 
     &::placeholder {
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
     }
 }
 
 .addr-search-clear {
     background: none;
     border: none;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     cursor: pointer;
     padding: 3px;
     border-radius: 50%;
@@ -1252,7 +1252,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     flex-shrink: 0;
 
     &:hover {
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
         background: var(--ul-hover-bg);
     }
 
@@ -1266,7 +1266,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     top: 52px;
     left: 54px;
     width: min(360px, calc(100% - 68px));
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: 12px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, .16);
@@ -1281,7 +1281,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     width: 100%;
     background: none;
     border: none;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     text-align: left;
     padding: 9px 14px;
     font-size: 0.8rem;
@@ -1296,12 +1296,12 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 
 .addr-suggestion:hover {
     background: var(--ul-hover-bg);
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
 }
 
 .addr-suggestion .material-icons {
     font-size: .85rem;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     flex-shrink: 0;
 }
 
@@ -1313,7 +1313,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
     box-shadow: 0 4px 24px rgba(0, 0, 0, .5);
-    color: var(--ul-text-4);
+    color: var(--ul-grey-5);
     padding: 0;
     min-width: 200px;
 }
@@ -1334,7 +1334,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 }
 
 .leaflet-popup-close-button:hover {
-    color: var(--ul-text-5) !important;
+    color: var(--ul-grey-4) !important;
 }
 
 .pin-popup {
@@ -1345,7 +1345,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 .popup-title {
     font-weight: 700;
     font-size: .95rem;
-    color: var(--ul-text-5);
+    color: var(--ul-grey-4);
     margin-bottom: 4px;
     line-height: 1.2;
 }
@@ -1490,7 +1490,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     justify-content: center;
     border-radius: 50%;
     font-weight: 700;
-    color: var(--ul-text-5);
+    color: var(--ul-grey-4);
     box-shadow: 0 2px 10px rgba(0, 0, 0, .4), 0 0 0 2px rgba(255, 255, 255, .22);
     transition: transform .12s, box-shadow .12s;
     line-height: 1;
@@ -1526,8 +1526,8 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 .leaflet-control-container {
     .leaflet-control {
         a {
-            background-color: var(--ul-surface-0);
-            color: var(--ul-text-3);
+            background-color: var(--ul-grey-0);
+            color: var(--ul-grey-6);
         }
     }
 }

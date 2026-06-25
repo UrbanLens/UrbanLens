@@ -20,8 +20,8 @@
 }
 
 .ul-card-header {
-	@include panel-header($bg: var(--ul-surface-1));
-	color: var(--ul-text-1);
+	@include panel-header($bg: var(--ul-grey-1));
+	color: var(--ul-grey-8);
 
 	.material-icons {
 		font-size: 1.1rem;
@@ -43,7 +43,7 @@
 .ul-card-footer {
 	padding: $bar-padding-y $bar-padding-x;
 	border-top: 1px solid var(--ul-border);
-	background: var(--ul-surface-1);
+	background: var(--ul-grey-1);
 }
 
 // ── Global dialog utility classes ─────────────────────────────────────────────
@@ -59,7 +59,7 @@
 	font-weight: 600;
 	font-size: .95rem;
 	flex-shrink: 0;
-	border-bottom: 1px solid var(--ul-surface-2b);
+	border-bottom: 1px solid var(--ul-grey-2b);
 }
 
 .dialog-footer {
@@ -70,12 +70,12 @@
 // Was previously defined only in dark-mode overrides - now has a light-mode base.
 .dialog-manage-link {
 	font-size: .8rem;
-	color: var(--ul-text-3);
+	color: var(--ul-grey-6);
 	text-decoration: none;
 	margin-right: auto;
 
 	&:hover {
-		color: var(--ul-text-1);
+		color: var(--ul-grey-8);
 		text-decoration: underline;
 	}
 }
@@ -104,7 +104,7 @@
 	@include dialog-base;
 
 	label {
-		color: var(--ul-text-1);
+		color: var(--ul-grey-8);
 	}
 
 	.panel-header {
@@ -113,7 +113,7 @@
 
 	// Tinted header background is specific to the .ul-dialog shell.
 	.dialog-header {
-		background-color: var(--ul-surface-2);
+		background-color: var(--ul-grey-2);
 	}
 }
 
@@ -140,8 +140,8 @@
 }
 
 .ul-panel-header {
-	@include panel-header($font-size: .9rem, $bg: var(--ul-surface-1));
-	color: var(--ul-text-1);
+	@include panel-header($font-size: .9rem, $bg: var(--ul-grey-1));
+	color: var(--ul-grey-8);
 
 	i,
 	.material-icons {
@@ -173,9 +173,9 @@
 	gap: $space-sm;
 	padding: .6rem $space-md;
 	border-top: 1px solid var(--ul-border);
-	background: var(--ul-surface-1);
+	background: var(--ul-grey-1);
 	font-size: .82rem;
-	color: var(--ul-text-2);
+	color: var(--ul-grey-7);
 	text-decoration: none;
 	transition: color .12s;
 
@@ -191,7 +191,7 @@
 .ul-panel-empty {
 	padding: 1.25rem;
 	font-size: .88rem;
-	color: var(--ul-text-3);
+	color: var(--ul-grey-6);
 	text-align: center;
 	font-style: italic;
 
@@ -247,7 +247,7 @@
 	}
 
 	&--neutral {
-		background: var(--ul-surface-4);
+		background: var(--ul-grey-4);
 		color: var(--ul-black);
 		border-color: var(--ul-border);
 	}
@@ -297,7 +297,7 @@
 	padding: .55rem 1.1rem;
 	font-size: .875rem;
 	font-weight: 500;
-	color: var(--ul-text-3);
+	color: var(--ul-grey-6);
 	border: none;
 	background: none;
 	cursor: pointer;
@@ -314,7 +314,7 @@
 	}
 
 	&:hover {
-		color: var(--ul-text-1);
+		color: var(--ul-grey-8);
 	}
 
 	&--active,
@@ -394,9 +394,9 @@
 	border-radius: $radius-full;
 	font-size: .8rem;
 	font-weight: 500;
-	background: var(--ul-surface-4);
-	border: 1px solid var(--ul-border);
-	color: var(--ul-text-2);
+	background: var(--ul-grey-4);
+	border: 1px solid var(--ul-grey-2b);
+	color: var(--ul-grey-8);
 	line-height: 1.4;
 
 	.material-icons {
@@ -408,7 +408,7 @@
 		transition: background .12s, border-color .12s;
 
 		&:hover {
-			background: var(--ul-surface-1);
+			background: var(--ul-grey-1);
 			border-color: var(--ul-border-strong);
 		}
 	}
@@ -423,9 +423,9 @@
     border-radius: 10px;
     cursor: pointer;
     font-size: .85rem;
-    color: var(--ul-text-2);
-	background-color: var(--ul-surface-0);
-    border: 2px solid var(--ul-surface-0b);
+    color: var(--ul-grey-7);
+	background-color: var(--ul-grey-0);
+    border: 2px solid var(--ul-grey-0b);
     transition: border-color .15s, background .15s;
     min-width: 80px;
 	opacity: 0.8;
@@ -435,7 +435,7 @@
     }
     .material-icons {
         font-size: 1.6rem;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         transition: color .15s;
     }
 
@@ -451,6 +451,6 @@
 
     &:hover:not(.active) {
 		opacity: 1;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-1);
     }
 }

@@ -23,7 +23,7 @@
         padding: 3rem 1.5rem 2.5rem;
         text-align: center;
         background: linear-gradient(145deg, $ui-indigo-950 0%, $ui-indigo-900 50%, $ui-indigo-700 80%, $ui-blue-500 100%);
-        color: var(--ul-text-5);
+        color: var(--ul-grey-4);
 
         @include up($breakpoint-sm) {
             grid-template-columns: 1fr 1fr;
@@ -46,7 +46,7 @@
         font-weight: 800;
         line-height: 1.13;
         letter-spacing: -.03em;
-        color: var(--ul-text-9);
+        color: var(--ul-grey-0);
         margin: 0 0 1.1rem;
 
         em {
@@ -113,7 +113,7 @@
 
         .material-icons {
             font-size: 1.2rem;
-            color: var(--ul-text-9);
+            color: var(--ul-grey-0);
         }
 
         &--1 {
@@ -163,21 +163,21 @@
     // ── Shared section chrome ─────────────────────────────────────────────────
     .about-section {
         padding: 5rem 0;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     .about-values-section {
         padding: 5rem 0;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     .about-features-section {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     .about-audience-section {
         padding: 5rem 0;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     .about-section-label {
@@ -192,7 +192,7 @@
     .about-section-title {
         font-size: clamp(1.6rem, 3vw, 2.25rem);
         font-weight: 800;
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
         margin: 0 0 1.25rem;
         letter-spacing: -.02em;
         line-height: 1.2;
@@ -200,7 +200,7 @@
 
     .about-section-body {
         font-size: 1.05rem;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         line-height: 1.75;
         max-width: 700px;
         margin: 0 0 1.1rem;
@@ -215,8 +215,8 @@
     }
 
     .about-pillar {
-        background: var(--ul-surface-0a);
-        border: 1px solid var(--ul-surface-1b);
+        background: var(--ul-grey-0a);
+        border: 1px solid var(--ul-grey-1b);
         border-radius: 12px;
         padding: 1.5rem;
     }
@@ -240,13 +240,13 @@
     .about-pillar-title {
         font-size: 1rem;
         font-weight: 700;
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
         margin: 0 0 .4rem;
     }
 
     .about-pillar-body {
         font-size: .9rem;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         line-height: 1.6;
         margin: 0;
     }
@@ -261,8 +261,8 @@
 
     .about-value-card {
         padding: 1.75rem;
-        background: var(--ul-surface-0a);
-        border: 1px solid var(--ul-surface-3b);
+        background: var(--ul-grey-0a);
+        border: 1px solid var(--ul-grey-3b);
         border-radius: 12px;
         position: relative;
     }
@@ -279,13 +279,13 @@
     .about-value-title {
         font-size: 1rem;
         font-weight: 700;
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
         margin: 0 0 .5rem;
     }
 
     .about-value-body {
         font-size: .88rem;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         line-height: 1.65;
         margin: 0;
     }
@@ -353,14 +353,14 @@
     .about-feature-title {
         font-size: 1.3rem;
         font-weight: 800;
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
         margin: 0 0 .6rem;
         letter-spacing: -.02em;
     }
 
     .about-feature-body {
         font-size: .975rem;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         line-height: 1.75;
         margin: 0 0 1rem;
     }
@@ -378,7 +378,7 @@
             align-items: center;
             gap: .5rem;
             font-size: .88rem;
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
 
             &::before {
                 content: '✓';
@@ -400,21 +400,21 @@
 
     .about-audience-card {
         padding: 1.5rem;
-        background: var(--ul-surface-0a);
-        border: 1px solid var(--ul-surface-3b);
+        background: var(--ul-grey-0a);
+        border: 1px solid var(--ul-grey-3b);
         border-radius: 12px;
         text-align: center;
 
         h3 {
             font-size: .975rem;
             font-weight: 700;
-            color: var(--ul-text-1);
+            color: var(--ul-grey-8);
             margin: .75rem 0 .45rem;
         }
 
         p {
             font-size: .875rem;
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
             line-height: 1.6;
             margin: 0;
         }
@@ -431,13 +431,13 @@
         background: linear-gradient(135deg, $ui-indigo-950 0%, $ui-indigo-700 100%);
         padding: 5rem 1.5rem;
         text-align: center;
-        color: var(--ul-text-5);
+        color: var(--ul-grey-4);
     }
 
     .about-cta-title {
         font-size: clamp(1.75rem, 3.5vw, 2.5rem);
         font-weight: 800;
-        color: var(--ul-text-9);
+        color: var(--ul-grey-0);
         margin: 0 0 .75rem;
         letter-spacing: -.025em;
     }
@@ -455,7 +455,7 @@
         .about-cta-title,
         .about-title,
         h1, h2, h3, h4, h5, h6 {
-            color: var(--ul-text-0);
+            color: var(--ul-grey-9);
         }
     }
 }

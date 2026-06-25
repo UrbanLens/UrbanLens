@@ -17,7 +17,7 @@ body.page-auth {
 }
 
 .auth-card {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border-radius: 20px;
     box-shadow: 0 24px 64px rgba(0, 0, 0, .35);
     width: 100%;
@@ -59,7 +59,7 @@ body.page-auth {
 .auth-title {
     font-size: 1.45rem;
     font-weight: 700;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     margin: 0 0 .3rem;
     line-height: 1.25;
 }
@@ -103,8 +103,8 @@ body.page-auth {
         border: 1.5px solid var(--ul-border);
         border-radius: 9px;
         font-size: .95rem;
-        color: var(--ul-text-1);
-        background: var(--ul-surface-0);
+        color: var(--ul-grey-8);
+        background: var(--ul-grey-0);
         transition: border-color .15s, box-shadow .15s, background .15s;
         box-sizing: border-box;
         font-family: inherit;
@@ -112,7 +112,7 @@ body.page-auth {
         &:focus {
             outline: none;
             border-color: $ui-indigo-500;
-            background: var(--ul-surface-0);
+            background: var(--ul-grey-0);
             box-shadow: 0 0 0 3px rgba(99, 102, 241, .15);
         }
 
@@ -146,7 +146,7 @@ body.page-auth {
 
 // ── Non-field errors ──────────────────────────────────────────────────────
 .auth-errors {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid $ui-red-200;
     border-radius: 9px;
     padding: .75rem 1rem;
@@ -175,7 +175,7 @@ body.page-auth {
     width: 100%;
     padding: .8rem;
     background: $ui-indigo-600;
-    color: var(--ul-text-4);
+    color: var(--ul-grey-5);
     border: none;
     border-radius: 9px;
     font-size: 1rem;
@@ -207,7 +207,7 @@ body.page-auth {
         content: '';
         flex: 1;
         height: 1px;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     span {
@@ -240,12 +240,12 @@ body.page-auth {
     }
 
     &--google {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: var(--ul-border);
         color: $google-text;
 
         &:hover {
-            background: var(--ul-surface-0);
+            background: var(--ul-grey-0);
             box-shadow: 0 1px 6px rgba(0, 0, 0, .15);
         }
 
@@ -257,7 +257,7 @@ body.page-auth {
     &--discord {
         background: $discord-brand;
         border-color: $discord-brand;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
 
         &:hover {
             background: $discord-brand-hover;
@@ -314,7 +314,7 @@ body.page-auth {
 .auth-info-title {
     font-size: 1.3rem;
     font-weight: 700;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     margin: 0 0 .5rem;
     text-align: center;
 }
@@ -334,7 +334,7 @@ body.page-auth {
 
 // Debug-only verification link block
 .auth-debug-block {
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid $ui-green-200;
     border-radius: 9px;
     padding: .85rem 1rem;

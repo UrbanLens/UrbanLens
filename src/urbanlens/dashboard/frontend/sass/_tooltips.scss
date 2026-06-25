@@ -188,7 +188,7 @@
     display: inline-flex;
     flex-shrink: 0;
     vertical-align: middle;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     border-radius: 50%;
     transition: color .15s, background .15s;
     opacity: 0.5;
@@ -200,7 +200,7 @@
     &:hover,
     &:focus-visible,
     &.is-tooltip-open {
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
         background: var(--ul-hover-bg);
         cursor: default;
         opacity: 1;

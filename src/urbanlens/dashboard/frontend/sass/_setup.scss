@@ -4,7 +4,7 @@
 .setup-wizard {
 	max-width: 1000px;
 	margin: 2rem auto;
-	background: var(--ul-surface-0);
+	background: var(--ul-grey-0);
 	border: 1px solid var(--ul-border);
 	border-radius: 16px;
 	overflow: hidden;
@@ -101,7 +101,7 @@
 			.step-icon {
 				border-color: var(--ul-accent, #0891b2);
 				background: var(--ul-accent, #0891b2);
-				color: var(--ul-text-5);
+				color: var(--ul-grey-4);
 			}
 		}
 
@@ -170,7 +170,7 @@
 
 	&__subtitle {
 		font-size: 0.95rem;
-		color: var(--ul-text-2);
+		color: var(--ul-grey-7);
 		margin: 0;
 		line-height: 1.55;
 	}
@@ -204,7 +204,7 @@
 		align-items: flex-start;
 		gap: 0.6rem;
 		padding: 0.85rem;
-		background: var(--ul-surface-1, $ui-slate-50);
+		background: var(--ul-grey-1, $ui-slate-50);
 		border: 1px solid var(--ul-border);
 		border-radius: 10px;
 
@@ -225,7 +225,7 @@
 
 	&__desc {
 		font-size: 0.75rem;
-		color: var(--ul-text-3);
+		color: var(--ul-grey-6);
 		line-height: 1.4;
 		margin-top: 0.15rem;
 	}
@@ -249,11 +249,11 @@
 		align-items: center;
 		flex-shrink: 0;
 		padding: 0 0.25em 0 10px;
-		background: var(--ul-surface-1, #f3f4f6);
+		background: var(--ul-grey-1, #f3f4f6);
 		border: 1.5px solid var(--ul-border);
 		border-right: none;
 		border-radius: 8px 0 0 8px;
-		color: var(--ul-text-3, #9aa0a6);
+		color: var(--ul-grey-6, #9aa0a6);
 		font-size: .9rem;
 		line-height: 1;
 		box-sizing: border-box;
@@ -270,8 +270,8 @@
 		font-size: .9rem;
 		line-height: 1.4;
 		outline: none;
-		background: var(--ul-surface-1);
-		color: var(--ul-text-1);
+		background: var(--ul-grey-1);
+		color: var(--ul-grey-8);
 	}
 
 	&:focus-within {
@@ -287,8 +287,8 @@
 		border: 1.5px solid var(--ul-border);
 		border-radius: 0 8px 8px 0;
 		border-left: none;
-		background: var(--ul-surface-1);
-		color: var(--ul-text-1);
+		background: var(--ul-grey-1);
+		color: var(--ul-grey-8);
 	}
 }
 
@@ -307,7 +307,7 @@
 	label {
 		font-size: 0.82rem;
 		font-weight: 600;
-		color: var(--ul-text-2);
+		color: var(--ul-grey-7);
 	}
 
 	input[type="text"] {
@@ -315,7 +315,7 @@
 		padding: 0.6rem 0.85rem;
 		border: 2px solid var(--ul-border);
 		border-radius: 8px;
-		background: var(--ul-surface-0);
+		background: var(--ul-grey-0);
 		color: var(--ul-text);
 		transition: border-color 0.2s;
 		width: 100%;
@@ -373,7 +373,7 @@
 		margin: 0.65rem 0 0.35rem;
 		font-size: 0.78rem;
 		font-weight: 600;
-		color: var(--ul-text-2);
+		color: var(--ul-grey-7);
 	}
 
 	&__suggestions {
@@ -391,14 +391,14 @@
 	border-radius: 999px;
 	padding: 0.28rem 0.75rem;
 	font-size: 0.78rem;
-	background: var(--ul-surface-0);
+	background: var(--ul-grey-0);
 	color: var(--ul-text);
 	cursor: pointer;
 	transition: border-color 0.15s, background-color 0.15s;
 
 	&:hover {
 		border-color: var(--ul-accent, #0891b2);
-		background: var(--ul-surface-1, $ui-slate-50);
+		background: var(--ul-grey-1, $ui-slate-50);
 	}
 }
 
@@ -407,7 +407,7 @@
 	align-items: center;
 	gap: 0.85rem;
 	padding: 1rem 1.15rem;
-	background: var(--ul-surface-1, $ui-slate-50);
+	background: var(--ul-grey-1, $ui-slate-50);
 	border: 1px solid var(--ul-border);
 	border-radius: 10px;
 
@@ -427,7 +427,7 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.3rem 0.75rem;
-		background: var(--ul-surface-0);
+		background: var(--ul-grey-0);
 		border: 1px solid $ui-slate-200;
 		border-radius: 6px 6px 0 0;
 		font-size: 0.78rem;
@@ -460,7 +460,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.09em;
-		color: var(--ul-text-3);
+		color: var(--ul-grey-6);
 		margin-bottom: 0.5rem;
 
 		.material-icons { font-size: 0.85rem; }
@@ -477,7 +477,7 @@
 	border: 1px solid var(--ul-border);
 	border-radius: 8px;
 	padding: 0.7rem 0.8rem;
-	background: var(--ul-surface-0);
+	background: var(--ul-grey-0);
 	display: flex;
 	flex-direction: column;
 	gap: 0.25rem;
@@ -497,13 +497,13 @@
 
 	&__desc {
 		font-size: 0.73rem;
-		color: var(--ul-text-3);
+		color: var(--ul-grey-6);
 		line-height: 1.35;
 	}
 
 	&__env {
 		font-size: 0.68rem;
-		color: var(--ul-text-3);
+		color: var(--ul-grey-6);
 		font-family: monospace;
 		word-break: break-all;
 		margin-top: 0.1rem;
@@ -529,8 +529,8 @@
 
 	&--missing {
 		.setup-feature-card__badge {
-			background: var(--ul-surface-1, $ui-slate-100);
-			color: var(--ul-text-3);
+			background: var(--ul-grey-1, $ui-slate-100);
+			color: var(--ul-grey-6);
 		}
 	}
 }
@@ -570,7 +570,7 @@
 
 	&__body {
 		font-size: 0.95rem;
-		color: var(--ul-text-2);
+		color: var(--ul-grey-7);
 		max-width: 380px;
 		line-height: 1.55;
 		margin: 0;

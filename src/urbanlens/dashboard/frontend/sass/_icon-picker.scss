@@ -19,7 +19,7 @@
     padding: 7px 12px;
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     cursor: pointer;
     font-size: 0.9rem;
     min-width: 130px;
@@ -55,7 +55,7 @@
     top: calc(100% + 4px);
     left: 0;
     z-index: 500;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     box-shadow: $shadow-dialog;
@@ -146,7 +146,7 @@
     transition: background 0.1s, border-color 0.1s;
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     &.selected {
@@ -207,7 +207,7 @@
     }
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-color: $ui-red-300;
         color: $ui-red-600;
     }
@@ -250,7 +250,7 @@
     height: 38px;
     border: 2px solid var(--ul-border);
     border-radius: $radius-sm;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -283,13 +283,13 @@
     background: $primary-color;
     border: none;
     border-radius: $radius-sm;
-    color: var(--ul-text-4);
+    color: var(--ul-grey-5);
     font-size: 0.75rem;
     font-weight: 600;
     cursor: pointer;
 
     i {
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
         font-size: 1rem !important;
     }
 

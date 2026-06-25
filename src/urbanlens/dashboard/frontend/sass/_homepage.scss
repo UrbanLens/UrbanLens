@@ -12,7 +12,7 @@ body.page-index {
         text-align: center;
         padding: 4rem 1.5rem;
         background: linear-gradient(160deg, $ui-indigo-950 0%, $ui-indigo-900 45%, $ui-indigo-700 75%, $ui-blue-500 100%);
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 
     .home-eyebrow {
@@ -29,7 +29,7 @@ body.page-index {
         font-weight: 800;
         line-height: 1.12;
         letter-spacing: -.03em;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
         margin: 0 0 1.1rem;
         max-width: 720px;
 
@@ -66,11 +66,11 @@ body.page-index {
         transition: background .15s, transform .1s, box-shadow .15s;
 
         &--primary {
-            background: var(--ul-surface-0);
+            background: var(--ul-grey-0);
             color: $ui-indigo-700;
 
             &:hover {
-                background: var(--ul-surface-0);
+                background: var(--ul-grey-0);
                 transform: translateY(-2px);
                 box-shadow: 0 6px 20px rgba(255, 255, 255, .25);
             }
@@ -78,7 +78,7 @@ body.page-index {
 
         &--secondary {
             background: rgba(255, 255, 255, .12);
-            color: var(--ul-text-5);
+            color: var(--ul-grey-4);
             border: 1.5px solid rgba(255, 255, 255, .35);
 
             &:hover {
@@ -90,7 +90,7 @@ body.page-index {
 
     .home-features {
         padding: 4.5rem 1.5rem;
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
     }
 
     .home-features-inner {
@@ -108,7 +108,7 @@ body.page-index {
 
     .home-section-subtitle {
         text-align: center;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         margin: 0 0 2.75rem;
         font-size: .95rem;
     }
@@ -120,7 +120,7 @@ body.page-index {
     }
 
     .home-feature-card {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         border-radius: 14px;
         padding: 1.75rem 1.5rem;
         border: 1px solid var(--ul-border);
@@ -158,7 +158,7 @@ body.page-index {
 
     .home-feature-desc {
         font-size: .875rem;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         margin: 0;
         line-height: 1.55;
     }
@@ -167,14 +167,14 @@ body.page-index {
         padding: 4rem 1.5rem;
         text-align: center;
         background: linear-gradient(135deg, $ui-indigo-900, $ui-indigo-700);
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 
     .home-cta-title {
         font-size: 1.8rem;
         font-weight: 700;
         margin: 0 0 .6rem;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 
     .home-cta-text {

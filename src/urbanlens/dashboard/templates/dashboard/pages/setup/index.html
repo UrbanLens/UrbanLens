@@ -101,7 +101,7 @@
 
                 {# Username #}
                 <div class="setup-field" style="margin-bottom:20px;">
-                    <label class="setup-field-label" for="setup-username-input" style="display:block;font-size:.85rem;font-weight:600;margin-bottom:6px;color:var(--ul-text-0)">
+                    <label class="setup-field-label" for="setup-username-input" style="display:block;font-size:.85rem;font-weight:600;margin-bottom:6px;color:var(--ul-grey-9)">
                         Username
                     </label>
                     <div class="setup-username-row">
@@ -130,13 +130,13 @@
                                  style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--ul-border,#e0e0e0);" alt="Avatar">
                             {% else %}
                             <div id="setup-avatar-preview"
-                                 style="width:72px;height:72px;border-radius:50%;background:var(--ul-surface-1,#f3f4f6);border:2px solid var(--ul-border,#e0e0e0);display:flex;align-items:center;justify-content:center;">
+                                 style="width:72px;height:72px;border-radius:50%;background:var(--ul-grey-1,#f3f4f6);border:2px solid var(--ul-border,#e0e0e0);display:flex;align-items:center;justify-content:center;">
                                 <i class="material-icons" style="font-size:2rem;color:#9aa0a6;">person</i>
                             </div>
                             {% endif %}
                         </div>
                         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
-                            <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:8px;border-radius:10px;border:1.5px solid var(--ul-border,#e0e0e0);background:var(--ul-surface-1,#fff);font-size:.75rem;color:#5f6368;min-width:64px;" title="Upload your own photo">
+                            <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:8px;border-radius:10px;border:1.5px solid var(--ul-border,#e0e0e0);background:var(--ul-grey-1,#fff);font-size:.75rem;color:#5f6368;min-width:64px;" title="Upload your own photo">
                                 <i class="material-icons" style="font-size:1.6rem;color:#9aa0a6;">upload</i>
                                 <span>Upload</span>
                                 <input type="file" accept="image/*" id="setup-avatar-upload" style="display:none">
@@ -144,7 +144,7 @@
                             {% if gravatar_preview_url %}
                             <button type="button" id="setup-avatar-gravatar-btn"
                                     data-gravatar-url="{{ gravatar_preview_url }}"
-                                    style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:8px;border-radius:10px;border:1.5px solid var(--ul-border,#e0e0e0);background:var(--ul-surface-1,#fff);font-size:.75rem;color:#5f6368;min-width:64px;"
+                                    style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:8px;border-radius:10px;border:1.5px solid var(--ul-border,#e0e0e0);background:var(--ul-grey-1,#fff);font-size:.75rem;color:#5f6368;min-width:64px;"
                                     title="Use your Gravatar">
                                 <img src="{{ gravatar_preview_url }}" style="width:52px;height:52px;border-radius:50%;object-fit:cover;" alt="Gravatar">
                                 <span>Gravatar</span>

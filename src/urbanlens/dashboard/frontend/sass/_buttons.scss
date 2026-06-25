@@ -43,20 +43,20 @@
 	}
 
 	&--ghost {
-		border-color: var(--ul-surface-2b);
-		color: var(--ul-text-2);
+		border-color: var(--ul-grey-2b);
+		color: var(--ul-grey-7);
 
 		&:focus,
 		&:hover {
-			background: var(--ul-surface-1);
-			color: var(--ul-text-1);
+			background: var(--ul-grey-1);
+			color: var(--ul-grey-8);
 		}
 	}
 
 	&--link {
 		color: var(--ul-primary-color);
 		padding-inline: .5rem;
-		border-color: var(--ul-surface-2b);
+		border-color: var(--ul-grey-2b);
 
 		&:focus,
 		&:hover {
@@ -68,6 +68,7 @@
 		color: $color-red-1300;
 		border-color: $danger-border;
 		background: $danger-bg;
+		text-transform: uppercase;
 
 		&:focus,
 		&:hover {
@@ -78,7 +79,8 @@
 	&--danger-filled {
 		background: $danger-color;
 		border-color: color.scale($danger-color, $lightness: -10%);
-		color: var(--ul-text-0);
+		color: var(--ul-grey-9);
+		text-transform: uppercase;
 
 		&:focus,
 		&:hover {
@@ -94,7 +96,6 @@
 
 	&--lg {
 		padding: 0.6rem 1.25rem;
-		font-size: 1rem;
 	}
 
 	&--icon {
@@ -134,7 +135,7 @@ input[type="submit"] {
 .btn-icon,
 .ul-icon-btn {
 	@include icon-btn(30px);
-	color: var(--ul-text-2);
+	color: var(--ul-grey-7);
 
 	&:focus-visible {
 		@include focus-ring($alpha: .12);
@@ -160,8 +161,8 @@ input[type="submit"] {
 
 		&:hover,
 		&:focus {
-			background: $accent-1-bg;
-			color: $accent-1-fg;
+			background: $accent-1-light;
+			color: $accent-1-dark;
 		}
 	}
 
@@ -170,7 +171,7 @@ input[type="submit"] {
 
 		&:hover,
 		&:focus {
-			background: $accent-2-bg;
+			background: $accent-2-light;
 			color: var(--ul-black);
 		}
 	}

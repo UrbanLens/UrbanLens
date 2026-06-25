@@ -130,7 +130,7 @@
     margin-top: 20px;
 
     .smithsonian-image {
-        background: var(--ul-surface-0);
+        background: var(--ul-grey-0);
         padding: 20px;
         text-align: center;
         border-radius: 10px;
@@ -237,7 +237,7 @@
     align-items: center;
     gap: 6px;
     padding: 8px;
-    background: var(--ul-surface-0);
+    background: var(--ul-grey-0);
     opacity: 0.9;
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .07);
@@ -256,7 +256,7 @@
         height: 2.5rem;
         font-size: 1.1rem;
         line-height: 1;
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -302,7 +302,7 @@
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         opacity: 0.7;
         transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         flex-shrink: 0;
@@ -336,7 +336,7 @@
     box-shadow: $shadow-sm;
 
     .card-header {
-        @include panel-header($bg: var(--ul-surface-1));
+        @include panel-header($bg: var(--ul-grey-1));
 
         .material-icons {
             font-size: 1.1rem;
@@ -367,7 +367,7 @@
     justify-content: center;
     gap: .5rem;
     padding: 2rem 1rem;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     font-size: .9rem;
 
     .material-icons {
