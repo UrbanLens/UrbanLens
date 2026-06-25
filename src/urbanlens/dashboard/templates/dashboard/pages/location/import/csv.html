@@ -40,11 +40,12 @@
 .iw-dot.active { background: #2196F3; }
 .iw-dot.done   { background: #43a047; }
 
-/* Step wrappers must be flex columns so .iw-body can scroll within the dialog */
-#iw-step-1,
-#iw-step-parsing,
-#iw-step-2,
-#iw-step-3 {
+/* Step wrappers must be flex columns so .iw-body can scroll within the dialog.
+   Use :not([hidden]) so this display:flex never fights the hidden attribute. */
+#iw-step-1:not([hidden]),
+#iw-step-parsing:not([hidden]),
+#iw-step-2:not([hidden]),
+#iw-step-3:not([hidden]) {
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -1108,6 +1109,9 @@ function escHtml(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function fmtCoord(n) { return typeof n === 'number' ? n.toFixed(4) : n; }
+
+/* ── Init ────────────────────────────────────────────────────────────── */
+showStep('upload', 0);
 
 })();
 </script>
