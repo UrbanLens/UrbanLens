@@ -25,7 +25,7 @@ Features planned for this release.
 
 ## Bug Fixes
 * When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]
-* On admin stats page: Uptime is incorrect (tracking server uptime, not app uptime). Time charts don't display. [UL-149]
+* On admin stats page: Uptime is incorrect (tracking server uptime, not app uptime). Time charts don't display. Locations count is wrong. [UL-149]
 * During import pins, checking "create badge", the badge is created, but the pins aren't added to it. (They are added to already existing badges you select, though) [UL-150]
 * UI Bug: Multi-select toolbar in dark mode [UL-151]
 * When changing a category to a tag, the tag is visually shown twice in the list until page refresh. [UL-152]
@@ -193,6 +193,10 @@ Features planned for future releases.
 * Export Feature: Additional method of delivery in case the page is reloaded or closed. [UL-218]
 * Handle case where user has a comment, someone else replies to it, and then the original comment is deleted. [UL-219]
 * New Site Tool -> Delete My Data: Fully removes all the user's submitted data from everywhere on the site. [UL-220]
+* BUG: When loading main map, it initially loads a different location than the starting point, then after a second it refreshes. [UL-221]
+* "Import from map" feature to load pins from a different service (mapquest, google custom map, etc). Maybe? Does this encourage pin hoarding, or is it just useful? Is it even useful? [UL-222]
+* If task UL-222 is implemented, then we could have a "subscribe to map" feature that would automatically pull updates. [UL-223]
+* Using haveibeenpwned, do not allow the use of compromised passwords. (Is this overreach? Probably not, but maybe. We want to ensure the security of the site and its data as much as possible.) [UL-224]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

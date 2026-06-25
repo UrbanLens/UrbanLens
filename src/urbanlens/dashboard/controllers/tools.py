@@ -34,10 +34,19 @@ def _export_dir(job_id: str) -> str:
 
 
 def _write_status(export_dir: str, status: str, progress: int, message: str, user_id: int | None = None) -> None:
+    status_file = os.path.join(export_dir, "status.json")
+    existing: dict[str, Any] = {}
+    if os.path.exists(status_file):
+        with open(status_file, encoding="utf-8") as fh:
+            existing = json.load(fh)
+
     data: dict[str, Any] = {"status": status, "progress": progress, "message": message}
     if user_id is not None:
         data["user_id"] = user_id
-    with open(os.path.join(export_dir, "status.json"), "w", encoding="utf-8") as fh:
+    elif "user_id" in existing:
+        data["user_id"] = existing["user_id"]
+
+    with open(status_file, "w", encoding="utf-8") as fh:
         json.dump(data, fh)
 
 
@@ -47,6 +56,24 @@ def _read_status(export_dir: str) -> dict[str, Any]:
         return {}
     with open(status_file, encoding="utf-8") as fh:
         return json.load(fh)
+
+
+def _export_error_partial(request: HttpRequest, job_id: str, message: str) -> HttpResponse:
+    """Render a progress fragment in the error state for HTMX to swap in.
+
+    Args:
+        request: The HTTP request.
+        job_id: Export job UUID string.
+        message: User-facing error message.
+
+    Returns:
+        Rendered export progress partial with ``status="error"``.
+    """
+    return render(
+        request,
+        "dashboard/partials/export_progress.html",
+        {"job_id": job_id, "status": "error", "message": message},
+    )
 
 
 def _schedule_cleanup(export_dir: str) -> None:
@@ -372,19 +399,23 @@ class ExportStatusView(LoginRequiredMixin, View):
             uuid.UUID(job_id)
         except ValueError:
             logger.error("Invalid job ID: %s", job_id)  # noqa: TRY400
-            return HttpResponse("Invalid job ID", status=400)
+            return _export_error_partial(request, job_id, "Invalid export job. Please start a new export.")
 
         exp_dir = _export_dir(job_id)
         data = _read_status(exp_dir)
 
         if not data:
             logger.debug("Job not found or expired: job %s, user %s", job_id, request.user.pk)
-            return HttpResponse("Job not found or expired", status=404)
+            return _export_error_partial(request, job_id, "Export job not found or expired. Please start a new export.")
 
         if data.get("user_id") != request.user.pk:
             # TODO: Candidate for sending out a notice
             logger.warning("Attempting to view export for unauthorized user: job %s, user %s", job_id, request.user.pk)
-            return HttpResponse("Forbidden", status=403)
+            return _export_error_partial(
+                request,
+                job_id,
+                "Could not verify export ownership. Please start a new export.",
+            )
 
         return render(request, "dashboard/partials/export_progress.html", {"job_id": job_id, **data})
 

@@ -813,7 +813,7 @@
                 iconHtml = `<span class="map-pin-emoji">${pin.icon}</span>`;
             }
             if (hasColor) {
-                iconHtml = `<span class="map-pin-with-circle" style="position:relative;display:flex;align-items:center;justify-content:center;width:36px;height:36px;"><span class="map-pin-color-circle" style="position:absolute;width:32px;height:32px;border-radius:50%;z-index:0;background:${_hexToRgba(color, 0.4)};"></span><span style="position:relative;z-index:1;display:flex;align-items:center;justify-content:center;">${iconHtml}</span></span>`;
+                iconHtml = `<span class="map-pin-with-circle" style="position:relative;display:flex;align-items:center;justify-content:center;width:36px;height:36px;"><span class="map-pin-color-circle" style="position:absolute;width:32px;height:32px;border-radius:50%;z-index:0;background:${_hexToRgba(color, 0.6)};"></span><span style="position:relative;z-index:1;display:flex;align-items:center;justify-content:center;">${iconHtml}</span></span>`;
             }
             const iconSize = hasColor ? [36, 36] : [28, 28];
             const iconAnchor = hasColor ? [18, 18] : [14, 14];

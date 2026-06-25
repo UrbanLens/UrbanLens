@@ -343,6 +343,49 @@
         return !!(poll && poll.hasAttribute('hx-get'));
     }
 
+    let lastExportErrorToast = '';
+
+    function notifyExportError(message) {
+        const text = (message || 'Export failed. Please try again.').trim();
+        if (!text || text === lastExportErrorToast || !window.toastr) return;
+        lastExportErrorToast = text;
+        toastr.error(text, 'Export failed');
+    }
+
+    function showExportError(message) {
+        const poll = document.getElementById('export-status-poll');
+        if (!poll) return;
+
+        poll.removeAttribute('hx-get');
+        poll.removeAttribute('hx-trigger');
+        poll.removeAttribute('hx-target');
+        poll.removeAttribute('hx-swap');
+
+        const text = message || 'Export failed. Please try again.';
+        poll.innerHTML =
+            '<div class="export-progress-track">' +
+                '<div class="export-progress-bar export-progress-bar--error" style="width: 100%;"></div>' +
+            '</div>' +
+            '<div class="export-error-msg">' +
+                '<i class="material-icons">error</i>' +
+                '<span></span>' +
+            '</div>' +
+            '<div class="export-done-actions" style="margin-top: .75rem;">' +
+                '<button type="button" class="btn btn-secondary" onclick="location.reload()">' +
+                    '<i class="material-icons">refresh</i>' +
+                    'Try again' +
+                '</button>' +
+            '</div>';
+        poll.querySelector('.export-error-msg span').textContent = text;
+        notifyExportError(text);
+    }
+
+    function responseMessage(xhr) {
+        if (!xhr || !xhr.responseText) return '';
+        const text = xhr.responseText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        return text;
+    }
+
     function beforeUnloadHandler(e) {
         if (!isExportInProgress()) return;
         e.preventDefault();
@@ -371,7 +414,7 @@
         });
     }, true);
 
-    // Hide the form once HTMX swaps in the progress panel
+    // Hide the form once HTMX swaps in the progress panel; toast server-rendered errors
     document.body.addEventListener('htmx:afterSwap', function (evt) {
         const targetId = evt.detail.target.id;
         if (targetId === 'export-status-area' || targetId === 'export-status-poll') {
@@ -379,7 +422,29 @@
                 const form = document.getElementById('export-form-wrap');
                 if (form) form.style.display = 'none';
             }
+
+            const errSpan = document.querySelector('#export-status-poll .export-error-msg span');
+            if (errSpan) notifyExportError(errSpan.textContent);
         }
+    });
+
+    document.body.addEventListener('htmx:responseError', function (evt) {
+        const elt = evt.detail.elt;
+        if (!elt || elt.id !== 'export-status-poll') return;
+        const xhr = evt.detail.xhr;
+        let message = responseMessage(xhr) || 'Export status could not be checked. Please try again.';
+        if (xhr && xhr.status === 403) {
+            message = 'Could not verify export ownership. Please start a new export.';
+        } else if (xhr && xhr.status === 404) {
+            message = 'Export job not found or expired. Please start a new export.';
+        }
+        showExportError(message);
+    });
+
+    document.body.addEventListener('htmx:sendError', function (evt) {
+        const elt = evt.detail.elt;
+        if (!elt || elt.id !== 'export-status-poll') return;
+        showExportError('Network error while checking export status. Please check your connection and try again.');
     });
 })();
 </script>
