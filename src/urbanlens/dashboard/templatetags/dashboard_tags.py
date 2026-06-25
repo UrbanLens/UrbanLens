@@ -37,10 +37,10 @@ def tag_total_pins(tag: Badge) -> int:
     """
     total = getattr(tag, "pin_count", None)
     if total is None:
-        total = tag.pins.count()
+        total = tag.pins.count() + tag.categorized_pins.count() + tag.status_pins.count()
     for child in tag.children.all():
         child_count = getattr(child, "pin_count", None)
-        total += child_count if child_count is not None else child.pins.count()
+        total += child_count if child_count is not None else child.pins.count() + child.categorized_pins.count() + child.status_pins.count()
     return total
 
 

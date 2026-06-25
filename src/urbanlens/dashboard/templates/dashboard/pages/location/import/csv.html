@@ -497,7 +497,7 @@
         <div class="iw-footer">
             <span id="iw-selected-count" style="margin-right:auto"></span>
             <label class="iw-meta-row" style="font-size:.85rem;color:#5f6368;cursor:pointer">
-                <input type="checkbox" id="iw-auto-tag" checked>
+                <input type="checkbox" id="iw-auto-tag">
                 Auto Tag
             </label>
             <button id="iw-btn-back" class="btn btn--ghost" style="padding:9px 16px;border-radius:8px;border:1.5px solid #e0e0e0;background:none;cursor:pointer;font-size:.88rem;color:#5f6368;">← Back</button>
@@ -716,7 +716,7 @@ function renderPreview(data) {
         var catId = 'iw-cat-' + listIdx;
         catRow.innerHTML =
             '<label>' +
-            '<input type="checkbox" id="' + catId + '" data-list="' + listIdx + '">' +
+            '<input type="checkbox" id="' + catId + '" data-list="' + listIdx + '" checked>' +
             'Create category <em>"' + escHtml(lst.stem) + '"</em>' +
             '</label>';
         meta.appendChild(catRow);

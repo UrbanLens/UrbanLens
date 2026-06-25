@@ -3,7 +3,6 @@ Features planned for this release.
 
 ## UI Adjustments
 * Notification bar modernization (read/unread are not clear) [UL-3]
-* Color tweaks throughout app for both light and dark mode. [UL-4]
 * Tweak notifications, and make success/error states more clear. [UL-6]
 * Loading indicators for all ui actions that take time. (Creating pin, searching map, etc) [UL-8]
 
@@ -24,6 +23,7 @@ Features planned for this release.
 ## Bug Fixes
 * When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]
 * On admin stats page: Uptime is incorrect (tracking server uptime, not app uptime). Time charts don't display.
+* During import pins, checking "create badge", the badge is created, but the pins aren't added to it. (They are added to already existing badges you select, though)
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
@@ -67,6 +67,7 @@ Features planned for this release.
 * User settings don't seem to properly save. [UL-34]
 * Tooltip UI [UL-5]
 * Add tooltips to help guide users through the app when my assumptions about what is intuitive are incorrect. [UL-17]
+* Verify the UX for changing the kind of a badge (do other properties get updated too, and is that clear?)
 
 # Future Features
 Features planned for future releases.
@@ -135,7 +136,6 @@ Features planned for future releases.
 * Organize page -> Priority Tab: Send to bottom / Send to top.
 * Badges that are created automatically: start them in a sensible priority order
 * During import dialog: some method of checking all "create badge" checkboxes
-* During import dialog: auto tag starts unchecked (for now)
 * Organize Page: Move badge to child of another just by dragging (maybe??)
 
 ## Really Big Ideas / Features
