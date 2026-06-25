@@ -74,6 +74,7 @@ Features planned for this release.
 * Tooltip UI [UL-5]
 * Add tooltips to help guide users through the app when my assumptions about what is intuitive are incorrect. [UL-17]
 * Verify the UX for changing the kind of a badge (do other properties get updated too, and is that clear?) [UL-155]
+* UI Bug in Dark Mode: Organize page -> Merge dialog doesn't show titles of cats being merged. [UL-191]
 
 # Future Features
 Features planned for future releases.
@@ -152,7 +153,7 @@ Features planned for future releases.
 * When creating new badges during pin import, allow an AI to select an emoji and color for it. [UL-176]
 * More (or all?) vector emojis that can change color. [UL-177]
 * On the map: icons with a color are surrounded by a circle of that color. Icons without a color are not. (consider: foreground colors and background colors? That might be overkill.) [UL-178]
-* Limit username changes to prevent users from pretending to be someone else in comments, etc. [UL-145]
+* Limit username changes to prevent users from pretending to be someone else in comments, etc. (Perhaps track historical usernames and display them on the public profile? I'm not sure about this.) [UL-145]
 * BUG: Very first login form on first site install says "welcome back" [UL-179]
 * UI: Login form SSO buttons text color [UL-180]
 * Onboarding: first map load -> "This is your first time using the map. Would you like to import any pins?" [UL-181]
@@ -161,6 +162,10 @@ Features planned for future releases.
 * UI: Tiny "saved" notice on settings pages should be better distinguished. [UL-184]
 * Map Layer: Show/Hide Street Details (otherwise does not show on sat view) [UL-185]
 * UI Bug: Map cluster groups in dark mode need more contrasting color (white?) [UL-186]
+* Main map: Some ability to go "back to home" quickly. [UL-187]
+* Organize Page: Create a new badge should probably open a dialog rather than an element inline. [UL-188]
+* Create badge dialog -> We can put the "upload custom icon" in the choose icon dropdown, so it doesn't look like it's a separate thing. [UL-189]
+* UI Bug: Bulk edit dialog -> visual bug for parent categories without an icon with respect to the tag chip and selector. [UL-190]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
