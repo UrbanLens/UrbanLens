@@ -90,7 +90,7 @@ def icon_keywords(value: str | None) -> str:
 
     Usage: data-keywords="{{ tag.icon|icon_keywords }}"
     """
-    from urbanlens.dashboard.models.badges.model import ICON_KEYWORDS
+    from urbanlens.dashboard.models.badges.meta import ICON_KEYWORDS
 
     return ICON_KEYWORDS.get(str(value), "")
 

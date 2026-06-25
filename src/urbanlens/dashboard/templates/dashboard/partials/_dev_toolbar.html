@@ -21,6 +21,14 @@
             </span>
             <span class="dev-toolbar__theme-label">{% if dev_toolbar_theme_mode == 'dark' %}Dark{% elif dev_toolbar_theme_mode == 'light' %}Light{% else %}Theme{% endif %}</span>
         </button>
+        <button type="button"
+                class="dev-toolbar__tool"
+                id="dev-toolbar-refresh-pin-cache"
+                title="Clear local pin cache and reload from server"
+                aria-label="Refresh pin cache">
+            <i class="material-icons dev-toolbar__tool-icon" aria-hidden="true">cached</i>
+            <span class="dev-toolbar__tool-label">Refresh pin cache</span>
+        </button>
     </div>
 </div>
 <script>
@@ -91,5 +99,33 @@
         var isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
         updateThemeToggle(isDark);
     });
+
+    var pinCacheBtn = document.getElementById('dev-toolbar-refresh-pin-cache');
+    if (pinCacheBtn) {
+        pinCacheBtn.addEventListener('click', function () {
+            if (typeof window.forceRefreshPinCache !== 'function') {
+                if (window.toastr) toastr.warning('Open the map page to refresh the pin cache.');
+                return;
+            }
+            if (pinCacheBtn.disabled) return;
+            pinCacheBtn.disabled = true;
+            pinCacheBtn.classList.add('is-busy');
+            window.forceRefreshPinCache()
+                .then(function (count) {
+                    var n = typeof count === 'number' ? count : '';
+                    if (window.toastr) {
+                        toastr.success(n !== '' ? 'Pin cache refreshed (' + n + ' pins).' : 'Pin cache refreshed from server.');
+                    }
+                })
+                .catch(function (err) {
+                    console.warn('[Dev toolbar] Pin cache refresh failed:', err);
+                    if (window.toastr) toastr.error('Pin cache refresh failed.');
+                })
+                .finally(function () {
+                    pinCacheBtn.disabled = false;
+                    pinCacheBtn.classList.remove('is-busy');
+                });
+        });
+    }
 }());
 </script>

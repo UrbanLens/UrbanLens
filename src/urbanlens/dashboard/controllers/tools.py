@@ -386,7 +386,7 @@ class ExportStatusView(LoginRequiredMixin, View):
 class ExportDownloadView(LoginRequiredMixin, View):
     """Serve the completed export ZIP file."""
 
-    def get(self, request: HttpRequest, job_id: str) -> HttpResponse:
+    def get(self, request: HttpRequest, job_id: str) -> HttpResponse | FileResponse:
         """Stream the export zip to the browser.
 
         Args:

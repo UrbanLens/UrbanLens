@@ -113,6 +113,32 @@
     letter-spacing: 0.01em;
 }
 
+.dev-toolbar__tool-icon {
+    font-size: 1.1rem !important;
+    color: var(--ul-text-muted, #64748b);
+}
+
+.dev-toolbar__tool-label {
+    color: var(--ul-text-muted, #64748b);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.dev-toolbar__tool.is-busy {
+    opacity: 0.65;
+    pointer-events: none;
+
+    .dev-toolbar__tool-icon {
+        animation: dev-toolbar-spin 0.9s linear infinite;
+    }
+}
+
+@keyframes dev-toolbar-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .dev-toolbar--dark-active {
     .dev-toolbar__theme-icon--dark.is-active {
         color: $ui-indigo-300;

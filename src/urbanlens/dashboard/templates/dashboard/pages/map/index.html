@@ -633,6 +633,27 @@
         try { localStorage.removeItem(_CACHE_KEY); } catch {}
         _lastKnownUpdated = null;
     };
+    // Dev toolbar: wipe localStorage + in-memory pin state, then reload from server.
+    window.forceRefreshPinCache = async function() {
+        console.log('[UL] Force clearing pin cache and refreshing from server');
+        window.invalidatePinCache();
+        try { localStorage.removeItem(`ul_pins_v4_${_PROFILE_ID}`); } catch {}
+        if (_PROFILE_UUID) try { localStorage.removeItem(`ul_pins_v4_${_PROFILE_UUID}`); } catch {}
+        _pinStore.clear();
+        _fetchedTiles.clear();
+        clusterGroup.clearLayers();
+        _markerMap.clear();
+        if (_filterMode) _exitFilterMode();
+        _totalPins = 0;
+        updatePinCounter();
+        const csi = document.getElementById('cache-status');
+        if (csi) csi.textContent = 'cache: refreshing…';
+        await _refreshAllPins();
+        await _pollForUpdates();
+        if (_cacheTid) { clearTimeout(_cacheTid); _cacheTid = null; }
+        _writeCache();
+        return _pinStore.size;
+    };
     // Update a single pin in the local store + map without touching any other pin.
     // Call this after editing a pin on the detail page so the map marker refreshes
     // immediately without a full server round-trip for all pins.
