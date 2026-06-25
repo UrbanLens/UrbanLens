@@ -1726,10 +1726,22 @@ body .edit-profile-page .edit-username-input {
 }
 
 .invite-dialog-inner {
-    padding: 1.5rem;
     display: flex;
     flex-direction: column;
     gap: 1rem;
+
+    .dialog-header {
+        background-color: var(--ul-grey-2);
+    }
+}
+
+.invite-dialog-body {
+    padding: 1.25rem;
+
+    input[type="email"] {
+        background-color: var(--ul-grey-1);
+        color: var(--ul-grey-9);
+    }
 }
 
 .invite-dialog-hint {

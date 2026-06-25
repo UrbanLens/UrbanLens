@@ -21,6 +21,7 @@ from urbanlens.dashboard.forms.profile_form import (
     validate_birth_date,
     validate_started_exploring,
 )
+from urbanlens.dashboard.models.badges.meta import KIND_STATUS
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -175,7 +176,8 @@ class ViewProfileView(LoginRequiredMixin, View):
         common_ids = their_loc_ids & my_loc_ids
 
         # Visited by both - has the protected "Visited" status badge, or has a last_visited date
-        visited_filter = Q(statuses__name="Visited") | Q(last_visited__isnull=False)
+        # TODO: Whatever is happening here is probably wrong.
+        visited_filter = Q(badges__name="Visited", badges__kind=KIND_STATUS) | Q(last_visited__isnull=False)
         their_visited_ids = set(
             Pin.objects.filter(profile=profile, location__isnull=False)
             .filter(visited_filter)
