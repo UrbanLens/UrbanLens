@@ -3,9 +3,9 @@ r"""Social link URL parser and profile-link renderer.
 Security contract
 -----------------
 * Only http/https URLs are accepted - data:, javascript:, etc. are rejected.
-* Every extracted handle is validated against ``_HANDLE_RE``; handles that
-  contain characters outside ``[\\w.\\-@#]`` are rejected, so no HTML injection
-  or path-traversal payloads can be stored.
+* Every extracted handle is validated against per-platform rules (``_PLATFORM_HANDLE_RULES``);
+  handles outside the allowed character set or length range are rejected, preventing
+  HTML injection and path-traversal payloads.
 * For ``website`` links the full canonicalized URL is stored, but fragments
   (``#…``) are stripped and length is capped at 500 characters.
 * Discord has no public profile-URL format; its handle is accepted via a
@@ -15,7 +15,11 @@ Security contract
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING, NamedTuple
 from urllib.parse import parse_qs, urlparse
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 # URL template for rendering a stored handle back to a clickable link.
 # None means the platform has no public profile URL (Discord).
@@ -61,16 +65,74 @@ PLATFORM_FA_ICON: dict[str, str] = {
 # All known platform keys (used for validation when removing a link).
 KNOWN_PLATFORMS: frozenset[str] = frozenset(PLATFORM_URL_TEMPLATE)
 
-# Handles may only contain word chars, dots, hyphens, @, or # (Discord tags).
+# Ordered display labels shown in the "Supported:" hint beneath the URL input.
+# Discord is intentionally absent — it uses a dedicated username form, not URL parsing.
+# "website" gets a friendlier label here instead of just "Website".
+# When adding a new URL-parseable platform, append its key to this tuple and the label
+# will appear automatically everywhere the hint is rendered.
+URL_INPUT_PLATFORM_LABELS: list[str] = [
+    PLATFORM_DISPLAY_NAME[p]
+    for p in ("instagram", "bluesky", "uer", "facebook", "flickr", "youtube", "tiktok", "reddit")
+] + ["any website URL"]
+
+
+class _HandleRule(NamedTuple):
+    """Validation rule for a platform's username/handle field."""
+
+    pattern: re.Pattern[str]
+    min_len: int
+    max_len: int
+    hint: str
+
+
+# Per-platform rules applied *after* extracting the handle from a URL.
+# Platforms not listed here (discord, website) are validated elsewhere or not at all.
+_PLATFORM_HANDLE_RULES: dict[str, _HandleRule] = {
+    "instagram": _HandleRule(re.compile(r"^[a-zA-Z0-9._]+$"), 1, 30, "1–30 chars: letters, digits, dots, underscores"),
+    "bluesky": _HandleRule(re.compile(r"^[a-zA-Z0-9._-]+$"), 3, 253, "3–253 chars: letters, digits, dots, hyphens"),
+    "facebook": _HandleRule(re.compile(r"^[a-zA-Z0-9._]+$"), 1, 50, "1–50 chars: letters, digits, dots, underscores"),
+    "flickr": _HandleRule(re.compile(r"^[a-zA-Z0-9@._-]+$"), 3, 64, "3–64 chars: letters, digits, @, dots, hyphens"),
+    "youtube": _HandleRule(re.compile(r"^[a-zA-Z0-9_.-]+$"), 1, 100, "1–100 chars: letters, digits, underscores, dots, hyphens"),
+    "tiktok": _HandleRule(re.compile(r"^[a-zA-Z0-9._]+$"), 1, 24, "1–24 chars: letters, digits, dots, underscores"),
+    "reddit": _HandleRule(re.compile(r"^[a-zA-Z0-9_-]+$"), 3, 20, "3–20 chars: letters, digits, underscores, hyphens"),
+    "uer": _HandleRule(re.compile(r"^\d+$"), 1, 10, "numeric ID (1–10 digits)"),
+}
+
+# Platforms for which we attempt to verify the URL resolves after saving.
+# Excludes discord (no URL) and website (arbitrary URLs, not username-based).
+VERIFIABLE_PLATFORMS: frozenset[str] = frozenset(_PLATFORM_HANDLE_RULES) - {"uer"}
+
+# Broad pre-check: reject anything outside the superset of all platform chars
+# before doing per-platform validation.
 _HANDLE_RE = re.compile(r"^[\w.\-@#]+$")
 
 
 def _clean_handle(s: str | None) -> str | None:
-    """Strip leading @, validate characters, return None if invalid."""
+    """Strip leading @, apply broad character pre-check, return None if invalid."""
     if not s:
         return None
     s = s.strip().lstrip("@")
     return s if s and _HANDLE_RE.match(s) else None
+
+
+def validate_handle(platform: str, handle: str) -> str | None:
+    """Return an error message if *handle* violates the per-platform rules, else None.
+
+    Args:
+        platform: A key from :data:`_PLATFORM_HANDLE_RULES`.
+        handle: The already-stripped (no leading @) username string.
+
+    Returns:
+        A human-readable error string, or ``None`` when the handle is valid.
+    """
+    rule = _PLATFORM_HANDLE_RULES.get(platform)
+    if rule is None:
+        return None
+    if not rule.min_len <= len(handle) <= rule.max_len:
+        return f"Username must be {rule.hint}."
+    if not rule.pattern.match(handle):
+        return f"Username must be {rule.hint}."
+    return None
 
 
 def parse_social_link(raw: str) -> tuple[str, str] | None:
@@ -88,6 +150,10 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
     if not raw:
         return None
 
+    raw_scheme = urlparse(raw).scheme
+    if raw_scheme not in {"", "http", "https"} and ("://" in raw or raw_scheme in {"javascript", "vbscript", "data", "ftp", "file", "mailto"}):
+        return None
+
     # Add a scheme so urlparse can see the host when the user omitted it.
     url_str = raw if "://" in raw else f"https://{raw}"
 
@@ -103,33 +169,42 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
     # ── Instagram ─────────────────────────────────────────────────────────────
     if host == "instagram.com":
         handle = _clean_handle(path_parts[0] if path_parts else None)
-        return ("instagram", handle) if handle else None
+        if not handle or validate_handle("instagram", handle) is not None:
+            return None
+        return ("instagram", handle)
 
     # ── Bluesky ───────────────────────────────────────────────────────────────
     if host == "bsky.app":
         # https://bsky.app/profile/<handle>
         if len(path_parts) >= 2 and path_parts[0] == "profile":
-            return ("bluesky", path_parts[1])
+            handle = _clean_handle(path_parts[1])
+            if not handle or validate_handle("bluesky", handle) is not None:
+                return None
+            return ("bluesky", handle)
         return None
 
     # ── UER ───────────────────────────────────────────────────────────────────
     if host == "uer.ca":
         posterid = qs.get("posterid", [None])[0]
-        if posterid and posterid.isdigit():
+        if posterid and validate_handle("uer", posterid) is None:
             return ("uer", posterid)
         return None
 
     # ── Facebook ──────────────────────────────────────────────────────────────
     if host in {"facebook.com", "fb.com", "fb.me"}:
         handle = _clean_handle(path_parts[0] if path_parts else None)
-        return ("facebook", handle) if handle else None
+        if not handle or validate_handle("facebook", handle) is not None:
+            return None
+        return ("facebook", handle)
 
     # ── Flickr ────────────────────────────────────────────────────────────────
     if host == "flickr.com":
         # https://flickr.com/photos/<username>
         if len(path_parts) >= 2 and path_parts[0] == "photos":
             handle = _clean_handle(path_parts[1])
-            return ("flickr", handle) if handle else None
+            if not handle or validate_handle("flickr", handle) is not None:
+                return None
+            return ("flickr", handle)
         return None
 
     # ── YouTube ───────────────────────────────────────────────────────────────
@@ -137,9 +212,15 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
         if path_parts:
             first = path_parts[0]
             if first.startswith("@"):
-                return ("youtube", first[1:])
+                handle = _clean_handle(first)
+                if not handle or validate_handle("youtube", handle) is not None:
+                    return None
+                return ("youtube", handle)
             if first in {"channel", "user", "c"} and len(path_parts) > 1:
-                return ("youtube", path_parts[1])
+                handle = _clean_handle(path_parts[1])
+                if not handle or validate_handle("youtube", handle) is not None:
+                    return None
+                return ("youtube", handle)
         return None
 
     # ── TikTok ────────────────────────────────────────────────────────────────
@@ -147,7 +228,9 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
         # https://tiktok.com/@username
         if path_parts and path_parts[0].startswith("@"):
             handle = _clean_handle(path_parts[0])
-            return ("tiktok", handle) if handle else None
+            if not handle or validate_handle("tiktok", handle) is not None:
+                return None
+            return ("tiktok", handle)
         return None
 
     # ── Reddit ────────────────────────────────────────────────────────────────
@@ -155,7 +238,9 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
         # /u/<name> or /user/<name>
         if len(path_parts) >= 2 and path_parts[0] in {"u", "user"}:
             handle = _clean_handle(path_parts[1])
-            return ("reddit", handle) if handle else None
+            if not handle or validate_handle("reddit", handle) is not None:
+                return None
+            return ("reddit", handle)
         return None
 
     # ── Generic website ───────────────────────────────────────────────────────
@@ -167,7 +252,7 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
     return None
 
 
-def get_profile_links(profile) -> list[dict]:
+def get_profile_links(profile: Profile) -> list[dict]:
     """Return a list of link dicts for all SocialLink rows attached to *profile*.
 
     Each dict contains: ``platform``, ``handle``, ``url`` (may be None for

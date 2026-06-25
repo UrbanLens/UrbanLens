@@ -8,7 +8,7 @@
         <div class="card-header">
             <i class="material-icons">info_outline</i>
             <span>Details</span>
-            <button type="button" class="btn-icon-sm" style="margin-left:auto" title="Edit details"
+            <button type="button" class="btn--icon-sm" style="margin-left:auto" title="Edit details"
                     onclick="document.getElementById('pin-edit-dialog').showModal()">
                 <i class="material-icons">edit</i>
             </button>
@@ -34,13 +34,15 @@
                 </div>
                 {% endif %}
                 <div class="pin-stat-item">
-                    <span class="field-label">Priority</span>
+                    <span class="field-label">
+                        {% include "dashboard/partials/_tooltip_label.html" with label="Priority" help="How urgently you want to visit this pin (1 = low, 5 = must visit soon)." %}
+                    </span>
                     <span class="field-value">
                         <span class="star-rating-interactive star-rating-interactive--priority">
                             {% for i in "12345"|make_list %}
                             <button type="button"
                                     class="sr-star-btn {% if pin.priority and forloop.counter <= pin.priority %}sr-star-btn--on{% endif %}"
-                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
                                     hx-target="#pin-overview"
                                     hx-swap="outerHTML"
                                     hx-vals='{"priority": {{ forloop.counter }}}'
@@ -49,7 +51,7 @@
                             {% if pin.priority %}
                             <button type="button"
                                     class="sr-star-clear"
-                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
                                     hx-target="#pin-overview"
                                     hx-swap="outerHTML"
                                     hx-vals='{"priority": 0}'
@@ -59,13 +61,15 @@
                     </span>
                 </div>
                 <div class="pin-stat-item">
-                    <span class="field-label">Rating</span>
+                    <span class="field-label">
+                        {% include "dashboard/partials/_tooltip_label.html" with label="Rating" help="Your personal quality rating for this location (1-5 stars)." %}
+                    </span>
                     <span class="field-value">
                         <span class="star-rating-interactive">
                             {% for i in "12345"|make_list %}
                             <button type="button"
                                     class="sr-star-btn {% if pin.rating and forloop.counter <= pin.rating %}sr-star-btn--on{% endif %}"
-                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
                                     hx-target="#pin-overview"
                                     hx-swap="outerHTML"
                                     hx-vals='{"rating": {{ forloop.counter }}}'
@@ -74,7 +78,7 @@
                             {% if pin.rating %}
                             <button type="button"
                                     class="sr-star-clear"
-                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
                                     hx-target="#pin-overview"
                                     hx-swap="outerHTML"
                                     hx-vals='{"rating": 0}'
@@ -84,13 +88,15 @@
                     </span>
                 </div>
                 <div class="pin-stat-item">
-                    <span class="field-label">Vulnerability</span>
+                    <span class="field-label">
+                        {% include "dashboard/partials/_tooltip_label.html" with label="Vulnerability" help="How at-risk or fragile this site feels - useful for planning and sharing responsibly." wide=True %}
+                    </span>
                     <span class="field-value">
                         <span class="star-rating-interactive star-rating-interactive--vulnerability">
                             {% for i in "12345"|make_list %}
                             <button type="button"
                                     class="sr-star-btn {% if pin.vulnerability and forloop.counter <= pin.vulnerability %}sr-star-btn--on{% endif %}"
-                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
                                     hx-target="#pin-overview"
                                     hx-swap="outerHTML"
                                     hx-vals='{"vulnerability": {{ forloop.counter }}}'
@@ -99,7 +105,7 @@
                             {% if pin.vulnerability %}
                             <button type="button"
                                     class="sr-star-clear"
-                                    hx-post="{% url 'pin.edit' pin.uuid %}"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
                                     hx-target="#pin-overview"
                                     hx-swap="outerHTML"
                                     hx-vals='{"vulnerability": 0}'
@@ -148,34 +154,42 @@
 
     {# ── Linked location panel ──────────────────────────────────────────────── #}
     <div class="pin-location-section" id="pin-location-section">
-        {% if pin.location %}
+        {% if pin.is_private %}
+        {# Private pins are intentionally unlinked from the community wiki. #}
+        <div class="pin-location-panel pin-location-panel--private">
+            <i class="material-icons" style="color:var(--text-muted,#888)">lock</i>
+            <span>Private pin &mdash; no community wiki entry.</span>
+        </div>
+        {% elif pin.location %}
         <div class="pin-location-panel">
             <div class="pin-location-panel-main">
                 <i class="material-icons pin-location-icon">public</i>
                 <div class="pin-location-info">
                     <span class="pin-location-label">Community Wiki</span>
-                    <a href="{% url 'location.wiki' pin.location.uuid %}" class="pin-location-name">
+                    <a href="{% url 'location.wiki' pin.location.slug %}" class="pin-location-name">
                         {{ pin.location.name }}
                         <i class="material-icons pin-location-name-icon">open_in_new</i>
                     </a>
                 </div>
                 <div class="pin-location-actions">
                     {% if overlapping_location_count > 1 %}
-                    <button type="button" class="btn-ghost btn-sm pin-loc-change-btn"
-                            hx-get="{% url 'pin.link' pin.uuid %}"
+                    <button type="button" class="btn btn--ghost btn--sm pin-loc-change-btn"
+                            hx-get="{% url 'pin.link' pin.slug %}"
                             hx-target="#pin-location-picker"
                             hx-swap="innerHTML"
+                            data-tooltip="Switch this pin to a different shared location. Other users' pins at this place will not be affected."
                             title="Switch to a different shared location">
                         <i class="material-icons">swap_horiz</i>
                         Change
                     </button>
                     {% endif %}
-                    <button type="button" class="btn-ghost btn-sm pin-loc-detach-btn"
-                            hx-post="{% url 'pin.link' pin.uuid %}"
+                    <button type="button" class="btn btn--ghost btn--sm pin-loc-detach-btn"
+                            hx-post="{% url 'pin.link' pin.slug %}"
                             hx-target="#pin-overview"
                             hx-swap="outerHTML"
                             hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
                             hx-confirm="Detach from this location? Your pin will get its own independent community wiki."
+                            data-tooltip="Unlink this pin from the shared location. Your pin will get its own private wiki page that only you can edit."
                             title="Detach from this shared location">
                         <i class="material-icons">link_off</i>
                         Detach
@@ -189,8 +203,8 @@
         <div class="pin-location-panel pin-location-panel--unlinked">
             <i class="material-icons">link_off</i>
             <span>Not linked to any shared location.</span>
-            <button type="button" class="btn-ghost btn-sm pin-loc-change-btn"
-                    hx-get="{% url 'pin.link' pin.uuid %}"
+            <button type="button" class="btn btn--ghost btn--sm pin-loc-change-btn"
+                    hx-get="{% url 'pin.link' pin.slug %}"
                     hx-target="#pin-location-picker"
                     hx-swap="innerHTML">
                 <i class="material-icons">search</i> Find a location

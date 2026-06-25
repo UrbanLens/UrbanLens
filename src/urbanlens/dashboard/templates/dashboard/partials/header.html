@@ -17,6 +17,12 @@
             <li><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
         </ul>
 
+        {# ── Hamburger (mobile only) ──────────────────────────────────────────── #}
+        <button class="app-nav-hamburger" id="nav-hamburger-btn" type="button"
+                aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="app-nav-drawer">
+            <i class="material-icons" id="nav-hamburger-icon">menu</i>
+        </button>
+
         {# ── Right: user menu or login ────────────────────────────────────────── #}
         <div class="app-nav-right">
             {% if user.is_authenticated %}
@@ -82,6 +88,10 @@
                         <i class="material-icons">settings</i>
                         <span>Settings</span>
                     </a>
+                    <a href="{% url 'tools.index' %}" class="nav-dropdown-item" role="menuitem">
+                        <i class="material-icons">build</i>
+                        <span>Tools</span>
+                    </a>
                     {% if user.is_superuser or perms.dashboard.view_site_admin %}
                     <a href="{% url 'site_admin' %}" class="nav-dropdown-item" role="menuitem">
                         <i class="material-icons">admin_panel_settings</i>
@@ -107,6 +117,18 @@
 
     </div>
 </nav>
+
+{# ── Mobile nav drawer (shown below nav bar on small screens) ──────────────── #}
+<div class="app-nav-drawer" id="app-nav-drawer" aria-hidden="true">
+    <ul class="app-nav-drawer-links">
+        <li><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
+        {% if user.is_authenticated %}
+        <li><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
+        <li><a href="{% url 'trips.list' %}" class="app-nav-link">Plan</a></li>
+        {% endif %}
+        <li><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
+    </ul>
+</div>
 
 <script>
 (function () {
@@ -167,7 +189,42 @@
 
     // Escape closes both
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') { closeMenu(); closeNotif(); }
+        if (e.key === 'Escape') { closeMenu(); closeNotif(); closeDrawer(); }
+    });
+
+    // ── Mobile hamburger drawer ───────────────────────────────────────────────
+    var hamburgerBtn  = document.getElementById('nav-hamburger-btn');
+    var hamburgerIcon = document.getElementById('nav-hamburger-icon');
+    var navDrawer     = document.getElementById('app-nav-drawer');
+
+    function openDrawer() {
+        if (!navDrawer) return;
+        navDrawer.classList.add('is-open');
+        navDrawer.setAttribute('aria-hidden', 'false');
+        if (hamburgerBtn) hamburgerBtn.setAttribute('aria-expanded', 'true');
+        if (hamburgerIcon) hamburgerIcon.textContent = 'close';
+    }
+    function closeDrawer() {
+        if (!navDrawer) return;
+        navDrawer.classList.remove('is-open');
+        navDrawer.setAttribute('aria-hidden', 'true');
+        if (hamburgerBtn) hamburgerBtn.setAttribute('aria-expanded', 'false');
+        if (hamburgerIcon) hamburgerIcon.textContent = 'menu';
+    }
+
+    if (hamburgerBtn) {
+        hamburgerBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            navDrawer.classList.contains('is-open') ? closeDrawer() : openDrawer();
+        });
+    }
+
+    // Close drawer on outside click
+    document.addEventListener('click', function (e) {
+        if (navDrawer && navDrawer.classList.contains('is-open') &&
+            !navDrawer.contains(e.target) && hamburgerBtn && !hamburgerBtn.contains(e.target)) {
+            closeDrawer();
+        }
     });
 }());
 </script>

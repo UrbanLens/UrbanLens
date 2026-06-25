@@ -2,7 +2,7 @@
     <div class="card-header">
         <i class="material-icons">label_important</i>
         <span>Aliases</span>
-        <button type="button" class="btn-icon-sm" style="margin-left:auto" title="Add alias"
+        <button type="button" class="btn--icon-sm" style="margin-left:auto" title="Add alias"
                 onclick="this.closest('.aliases-panel').querySelector('.alias-add-input').focus()">
             <i class="material-icons">add</i>
         </button>
@@ -17,7 +17,7 @@
             <button type="button"
                     class="alias-chip-remove"
                     title="Remove alias"
-                    hx-delete="{% url 'pin.alias.delete' pin.uuid alias.id %}"
+                    hx-delete="{% url 'pin.alias.delete' pin.slug alias.id %}"
                     hx-target="#pin-aliases-panel"
                     hx-swap="outerHTML"
                     hx-confirm="Remove alias &ldquo;{{ alias.name }}&rdquo;?">
@@ -31,7 +31,7 @@
     {% endif %}
 
     <form class="alias-add-form"
-          hx-post="{% url 'pin.aliases' pin.uuid %}"
+          hx-post="{% url 'pin.aliases' pin.slug %}"
           hx-target="#pin-aliases-panel"
           hx-swap="outerHTML">
         {% csrf_token %}

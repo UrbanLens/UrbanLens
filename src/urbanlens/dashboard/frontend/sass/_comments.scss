@@ -22,14 +22,14 @@
     display: flex;
     gap: .65rem;
     padding: .75rem 1rem;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid $ui-gray-100;
 
     &:last-child {
         border-bottom: none;
     }
 
     &--reply {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         padding-left: 1.2rem;
     }
 }
@@ -42,7 +42,7 @@
     .comment-item {
         padding-left: .75rem;
         border-bottom: none;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         border-radius: 6px;
         margin-bottom: .3rem;
     }
@@ -80,8 +80,8 @@
     width: 100%;
     height: 100%;
     border-radius: 50%;
-    background: #e0e7ff;
-    color: #4338ca;
+    background: $ui-indigo-100;
+    color: $ui-indigo-700;
     font-weight: 700;
     font-size: .8rem;
 }
@@ -103,7 +103,7 @@
 .comment-author {
     font-size: .82rem;
     font-weight: 600;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
 
     &--link {
         text-decoration: none;
@@ -111,40 +111,28 @@
 
         &:hover {
             text-decoration: underline;
-            color: #4f46e5;
+            color: $ui-indigo-600;
         }
     }
 }
 
 .comment-date {
     font-size: .75rem;
-    color: #9ca3af;
+    color: $ui-gray-400;
 }
 
 .comment-delete-btn {
+    @include icon-btn-danger(20px);
     margin-left: auto;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: #d1d5db;
-    padding: .1rem;
-    border-radius: 3px;
-    display: flex;
-    align-items: center;
-    transition: color .12s;
 
-    .material-icons {
+    i {
         font-size: .85rem;
-    }
-
-    &:hover {
-        color: #ef4444;
     }
 }
 
 .comment-text {
     font-size: .85rem;
-    color: #374151;
+    color: $ui-gray-700;
     line-height: 1.5;
     word-break: break-word;
 
@@ -153,7 +141,7 @@
         text-decoration: none;
 
         &--location {
-            color: #7c3aed;
+            color: $ui-violet-600;
 
             &:hover {
                 text-decoration: underline;
@@ -161,7 +149,7 @@
         }
 
         &--activity {
-            color: #0369a1;
+            color: $ui-sky-700;
 
             &:hover {
                 text-decoration: underline;
@@ -191,7 +179,7 @@
     border: none;
     cursor: pointer;
     font-size: .78rem;
-    color: #6b7280;
+    color: $ui-gray-500;
     display: inline-flex;
     align-items: center;
     gap: .2rem;
@@ -205,13 +193,13 @@
     }
 
     .reply-count {
-        color: #9ca3af;
+        color: $ui-gray-400;
         font-size: .73rem;
     }
 
     &:hover {
-        color: #4f46e5;
-        background: var(--ul-surface-1);
+        color: $ui-indigo-600;
+        background: var(--ul-grey-0);
     }
 }
 
@@ -235,30 +223,30 @@
     gap: .2rem;
     padding: .15rem .5rem;
     border-radius: 20px;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     font-size: .8rem;
     cursor: pointer;
     transition: background .1s, border-color .1s;
 
     &:hover {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
     }
 
     &--mine {
-        background: #ede9fe;
-        border-color: #a78bfa;
-        color: #5b21b6;
+        background: var(--ul-accent-purple-bg);
+        border-color: $ui-violet-400;
+        color: var(--ul-accent-purple-fg);
     }
 }
 
 .reaction-count {
     font-size: .72rem;
     font-weight: 600;
-    color: #6b7280;
+    color: $ui-gray-500;
 
     .reaction-pill--mine & {
-        color: #5b21b6;
+        color: var(--ul-accent-purple-fg);
     }
 }
 
@@ -273,7 +261,7 @@
     border-radius: 20px;
     padding: .15rem .4rem;
     cursor: pointer;
-    color: #9ca3af;
+    color: $ui-gray-400;
     font-size: .8rem;
     display: inline-flex;
     align-items: center;
@@ -284,8 +272,8 @@
     }
 
     &:hover {
-        background: var(--ul-surface-1);
-        color: #374151;
+        background: var(--ul-grey-0);
+        color: $ui-gray-700;
     }
 }
 
@@ -293,7 +281,7 @@
     position: absolute;
     bottom: calc(100% + 4px);
     left: 0;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: 10px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
@@ -318,7 +306,7 @@
     transition: background .1s, transform .1s;
 
     &:hover {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         transform: scale(1.2);
     }
 }
@@ -327,7 +315,7 @@
 
 .comment-compose {
     padding: .75rem 1rem;
-    border-top: 1px solid #f3f4f6;
+    border-top: 1px solid $ui-gray-100;
     display: flex;
     gap: .6rem;
     align-items: flex-start;
@@ -350,6 +338,14 @@
     min-width: 0;
 }
 
+.card {
+    .comment-compose-field {
+        textarea {
+            background-color: var(--ul-grey-0a);
+        }
+    }
+}
+
 .comment-input-wrap {
     position: relative;
 }
@@ -366,7 +362,7 @@
 
     &:focus {
         outline: none;
-        border-color: #6366f1;
+        border-color: $ui-indigo-500;
         box-shadow: 0 0 0 3px rgba(99, 102, 241, .1);
     }
 }
@@ -387,7 +383,7 @@
     border-radius: 6px;
     cursor: pointer;
     padding: .25rem .45rem;
-    color: #6b7280;
+    color: $ui-gray-500;
     display: inline-flex;
     align-items: center;
     font-size: .8rem;
@@ -399,9 +395,9 @@
     }
 
     &:hover {
-        background: #ede9fe;
-        border-color: #a78bfa;
-        color: #6d28d9;
+        background: var(--ul-accent-purple-bg);
+        border-color: $ui-violet-400;
+        color: $ui-violet-700;
     }
 }
 
@@ -409,12 +405,12 @@
     display: inline-flex;
     align-items: center;
     gap: .35rem;
-    background: #ede9fe;
-    border: 1px solid #a78bfa;
+    background: var(--ul-accent-purple-bg);
+    border: 1px solid $ui-violet-400;
     border-radius: 6px;
     padding: .2rem .5rem;
     font-size: .78rem;
-    color: #5b21b6;
+    color: var(--ul-accent-purple-fg);
     margin-top: .35rem;
 
     .material-icons {
@@ -431,7 +427,7 @@
     background: none;
     border: none;
     cursor: pointer;
-    color: #7c3aed;
+    color: $ui-violet-600;
     padding: 0;
     display: inline-flex;
     align-items: center;
@@ -441,7 +437,7 @@
     }
 
     &:hover {
-        color: #4c1d95;
+        color: $ui-violet-900;
     }
 }
 
@@ -474,7 +470,7 @@
     display: inline-flex;
     align-items: center;
     gap: .25rem;
-    color: #374151;
+    color: $ui-gray-700;
     backdrop-filter: blur(4px);
     transition: background .1s;
 
@@ -490,22 +486,7 @@
 // ── Comment map viewer dialog ─────────────────────────────────────────────────
 
 .comment-map-view-dialog {
-    width: min(90vw, 820px);
-    max-height: 90vh;
-    padding: 0;
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
-    overflow: hidden;
-
-    .dialog-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: .75rem 1rem;
-        border-bottom: 1px solid var(--ul-border);
-        font-weight: 600;
-    }
+    @include dialog-base(820px);
 }
 
 .comment-map-view-body {
@@ -516,40 +497,14 @@
 // ── Comment map composer dialog ───────────────────────────────────────────────
 
 .comment-map-composer-dialog {
-    width: min(95vw, 900px);
+    @include dialog-base(900px);
     max-height: 95vh;
-    padding: 0;
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
-    overflow: hidden;
 
     &[open] {
-        display: flex;
-        flex-direction: column;
         // Explicit height so flex children (body, map) have a real reference to
         // grow into. Without this, flex: 1 on the body resolves to flex-basis: 0
         // and Leaflet reads a 0px container height.
         height: min(95vh, 680px);
-    }
-
-    .dialog-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: .75rem 1rem;
-        border-bottom: 1px solid var(--ul-border);
-        font-weight: 600;
-        flex-shrink: 0;
-    }
-
-    .dialog-footer {
-        display: flex;
-        justify-content: flex-end;
-        gap: .6rem;
-        padding: .75rem 1rem;
-        border-top: 1px solid var(--ul-border);
-        flex-shrink: 0;
     }
 }
 
@@ -562,7 +517,7 @@
 
 .comment-map-composer-controls {
     padding: .5rem 1rem;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid $ui-gray-100;
     display: flex;
     align-items: center;
     gap: .75rem;
@@ -572,7 +527,7 @@
 .cmcc-label {
     font-size: .78rem;
     font-weight: 600;
-    color: #6b7280;
+    color: $ui-gray-500;
     white-space: nowrap;
 }
 
@@ -595,7 +550,7 @@
 
     &:focus {
         outline: none;
-        border-color: #6366f1;
+        border-color: $ui-indigo-500;
     }
 
     &:disabled {
@@ -611,8 +566,8 @@
     padding: .3rem .5rem;
     border: 1px solid var(--ul-border);
     border-radius: 6px;
-    background: var(--ul-surface-1);
-    color: #374151;
+    background: var(--ul-grey-0);
+    color: $ui-gray-700;
     cursor: pointer;
     flex-shrink: 0;
     transition: background .12s, border-color .12s;
@@ -622,9 +577,9 @@
     }
 
     &:hover {
-        background: #6366f1;
-        border-color: #6366f1;
-        color: var(--ul-text-4);
+        background: $ui-indigo-500;
+        border-color: $ui-indigo-500;
+        color: var(--ul-grey-5);
     }
 }
 
@@ -634,7 +589,7 @@
     left: 0;
     right: 0;
     width: 100%;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: 8px;
     box-shadow: 0 6px 24px rgba(0, 0, 0, .1);
@@ -651,10 +606,10 @@
     padding: .45rem .75rem;
     font-size: .83rem;
     cursor: pointer;
-    color: #374151;
+    color: $ui-gray-700;
 
     &:hover {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
     }
 }
 
@@ -670,7 +625,7 @@
     align-items: center;
     gap: .35rem;
     padding: .45rem .75rem;
-    border-top: 1px solid #f3f4f6;
+    border-top: 1px solid $ui-gray-100;
     flex-shrink: 0;
     flex-wrap: wrap;
 }
@@ -678,21 +633,21 @@
 .cmc-toolbar-label {
     font-size: .72rem;
     font-weight: 600;
-    color: #9ca3af;
+    color: $ui-gray-400;
     margin-right: .15rem;
 }
 
 .cmc-toolbar-sep {
     width: 1px;
     height: 20px;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     margin: 0 .1rem;
 }
 
 .cmc-hint-text {
     margin-left: auto;
     font-size: .72rem;
-    color: #9ca3af;
+    color: $ui-gray-400;
     font-style: italic;
     white-space: nowrap;
     pointer-events: none;
@@ -707,7 +662,7 @@
     border-radius: 6px;
     padding: .2rem .45rem;
     cursor: pointer;
-    color: #374151;
+    color: $ui-gray-700;
     display: inline-flex;
     align-items: center;
     transition: background .1s, border-color .1s, color .1s;
@@ -717,13 +672,13 @@
     }
 
     &:hover {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
     }
 
     &.is-active {
-        background: #ede9fe;
-        border-color: #a78bfa;
-        color: #5b21b6;
+        background: var(--ul-accent-purple-bg);
+        border-color: $ui-violet-400;
+        color: var(--ul-accent-purple-fg);
     }
 }
 
@@ -732,7 +687,7 @@
     align-items: center;
     gap: .3rem;
     font-size: .78rem;
-    color: #6b7280;
+    color: $ui-gray-500;
     cursor: pointer;
 
     input[type="color"] {
@@ -759,7 +714,7 @@
 
 .comment-image-label {
     cursor: pointer;
-    color: #9ca3af;
+    color: $ui-gray-400;
     display: flex;
     align-items: center;
     padding: .2rem;
@@ -771,7 +726,7 @@
     }
 
     &:hover {
-        color: #6366f1;
+        color: $ui-indigo-500;
     }
 
     input[type="file"] {
@@ -785,7 +740,7 @@
 
 .comment-image-preview {
     font-size: .75rem;
-    color: #6b7280;
+    color: $ui-gray-500;
     max-width: 140px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -793,11 +748,7 @@
 }
 
 .comment-empty {
-    padding: 1.25rem 1rem;
-    text-align: center;
-    font-size: .84rem;
-    color: #9ca3af;
-    margin: 0;
+    display: none;
 }
 
 // ── @mention autocomplete ──────────────────────────────────────────────────────
@@ -807,7 +758,7 @@
     top: 100%;
     left: 0;
     right: 0;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: 8px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .1);
@@ -824,8 +775,8 @@
     padding: .45rem .75rem;
     font-size: .84rem;
     cursor: pointer;
-    color: #374151;
-    border-bottom: 1px solid #f9fafb;
+    color: $ui-gray-700;
+    border-bottom: 1px solid $ui-gray-50;
 
     &:last-child {
         border-bottom: none;
@@ -833,13 +784,11 @@
 
     &:hover,
     &.is-selected {
-        background: var(--ul-surface-1);
-        color: #4338ca;
+        background: var(--ul-grey-0);
+        color: $ui-indigo-700;
     }
 
     &__name {
         font-weight: 500;
     }
 }
-
-// .btn-sm → _base.scss

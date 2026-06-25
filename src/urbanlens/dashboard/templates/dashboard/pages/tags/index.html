@@ -4,12 +4,12 @@
 {% block content %}
 <div class="tag-page page-content">
 
-    <div class="tag-header">
+    <div class="badge-header">
         <div>
-            <h1 class="tag-title">My Tags</h1>
+            <h1 class="badge-title">My Tags</h1>
             <p class="tag-subtitle">Organize your pins with custom tags.</p>
         </div>
-        <div class="tag-header-right">
+        <div class="badge-header-right">
             <div class="tag-view-toggle" role="group" aria-label="View mode">
                 <button type="button" class="tag-view-btn active" data-view="list" title="List view">
                     <i class="material-icons">view_list</i>
@@ -21,7 +21,7 @@
                     <i class="material-icons">account_tree</i>
                 </button>
             </div>
-            <button class="btn-primary" id="new-tag-btn" type="button">
+            <button class="btn btn--primary" id="new-tag-btn" type="button">
                 <i class="material-icons">add</i> New Tag
             </button>
         </div>
@@ -144,8 +144,8 @@
             </div>
 
             <div class="tag-form-actions">
-                <button type="submit" class="btn-primary">Create</button>
-                <button type="button" class="btn-ghost" onclick="document.getElementById('new-tag-form').style.display='none'">Cancel</button>
+                <button type="submit" class="btn btn--primary">Create</button>
+                <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-tag-form').style.display='none'">Cancel</button>
             </div>
         </form>
     </div>
@@ -195,11 +195,11 @@
         </p>
     </div>
     <div class="cat-merge-dialog-footer">
-        <button type="button" id="tag-merge-confirm-btn" class="btn-primary">
+        <button type="button" id="tag-merge-confirm-btn" class="btn btn--primary">
             <i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i>
             Merge
         </button>
-        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </dialog>
 
@@ -272,11 +272,11 @@
 
     </div>
     <div class="cat-bulk-edit-footer">
-        <button type="button" id="tag-bulk-edit-confirm" class="btn-primary">
+        <button type="button" id="tag-bulk-edit-confirm" class="btn btn--primary">
             <i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i>
             Apply Changes
         </button>
-        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </dialog>
 
@@ -358,7 +358,8 @@ const IconPicker = {
             } else {
                 const label = item.dataset.label || '';
                 const icon = item.dataset.icon || '';
-                item.style.display = (label.includes(q) || icon === q) ? '' : 'none';
+                const keywords = item.dataset.keywords || '';
+                item.style.display = (label.includes(q) || icon === q || keywords.includes(q)) ? '' : 'none';
             }
         });
     },
@@ -833,7 +834,7 @@ document.getElementById('tag-merge-confirm-btn').addEventListener('click', funct
 document.getElementById('tag-sel-delete').addEventListener('click', async function() {
     var n = _tagSelected.size;
     if (n === 0) return;
-    var msg = (n === 1 ? 'Delete 1 tag?' : 'Delete ' + n + ' tags?') + '\nPins will keep their other tags.';
+    var msg = (n === 1 ? 'Delete 1 tag?' : 'Delete ' + n + ' tags?') + '\nPins will NOT be deleted.';
     if (!await confirmDialog({title:'Delete Tags', message:msg, confirmLabel:'Delete'})) return;
     var ids = Array.from(_tagSelected).map(function(id) { return parseInt(id, 10); });
     fetch('{% url "tag.bulk_delete" %}', {

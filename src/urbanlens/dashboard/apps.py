@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    apps.py                                                                                              *
-*        Path:    /apps.py                                                                                             *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 # Generic imports
 from __future__ import annotations
 
@@ -42,4 +16,5 @@ class DashboardConfig(AppConfig):
         import urbanlens.dashboard.models.pin.signals
         from urbanlens.dashboard.models.profile.model import Profile
         import urbanlens.dashboard.models.profile.signals
+
         post_save.connect(create_default_tags, sender=Profile, dispatch_uid="badge_create_default_tags")

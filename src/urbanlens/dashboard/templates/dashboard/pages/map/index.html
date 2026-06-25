@@ -14,30 +14,53 @@
 {% block content %}
 <div id="map" hx-boost="true">
     <div class="map-buttons" id="map-buttons">
-        <button id="toggle-map-buttons" class="map-btn-icon" title="Toggle controls">
+        <button id="toggle-map-buttons" class="map-btn-icon"
+                data-tooltip="Show or hide map toolbar"
+                aria-label="Toggle map controls">
             <i class="material-icons">menu</i>
         </button>
         <div class="map-buttons-content">
-            <button id="add-pin-button" class="map-btn-icon" title="Add Pin"
+            <button id="add-pin-button" class="map-btn-icon"
+                    data-tooltip="Drop a new pin on the map." data-tooltip-float="true"
+                    aria-label="Add pin"
                     onclick="openAddPinDialog()">
                 <i class="material-icons">add_location</i>
             </button>
-            <button id="search-pins-button" class="map-btn-icon" title="Filter / Search Pins" onclick="toggleFilterPanel()">
+            <button id="search-pins-button" class="map-btn-icon"
+                    data-tooltip="Filter pins by name, rating, visit status, badges, and more." data-tooltip-float="true"
+                    data-tooltip-pos="below"
+                    aria-label="Filter and search pins"
+                    onclick="toggleFilterPanel()">
                 <i class="material-icons">search</i>
             </button>
-            <button id="topography-button" class="map-btn-icon" title="Topography View" onclick="toggleTopographyView()">
+            <button id="topography-button" class="map-btn-icon"
+                    data-tooltip="Switch to topographic terrain view with elevation contours." data-tooltip-float="true"
+                    aria-label="Topography view"
+                    onclick="toggleTopographyView()">
                 <i class="material-icons">terrain</i>
             </button>
-            <button id="satellite-button" class="map-btn-icon" title="Satellite View" onclick="toggleSatelliteView()">
+            <button id="satellite-button" class="map-btn-icon"
+                    data-tooltip="Switch to satellite imagery." data-tooltip-float="true"
+                    aria-label="Satellite view"
+                    onclick="toggleSatelliteView()">
                 <i class="material-icons">satellite_alt</i>
             </button>
-            <button id="toggle-pins-button" class="map-btn-icon" title="Toggle Pins" onclick="togglePins()">
+            <button id="toggle-pins-button" class="map-btn-icon"
+                    data-tooltip="Show or hide all pin markers without changing filters." data-tooltip-float="true"
+                    aria-label="Toggle pins"
+                    onclick="togglePins()">
                 <i class="material-icons">push_pin</i>
             </button>
-            <button id="weather-button" class="map-btn-icon" title="Weather View" onclick="toggleWeatherView()">
+            <button id="weather-button" class="map-btn-icon"
+                    data-tooltip="Overlay current weather conditions on the map." data-tooltip-float="true"
+                    aria-label="Weather view"
+                    onclick="toggleWeatherView()">
                 <i class="material-icons">cloud</i>
             </button>
-            <button id="import-pins-button" class="map-btn-icon" title="Import Pins"
+            <button id="import-pins-button" class="map-btn-icon"
+                    data-tooltip="Import pins from Google Takeout." data-tooltip-float="true"
+                    data-tooltip-pos="below"
+                    aria-label="Import pins"
                     hx-get="{% url 'pin.import.form' %}" hx-target="#importPinsModal" hx-swap="innerHTML">
                 <i class="material-icons">upload</i>
             </button>
@@ -48,9 +71,12 @@
     <div id="addr-search-bar">
         <i class="material-icons addr-search-icon">place</i>
         <input type="text" id="address-search-input" placeholder="Jump to a place…"
+               data-tooltip="Search by address or place name, then press Enter to fly there."
+               data-tooltip-pos="below"
                autocomplete="off" onkeydown="if(event.key==='Enter'){geocodeAddress();event.preventDefault();}">
         <button type="button" class="addr-search-clear" id="addr-search-clear" hidden
-                onclick="clearAddrSearch()" title="Clear">
+                aria-label="Clear search"
+                onclick="clearAddrSearch()">
             <i class="material-icons">close</i>
         </button>
     </div>
@@ -60,7 +86,8 @@
     <div id="filter-panel">
         <div class="fp-header">
             <span class="fp-title">Search &amp; Filter</span>
-            <button class="fp-close" onclick="toggleFilterPanel()" title="Close">✕</button>
+            {% include "dashboard/partials/_tooltip_help.html" with text="Filters apply instantly as you change them. Pins matching all selected criteria stay visible on the map." wide=True %}
+            <button class="fp-close" onclick="toggleFilterPanel()" aria-label="Close">✕</button>
         </div>
 
         <form id="filter-form"
@@ -79,7 +106,6 @@
             <details class="fp-accordion-item" id="fp-acc-rating">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Rating</span>
-                    <span class="fp-acc-dot"></span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -107,7 +133,6 @@
             <details class="fp-accordion-item" id="fp-acc-visits">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Visit Status</span>
-                    <span class="fp-acc-dot"></span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -133,7 +158,6 @@
             <details class="fp-accordion-item" id="fp-acc-priority">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Priority</span>
-                    <span class="fp-acc-dot"></span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -163,7 +187,6 @@
             <details class="fp-accordion-item" id="fp-acc-date">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Date Pinned</span>
-                    <span class="fp-acc-dot"></span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -185,7 +208,7 @@
             <details class="fp-accordion-item" id="fp-acc-incl-tags">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Include Badges</span>
-                    <span class="fp-acc-dot"></span>
+                    {% include "dashboard/partials/_tooltip_help.html" with text="Show only pins that have at least one of the selected badges." pos="below" %}
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -207,7 +230,7 @@
             <details class="fp-accordion-item" id="fp-acc-excl-tags">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Exclude Badges</span>
-                    <span class="fp-acc-dot"></span>
+                    {% include "dashboard/partials/_tooltip_help.html" with text="Hide pins that have any of the selected badges." pos="below" %}
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -247,10 +270,12 @@
 
     <div id="loading-pins-message" aria-hidden="true" style="display:none"></div>
 
+    {% if show_pin_count %}
     <div id="pin-counter">
         <span id="pin-counter-value">0</span>
         <span id="pin-counter-label">pins</span>
     </div>
+    {% endif %}
     <span id="cache-status" aria-hidden="true"></span>
     <div id="map-body"></div>
 
@@ -357,8 +382,8 @@
 
     </div>
     <div class="apdlg-footer">
-        <button type="button" class="btn-ghost" onclick="closeAddPinDialog()">Cancel</button>
-        <button type="button" class="btn-primary" id="apdlg-submit">Add Pin</button>
+        <button type="button" class="btn btn--ghost" onclick="closeAddPinDialog()">Cancel</button>
+        <button type="button" class="btn btn--primary" id="apdlg-submit">Add Pin</button>
     </div>
 </dialog>
 <div id="importPinsModal"></div>
@@ -368,9 +393,12 @@
 {% block scripts %}
 <script>
     // ── Constants ─────────────────────────────────────────────────────────────
-    const _PROFILE_ID  = {{ profile_id|default:0 }};
+    const _PROFILE_ID   = {{ profile_id|default:0 }};
+    const _PROFILE_UUID = '{{ profile_uuid|default:"" }}';
+    const _APP_UUID     = '{{ app_uuid|default:"" }}';   // server instance UUID - changes on DB wipe
     const _USE_CACHE      = {{ use_pin_cache|yesno:"true,false" }};
-    const _CACHE_KEY      = `ul_pins_v4_${_PROFILE_ID}`;
+    // v5: uses profile UUID (not PK) in key, and embeds app_uuid for DB-wipe detection.
+    const _CACHE_KEY      = `ul_pins_v5_${_PROFILE_UUID}`;
     const _CACHE_MAX      = 180 * 24 * 60 * 60 * 1000;  // 6 months: space reclaim for inactive users
     const _POLL_INTERVAL  = 2 * 60 * 1000;               // 2 min: background poll for pin changes
     const _TILE_SIZE   = 0.5;   // degrees per tile edge (~55 km at mid-latitudes)
@@ -397,11 +425,18 @@
     const _GPS_FALLBACK_LAT  = {{ gps_fallback_lat|default:"null" }};
     const _GPS_FALLBACK_LNG  = {{ gps_fallback_lng|default:"null" }};
     const _defaultZoom       = {{ map_default_zoom|default:13 }};
+    const _DEFAULT_MAP_VIEW  = '{{ default_map_view|default:"street" }}';
+    const _MAP_DARK_MODE     = '{{ map_dark_mode|default:"light" }}';
+    // Per-profile key for remembering active layers across sessions.
+    const _LAYER_CACHE_KEY   = `ul_layers_v1_${_PROFILE_UUID}`;
     const _serverCenter      = (_SERVER_CENTER_LAT !== null && _SERVER_CENTER_LNG !== null)
         ? [_SERVER_CENTER_LAT, _SERVER_CENTER_LNG]
         : (_GPS_FALLBACK_LAT !== null ? [_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG] : [40.7128, -74.0060]);
 
     const map = L.map('map', { maxZoom: 19 }).setView(_serverCenter, _defaultZoom);
+    // Dedicated pane for topo tiles so the invert filter never touches satellite or street.
+    map.createPane('topoPane');
+    map.getPane('topoPane').style.zIndex = 401;
     window.map = map;
     window.pin = null;
 
@@ -477,6 +512,8 @@
     }
 
     function updatePinCounter() {
+        const counter = document.getElementById('pin-counter');
+        if (!counter) return;
         // Show the total pin count for the user, not just what's visible in the current viewport.
         // _totalPins comes from the server at page load and is updated after a full refresh.
         // Once _pinStore has been fully populated (after _refreshAllPins or a '*' tile fetch),
@@ -547,8 +584,15 @@
             const raw = localStorage.getItem(_CACHE_KEY);
             if (!raw) return null;
             const c = JSON.parse(raw);
-            if (c.v !== 4 || c.profileId !== _PROFILE_ID) return null;
+            if (c.v !== 5 || c.profileUuid !== _PROFILE_UUID) return null;
             if (Date.now() - c.ts > _CACHE_MAX) { localStorage.removeItem(_CACHE_KEY); return null; }
+            // App UUID mismatch = DB was wiped or app was redeployed with a fresh database.
+            // Clear cache so ghost pins from the old DB don't appear on the map.
+            if (_APP_UUID && c.appUuid && c.appUuid !== _APP_UUID) {
+                console.log('[UL] App UUID mismatch - clearing stale cache from previous deployment');
+                localStorage.removeItem(_CACHE_KEY);
+                return null;
+            }
             return c;
         } catch { return null; }
     }
@@ -558,7 +602,7 @@
         const ts = Date.now();
         try {
             const payload = JSON.stringify({
-                v: 4, ts, profileId: _PROFILE_ID,
+                v: 5, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
                 lastUpdated: _lastKnownUpdated,
                 tiles: [..._fetchedTiles],
                 pins: Object.fromEntries([..._pinStore.entries()].map(([k, v]) => [k, _slimPin(v)])),
@@ -578,14 +622,35 @@
     }
     // Flush the cache when the user navigates away so it's always saved
     window.addEventListener('beforeunload', _writeCache);
-    // Purge any leftover oversized v3 entry from the old key
+    // Purge stale keys from old cache versions
     try { localStorage.removeItem(`ul_pins_v3_${_PROFILE_ID}`); } catch {}
+    try { localStorage.removeItem(`ul_pins_v4_${_PROFILE_ID}`); } catch {}
+    if (_PROFILE_UUID) try { localStorage.removeItem(`ul_pins_v4_${_PROFILE_UUID}`); } catch {}
     // Call after any pin mutation (add/delete) to force a fresh fetch next time.
     // Always clears any existing localStorage entry regardless of _USE_CACHE,
     // so disabling and re-enabling caching starts fresh.
     window.invalidatePinCache = function() {
         try { localStorage.removeItem(_CACHE_KEY); } catch {}
         _lastKnownUpdated = null;
+    };
+    // Update a single pin in the local store + map without touching any other pin.
+    // Call this after editing a pin on the detail page so the map marker refreshes
+    // immediately without a full server round-trip for all pins.
+    window.updateCachedPin = function(pinData) {
+        if (!pinData || !pinData.uuid) return;
+        const uuid = pinData.uuid;
+        _pinStore.set(uuid, pinData);
+        if (_markerMap.has(uuid)) {
+            clusterGroup.removeLayer(_markerMap.get(uuid));
+            _markerMap.delete(uuid);
+        }
+        if (!_filterMode) {
+            const m = _buildMarker(pinData);
+            if (m) { _markerMap.set(uuid, m); clusterGroup.addLayer(m); }
+        }
+        _totalPins = _pinStore.size;
+        updatePinCounter();
+        _scheduleCache();
     };
 
     // ── Cache status display ──────────────────────────────────────────────────
@@ -664,12 +729,20 @@
 
     // ── Background polling ────────────────────────────────────────────────────
     // Checks whether any pin has been updated since the cached timestamp.
+    // Also detects mid-session DB wipes via app_uuid mismatch.
     // Only triggers a full refresh when the server signals a change.
     async function _pollForUpdates() {
         try {
             const resp = await fetch('{% url "map.pins.meta" %}', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!resp.ok) return;
             const data = await resp.json();
+            // App UUID changed mid-session (DB wiped while user had the map open).
+            if (_APP_UUID && data.app_uuid && data.app_uuid !== _APP_UUID) {
+                console.log('[UL] App UUID changed mid-session - clearing cache and reloading pins');
+                window.invalidatePinCache();
+                await _refreshAllPins();
+                return;
+            }
             if (data.last_updated) {
                 if (_lastKnownUpdated !== null && data.last_updated !== _lastKnownUpdated) {
                     _lastKnownUpdated = data.last_updated;
@@ -682,13 +755,34 @@
     }
 
     // ── Marker builder ────────────────────────────────────────────────────────
+    function _hexToRgba(hex, alpha) {
+        let h = String(hex).replace('#', '');
+        if (h.length === 3) h = h.split('').map(c => c + c).join('');
+        const r = parseInt(h.slice(0, 2), 16);
+        const g = parseInt(h.slice(2, 4), 16);
+        const b = parseInt(h.slice(4, 6), 16);
+        return `rgba(${r},${g},${b},${alpha})`;
+    }
+
+    function _resolvePinColor(pin) {
+        const bad = v => !v || v === 'None' || v === 'null';
+        if (!bad(pin.color)) return pin.color;
+        const tags = pin.tags_data || [];
+        const iconTag = tags.find(t => t.icon && t.icon === pin.icon);
+        if (iconTag && !bad(iconTag.color)) return iconTag.color;
+        const colored = tags.find(t => !bad(t.color));
+        return colored ? colored.color : null;
+    }
+
     function _buildMarker(pin) {
         if (!pin.latitude || !pin.longitude) return null;
         const coords = [parseFloat(pin.latitude), parseFloat(pin.longitude)];
         const marker = L.marker(coords, { draggable: true });
 
         if (pin.icon && pin.icon !== 'undefined' && pin.icon !== 'null') {
-            const color = (pin.color && pin.color !== 'None') ? pin.color : '#555555';
+            const resolvedColor = _resolvePinColor(pin);
+            const hasColor = !!resolvedColor;
+            const color = hasColor ? resolvedColor : '#555555';
             let iconHtml;
             if (/^[a-z_]+$/.test(pin.icon)) {
                 iconHtml = `<i class="material-icons map-pin-icon" style="color:${color};">${pin.icon}</i>`;
@@ -697,7 +791,12 @@
             } else {
                 iconHtml = `<span class="map-pin-emoji">${pin.icon}</span>`;
             }
-            marker.setIcon(L.divIcon({ className: 'map-pin-icon-wrap', html: iconHtml, iconSize: [28,28], iconAnchor: [14,14] }));
+            if (hasColor) {
+                iconHtml = `<span class="map-pin-with-circle" style="position:relative;display:flex;align-items:center;justify-content:center;width:36px;height:36px;"><span class="map-pin-color-circle" style="position:absolute;width:32px;height:32px;border-radius:50%;z-index:0;background:${_hexToRgba(color, 0.8)};"></span><span style="position:relative;z-index:1;display:flex;align-items:center;justify-content:center;">${iconHtml}</span></span>`;
+            }
+            const iconSize = hasColor ? [36, 36] : [28, 28];
+            const iconAnchor = hasColor ? [18, 18] : [14, 14];
+            marker.setIcon(L.divIcon({ className: 'map-pin-icon-wrap', html: iconHtml, iconSize, iconAnchor }));
         }
 
         // Build tag chips: prefer full tag objects (color/icon), fall back to CSV names
@@ -751,11 +850,32 @@
         if (pin.id) {
             let _savedLat = parseFloat(pin.latitude);
             let _savedLng = parseFloat(pin.longitude);
+            let _dragUnlocked = false;
+            const PIN_DRAG_CONFIRM_ZOOM = 14;
+
             marker.on('dragstart', function () {
+                if (map.getZoom() >= PIN_DRAG_CONFIRM_ZOOM && !_dragUnlocked) {
+                    marker.dragging.disable();
+                    marker.setLatLng([_savedLat, _savedLng]);
+                    window.confirmDialog({
+                        title: 'Move pin?',
+                        message: 'At this zoom level it is easy to move a pin by accident.\n\nDrag again after confirming to reposition it.',
+                        confirmLabel: 'Enable move',
+                        danger: false,
+                    }).then(function (ok) {
+                        if (ok) {
+                            _dragUnlocked = true;
+                            marker.dragging.enable();
+                            toastr.info('Drag the pin to its new location.');
+                        }
+                    });
+                    return;
+                }
                 clusterGroup.removeLayer(marker);
                 marker.addTo(map);
             });
             marker.on('dragend', function () {
+                _dragUnlocked = false;
                 const pos = marker.getLatLng();
                 fetch(`/dashboard/rest/pins/${pin.id}/`, {
                     method: 'PATCH',
@@ -919,7 +1039,7 @@
         if (cache?.pins && Object.keys(cache.pins).length) {
             // Restore from cache immediately - no server round-trip, no loading indicator.
             const ageSeconds = Math.round((Date.now() - cache.ts) / 1000);
-            console.log('[UL] Cache HIT - %d pins, age %ds', Object.keys(cache.pins).length, ageSeconds);
+            console.log('[UL] Cache HIT - %d pins, age %ds, app_uuid=%s', Object.keys(cache.pins).length, ageSeconds, cache.appUuid || 'none');
             const layers = [];
             for (const [uuid, pin] of Object.entries(cache.pins)) {
                 _pinStore.set(uuid, pin);
@@ -964,13 +1084,19 @@
 
     const standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-    }).addTo(map);
+    });
     const topographyLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
+        pane: 'topoPane',
     });
     // ESRI Satellite tile layer
     const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    });
+    // CartoDB Dark Matter - used when map dark mode is active (street/topographic base only)
+    const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19,
     });
     // OpenWeatherMap tile layer
     const rainLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{openweathermap_api_key}}', {
@@ -981,6 +1107,75 @@
         attribution: 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
         layer: 'clouds_new',
     });
+
+    // ── Dark map mode helpers ─────────────────────────────────────────────────
+    function _isDarkMapActive() {
+        if (_MAP_DARK_MODE === 'dark') return true;
+        if (_MAP_DARK_MODE === 'light') return false;
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    // Apply invert filter to the topo pane when dark map mode is active.
+    function _applyTopoFilter() {
+        const pane = map.getPane('topoPane');
+        if (!pane) return;
+        pane.style.filter = (_isDarkMapActive() && map.hasLayer(topographyLayer))
+            ? 'invert(100%) hue-rotate(180deg) brightness(90%)'
+            : '';
+    }
+
+    // Swap between standardLayer and darkLayer without touching satellite/topo.
+    function _syncBaseLayer() {
+        const useDark = _isDarkMapActive();
+        if (useDark) {
+            if (map.hasLayer(standardLayer)) map.removeLayer(standardLayer);
+            if (!map.hasLayer(darkLayer)) darkLayer.addTo(map);
+        } else {
+            if (map.hasLayer(darkLayer)) map.removeLayer(darkLayer);
+            if (!map.hasLayer(standardLayer)) standardLayer.addTo(map);
+        }
+        _applyTopoFilter();
+    }
+
+    // Re-apply topo filter when the topo layer is toggled.
+    map.on('layeradd layerremove', function(e) {
+        if (e.layer === topographyLayer) _applyTopoFilter();
+    });
+
+    // In system mode, re-sync whenever the OS preference changes.
+    if (_MAP_DARK_MODE === 'system') {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', _syncBaseLayer);
+    }
+
+    // ── Apply initial base layer from user preference ─────────────────────────
+    // standardLayer / darkLayer is the bottom-most base; satellite/topo sit on top.
+    _syncBaseLayer();
+    (function _applyInitialLayers() {
+        let baseView = _DEFAULT_MAP_VIEW;
+        let weatherOn = false;
+
+        if (baseView === 'remember') {
+            try {
+                const saved = JSON.parse(localStorage.getItem(_LAYER_CACHE_KEY) || 'null');
+                if (saved) { baseView = saved.base || 'street'; weatherOn = !!saved.weather; }
+                else { baseView = 'street'; }
+            } catch (_) { baseView = 'street'; }
+        }
+
+        if (baseView === 'satellite') {
+            satelliteLayer.addTo(map);
+            document.querySelector('#satellite-button')?.classList.add('active');
+        } else if (baseView === 'topographic') {
+            topographyLayer.addTo(map);
+            document.querySelector('#topography-button')?.classList.add('active');
+        }
+
+        if (weatherOn) {
+            rainLayer.addTo(map);
+            cloudLayer.addTo(map);
+            document.querySelector('#weather-button')?.classList.add('active');
+        }
+    }());
 
     // ── Tile loading visual feedback ──────────────────────────────────────────
     // Grey-dim the tile pane while map tiles are downloading; restore when done.
@@ -995,7 +1190,7 @@
         _tileLoadingCount = Math.max(0, _tileLoadingCount - 1);
         if (_tileLoadingCount === 0) document.getElementById('map').classList.remove('tiles-loading');
     }
-    [standardLayer, topographyLayer, satelliteLayer].forEach(layer => {
+    [standardLayer, topographyLayer, satelliteLayer, darkLayer].forEach(layer => {
         layer.on('loading', _onTileLayerLoading);
         layer.on('load',    _onTileLayerLoad);
         layer.on('error',   _onTileLayerLoad);
@@ -1276,6 +1471,19 @@
     });
     map.invalidateSize();
 
+    // Re-validate map size on resize and orientation change (important on mobile)
+    (function () {
+        var _resizeTimer;
+        function onResize() {
+            clearTimeout(_resizeTimer);
+            _resizeTimer = setTimeout(function () { map.invalidateSize(); }, 150);
+        }
+        window.addEventListener('resize', onResize);
+        window.addEventListener('orientationchange', function () {
+            setTimeout(function () { map.invalidateSize(); }, 300);
+        });
+    }());
+
     function togglePins() {
         if (pinsVisible) {
             map.removeLayer(pinsLayerGroup);
@@ -1299,6 +1507,18 @@
         layer.addTo(map);
     }
 
+    // Persist active layers to localStorage when the user has chosen "Remember".
+    function _saveLayerState() {
+        if (_DEFAULT_MAP_VIEW !== 'remember') return;
+        try {
+            const base = map.hasLayer(satelliteLayer) ? 'satellite'
+                       : map.hasLayer(topographyLayer) ? 'topographic'
+                       : 'street';
+            const weather = map.hasLayer(rainLayer) || map.hasLayer(cloudLayer);
+            localStorage.setItem(_LAYER_CACHE_KEY, JSON.stringify({ base, weather }));
+        } catch (_) {}
+    }
+
     function toggleTopographyView() {
         // Satellite and topography are mutually exclusive
         if (map.hasLayer(satelliteLayer)) {
@@ -1307,6 +1527,7 @@
         }
         toggleMapView(topographyLayer);
         document.querySelector('#topography-button').classList.toggle('active', map.hasLayer(topographyLayer));
+        _saveLayerState();
     }
 
     function toggleSatelliteView() {
@@ -1317,20 +1538,19 @@
         }
         toggleMapView(satelliteLayer);
         document.querySelector('#satellite-button').classList.toggle('active', map.hasLayer(satelliteLayer));
+        _saveLayerState();
     }
 
     function toggleWeatherView() {
         if (map.hasLayer(rainLayer) || map.hasLayer(cloudLayer)) {
-            // Turn it off
             map.removeLayer(rainLayer);
             map.removeLayer(cloudLayer);
-            return;
+        } else {
+            rainLayer.addTo(map);
+            cloudLayer.addTo(map);
         }
-
-        // Add the selected layer
-        rainLayer.addTo(map);
-        cloudLayer.addTo(map);
-        document.querySelector('#weather-button').classList.toggle('active');
+        document.querySelector('#weather-button').classList.toggle('active', map.hasLayer(rainLayer));
+        _saveLayerState();
     }
 
     // Update the Leaflet icon URLs
@@ -1374,7 +1594,7 @@
     document.getElementById('toggle-map-buttons').addEventListener('click', function() {
         const panel = document.getElementById('map-buttons');
         const collapsed = panel.classList.toggle('collapsed');
-        this.title = collapsed ? 'Expand map controls' : 'Collapse map controls';
+        this.dataset.tooltip = collapsed ? 'Expand map controls' : 'Collapse map controls';
     });
 
     // ── Filter panel ──────────────────────────────────────────────────────
@@ -1427,10 +1647,16 @@
         document.getElementById('search-pins-button').classList.toggle('has-filters', _hasActiveFilters());
     });
 
-    // ── Scroll wheel: prevent filter panel from zooming the map ──────────
+    // ── Prevent filter panel pointer events from reaching the Leaflet map ──
     document.getElementById('filter-panel').addEventListener('wheel', function (e) {
         e.stopPropagation();
     }, { passive: true });
+    document.getElementById('filter-panel').addEventListener('mousedown', function (e) {
+        e.stopPropagation();
+    });
+    document.getElementById('filter-panel').addEventListener('touchstart', function (e) {
+        e.stopPropagation();
+    });
 
     // ── Dual-handle range slider ──────────────────────────────────────────
     function syncDualSlider(name) {
@@ -1595,10 +1821,24 @@
         document.getElementById('add-pin-dialog').close();
     }
 
-    // Close dialog on backdrop click
-    document.getElementById('add-pin-dialog').addEventListener('click', function(e) {
-        if (e.target === this) closeAddPinDialog();
-    });
+    // Close dialog on backdrop click (not drag-outside)
+    (function () {
+        var apDlg = document.getElementById('add-pin-dialog');
+        var apPress = null;
+        function apIsBackdrop(dlg, x, y) {
+            var rect = dlg.getBoundingClientRect();
+            return x < rect.left || x > rect.right || y < rect.top || y > rect.bottom;
+        }
+        apDlg.addEventListener('mousedown', function (e) {
+            if (e.target !== apDlg) { apPress = 'inside'; return; }
+            apPress = apIsBackdrop(apDlg, e.clientX, e.clientY) ? 'backdrop' : 'inside';
+        });
+        apDlg.addEventListener('click', function (e) {
+            if (e.target !== apDlg || apPress !== 'backdrop') return;
+            if (apIsBackdrop(apDlg, e.clientX, e.clientY)) closeAddPinDialog();
+            apPress = null;
+        });
+    }());
 
     // Map click: place pin while dialog is open
     map.on('click', function(e) {
@@ -1726,15 +1966,31 @@
         .then(data => {
             toastr.success('Pin added!');
             closeAddPinDialog();
-            // Optimistically add a placeholder marker so the user sees the pin immediately
+            // Fetch just the new pin's data and inject it into the store/map -
+            // avoids a full reload of all pins on every add.
             const tempMarker = L.marker([pinLat, pinLng]).addTo(map);
             tempMarker.bindPopup(`<strong>${pinName}</strong><br><em>Saving…</em>`);
-            // Refresh pins in the background; replace the temp marker when done
-            if (typeof window.invalidatePinCache === 'function') window.invalidatePinCache();
-            _refreshAllPins().then(() => map.removeLayer(tempMarker)).catch(() => map.removeLayer(tempMarker));
+            if (data && data.pin_slug) {
+                fetch(`{% url "map.pin.json" pin_slug="placeholder-slug" %}`.replace('placeholder-slug', data.pin_slug), {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                })
+                .then(r => r.ok ? r.json() : null)
+                .then(d => {
+                    if (d && d.pin) { window.updateCachedPin(d.pin); }
+                    map.removeLayer(tempMarker);
+                })
+                .catch(() => {
+                    // Fallback: full refresh if single-pin fetch fails
+                    window.invalidatePinCache();
+                    _refreshAllPins().then(() => map.removeLayer(tempMarker)).catch(() => map.removeLayer(tempMarker));
+                });
+            } else {
+                window.invalidatePinCache();
+                _refreshAllPins().then(() => map.removeLayer(tempMarker)).catch(() => map.removeLayer(tempMarker));
+            }
             // When multiple locations cover the same coordinates, prompt the user to choose.
             if (data && data.conflicting_locations && data.conflicting_locations.length > 1) {
-                _showLocationConflictPicker(data.pin_uuid, data.conflicting_locations);
+                _showLocationConflictPicker(data.pin_slug, data.conflicting_locations);
             }
         })
         .catch(err => toastr.error('Failed to add pin: ' + err))
@@ -1742,7 +1998,7 @@
     });
 
     // ── Location conflict picker ───────────────────────────────────────────────
-    function _showLocationConflictPicker(pinUuid, locations) {
+    function _showLocationConflictPicker(pinSlug, locations) {
         var dlg = document.getElementById('loc-conflict-dialog');
         var list = document.getElementById('loc-conflict-list');
         if (!dlg || !list) return;
@@ -1757,9 +2013,9 @@
                     (loc.is_current ? ' <span class="loc-conflict-badge">Current</span>' : '') +
                 '</div>' +
                 '<div class="loc-conflict-option-actions">' +
-                    '<a href="' + loc.wiki_url + '" target="_blank" class="btn-ghost btn-sm">Wiki</a>' +
+                    '<a href="' + loc.wiki_url + '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>' +
                     (!loc.is_current
-                        ? '<button class="btn-primary btn-sm loc-conflict-switch-btn" data-uuid="' + loc.uuid + '" data-name="' + (loc.name || '').replace(/"/g, '&quot;') + '">Use this</button>'
+                        ? '<button class="btn btn--primary btn--sm loc-conflict-switch-btn" data-slug="' + loc.slug + '" data-name="' + (loc.name || '').replace(/"/g, '&quot;') + '">Use this</button>'
                         : '') +
                 '</div>';
             list.appendChild(item);
@@ -1767,11 +2023,11 @@
 
         list.querySelectorAll('.loc-conflict-switch-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
-                var locUuid = btn.dataset.uuid;
+                var locSlug = btn.dataset.slug;
                 var locName = btn.dataset.name;
                 btn.disabled = true;
                 btn.textContent = 'Switching…';
-                fetch('/dashboard/map/pin/' + pinUuid + '/link/' + locUuid + '/', {
+                fetch('/dashboard/map/pin/' + pinSlug + '/link/' + locSlug + '/', {
                     method: 'POST',
                     headers: { 'X-CSRFToken': '{{ csrf_token }}', 'X-Requested-With': 'XMLHttpRequest' },
                 })

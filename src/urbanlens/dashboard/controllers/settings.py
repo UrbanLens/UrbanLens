@@ -114,7 +114,7 @@ class SettingsView(LoginRequiredMixin, View):
             if contact_form.is_valid():
                 request.user.email = contact_form.cleaned_data["email"]
                 request.user.save(update_fields=["email"])
-                messages.success(request, "Contact settings saved.")
+                messages.success(request, "Email address saved.")
                 return redirect("settings.view")
 
         elif section == "style":

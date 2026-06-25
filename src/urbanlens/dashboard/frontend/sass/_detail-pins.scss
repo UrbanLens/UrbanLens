@@ -10,55 +10,17 @@
 
     .detail-pin-empty {
         padding: 1rem 1.25rem;
-        color: #888;
+        color: var(--ul-grey-6);
         font-size: .85rem;
-    }
-}
-
-// Shared "Add" button used in card headers across trips, detail pins, etc.
-.detail-pin-add-btn {
-    margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: .25rem;
-    padding: .3rem .75rem;
-    border: none;
-    border-radius: 6px;
-    background: #2563eb;
-    color: var(--ul-text-2);
-    font-size: .8rem;
-    cursor: pointer;
-    outline: none;
-
-    &:hover,
-    &:focus {
-        background: #1d4ed8;
-        outline: none;
     }
 }
 
 // Shared destructive icon button - used in detail pins, trip panels, etc.
 .detail-pin-action-btn {
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    color: #94a3b8;
-    padding: .2rem;
-    border-radius: 4px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    @include icon-btn-danger(28px);
     outline: none;
-    transition: background .12s, color .12s;
 
-    .material-icons {
-        font-size: 1.1rem;
-    }
-
-    &:hover,
     &:focus {
-        background: #fee2e2;
-        color: #dc2626;
         outline: none;
     }
 }
@@ -99,12 +61,12 @@
 
         .detail-pin-desc {
             font-size: .8rem;
-            color: #888;
+            color: var(--ul-grey-6);
         }
 
         .detail-pin-coords {
             font-size: .75rem;
-            color: #aaa;
+            color: var(--ul-grey-6);
             font-family: monospace;
         }
     }
@@ -118,57 +80,47 @@
     // see global .detail-pin-action-btn below
 
     &.detail-pin-type--building .detail-pin-type-icon {
-        color: #6b7280;
+        color: $ui-gray-500;
     }
 
     &.detail-pin-type--entrance .detail-pin-type-icon {
-        color: #16a34a;
+        color: $ui-green-600;
     }
 
     &.detail-pin-type--poi .detail-pin-type-icon {
-        color: #d97706;
+        color: var(--ul-accent-amber);
     }
 
     &.detail-pin-type--danger .detail-pin-type-icon {
-        color: #dc2626;
+        color: $ui-red-600;
     }
 
     &.detail-pin-type--other .detail-pin-type-icon {
-        color: #7c3aed;
+        color: $ui-violet-600;
     }
 
     &.detail-pin-type--location .detail-pin-type-icon {
-        color: #2563eb;
+        color: $ui-blue-600;
     }
 }
 
 .detail-pin-no-location {
     margin: 0 1.25rem .5rem;
     font-size: .8rem;
-    color: #9ca3af;
+    color: $ui-gray-400;
     font-style: italic;
 }
 
 .form-optional {
     font-weight: 400;
-    color: #9ca3af;
+    color: $ui-gray-400;
     font-size: .8em;
 }
 
 .detail-pin-add-dialog {
-    border: none;
-    border-radius: 12px;
-    padding: 0;
-    width: min(520px, 96vw);
-    // Constrain to viewport - the inner body scrolls, not the dialog itself
+    @include dialog-base(520px);
+    // Inner body scrolls - cap slightly tighter than default for this tall form
     max-height: min(92vh, 900px);
-    overflow: hidden;
-
-    &[open] {
-        display: flex;
-        flex-direction: column;
-    }
-
     &::backdrop {
         background: rgba(0, 0, 0, .4);
     }
@@ -186,7 +138,7 @@
         gap: .5rem;
         margin: .5rem 1.25rem 0;
         font-size: .82rem;
-        color: #6b7280;
+        color: $ui-gray-500;
     }
 
     #detail-pin-picker-map {
@@ -201,38 +153,14 @@
         padding: 0 1.25rem 1.25rem;
 
         .form-row {
-            display: flex;
-            flex-direction: column;
-            gap: .3rem;
+            @include form-row;
             margin-bottom: .8rem;
 
-            label {
-                font-size: .82rem;
-                font-weight: 600;
-                color: #555;
-            }
-
-            input,
-            select,
-            textarea {
-                width: 100%;
-                box-sizing: border-box;
-                border: 1px solid var(--ul-border);
-                border-radius: 6px;
-                padding: .45rem .6rem;
-                font-size: .9rem;
-
-                &:focus {
-                    outline: 2px solid #2563eb;
-                    border-color: transparent;
-                }
-            }
-
-            &.form-row--coords {
+            &--coords {
                 flex-direction: row;
                 gap: .75rem;
 
-                >div {
+                > div {
                     flex: 1;
                     display: flex;
                     flex-direction: column;
@@ -264,26 +192,26 @@
     height: 34px;
     border-radius: 6px;
     border: 1px solid var(--ul-border);
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     cursor: pointer;
     transition: border-color .12s, background .12s;
 
     .material-icons {
         font-size: 18px;
-        color: #555;
+        color: var(--ul-grey-7);
     }
 
     &:hover {
-        background: #eff6ff;
-        border-color: #93c5fd;
+        background: var(--ul-grey-0a);
+        border-color: $ui-blue-300;
     }
 
     &.dp-icon-btn--active {
-        background: #dbeafe;
-        border-color: #2563eb;
+        background: $ui-blue-100;
+        border-color: $ui-blue-600;
 
         .material-icons {
-            color: #2563eb;
+            color: $ui-blue-600;
         }
     }
 }
@@ -308,7 +236,7 @@
     }
 
     &.dp-color-swatch--active {
-        border-color: #1e293b;
+        border-color: $ui-slate-800;
         box-shadow: 0 0 0 2px #fff inset;
     }
 }
@@ -339,7 +267,7 @@
     .detail-pin-wiki-attr {
         margin-left: auto;
         font-size: .75rem;
-        color: #94a3b8;
+        color: $ui-slate-400;
         white-space: nowrap;
         flex-shrink: 0;
     }
@@ -347,7 +275,7 @@
 
 .detail-pin-wiki-empty {
     padding: 1rem 1.25rem;
-    color: #888;
+    color: var(--ul-grey-6);
     font-size: .85rem;
 }
 
@@ -356,7 +284,7 @@
     .aliases-description {
         padding: .5rem 1rem 0;
         font-size: .83rem;
-        color: #888;
+        color: var(--ul-grey-6);
         margin: 0;
     }
 }
@@ -376,11 +304,11 @@
     gap: .25rem;
     padding: .25rem .35rem .25rem .65rem;
     border-radius: 20px;
-    background: color-mix(in srgb, #6366f1 12%, transparent);
-    border: 1px solid color-mix(in srgb, #6366f1 25%, transparent);
+    background: color-mix(in srgb, $ui-indigo-500 12%, transparent);
+    border: 1px solid color-mix(in srgb, $ui-indigo-500 25%, transparent);
     font-size: .8rem;
     font-weight: 500;
-    color: #333;
+    color: var(--ul-grey-8);
     line-height: 1.3;
 
     .alias-chip-name {
@@ -389,7 +317,7 @@
 
     .alias-chip-author {
         font-size: .72rem;
-        color: #777;
+        color: var(--ul-grey-6);
         font-style: italic;
         padding: 0 .2rem;
 
@@ -410,7 +338,7 @@
         background: rgba(0, 0, 0, .1);
         cursor: pointer;
         padding: 0;
-        color: #666;
+        color: var(--ul-grey-7);
         outline: none;
         transition: background .12s, color .12s;
 
@@ -422,7 +350,7 @@
         &:hover,
         &:focus {
             background: rgba(200, 0, 0, .18);
-            color: #c00;
+            color: var(--ul-color-danger-accent);
             outline: none;
         }
     }
@@ -431,7 +359,7 @@
 .aliases-empty {
     padding: .5rem 1rem .75rem;
     font-size: .83rem;
-    color: #aaa;
+    color: var(--ul-grey-6);
     font-style: italic;
     margin: 0;
 }
@@ -451,7 +379,7 @@
         outline: none;
 
         &:focus {
-            border-color: #6366f1;
+            border-color: $ui-indigo-500;
             box-shadow: 0 0 0 2px rgba(99, 102, 241, .15);
         }
     }
@@ -461,8 +389,8 @@
         align-items: center;
         justify-content: center;
         padding: .35rem .6rem;
-        background: #6366f1;
-        color: var(--ul-text-4);
+        background: $ui-indigo-500;
+        color: var(--ul-grey-5);
         border: none;
         border-radius: 6px;
         cursor: pointer;
@@ -473,7 +401,7 @@
         }
 
         &:hover {
-            background: #4f46e5;
+            background: $ui-indigo-600;
         }
     }
 }
@@ -487,20 +415,20 @@
 
     .dp-opacity-label {
         font-size: .78rem;
-        color: #64748b;
+        color: $ui-slate-500;
         white-space: nowrap;
         flex-shrink: 0;
     }
 
     input[type=range] {
         flex: 1;
-        accent-color: #6366f1;
+        accent-color: $ui-indigo-500;
     }
 }
 
 .dp-opacity-val {
     font-size: .78rem;
-    color: #374151;
+    color: $ui-gray-700;
     min-width: 2.2ch;
     text-align: right;
 }
@@ -515,7 +443,7 @@
     background: rgba(15, 23, 42, .88);
     border: none;
     border-radius: 6px;
-    color: #f8fafc;
+    color: $ui-slate-50;
     font-size: .78rem;
     font-weight: 500;
     padding: .25rem .5rem;
@@ -529,18 +457,7 @@
 
 // Shared wiki dialog uses the same base as tag/visit dialogs.
 .wiki-edit-dialog {
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
-    padding: 0;
-    width: min(480px, 95vw);
-    max-height: 90vh;
-    overflow: hidden;
-
-    &[open] {
-        display: flex;
-        flex-direction: column;
-    }
+    @include dialog-base(480px);
 
     .wiki-edit-form {
         flex: 1;

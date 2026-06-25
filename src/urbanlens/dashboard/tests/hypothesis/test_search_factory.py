@@ -165,7 +165,7 @@ class BuildPinSearchQueryNameTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# get_search_gateway — factory
+# get_search_gateway - factory
 # ---------------------------------------------------------------------------
 
 class GetSearchGatewayTests(TestCase):

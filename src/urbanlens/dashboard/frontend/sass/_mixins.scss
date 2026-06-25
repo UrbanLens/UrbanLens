@@ -1,9 +1,18 @@
 @use "tokens" as *;
+@use 'sass:color';
 
 // ── Responsive ────────────────────────────────────────────────────────────────
+// up()   — mobile-first: apply styles at $breakpoint and wider (preferred).
+// down() — use only to override desktop-first legacy rules; prefer up() for new code.
 
 @mixin up($breakpoint) {
 	@media (min-width: $breakpoint) {
+		@content;
+	}
+}
+
+@mixin down($breakpoint) {
+	@media (max-width: calc(#{$breakpoint} - 1px)) {
 		@content;
 	}
 }
@@ -47,8 +56,8 @@
 	border: 1px solid var(--ul-border);
 	border-radius: $radius-sm;
 	font-size: .9rem;
-	color: var(--ul-text-1);
-	background: var(--ul-surface-1);
+	color: var(--ul-grey-8);
+	background: var(--ul-grey-0);
 	box-sizing: border-box;
 	transition: border-color .15s, box-shadow .15s;
 
@@ -57,7 +66,7 @@
 	}
 
 	&::placeholder {
-		color: var(--ul-text-3);
+		color: var(--ul-grey-6);
 	}
 
 	&:disabled {
@@ -69,7 +78,7 @@
 // ── Surfaces ──────────────────────────────────────────────────────────────────
 
 @mixin surface($radius: $radius-md) {
-	background: var(--ul-surface-1);
+	background: var(--ul-grey-0);
 	border: 1px solid var(--ul-border);
 	border-radius: $radius;
 }
@@ -80,6 +89,92 @@
 }
 
 // ── Buttons ───────────────────────────────────────────────────────────────────
+// These mixins are the source of truth for button appearance. The .btn class in
+// _buttons.scss uses them, and feature files can @include them directly in
+// feature-specific button classes so they never need to reimplement button styles.
+
+// Base layout, typography, and transitions shared by all .btn variants.
+@mixin btn-base {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: .35em;
+	padding: .5rem 1rem;
+	font-size: .95rem;
+	font-weight: 500;
+	line-height: 1.25;
+	border: 1px solid transparent;
+	border-radius: $radius-sm;
+	cursor: pointer;
+	text-decoration: none;
+	white-space: nowrap;
+	user-select: none;
+	transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+	background: none;
+	color: var(--ul-grey-8);
+	text-transform: none;
+
+	&:active {
+		transform: translateY(1px);
+	}
+
+	&:disabled,
+	&[disabled] {
+		@include btn-disabled;
+	}
+}
+
+// Filled primary button (uses --ul-button-* CSS custom properties so dark mode works).
+@mixin btn-primary {
+	@include btn-base;
+	background: var(--ul-button-bg);
+	border-color: var(--ul-button-border);
+	color: var(--ul-button-text);
+
+	&:hover {
+		background: var(--ul-button-hover-bg);
+		border-color: var(--ul-button-hover-border);
+		color: var(--ul-button-hover-text);
+	}
+}
+
+// Outlined / ghost button.
+@mixin btn-ghost {
+	@include btn-base;
+	border-color: var(--ul-border);
+	color: var(--ul-grey-7);
+
+	&:hover {
+		background: var(--ul-grey-1);
+		color: var(--ul-grey-8);
+		border-color: var(--ul-border-strong);
+	}
+}
+
+// Outlined danger button.
+@mixin btn-danger {
+	@include btn-base;
+	color: $danger-color;
+	border-color: $danger-border;
+	background: $danger-bg;
+
+	&:hover {
+		background: color.scale($danger-bg, $lightness: -4%);
+	}
+}
+
+// Icon button that reveals danger colors on hover.
+// Uses surface-0a (translucent neutral) for the hover background so it works in both
+// light and dark themes; only the icon changes to the danger red.
+@mixin icon-btn-danger($size: 28px) {
+	@include icon-btn($size);
+
+	&:hover,
+	&:focus {
+		background: var(--ul-grey-0a);
+		color: $danger-color;
+	}
+}
 
 @mixin icon-btn($size: 28px) {
 	@include flex-center;
@@ -90,7 +185,7 @@
 	background: transparent;
 	cursor: pointer;
 	flex-shrink: 0;
-	color: var(--ul-text-3);
+	color: var(--ul-grey-6);
 	padding: 0;
 	transition: background .12s, color .12s;
 
@@ -100,7 +195,7 @@
 
 	&:hover {
 		background: var(--ul-hover-bg);
-		color: var(--ul-text-1);
+		color: var(--ul-grey-8);
 	}
 }
 
@@ -110,19 +205,25 @@
 	pointer-events: none;
 }
 
+// Inline spinner element styles (used by .ul-spinner and one-off spinner elements).
+@mixin spinner($size: 14px) {
+	display: inline-block;
+	width: $size;
+	height: $size;
+	border: 2px solid rgba(255, 255, 255, .35);
+	border-top-color: var(--ul-grey-5);
+	border-radius: 50%;
+	animation: ul-spin .65s linear infinite;
+	vertical-align: middle;
+	flex-shrink: 0;
+}
+
+// Appends a spinning ::after pseudo-element to a button for loading states.
 @mixin btn-loading-spinner($size: 13px) {
 	&::after {
 		content: '';
-		display: inline-block;
-		width: $size;
-		height: $size;
-		border: 2px solid rgba(255, 255, 255, .4);
-		border-top-color: var(--ul-text-4);
-		border-radius: 50%;
-		animation: ul-spin .65s linear infinite;
+		@include spinner($size);
 		margin-left: .4rem;
-		vertical-align: middle;
-		flex-shrink: 0;
 	}
 }
 
@@ -166,16 +267,23 @@
 	}
 }
 
-@mixin dialog-base {
+// $width sets the dialog's preferred width; min() clamps to 90vw on small screens.
+@mixin dialog-base($width: 55rem) {
 	border: none;
 	border-radius: $radius-md;
-	box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
+	box-shadow: $shadow-dialog;
 	padding: 0;
+	width: min(#{$width}, 90vw);
 	max-width: 90vw;
-	background: var(--ul-surface-1);
+	max-height: 90vh;
+	overflow: visible;
+	background: var(--ul-grey-0);
+	color: var(--ul-grey-8);
 
 	&::backdrop {
-		background: rgba(0, 0, 0, .45);
+		background: rgba(0, 0, 0, .55);
+		backdrop-filter: blur(2px);
+		-webkit-backdrop-filter: blur(2px);
 	}
 
 	&[open] {
@@ -194,13 +302,37 @@
 	flex-shrink: 0;
 }
 
+// Vertical label + input stack used inside dialog forms.
+@mixin form-row {
+	display: flex;
+	flex-direction: column;
+	gap: .35rem;
+
+	label {
+		font-size: .8rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: .04em;
+		color: var(--ul-grey-6);
+	}
+
+	input[type="text"],
+	input[type="email"],
+	input[type="date"],
+	input[type="number"],
+	textarea,
+	select {
+		@include ul-input;
+	}
+}
+
 @mixin add-form-row {
 	display: flex;
 	gap: $space-sm;
 	align-items: center;
 	padding: $bar-padding-y $bar-padding-x;
 	border-top: 1px solid var(--ul-border);
-	background: var(--ul-surface-1);
+	background: var(--ul-grey-0);
 }
 
 @mixin empty-state {
@@ -210,7 +342,7 @@
 	justify-content: center;
 	gap: $space-sm;
 	padding: $space-xl;
-	color: var(--ul-text-3);
+	color: var(--ul-grey-6);
 	text-align: center;
 
 	.material-icons {
@@ -229,7 +361,7 @@
 	padding: 8px 14px;
 	font-size: .875rem;
 	font-weight: 500;
-	color: var(--ul-text-1);
+	color: var(--ul-grey-8);
 	text-decoration: none;
 	background: none;
 	border: none;
@@ -240,12 +372,12 @@
 
 	.material-icons {
 		font-size: 1.05rem;
-		color: var(--ul-text-2);
+		color: var(--ul-grey-7);
 		flex-shrink: 0;
 	}
 
 	&:hover {
-		background: var(--ul-surface-2);
+		background: var(--ul-grey-1);
 
 		.material-icons {
 			color: $primary-color;

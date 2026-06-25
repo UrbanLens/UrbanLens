@@ -1,8 +1,8 @@
 <form class="comment-compose {% if is_reply %}comment-compose--reply{% endif %}"
       {% if context_type == "pin" %}
-      hx-post="{% url 'pin.comments' pin.uuid %}"
+      hx-post="{% url 'pin.comments' pin.slug %}"
       {% elif context_type == "wiki" %}
-      hx-post="{% url 'location.wiki.comments' location.uuid %}"
+      hx-post="{% url 'location.wiki.comments' location.slug %}"
       {% else %}
       hx-post="{% url 'trips.comments' trip.uuid %}"
       {% endif %}
@@ -58,7 +58,7 @@
                 onclick="_openCommentMapComposer(this.closest('.comment-compose'))">
           <i class="material-icons">map</i>
         </button>
-        <button type="submit" class="btn-primary {% if is_reply %}btn-sm{% endif %}">
+        <button type="submit" class="btn btn--primary {% if is_reply %}btn--sm{% endif %}">
           {% if is_reply %}Reply{% else %}Post{% endif %}
         </button>
       </div>

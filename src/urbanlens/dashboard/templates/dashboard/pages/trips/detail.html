@@ -21,7 +21,8 @@
         <div class="trip-map-overlay">
             <button type="button" class="trip-map-past-btn" id="trip-map-completed-toggle"
                     onclick="window.tripToggleShowCompleted()"
-                    title="Show completed / past activities">
+                    data-tooltip="Toggle past activities on the trip map."
+                    aria-label="Show completed activities">
                 <i class="material-icons">history</i>
             </button>
         </div>
@@ -132,8 +133,8 @@
             </div>
         </div>
         <div class="form-actions">
-            <button type="submit" class="submit-button">Save Changes</button>
-            <button type="button" class="btn-ghost"
+            <button type="submit" class="submit-button btn btn--primary btn--lg">Save Changes</button>
+            <button type="button" class="btn btn--ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </form>
@@ -159,7 +160,7 @@
             </div>
         </div>
         <div class="form-row" style="margin-bottom:.1rem">
-            <button type="button" class="btn-ghost" id="add-activity-name-toggle"
+            <button type="button" class="btn btn--ghost" id="add-activity-name-toggle"
                     style="font-size:.8rem;padding:.25rem .5rem"
                     onclick="_toggleAddActivityName()">
                 <i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name
@@ -205,7 +206,7 @@
                 <input type="hidden" name="child_trip_uuid" id="activity-child-trip-uuid">
                 <div id="activity-child-trip-suggestions" class="location-suggestions" hidden></div>
                 <span id="activity-child-trip-display" class="activity-location-display"></span>
-                <button type="button" class="btn-ghost activity-child-trip-clear" id="activity-child-trip-clear"
+                <button type="button" class="btn btn--ghost activity-child-trip-clear" id="activity-child-trip-clear"
                         style="display:none;margin-top:.25rem;font-size:.8rem;padding:.2rem .5rem"
                         onclick="_clearChildTrip('add')">
                     <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i> Remove
@@ -241,8 +242,8 @@
             <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
         </div>
         <div class="form-actions">
-            <button type="submit" class="submit-button">Add Activity</button>
-            <button type="button" class="btn-ghost"
+            <button type="submit" class="submit-button btn btn--primary btn--lg">Add Activity</button>
+            <button type="button" class="btn btn--ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </form>
@@ -259,7 +260,7 @@
           class="trip-create-form">
         {% csrf_token %}
         <div class="form-row" style="margin-bottom:.1rem">
-            <button type="button" class="btn-ghost" id="edit-activity-name-toggle"
+            <button type="button" class="btn btn--ghost" id="edit-activity-name-toggle"
                     style="font-size:.8rem;padding:.25rem .5rem"
                     onclick="_toggleEditActivityName()">
                 <i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name
@@ -285,7 +286,7 @@
                 <div id="edit-activity-location-suggestions" class="location-suggestions" hidden></div>
                 <span id="edit-activity-location-display" class="activity-location-display"></span>
             </div>
-            <button type="button" class="btn-ghost"
+            <button type="button" class="btn btn--ghost"
                     onclick="_clearEditLocation()" style="margin-top:.35rem;font-size:.8rem;padding:.25rem .6rem">
                 <i class="material-icons" style="font-size:1rem;vertical-align:middle">clear</i> Clear location
             </button>
@@ -296,7 +297,7 @@
             <div class="activity-datetime-row">
                 <input type="date" name="scheduled_date" id="edit-activity-date">
                 <input type="time" name="scheduled_time" id="edit-activity-time">
-                <button type="button" class="btn-ghost"
+                <button type="button" class="btn btn--ghost"
                         style="font-size:.78rem;padding:.2rem .5rem;white-space:nowrap"
                         onclick="document.getElementById('edit-activity-date').value='';document.getElementById('edit-activity-time').value=''">
                     <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i>
@@ -309,7 +310,7 @@
             <div class="activity-datetime-row">
                 <input type="date" name="scheduled_end_date" id="edit-activity-end-date">
                 <input type="time" name="scheduled_end_time" id="edit-activity-end-time">
-                <button type="button" class="btn-ghost"
+                <button type="button" class="btn btn--ghost"
                         style="font-size:.78rem;padding:.2rem .5rem;white-space:nowrap"
                         onclick="document.getElementById('edit-activity-end-date').value='';document.getElementById('edit-activity-end-time').value=''">
                     <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i>
@@ -325,7 +326,7 @@
                 <input type="hidden" name="child_trip_uuid" id="edit-activity-child-trip-uuid">
                 <div id="edit-activity-child-trip-suggestions" class="location-suggestions" hidden></div>
                 <span id="edit-activity-child-trip-display" class="activity-location-display"></span>
-                <button type="button" class="btn-ghost activity-child-trip-clear" id="edit-activity-child-trip-clear"
+                <button type="button" class="btn btn--ghost activity-child-trip-clear" id="edit-activity-child-trip-clear"
                         style="display:none;margin-top:.25rem;font-size:.8rem;padding:.2rem .5rem"
                         onclick="_clearChildTrip('edit')">
                     <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i> Remove
@@ -361,15 +362,42 @@
             <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
         </div>
         <div class="form-actions form-actions--split">
-            <button type="button" class="btn-danger" id="edit-activity-delete-btn"
+            <button type="button" class="btn--danger" id="edit-activity-delete-btn"
                     onclick="_deleteEditActivity()">
                 <i class="material-icons">delete</i> Delete
             </button>
             <div class="form-actions-right">
-                <button type="submit" class="submit-button">Save Changes</button>
-                <button type="button" class="btn-ghost"
+                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Changes</button>
+                <button type="button" class="btn btn--ghost"
                         onclick="this.closest('dialog').close()">Cancel</button>
             </div>
+        </div>
+    </form>
+</dialog>
+
+{# ── Mark as completed dialog ────────────────────────────────────────────── #}
+<dialog id="trip-complete-dialog" class="trip-create-dialog ul-dialog">
+    {% include "dashboard/partials/_dialog_header.html" with title="Mark as Completed" %}
+    <form id="trip-complete-form"
+          hx-post=""
+          hx-target="#trip-activities-panel"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful)document.getElementById('trip-complete-dialog').close()"
+          class="trip-create-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <p style="margin:0 0 .75rem;color:var(--ul-text-muted,#6b7280)">When was this activity completed?</p>
+            <label for="trip-complete-date">Date completed</label>
+            <input type="date" name="completed_date" id="trip-complete-date"
+                   style="width:100%;max-width:240px;margin-top:.25rem">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="submit-button btn btn--primary btn--lg">
+                <i class="material-icons" style="font-size:1rem;vertical-align:middle">check_circle</i>
+                Mark Complete
+            </button>
+            <button type="button" class="btn btn--ghost"
+                    onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </form>
 </dialog>
@@ -400,8 +428,8 @@
                    placeholder="Enter exact username">
         </div>
         <div class="form-actions">
-            <button type="submit" class="submit-button">Add Member</button>
-            <button type="button" class="btn-ghost"
+            <button type="submit" class="submit-button btn btn--primary btn--lg">Add Member</button>
+            <button type="button" class="btn btn--ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </form>
@@ -564,9 +592,33 @@
                     _markers[actId] = marker;
 
                     if (!isChildTrip && pt.draggable) {
-                        (function (aId) {
+                        (function (aId, m, savedLat, savedLng) {
+                            var dragUnlocked = false;
+                            var PIN_DRAG_CONFIRM_ZOOM = 14;
                             var posUrl = '{% url "trips.activity.position" trip.uuid 0 %}'.replace('/0/', '/' + aId + '/');
-                            marker.on('dragend', function (ev) {
+
+                            m.on('dragstart', function () {
+                                if (_map.getZoom() >= PIN_DRAG_CONFIRM_ZOOM && !dragUnlocked) {
+                                    m.dragging.disable();
+                                    m.setLatLng([savedLat, savedLng]);
+                                    window.confirmDialog({
+                                        title: 'Move activity?',
+                                        message: 'At this zoom level it is easy to move a marker by accident.\n\nDrag again after confirming to reposition it.',
+                                        confirmLabel: 'Enable move',
+                                        danger: false,
+                                    }).then(function (ok) {
+                                        if (ok) {
+                                            dragUnlocked = true;
+                                            m.dragging.enable();
+                                            toastr && toastr.info('Drag the marker to its new location.');
+                                        }
+                                    });
+                                    return;
+                                }
+                            });
+
+                            m.on('dragend', function (ev) {
+                                dragUnlocked = false;
                                 var ll = ev.target.getLatLng();
                                 fetch(posUrl, {
                                     method: 'POST',
@@ -580,7 +632,7 @@
                                     toastr && toastr.error('Could not save new position.');
                                 });
                             });
-                        }(actId));
+                        }(actId, marker, pt.lat, pt.lng));
                     }
                 }
                 marker.addTo(_markersGroup);
@@ -744,7 +796,7 @@ window.tripToggleShowCompleted = function () {
                                 if (lngInput)  lngInput.value  = loc.lng;
                                 if (nameInput) nameInput.value = loc.name;
                             } else {
-                                uuidInput.value = loc.uuid;
+                                uuidInput.value = loc.slug;
                                 if (latInput)  latInput.value  = '';
                                 if (lngInput)  lngInput.value  = '';
                                 if (nameInput) nameInput.value = '';
@@ -1294,6 +1346,23 @@ window.tripSetTab = function (tab) {
 
     // Re-render calendar so the filtered set is reflected there too
     if (window._tripCurrentView === 'calendar') _renderTripCalendar();
+};
+
+// ── Mark-as-completed dialog ─────────────────────────────────────────────
+window.tripOpenCompleteDialog = function (url) {
+    var form = document.getElementById('trip-complete-form');
+    if (form) {
+        form.setAttribute('hx-post', url);
+        htmx.process(form);
+    }
+    var today = new Date().toISOString().slice(0, 10);
+    var dateInput = document.getElementById('trip-complete-date');
+    if (dateInput) {
+        dateInput.value = today;
+        dateInput.max = today;
+    }
+    var dlg = document.getElementById('trip-complete-dialog');
+    if (dlg) dlg.showModal();
 };
 
 // Restore tab + show-completed state after panel swap

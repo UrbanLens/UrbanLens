@@ -8,14 +8,14 @@
 
 <div class="comment-body">
   <div class="comment-meta">
-    <a href="{% url 'profile.view_user' comment.profile.uuid %}" class="comment-author comment-author--link">{{ comment.profile.username }}</a>
+    <a href="{% url 'profile.view_user' comment.profile.slug %}" class="comment-author comment-author--link">{{ comment.profile.username }}</a>
     <span class="comment-date">{{ comment.created|timesince }} ago</span>
     {% if comment.profile == profile %}
     <button type="button" class="comment-delete-btn" title="Delete"
             {% if context_type == "pin" %}
-            hx-delete="{% url 'pin.comment.delete' pin.uuid comment.id %}"
+            hx-delete="{% url 'pin.comment.delete' pin.slug comment.id %}"
             {% elif context_type == "wiki" %}
-            hx-delete="{% url 'location.wiki.comment.delete' location.uuid comment.id %}"
+            hx-delete="{% url 'location.wiki.comment.delete' location.slug comment.id %}"
             {% endif %}
             hx-target="#comment-{{ comment.id }}"
             hx-swap="outerHTML"

@@ -6,6 +6,26 @@ Include BEFORE any template that uses MarkupEngine (e.g. in base.html <head>).
 window.MarkupEngine = (function () {
     'use strict';
 
+    // ── Client-side sanitizers (defense-in-depth for legacy stored data) ─────
+
+    var _hexColorRe = /^#[0-9a-fA-F]{6}$/;
+
+    function safeColor(v, fallback) {
+        fallback = fallback || '#e74c3c';
+        return (typeof v === 'string' && _hexColorRe.test(v)) ? v : fallback;
+    }
+
+    function safeOptionalColor(v, fallback) {
+        if (v === 'none') return 'none';
+        return safeColor(v, fallback || '#e74c3c');
+    }
+
+    function safeNumber(v, lo, hi, def) {
+        var n = parseFloat(v);
+        if (isNaN(n)) return def;
+        return Math.max(lo, Math.min(hi, n));
+    }
+
     // ── Geometry helpers ──────────────────────────────────────────────────────
 
     function bearing(from, to) {
@@ -36,10 +56,10 @@ window.MarkupEngine = (function () {
     }
 
     function textLabelHtml(s) {
-        var color = s.color || '#e53e3e';
-        var sz    = s.stroke_width || 16;
+        var color = safeColor(s.color, '#e53e3e');
+        var sz    = safeNumber(s.stroke_width, 8, 96, 16);
         var bg    = s.border_color;
-        var bgVal = (!bg || bg === 'none') ? 'rgba(255,255,255,0.92)' : bg;
+        var bgVal = (!bg || bg === 'none') ? 'rgba(255,255,255,0.92)' : safeColor(bg, 'rgba(255,255,255,0.92)');
         var lbl   = (s.label || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
         return '<span class="markup-text-label" style="color:' + color +
             ';font-size:' + sz + 'px;background:' + bgVal +
@@ -52,11 +72,12 @@ window.MarkupEngine = (function () {
 
     function renderShape(s, group, zoom) {
         if (typeof L === 'undefined') return;
-        var color  = s.color || '#e74c3c';
-        var weight = s.stroke_width || s.weight || 3;
-        var fillOp   = (s.fill_opacity   != null ? s.fill_opacity   : 87)  / 100;
-        var borderOp = (s.border_opacity != null ? s.border_opacity : 100) / 100;
-        var bc = s.border_color, hasBorder = !!(bc && bc !== 'none');
+        var color  = safeColor(s.color, '#e74c3c');
+        var weight = safeNumber(s.stroke_width != null ? s.stroke_width : s.weight, 1, 50, 3);
+        var fillOp   = safeNumber(s.fill_opacity   != null ? s.fill_opacity   : 87,  0, 100, 87)  / 100;
+        var borderOp = safeNumber(s.border_opacity != null ? s.border_opacity : 100, 0, 100, 100) / 100;
+        var bc = (s.border_color && s.border_color !== 'none') ? safeColor(s.border_color, color) : null;
+        var hasBorder = !!bc;
         var strokeC = hasBorder ? bc : color;
 
         function shapeOpts() {

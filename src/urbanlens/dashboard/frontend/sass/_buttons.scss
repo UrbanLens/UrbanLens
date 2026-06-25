@@ -2,8 +2,9 @@
 @use 'variables' as *;
 
 // ── Standard button system ────────────────────────────────────────────────────
-// Prefer `.btn` + BEM modifiers for new markup. Legacy class names (`.btn-primary`,
-// `.btn-ghost`, etc.) extend the same rules so existing templates keep working.
+// Prefer `.btn` + BEM modifiers for new markup. The button appearance is driven
+// by mixins in _mixins.scss so feature files can @include btn-primary/ghost/danger
+// without duplicating rules here.
 
 @keyframes ul-spin {
 	to {
@@ -12,23 +13,18 @@
 }
 
 .btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: .35em;
-	padding: .5rem 1rem;
-	font-size: .875rem;
-	font-weight: 500;
-	line-height: 1.25;
-	border: 1px solid transparent;
-	border-radius: $radius-sm;
-	cursor: pointer;
-	text-decoration: none;
-	white-space: nowrap;
-	user-select: none;
-	transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
-	background: none;
-	color: var(--ul-text-1);
+	@include btn-base;
+
+	&:focus,
+	&:hover {
+		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+	}
+
+	&:disabled {
+		background: var(--ul-grey-4);
+		border-color: var(--ul-grey-5b);
+		color: var(--ul-grey-9a);
+	}
 
 	.material-icons {
 		font-size: 1.05em;
@@ -36,55 +32,67 @@
 	}
 
 	&--primary {
-		background: $primary-color;
-		border-color: $primary-color;
-		color: var(--ul-text-4);
+		background: var(--ul-button-bg);
+		border-color: var(--ul-button-border);
+		color: var(--ul-button-text);
 
+		&:focus,
 		&:hover {
-			background: color.adjust($primary-color, $lightness: -7%);
-			border-color: color.adjust($primary-color, $lightness: -7%);
+			background-color: var(--ul-button-hover-bg);
+			border-color: var(--ul-button-hover-border);
+			color: var(--ul-button-hover-text);
 		}
 
 		&:active {
-			background: color.adjust($primary-color, $lightness: -14%);
+			background-color: var(--ul-button-hover-bg);
 		}
 	}
 
 	&--ghost {
-		border-color: var(--ul-border);
-		color: var(--ul-text-2);
+		border-color: var(--ul-grey-2b);
+		color: var(--ul-grey-7);
 
+		&:focus,
 		&:hover {
-			background: var(--ul-surface-2);
-			color: var(--ul-text-1);
-			border-color: var(--ul-border-strong);
+			background: var(--ul-grey-0a);
+			color: var(--ul-grey-8);
 		}
 	}
 
 	&--link {
-		color: $primary-color;
+		color: var(--ul-primary-color);
 		padding-inline: .5rem;
+		border-color: var(--ul-grey-2b);
 
+		&:focus,
 		&:hover {
-			background: var(--ul-hover-bg-primary);
+			background: var(--ul-grey-0a);
 		}
 	}
 
 	&--danger {
-		color: $danger-color;
+		color: $color-red-1300;
 		border-color: $danger-border;
 		background: $danger-bg;
+		text-transform: uppercase;
 
+		&:focus,
 		&:hover {
 			background: color.scale($danger-bg, $lightness: -4%);
+
+			i.material-icons {
+				color: $color-red-1300;
+			}		
 		}
 	}
 
 	&--danger-filled {
 		background: $danger-color;
-		border-color: $danger-color;
-		color: var(--ul-text-4);
+		border-color: color.scale($danger-color, $lightness: -10%);
+		color: var(--ul-grey-9);
+		text-transform: uppercase;
 
+		&:focus,
 		&:hover {
 			background: color.adjust($danger-color, $lightness: -8%);
 			border-color: color.adjust($danger-color, $lightness: -8%);
@@ -97,8 +105,7 @@
 	}
 
 	&--lg {
-		padding: .65rem 1.35rem;
-		font-size: 1rem;
+		padding: 0.6rem 1.25rem;
 	}
 
 	&--icon {
@@ -111,11 +118,6 @@
 			font-size: 1.1rem;
 		}
 	}
-
-	&:disabled,
-	&[disabled] {
-		@include btn-disabled;
-	}
 }
 
 // Filled CTA used in legacy dialogs and forms
@@ -123,24 +125,7 @@
 .file-button {
 	@extend .btn;
 	@extend .btn--primary;
-	padding: 9px 20px;
-	font-weight: 500;
-	letter-spacing: 0.01em;
-
-	&:hover {
-		box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
-	}
-
-	&:active {
-		transform: translateY(1px);
-		box-shadow: none;
-	}
-
-	&:disabled,
-	&[disabled] {
-		transform: none;
-		box-shadow: none;
-	}
+	@extend .btn--lg;
 
 	&.is-loading {
 		opacity: .78;
@@ -154,42 +139,13 @@ input[type="submit"] {
 	@extend .submit-button;
 }
 
-// Legacy aliases — do not remove until templates are migrated to `.btn--*`
-.btn-primary {
-	@extend .btn;
-	@extend .btn--primary;
-	font-weight: 600;
-
-	i {
-		font-size: 1.1rem;
-	}
-}
-
-.btn-ghost {
-	@extend .btn;
-	@extend .btn--ghost;
-}
-
-.btn-danger-filled {
-	@extend .btn;
-	@extend .btn--danger-filled;
-	font-weight: 600;
-
-	i {
-		font-size: 1.1rem;
-	}
-}
-
-.btn-sm {
-	padding: .25rem .6rem;
-	font-size: .8rem;
-}
-
-// Icon-only buttons (legacy `.btn-icon` + modern `.ul-icon-btn`)
+// ── Icon-only buttons ─────────────────────────────────────────────────────────
+// .btn-icon is canonical. .btn-icon is a legacy alias that shares the same
+// base styles so existing templates keep working without changes.
 .btn-icon,
-.ul-icon-btn {
+.btn-icon {
 	@include icon-btn(30px);
-	color: var(--ul-text-2);
+	color: var(--ul-grey-7);
 
 	&:focus-visible {
 		@include focus-ring($alpha: .12);
@@ -201,60 +157,44 @@ input[type="submit"] {
 }
 
 .btn-icon {
-	&.btn-icon--danger {
-		&:hover,
-		&:focus {
-			background: $danger-bg;
-			color: $danger-color;
+	&--danger {
+
+		&:hover {
+			color: $color-red-1300;
+			border-color: $color-red-1500;
+			background-color: $color-red-500;
 		}
 	}
 
-	&.btn-icon--active {
-		color: $accent-purple;
+	&--active {
+		color: $accent-1;
 
 		&:hover,
 		&:focus {
-			background: $accent-purple-bg;
-			color: $accent-purple-fg;
+			background-color: $accent-1-light;
+			color: $accent-1-dark;
 		}
 	}
 
-	&.btn-icon--global-edit {
-		color: $accent-amber;
+	&--global-edit {
+		color: $color-amber-500;
 
 		&:hover,
 		&:focus {
-			background: $accent-amber-bg;
-			color: $accent-amber-fg;
+			background-color: $color-amber-500;
+			border-color: $color-amber-500;
+			color: $color-amber-1700;
 		}
 	}
 }
 
-.ul-icon-btn {
-	&--primary:hover {
-		background: var(--ul-hover-bg-primary);
-		color: $primary-color;
-	}
-
-	&--danger:hover {
-		background: $danger-bg;
-		color: $danger-color;
-	}
-}
-
+// Absolutely-positioned corner close button used in legacy card/panel contexts.
+// Extends .btn-icon for the base appearance; position overrides make it stick to its container.
 .btn-close {
-	@include icon-btn(28px);
+	@extend .btn-icon;
 	position: absolute;
-	top: 16px;
-	right: 16px;
-	color: $text-muted;
-	font-size: 1.15rem;
-	line-height: 1;
-
-	&:hover {
-		background: var(--ul-surface-1);
-		color: $text-primary;
-	}
+	top: 0.5em;
+	right: 0.5em;
 
 	&:disabled {
 		opacity: 0.35;

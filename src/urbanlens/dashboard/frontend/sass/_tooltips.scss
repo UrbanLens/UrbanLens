@@ -1,0 +1,270 @@
+// ── Tooltip system ─────────────────────────────────────────────────────────────
+//
+// Attribute-based (CSS-only, no JS required):
+//   data-tooltip="Hint text"
+//   data-tooltip-pos="above|below|left|right"   (default: above)
+//   data-tooltip-wide                            (280px bubble for longer copy)
+//
+// JS-portal (escapes overflow:hidden parents - add data-tooltip-float="true"):
+//   Uses .ul-tooltip-float element appended to <body> by _tooltips_script.html
+//
+// Reusable components (dashboard/partials/_tooltip_*.html):
+//   .ul-tooltip-help   - ⓘ icon button trigger
+//   .ul-tooltip-label  - inline label + optional help icon row
+
+@use 'variables' as *;
+
+// ── Internal mixins ───────────────────────────────────────────────────────────
+
+@mixin _bubble {
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: var(--ul-tooltip-bg);
+    color: var(--ul-tooltip-fg);
+    border: 1px solid var(--ul-tooltip-border);
+    box-shadow: var(--ul-tooltip-shadow);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.45;
+    letter-spacing: .012em;
+    white-space: normal;
+    // shrink-wrap short labels; long text wraps at max-width
+    width: max-content;
+    max-width: var(--_tip-max, 220px);
+    text-align: left;
+    word-break: break-word;
+    pointer-events: none;
+}
+
+// $from: which face of the arrow carries color (opposite to pointing direction).
+// e.g. $from: top → base is at top → triangle points down (toward element below).
+@mixin _arrow($from) {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 0;
+    border: 5px solid transparent;
+    pointer-events: none;
+
+    @if $from == top    { border-top-color:    var(--ul-tooltip-bg); }
+    @if $from == bottom { border-bottom-color: var(--ul-tooltip-bg); }
+    @if $from == left   { border-left-color:   var(--ul-tooltip-bg); }
+    @if $from == right  { border-right-color:  var(--ul-tooltip-bg); }
+}
+
+// ── Attribute triggers ────────────────────────────────────────────────────────
+
+[data-tooltip] {
+    position: relative;
+
+    // Bubble - default position: above trigger
+    &::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        @include _bubble;
+        z-index: 9900;
+
+        bottom: calc(100% + 9px);
+        left: 50%;
+
+        // --_t-show / --_t-hide encode position-aware entry animation per variant.
+        // Higher-specificity variant rules override these without needing !important.
+        --_t-show: translateX(-50%) translateY(0);
+        --_t-hide: translateX(-50%) translateY(6px);
+        transform: var(--_t-hide);
+
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity .15s ease, visibility .15s ease, transform .15s ease;
+        transition-delay: .18s;
+    }
+
+    // Arrow - default: sits just above trigger, points down toward it
+    &::before {
+        @include _arrow(top);
+        position: absolute;
+        bottom: calc(100% + 4px);
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9900;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity .15s ease, visibility .15s ease;
+        transition-delay: .18s;
+    }
+
+    &[data-tooltip-wide]::after {
+        --_tip-max: 300px;
+    }
+
+    // ── below ──────────────────────────────────────────────────────────────────
+    &[data-tooltip-pos='below'] {
+        &::after {
+            bottom: auto;
+            top: calc(100% + 9px);
+            --_t-show: translateX(-50%) translateY(0);
+            --_t-hide: translateX(-50%) translateY(-6px);
+            transform: var(--_t-hide);
+        }
+        &::before {
+            @include _arrow(bottom);
+            bottom: auto;
+            top: calc(100% + 4px);
+        }
+    }
+
+    // ── left ───────────────────────────────────────────────────────────────────
+    &[data-tooltip-pos='left'] {
+        &::after {
+            bottom: auto;
+            top: 50%;
+            left: auto;
+            right: calc(100% + 9px);
+            --_t-show: translateY(-50%) translateX(0);
+            --_t-hide: translateY(-50%) translateX(6px);
+            transform: var(--_t-hide);
+        }
+        &::before {
+            @include _arrow(left);
+            bottom: auto;
+            top: 50%;
+            left: auto;
+            right: calc(100% + 4px);
+            transform: translateY(-50%);
+        }
+    }
+
+    // ── right ──────────────────────────────────────────────────────────────────
+    &[data-tooltip-pos='right'] {
+        &::after {
+            bottom: auto;
+            top: 50%;
+            left: calc(100% + 9px);
+            --_t-show: translateY(-50%) translateX(0);
+            --_t-hide: translateY(-50%) translateX(-6px);
+            transform: var(--_t-hide);
+        }
+        &::before {
+            @include _arrow(right);
+            bottom: auto;
+            top: 50%;
+            left: calc(100% + 4px);
+            transform: translateY(-50%);
+        }
+    }
+
+    // ── Reveal states ──────────────────────────────────────────────────────────
+
+    @media (hover: hover) and (pointer: fine) {
+        &:hover::after  { opacity: 1; visibility: visible; transform: var(--_t-show); }
+        &:hover::before { opacity: 1; visibility: visible; }
+    }
+
+    &:focus-visible::after,
+    &.is-tooltip-open::after {
+        opacity: 1;
+        visibility: visible;
+        transform: var(--_t-show);
+        transition-delay: 0s;
+    }
+
+    &:focus-visible::before,
+    &.is-tooltip-open::before {
+        opacity: 1;
+        visibility: visible;
+        transition-delay: 0s;
+    }
+}
+
+// ── Info icon trigger ─────────────────────────────────────────────────────────
+
+.ul-tooltip-help {
+    @include icon-btn(18px);
+    // inline-flex overrides the block-level `flex` from icon-btn so the button
+    // participates in the inline flow of its parent (e.g. headings) and sits
+    // visually beside the label text rather than dropping to a new line.
+    display: inline-flex;
+    flex-shrink: 0;
+    vertical-align: middle;
+    color: var(--ul-grey-6);
+    border-radius: 50%;
+    transition: color .15s, background .15s;
+    opacity: 0.5;
+
+    .material-icons {
+        font-size: 15px;
+    }
+
+    &:hover,
+    &:focus-visible,
+    &.is-tooltip-open {
+        color: var(--ul-grey-8);
+        background: var(--ul-hover-bg);
+        cursor: default;
+        opacity: 1;
+    }
+
+    // Default to right-side tooltip - avoids clipping in page headers
+    &[data-tooltip]:not([data-tooltip-pos]) {
+        &::after {
+            bottom: auto;
+            top: 50%;
+            left: calc(100% + 9px);
+            --_t-show: translateY(-50%) translateX(0);
+            --_t-hide: translateY(-50%) translateX(-6px);
+            transform: var(--_t-hide);
+        }
+        &::before {
+            @include _arrow(right);
+            bottom: auto;
+            top: 50%;
+            left: calc(100% + 4px);
+            transform: translateY(-50%);
+        }
+    }
+}
+
+// ── Label + help row ──────────────────────────────────────────────────────────
+
+.ul-tooltip-label {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+}
+
+// ── "Hide tooltips" user preference ──────────────────────────────────────────
+// Applied via the html.tooltips-disabled class set from the user's profile setting.
+
+html.tooltips-disabled {
+    [data-tooltip] {
+        &::before,
+        &::after { display: none !important; }
+    }
+    .ul-tooltip-float { display: none !important; }
+    .ul-tooltip-help { display: none !important; }
+}
+
+// ── Floating tooltip (JS portal - escapes overflow:hidden) ────────────────────
+
+.ul-tooltip-float {
+    @include _bubble;
+    position: fixed;
+    z-index: 99999;
+    max-width: min(280px, calc(100vw - 16px));
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(5px);
+    transition: opacity .14s ease, visibility .14s ease, transform .14s ease;
+
+    &.is-visible {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+    }
+
+    &[data-wide='true'] {
+        max-width: min(340px, calc(100vw - 16px));
+    }
+}

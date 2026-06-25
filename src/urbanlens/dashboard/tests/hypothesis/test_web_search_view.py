@@ -83,7 +83,7 @@ class DomainExtractionTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Location.has_place_name — "No Information Available" sentinel
+# Location.has_place_name - "No Information Available" sentinel
 # ---------------------------------------------------------------------------
 
 class LocationHasPlaceNameTests(TestCase):
@@ -127,7 +127,7 @@ class LocationHasPlaceNameTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# web_search controller — via Django test client
+# web_search controller - via Django test client
 # ---------------------------------------------------------------------------
 
 class WebSearchViewTests(TestCase):
@@ -144,8 +144,7 @@ class WebSearchViewTests(TestCase):
         pin = baker.make(Pin, location=loc, profile=profile)
         return pin
 
-    def test_nonexistent_pin_uuid_returns_404(self):
-        import uuid
+    def test_nonexistent_pin_slug_returns_404(self):
         from django.test import RequestFactory
         from urbanlens.dashboard.controllers.pin import PinController
 
@@ -153,7 +152,7 @@ class WebSearchViewTests(TestCase):
         request = rf.get("/")
         request.user = baker.make("auth.User")
         view = PinController()
-        response = view.web_search(request, pin_uuid=uuid.uuid4())
+        response = view.web_search(request, pin_slug="nonexistent-pin-slug")
         self.assertEqual(response.status_code, 404)
 
     def test_successful_search_returns_200(self):
@@ -176,7 +175,7 @@ class WebSearchViewTests(TestCase):
             mock_factory.return_value = mock_gw
 
             view = PinController()
-            response = view.web_search(request, pin_uuid=pin.uuid)
+            response = view.web_search(request, pin_slug=pin.slug)
 
         self.assertEqual(response.status_code, 200)
 
@@ -211,7 +210,7 @@ class WebSearchViewTests(TestCase):
             mock_factory.return_value = mock_gw
 
             view = PinController()
-            view.web_search(request, pin_uuid=pin.uuid)
+            view.web_search(request, pin_slug=pin.slug)
 
         self.assertEqual(len(captured), 2)
         self.assertEqual(captured[0]["domain"], "example.com")
@@ -243,7 +242,7 @@ class WebSearchViewTests(TestCase):
             mock_factory.return_value = mock_gw
 
             view = PinController()
-            view.web_search(request, pin_uuid=pin.uuid)
+            view.web_search(request, pin_slug=pin.slug)
 
         self.assertIn("error", captured_ctx)
         self.assertNotIn("search_results", captured_ctx)

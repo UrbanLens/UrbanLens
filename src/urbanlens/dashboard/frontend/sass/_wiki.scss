@@ -14,10 +14,10 @@
         align-items: flex-start;
         justify-content: space-between;
         gap: 1.5rem;
-        background: linear-gradient(135deg, #0e7490 0%, #0891b2 50%, #06b6d4 100%);
+        background: linear-gradient(135deg, $ui-cyan-700 0%, $ui-cyan-600 50%, $ui-cyan-500 100%);
         border-radius: 16px;
         padding: 1.75rem 2rem;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
         margin-bottom: 1.5rem;
         flex-wrap: wrap;
     }
@@ -101,7 +101,7 @@
         padding: .45rem .9rem;
         font-size: .85rem;
         font-weight: 500;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
         text-decoration: none;
         transition: background .15s;
 
@@ -120,7 +120,7 @@
 
         .wiki-description {
             font-size: .9rem;
-            color: var(--ul-text-1);
+            color: var(--ul-grey-8);
             margin: 0 0 .6rem;
             line-height: 1.55;
         }
@@ -136,7 +136,7 @@
             align-items: center;
             gap: .3rem;
             font-size: .78rem;
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
 
             .material-icons {
                 font-size: .9rem;
@@ -151,20 +151,20 @@
         gap: 1rem;
         align-items: start;
 
-        @media (min-width: 768px) {
+        @include up($breakpoint-sm) {
             grid-template-columns: 1fr 1fr;
         }
 
-        @media (min-width: 1280px) {
+        @include up($breakpoint-lg) {
             grid-template-columns: repeat(3, 1fr);
         }
 
         .wiki-meta {
-            @media (min-width: 768px) { grid-column: 1; }
+            @include up($breakpoint-sm) { grid-column: 1; }
         }
 
         .wiki-stats {
-            @media (min-width: 768px) { grid-column: 2; }
+            @include up($breakpoint-sm) { grid-column: 2; }
         }
 
         .location-map,
@@ -189,7 +189,7 @@
 
     // ── Card base ─────────────────────────────────────────────────────────
     .wiki-card {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         border: 1px solid var(--ul-border);
         ;
         border-radius: 14px;
@@ -202,12 +202,12 @@
         align-items: center;
         gap: .6rem;
         padding: .85rem 1.1rem;
-        border-bottom: 1px solid #e2e8f0;
-        background: var(--ul-surface-1);
+        border-bottom: 1px solid $ui-slate-200;
+        background: var(--ul-grey-0);
 
         .material-icons {
             font-size: 1.1rem;
-            color: #0891b2;
+            color: $ui-cyan-600;
         }
 
         h2 {
@@ -215,7 +215,7 @@
             font-size: .95rem;
             font-weight: 600;
             flex: 1;
-            color: #0f172a;
+            color: $ui-slate-900;
         }
     }
 
@@ -227,7 +227,7 @@
         border: 1px solid rgba(255, 255, 255, .5);
         border-radius: 8px;
         background: rgba(255, 255, 255, .15);
-        color: #fff;
+        color: var(--ul-grey-4);
         font-size: .85rem;
         font-weight: 500;
         cursor: pointer;
@@ -246,7 +246,7 @@
     .wiki-card-desc {
         padding: .75rem 1.1rem;
         font-size: .83rem;
-        color: #64748b;
+        color: $ui-slate-500;
         margin: 0;
         border-bottom: 1px solid var(--ul-border);
     }
@@ -274,14 +274,14 @@
         dt {
             font-size: .78rem;
             font-weight: 600;
-            color: #64748b;
+            color: $ui-slate-500;
             text-transform: uppercase;
             letter-spacing: .04em;
         }
 
         dd {
             font-size: .9rem;
-            color: #1e293b;
+            color: $ui-slate-800;
             margin: 0;
         }
     }
@@ -303,13 +303,13 @@
     .wiki-stat-value {
         font-size: 1.6rem;
         font-weight: 700;
-        color: #0891b2;
+        color: $ui-cyan-600;
         line-height: 1;
     }
 
     .wiki-stat-label {
         font-size: .8rem;
-        color: #64748b;
+        color: $ui-slate-500;
     }
 
     // ── Location map card ─────────────────────────────────────────────────
@@ -325,36 +325,19 @@
 
     // ── Action buttons ────────────────────────────────────────────────────
     .wiki-action-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: .35rem;
+        @include btn-ghost;
         padding: .45rem .9rem;
-        border: 1px solid #cbd5e1;
         border-radius: 8px;
-        background: var(--ul-surface-1);
-        color: #475569;
         font-size: .85rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background .15s, border-color .15s, color .15s;
-
-        .material-icons {
-            font-size: 1rem;
-        }
-
-        &:hover {
-            background: var(--ul-surface-1);
-            border-color: #94a3b8;
-        }
 
         &--primary {
-            background: #0891b2;
-            border-color: #0891b2;
-            color: var(--ul-text-4);
+            background: $ui-cyan-600;
+            border-color: $ui-cyan-600;
+            color: var(--ul-grey-5);
 
             &:hover {
-                background: #0e7490;
-                border-color: #0e7490;
+                background: $ui-cyan-700;
+                border-color: $ui-cyan-700;
             }
         }
     }
@@ -363,9 +346,9 @@
     .wiki-tabs {
         display: flex;
         gap: 0;
-        border-bottom: 2px solid #e2e8f0;
+        border-bottom: 2px solid $ui-slate-200;
         padding: 0 1rem;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
     }
 
     .wiki-tab {
@@ -379,7 +362,7 @@
         background: transparent;
         font-size: .88rem;
         font-weight: 500;
-        color: #64748b;
+        color: $ui-slate-500;
         cursor: pointer;
         transition: color .15s, border-color .15s;
 
@@ -389,8 +372,8 @@
 
         &--active,
         &:hover {
-            color: #0891b2;
-            border-bottom-color: #0891b2;
+            color: $ui-cyan-600;
+            border-bottom-color: $ui-cyan-600;
         }
     }
 
@@ -403,7 +386,7 @@
         display: flex;
         align-items: center;
         gap: .5rem;
-        color: #94a3b8;
+        color: $ui-slate-400;
         font-size: .88rem;
 
         .material-icons {
@@ -414,7 +397,7 @@
     // ── Edit history ──────────────────────────────────────────────────────
     .wiki-history-empty {
         font-size: .85rem;
-        color: #94a3b8;
+        color: $ui-slate-400;
         font-style: italic;
         margin: 0;
     }
@@ -433,12 +416,12 @@
         ;
         border-radius: 10px;
         padding: .75rem 1rem;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         position: relative;
 
         &--reverted {
             opacity: .55;
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-0);
         }
     }
 
@@ -456,17 +439,17 @@
         gap: .25rem;
         font-size: .83rem;
         font-weight: 600;
-        color: #1e293b;
+        color: $ui-slate-800;
 
         .material-icons {
             font-size: .9rem;
-            color: #94a3b8;
+            color: $ui-slate-400;
         }
     }
 
     .wiki-history-date {
         font-size: .78rem;
-        color: #94a3b8;
+        color: $ui-slate-400;
         margin-left: auto;
     }
 
@@ -484,8 +467,8 @@
         }
 
         &--reverted {
-            background: #fef3c7;
-            color: #92400e;
+            background: var(--ul-accent-amber-bg);
+            color: $ui-amber-800;
         }
     }
 
@@ -508,7 +491,7 @@
 
     .wiki-change-field {
         font-weight: 600;
-        color: #475569;
+        color: $ui-slate-600;
         min-width: 80px;
         font-size: .78rem;
         text-transform: uppercase;
@@ -516,8 +499,8 @@
     }
 
     .wiki-change-from {
-        color: #b91c1c;
-        background: var(--ul-surface-1);
+        color: $ui-red-700;
+        background: var(--ul-grey-0);
         border-radius: 4px;
         padding: .1rem .35rem;
         font-size: .82rem;
@@ -527,12 +510,12 @@
 
     .wiki-change-arrow {
         font-size: .85rem;
-        color: #94a3b8;
+        color: $ui-slate-400;
     }
 
     .wiki-change-to {
-        color: #15803d;
-        background: var(--ul-surface-1);
+        color: $ui-green-700;
+        background: var(--ul-grey-0);
         border-radius: 4px;
         padding: .1rem .35rem;
         font-size: .82rem;
@@ -541,27 +524,17 @@
     }
 
     .wiki-revert-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: .3rem;
+        @include btn-base;
         padding: .3rem .7rem;
-        border: 1px solid #fca5a5;
         border-radius: 6px;
-        background: var(--ul-surface-1);
-        color: #dc2626;
+        border-color: $ui-red-300;
+        background: var(--ul-grey-0);
+        color: $ui-red-600;
         font-size: .78rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background .15s, border-color .15s;
-        opacity: 0.7;
-
-        .material-icons {
-            font-size: .85rem;
-        }
+        opacity: .7;
 
         &:hover {
-            background: var(--ul-surface-1);
-            border-color: #dc2626;
+            border-color: $ui-red-600;
             opacity: 1;
         }
     }
@@ -573,10 +546,10 @@
         gap: .5rem;
         margin: .5rem 1rem .75rem;
         padding: .55rem .75rem;
-        background: #eff6ff;
+        background: var(--ul-grey-0a);
         border-radius: 8px;
         font-size: .82rem;
-        color: #1d4ed8;
+        color: $ui-blue-700;
 
         .material-icons {
             font-size: .95rem;
@@ -599,7 +572,7 @@
             label {
                 font-size: .82rem;
                 font-weight: 600;
-                color: #555;
+                color: var(--ul-grey-7);
             }
 
             input,
@@ -613,7 +586,7 @@
                 box-sizing: border-box;
 
                 &:focus {
-                    border-color: #0891b2;
+                    border-color: $ui-cyan-600;
                     box-shadow: 0 0 0 3px rgba(8, 145, 178, .12);
                 }
             }

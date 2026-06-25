@@ -24,9 +24,9 @@
                     <i class="material-icons">date_range</i>
                 </button>
             </div>
-            <button type="button" class="detail-pin-add-btn"
+            <button type="button" class="btn btn--sm btn--primary"
                     onclick="document.getElementById('add-activity-dialog').showModal()">
-                <i class="material-icons">add</i> Add
+                <i class="material-icons">add</i>
             </button>
         </div>
     </div>
@@ -56,7 +56,7 @@
                 data-act-time="{% if act.scheduled_at %}{% with t=act.scheduled_at|time:'H:i' %}{% if t != '00:00' %}{{ t }}{% endif %}{% endwith %}{% endif %}"
                 data-act-end-date="{% if act.scheduled_end %}{{ act.scheduled_end|date:'Y-m-d' }}{% endif %}"
                 data-act-end-time="{% if act.scheduled_end %}{% with t=act.scheduled_end|time:'H:i' %}{% if t != '00:00' %}{{ t }}{% endif %}{% endwith %}{% endif %}"
-                data-act-location-uuid="{{ act.location.uuid|default:'' }}"
+                data-act-location-uuid="{{ act.location.slug|default:'' }}"
                 data-act-location-name="{{ act.location.name|default:'' }}"
                 data-act-child-trip-uuid="{{ act.child_trip.uuid|default:'' }}"
                 data-act-child-trip-name="{{ act.child_trip.name|default:'' }}"
@@ -117,7 +117,7 @@
                     <span class="trip-activity-notes">{{ act.notes }}</span>
                     {% endif %}
                     {% if act.added_by %}
-                    <span class="trip-activity-attr">Added by <a href="{% url 'profile.view_user' act.added_by.uuid %}" class="trip-attr-link">{{ act.added_by.user.username }}</a></span>
+                    <span class="trip-activity-attr">Added by <a href="{% url 'profile.view_user' act.added_by.slug %}" class="trip-attr-link">{{ act.added_by.user.username }}</a></span>
                     {% endif %}
 
                     {# ── Voting (proposed activities only) ────────────────── #}
@@ -163,10 +163,7 @@
                     <button type="button"
                             class="detail-pin-action-btn trip-complete-btn"
                             title="Mark as completed"
-                            hx-post="{% url 'trips.activity.complete' trip.uuid act.id %}"
-                            hx-target="#trip-activities-panel"
-                            hx-swap="outerHTML"
-                            hx-confirm="Mark this activity as completed?">
+                            onclick="tripOpenCompleteDialog('{% url 'trips.activity.complete' trip.uuid act.id %}')">
                         <i class="material-icons">check</i>
                     </button>
                     <button type="button"
@@ -198,7 +195,7 @@
             {% endfor %}
         </ul>
         {% else %}
-        <p class="trip-panel-empty">No activities yet. Add stops, check-in points, or locations for your trip.</p>
+        <p class="trip-panel-empty">No activities yet.</p>
         {% endif %}
     </div>
 

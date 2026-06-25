@@ -1,4 +1,4 @@
-"""Search provider factory — returns the configured gateway for web search."""
+"""Search provider factory - returns the configured gateway for web search."""
 
 from __future__ import annotations
 
@@ -21,18 +21,14 @@ def get_search_gateway() -> SearchGateway:
         A gateway instance whose ``search(query)`` method returns a list of
         ``{"title": ..., "link": ..., "snippet": ...}`` dicts.
     """
-    from urbanlens.dashboard.models.site_settings import (
-        SEARCH_PROVIDER_BRAVE,
-        SEARCH_PROVIDER_GOOGLE,
-        SiteSettings,
-    )
+    from urbanlens.dashboard.models.site_settings import SearchProviderChoice, SiteSettings
 
     try:
         provider = SiteSettings.get_current().search_provider
     except Exception:
-        provider = SEARCH_PROVIDER_BRAVE
+        provider = SearchProviderChoice.BRAVE
 
-    if provider == SEARCH_PROVIDER_GOOGLE:
+    if provider == SearchProviderChoice.GOOGLE:
         from urbanlens.dashboard.services.google.search import GoogleCustomSearchGateway
         return GoogleCustomSearchGateway()
 

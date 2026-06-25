@@ -37,7 +37,7 @@
                     Suggest edits
                 </button>
                 {% if user_pin %}
-                <a href="{% url 'pin.details' user_pin.uuid %}" class="wiki-back-link">
+                <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link">
                     <i class="material-icons">arrow_back</i> Back to my pin
                 </a>
                 {% endif %}
@@ -59,10 +59,10 @@
             <div class="wiki-lcn-list">
                 {% for other in other_locations %}
                 <span class="wiki-lcn-item">
-                    <a href="{% url 'location.wiki' other.uuid %}" class="wiki-lcn-link">{{ other.name }}</a>
+                    <a href="{% url 'location.wiki' other.slug %}" class="wiki-lcn-link">{{ other.name }}</a>
                     {% if user_pin %}
                     <button type="button" class="wiki-lcn-switch-btn"
-                            hx-post="{% url 'pin.link.to' user_pin.uuid other.uuid %}"
+                            hx-post="{% url 'pin.link.to' user_pin.slug other.slug %}"
                             hx-target="#pin-overview-stub"
                             hx-swap="none"
                             hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
@@ -213,7 +213,7 @@
         {# Badges/categories hidden: global categories no longer exist #}
 
         {# ── Aliases ─────────────────────────────────────────────────────── #}
-        <div hx-get="{% url 'location.wiki.aliases' location.uuid %}"
+        <div hx-get="{% url 'location.wiki.aliases' location.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML"
              id="location-aliases-panel"
@@ -227,7 +227,7 @@
 
         {# ── Photo gallery ────────────────────────────────────────────────── #}
         <div id="wiki-gallery-panel"
-             hx-get="{% url 'location.wiki.gallery' location.uuid %}"
+             hx-get="{% url 'location.wiki.gallery' location.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML">
             <div class="card">
@@ -241,7 +241,7 @@
 
         {# ── Comments ─────────────────────────────────────────────────────── #}
         <div id="comment-panel"
-             hx-get="{% url 'location.wiki.comments' location.uuid %}"
+             hx-get="{% url 'location.wiki.comments' location.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML"
              class="wiki-card">
@@ -256,7 +256,7 @@
         <div class="wiki-card wiki-tabs-card">
             <div class="wiki-tabs">
                 <button class="wiki-tab wiki-tab--active" data-tab="history"
-                        hx-get="{% url 'location.wiki.history' location.uuid %}"
+                        hx-get="{% url 'location.wiki.history' location.slug %}"
                         hx-target="#wiki-tab-content"
                         hx-swap="innerHTML"
                         hx-trigger="click, load">
@@ -327,7 +327,7 @@
                 </div>
             </details>
             <div class="form-actions">
-                <button type="submit" class="wiki-action-btn wiki-action-btn--primary">Save changes</button>
+                <button type="submit" class="wiki-action-btn wiki-action-btn btn--primary">Save changes</button>
                 <button type="button" class="wiki-action-btn" onclick="this.closest('dialog').close()">Cancel</button>
             </div>
         </form>
@@ -392,10 +392,10 @@
         <input type="hidden" id="wdp-lat" name="latitude">
         <input type="hidden" id="wdp-lon" name="longitude">
         <div class="form-actions">
-            <button type="submit" id="wiki-dp-submit-btn" class="submit-button" disabled>
+            <button type="submit" id="wiki-dp-submit-btn" class="submit-button btn btn--primary btn--lg" disabled>
                 Add Pin
             </button>
-            <button type="button" class="submit-button cancel-btn" id="wiki-dp-cancel-btn">
+            <button type="button" class="submit-button btn btn--primary btn--lg cancel-btn" id="wiki-dp-cancel-btn">
                 Cancel
             </button>
         </div>
@@ -410,7 +410,7 @@
     // Expose page coordinates for the comment map composer default center.
     window._commentMapDefaultLat = locLat;
     window._commentMapDefaultLng = locLng;
-    const bboxApiUrl = "{% url 'location.wiki.bbox' location.uuid %}";
+    const bboxApiUrl = "{% url 'location.wiki.bbox' location.slug %}";
     const csrfToken = '{{ csrf_token }}';
 
     // ── Bounding-box map ────────────────────────────────────────────────────
@@ -540,7 +540,7 @@
         e.preventDefault();
         const data = {};
         new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
-        fetch("{% url 'location.wiki.edit' location.uuid %}", {
+        fetch("{% url 'location.wiki.edit' location.slug %}", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
             body: JSON.stringify(data),
@@ -579,9 +579,9 @@
         danger: 'warning', other: 'info', location: 'place',
     };
     const _dpLayer = L.layerGroup().addTo(bboxMap);
-    const _wikiDpEditBase = "{% url 'location.wiki.detail_pin.edit' location.uuid '00000000-0000-0000-0000-000000000000' %}"
+    const _wikiDpEditBase = "{% url 'location.wiki.detail_pin.edit' location.slug '00000000-0000-0000-0000-000000000000' %}"
         .replace('/00000000-0000-0000-0000-000000000000/edit/', '/');
-    const _wikiDpDeleteBase = "{% url 'location.wiki.detail_pin.delete' location.uuid '00000000-0000-0000-0000-000000000000' %}"
+    const _wikiDpDeleteBase = "{% url 'location.wiki.detail_pin.delete' location.slug '00000000-0000-0000-0000-000000000000' %}"
         .replace('/00000000-0000-0000-0000-000000000000/delete/', '/');
 
     function _dpMarkerIcon(pinType, customIcon, customColor) {
@@ -657,7 +657,7 @@
     });
 
     function loadWikiDetailPinsOnMap() {
-        fetch("{% url 'location.wiki.detail_pins.json' location.uuid %}")
+        fetch("{% url 'location.wiki.detail_pins.json' location.slug %}")
             .then(r => r.json())
             .then(data => {
                 _dpLayer.clearLayers();
@@ -841,7 +841,7 @@
     });
 
     // Load gallery photos on page load
-    fetch("{% url 'location.wiki.gallery.json' location.uuid %}")
+    fetch("{% url 'location.wiki.gallery.json' location.slug %}")
         .then(r => r.json())
         .then(data => {
             _photoPanelItems = [];
@@ -942,7 +942,7 @@
             submitBtn.textContent = 'Saving…';
             const data = {};
             new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
-            fetch("{% url 'location.wiki.detail_pins.panel' location.uuid %}", {
+            fetch("{% url 'location.wiki.detail_pins.panel' location.slug %}", {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                 body: JSON.stringify(data),
@@ -965,7 +965,7 @@
     // ── Photo map layer ───────────────────────────────────────────────────────
     const _wikiPhotoLayer   = L.layerGroup().addTo(bboxMap);
     const _wikiPhotoMarkers = {};  // id → { marker, img }
-    const _wikiPhotoJsonUrl = "{% url 'location.wiki.gallery.json' location.uuid %}";
+    const _wikiPhotoJsonUrl = "{% url 'location.wiki.gallery.json' location.slug %}";
 
     function _wikiPhotoMarkerHtml(img, size) {
         return `<div class="photo-map-marker" style="width:${size}px;height:${size}px">` +

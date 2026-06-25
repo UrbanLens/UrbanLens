@@ -2,7 +2,7 @@
 
 from django import forms
 
-from urbanlens.dashboard.models.profile.model import MapCenterMode, MapViewChoice, Profile, VisibilityChoice
+from urbanlens.dashboard.models.profile.model import MapCenterMode, MapViewChoice, Profile, ThemeChoice, VisibilityChoice
 
 
 class MarkupDefaultsForm(forms.ModelForm):
@@ -45,7 +45,7 @@ _FRIEND_REQUEST_CHOICES = [(k, v) for k, v in VisibilityChoice.choices if k != V
 
 
 class PrivacySettingsForm(forms.ModelForm):
-    """Controls who can see this user's profile, comments, photos, and friend requests."""
+    """Controls who can see this user's profile, comments, photos, contact info, and friend requests."""
 
     profile_visibility = forms.ChoiceField(
         choices=VisibilityChoice.choices,
@@ -76,15 +76,20 @@ class PrivacySettingsForm(forms.ModelForm):
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Trip Pins",
         help_text=(
-            "When you share one of your pins as a trip activity, who can see the "
-            "actual location? Members outside this setting will only see the pin name."
+            "Who can see pins you share to a trip? Other trip members will only see the pin name."
         ),
     )
     viewer_photo_filter = forms.ChoiceField(
         choices=VisibilityChoice.choices,
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Show Photos From",
-        help_text="Whose photos you want to see. Photos from users outside this setting will be blurred.",
+        help_text="Photos you want to see. Other photos will be blurred.",
+    )
+    contact_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Contact Visibility",
+        help_text="Who can see your contact methods on your profile.",
     )
 
     class Meta:
@@ -96,6 +101,7 @@ class PrivacySettingsForm(forms.ModelForm):
             "photo_upload_visibility",
             "viewer_photo_filter",
             "trip_pin_location_visibility",
+            "contact_visibility",
         ]
 
 
@@ -116,18 +122,82 @@ class ContactSettingsForm(forms.Form):
 
 
 class StyleSettingsForm(forms.ModelForm):
-    """Site-wide appearance - color theme only."""
+    """Site-wide appearance - color theme, map dark mode, and tooltip visibility."""
 
-    dark_mode = forms.BooleanField(
+    theme_mode = forms.ChoiceField(
+        choices=ThemeChoice.choices,
+        widget=forms.RadioSelect(attrs={"class": "settings-radio"}),
+        label="Color Theme",
+        help_text="System follows your OS preference automatically.",
+    )
+    map_dark_mode = forms.ChoiceField(
+        choices=ThemeChoice.choices,
+        widget=forms.RadioSelect(attrs={"class": "settings-radio"}),
+        label="Map Dark Mode",
+        help_text="When to apply a dark tile layer on the map. System follows your OS preference. Satellite is unaffected.",
+    )
+    hide_tooltips = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
-        label="Dark Mode",
-        help_text="Use a dark color scheme across the app.",
+        label="Hide Tooltips",
+        help_text="Suppress hover and focus tooltips everywhere on the site.",
     )
 
     class Meta:
         model = Profile
-        fields = ["dark_mode"]
+        fields = ["theme_mode", "map_dark_mode", "hide_tooltips"]
+
+
+class ContactMethodsForm(forms.ModelForm):
+    """Optional contact methods stored on the profile."""
+
+    phone_number = forms.CharField(
+        required=False,
+        max_length=30,
+        widget=forms.TextInput(attrs={"class": "settings-input", "placeholder": "+1 555 000 0000"}),
+        label="Phone Number",
+    )
+    signal_username = forms.CharField(
+        required=False,
+        max_length=100,
+        widget=forms.TextInput(attrs={"class": "settings-input", "placeholder": "username or phone"}),
+        label="Signal",
+    )
+    discord_username = forms.CharField(
+        required=False,
+        max_length=100,
+        widget=forms.TextInput(attrs={"class": "settings-input", "placeholder": "username"}),
+        label="Discord",
+    )
+    whatsapp_number = forms.CharField(
+        required=False,
+        max_length=30,
+        widget=forms.TextInput(attrs={"class": "settings-input", "placeholder": "+1 555 000 0000"}),
+        label="WhatsApp",
+    )
+    telegram_username = forms.CharField(
+        required=False,
+        max_length=100,
+        widget=forms.TextInput(attrs={"class": "settings-input", "placeholder": "@username"}),
+        label="Telegram",
+    )
+    matrix_handle = forms.CharField(
+        required=False,
+        max_length=200,
+        widget=forms.TextInput(attrs={"class": "settings-input", "placeholder": "@user:server.org"}),
+        label="Matrix / Element",
+    )
+
+    class Meta:
+        model = Profile
+        fields = [
+            "phone_number",
+            "signal_username",
+            "discord_username",
+            "whatsapp_number",
+            "telegram_username",
+            "matrix_handle",
+        ]
 
 
 class MapDisplayForm(forms.ModelForm):

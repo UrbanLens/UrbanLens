@@ -10,6 +10,7 @@ __pycache__/
 node_modules
 package-lock.json
 .venv/
+.venv_windows/
 
 # Temporary files
 *.out
@@ -18,8 +19,12 @@ package-lock.json
 .*cache
 docs/prompts.txt
 
-# VSCode stuff per user
-.vscode
+# VSCode stuff per user (keep shared workspace config)
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
 .favorites.json
 notes/
 .coverage
@@ -36,3 +41,4 @@ bin/settings.py
 pgsql
 src/urbanlens/frontend/static/dashboard/images/
 .claude/settings.local.json
+.vscode/settings.json

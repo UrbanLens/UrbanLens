@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    db.py                                                                                                *
-*        Path:    /core/controllers/backups/db.py                                                                      *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2024-02-19                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-02-19     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -85,7 +59,7 @@ class DatabaseBackup:
         # TODO temporarily disable
         datetime.now(tz=settings.TIME_ZONE).date()
 
-        backup_filename = f'backup_{datetime.now(tz=settings.TIME_ZONE).strftime("%Y%m%d_%H%M%S")}.sql'
+        backup_filename = f"backup_{datetime.now(tz=settings.TIME_ZONE).strftime('%Y%m%d_%H%M%S')}.sql"
 
         db = settings.databases["default"]
         db_user = db.get("USER")
@@ -98,11 +72,15 @@ class DatabaseBackup:
 
         pg_dump_command = [
             "pg_dump",
-            "-U", db_user,
-            "-h", db_host,
-            "-p", db_port,
+            "-U",
+            db_user,
+            "-h",
+            db_host,
+            "-p",
+            db_port,
             db_name,
-            "-f", os.path.join(self.backup_dir, backup_filename),
+            "-f",
+            os.path.join(self.backup_dir, backup_filename),
         ]
 
         try:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
@@ -14,6 +15,9 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup, SecurityIndicatorType
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+
+if TYPE_CHECKING:
+    from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +60,7 @@ _GEOMETRY_TYPES = {
 }
 
 
-def _parse_body(request) -> dict:
+def _parse_body(request: HttpRequest) -> dict:
     """Parse JSON or fall back to POST data."""
     try:
         return json.loads(request.body)
@@ -67,20 +71,20 @@ def _parse_body(request) -> dict:
 class MarkupJsonView(LoginRequiredMixin, View):
     """Return all markup items for a pin as JSON (for Leaflet rendering).
 
-    GET /map/pin/<pin_uuid>/markup/json/
+    GET /map/pin/<pin_slug>/markup/json/
     """
 
-    def get(self, request, pin_uuid):
+    def get(self, request, pin_slug):
         """Return markup items as a JSON list.
 
         Args:
             request: HttpRequest.
-            pin_uuid: UUID of the parent pin.
+            pin_slug: UUID of the parent pin.
 
         Returns:
             JsonResponse with ``markup_items`` list.
         """
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         items = PinMarkup.objects.for_pin(pin).order_by("created")
         return JsonResponse({"markup_items": [m.to_json() for m in items]})
 
@@ -88,20 +92,20 @@ class MarkupJsonView(LoginRequiredMixin, View):
 class MarkupView(LoginRequiredMixin, View):
     """Create a new markup item for a pin.
 
-    POST /map/pin/<pin_uuid>/markup/
+    POST /map/pin/<pin_slug>/markup/
     """
 
-    def post(self, request, pin_uuid):
+    def post(self, request, pin_slug):
         """Create a markup item.
 
         Args:
             request: HttpRequest with JSON body containing markup fields.
-            pin_uuid: UUID of the parent pin.
+            pin_slug: UUID of the parent pin.
 
         Returns:
             JsonResponse with ``ok`` and ``uuid`` on success, error on failure.
         """
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         body = _parse_body(request)
 
@@ -149,27 +153,27 @@ class MarkupView(LoginRequiredMixin, View):
 class MarkupEditView(LoginRequiredMixin, View):
     """Update or delete a single markup item.
 
-    POST /map/pin/<pin_uuid>/markup/<markup_uuid>/  - update geometry / label / color / width
-    DELETE /map/pin/<pin_uuid>/markup/<markup_uuid>/  - delete
+    POST /map/pin/<pin_slug>/markup/<markup_uuid>/  - update geometry / label / color / width
+    DELETE /map/pin/<pin_slug>/markup/<markup_uuid>/  - delete
     """
 
-    def _get_item(self, request, pin_uuid, markup_uuid) -> PinMarkup:
+    def _get_item(self, request, pin_slug, markup_uuid) -> PinMarkup:
         """Resolve markup item ensuring the caller owns the parent pin."""
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         return get_object_or_404(PinMarkup, uuid=markup_uuid, parent_pin=pin)
 
-    def post(self, request, pin_uuid, markup_uuid):
+    def post(self, request, pin_slug, markup_uuid):
         """Update mutable fields on a markup item.
 
         Args:
             request: HttpRequest with JSON body.
-            pin_uuid: UUID of the parent pin.
+            pin_slug: UUID of the parent pin.
             markup_uuid: UUID of the markup item to update.
 
         Returns:
             JsonResponse with ``ok`` on success.
         """
-        item = self._get_item(request, pin_uuid, markup_uuid)
+        item = self._get_item(request, pin_slug, markup_uuid)
         body = _parse_body(request)
 
         if "geometry" in body and isinstance(body["geometry"], dict):
@@ -194,17 +198,17 @@ class MarkupEditView(LoginRequiredMixin, View):
             _apply_security_indicator(item.parent_pin, item.security_indicator)
         return JsonResponse({"ok": True})
 
-    def delete(self, request, pin_uuid, markup_uuid):
+    def delete(self, request, pin_slug, markup_uuid):
         """Delete a markup item.
 
         Args:
             request: HttpRequest.
-            pin_uuid: UUID of the parent pin.
+            pin_slug: UUID of the parent pin.
             markup_uuid: UUID of the markup item to delete.
 
         Returns:
             Empty 200 response on success.
         """
-        item = self._get_item(request, pin_uuid, markup_uuid)
+        item = self._get_item(request, pin_slug, markup_uuid)
         item.delete()
         return HttpResponse("", status=200)

@@ -1,0 +1,374 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="site-admin-page page-content">
+    <div class="site-admin-header">
+        <h1 class="site-admin-title">
+            <i class="material-icons">bar_chart</i>
+            Site Statistics
+        </h1>
+        <p class="site-admin-subtitle">Usage metrics and server health at a glance.</p>
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:.5rem">
+            <span class="stats-timestamp">
+                <i class="material-icons" style="font-size:.9rem;vertical-align:-.1em">schedule</i>
+                {{ server_time|date:"N j, Y  g:i A" }} UTC
+            </span>
+        </div>
+    </div>
+
+    {# ── KPI cards ─────────────────────────────────────────────────────────── #}
+    <div class="stats-kpi-grid">
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(8,145,178,.12)">
+                <i class="material-icons" style="color:#0891b2">people</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">{{ total_users }}</div>
+                <div class="stats-kpi-label">Total Users</div>
+                <div class="stats-kpi-sub">+{{ new_users_30d }} in last 30 days</div>
+            </div>
+        </div>
+
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(22,163,74,.12)">
+                <i class="material-icons" style="color:#16a34a">person</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">{{ active_users_30d }}</div>
+                <div class="stats-kpi-label">Active Users</div>
+                <div class="stats-kpi-sub">logged in last 30 days</div>
+            </div>
+        </div>
+
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(124,58,237,.12)">
+                <i class="material-icons" style="color:#7c3aed">place</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">{{ total_locations }}</div>
+                <div class="stats-kpi-label">Locations</div>
+                <div class="stats-kpi-sub">+{{ new_locations_30d }} in last 30 days</div>
+            </div>
+        </div>
+
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(217,119,6,.12)">
+                <i class="material-icons" style="color:#d97706">push_pin</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">{{ total_pins }}</div>
+                <div class="stats-kpi-label">Pins</div>
+                <div class="stats-kpi-sub">avg {{ avg_pins_per_user }} per user</div>
+            </div>
+        </div>
+
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(236,72,153,.12)">
+                <i class="material-icons" style="color:#ec4899">photo_library</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">{{ total_photos }}</div>
+                <div class="stats-kpi-label">Photos</div>
+                <div class="stats-kpi-sub">user-uploaded images</div>
+            </div>
+        </div>
+
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(20,184,166,.12)">
+                <i class="material-icons" style="color:#14b8a6">people_alt</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">{{ total_friendships }}</div>
+                <div class="stats-kpi-label">Friendships</div>
+                <div class="stats-kpi-sub">accepted connections</div>
+            </div>
+        </div>
+
+        {% if total_reviews is not None %}
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(251,191,36,.12)">
+                <i class="material-icons" style="color:#f59e0b">star</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">{{ total_reviews }}</div>
+                <div class="stats-kpi-label">Reviews</div>
+                <div class="stats-kpi-sub">location reviews</div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if total_trips is not None %}
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(99,102,241,.12)">
+                <i class="material-icons" style="color:#6366f1">directions_car</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">{{ total_trips }}</div>
+                <div class="stats-kpi-label">Trips</div>
+                <div class="stats-kpi-sub">{% if new_trips_30d %}+{{ new_trips_30d }} in last 30 days{% else %}planned adventures{% endif %}</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ── Charts ────────────────────────────────────────────────────────────── #}
+    <div class="stats-charts-grid">
+        <div class="site-admin-card ul-section card stats-chart-card">
+            <div class="card-header">
+                <i class="material-icons">person_add</i>
+                <span>New User Signups - last 12 months</span>
+            </div>
+            <div class="stats-chart-wrap">
+                <canvas id="chart-users"></canvas>
+            </div>
+        </div>
+
+        <div class="site-admin-card ul-section card stats-chart-card">
+            <div class="card-header">
+                <i class="material-icons">add_location_alt</i>
+                <span>New Locations - last 12 months</span>
+            </div>
+            <div class="stats-chart-wrap">
+                <canvas id="chart-locations"></canvas>
+            </div>
+        </div>
+    </div>
+
+    {# ── Top locations ─────────────────────────────────────────────────────── #}
+    {% if top_locations %}
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-icons">leaderboard</i>
+            <span>Most Pinned Locations</span>
+        </div>
+        <table class="stats-table">
+            <thead>
+                <tr><th>#</th><th>Location</th><th>Pins</th></tr>
+            </thead>
+            <tbody>
+                {% for loc in top_locations %}
+                <tr>
+                    <td class="stats-table-rank">{{ forloop.counter }}</td>
+                    <td>
+                        {% if loc.slug %}
+                        <a href="{% url 'location.wiki' loc.slug %}" class="stats-table-link">{{ loc.name }}</a>
+                        {% else %}
+                        {{ loc.name }}
+                        {% endif %}
+                    </td>
+                    <td class="stats-table-count">{{ loc.pin_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {# ── Server health ─────────────────────────────────────────────────────── #}
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-icons">dns</i>
+            <span>Server Health</span>
+        </div>
+        <div class="stats-health-grid">
+            {% if uptime %}
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#16a34a">timer</i>
+                <div>
+                    <div class="stats-health-value">{{ uptime }}</div>
+                    <div class="stats-health-label">Uptime</div>
+                </div>
+            </div>
+            {% endif %}
+            {% if media_size_mb is not None %}
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#d97706">storage</i>
+                <div>
+                    <div class="stats-health-value">{{ media_size_mb }} MB</div>
+                    <div class="stats-health-label">Media Storage</div>
+                </div>
+            </div>
+            {% endif %}
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#7c3aed">code</i>
+                <div>
+                    <div class="stats-health-value">Python {{ python_version }}</div>
+                    <div class="stats-health-label">Runtime</div>
+                </div>
+            </div>
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#0891b2">hub</i>
+                <div>
+                    <div class="stats-health-value">Django {{ django_version }}</div>
+                    <div class="stats-health-label">Framework</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    var isDark = document.getElementById('html-root').getAttribute('data-theme') === 'dark';
+    var gridColor  = isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+    var labelColor = isDark ? '#94a3b8' : '#64748b';
+    var tooltipBg  = isDark ? '#1e293b' : '#fff';
+    var tooltipFg  = isDark ? '#f1f5f9' : '#0f172a';
+
+    var defaults = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: tooltipBg,
+                titleColor: tooltipFg,
+                bodyColor: tooltipFg,
+                borderColor: gridColor,
+                borderWidth: 1,
+            },
+        },
+        scales: {
+            x: {
+                ticks: { color: labelColor, maxRotation: 45 },
+                grid: { color: gridColor },
+            },
+            y: {
+                beginAtZero: true,
+                ticks: { color: labelColor, precision: 0 },
+                grid: { color: gridColor },
+            },
+        },
+    };
+
+    function makeBar(canvasId, labels, data, color) {
+        var ctx = document.getElementById(canvasId);
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: color + '99',
+                    borderColor: color,
+                    borderWidth: 1.5,
+                    borderRadius: 4,
+                }],
+            },
+            options: defaults,
+        });
+    }
+
+    makeBar('chart-users',     {{ chart_user_labels }},     {{ chart_user_counts }},     '#0891b2');
+    makeBar('chart-locations', {{ chart_location_labels }}, {{ chart_location_counts }}, '#7c3aed');
+}());
+</script>
+
+<style>
+/* ── Stats page layout ────────────────────────────────────────────────────── */
+.stats-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+.stats-kpi-card {
+    display: flex;
+    align-items: center;
+    gap: .9rem;
+    background: var(--ul-grey-1, #fff);
+    border: 1px solid var(--ul-border, #e5e7eb);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+}
+.stats-kpi-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    flex-shrink: 0;
+}
+.stats-kpi-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--ul-grey-8, #0f172a);
+}
+.stats-kpi-label {
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--ul-grey-7, #475569);
+    margin-top: .1rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.stats-kpi-sub {
+    font-size: .75rem;
+    color: var(--ul-grey-5, #94a3b8);
+    margin-top: .15rem;
+}
+.stats-charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+.stats-chart-card { margin-bottom: 0 !important; }
+.stats-chart-wrap { height: 240px; padding: 1rem; }
+.stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .88rem;
+}
+.stats-table th, .stats-table td {
+    padding: .55rem .9rem;
+    text-align: left;
+    border-bottom: 1px solid var(--ul-border, #e5e7eb);
+}
+.stats-table th {
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--ul-grey-7, #475569);
+}
+.stats-table-rank { color: var(--ul-grey-6, #94a3b8); width: 2.5rem; }
+.stats-table-count { font-weight: 600; text-align: right; }
+.stats-table-link { color: var(--ul-accent, #0891b2); text-decoration: none; }
+.stats-table-link:hover { text-decoration: underline; }
+.stats-health-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    padding: 1rem 1.25rem 1.25rem;
+}
+.stats-health-item {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+}
+.stats-health-icon { font-size: 1.6rem !important; }
+.stats-health-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--ul-grey-8, #0f172a);
+}
+.stats-health-label {
+    font-size: .75rem;
+    color: var(--ul-grey-6, #94a3b8);
+}
+.stats-timestamp {
+    font-size: .8rem;
+    color: var(--ul-grey-6, #94a3b8);
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+}
+</style>
+{% endblock %}

@@ -4,6 +4,7 @@ from django.db.models import TextChoices
 
 
 class FriendshipStatus(TextChoices):
+    PENDING = "Pending", "Pending"
     REQUESTED = "Requested", "Requested"
     ACCEPTED = "Accepted", "Accepted"
     DECLINED = "Declined", "Declined"

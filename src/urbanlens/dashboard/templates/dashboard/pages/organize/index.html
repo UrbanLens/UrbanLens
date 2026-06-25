@@ -5,7 +5,9 @@
 <div class="organize-page page-content">
 
     <div class="organize-page-header">
-        <h1 class="organize-page-title">Organize</h1>
+        <h1 class="organize-page-title">Organize
+            {% include "dashboard/partials/_tooltip_help.html" with text="Tags label pins, categories group them by type, statuses track visit progress, and priority controls which icon wins when a pin has several." wide=True %}
+        </h1>
         <p class="organize-page-subtitle">Manage tags, categories, statuses, and display priority.</p>
     </div>
 
@@ -34,158 +36,16 @@
     </div>
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# TAGS PANEL                                                                #}
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    <div class="organize-panel tag-page" id="panel-tags" role="tabpanel"
-         {% if active_tab != 'tags' %}hidden{% endif %}>
-
-        <div class="tag-header">
-            <div>
-                <h2 class="tag-title">My Tags</h2>
-                <p class="tag-subtitle">Organize your pins with custom tags.</p>
-            </div>
-            <div class="tag-header-right">
-                <div class="tag-view-toggle" role="group" aria-label="Tag view mode">
-                    <button type="button" class="tag-view-btn tag-view-btn--tags active" data-view="list" title="List view">
-                        <i class="material-icons">view_list</i>
-                    </button>
-                    <button type="button" class="tag-view-btn tag-view-btn--tags" data-view="gallery" title="Gallery view">
-                        <i class="material-icons">grid_view</i>
-                    </button>
-                    <button type="button" class="tag-view-btn tag-view-btn--tags" data-view="tree" title="Tree view">
-                        <i class="material-icons">account_tree</i>
-                    </button>
-                </div>
-                <div class="tag-view-toggle--sel">
-                    <button type="button" class="tag-view-btn--sel" id="tag-sel-all" title="Select all tags">
-                        <i class="material-icons">checklist</i>
-                    </button>
-                </div>
-                <button type="button" class="btn-ghost btn-sm" id="tag-filter-btn" title="Filter tags" onclick="toggleOrgFilter('tag')">
-                    <i class="material-icons">filter_list</i> Filter
-                    <span class="org-filter-active-dot"></span>
-                </button>
-                <button class="btn-primary" id="new-tag-btn" type="button" title="New Tag" style="padding:.4rem .55rem;min-width:0;">
-                    <i class="material-icons" style="font-size:1.2rem;">add</i>
-                </button>
-            </div>
-        </div>
-
-        <div id="tag-filter-bar" class="org-filter-bar">
-            <input type="search" id="tag-filter-search" class="org-filter-search" placeholder="Search tags…" oninput="applyOrgFilter('tag')" autocomplete="off">
-            <div class="org-filter-chips">
-                <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">image</i> Has icon</button>
-                <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">hide_image</i> No icon</button>
-                <button type="button" class="org-filter-chip" data-filter="has-children" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">account_tree</i> Has children</button>
-                <button type="button" class="org-filter-chip" data-filter="has-parents" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">call_merge</i> Has parents</button>
-                <div class="org-filter-color-row">
-                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color" data-mutex="no-color"
-                            title="Show only items with a color" onclick="toggleOrgChip(this,'tag')">
-                        <i class="material-icons">palette</i>
-                    </button>
-                    {% for hex, label in color_choices %}
-                    <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
-                            style="background:{{ hex }};" onclick="toggleOrgChip(this,'tag')"></button>
-                    {% endfor %}
-                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color" data-mutex="has-color"
-                            title="Show only items without a color" onclick="toggleOrgChip(this,'tag')">
-                        <i class="material-icons">block</i>
-                    </button>
-                </div>
-                <button type="button" class="org-filter-clear" onclick="clearOrgFilter('tag')">✕ Clear</button>
-            </div>
-        </div>
-
-        <div class="tag-create-card" id="new-tag-form" style="display:none;">
-            <form hx-post="{% url 'tag.create' %}" hx-target="#tag-rows" hx-swap="innerHTML"
-                  enctype="multipart/form-data" class="tag-form"
-                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-tag-form').style.display='none'; toastr.success('Tag created.'); }">
-                {% csrf_token %}
-                <div class="tag-form-grid">
-                    <div class="form-field">
-                        <label class="form-label" for="new-tag-name">Tag name</label>
-                        <input id="new-tag-name" name="name" type="text" class="form-input" placeholder="e.g. Road trip" required>
-                    </div>
-                    <div class="form-field">
-                        <label class="form-label" for="new-tag-order">Order (higher = higher priority)</label>
-                        <input id="new-tag-order" name="order" type="number" class="form-input" value="0">
-                    </div>
-                </div>
-                <div class="form-field">
-                    <label class="form-label" for="new-tag-desc">Description (optional)</label>
-                    <textarea id="new-tag-desc" name="description" class="form-input" rows="2" placeholder="What is this tag for?"></textarea>
-                </div>
-                <div class="tag-icon-color-row">
-                    <div class="form-field">
-                        <label class="form-label">Icon</label>
-                        <div class="icon-picker-wrap">
-                            {% with picker_id="new-tag" current_icon="" field_name="icon" %}
-                            {% include 'dashboard/partials/_icon_picker.html' %}
-                            {% endwith %}
-                        </div>
-                        <div class="icon-custom-upload-area" style="margin-top:8px;">
-                            <img id="new-tag-custom-preview" class="icon-custom-preview-thumb" style="display:none" alt="">
-                            <label class="icon-custom-upload-btn" title="Upload a custom image icon">
-                                <i class="material-icons">upload</i> Upload custom
-                                <input type="file" name="custom_icon" id="new-tag-custom-input" accept="image/*" style="display:none"
-                                       onchange="showTagCustomPreview(this)">
-                            </label>
-                        </div>
-                    </div>
-                    <div class="form-field">
-                        <label class="form-label">Color</label>
-                        <div class="color-picker" id="new-tag-color-picker">
-                            <input type="hidden" name="color" id="new-tag-color-value">
-                            {% for hex, label in color_choices %}
-                            <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
-                                    onclick="pickColor('new-tag-color-picker','new-tag-color-value','{{ hex }}',this)"></button>
-                            {% endfor %}
-                            <button type="button" class="color-swatch color-clear" title="No color"
-                                    onclick="pickColor('new-tag-color-picker','new-tag-color-value','',this)">
-                                <i class="material-icons" style="font-size:1rem;">block</i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-field">
-                    <label class="form-label">Parent tags (optional)</label>
-                    <input type="text" class="form-input tag-parent-search" placeholder="Search tags…"
-                           oninput="filterParentOptions(this,'parent-select-new-tag')" autocomplete="off">
-                    <div class="tag-parent-select" id="parent-select-new-tag">
-                        {% for t in tags %}
-                        <label class="tag-parent-option">
-                            <input type="checkbox" name="parent_ids" value="{{ t.id }}">
-                            {% if t.custom_icon %}<img src="{{ t.custom_icon.url }}" class="tag-parent-icon-img" alt="">
-                            {% elif t.icon %}{% if t.icon|is_material_icon %}<i class="material-icons" {% if t.color %}style="color:{{ t.color }}"{% endif %}>{{ t.icon }}</i>{% else %}<span>{{ t.icon }}</span>{% endif %}{% endif %}
-                            {{ t.name }}
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
-                <div class="tag-form-actions">
-                    <button type="submit" class="btn-primary">Create</button>
-                    <button type="button" class="btn-ghost" onclick="document.getElementById('new-tag-form').style.display='none'">Cancel</button>
-                </div>
-            </form>
-        </div>
-
-        <div id="tag-rows">
-            {% include 'dashboard/partials/tag_rows.html' %}
-        </div>
-    </div>{# end #panel-tags #}
-
-    {# ══════════════════════════════════════════════════════════════════════════ #}
     {# CATEGORIES PANEL                                                          #}
     {# ══════════════════════════════════════════════════════════════════════════ #}
     <div class="organize-panel tag-page" id="panel-categories" role="tabpanel"
          {% if active_tab != 'categories' %}hidden{% endif %}>
 
-        <div class="tag-header">
+        <div class="badge-header">
             <div>
-                <h2 class="tag-title">Categories</h2>
                 <p class="tag-subtitle">Your personal categories - organize pins and locations by type.</p>
             </div>
-            <div class="tag-header-right">
+            <div class="badge-header-right">
                 <div class="tag-view-toggle" role="group" aria-label="Category view mode">
                     <button type="button" class="tag-view-btn tag-view-btn--cats active" data-view="list" title="List view">
                         <i class="material-icons">view_list</i>
@@ -202,11 +62,11 @@
                         <i class="material-icons">checklist</i>
                     </button>
                 </div>
-                <button type="button" class="btn-ghost btn-sm" id="cat-filter-btn" title="Filter categories" onclick="toggleOrgFilter('cat')">
+                <button type="button" class="btn btn--ghost btn--sm" id="cat-filter-btn" title="Filter categories" onclick="toggleOrgFilter('cat')">
                     <i class="material-icons">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
                 </button>
-                <button class="btn-primary" id="new-category-btn" type="button" title="New Category" style="padding:.4rem .55rem;min-width:0;">
+                <button class="btn btn--primary" id="new-category-btn" type="button" title="New Category" style="padding:.4rem .55rem;min-width:0;">
                     <i class="material-icons" style="font-size:1.2rem;">add</i>
                 </button>
             </div>
@@ -281,22 +141,24 @@
                     </div>
                 </div>
                 <div class="form-field">
-                    <label class="form-label">Parent categories (optional)</label>
-                    <input type="text" class="form-input tag-parent-search" placeholder="Search categories…"
+                    <label class="form-label">Parent badges (optional)</label>
+                    <p class="form-hint">Placing this category under a parent badge creates emergent behavior — e.g. under "Visited" its pins appear in visit filters.</p>
+                    <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
                            oninput="filterParentOptions(this,'parent-select-new-cat')" autocomplete="off">
                     <div class="tag-parent-select" id="parent-select-new-cat">
-                        {% for cat in categories %}
+                        {% for b in priority_items %}
                         <label class="tag-parent-option">
-                            <input type="checkbox" name="parent_ids" value="{{ cat.id }}">
-                            {% if cat.icon %}{% if cat.icon|is_material_icon %}<i class="material-icons" {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</i>{% else %}<span>{{ cat.icon }}</span>{% endif %}{% endif %}
-                            {{ cat.name }}
+                            <input type="checkbox" name="parent_ids" value="{{ b.id }}">
+                            {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
+                            {{ b.name }}
+                            <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
                         </label>
                         {% endfor %}
                     </div>
                 </div>
                 <div class="tag-form-actions">
-                    <button type="submit" class="btn-primary">Create</button>
-                    <button type="button" class="btn-ghost" onclick="document.getElementById('new-category-form').style.display='none'">Cancel</button>
+                    <button type="submit" class="btn btn--primary">Create</button>
+                    <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-category-form').style.display='none'">Cancel</button>
                 </div>
             </form>
         </div>
@@ -307,17 +169,160 @@
     </div>{# end #panel-categories #}
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
+    {# TAGS PANEL                                                                #}
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    <div class="organize-panel tag-page" id="panel-tags" role="tabpanel"
+         {% if active_tab != 'tags' %}hidden{% endif %}>
+
+        <div class="badge-header">
+            <div>
+                <p class="tag-subtitle">Organize your pins with custom tags.</p>
+            </div>
+            <div class="badge-header-right">
+                <div class="tag-view-toggle" role="group" aria-label="Tag view mode">
+                    <button type="button" class="tag-view-btn tag-view-btn--tags active" data-view="list" title="List view">
+                        <i class="material-icons">view_list</i>
+                    </button>
+                    <button type="button" class="tag-view-btn tag-view-btn--tags" data-view="gallery" title="Gallery view">
+                        <i class="material-icons">grid_view</i>
+                    </button>
+                    <button type="button" class="tag-view-btn tag-view-btn--tags" data-view="tree" title="Tree view">
+                        <i class="material-icons">account_tree</i>
+                    </button>
+                </div>
+                <div class="tag-view-toggle--sel">
+                    <button type="button" class="tag-view-btn--sel" id="tag-sel-all" title="Select all tags">
+                        <i class="material-icons">checklist</i>
+                    </button>
+                </div>
+                <button type="button" class="btn btn--ghost btn--sm" id="tag-filter-btn" title="Filter tags" onclick="toggleOrgFilter('tag')">
+                    <i class="material-icons">filter_list</i> Filter
+                    <span class="org-filter-active-dot"></span>
+                </button>
+                <button class="btn btn--primary" id="new-tag-btn" type="button" title="New Tag" style="padding:.4rem .55rem;min-width:0;">
+                    <i class="material-icons" style="font-size:1.2rem;">add</i>
+                </button>
+            </div>
+        </div>
+
+        <div id="tag-filter-bar" class="org-filter-bar">
+            <input type="search" id="tag-filter-search" class="org-filter-search" placeholder="Search tags…" oninput="applyOrgFilter('tag')" autocomplete="off">
+            <div class="org-filter-chips">
+                <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">image</i> Has icon</button>
+                <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">hide_image</i> No icon</button>
+                <button type="button" class="org-filter-chip" data-filter="has-children" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">account_tree</i> Has children</button>
+                <button type="button" class="org-filter-chip" data-filter="has-parents" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">call_merge</i> Has parents</button>
+                <div class="org-filter-color-row">
+                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color" data-mutex="no-color"
+                            title="Show only items with a color" onclick="toggleOrgChip(this,'tag')">
+                        <i class="material-icons">palette</i>
+                    </button>
+                    {% for hex, label in color_choices %}
+                    <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
+                            style="background:{{ hex }};" onclick="toggleOrgChip(this,'tag')"></button>
+                    {% endfor %}
+                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color" data-mutex="has-color"
+                            title="Show only items without a color" onclick="toggleOrgChip(this,'tag')">
+                        <i class="material-icons">block</i>
+                    </button>
+                </div>
+                <button type="button" class="org-filter-clear" onclick="clearOrgFilter('tag')">✕ Clear</button>
+            </div>
+        </div>
+
+        <div class="tag-create-card" id="new-tag-form" style="display:none;">
+            <form hx-post="{% url 'tag.create' %}" hx-target="#tag-rows" hx-swap="innerHTML"
+                  enctype="multipart/form-data" class="tag-form"
+                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-tag-form').style.display='none'; toastr.success('Tag created.'); }">
+                {% csrf_token %}
+                <div class="tag-form-grid">
+                    <div class="form-field">
+                        <label class="form-label" for="new-tag-name">Tag name</label>
+                        <input id="new-tag-name" name="name" type="text" class="form-input" placeholder="e.g. Road trip" required>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="new-tag-order">
+                            {% include "dashboard/partials/_tooltip_label.html" with label="Order (higher = higher priority)" help="When a pin has multiple tags, higher-order tags appear first in lists and can win on the map icon." %}
+                        </label>
+                        <input id="new-tag-order" name="order" type="number" class="form-input" value="0">
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="new-tag-desc">Description (optional)</label>
+                    <textarea id="new-tag-desc" name="description" class="form-input" rows="2" placeholder="What is this tag for?"></textarea>
+                </div>
+                <div class="tag-icon-color-row">
+                    <div class="form-field">
+                        <label class="form-label">Icon</label>
+                        <div class="icon-picker-wrap">
+                            {% with picker_id="new-tag" current_icon="" field_name="icon" %}
+                            {% include 'dashboard/partials/_icon_picker.html' %}
+                            {% endwith %}
+                        </div>
+                        <div class="icon-custom-upload-area" style="margin-top:8px;">
+                            <img id="new-tag-custom-preview" class="icon-custom-preview-thumb" style="display:none" alt="">
+                            <label class="icon-custom-upload-btn" title="Upload a custom image icon">
+                                <i class="material-icons">upload</i> Upload custom
+                                <input type="file" name="custom_icon" id="new-tag-custom-input" accept="image/*" style="display:none"
+                                       onchange="showTagCustomPreview(this)">
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label">Color</label>
+                        <div class="color-picker" id="new-tag-color-picker">
+                            <input type="hidden" name="color" id="new-tag-color-value">
+                            {% for hex, label in color_choices %}
+                            <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
+                                    onclick="pickColor('new-tag-color-picker','new-tag-color-value','{{ hex }}',this)"></button>
+                            {% endfor %}
+                            <button type="button" class="color-swatch color-clear" title="No color"
+                                    onclick="pickColor('new-tag-color-picker','new-tag-color-value','',this)">
+                                <i class="material-icons" style="font-size:1rem;">block</i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">
+                        {% include "dashboard/partials/_tooltip_label.html" with label="Parent badges (optional)" help="Child tags inherit organization from parents. Placing a tag under a parent badge creates emergent behavior — e.g. under 'Visited' its pins appear in visit filters." wide=True %}
+                    </label>
+                    <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
+                           oninput="filterParentOptions(this,'parent-select-new-tag')" autocomplete="off">
+                    <div class="tag-parent-select" id="parent-select-new-tag">
+                        {% for b in priority_items %}
+                        <label class="tag-parent-option">
+                            <input type="checkbox" name="parent_ids" value="{{ b.id }}">
+                            {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
+                            {{ b.name }}
+                            <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="tag-form-actions">
+                    <button type="submit" class="btn btn--primary">Create</button>
+                    <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-tag-form').style.display='none'">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="tag-rows">
+            {% include 'dashboard/partials/tag_rows.html' %}
+        </div>
+    </div>{# end #panel-tags #}
+
+    {# ══════════════════════════════════════════════════════════════════════════ #}
     {# STATUS PANEL                                                              #}
     {# ══════════════════════════════════════════════════════════════════════════ #}
     <div class="organize-panel tag-page" id="panel-status" role="tabpanel"
          {% if active_tab != 'status' %}hidden{% endif %}>
 
-        <div class="tag-header">
+        <div class="badge-header">
             <div>
-                <h2 class="tag-title">Status Labels</h2>
                 <p class="tag-subtitle">Track the state of locations - visited, active, abandoned, and more.</p>
             </div>
-            <div class="tag-header-right">
+            <div class="badge-header-right">
                 <div class="tag-view-toggle" role="group" aria-label="Status view mode">
                     <button type="button" class="tag-view-btn tag-view-btn--status active" data-view="list" title="List view">
                         <i class="material-icons">view_list</i>
@@ -331,11 +336,11 @@
                         <i class="material-icons">checklist</i>
                     </button>
                 </div>
-                <button type="button" class="btn-ghost btn-sm" id="status-filter-btn" title="Filter statuses" onclick="toggleOrgFilter('status')">
+                <button type="button" class="btn btn--ghost btn--sm" id="status-filter-btn" title="Filter statuses" onclick="toggleOrgFilter('status')">
                     <i class="material-icons">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
                 </button>
-                <button class="btn-primary" id="new-status-btn" type="button" title="New Status" style="padding:.4rem .55rem;min-width:0;">
+                <button class="btn btn--primary" id="new-status-btn" type="button" title="New Status" style="padding:.4rem .55rem;min-width:0;">
                     <i class="material-icons" style="font-size:1.2rem;">add</i>
                 </button>
             </div>
@@ -407,9 +412,25 @@
                         </div>
                     </div>
                 </div>
+                <div class="form-field">
+                    <label class="form-label">Parent badges (optional)</label>
+                    <p class="form-hint">Placing this status under a parent badge creates emergent behavior — e.g. under "Visited" its pins appear in visit filters.</p>
+                    <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
+                           oninput="filterParentOptions(this,'parent-select-new-status')" autocomplete="off">
+                    <div class="tag-parent-select" id="parent-select-new-status">
+                        {% for b in priority_items %}
+                        <label class="tag-parent-option">
+                            <input type="checkbox" name="parent_ids" value="{{ b.id }}">
+                            {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
+                            {{ b.name }}
+                            <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
                 <div class="tag-form-actions">
-                    <button type="submit" class="btn-primary">Create</button>
-                    <button type="button" class="btn-ghost" onclick="document.getElementById('new-status-form').style.display='none'">Cancel</button>
+                    <button type="submit" class="btn btn--primary">Create</button>
+                    <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-status-form').style.display='none'">Cancel</button>
                 </div>
             </form>
         </div>
@@ -425,9 +446,9 @@
     <div class="organize-panel tag-page" id="panel-priority" role="tabpanel"
          {% if active_tab != 'priority' %}hidden{% endif %}>
 
-        <div class="tag-header">
+        <div class="badge-header">
             <div>
-                <h2 class="tag-title">Priority Order</h2>
+                <h2 class="badge-title">Priority Order</h2>
                 <p class="tag-subtitle">Drag to set the order icons will appear on your map. Higher items take precedence.</p>
             </div>
         </div>
@@ -489,23 +510,22 @@
     <div class="organize-panel tag-page" id="panel-people" role="tabpanel"
          {% if active_tab != 'people' %}hidden{% endif %}>
 
-        <div class="tag-header">
+        <div class="badge-header">
             <div>
-                <h2 class="tag-title">People</h2>
                 <p class="tag-subtitle">Labels you apply privately to other users. Only visible to you.</p>
             </div>
-            <div class="tag-header-right">
+            <div class="badge-header-right">
                 <div class="tag-view-toggle--sel">
                     <button type="button" class="tag-view-btn--sel" id="people-sel-all" title="Select all labels">
                         <i class="material-icons">checklist</i>
                     </button>
                 </div>
-                <button type="button" class="btn-ghost btn-sm" id="people-filter-btn" title="Filter labels" onclick="toggleOrgFilter('people')">
+                <button type="button" class="btn btn--ghost btn--sm" id="people-filter-btn" title="Filter labels" onclick="toggleOrgFilter('people')">
                     <i class="material-icons">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
                 </button>
-                <button type="button" class="btn-primary btn-sm" id="people-badge-create-btn"
-                        hx-get="{% url 'tag.create' %}?kind=user"
+                <button type="button" class="btn btn--primary btn--sm" id="people-badge-create-btn"
+                        hx-get="{% url 'people.create' %}"
                         hx-target="#people-badge-edit-dialog-body"
                         hx-swap="innerHTML"
                         onclick="document.getElementById('people-badge-edit-dialog').showModal()">
@@ -543,61 +563,7 @@
         </div>
 
         <div class="tag-list" id="people-badge-rows">
-            {% for badge in user_badges %}
-            <div class="tag-row org-selectable" id="pbd-{{ badge.id }}"
-                 data-id="{{ badge.id }}"
-                 data-name="{{ badge.name|lower }}"
-                 data-has-icon="{% if badge.icon %}true{% else %}false{% endif %}"
-                 data-has-color="{% if badge.color %}true{% else %}false{% endif %}"
-                 data-color="{{ badge.color|default:'' }}"
-                 data-kind="people">
-                <label class="org-sel-label" title="Select">
-                    <input type="checkbox" class="org-sel-cb people-sel-cb" data-id="{{ badge.id }}" data-name="{{ badge.name }}">
-                </label>
-                <div class="tag-row-icon" {% if badge.color %}style="background:{{ badge.color }}22;border-color:{{ badge.color }}44;"{% endif %}>
-                    {% if badge.icon %}
-                        {% if badge.icon|is_material_icon %}
-                            <i class="material-icons" {% if badge.color %}style="color:{{ badge.color }}"{% endif %}>{{ badge.icon }}</i>
-                        {% else %}
-                            <span class="tag-icon-emoji">{{ badge.icon }}</span>
-                        {% endif %}
-                    {% else %}
-                        <i class="material-icons">person</i>
-                    {% endif %}
-                </div>
-                <div class="tag-row-info">
-                    <span class="tag-row-name">{{ badge.name }}</span>
-                    {% if badge.is_protected %}<span class="tag-global-badge"><i class="material-icons" style="font-size:.75rem;vertical-align:middle">lock</i> protected</span>{% endif %}
-                </div>
-                <div class="tag-row-actions">
-                    {% if not badge.is_protected %}
-                    <button type="button" class="tag-row-action" title="Edit"
-                            hx-get="{% url 'tag.edit' badge.id %}"
-                            hx-target="#people-badge-edit-dialog-body"
-                            hx-swap="innerHTML"
-                            onclick="document.getElementById('people-badge-edit-dialog').showModal()">
-                        <i class="material-icons">edit</i>
-                    </button>
-                    <button type="button" class="tag-row-action" title="Merge into another label"
-                            onclick="peopleMergeSingle({{ badge.id }}, '{{ badge.name|escapejs }}')">
-                        <i class="material-icons">merge</i>
-                    </button>
-                    <button type="button" class="tag-row-action tag-row-action--danger" title="Delete"
-                            hx-post="{% url 'tag.delete' badge.id %}"
-                            hx-confirm="Delete label '{{ badge.name }}'?"
-                            hx-target="#pbd-{{ badge.id }}"
-                            hx-swap="outerHTML">
-                        <i class="material-icons">delete</i>
-                    </button>
-                    {% endif %}
-                </div>
-            </div>
-            {% empty %}
-            <div class="tag-empty" id="people-badge-empty">
-                <i class="material-icons">people_outline</i>
-                <p>No people labels yet. Click <strong>+ New Label</strong> to create one.</p>
-            </div>
-            {% endfor %}
+            {% include "dashboard/partials/people_badge_rows.html" %}
         </div>
 
     </div>{# end #panel-people #}
@@ -625,10 +591,10 @@
                Assignments to the merged labels will transfer to the surviving label. This cannot be undone.</p>
         </div>
         <div class="cat-merge-dialog-footer">
-            <button type="button" id="people-merge-confirm-btn" class="btn-primary">
+            <button type="button" id="people-merge-confirm-btn" class="btn btn--primary">
                 <i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge
             </button>
-            <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </dialog>
 
@@ -709,8 +675,8 @@
         <p class="cat-merge-warning"><i class="material-icons">warning</i> All pins will be transferred to the surviving tag. This cannot be undone.</p>
     </div>
     <div class="cat-merge-dialog-footer">
-        <button type="button" id="tag-merge-confirm-btn" class="btn-primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
-        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" id="tag-merge-confirm-btn" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </dialog>
 
@@ -766,17 +732,17 @@
             </label>
         </div>
         <div class="cat-bulk-field">
-            <label class="form-label">Add parent tags</label>
-            <p class="cat-bulk-parents-hint">Checked tags will be <strong>added</strong> as parents. Existing parents are not removed.</p>
-            <input type="text" class="form-input tag-parent-search" placeholder="Search tags…"
+            <label class="form-label">Add parent badges</label>
+            <p class="cat-bulk-parents-hint">Checked badges will be <strong>added</strong> as parents. Existing parents are not removed. Cross-kind parents enable emergent behavior.</p>
+            <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
                    oninput="filterParentOptions(this,'tag-bulk-parent-select')" autocomplete="off">
             <div class="tag-parent-select" id="tag-bulk-parent-select">
-                {% for t in tags %}
+                {% for b in priority_items %}
                 <label class="tag-parent-option">
-                    <input type="checkbox" class="tag-bulk-parent-cb" value="{{ t.id }}">
-                    {% if t.custom_icon %}<img src="{{ t.custom_icon.url }}" class="tag-parent-icon-img" alt="">
-                    {% elif t.icon %}{% if t.icon|is_material_icon %}<i class="material-icons" {% if t.color %}style="color:{{ t.color }}"{% endif %}>{{ t.icon }}</i>{% else %}<span>{{ t.icon }}</span>{% endif %}{% endif %}
-                    {{ t.name }}
+                    <input type="checkbox" class="tag-bulk-parent-cb" value="{{ b.id }}">
+                    {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
+                    {{ b.name }}
+                    <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
                 </label>
                 {% endfor %}
             </div>
@@ -784,8 +750,8 @@
         </div>{# end tag-bulk-main-fields #}
     </div>
     <div class="cat-bulk-edit-footer">
-        <button type="button" id="tag-bulk-edit-confirm" class="btn-primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
-        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" id="tag-bulk-edit-confirm" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </dialog>
 
@@ -848,8 +814,8 @@
         <p class="cat-merge-warning"><i class="material-icons">warning</i> All pins and locations will be transferred to the surviving category. This cannot be undone.</p>
     </div>
     <div class="cat-merge-dialog-footer">
-        <button type="button" id="cat-merge-confirm-btn" class="btn-primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
-        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" id="cat-merge-confirm-btn" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </dialog>
 
@@ -905,16 +871,17 @@
             </label>
         </div>
         <div class="cat-bulk-field">
-            <label class="form-label">Add parent categories</label>
-            <p class="cat-bulk-parents-hint">Checked categories will be <strong>added</strong> as parents. Existing parents are not removed.</p>
-            <input type="text" class="form-input tag-parent-search" placeholder="Search categories…"
+            <label class="form-label">Add parent badges</label>
+            <p class="cat-bulk-parents-hint">Checked badges will be <strong>added</strong> as parents. Existing parents are not removed. Cross-kind parents enable emergent behavior.</p>
+            <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
                    oninput="filterParentOptions(this,'cat-bulk-parent-select')" autocomplete="off">
             <div class="tag-parent-select" id="cat-bulk-parent-select">
-                {% for cat in categories %}
+                {% for b in priority_items %}
                 <label class="tag-parent-option">
-                    <input type="checkbox" class="cat-bulk-parent-cb" value="{{ cat.id }}">
-                    {% if cat.icon %}{% if cat.icon|is_material_icon %}<i class="material-icons" {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</i>{% else %}<span>{{ cat.icon }}</span>{% endif %}{% endif %}
-                    {{ cat.name }}
+                    <input type="checkbox" class="cat-bulk-parent-cb" value="{{ b.id }}">
+                    {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
+                    {{ b.name }}
+                    <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
                 </label>
                 {% endfor %}
             </div>
@@ -922,8 +889,8 @@
         </div>{# end cat-bulk-main-fields #}
     </div>
     <div class="cat-bulk-edit-footer">
-        <button type="button" id="cat-bulk-edit-confirm" class="btn-primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
-        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" id="cat-bulk-edit-confirm" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </dialog>
 
@@ -974,8 +941,8 @@
         <p class="cat-merge-warning"><i class="material-icons">warning</i> All pin status assignments will be transferred to the surviving status. This cannot be undone.</p>
     </div>
     <div class="cat-merge-dialog-footer">
-        <button type="button" id="status-merge-confirm-btn" class="btn-primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
-        <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" id="status-merge-confirm-btn" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </dialog>
 
@@ -1042,8 +1009,8 @@ var IconPicker = {
         grid.querySelectorAll('.icon-picker-item').forEach(function(item) {
             if (!q) { item.style.display = ''; }
             else {
-                var label = item.dataset.label || '', icon = item.dataset.icon || '';
-                item.style.display = (label.includes(q) || icon === q) ? '' : 'none';
+                var label = item.dataset.label || '', icon = item.dataset.icon || '', keywords = item.dataset.keywords || '';
+                item.style.display = (label.includes(q) || icon === q || keywords.includes(q)) ? '' : 'none';
             }
         });
     },
@@ -1260,6 +1227,32 @@ document.body.addEventListener('htmx:afterSwap', function(e) {
         var sdlg = document.getElementById('status-edit-dialog'); if (sdlg && !sdlg.open) sdlg.showModal();
     }
 });
+
+// ── Kind-changed: refresh destination rows + switch tab after conversion ────
+(function () {
+    var _rowUrls = {
+        'tag': '{% url "tag.rows" %}',
+        'category': '{% url "category.rows" %}',
+        'status': '{% url "status.rows" %}'
+    };
+    var _rowTargets = { 'tag': '#tag-rows', 'category': '#category-rows', 'status': '#status-rows' };
+    var _tabKeys = { 'tag': 'tags', 'category': 'categories', 'status': 'status' };
+
+    document.body.addEventListener('htmx:afterRequest', function (e) {
+        var xhr = e.detail && e.detail.xhr;
+        if (!xhr || !e.detail.successful) return;
+        var kc = xhr.getResponseHeader('X-Kind-Changed');
+        if (!kc) return;
+        var url = _rowUrls[kc], target = _rowTargets[kc], tabKey = _tabKeys[kc];
+        if (url && target) {
+            htmx.ajax('GET', url, { target: target, swap: 'innerHTML' });
+        }
+        if (tabKey) {
+            var tabBtn = document.querySelector('.organize-tab[data-tab="' + tabKey + '"]');
+            if (tabBtn) tabBtn.click();
+        }
+    });
+}());
 </script>
 
 {# ── Tab switching ─────────────────────────────────────────────────────────── #}
@@ -1603,7 +1596,7 @@ window._orgBulkSync = function(n, opts) {
     // ── Bulk delete ───────────────────────────────────────────────────────────
     async function _tagBulkDelete() {
         var n = _tagSelected.size; if (!n) return;
-        if (!await confirmDialog({title:'Delete Tags',message:(n===1?'Delete 1 tag?':'Delete '+n+' tags?')+'\nPins will keep their other tags.',confirmLabel:'Delete'})) return;
+        if (!await confirmDialog({title:'Delete Tags',message:(n===1?'Delete 1 tag?':'Delete '+n+' tags?')+'\nPins will NOT be deleted.',confirmLabel:'Delete'})) return;
         var ids = Array.from(_tagSelected).map(function(id){return parseInt(id,10);});
         fetch('{% url "tag.bulk_delete" %}', {
             method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
@@ -2011,7 +2004,7 @@ window._orgBulkSync = function(n, opts) {
     // ── Bulk delete ───────────────────────────────────────────────────────────
     async function _catBulkDelete() {
         var n=_catSelected.size; if(!n)return;
-        if(!await confirmDialog({title:'Delete Categories',message:(n===1?'Delete 1 category?':'Delete '+n+' categories?')+'\nPins and locations will keep their other categories.',confirmLabel:'Delete'}))return;
+        if(!await confirmDialog({title:'Delete Categories',message:(n===1?'Delete 1 category?':'Delete '+n+' categories?')+'\nPins and locations will NOT be deleted.',confirmLabel:'Delete'}))return;
         var ids=Array.from(_catSelected).map(function(id){return parseInt(id,10);});
         fetch('{% url "category.bulk_delete" %}', {
             method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
@@ -2450,7 +2443,7 @@ window._orgBulkSync = function(n, opts) {
 (function () {
     var _peopleSelected = new Set();
     var _peopleMergeTargetId = null;
-    var _mergeUrl = '{% url "tag.multi_merge" %}';
+    var _mergeUrl = '{% url "people.multi_merge" %}';
 
     function _getCsrf() { var m = document.cookie.match(/csrftoken=([^;]+)/); return m ? m[1] : ''; }
 
@@ -2593,8 +2586,9 @@ window._orgBulkSync = function(n, opts) {
     function _bulkDeletePeople() {
         var ids = Array.from(_peopleSelected);
         var csrfVal = _getCsrf();
+        var baseUrl = '{% url "people.delete" 99999 %}';
         Promise.all(ids.map(function (id) {
-            return fetch('/dashboard/tag/' + id + '/delete/', { method: 'POST', headers: { 'X-CSRFToken': csrfVal } });
+            return fetch(baseUrl.replace('99999', id), { method: 'POST', headers: { 'X-CSRFToken': csrfVal } });
         })).then(function () {
             ids.forEach(function (id) {
                 var row = document.getElementById('pbd-' + id);

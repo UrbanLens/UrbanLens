@@ -31,7 +31,7 @@
                 <div class="friend-avatar-sm friend-avatar-placeholder">{{ req.from_profile.username|first|upper }}</div>
                 {% endif %}
                 <div class="friend-request-info">
-                    <a href="{% url 'profile.view_user' req.from_profile.uuid %}" class="friend-request-name">
+                    <a href="{% url 'profile.view_user' req.from_profile.slug %}" class="friend-request-name">
                         {{ req.from_profile.full_name|default:req.from_profile.username }}
                     </a>
                     <span class="friend-request-sub">@{{ req.from_profile.username }}</span>
@@ -71,7 +71,7 @@
     <ul class="friend-grid">
         {% for friend in friends|slice:":8" %}
         <li class="friend-card">
-            <a href="{% url 'profile.view_user' friend.uuid %}" class="friend-card-link">
+            <a href="{% url 'profile.view_user' friend.slug %}" class="friend-card-link">
                 {% if friend.avatar %}
                 <img class="friend-avatar" src="{{ friend.avatar.url }}" alt="{{ friend.username }}">
                 {% else %}
@@ -94,7 +94,7 @@
     <ul class="friend-grid">
         {% for friend in mutual_friends %}
         <li class="friend-card">
-            <a href="{% url 'profile.view_user' friend.uuid %}" class="friend-card-link">
+            <a href="{% url 'profile.view_user' friend.slug %}" class="friend-card-link">
                 {% if friend.avatar %}
                 <img class="friend-avatar" src="{{ friend.avatar.url }}" alt="{{ friend.username }}">
                 {% else %}

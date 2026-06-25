@@ -29,7 +29,7 @@
         {% if not edit.reverted %}
         <button type="button"
                 class="wiki-revert-btn"
-                hx-post="{% url 'location.wiki.revert' location.uuid edit.id %}"
+                hx-post="{% url 'location.wiki.revert' location.slug edit.id %}"
                 hx-target="closest .wiki-history-item"
                 hx-swap="outerHTML"
                 hx-confirm="Revert this edit? The location will be restored to the values shown on the left.">

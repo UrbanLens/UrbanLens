@@ -10,9 +10,22 @@ UrbanLens is a Django-based web mapping application for photographers and urban 
 
 ## Development Environment
 
-- **Development machine**: Windows with WSL (use WSL for shell commands)
+- **Development machine**: Windows. Use **PowerShell** for all terminal commands requiring access to project files - the Bash
+  tool's WSL sandbox does not have the Windows filesystem mounted (`/mnt/c/` is inaccessible).
 - **Production**: Ubuntu via Docker, managed through Portainer
 - **Docker-compose** is the canonical way to run the full stack locally
+
+### Virtual environment
+
+The Windows venv lives at `.venv_windows\` (not `.venv`). Always prefix tool invocations with
+the full path to the venv executable:
+
+```powershell
+.venv_windows\Scripts\python.exe  # Python interpreter
+.venv_windows\Scripts\ruff.exe    # Linter (works on Windows)
+.venv_windows\Scripts\mypy.exe    # Type checker (crashes on Windows - use Docker)
+.venv_windows\Scripts\pytest.exe  # Tests (crashes on Windows - use Docker)
+```
 
 ## Quick Start
 
@@ -24,23 +37,44 @@ docker-compose up --build
 Full stack: Django app on port 21800, Nginx on 21080, PostgreSQL/PostGIS.
 
 ### Building & Compiling
-These commands only work in Ubuntu on WSL, not in Powershell. You do not need to run these manually during normal development - they are handled automatically by the `docker-compose` setup. 
+
+`bun`, `node`, and `npx` are **not installed on Windows** - these commands only work inside
+Docker (or a separately-configured WSL Ubuntu instance). Under normal development you do not
+need to run them manually; `docker-compose` handles compilation automatically.
 
 ```bash
-# SCSS → CSS
-bun run sass
-# Outputs to: src/urbanlens/dashboard/frontend/static/dashboard/style.css
-
-# TypeScript/JSX
-bun run build
-# Outputs to: src/urbanlens/dashboard/frontend/static/dashboard/js/
+# Inside Docker / WSL Ubuntu only:
+bun run sass    # SCSS → src/urbanlens/dashboard/frontend/static/dashboard/style.css
+bun run build   # TypeScript/JSX → src/urbanlens/dashboard/frontend/static/dashboard/js/
 ```
 
 ### Linting & Type Checking
 
-```bash
-python -m ruff check --fix src/urbanlens  # lint
-python -m mypy src/urbanlens              # type check
+**Ruff (linting) - works on Windows:**
+```powershell
+.venv_windows\Scripts\ruff.exe check --fix src/urbanlens
+```
+Note: `migrations/`, `settings/`, `tests/`, and `__init__.py` are excluded from ruff by the
+config in `pyproject.toml`.
+
+**Syntax checking a single file - works on Windows:**
+```powershell
+.venv_windows\Scripts\python.exe -m py_compile path/to/file.py
+```
+
+**mypy (type checking) - Docker only:**
+
+mypy crashes on Windows because GDAL/GeoDjango native libraries are unavailable outside Docker.
+```powershell
+# Run inside the running app container:
+docker exec <app_container_name> python -m mypy src/urbanlens
+```
+
+**pytest (tests) - Docker only:**
+
+Same GDAL limitation; tests require a live PostGIS database.
+```powershell
+docker exec <app_container_name> python -m pytest
 ```
 
 When examining mypy output, never use cast or similar solutions. Remember that the purpose of mypy is to find real errors and improve code quality, not to silence warnings. This will sometimes require going back to the origin of the call and adjusting types, rather than trying to paper over it at the point of failure. If the code at the origin is making a false assumption, fix the bug. Doing things like implementing generics is needed to address some types of mypy warnings. If you're unsure, mark it as a TODO instead of doing things to silence the warning.
@@ -180,7 +214,7 @@ When calling any paid API, track usage and cost per call (keep a running estimat
 **Docstrings**: All classes and methods must have Google-style docstrings (Args, Returns, Raises sections). These will be consumed by Sphinx for ReadTheDocs-style documentation - completeness matters.
 
 **Linting & Formatting**:
-- Ruff enforces Google style, tabs for indentation, max line length 250
+- Ruff enforces Google style, 4-space indentation, max line length 250
 - Type hints throughout; MyPy with Django stubs
 
 **Preferred patterns**:

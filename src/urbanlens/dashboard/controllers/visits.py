@@ -27,8 +27,8 @@ def _add_visited_status(pin: Pin) -> None:
     visited_badge = (
         Badge.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
     )
-    if visited_badge and not pin.statuses.filter(pk=visited_badge.pk).exists():
-        pin.statuses.add(visited_badge)
+    if visited_badge and not pin.badges.filter(pk=visited_badge.pk).exists():
+        pin.badges.add(visited_badge)
 
 
 def _sync_last_visited(pin: Pin) -> None:
@@ -49,35 +49,35 @@ class VisitHistoryView(LoginRequiredMixin, View):
     POST /map/pin/<pin_id>/visits/  → creates a new visit, returns updated panel
     """
 
-    def get(self, request: HttpRequest, pin_uuid) -> HttpResponse:
+    def get(self, request: HttpRequest, pin_slug) -> HttpResponse:
         """Render the visit history panel for a pin.
 
         Args:
             request: Incoming HTTP request.
-            pin_uuid: Primary key of the target pin.
+            pin_slug: Primary key of the target pin.
 
         Returns:
             Rendered HTML partial.
         """
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         return render(
             request,
             "dashboard/partials/_visit_history.html",
             {"pin": pin, "visits": pin.visit_history.all()},
         )
 
-    def post(self, request: HttpRequest, pin_uuid) -> HttpResponse:
+    def post(self, request: HttpRequest, pin_slug) -> HttpResponse:
         """Create a new manual visit entry and return the updated panel.
 
         Args:
             request: Incoming HTTP request. POST body must include ``visited_at``
                 (datetime-local string) and optionally ``notes``.
-            pin_uuid: Primary key of the target pin.
+            pin_slug: Primary key of the target pin.
 
         Returns:
             Rendered HTML partial, or 400 on validation failure.
         """
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
 
         raw_date = request.POST.get("visited_date", "").strip()
         raw_time = request.POST.get("visited_time", "").strip()
@@ -107,12 +107,12 @@ class VisitDeleteView(LoginRequiredMixin, View):
     POST /map/pin/<pin_id>/visits/<visit_id>/delete/
     """
 
-    def post(self, request: HttpRequest, pin_uuid, visit_id: int) -> HttpResponse:
+    def post(self, request: HttpRequest, pin_slug, visit_id: int) -> HttpResponse:
         """Delete the specified visit and return the updated panel.
 
         Args:
             request: Incoming HTTP request.
-            pin_uuid: Primary key of the pin.
+            pin_slug: Primary key of the pin.
             visit_id: Primary key of the visit to delete.
 
         Returns:
@@ -121,7 +121,7 @@ class VisitDeleteView(LoginRequiredMixin, View):
         visit = get_object_or_404(
             PinVisit,
             id=visit_id,
-            pin__uuid=pin_uuid,
+            pin__slug=pin_slug,
             pin__profile__user=request.user,
         )
         pin = visit.pin

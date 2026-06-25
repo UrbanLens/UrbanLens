@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    queryset.py                                                                                          *
-*        Path:    /dashboard/models/pin/queryset.py                                                              *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 # Generic imports
 from __future__ import annotations
 
@@ -31,13 +5,14 @@ import contextlib
 from datetime import datetime
 import logging
 import math
+from math import atan2, cos, radians, sin, sqrt
 from typing import TYPE_CHECKING, Self
 
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 
 # Django Imports
-from django.db.models import Q
+from django.db.models import F, Q
 
 # App Imports
 from urbanlens.dashboard.models import abstract
@@ -73,7 +48,7 @@ class PinQuerySet(abstract.QuerySet):
         return self.filter(last_visited__year__lt=datetime.now(tz=settings.TIME_ZONE).year)
 
     def by_category(self, category):
-        return self.filter(categories__name=category)
+        return self.filter(badges__name=category, badges__kind="category")
 
     def by_priority(self, priority):
         return self.filter(priority=priority)
@@ -100,9 +75,6 @@ class PinQuerySet(abstract.QuerySet):
         return self.filter(updated__year=year)
 
     def nearby_pins(self, latitude, longitude, radius):
-        from math import atan2, cos, radians, sin, sqrt
-
-        from django.db.models import F
 
         R = 6371  # radius of the Earth in km
         lat1 = radians(latitude)
@@ -121,7 +93,7 @@ class PinQuerySet(abstract.QuerySet):
         from urbanlens.dashboard.models.badges.model import Badge
 
         tag_ids = Badge.get_badge_and_descendants(tag_id)
-        return self.filter(tags__id__in=tag_ids).distinct()
+        return self.filter(badges__id__in=tag_ids).distinct()
 
     def filter_by_criteria(self, criteria) -> Self:
         """Filter pins by the criteria dict produced by SearchForm.cleaned_data.
@@ -139,32 +111,22 @@ class PinQuerySet(abstract.QuerySet):
         qs = self
         if name := (criteria.get("name") or "").strip():
             qs = qs.filter(
-                Q(nickname__icontains=name)
-                | Q(location__name__icontains=name)
-                | Q(aliases__name__icontains=name),
+                Q(nickname__icontains=name) | Q(location__name__icontains=name) | Q(aliases__name__icontains=name),
             )
         if badge_statuses := criteria.get("status"):
-            qs = qs.filter(statuses__id__in=[s.id if hasattr(s, "id") else s for s in badge_statuses])
+            qs = qs.filter(badges__id__in=[s.id if hasattr(s, "id") else s for s in badge_statuses])
         if tags := criteria.get("tags"):
-            from urbanlens.dashboard.models.badges.model import KIND_CATEGORY, KIND_STATUS, Badge as _Badge
+            from urbanlens.dashboard.models.badges.model import Badge as _Badge
+
             for badge in tags:
                 badge_ids = _Badge.get_badge_and_descendants(badge.id)
-                if badge.kind == KIND_CATEGORY:
-                    qs = qs.filter(categories__id__in=badge_ids)
-                elif badge.kind == KIND_STATUS:
-                    qs = qs.filter(statuses__id__in=badge_ids)
-                else:
-                    qs = qs.filter(tags__id__in=badge_ids)
+                qs = qs.filter(badges__id__in=badge_ids)
         if exclude_tags := criteria.get("exclude_tags"):
-            from urbanlens.dashboard.models.badges.model import KIND_CATEGORY, KIND_STATUS, Badge as _Badge
+            from urbanlens.dashboard.models.badges.model import Badge as _Badge
+
             for badge in exclude_tags:
                 badge_ids = _Badge.get_badge_and_descendants(badge.id)
-                if badge.kind == KIND_CATEGORY:
-                    qs = qs.exclude(categories__id__in=badge_ids)
-                elif badge.kind == KIND_STATUS:
-                    qs = qs.exclude(statuses__id__in=badge_ids)
-                else:
-                    qs = qs.exclude(tags__id__in=badge_ids)
+                qs = qs.exclude(badges__id__in=badge_ids)
         if min_rating := criteria.get("min_rating"):
             with contextlib.suppress(ValueError, TypeError):
                 qs = qs.filter(reviews__rating__gte=int(min_rating))
@@ -172,7 +134,7 @@ class PinQuerySet(abstract.QuerySet):
             with contextlib.suppress(ValueError, TypeError):
                 qs = qs.filter(reviews__rating__lte=int(max_rating))
         if has_visits := criteria.get("has_visits"):
-            visited_q = Q(last_visited__isnull=False) | Q(statuses__name="Visited")
+            visited_q = Q(last_visited__isnull=False) | Q(badges__name="Visited", badges__kind="status")
             if has_visits == "yes":
                 qs = qs.filter(visited_q)
             elif has_visits == "no":

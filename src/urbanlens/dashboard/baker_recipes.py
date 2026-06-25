@@ -22,19 +22,23 @@ its own User/Profile and avoiding OneToOneField constraint violations.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.models import User
 from model_bakery import baker as _baker
-from model_bakery.recipe import Recipe, foreign_key, seq
+from model_bakery.recipe import Recipe, foreign_key
+from model_bakery.utils import seq
 
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.markup.model import MarkupType
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.visits.model import VisitSource
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
-def _make_profile():
+
+def _make_profile() -> Profile:
     """Create a fresh User and return the Profile auto-created by the post_save signal."""
     return _baker.make(User).profile
 

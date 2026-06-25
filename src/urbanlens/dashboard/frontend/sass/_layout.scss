@@ -32,7 +32,7 @@
         position: absolute;
         bottom: 0;
         right: 0;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, .5);
         color: $light-neutral-color;
         padding: 5px;
         border-radius: 50%;
@@ -60,7 +60,7 @@
     }
 
     label {
-        color: gold;
+        color: $ui-amber-400;
         font-size: 20px;
         padding: 0 1px;
 
@@ -70,32 +70,32 @@
     }
 
     input:checked~label {
-        color: lightgrey;
+        color: $ui-gray-300;
     }
 
 
     input:checked+label {
-        color: gold;
+        color: $ui-amber-400;
     }
 
     input:hover+label {
-        color: red;
+        color: $ui-red-500;
     }
 
     &.rating-undefined,
     &.rating-0 {
         label {
-            color: lightgrey;
+            color: $ui-gray-300;
         }
     }
 
     &:hover {
         label {
-            color: red;
+            color: $ui-red-500;
         }
 
         label:hover~label {
-            color: lightgrey;
+            color: $ui-gray-300;
         }
     }
 }
@@ -130,7 +130,7 @@
     margin-top: 20px;
 
     .smithsonian-image {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         padding: 20px;
         text-align: center;
         border-radius: 10px;
@@ -237,15 +237,14 @@
     align-items: center;
     gap: 6px;
     padding: 8px;
-    background: rgba(255, 255, 255, 0.18);
+    background: var(--ul-grey-0);
+    opacity: 0.9;
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .07);
-    opacity: 0.45;
     transition: opacity 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 
     &:hover {
         opacity: 1;
-        background: rgba(255, 255, 255, 0.92);
         box-shadow: 0 2px 8px rgba(0, 0, 0, .14), 0 0 0 1px rgba(0, 0, 0, .06);
     }
 
@@ -257,7 +256,7 @@
         height: 2.5rem;
         font-size: 1.1rem;
         line-height: 1;
-        color: #333;
+        color: var(--ul-grey-8);
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -267,8 +266,8 @@
 
         &:hover,
         &:focus {
-            background-color: rgba(33, 150, 243, 0.08);
-            border-color: rgba(33, 150, 243, 0.25);
+            background-color: rgba($color-blue-500, .08);
+            border-color: rgba($color-blue-500, .25);
         }
     }
 
@@ -283,10 +282,19 @@
         opacity: 1;
     }
 
-    &.collapsed .map-buttons-content {
-        max-width: 0;
-        opacity: 0;
-        gap: 0;
+    &.collapsed {
+        opacity: 0.45;
+
+        &:focus,
+        &:hover {
+            opacity: 1;
+        }
+        
+        .map-buttons-content {
+            max-width: 0;
+            opacity: 0;
+            gap: 0;
+        }
     }
 
     .map-btn-icon {
@@ -299,7 +307,7 @@
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        color: #444;
+        color: var(--ul-grey-7);
         opacity: 0.7;
         transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         flex-shrink: 0;
@@ -312,28 +320,29 @@
         &:hover,
         &:focus {
             opacity: 1;
-            color: #1565c0;
-            background-color: rgba(33, 150, 243, 0.09);
-            border-color: rgba(33, 150, 243, 0.28);
+            color: $color-blue-800;
+            background-color: rgba($color-blue-500, .09);
+            border-color: rgba($color-blue-500, .28);
             outline: none;
         }
 
         &:active,
         &.active {
             opacity: 1;
-            color: #1976d2;
-            background-color: rgba(33, 150, 243, 0.18);
-            border-color: rgba(33, 150, 243, 0.45);
+            color: $color-blue-700;
+            background-color: rgba($color-blue-500, .18);
+            border-color: rgba($color-blue-500, .45);
         }
     }
 }
 
 .card {
     @include surface($radius-sm);
-    box-shadow: $shadow-sm;
+    box-shadow: 3px 3px 10px rgba(0,0,0,.08);
 
     .card-header {
-        @include panel-header($bg: var(--ul-surface-2));
+        @include panel-header($bg: var(--ul-grey-1));
+        border-radius: $radius-sm $radius-sm 0 0;
 
         .material-icons {
             font-size: 1.1rem;
@@ -364,7 +373,7 @@
     justify-content: center;
     gap: .5rem;
     padding: 2rem 1rem;
-    color: #888;
+    color: var(--ul-grey-6);
     font-size: .9rem;
 
     .material-icons {
@@ -391,12 +400,12 @@
     gap: .35rem;
     padding: .35rem .6rem;
     font-size: .78rem;
-    color: #6b7280;
+    color: $ui-gray-500;
     border-top: 1px solid var(--ul-border);
 
     .material-icons {
         font-size: 1rem;
-        color: #9ca3af;
+        color: $ui-gray-400;
     }
 }
 
@@ -410,5 +419,17 @@
     animation: spin 1.2s linear infinite;
 }
 
-// Pin detail styles → _pin-detail.scss
-// Organize/tags styles → _tags.scss
+// ── Map toolbar: ensure 44px touch targets on mobile ─────────────────────────
+
+@include down($breakpoint-sm) {
+    .map-buttons {
+        padding: 6px;
+        gap: 4px;
+
+        #toggle-map-buttons,
+        .map-btn-icon {
+            width: 2.75rem;
+            height: 2.75rem;
+        }
+    }
+}

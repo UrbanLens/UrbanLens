@@ -9,7 +9,8 @@ from uuid import uuid4
 from django.contrib.gis.db.models import PointField, PolygonField
 from django.contrib.gis.geos import Point, Polygon
 from django.db.models import Index, ManyToManyField, UUIDField
-from django.db.models.fields import CharField, DateField, DecimalField, TextField
+from django.db.models.fields import CharField, DateField, DecimalField, SlugField, TextField
+from django.utils.text import slugify
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -56,6 +57,8 @@ class Location(abstract.AddressableMixin, abstract.Model):
     # Public-facing identifier. Non-sequential so users cannot infer location counts
     # or enumerate other locations from a known URL.
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
+    # URL slug - globally unique. Auto-generated from name on first save.
+    slug = SlugField(max_length=255, null=True, blank=True, unique=True)
 
     # Canonical name of the place - NOT a user's personal label (that's Pin.nickname).
     name = CharField(max_length=255)
@@ -87,25 +90,11 @@ class Location(abstract.AddressableMixin, abstract.Model):
     date_abandoned = DateField(null=True, blank=True)
     date_last_active = DateField(null=True, blank=True)
 
-    # Shared taxonomy - these represent the real-world place's type, not a user's classification.
-    # Users apply their own categories/tags via the Pin's M2M fields.
-    categories = ManyToManyField(
-        "dashboard.Badge",
-        blank=True,
-        related_name="categorized_locations",
-        limit_choices_to={"kind": "category"},
-    )
-    tags = ManyToManyField(
+    # Shared taxonomy - represents the real-world place's type, visible to all users.
+    badges = ManyToManyField(
         "dashboard.Badge",
         blank=True,
         related_name="locations",
-        limit_choices_to={"kind": "tag"},
-    )
-    statuses = ManyToManyField(
-        "dashboard.Badge",
-        blank=True,
-        related_name="status_locations",
-        limit_choices_to={"kind": "status"},
     )
 
     objects = LocationManager()
@@ -129,10 +118,16 @@ class Location(abstract.AddressableMixin, abstract.Model):
 
     def get_place_name(self) -> str | None:
         """Fetch the canonical place name from Google and cache it."""
-        result = GoogleGeocodingGateway(api_key=settings.google_maps_api_key).get_place_name(
-            self.latitude,
-            self.longitude,
-        )
+        if self.latitude is None or self.longitude is None or not (-90 <= float(self.latitude) <= 90) or not (-180 <= float(self.longitude) <= 180):
+            return "No Information Available"
+        try:
+            result = GoogleGeocodingGateway(api_key=settings.google_maps_api_key).get_place_name(
+                self.latitude,
+                self.longitude,
+            )
+        except Exception as exc:
+            logger.debug("Google place-name lookup failed for location %s: %s", self.pk or self.name, exc)
+            result = None
         if not result:
             result = "No Information Available"
         if not self.cached_place_name:
@@ -150,8 +145,8 @@ class Location(abstract.AddressableMixin, abstract.Model):
         from urbanlens.dashboard.models.badges.model import Badge
 
         category = Badge.objects.get(id=category_id, kind="category")
-        self.categories.clear()
-        self.categories.add(category)
+        self.badges.remove(*self.badges.filter(kind="category"))
+        self.badges.add(category)
         self.save()
 
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
@@ -169,8 +164,8 @@ class Location(abstract.AddressableMixin, abstract.Model):
         prompt = ""
         if self.address:
             prompt += f"address: {self.address}\n"
-        if self.has_place_name():
-            prompt += f"google maps description: {self.place_name}\n"
+        if self.cached_place_name and self.has_place_name():
+            prompt += f"google maps description: {self.cached_place_name}\n"
             instructions += "\nThe google maps description may be helpful, but it also may be inaccurate. Use your best judgement.\n"
         if self.name:
             prompt += f"location title: {self.name}\n"
@@ -198,7 +193,7 @@ class Location(abstract.AddressableMixin, abstract.Model):
         try:
             category, _created = Badge.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
             if category:
-                self.categories.add(category)
+                self.badges.add(category)
                 if save:
                     self.save()
                 return category
@@ -226,7 +221,22 @@ class Location(abstract.AddressableMixin, abstract.Model):
             "longitude": float(self.longitude),
         }
 
+    def _generate_slug(self) -> str:
+        """Derive a slug that is globally unique across all locations."""
+        base = slugify(self.name or "location")[:255] or "location"
+        candidate = base
+        n = 2
+        qs = Location.objects.all()
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+        while qs.filter(slug=candidate).exists():
+            candidate = f"{base}-{n}"
+            n += 1
+        return candidate
+
     def save(self, *args, **kwargs) -> None:
+        if not self.slug:
+            self.slug = self._generate_slug()
         if self.latitude is not None and self.longitude is not None:
             self.point = Point(float(self.longitude), float(self.latitude), srid=4326)
             if self.bounding_box is None:

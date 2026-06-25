@@ -54,12 +54,12 @@
     </div>
 
     <div class="tag-form-actions">
-        <button type="submit" class="btn-primary">Save</button>
+        <button type="submit" class="btn btn--primary">Save</button>
         {% if customization %}
-        <button type="submit" name="action" value="clear" class="btn-ghost"
+        <button type="submit" name="action" value="clear" class="btn btn--ghost"
                 style="color:var(--color-danger,#e53);">Reset to global defaults</button>
         {% endif %}
-        <button type="button" class="btn-ghost"
+        <button type="button" class="btn btn--ghost"
                 onclick="this.closest('dialog').close()">Cancel</button>
     </div>
 </form>

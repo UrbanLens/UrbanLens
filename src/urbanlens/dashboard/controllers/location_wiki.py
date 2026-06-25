@@ -29,8 +29,8 @@ class LocationWikiView(LoginRequiredMixin, View):
     GET  /location/<id>/wiki/  → full wiki page
     """
 
-    def get(self, request, location_uuid):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def get(self, request, location_slug):
+        location = get_object_or_404(Location, slug=location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         # Only count root pins (not detail pins), and count distinct users.
@@ -105,8 +105,8 @@ class LocationWikiEditView(LoginRequiredMixin, View):
     Records a LocationEdit and applies changes to the Location.
     """
 
-    def post(self, request, location_uuid):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def post(self, request, location_slug):
+        location = get_object_or_404(Location, slug=location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
@@ -174,16 +174,16 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
     POST /location/<id>/wiki/bbox/  → { "polygon": <GeoJSON geometry> }
     """
 
-    def get(self, request, location_uuid):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def get(self, request, location_slug):
+        location = get_object_or_404(Location, slug=location_slug)
         if location.bounding_box:
             import json as _json
 
             return JsonResponse({"polygon": _json.loads(location.bounding_box.geojson)})
         return JsonResponse({"polygon": None})
 
-    def post(self, request, location_uuid):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def post(self, request, location_slug):
+        location = get_object_or_404(Location, slug=location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
@@ -240,8 +240,8 @@ class LocationWikiHistoryView(LoginRequiredMixin, View):
     GET /location/<id>/wiki/history/
     """
 
-    def get(self, request, location_uuid):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def get(self, request, location_slug):
+        location = get_object_or_404(Location, slug=location_slug)
         edits = location.edits.select_related("editor__user", "reverted_by").order_by("-created")
         return render(
             request,
@@ -258,8 +258,8 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
     original edit as reverted.
     """
 
-    def post(self, request, location_uuid, edit_id: int):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def post(self, request, location_slug, edit_id: int):
+        location = get_object_or_404(Location, slug=location_slug)
         target_edit = get_object_or_404(LocationEdit, id=edit_id, location=location)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 

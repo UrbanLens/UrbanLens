@@ -6,6 +6,7 @@ import contextlib
 import io
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -15,12 +16,17 @@ from django.views import View
 from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Badge
 from urbanlens.dashboard.models.pin.model import Pin
 
+if TYPE_CHECKING:
+    from django.core.files.uploadedfile import UploadedFile
+
+    from urbanlens.dashboard.models.profile.model import Profile
+
 logger = logging.getLogger(__name__)
 
 _ICON_MAX_PX = 256
 
 
-def _resize_custom_icon(uploaded_file):
+def _resize_custom_icon(uploaded_file: UploadedFile) -> UploadedFile:
     """Resize an uploaded icon to at most _ICON_MAX_PX * _ICON_MAX_PX pixels.
 
     Returns the original file unchanged if it is already within bounds or if
@@ -30,13 +36,13 @@ def _resize_custom_icon(uploaded_file):
         from django.core.files.uploadedfile import InMemoryUploadedFile
         from PIL import Image
 
-        img = Image.open(uploaded_file)
+        img: Image.Image = Image.open(uploaded_file)
         if max(img.width, img.height) <= _ICON_MAX_PX:
             uploaded_file.seek(0)
             return uploaded_file
 
         img = img.convert("RGBA") if img.mode in {"RGBA", "P", "PA"} else img.convert("RGB")
-        img.thumbnail((_ICON_MAX_PX, _ICON_MAX_PX), Image.LANCZOS)
+        img.thumbnail((_ICON_MAX_PX, _ICON_MAX_PX), Image.Resampling.LANCZOS)
         fmt = "PNG" if img.mode == "RGBA" else "JPEG"
         out = io.BytesIO()
         img.save(out, format=fmt, quality=88, optimize=True)
@@ -62,7 +68,7 @@ _BASE_CTX = {
 _PERM = "dashboard.edit_global_badge"
 
 
-def _rows_ctx(profile, can_edit_global: bool = False, extra: dict | None = None) -> dict:
+def _rows_ctx(profile: Profile, can_edit_global: bool = False, extra: dict | None = None) -> dict:
     tags = Badge.objects.tags().visible_to(profile).ordered().with_customizations_for(profile).with_pin_counts()
     ctx = {**_BASE_CTX, "tags": tags, "can_edit_global": can_edit_global}
     if extra:
@@ -107,7 +113,7 @@ class TagCreateView(LoginRequiredMixin, View):
             order=order,
         )
         if parent_ids:
-            valid_parents = Badge.objects.tags().filter(id__in=parent_ids).visible_to(profile)
+            valid_parents = Badge.objects.visible_to(profile).filter(id__in=parent_ids).exclude(id=tag.id)
             tag.parents.set(valid_parents)
 
         return render(
@@ -128,7 +134,7 @@ class TagEditView(LoginRequiredMixin, View):
         elif tag.profile.user != request.user:
             return HttpResponseForbidden()
         profile = request.user.profile
-        available_parents = Badge.objects.tags().visible_to(profile).ordered().exclude(id=tag_id)
+        available_parents = Badge.objects.visible_to(profile).ordered().exclude(id=tag_id)
         parent_ids = set(tag.parents.values_list("id", flat=True))
         return render(
             request,
@@ -176,26 +182,9 @@ class TagEditView(LoginRequiredMixin, View):
         profile = request.user.profile
 
         if kind_changed and new_kind == "category":
-            # Migrate tag → category: move pin.tags → pin.categories and
-            # location.tags → location.categories.
-            from urbanlens.dashboard.models.location.model import Location
-            from urbanlens.dashboard.models.pin.model import Pin
-
-            for pin in Pin.objects.filter(tags=tag):
-                pin.categories.add(tag)
-                pin.tags.remove(tag)
-            for loc in Location.objects.filter(tags=tag):
-                loc.categories.add(tag)
-                loc.tags.remove(tag)
             tag.kind = "category"
 
         elif kind_changed and new_kind == "status":
-            # Migrate tag → status: remove from pin.tags, add to pin.statuses.
-            from urbanlens.dashboard.models.pin.model import Pin
-
-            for pin in Pin.objects.filter(tags=tag, profile=profile):
-                pin.statuses.add(tag)
-                pin.tags.remove(tag)
             tag.kind = "status"
             tag.profile = profile
 
@@ -207,7 +196,7 @@ class TagEditView(LoginRequiredMixin, View):
         else:
             parent_ids = request.POST.getlist("parent_ids")
             if parent_ids:
-                valid_parents = Badge.objects.tags().filter(id__in=parent_ids).visible_to(profile).exclude(id=tag_id)
+                valid_parents = Badge.objects.visible_to(profile).filter(id__in=parent_ids).exclude(id=tag_id)
                 tag.parents.set(valid_parents)
             else:
                 tag.parents.clear()
@@ -326,11 +315,11 @@ class TagMergeView(LoginRequiredMixin, View):
 class TagMembershipView(LoginRequiredMixin, View):
     """Add or remove a tag from a specific pin (HTMX panel on pin detail page)."""
 
-    def get(self, request, pin_uuid, *args, **kwargs):
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+    def get(self, request, pin_slug, *args, **kwargs):
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = request.user.profile
         all_tags = Badge.objects.tags().visible_to(profile).ordered()
-        member_ids = set(pin.tags.values_list("id", flat=True))
+        member_ids = set(pin.badges.filter(kind="tag").values_list("id", flat=True))
         return render(
             request,
             "dashboard/partials/tag_panel.html",
@@ -341,8 +330,8 @@ class TagMembershipView(LoginRequiredMixin, View):
             },
         )
 
-    def post(self, request, pin_uuid, *args, **kwargs):
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+    def post(self, request, pin_slug, *args, **kwargs):
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         tag_id = request.POST.get("tag_id")
         action = request.POST.get("action")  # "add" or "remove"
 
@@ -350,12 +339,12 @@ class TagMembershipView(LoginRequiredMixin, View):
         tag = get_object_or_404(Badge.objects.tags().visible_to(profile), id=tag_id)
 
         if action == "add":
-            pin.tags.add(tag)
+            pin.badges.add(tag)
         elif action == "remove":
-            pin.tags.remove(tag)
+            pin.badges.remove(tag)
 
         all_tags = Badge.objects.tags().visible_to(profile).ordered()
-        member_ids = set(pin.tags.values_list("id", flat=True))
+        member_ids = set(pin.badges.filter(kind="tag").values_list("id", flat=True))
         return render(
             request,
             "dashboard/partials/tag_panel.html",
@@ -438,7 +427,7 @@ class TagBulkEditView(LoginRequiredMixin, View):
                 tag.save(update_fields=update_fields)
 
         if add_parent_ids:
-            valid_parents = list(Badge.objects.tags().filter(id__in=add_parent_ids).visible_to(profile))
+            valid_parents = list(Badge.objects.visible_to(profile).filter(id__in=add_parent_ids))
             for tag in tags:
                 tag.parents.add(*[p for p in valid_parents if p.id != tag.id])
 
@@ -466,17 +455,9 @@ class TagBulkConvertView(LoginRequiredMixin, View):
         if not ids:
             return HttpResponse("No tags specified.", status=400)
 
-        from urbanlens.dashboard.models.location.model import Location
-
         profile = request.user.profile
         tags_to_convert = list(Badge.objects.filter(id__in=ids, profile=profile, kind="tag"))
         for tag in tags_to_convert:
-            for pin in Pin.objects.filter(tags=tag):
-                pin.categories.add(tag)
-                pin.tags.remove(tag)
-            for loc in Location.objects.filter(tags=tag):
-                loc.categories.add(tag)
-                loc.tags.remove(tag)
             tag.kind = "category"
             tag.parents.clear()
             tag.save()
@@ -508,9 +489,6 @@ class TagBulkConvertToStatusView(LoginRequiredMixin, View):
         profile = request.user.profile
         tags_to_convert = list(Badge.objects.filter(id__in=ids, profile=profile, kind="tag"))
         for tag in tags_to_convert:
-            for pin in Pin.objects.filter(tags=tag, profile=profile):
-                pin.statuses.add(tag)
-                pin.tags.remove(tag)
             tag.kind = "status"
             tag.profile = profile
             tag.parents.clear()

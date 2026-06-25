@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    init.py                                                                                              *
-*        Path:    /bin/init.py                                                                                         *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-02-19     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 from __future__ import annotations
 
 import argparse
@@ -66,7 +40,7 @@ class DjangoProjectInitializer:
         self.db_name = os.environ.get("UL_DB_NAME", "UrbanLens")
         self.db_user = os.environ.get("UL_DB_USER", "postgres")
         self.db_pass = os.environ.get("UL_DB_PASS", "postgres")
-        self.environment = environment or os.environ.get("ENVIRONMENT", "production")
+        self.environment = environment or os.environ.get("UL_ENVIRONMENT", "production")
 
     @property
     def db_host(self) -> str:
@@ -140,7 +114,7 @@ class DjangoProjectInitializer:
     @environment.setter
     def environment(self, value: str):
         # Ensure environment is a known option
-        if value not in {"development", "test", "production"}:
+        if value not in {"development", "testing", "production"}:
             safe_value = re.sub(r"[^a-zA-Z0-9_-]", "", value)
             logger.error("Invalid environment: %s", safe_value)
             raise UnrecoverableError(f"Invalid environment: {safe_value}")
@@ -327,13 +301,15 @@ class DjangoProjectInitializer:
                 file.write("")
             logger.debug("Created empty file %s", entry)
 
-        self.run_command(["npm", "run", "sass"], "compiling sass", raise_error=False)
-
         match self.environment:
             case "development":
+                sass_command = ["npm", "run", "sass:dev"]
                 command = ["npm", "run", "build"]
             case _:
+                sass_command = ["npm", "run", "sass"]
                 command = ["npm", "run", "deploy"]
+
+        self.run_command(sass_command, "compiling sass", raise_error=False)
 
         self.run_command(command, "building frontend")
         self.run_command(["python", "src/urbanlens/manage.py", "collectstatic", "--noinput"], "collecting static files")
@@ -426,8 +402,9 @@ class DjangoProjectInitializer:
             return
 
         try:
-            with Path(pgpass).open("w", encoding="utf-8") as file:
-                file.write(f"{self.db_host}:{self.db_port}:*:{self.db_user}:{self.db_pass}\n")
+            Path(pgpass).write_text(
+                f"{self.db_host}:{self.db_port}:*:{self.db_user}:{self.db_pass}\n", encoding="utf-8",
+            )
             os.chmod(pgpass, 0o600)
             # file_contents = open(pgpass, 'r').read()
             # logger.debug('Created .pgpass file: %s', file_contents)
@@ -528,7 +505,7 @@ def main():
     parser.add_argument(
         "--environment",
         "-e",
-        choices=["development", "test", "production"],
+        choices=["development", "testing", "production"],
         help="Set the environment",
     )
     args = parser.parse_args()

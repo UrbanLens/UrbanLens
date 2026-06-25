@@ -20,9 +20,9 @@ from urbanlens.dashboard.models.reviews.model import Review
 logger = logging.getLogger(__name__)
 
 
-def _pin_for_user(pin_uuid, request) -> Pin | HttpResponse:
+def _pin_for_user(pin_slug, request) -> Pin | HttpResponse:
     """Return the pin if it belongs to the requesting user, else 403."""
-    pin = get_object_or_404(Pin.objects.select_related("location", "profile__user"), uuid=pin_uuid)
+    pin = get_object_or_404(Pin.objects.select_related("location", "profile__user"), slug=pin_slug)
     if pin.profile.user != request.user:
         return HttpResponse("Forbidden", status=403)
     return pin
@@ -129,8 +129,8 @@ class PinOverviewView(LoginRequiredMixin, View):
     GET /map/pin/<uuid>/overview/
     """
 
-    def get(self, request, pin_uuid):
-        result = _pin_for_user(pin_uuid, request)
+    def get(self, request, pin_slug):
+        result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
         pin = result
@@ -146,8 +146,8 @@ class PinEditView(LoginRequiredMixin, View):
     Re-renders the pin overview partial on success.
     """
 
-    def post(self, request, pin_uuid):
-        result = _pin_for_user(pin_uuid, request)
+    def post(self, request, pin_slug):
+        result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
         pin = result
@@ -268,18 +268,26 @@ class PinEditView(LoginRequiredMixin, View):
         elif rating == 0:
             Review.objects.filter(user=request.user, pin=pin).delete()
 
-        # Category update: comma-separated names replace all current categories
-        category_raw = (body.get("categories") or "").strip()
-        if category_raw is not None:
+        # Category update: only runs when the field was explicitly submitted (partial requests preserve existing)
+        if "categories" in body:
+            category_raw = (body.get("categories") or "").strip()
             names = [n.strip().lower() for n in category_raw.split(",") if n.strip()]
-            pin.categories.clear()
+            seen_names: set[str] = set()
+            pin.badges.remove(*pin.badges.filter(kind="category"))
             for name in names:
-                cat, _ = Badge.objects.get_or_create(name=name, kind="category", defaults={"profile": None})
-                pin.categories.add(cat)
+                if name in seen_names:
+                    continue
+                seen_names.add(name)
+                cat = Badge.objects.filter(name__iexact=name, kind="category", profile=pin.profile).first()
+                if cat is None:
+                    cat, _ = Badge.objects.get_or_create(
+                        name=name, kind="category", profile=pin.profile,
+                    )
+                pin.badges.add(cat)
 
         # Reload from DB so all properties reflect saved state
         pin.refresh_from_db()
-        pin.categories.all()  # prime M2M cache
+        pin.badges.filter(kind="category")  # prime M2M cache
 
         return render(request, "dashboard/partials/pin_overview_partial.html", _overview_context(pin))
 
@@ -291,16 +299,16 @@ class PinNotesView(LoginRequiredMixin, View):
     POST /map/pin/<uuid>/notes/  → add note, re-render panel
     """
 
-    def get(self, request, pin_uuid):
-        result = _pin_for_user(pin_uuid, request)
+    def get(self, request, pin_slug):
+        result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
         pin = result
         notes = pin.notes.order_by("-created")
         return render(request, "dashboard/partials/pin_notes_panel.html", {"pin": pin, "notes": notes})
 
-    def post(self, request, pin_uuid):
-        result = _pin_for_user(pin_uuid, request)
+    def post(self, request, pin_slug):
+        result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
         pin = result
@@ -325,8 +333,8 @@ class PinNoteDeleteView(LoginRequiredMixin, View):
     DELETE /map/pin/<uuid>/notes/<int:note_id>/delete/
     """
 
-    def delete(self, request, pin_uuid, note_id):
-        result = _pin_for_user(pin_uuid, request)
+    def delete(self, request, pin_slug, note_id):
+        result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
         pin = result
@@ -343,17 +351,17 @@ class PinRelinkView(LoginRequiredMixin, View):
     POST /map/pin/<uuid>/link/<loc_uuid>/    → Relink: switches the pin to the given Location
     """
 
-    def get(self, request, pin_uuid):
+    def get(self, request, pin_slug):
         """Return an HTMX partial listing every Location that covers this pin's point.
 
         Args:
             request: The HTTP request.
-            pin_uuid: UUID of the pin.
+            pin_slug: UUID of the pin.
 
         Returns:
             Rendered HTML partial with location choices.
         """
-        result = _pin_for_user(pin_uuid, request)
+        result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
         pin = result
@@ -373,38 +381,45 @@ class PinRelinkView(LoginRequiredMixin, View):
             {"pin": pin, "locations": locations},
         )
 
-    def post(self, request, pin_uuid, location_uuid=None):
+    def post(self, request, pin_slug, location_slug=None):
         """Relink or detach the pin.
 
         Args:
             request: The HTTP request.
-            pin_uuid: UUID of the pin.
-            location_uuid: Optional UUID of an existing Location to link to.
+            pin_slug: UUID of the pin.
+            location_slug: Optional UUID of an existing Location to link to.
                 If omitted, detaches the pin (creates a fresh bare Location).
 
         Returns:
             Re-rendered pin overview partial.
         """
-        result = _pin_for_user(pin_uuid, request)
+        result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
         pin = result
 
         from urbanlens.dashboard.models.location.model import Location
 
-        if location_uuid:
-            location = get_object_or_404(Location, uuid=location_uuid)
+        if location_slug:
+            location = get_object_or_404(Location, slug=location_slug)
         else:
             # Detach: create a new bare Location at this pin's coordinates so
             # the pin retains its own independent community wiki page.
+            # Use the existing location's canonical name if available; otherwise
+            # fetch the Google place name.  Never fall back to pin.nickname -
+            # that is personal data and must not become a community wiki title.
             lat = float(pin.effective_latitude or 0)
             lng = float(pin.effective_longitude or 0)
-            name = (pin.location.name if pin.location else None) or pin.nickname or "Unnamed Location"
-            location = Location.objects.create(
-                name=name,
-                latitude=lat,
-                longitude=lng,
-            )
+            if pin.location and pin.location.name and pin.location.name != "Unnamed Location":
+                location = Location.objects.create(
+                    name=pin.location.name,
+                    latitude=lat,
+                    longitude=lng,
+                )
+            else:
+                from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
+
+                location = _create_location_with_canonical_name(lat, lng)
 
         pin.location = location
         pin.save(update_fields=["location"])

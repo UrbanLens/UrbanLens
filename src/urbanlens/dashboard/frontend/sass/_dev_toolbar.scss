@@ -1,0 +1,132 @@
+// Admin dev toolbar - fixed, collapsible panel for development-mode tooling.
+@use 'variables' as *;
+
+.dev-toolbar {
+    position: fixed;
+    bottom: 1rem;
+    left: 1rem;
+    z-index: 10050;
+    min-width: 10rem;
+    max-width: 16rem;
+    border-radius: 10px;
+    border: 1px solid var(--ul-border, #cbd5e1);
+    background: var(--ul-grey-elevated, #fff);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+    font-size: 0.8125rem;
+    color: var(--ul-text, #0f172a);
+    overflow: hidden;
+
+    &[data-collapsed='true'] {
+        .dev-toolbar__chevron {
+            transform: rotate(-90deg);
+        }
+    }
+}
+
+.dev-toolbar__header {
+    border-bottom: 1px solid var(--ul-border, #e2e8f0);
+}
+
+.dev-toolbar__toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: 100%;
+    padding: 0.45rem 0.65rem;
+    border: 0;
+    background: var(--ul-grey-muted, #f8fafc);
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+
+    &:hover {
+        background: var(--ul-hover-bg, #f1f5f9);
+    }
+}
+
+.dev-toolbar__chevron {
+    font-size: 1.1rem !important;
+    transition: transform 0.15s ease;
+}
+
+.dev-toolbar__title {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    color: var(--ul-text-muted, #64748b);
+}
+
+.dev-toolbar__body {
+    display: flex;
+    flex-direction: column;
+    padding: 0.35rem;
+    gap: 0.25rem;
+}
+
+.dev-toolbar__tool {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: 100%;
+    padding: 0.45rem 0.55rem;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+
+    &:hover {
+        background: var(--ul-hover-bg, #f1f5f9);
+    }
+}
+
+.dev-toolbar__theme-icons {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+    padding: 0.1rem 0.25rem;
+    border-radius: 6px;
+    background: var(--ul-grey-muted, #f1f5f9);
+}
+
+.dev-toolbar__theme-icon {
+    font-size: 1.1rem !important;
+    opacity: 0.35;
+    color: var(--ul-text-muted, #94a3b8);
+    transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
+
+    &.is-active {
+        opacity: 1;
+        color: var(--ul-text, #0f172a);
+        transform: scale(1.05);
+    }
+}
+
+.dev-toolbar__theme-label {
+    color: var(--ul-text-muted, #64748b);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.dev-toolbar--dark-active {
+    .dev-toolbar__theme-icon--dark.is-active {
+        color: $ui-indigo-300;
+    }
+}
+
+.dev-toolbar:not(.dev-toolbar--dark-active) {
+    .dev-toolbar__theme-icon--light.is-active {
+        color: $ui-amber-500;
+    }
+}
+
+html[data-theme='dark'] {
+    .dev-toolbar {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+}

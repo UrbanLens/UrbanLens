@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    factory.py                                                                                           *
-*        Path:    /UrbanLens/environments/factory.py                                                                   *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
-*        Created: 2024-02-19                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-02-19     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 from __future__ import annotations
 
 import os
@@ -68,13 +42,13 @@ def select_environment(
     match env_type:
         case EnvironmentTypes.LOCAL:
             return Local()
-        case EnvironmentTypes.DEV:
+        case EnvironmentTypes.DEVELOPMENT:
             return Development()
-        case EnvironmentTypes.TEST:
+        case EnvironmentTypes.TESTING:
             return Testing()
         case EnvironmentTypes.STAGING:
             return Staging()
-        case EnvironmentTypes.PROD:
+        case EnvironmentTypes.PRODUCTION:
             return Production()
         case _:
             raise ValueError(f"Unknown environment type: {env_type}")

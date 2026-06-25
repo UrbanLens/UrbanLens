@@ -1,28 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        - File:    functions.py                                                                                       *
-*        - Path:    /dashboard/services/ai/functions.py                                                                *
-*        - Project: urbanlens                                                                                          *
-*        - Version: 1.0.0                                                                                              *
-*        - Created: 2024-03-21                                                                                         *
-*        - Author:  Jess Mann                                                                                          *
-*        - Email:   jess@urbanlens.org                                                                               *
-*        - Copyright (c) 2024 Urban Lens                                                                               *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-03-21     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -65,7 +40,7 @@ def estimate_tokens(prompt: str) -> int:
 def estimate_combined_tokens(messages: MessageQueue | list[MessageType]) -> int:
     """
     Estimate the combined token count of a list of messages.
-    
+
     This method provides an approximation based on whitespace and common punctuation.
 
     Args:

@@ -65,20 +65,16 @@ class BadgeQuerySet(abstract.QuerySet):
         )
 
     def with_pin_counts(self) -> Self:
-        """Annotate pin_count / location_count and prefetch children (with their own pin_count) and parents.
-
-        Replaces heavy prefetch_related('pins', 'categorized_pins', ...) with lightweight COUNT annotations.
-        pin_count covers both tag pins (related_name="pins") and status pins (related_name="status_pins").
-        """
+        """Annotate pin_count / location_count and prefetch children (with their own pin_count) and parents."""
         return self.annotate(
-            pin_count=Count("pins", distinct=True) + Count("status_pins", distinct=True),
-            location_count=Count("categorized_locations", distinct=True),
+            pin_count=Count("pins", distinct=True),
+            location_count=Count("locations", distinct=True),
         ).prefetch_related(
             Prefetch(
                 "children",
                 queryset=self.model.objects.annotate(pin_count=Count("pins", distinct=True)),
             ),
-            Prefetch("parents", queryset=self.model.objects.only("id", "name")),
+            Prefetch("parents", queryset=self.model.objects.only("id", "name", "kind")),
         )
 
     def ordered(self) -> Self:

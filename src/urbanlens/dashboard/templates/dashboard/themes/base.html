@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html id="html-root" {% if request.user.is_authenticated and request.user.profile.dark_mode %}data-theme="dark"{% endif %}>
+<html id="html-root"{% if request.user.is_authenticated %}{% with tm=request.user.profile.theme_mode %}{% if tm == "dark" %} data-theme="dark"{% elif tm == "light" %} data-theme="light"{% endif %}{% endwith %}{% if request.user.profile.hide_tooltips %} class="tooltips-disabled"{% endif %}{% endif %}>
 
 <head>
     <meta charset="utf-8">
-    <title>UrbanLens</title>
+    {# Anti-FOUC: when theme_mode is "system" (no server-side attribute), detect OS preference immediately. #}
+    <script>!function(){var e=document.getElementById('html-root');if(!e.getAttribute('data-theme')){var d=window.matchMedia('(prefers-color-scheme: dark)').matches;e.setAttribute('data-theme',d?'dark':'light');window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(c){e.setAttribute('data-theme',c.matches?'dark':'light');});}}();</script>
+    <title>{% block page_title %}{{ site_title|default:"UrbanLens" }}{% endblock %}</title>
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
 
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0" />
@@ -37,16 +39,11 @@
     </div>
     {% include 'dashboard/partials/footer.html' %}
 
-    <!--  Scripts-->
-    {% if messages %}
-    <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        {% for message in messages %}
-        toastr['{{ message.tags }}']('{{ message.message|escapejs }}');
-        {% endfor %}
-    });
-    </script>
+    {% if show_dev_toolbar %}
+    {% include 'dashboard/partials/_dev_toolbar.html' %}
     {% endif %}
+
+    <!--  Scripts-->
     <script>
         var csrftoken = '{{ csrf_token }}';
         // Include CSRF token in all HTMX requests (needed for DELETE/PUT/PATCH)
@@ -56,10 +53,34 @@
         toastr.options = {
             positionClass: 'toast-bottom-right',
             progressBar: true,
-            timeOut: 4000,
+            timeOut: 4500,
+            extendedTimeOut: 2000,
+            closeButton: true,
             tapToDismiss: true,
             newestOnTop: true,
         };
+
+        {% if messages %}
+        (function () {
+            var _valid = { success: 1, info: 1, warning: 1, error: 1 };
+            {% for message in messages %}
+            (function () {
+                var tag = '{{ message.tags|escapejs }}';
+                var fn = _valid[tag] ? tag : 'info';
+                toastr[fn]('{{ message.message|escapejs }}');
+            }());
+            {% endfor %}
+        }());
+        {% endif %}
+
+        // Global: handle HX-Trigger showToast events fired by HTMX responses
+        document.body.addEventListener('showToast', function (evt) {
+            var d = evt.detail;
+            if (!d) return;
+            var level = d.level;
+            var fn = (level === 'success' || level === 'info' || level === 'warning' || level === 'error') ? level : 'info';
+            toastr[fn](d.message || '');
+        });
 
         // Global: disable submit buttons during HTMX form requests to prevent double-submit
         (function () {
@@ -288,17 +309,94 @@
     </script>
 
     <script>
-    // ── Close any <dialog> on backdrop click ──────────────────────────────────
-    document.addEventListener('click', function (e) {
-        if (e.target.tagName !== 'DIALOG' || !e.target.open) return;
-        var rect = e.target.getBoundingClientRect();
-        if (e.clientX < rect.left || e.clientX > rect.right ||
-            e.clientY < rect.top  || e.clientY > rect.bottom) {
+    // ── Unsaved / in-flight auto-save guard ───────────────────────────────────
+    (function () {
+        var _dirty = false;
+        var _inFlight = 0;
+        var _message = 'Changes are still saving. Leave this page anyway?';
+
+        window.autosaveGuard = {
+            markDirty: function () { _dirty = true; },
+            markClean: function () { _dirty = false; },
+            saveStarted: function () { _inFlight++; },
+            saveFinished: function () { _inFlight = Math.max(0, _inFlight - 1); },
+            allowNavigation: function () { _dirty = false; _inFlight = 0; },
+            isBlocked: function () { return _dirty || _inFlight > 0; },
+            setMessage: function (msg) { _message = msg; },
+        };
+
+        window.addEventListener('beforeunload', function (e) {
+            if (!window.autosaveGuard.isBlocked()) return;
+            e.preventDefault();
+            e.returnValue = '';
+        });
+
+        document.body.addEventListener('htmx:confirm', function (e) {
+            if (!window.autosaveGuard.isBlocked()) return;
+            e.preventDefault();
+            var proceed = window.confirmDialog ? window.confirmDialog({
+                title: 'Leave page?',
+                message: _message,
+                confirmLabel: 'Leave anyway',
+                danger: true,
+            }) : Promise.resolve(window.confirm(_message));
+            proceed.then(function (ok) {
+                if (ok) {
+                    window.autosaveGuard.allowNavigation();
+                    e.detail.issueRequest(true);
+                }
+            });
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!window.autosaveGuard.isBlocked()) return;
+            var a = e.target.closest ? e.target.closest('a[href]') : null;
+            if (!a) return;
+            var href = a.getAttribute('href');
+            if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0 || a.target === '_blank') return;
+            e.preventDefault();
+            var proceed = window.confirmDialog ? window.confirmDialog({
+                title: 'Leave page?',
+                message: _message,
+                confirmLabel: 'Leave anyway',
+                danger: true,
+            }) : Promise.resolve(window.confirm(_message));
+            proceed.then(function (ok) {
+                if (ok) {
+                    window.autosaveGuard.allowNavigation();
+                    window.location.href = a.href;
+                }
+            });
+        }, true);
+    }());
+    </script>
+
+    <script>
+    // ── Close any <dialog> on backdrop click (not drag-outside) ───────────────
+    (function () {
+        var _dialogPress = null;
+
+        function _isBackdrop(dialog, x, y) {
+            var rect = dialog.getBoundingClientRect();
+            return x < rect.left || x > rect.right || y < rect.top || y > rect.bottom;
+        }
+
+        document.addEventListener('mousedown', function (e) {
+            var dlg = e.target.closest ? e.target.closest('dialog') : null;
+            if (!dlg || !dlg.open) { _dialogPress = null; return; }
+            _dialogPress = _isBackdrop(dlg, e.clientX, e.clientY) ? 'backdrop' : 'inside';
+        });
+
+        document.addEventListener('click', function (e) {
+            if (e.target.tagName !== 'DIALOG' || !e.target.open) return;
+            if (_dialogPress !== 'backdrop') return;
+            if (!_isBackdrop(e.target, e.clientX, e.clientY)) return;
             var closeFn = e.target.dataset.closefn;
             if (closeFn && window[closeFn]) { window[closeFn](); }
             else { e.target.close(); }
-        }
-    });
+            _dialogPress = null;
+        });
+    }());
     </script>
 
     {# ── Comment map composer dialog ──────────────────────────────────────────── #}
@@ -372,8 +470,8 @@
         </div>
       </div>
       <div class="dialog-footer">
-        <button type="button" class="btn-ghost" id="comment-map-composer-cancel">Cancel</button>
-        <button type="button" class="btn-primary" id="comment-map-composer-save">Attach map</button>
+        <button type="button" class="btn btn--ghost" id="comment-map-composer-cancel">Cancel</button>
+        <button type="button" class="btn btn--primary" id="comment-map-composer-save">Attach map</button>
       </div>
     </dialog>
 
@@ -389,8 +487,8 @@
             <p id="confirm-dialog-message"></p>
         </div>
         <div class="confirm-dialog-footer">
-            <button type="button" class="btn-ghost" id="confirm-dialog-cancel">Cancel</button>
-            <button type="button" class="btn-danger-filled" id="confirm-dialog-ok">Confirm</button>
+            <button type="button" class="btn btn--ghost" id="confirm-dialog-cancel">Cancel</button>
+            <button type="button" class="btn--danger-filled" id="confirm-dialog-ok">Confirm</button>
         </div>
     </dialog>
     <script>
@@ -417,7 +515,7 @@
             document.getElementById('confirm-dialog-message').innerHTML =
                 (opts.message || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>');
             okBtn.textContent = opts.confirmLabel || 'Confirm';
-            okBtn.className = (opts.danger === false) ? 'btn-primary' : 'btn-danger-filled';
+            okBtn.className = (opts.danger === false) ? 'btn btn--primary' : 'btn--danger-filled';
             return new Promise(function (resolve) {
                 _resolve = resolve;
                 dlg.showModal();
@@ -907,6 +1005,7 @@
     }());
     </script>
 
+    {% include 'dashboard/partials/_tooltips_script.html' %}
     {% block scripts %}{% endblock %}
 
 </body>

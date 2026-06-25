@@ -2,9 +2,9 @@
     <div class="card-header">
         <i class="material-icons">push_pin</i>
         <span>Detail Pins</span>
-        <button type="button" class="detail-pin-add-btn"
+        <button type="button" class="btn btn--sm btn--primary"
                 onclick="document.getElementById('detail-pin-add-dialog').showModal()">
-            <i class="material-icons">add_location</i> Add
+            <i class="material-icons">add</i>
         </button>
     </div>
 
@@ -32,7 +32,7 @@
             <div class="detail-pin-actions">
                 <button type="button" class="detail-pin-action-btn"
                         title="Delete"
-                        hx-delete="{% url 'pin.detail_pin.edit' pin.uuid dp.uuid %}"
+                        hx-delete="{% url 'pin.detail_pin.edit' pin.slug dp.uuid %}"
                         hx-target="#detail-pin-{{ dp.uuid }}"
                         hx-swap="outerHTML"
                         hx-confirm="Delete this detail pin?"

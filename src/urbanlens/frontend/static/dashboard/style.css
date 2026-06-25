@@ -12039,7 +12039,7 @@ body.page-location-details .pin-comments.card .card-header span {
   padding: 2rem 1rem;
 }
 
-.tag-header {
+.badge-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -12048,14 +12048,14 @@ body.page-location-details .pin-comments.card .card-header span {
   margin-bottom: 1.75rem;
 }
 
-.tag-header .tag-title {
+.badge-header .badge-title {
   font-size: 1.6rem;
   font-weight: 700;
   color: #1a1a1a;
   margin: 0 0 0.25rem;
 }
 
-.tag-header .tag-subtitle {
+.badge-header .tag-subtitle {
   font-size: 0.9rem;
   color: #5f6368;
   margin: 0;
@@ -12749,7 +12749,7 @@ body.page-location-details .pin-comments.card .card-header span {
   border-color: #2196F3;
 }
 
-.tag-header-right {
+.badge-header-right {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -16041,7 +16041,7 @@ a.profile-stat--link:hover .stat-label {
 [data-theme=dark] .settings-label,
 [data-theme=dark] .settings-toggle-label,
 [data-theme=dark] .tag-card-name,
-[data-theme=dark] .tag-title {
+[data-theme=dark] .badge-title {
   color: #e0e0e0;
 }
 

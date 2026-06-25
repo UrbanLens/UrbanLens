@@ -1,28 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    app.py                                                                                               *
-*        Path:    /UrbanLens/settings/app.py                                                                           *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.1                                                                                                *
-*        Created: 2024-02-19                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-02-19     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
 
 from __future__ import annotations
 
@@ -74,15 +49,20 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     secret_key : str = Field(default = '1t5v24s98-fcbas23-vfsd238vc-asfdioj322', description = "The secret key")
     root_urlconf : str = Field(default = 'urbanlens.UrbanLens.urls', description = "The root urlconf")
     admin_username : str = Field(default = 'Admin', description = "The username to use for the admin user")
-    admin_email : str = Field(default = 'jess@urbanlens.org', description = "The email to use for the admin user")
+    admin_email : str = Field(default = 'admin@yourdomain.com', description = "The email to use for the admin user")
     allowed_hosts : list[str] = Field(default = ['urbanlens.org'], description = "The allowed hosts")
     language_code : str = Field(default = 'en-us', description = "The language code")
     time_zone : str = Field(default = 'EST', description = "The time zone")
     use_i18n : bool = Field(default = True, description = "Whether or not to use i18n")
     use_tz : bool = Field(default = True, description = "Whether or not to use tz")
-    email_from : str = Field(default = 'jess@urbanlens.org', description = "The from email")
+    email_backend : str = Field(default = 'django.core.mail.backends.console.EmailBackend', description = "Django email backend class path")
+    email_from : str = Field(default = 'noreply@yourdomain.com', description = "The from email")
     email_host : str = Field(default = 'smtp.gmail.com', description = "The email host")
     email_port : int = Field(default = 587, description = "The email port")
+    email_user : str | None = Field(default = None, description = "SMTP username / sending address")
+    email_password : str | None = Field(default = None, description = "SMTP password or app password")
+    email_tls : bool = Field(default = True, description = "Use STARTTLS (port 587)")
+    email_use_ssl : bool = Field(default = False, description = "Use SSL instead of STARTTLS (port 465)")
     backup_retention : int = Field(default = 30, description = "The number of days to retain backups")
 
     # Classes

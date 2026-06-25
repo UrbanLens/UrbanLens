@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        - File:    pin.py                                                                                        *
-*        - Path:    /dashboard/controllers/pin.py                                                                 *
-*        - Project: urbanlens                                                                                          *
-*        - Version: 1.0.0                                                                                              *
-*        - Created: 2024-01-01                                                                                         *
-*        - Author:  Jess Mann                                                                                          *
-*        - Email:   jess@urbanlens.org                                                                               *
-*        - Copyright (c) 2024 Urban Lens                                                                               *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-03-22     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 from datetime import UTC, datetime
 import logging
 
@@ -34,6 +8,7 @@ from django.shortcuts import render
 from requests.exceptions import HTTPError
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.request import Request
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
@@ -48,26 +23,30 @@ from urbanlens.UrbanLens.settings.app import settings
 logger = logging.getLogger(__name__)
 
 
+def _format_relative_search_date(dt: datetime) -> str:
+    """Return a short relative display label for a parsed search-result date."""
+    now = datetime.now(tz=UTC)
+    delta = now - dt
+    if delta.days < 1:
+        hours = delta.seconds // 3600
+        return f"{hours}h ago" if hours else "Just now"
+    if delta.days < 7:
+        return f"{delta.days}d ago"
+    if delta.days < 365:
+        return dt.strftime("%b %-d")
+    return dt.strftime("%b %-d, %Y")
+
+
 def _format_search_date(raw: str | None) -> str:
     """Convert an ISO date string or human-readable age string to a short display label."""
     if not raw:
         return ""
-    from datetime import datetime, timezone
 
     for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
         try:
             dt = datetime.strptime(raw[:19].rstrip("Z"), fmt.rstrip("%z"))
             dt = dt.replace(tzinfo=UTC)
-            now = datetime.now(tz=UTC)
-            delta = now - dt
-            if delta.days < 1:
-                hours = delta.seconds // 3600
-                return f"{hours}h ago" if hours else "Just now"
-            if delta.days < 7:
-                return f"{delta.days}d ago"
-            if delta.days < 365:
-                return dt.strftime("%b %-d")
-            return dt.strftime("%b %-d, %Y")
+            return _format_relative_search_date(dt)
         except ValueError:
             continue
     return raw
@@ -130,18 +109,25 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import PinType
 
-        pin = Pin.objects.select_related("location").get(uuid=kwargs["pin_uuid"])
+        try:
+            pin = Pin.objects.select_related("location").get(slug=kwargs["pin_slug"], profile__user=request.user)
+        except Pin.DoesNotExist:
+            return render(
+                request,
+                "dashboard/pages/errors/pin_not_found.html",
+                {"pin_slug": kwargs.get("pin_slug")},
+                status=404,
+            )
 
         # Auto-link legacy pins that pre-date the Location requirement.
-        if pin.location is None and pin.effective_latitude and pin.effective_longitude:
+        # Private pins are intentionally unlinked - never create a wiki entry for them.
+        if not pin.is_private and pin.location is None and pin.effective_latitude and pin.effective_longitude:
             lat, lon = pin.effective_latitude, pin.effective_longitude
             location = Location.objects.get_for_point(lat, lon)
             if not location:
-                location = Location.objects.create(
-                    name=pin.effective_name or "Unnamed Location",
-                    latitude=lat,
-                    longitude=lon,
-                )
+                from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
+
+                location = _create_location_with_canonical_name(lat, lon)
             pin.location = location
             pin.save(update_fields=["location"])
 
@@ -286,13 +272,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         return map_data
 
-    def get_smithsonian_images(self, request: HttpRequest, pin_uuid):
+    def get_smithsonian_images(self, request: HttpRequest, pin_slug):
         """
         Returns the Smithsonian images for a pin.
         """
         # Get the pin
         try:
-            pin: Pin = Pin.objects.get(uuid=pin_uuid)
+            pin: Pin = Pin.objects.get(slug=pin_slug)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -300,9 +286,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         smithsonian_gateway = SmithsonianGateway(api_key=settings.smithsonian_api_key or "")
 
         # Get historic images from the Smithsonian's API; discard entries without a usable URL
-        smithsonian_images = [
-            img for img in smithsonian_gateway.get_data(pin.effective_name) if img.get("url")
-        ]
+        smithsonian_images = [img for img in smithsonian_gateway.get_data(pin.effective_name) if img.get("url")]
 
         return render(
             request,
@@ -312,7 +296,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    def web_search(self, request: HttpRequest, pin_uuid):
+    def web_search(self, request: HttpRequest, pin_slug):
         """
         Returns the web search results for a pin.
         """
@@ -323,14 +307,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.site_settings import SiteSettings
 
         try:
-            pin: Pin = Pin.objects.get(uuid=pin_uuid)
+            pin: Pin = Pin.objects.get(slug=pin_slug)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
         if not pin.has_meaningful_name:
             return HttpResponse("", status=204)
 
-        cache_key = f"web_search_{pin_uuid}"
+        cache_key = f"web_search_pin_{pin.pk}"
         site_settings = SiteSettings.get_current()
         cache_hours = site_settings.search_cache_hours
 
@@ -368,7 +352,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Returns an HTML fragment with an Esri satellite map for a pin.
         """
         try:
-            pin = Pin.objects.get(uuid=kwargs["pin_uuid"])
+            pin = Pin.objects.get(slug=kwargs["pin_slug"], profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -389,8 +373,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         import base64
 
+        from django.core.cache import cache
+
         try:
-            pin = Pin.objects.get(uuid=kwargs["pin_uuid"])
+            pin = Pin.objects.get(slug=kwargs["pin_slug"], profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -399,13 +385,26 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if lat is None or lng is None:
             return render(request, "dashboard/pages/location/street_view.html", {"error": "No coordinates available."})
 
+        thirty_days = 30 * 24 * 3600
+        cache_key = f"street_view_{float(lat):.6f}_{float(lng):.6f}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            image_b64, capture_date = cached
+            return render(
+                request,
+                "dashboard/pages/location/street_view.html",
+                {"image_b64": image_b64, "pin": pin, "capture_date": capture_date},
+            )
+
         try:
             google_maps_gateway = GoogleMapsGateway(api_key=settings.google_street_view_api_key or "")
             image_bytes, capture_date = google_maps_gateway.get_street_view(lat, lng)
             image_b64 = base64.b64encode(image_bytes).decode("ascii")
         except Exception as exc:
-            logger.warning("Street view unavailable for pin %s: %s", kwargs.get("pin_uuid"), exc)
+            logger.warning("Street view unavailable for pin %s: %s", kwargs.get("pin_slug"), exc)
             return render(request, "dashboard/pages/location/street_view.html", {"error": "Street view unavailable."})
+
+        cache.set(cache_key, (image_b64, capture_date), thirty_days)
 
         return render(
             request,
@@ -505,13 +504,109 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         response["X-Accel-Buffering"] = "no"
         return response
 
-    def weather_forecast(self, request: HttpRequest, pin_uuid):
+    @action(detail=False, methods=["post"])
+    def parse_for_preview(self, request: HttpRequest):
+        """Parse uploaded files and return pin preview data as JSON without importing."""
+        import json as _json
+
+        from urbanlens.dashboard.models.badges.model import Badge
+        from urbanlens.dashboard.services.archive_extractor import extract_archive, is_archive
+
+        if not isinstance(request.user, User):
+            return JsonResponse({"error": "Authentication required."}, status=401)
+
+        form = UploadDataFile(request.POST, request.FILES)
+        if not form.is_valid():
+            return JsonResponse({"error": "Invalid form."}, status=400)
+
+        uploaded_files = form.cleaned_data["upload_files"]
+
+        all_files: list[tuple[str, bytes]] = []
+        for uploaded_file in uploaded_files:
+            try:
+                data = uploaded_file.read()
+            except Exception as exc:
+                return JsonResponse({"error": f"Failed to read {uploaded_file.name}: {exc}"}, status=400)
+
+            if is_archive(data):
+                try:
+                    extracted = extract_archive(data)
+                except ValueError as exc:
+                    return JsonResponse({"error": str(exc)}, status=400)
+                for entry in extracted:
+                    if is_archive(entry.data):
+                        try:
+                            inner = extract_archive(entry.data)
+                            all_files.extend((x.name, x.data) for x in inner)
+                        except ValueError:
+                            logger.warning("Could not extract nested archive during preview")
+                    else:
+                        all_files.append((entry.name, entry.data))
+            else:
+                all_files.append((uploaded_file.name, data))
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
+
+        lists = gateway.parse_for_preview(all_files, profile)
+        if not lists:
+            return JsonResponse({"error": "No valid location files found in the upload."}, status=400)
+
+        badges = Badge.objects.visible_to(profile).ordered()
+
+        return JsonResponse(
+            {
+                "lists": lists,
+                "total": sum(len(lst["pins"]) for lst in lists),
+                "badges": [
+                    {
+                        "id": b.id,
+                        "name": b.name,
+                        "color": b.color or "",
+                        "icon": b.icon or "",
+                        "kind": b.kind,
+                    }
+                    for b in badges
+                ],
+            },
+        )
+
+    @action(detail=False, methods=["post"])
+    def import_confirmed(self, request: Request):
+        """Stream SSE import progress for user-confirmed pin selections from the preview step."""
+        import json as _json
+
+        if not isinstance(request.user, User):
+            return JsonResponse({"error": "Authentication required."}, status=401)
+
+        try:
+            payload = request.data
+            confirmed_lists = payload.get("lists", [])
+            auto_tag = bool(payload.get("auto_tag", True))
+        except (ValueError, KeyError):
+            return JsonResponse({"error": "Invalid JSON payload."}, status=400)
+
+        if not confirmed_lists:
+            return JsonResponse({"error": "No lists provided."}, status=400)
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
+
+        response = StreamingHttpResponse(
+            gateway.import_preview_streaming(confirmed_lists, profile, auto_tag=auto_tag),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
+
+    def weather_forecast(self, request: HttpRequest, pin_slug):
         """
         Returns the weather forecast for a pin.
         """
         # Get the pin
         try:
-            pin: Pin = Pin.objects.get(uuid=pin_uuid)
+            pin: Pin = Pin.objects.get(slug=pin_slug)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 

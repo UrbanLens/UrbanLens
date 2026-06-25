@@ -20,7 +20,8 @@ from django.db.models import (
     UniqueConstraint,
     UUIDField,
 )
-from django.db.models.fields import CharField, DateField, DateTimeField, DecimalField, IntegerField, TextField
+from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, DecimalField, IntegerField, SlugField, TextField
+from django.utils.text import slugify
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel, TextChoices
@@ -72,6 +73,15 @@ class Pin(abstract.Model):
 
     # Public-facing identifier. Non-sequential so users cannot enumerate other pins.
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
+    # URL slug - unique per (profile, slug). Auto-generated from the effective name on first save.
+    slug = SlugField(max_length=255, null=True, blank=True)
+
+    # When True this pin is entirely personal: it will not be linked to a shared
+    # Location and will never contribute to the community wiki.  User-specific
+    # data (nickname, description, coordinates) must not be surfaced to others
+    # regardless of this flag, but is_private=True is the explicit opt-out from
+    # having any community presence at these coordinates.
+    is_private = BooleanField(default=False)
 
     # User's custom label. None = show location.name instead (see effective_name).
     # Do NOT store canonical place names here - those belong on Location.
@@ -104,23 +114,10 @@ class Pin(abstract.Model):
         blank=True,
         related_name="pins",
     )
-    categories = ManyToManyField(
-        "dashboard.Badge",
-        blank=True,
-        related_name="categorized_pins",
-        limit_choices_to={"kind": "category"},
-    )
-    tags = ManyToManyField(
+    badges = ManyToManyField(
         "dashboard.Badge",
         blank=True,
         related_name="pins",
-        limit_choices_to={"kind": "tag"},
-    )
-    statuses = ManyToManyField(
-        "dashboard.Badge",
-        blank=True,
-        related_name="status_pins",
-        limit_choices_to={"kind": "status"},
     )
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
     # when the user explicitly picks a color in the dialog.
@@ -167,11 +164,31 @@ class Pin(abstract.Model):
         location_id: int | None
         reviews: ReviewManager
 
-    objects = PinManager()
+    objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 
     # ------------------------------------------------------------------
     # Effective values - resolve overrides against the linked Location
     # ------------------------------------------------------------------
+
+    def _display_badges(self):
+        """Badges that participate in map icon/color priority (tags, categories, statuses).
+
+        Prefetch badges (with customizations) when calling in bulk (e.g. get_map_data).
+        """
+        from urbanlens.dashboard.models.badges.model import KIND_USER
+
+        return self.badges.exclude(kind=KIND_USER).order_by("-order")
+
+    def _winning_display_badge(self) -> Badge | None:
+        """Badge supplying the map icon, when the icon is inherited from a badge."""
+        if self.custom_icon or self.icon:
+            return None
+        for badge in self._display_badges():
+            if badge.custom_icon and not badge.icon_is_overridden:
+                return badge
+            if badge.effective_icon:
+                return badge
+        return None
 
     @property
     def effective_icon(self) -> str | None:
@@ -180,31 +197,35 @@ class Pin(abstract.Model):
         Priority:
         1. custom_icon uploaded directly for this pin (returns URL)
         2. standard icon key selected for this pin
-        3. highest-order tag that has any icon (custom_icon beats icon)
-        4. None - caller should fall back to location category or default marker
+        3. highest-order tag/category/status that has any icon (custom_icon beats icon)
+        4. None - caller should fall back to the default marker
 
-        Prefetch tags when calling in bulk (e.g. get_map_data).
+        Prefetch badges when calling in bulk (e.g. get_map_data).
         """
         if self.custom_icon:
             return self.custom_icon.url
         if self.icon:
             return self.icon
-        for tag in self.tags.order_by("-order"):
-            if tag.custom_icon:
-                return tag.custom_icon.url
-            if tag.icon:
-                return tag.icon
+        for badge in self._display_badges():
+            if badge.custom_icon and not badge.icon_is_overridden:
+                return badge.custom_icon.url
+            icon = badge.effective_icon
+            if icon:
+                return icon
         return None
 
     @property
     def effective_color(self) -> str | None:
-        """Color hex string for this pin, inherited from the highest-order tag with a color.
+        """Color hex string for this pin, from the icon-winning badge or next badge with a color.
 
-        Prefetch tags when calling in bulk (e.g. get_map_data).
+        Prefetch badges (with customizations) when calling in bulk (e.g. get_map_data).
         """
-        for tag in self.tags.order_by("-order"):
-            if tag.color:
-                return tag.color
+        winning = self._winning_display_badge()
+        if winning and winning.effective_color:
+            return winning.effective_color
+        for badge in self._display_badges():
+            if badge.effective_color:
+                return badge.effective_color
         return None
 
     # Names produced by Google Maps when a place has no real identity. A pin
@@ -317,8 +338,8 @@ class Pin(abstract.Model):
         from urbanlens.dashboard.models.badges.model import Badge
 
         category = Badge.objects.get(id=category_id, kind="category")
-        self.categories.clear()
-        self.categories.add(category)
+        self.badges.remove(*self.badges.filter(kind="category"))
+        self.badges.add(category)
         self.save()
 
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
@@ -376,7 +397,7 @@ class Pin(abstract.Model):
         try:
             category, _ = Badge.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
             if category:
-                self.categories.add(category)
+                self.badges.add(category)
                 if save:
                     self.save()
                 return category
@@ -389,7 +410,7 @@ class Pin(abstract.Model):
     # ------------------------------------------------------------------
 
     def __str__(self) -> str:
-        status_labels = ", ".join(s.name for s in self.statuses.all()) or "None"
+        status_labels = ", ".join(s.name for s in self.badges.filter(kind="status")) or "None"
         return (
             f"Name: {self.effective_name}\n"
             f"Description: {self.description or ''}\n"
@@ -401,6 +422,7 @@ class Pin(abstract.Model):
     def to_json(self) -> dict[str, Any]:
         return {
             "uuid": str(self.uuid),
+            "slug": self.slug or str(self.uuid),
             "name": self.effective_name,
             "icon": self.effective_icon,
             "place_name": self.place_name,
@@ -413,11 +435,14 @@ class Pin(abstract.Model):
             "last_visited": self.last_visited.isoformat() if self.last_visited else "never",
             "latitude": self.effective_latitude,
             "longitude": self.effective_longitude,
-            "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.statuses.all()],
+            "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.badges.filter(kind="status")],
             "profile": self.profile.id,
             "rating": self.rating,
-            "color": self.effective_color,
-            "tags": [{"id": t.id, "name": t.name, "color": t.color, "icon": t.icon} for t in self.tags.all()],
+            "color": self.color or self.effective_color,
+            "tags": [
+                {"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon}
+                for t in self.badges.filter(kind="tag")
+            ],
         }
 
     def to_detail_json(self) -> dict:
@@ -437,7 +462,22 @@ class Pin(abstract.Model):
             "border_opacity": self.detail_border_opacity,
         }
 
+    def _generate_slug(self) -> str:
+        """Derive a slug that is unique within this user's pins."""
+        base = slugify(self.effective_name)[:200] or "pin"
+        candidate = base
+        n = 2
+        qs = Pin.objects.filter(profile_id=self.profile_id)
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+        while qs.filter(slug=candidate).exists():
+            candidate = f"{base}-{n}"
+            n += 1
+        return candidate
+
     def save(self, *args, **kwargs) -> None:
+        if not self.slug:
+            self.slug = self._generate_slug()
         lat = self.effective_latitude
         lon = self.effective_longitude
         if lat is not None and lon is not None:
@@ -452,15 +492,21 @@ class Pin(abstract.Model):
             Index(fields=["profile"]),
             Index(fields=["profile", "priority"]),
             Index(fields=["profile", "last_visited"]),
+            Index(fields=["profile", "updated"], name="dashboard_profile_update_idx"),
             Index(fields=["latitude", "longitude"]),
             Index(fields=["parent_pin"]),
-            Index(fields=["parent_location"], name="dashboard_pin_parent_loc_idx"),
+            Index(fields=["parent_location"], name="dashboard_parent_loc_idx"),
         ]
         constraints = [
             UniqueConstraint(
                 fields=["latitude", "longitude", "profile"],
                 condition=Q(parent_pin__isnull=True, parent_location__isnull=True),
                 name="dashboard_pin_unique_location_per_profile",
+            ),
+            UniqueConstraint(
+                fields=["profile", "slug"],
+                condition=Q(slug__isnull=False),
+                name="dashboard_pin_unique_slug_per_profile",
             ),
         ]
 

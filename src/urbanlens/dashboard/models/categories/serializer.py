@@ -26,7 +26,7 @@ class CategorySerializer(serializers.ModelSerializer):
         Returns:
             Pin count.
         """
-        return obj.categorized_pins.count()
+        return obj.pins.count()
 
     def get_location_count(self, obj: Badge) -> int:
         """Return the number of locations with this category.
@@ -37,4 +37,4 @@ class CategorySerializer(serializers.ModelSerializer):
         Returns:
             Location count.
         """
-        return obj.categorized_locations.count()
+        return obj.locations.count()

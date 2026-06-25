@@ -50,6 +50,7 @@
             <button type="button"
                     class="icon-picker-item {% if current_icon == icon %}selected{% endif %}"
                     data-icon="{{ icon }}" data-cat="{{ cat_id }}" data-label="{{ label|lower }}"
+                    data-keywords="{{ icon|icon_keywords }}"
                     title="{{ label }}"
                     onclick="IconPicker.pick('{{ picker_id }}', this.dataset.icon, this)">
                 <span class="icon-picker-glyph">{{ icon }}</span>

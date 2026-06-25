@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import User
 from django.test import Client
 from django.urls import reverse
 from model_bakery import baker
@@ -11,6 +11,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.services.site_admin import (
     SITE_ADMIN_GROUP_NAME,
+    add_user_to_site_admin_group,
     complete_site_admin_onboarding,
     promote_first_user_if_needed,
     should_redirect_to_site_admin,
@@ -45,7 +46,7 @@ class SiteAdminRedirectTests(TestCase):
 
     def setUp(self) -> None:
         self.user: User = baker.make(User, username="founder")
-        Group.objects.get_or_create(name=SITE_ADMIN_GROUP_NAME)[0].user_set.add(self.user)
+        add_user_to_site_admin_group(self.user)
         settings = SiteSettings.get_current()
         settings.bootstrap_admin_user = self.user
         settings.bootstrap_admin_onboarding_complete = False
@@ -58,14 +59,14 @@ class SiteAdminRedirectTests(TestCase):
         complete_site_admin_onboarding(self.user)
         self.assertFalse(should_redirect_to_site_admin(self.user))
 
-    def test_post_login_redirects_bootstrap_admin_to_site_admin(self) -> None:
+    def test_post_login_redirects_bootstrap_admin_to_setup(self) -> None:
         client = Client()
         client.force_login(self.user)
 
         response = client.get(reverse("post_login"), follow=False)
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], reverse("site_admin"))
+        self.assertEqual(response["Location"], reverse("setup"))
 
     def test_post_login_redirects_to_map_after_onboarding(self) -> None:
         complete_site_admin_onboarding(self.user)

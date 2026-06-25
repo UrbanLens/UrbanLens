@@ -1,12 +1,14 @@
 {
     "name": "urbanlens",
-    "version": "0.0.2",
+    "version": "0.2.0",
     "description": "Mapping for Urban Explorers",
     "main": "index.js",
     "scripts": {
         "db": "python src/bin/db.py start",
         "migrate": "python -m urbanlens.manage makemigrations & python -m urbanlens.manage migrate",
-        "sass": "sass src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
+        "sass": "sass --style=compressed --no-source-map src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
+        "sass:dev": "sass --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
+        "sass:watch": "sass --watch --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
         "build": "bun build src/urbanlens/dashboard/frontend/ts/index.tsx --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser",
         "deploy": "bun build src/urbanlens/dashboard/frontend/ts/index.tsx --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser",
         "start": "gunicorn urbanlens.UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 600 -k gevent",
@@ -14,7 +16,8 @@
         "lint": "pyright src/urbanlens",
         "up": "git pull && sudo docker compose build && sudo docker compose up",
         "test": "python -m coverage run --source='src' src/urbanlens/manage.py test",
-        "coverage": "python -m coverage report"
+        "coverage": "python -m coverage report",
+        "uninstall": "docker compose down && docker volume ls -q | grep '^urbanlens_' | xargs -r docker volume rm"
     },
     "author": "Jess Mann",
     "license": "N/A",

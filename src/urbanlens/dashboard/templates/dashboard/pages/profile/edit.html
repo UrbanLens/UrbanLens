@@ -19,36 +19,98 @@
 {% endif %}
 {% endwith %}
 
-<div class="edit-profile-page">
+<div class="edit-profile-page page-content">
+
+    {# ── Setup / welcome banner (shown to all new users until they complete setup) ── #}
+    {% if not form.instance.profile_setup_complete %}
+    <div class="edit-setup-banner" id="setup-banner">
+        <i class="material-icons setup-banner-icon">waving_hand</i>
+        <div class="setup-banner-text">
+            <strong>Welcome! Set up your profile.</strong>
+            <span>Choose a username and avatar before you start exploring.</span>
+        </div>
+        <button class="setup-banner-skip" id="setup-skip-btn" type="button">
+            Skip for now
+        </button>
+    </div>
+    {% endif %}
 
     <div class="edit-profile-header">
         <a href="{% url 'profile.view' %}" class="edit-back-link">
             <i class="material-icons">arrow_back</i> Back to Profile
         </a>
         <h1 class="edit-profile-title">Edit Profile</h1>
-        <p class="edit-profile-autosave-hint">Changes are saved automatically.</p>
     </div>
 
     {# ── Profile info ──────────────────────────────────────────────────────── #}
-    <section class="edit-card">
+    <section class="edit-card ul-section">
         <h2 class="edit-card-title">Profile Info</h2>
+
+        {# Username #}
+        <div class="edit-field">
+            <label class="edit-label">
+                Username
+                <span class="field-status" data-field-status="username"></span>
+            </label>
+            <div class="edit-username-wrap">
+                <span class="edit-username-at">@</span>
+                <input type="text" class="edit-input edit-username-input" id="username-input"
+                       maxlength="30" value="{{ request.user.username }}"
+                       autocomplete="username" spellcheck="false">
+                <span class="edit-username-hint" id="username-hint"></span>
+            </div>
+            <p class="edit-field-hint">3-30 characters: letters, numbers, and underscores only.</p>
+        </div>
 
         {# Avatar #}
         <div class="edit-field edit-avatar-field">
-            <label class="edit-label">Profile Photo <span class="field-status" data-field-status="avatar"></span></label>
-            <div class="edit-avatar-wrap">
-                {% if form.instance.avatar %}
-                <img src="{{ form.instance.avatar.url }}" class="edit-avatar-preview" id="avatar-preview" alt="Avatar">
-                {% else %}
-                <div class="edit-avatar-placeholder" id="avatar-preview">
-                    <i class="material-icons">person</i>
+            <label class="edit-label">Profile Photo</label>
+            <div class="edit-avatar-layout">
+                {# Current avatar display #}
+                <div class="edit-avatar-current-wrap">
+                    {% if form.instance.avatar %}
+                    <img src="{{ form.instance.avatar.url }}" class="edit-avatar-preview" id="avatar-preview" alt="Avatar">
+                    {% else %}
+                    <div class="edit-avatar-placeholder" id="avatar-preview">
+                        <i class="material-icons">person</i>
+                    </div>
+                    {% endif %}
+                    <span class="field-status" data-field-status="avatar" style="display:block;text-align:center;margin-top:4px"></span>
                 </div>
-                {% endif %}
-                <label class="edit-avatar-upload-btn">
-                    <i class="material-icons">photo_camera</i>
-                    <span>Change Photo</span>
-                    <input type="file" accept="image/*" data-autosave="avatar" style="display:none">
-                </label>
+
+                {# Avatar source options #}
+                <div class="edit-avatar-sources">
+
+                    {# Upload #}
+                    <label class="edit-avatar-option" title="Upload your own photo">
+                        <i class="material-icons">upload</i>
+                        <span>Upload</span>
+                        <input type="file" accept="image/*" data-autosave="avatar" style="display:none">
+                    </label>
+
+                    {# Gravatar #}
+                    {% if gravatar_preview_url %}
+                    <button type="button" class="edit-avatar-option" id="avatar-gravatar-btn"
+                            data-gravatar-url="{{ gravatar_preview_url }}" title="Use your Gravatar">
+                        <img src="{{ gravatar_preview_url }}" class="edit-avatar-option-img" alt="Gravatar">
+                        <span>Gravatar</span>
+                    </button>
+                    {% endif %}
+
+                    {# Emoji circles #}
+                    {% for opt in emoji_options %}
+                    <button type="button" class="edit-avatar-option edit-avatar-emoji-opt"
+                            data-animal="{{ opt.animal }}" data-color="{{ opt.color }}"
+                            title="{{ opt.animal|title }} emoji avatar"
+                            style="background:none;border:none;cursor:pointer;padding:0;">
+                        <div class="edit-avatar-emoji-circle" style="background:{{ opt.color }}">
+                            {{ opt.emoji }}
+                        </div>
+                        <span>{{ opt.animal|title }}</span>
+                    </button>
+                    {% endfor %}
+
+                </div>
             </div>
         </div>
 
@@ -111,69 +173,97 @@
     </section>
 
     {# ── Social links ──────────────────────────────────────────────────────── #}
-    <section class="edit-card">
+    <section class="edit-card ul-section">
         <h2 class="edit-card-title">Social Links</h2>
         <p class="edit-card-desc">Paste a profile URL - the platform is detected automatically.</p>
+        {% include "dashboard/partials/profile_social_links.html" %}
+    </section>
 
-        {% if social_links %}
-        <ul class="edit-links-list">
-            {% for link in social_links %}
-            <li class="edit-link-row">
-                <i class="{{ link.icon }} edit-link-icon"></i>
-                <span class="edit-link-platform">{{ link.display_name }}</span>
-                {% if link.url %}
-                <a href="{{ link.url }}" class="edit-link-handle" target="_blank" rel="noopener">{{ link.handle }}</a>
-                {% else %}
-                <span class="edit-link-handle">{{ link.handle }}</span>
-                {% endif %}
-                <form method="post" action="{% url 'profile.edit' %}" class="edit-link-remove-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="remove_link">
-                    <input type="hidden" name="remove_platform" value="{{ link.platform }}">
-                    <button type="submit" class="edit-link-remove-btn" title="Remove">
-                        <i class="material-icons">close</i>
-                    </button>
-                </form>
-            </li>
-            {% endfor %}
-        </ul>
-        {% endif %}
+    {# ── Contact Information ────────────────────────────────────────────────── #}
+    <section class="edit-card ul-section">
+        <h2 class="edit-card-title">Contact Information</h2>
 
-        <form method="post" action="{% url 'profile.edit' %}" class="edit-add-link-form">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="add_link">
-            <div class="edit-add-link-row">
-                <input type="text" name="link_input"
-                       class="edit-add-link-input{% if link_error %} edit-add-link-input--error{% endif %}"
-                       placeholder="https://instagram.com/you  ·  https://reddit.com/u/you  ·  etc."
-                       autofocus>
-                <button type="submit" class="edit-add-link-btn">Add</button>
+        <div class="edit-field">
+            <label class="edit-label">
+                Email Address
+                <span class="field-status" data-field-status="email"></span>
+            </label>
+            <input type="email" class="edit-input" maxlength="254"
+                   value="{{ request.user.email }}"
+                   placeholder="your@email.com"
+                   autocomplete="email"
+                   data-autosave="email">
+            <p class="edit-field-hint">Used for account recovery and notifications.</p>
+        </div>
+
+        <div class="edit-field-row">
+            <div class="edit-field">
+                <label class="edit-label">
+                    Phone Number
+                    <span class="field-status" data-field-status="phone_number"></span>
+                </label>
+                <input type="tel" class="edit-input" maxlength="30"
+                       value="{{ form.instance.phone_number }}"
+                       placeholder="+1 555 000 0000"
+                       data-autosave="phone_number">
             </div>
-            {% if link_error %}
-            <p class="edit-error edit-error--link">{{ link_error }}</p>
-            {% endif %}
-        </form>
+            <div class="edit-field">
+                <label class="edit-label">
+                    WhatsApp Number
+                    <span class="field-status" data-field-status="whatsapp_number"></span>
+                </label>
+                <input type="tel" class="edit-input" maxlength="30"
+                       value="{{ form.instance.whatsapp_number }}"
+                       placeholder="+1 555 000 0000"
+                       data-autosave="whatsapp_number">
+            </div>
+        </div>
 
-        <details class="edit-discord-details">
-            <summary class="edit-discord-summary">
-                <i class="fa-brands fa-discord"></i> Set Discord username
-            </summary>
-            <form method="post" action="{% url 'profile.edit' %}" class="edit-discord-form">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="save_discord">
-                <div class="edit-add-link-row">
-                    {{ discord_form.discord }}
-                    <button type="submit" class="edit-add-link-btn">Save</button>
-                </div>
-                {% if discord_form.discord.errors %}
-                <p class="edit-error">{{ discord_form.discord.errors|join:", " }}</p>
-                {% endif %}
-            </form>
-        </details>
+        <div class="edit-field-row">
+            <div class="edit-field">
+                <label class="edit-label">
+                    Signal Username
+                    <span class="field-status" data-field-status="signal_username"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="100"
+                       value="{{ form.instance.signal_username }}"
+                       placeholder="signal.01"
+                       data-autosave="signal_username">
+            </div>
+            <div class="edit-field">
+                <label class="edit-label">
+                    Discord Username
+                    <span class="field-status" data-field-status="discord_username"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="100"
+                       value="{{ form.instance.discord_username }}"
+                       placeholder="username"
+                       data-autosave="discord_username">
+            </div>
+        </div>
 
-        <p class="edit-supported-platforms">
-            Supported: Instagram · Bluesky · UER · Facebook · Flickr · YouTube · Twitch · Reddit · any website URL
-        </p>
+        <div class="edit-field-row">
+            <div class="edit-field">
+                <label class="edit-label">
+                    Telegram Username
+                    <span class="field-status" data-field-status="telegram_username"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="100"
+                       value="{{ form.instance.telegram_username }}"
+                       placeholder="@username"
+                       data-autosave="telegram_username">
+            </div>
+            <div class="edit-field">
+                <label class="edit-label">
+                    Matrix Handle
+                    <span class="field-status" data-field-status="matrix_handle"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="200"
+                       value="{{ form.instance.matrix_handle }}"
+                       placeholder="@user:server.org"
+                       data-autosave="matrix_handle">
+            </div>
+        </div>
     </section>
 
 </div>
@@ -227,7 +317,10 @@ function closeDateErrorDialog() {
 
     // ── core save ─────────────────────────────────────────────────────────────
     function saveField(field, value, isFile) {
+        if (window.autosaveGuard) window.autosaveGuard.markDirty();
         setStatus(field, 'saving', 'Saving…');
+        var guard = window.autosaveGuard;
+        if (guard) guard.saveStarted();
         var fd = new FormData();
         fd.append('csrfmiddlewaretoken', csrftoken);
         fd.append('field', field);
@@ -240,6 +333,7 @@ function closeDateErrorDialog() {
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (data.ok) {
+                    if (guard) guard.markClean();
                     setStatus(field, 'saved', '✓ Saved');
                     if (data.avatar_url) {
                         var el = document.getElementById('avatar-preview');
@@ -267,7 +361,8 @@ function closeDateErrorDialog() {
                     }
                 }
             })
-            .catch(function () { setStatus(field, 'error', 'Save failed.'); });
+            .catch(function () { setStatus(field, 'error', 'Save failed.'); })
+            .finally(function () { if (guard) guard.saveFinished(); });
     }
 
     // ── wire up all autosave inputs ───────────────────────────────────────────
@@ -281,6 +376,128 @@ function closeDateErrorDialog() {
             el.addEventListener('change', function () { saveField(field, el.value, false); });
         }
     });
+
+    // ── username field: debounced availability check + save on blur ───────────
+    var usernameInput = document.getElementById('username-input');
+    var usernameHint  = document.getElementById('username-hint');
+    var _unameCheckTimer;
+    var _lastChecked = '';
+
+    function checkUsername(username) {
+        if (!username || username === _lastChecked) return;
+        _lastChecked = username;
+        usernameHint.textContent = '';
+        if (!/^[a-zA-Z0-9_]{3,30}$/.test(username)) {
+            usernameHint.className = 'edit-username-hint edit-username-hint--bad';
+            usernameHint.textContent = '3-30 chars: letters, numbers, underscores';
+            return;
+        }
+        fetch(SAVE_URL + '?field=username&value=' + encodeURIComponent(username))
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.available) {
+                    usernameHint.className = 'edit-username-hint edit-username-hint--ok';
+                    usernameHint.textContent = '✓ Available';
+                } else {
+                    usernameHint.className = 'edit-username-hint edit-username-hint--bad';
+                    usernameHint.textContent = d.reason || 'Unavailable';
+                }
+            })
+            .catch(function () {});
+    }
+
+    if (usernameInput) {
+        usernameInput.addEventListener('input', function () {
+            clearTimeout(_unameCheckTimer);
+            var v = usernameInput.value.trim();
+            _unameCheckTimer = setTimeout(function () { checkUsername(v); }, 400);
+        });
+
+        usernameInput.addEventListener('blur', function () {
+            var v = usernameInput.value.trim();
+            if (!v || !/^[a-zA-Z0-9_]{3,30}$/.test(v)) return;
+            saveField('username', v, false);
+        });
+    }
+
+    // ── gravatar button ───────────────────────────────────────────────────────
+    var gravatarBtn = document.getElementById('avatar-gravatar-btn');
+    if (gravatarBtn) {
+        gravatarBtn.addEventListener('click', function () {
+            setStatus('avatar', 'saving', 'Saving…');
+            var fd = new FormData();
+            fd.append('csrfmiddlewaretoken', csrftoken);
+            fd.append('field', 'avatar_gravatar');
+            fetch(SAVE_URL, { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) {
+                        setStatus('avatar', 'saved', '✓ Saved');
+                        updateAvatarPreview(d.avatar_url);
+                    } else {
+                        setStatus('avatar', 'error', '✗');
+                        toastr.error(d.error || 'Could not load Gravatar.');
+                    }
+                })
+                .catch(function () { setStatus('avatar', 'error', 'Failed'); });
+        });
+    }
+
+    // ── emoji circle buttons ──────────────────────────────────────────────────
+    document.querySelectorAll('.edit-avatar-emoji-opt').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var animal = btn.dataset.animal;
+            var color  = btn.dataset.color;
+            setStatus('avatar', 'saving', 'Saving…');
+            var fd = new FormData();
+            fd.append('csrfmiddlewaretoken', csrftoken);
+            fd.append('field', 'avatar_emoji');
+            fd.append('animal', animal);
+            fd.append('color', color);
+            fetch(SAVE_URL, { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) {
+                        setStatus('avatar', 'saved', '✓ Saved');
+                        updateAvatarPreview(d.avatar_url);
+                    } else {
+                        setStatus('avatar', 'error', '✗');
+                        toastr.error(d.error || 'Could not save avatar.');
+                    }
+                })
+                .catch(function () { setStatus('avatar', 'error', 'Failed'); });
+        });
+    });
+
+    function updateAvatarPreview(url) {
+        if (!url) return;
+        var el = document.getElementById('avatar-preview');
+        if (!el) return;
+        if (el.tagName === 'IMG') {
+            el.src = url + '?' + Date.now();
+        } else {
+            var img = document.createElement('img');
+            img.src = url + '?' + Date.now();
+            img.className = 'edit-avatar-preview';
+            img.id = 'avatar-preview';
+            img.alt = 'Avatar';
+            el.parentNode.replaceChild(img, el);
+        }
+    }
+
+    // ── setup banner skip ─────────────────────────────────────────────────────
+    var skipBtn = document.getElementById('setup-skip-btn');
+    var banner  = document.getElementById('setup-banner');
+    if (skipBtn && banner) {
+        skipBtn.addEventListener('click', function () {
+            var fd = new FormData();
+            fd.append('csrfmiddlewaretoken', csrftoken);
+            fd.append('field', 'setup_complete');
+            fetch(SAVE_URL, { method: 'POST', body: fd })
+                .then(function () { banner.remove(); })
+                .catch(function () { banner.remove(); });
+        });
+    }
 
     // ── server-rendered date dialog close wiring ──────────────────────────────
     var overlay = document.getElementById('date-error-overlay');

@@ -3,8 +3,8 @@
     <div class="card-header">
         <i class="material-icons">label</i>
         <h3>Tags</h3>
-        <button type="button" class="btn-icon-sm" style="margin-left:auto"
-                onclick="document.getElementById('tag-add-dialog-{{ pin.uuid }}').showModal()"
+        <button type="button" class="btn--icon-sm" style="margin-left:auto"
+                onclick="document.getElementById('tag-add-dialog-{{ pin.slug }}').showModal()"
                 title="Add a tag">
             <i class="material-icons">add</i>
         </button>
@@ -23,7 +23,7 @@
             </span>
             {% endif %}
             <span class="tag-chip-name">{{ tag.name }}</span>
-            <form hx-post="{% url 'tag.membership' pin.uuid %}" hx-target="#tag-panel" hx-swap="outerHTML" style="display:inline">
+            <form hx-post="{% url 'tag.membership' pin.slug %}" hx-target="#tag-panel" hx-swap="outerHTML" style="display:inline">
                 {% csrf_token %}
                 <input type="hidden" name="tag_id" value="{{ tag.id }}">
                 <input type="hidden" name="action" value="remove">
@@ -38,7 +38,7 @@
     </div>
 
     {# ── Add-tag dialog ──────────────────────────────────────────────── #}
-    <dialog id="tag-add-dialog-{{ pin.uuid }}" class="tag-add-dialog ul-dialog">
+    <dialog id="tag-add-dialog-{{ pin.slug }}" class="tag-add-dialog ul-dialog">
         {% include "dashboard/partials/_dialog_header.html" with title="Add Tags" %}
         <input type="search" class="dialog-search" placeholder="Search tags…" autocomplete="off"
                oninput="(function(i){i.closest('dialog').querySelectorAll('.tag-dialog-item').forEach(function(el){el.hidden=!el.dataset.name.includes(i.value.toLowerCase());})})(this)">
@@ -46,7 +46,7 @@
             {% for tag in all_tags %}
             {% if tag.id not in member_ids %}
             <li class="tag-dialog-item" data-name="{{ tag.name|lower }}">
-                <form hx-post="{% url 'tag.membership' pin.uuid %}" hx-target="#tag-panel" hx-swap="outerHTML">
+                <form hx-post="{% url 'tag.membership' pin.slug %}" hx-target="#tag-panel" hx-swap="outerHTML">
                     {% csrf_token %}
                     <input type="hidden" name="tag_id" value="{{ tag.id }}">
                     <input type="hidden" name="action" value="add">

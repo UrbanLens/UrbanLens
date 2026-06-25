@@ -4,8 +4,8 @@
         <i class="material-icons">history</i>
         <h3>Visit History</h3>
         {% if visits %}<span class="visit-count badge">{{ visits|length }}</span>{% endif %}
-        <button type="button" class="btn-icon-sm" style="margin-left:auto"
-                onclick="document.getElementById('visit-add-dialog-{{ pin.uuid }}').showModal()"
+        <button type="button" class="btn--icon-sm" style="margin-left:auto"
+                onclick="document.getElementById('visit-add-dialog-{{ pin.slug }}').showModal()"
                 title="Log a visit">
             <i class="material-icons">add</i>
         </button>
@@ -33,7 +33,7 @@
             <div class="visit-notes">{{ visit.notes }}</div>
             {% endif %}
             <button type="button"
-                    hx-post="{% url 'pin.visit.delete' pin.uuid visit.id %}"
+                    hx-post="{% url 'pin.visit.delete' pin.slug visit.id %}"
                     hx-target="#visit-history-panel"
                     hx-swap="outerHTML"
                     hx-confirm="Delete this visit record?"
@@ -49,28 +49,28 @@
     {% endif %}
 
     {# ── Log-a-visit dialog ──────────────────────────────────────────── #}
-    <dialog id="visit-add-dialog-{{ pin.uuid }}" class="visit-add-dialog ul-dialog">
+    <dialog id="visit-add-dialog-{{ pin.slug }}" class="visit-add-dialog ul-dialog">
         {% include "dashboard/partials/_dialog_header.html" with title="Log a Visit" %}
-        <form hx-post="{% url 'pin.visits' pin.uuid %}"
+        <form hx-post="{% url 'pin.visits' pin.slug %}"
               hx-target="#visit-history-panel"
               hx-swap="outerHTML"
               class="visit-add-form">
             {% csrf_token %}
             <div class="form-row">
-                <label for="visited_date_{{ pin.uuid }}">Date</label>
-                <input type="date" name="visited_date" id="visited_date_{{ pin.uuid }}" required>
+                <label for="visited_date_{{ pin.slug }}">Date</label>
+                <input type="date" name="visited_date" id="visited_date_{{ pin.slug }}" required>
             </div>
             <div class="form-row">
-                <label for="visited_time_{{ pin.uuid }}">Time <small>(optional)</small></label>
-                <input type="time" name="visited_time" id="visited_time_{{ pin.uuid }}">
+                <label for="visited_time_{{ pin.slug }}">Time <small>(optional)</small></label>
+                <input type="time" name="visited_time" id="visited_time_{{ pin.slug }}">
             </div>
             <div class="form-row">
-                <label for="visit_notes_{{ pin.uuid }}">Notes <small>(optional)</small></label>
-                <textarea name="notes" id="visit_notes_{{ pin.uuid }}" rows="3" placeholder="What did you see?"></textarea>
+                <label for="visit_notes_{{ pin.slug }}">Notes <small>(optional)</small></label>
+                <textarea name="notes" id="visit_notes_{{ pin.slug }}" rows="3" placeholder="What did you see?"></textarea>
             </div>
             <div class="form-actions">
-                <button type="submit" class="submit-button">Save Visit</button>
-                <button type="button" class="btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Visit</button>
+                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
             </div>
         </form>
     </dialog>

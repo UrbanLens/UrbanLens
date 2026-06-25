@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -18,6 +19,10 @@ from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORI
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.badges.queryset import BadgeQuerySet
+    from urbanlens.dashboard.models.profile.model import Profile
+
 logger = logging.getLogger(__name__)
 
 _CTX_BASE = {
@@ -27,12 +32,12 @@ _CTX_BASE = {
 }
 
 
-def _all_categories(profile):
+def _all_categories(profile: Profile) -> BadgeQuerySet:
     """Return categories belonging to *profile*, ordered for display with count annotations."""
     return Badge.objects.categories().for_profile(profile).ordered().with_pin_counts()
 
 
-def _rows_ctx(profile, extra: dict | None = None) -> dict:
+def _rows_ctx(profile: Profile, extra: dict | None = None) -> dict:
     """Build template context for category rows partial."""
     ctx = {**_CTX_BASE, "categories": _all_categories(profile)}
     if extra:
@@ -88,7 +93,7 @@ class CategoryCreateView(LoginRequiredMixin, View):
             order=order,
         )
         if parent_ids:
-            valid_parents = Badge.objects.categories().for_profile(profile).filter(id__in=parent_ids)
+            valid_parents = Badge.objects.visible_to(profile).filter(id__in=parent_ids).exclude(id=category.id)
             category.parents.set(valid_parents)
 
         return render(
@@ -111,7 +116,7 @@ class CategoryEditView(LoginRequiredMixin, View):
         """
         profile = request.user.profile
         category = get_object_or_404(Badge, id=cat_id, kind="category", profile=profile)
-        available_parents = Badge.objects.categories().for_profile(profile).ordered().exclude(id=cat_id)
+        available_parents = Badge.objects.visible_to(profile).ordered().exclude(id=cat_id)
         parent_ids = set(category.parents.values_list("id", flat=True))
         return render(
             request,
@@ -153,22 +158,9 @@ class CategoryEditView(LoginRequiredMixin, View):
         category.order = int(request.POST.get("order", category.order))
 
         if kind_changed and new_kind == "tag":
-            # Migrate category → tag: move pin.categories → pin.tags and
-            # location.categories → location.tags.
-            for pin in Pin.objects.filter(categories=category):
-                pin.tags.add(category)
-                pin.categories.remove(category)
-            for loc in Location.objects.filter(categories=category):
-                loc.tags.add(category)
-                loc.categories.remove(category)
             category.kind = "tag"
 
         elif kind_changed and new_kind == "status":
-            # Migrate category → status: remove from pin.categories, add to pin.statuses.
-            # Location memberships are dropped (statuses are per-pin, not per-location).
-            for pin in Pin.objects.filter(categories=category, profile=profile):
-                pin.statuses.add(category)
-                pin.categories.remove(category)
             category.kind = "status"
 
         category.save()
@@ -178,9 +170,7 @@ class CategoryEditView(LoginRequiredMixin, View):
         else:
             parent_ids = request.POST.getlist("parent_ids")
             if parent_ids:
-                valid_parents = (
-                    Badge.objects.categories().for_profile(profile).filter(id__in=parent_ids).exclude(id=cat_id)
-                )
+                valid_parents = Badge.objects.visible_to(profile).filter(id__in=parent_ids).exclude(id=cat_id)
                 category.parents.set(valid_parents)
             else:
                 category.parents.clear()
@@ -322,7 +312,7 @@ class CategoryBulkEditView(LoginRequiredMixin, View):
                 cat.save(update_fields=update_fields)
 
         if add_parent_ids:
-            valid_parents = list(Badge.objects.categories().for_profile(profile).filter(id__in=add_parent_ids))
+            valid_parents = list(Badge.objects.visible_to(profile).filter(id__in=add_parent_ids))
             for cat in categories:
                 cat.parents.add(*[p for p in valid_parents if p.id != cat.id])
 
@@ -353,12 +343,6 @@ class CategoryBulkConvertView(LoginRequiredMixin, View):
         profile = request.user.profile
         cats_to_convert = list(Badge.objects.filter(id__in=ids, kind="category", profile=profile))
         for category in cats_to_convert:
-            for pin in Pin.objects.filter(categories=category):
-                pin.tags.add(category)
-                pin.categories.remove(category)
-            for loc in Location.objects.filter(categories=category):
-                loc.tags.add(category)
-                loc.categories.remove(category)
             category.kind = "tag"
             category.parents.clear()
             category.save()
@@ -390,9 +374,6 @@ class CategoryBulkConvertToStatusView(LoginRequiredMixin, View):
         profile = request.user.profile
         cats_to_convert = list(Badge.objects.filter(id__in=ids, kind="category", profile=profile))
         for category in cats_to_convert:
-            for pin in Pin.objects.filter(categories=category, profile=profile):
-                pin.statuses.add(category)
-                pin.categories.remove(category)
             category.kind = "status"
             category.parents.clear()
             category.save()
@@ -431,8 +412,8 @@ class CategoryMultiMergeView(LoginRequiredMixin, View):
             return HttpResponse("No valid source categories.", status=400)
 
         for source in sources:
-            target.categorized_pins.add(*source.categorized_pins.all())
-            target.categorized_locations.add(*source.categorized_locations.all())
+            target.pins.add(*source.pins.all())
+            target.locations.add(*source.locations.all())
             source.delete()
 
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
@@ -484,72 +465,58 @@ class CategoryMergeView(LoginRequiredMixin, View):
         if target.id == source.id:
             return HttpResponse("Cannot merge a category into itself.", status=400)
 
-        target.categorized_pins.add(*source.categorized_pins.all())
-        target.categorized_locations.add(*source.categorized_locations.all())
+        target.pins.add(*source.pins.all())
+        target.locations.add(*source.locations.all())
         source.delete()
 
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
 
 
-def _all_badges(profile):
+def _all_badges(profile: Profile) -> BadgeQuerySet:
     """Return all tag/category/status badges visible to *profile*, ordered for the badge picker."""
     return Badge.objects.visible_to(profile).ordered()
 
 
-def _pin_member_ids(pin) -> set[int]:
-    """Return the set of all badge IDs currently assigned to a pin (all kinds)."""
-    return (
-        set(pin.categories.values_list("id", flat=True))
-        | set(pin.tags.values_list("id", flat=True))
-        | set(pin.statuses.values_list("id", flat=True))
-    )
+def _pin_member_ids(pin: Pin) -> set[int]:
+    """Return the set of all badge IDs currently assigned to a pin."""
+    return set(pin.badges.values_list("id", flat=True))
 
 
-def _location_member_ids(location) -> set[int]:
-    """Return the set of all badge IDs currently assigned to a location (all kinds)."""
-    return (
-        set(location.categories.values_list("id", flat=True))
-        | set(location.tags.values_list("id", flat=True))
-        | set(location.statuses.values_list("id", flat=True))
-    )
+def _location_member_ids(location: Location) -> set[int]:
+    """Return the set of all badge IDs currently assigned to a location."""
+    return set(location.badges.values_list("id", flat=True))
 
 
-def _apply_badge_to_pin(pin, badge: Badge, action: str) -> None:
-    """Add or remove a badge from the correct M2M field on a pin based on its kind."""
-    m2m = {"category": pin.categories, "tag": pin.tags, "status": pin.statuses}.get(badge.kind)
-    if m2m is None:
-        return
+def _apply_badge_to_pin(pin: Pin, badge: Badge, action: str) -> None:
+    """Add or remove a badge from a pin."""
     if action == "add":
-        m2m.add(badge)
+        pin.badges.add(badge)
     elif action == "remove":
-        m2m.remove(badge)
+        pin.badges.remove(badge)
 
 
-def _apply_badge_to_location(location, badge: Badge, action: str) -> None:
-    """Add or remove a badge from the correct M2M field on a location based on its kind."""
-    m2m = {"category": location.categories, "tag": location.tags, "status": location.statuses}.get(badge.kind)
-    if m2m is None:
-        return
+def _apply_badge_to_location(location: Location, badge: Badge, action: str) -> None:
+    """Add or remove a badge from a location."""
     if action == "add":
-        m2m.add(badge)
+        location.badges.add(badge)
     elif action == "remove":
-        m2m.remove(badge)
+        location.badges.remove(badge)
 
 
 class CategoryPinMembershipView(LoginRequiredMixin, View):
     """Add or remove a badge from a pin (HTMX panel on pin detail page)."""
 
-    def get(self, request, pin_uuid, *args, **kwargs):
+    def get(self, request, pin_slug, *args, **kwargs):
         """Render the badge panel for a pin.
 
         Args:
             request: The HTTP request.
-            pin_uuid: The pin UUID.
+            pin_slug: The pin UUID.
 
         Returns:
             Rendered category_panel.html partial.
         """
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = request.user.profile
         return render(
             request,
@@ -561,17 +528,17 @@ class CategoryPinMembershipView(LoginRequiredMixin, View):
             },
         )
 
-    def post(self, request, pin_uuid, *args, **kwargs):
+    def post(self, request, pin_slug, *args, **kwargs):
         """Add or remove a badge from a pin.
 
         Args:
             request: The HTTP request with POST data (category_id, action).
-            pin_uuid: The pin UUID.
+            pin_slug: The pin UUID.
 
         Returns:
             Rendered category_panel.html partial.
         """
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = request.user.profile
         badge_id = request.POST.get("category_id")
         action = request.POST.get("action")
@@ -591,17 +558,17 @@ class CategoryPinMembershipView(LoginRequiredMixin, View):
 class CategoryLocationMembershipView(LoginRequiredMixin, View):
     """Add or remove a badge from a location (HTMX panel on wiki page)."""
 
-    def get(self, request, location_uuid, *args, **kwargs):
+    def get(self, request, location_slug, *args, **kwargs):
         """Render the badge panel for a location.
 
         Args:
             request: The HTTP request.
-            location_uuid: The location UUID.
+            location_slug: The location UUID.
 
         Returns:
             Rendered category_location_panel.html partial.
         """
-        location = get_object_or_404(Location, uuid=location_uuid)
+        location = get_object_or_404(Location, slug=location_slug)
         profile = request.user.profile
         return render(
             request,
@@ -613,17 +580,17 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
             },
         )
 
-    def post(self, request, location_uuid, *args, **kwargs):
+    def post(self, request, location_slug, *args, **kwargs):
         """Add or remove a badge from a location.
 
         Args:
             request: The HTTP request with POST data (category_id, action).
-            location_uuid: The location UUID.
+            location_slug: The location UUID.
 
         Returns:
             Rendered category_location_panel.html partial.
         """
-        location = get_object_or_404(Location, uuid=location_uuid)
+        location = get_object_or_404(Location, slug=location_slug)
         profile = request.user.profile
         badge_id = request.POST.get("category_id")
         action = request.POST.get("action")
@@ -659,7 +626,7 @@ class CategoryCustomizeView(LoginRequiredMixin, View):
         """
         profile = request.user.profile
         category = get_object_or_404(Badge, id=cat_id, kind="category", profile=profile)
-        available_parents = Badge.objects.categories().for_profile(profile).ordered().exclude(id=cat_id)
+        available_parents = Badge.objects.visible_to(profile).ordered().exclude(id=cat_id)
         parent_ids = set(category.parents.values_list("id", flat=True))
         return render(
             request,

@@ -16,19 +16,19 @@
     </div>
     <div class="trip-detail-header-right">
         {% if viewer_is_organizer %}
-        <button type="button" class="trip-header-btn trip-header-btn--settings"
+        <button type="button" class="btn-icon"
                 title="Trip settings"
                 onclick="document.getElementById('trip-settings-dialog').showModal()">
             <i class="material-icons">settings</i>
         </button>
         {% endif %}
-        <button type="button" class="trip-header-btn trip-header-btn--edit"
+        <button type="button" class="btn-icon"
                 title="Edit trip"
                 onclick="document.getElementById('edit-trip-dialog').showModal()">
             <i class="material-icons">edit</i>
         </button>
         {% if trip.creator == profile %}
-        <button type="button" class="trip-header-btn trip-header-btn--delete"
+        <button type="button" class="btn-icon"
                 title="Delete trip"
                 hx-delete="{% url 'trips.delete' trip.uuid %}"
                 hx-confirm="Permanently delete this trip and all its activities?"

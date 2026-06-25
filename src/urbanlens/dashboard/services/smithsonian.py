@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    smithsonian.py                                                                                       *
-*        Path:    /dashboard/services/smithsonian.py                                                                   *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2024-01-01                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-01-01     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 from dataclasses import dataclass, field
 
 from django.core.cache import cache
@@ -75,12 +49,9 @@ class SmithsonianGateway(Gateway):
     def parse_response(self, data: dict) -> list[dict]:
         images = []
         for record in data.get("response", {}).get("rows", []):
-            media_list = (
-                record.get("content", {})
-                .get("descriptiveNonRepeating", {})
-                .get("online_media", {})
-                .get("media") or [{}]
-            )
+            media_list = record.get("content", {}).get("descriptiveNonRepeating", {}).get("online_media", {}).get(
+                "media",
+            ) or [{}]
             first_media = media_list[0]
             image_data = {
                 "title": record.get("title"),

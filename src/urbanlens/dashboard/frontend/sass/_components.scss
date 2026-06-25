@@ -20,8 +20,8 @@
 }
 
 .ul-card-header {
-	@include panel-header($bg: var(--ul-surface-2));
-	color: var(--ul-text-1);
+	@include panel-header($bg: var(--ul-grey-1));
+	color: var(--ul-grey-8);
 
 	.material-icons {
 		font-size: 1.1rem;
@@ -43,46 +43,78 @@
 .ul-card-footer {
 	padding: $bar-padding-y $bar-padding-x;
 	border-top: 1px solid var(--ul-border);
-	background: var(--ul-surface-2);
+	background: var(--ul-grey-1);
 }
 
-// ── Dialogs ───────────────────────────────────────────────────────────────────
+// ── Global dialog utility classes ─────────────────────────────────────────────
+// These standalone classes are shared by all native <dialog> elements and do
+// not depend on .ul-dialog being a parent.
+
+.dialog-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: .5rem;
+	padding: .75rem 1rem;
+	font-weight: 600;
+	font-size: .95rem;
+	flex-shrink: 0;
+	border-bottom: 1px solid var(--ul-grey-2b);
+}
+
+.dialog-footer {
+	@include dialog-footer;
+}
+
+// Link shown at the bottom of dialogs pointing to a management page.
+// Was previously defined only in dark-mode overrides - now has a light-mode base.
+.dialog-manage-link {
+	font-size: .8rem;
+	color: var(--ul-grey-6);
+	text-decoration: none;
+	margin-right: auto;
+
+	&:hover {
+		color: var(--ul-grey-8);
+		text-decoration: underline;
+	}
+}
+
+.dialog-close {
+	@include icon-btn(28px);
+	outline: none;
+}
+
+.form-row {
+	@include form-row;
+
+	&--two-col {
+		@include form-row;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: $space-sm $space-md;
+	}
+}
+
+// ── Dialog component ──────────────────────────────────────────────────────────
+// Base class for all native <dialog> elements. Feature dialogs set their own
+// width via @include dialog-base($width) and add only feature-specific rules.
 
 .ul-dialog {
-	border: none;
-	border-radius: $radius-md;
-	box-shadow: $shadow-dialog;
-	padding: 0;
-	background: var(--ul-surface-1);
-	color: var(--ul-text-1);
-	width: min(55rem, 90vw);
-	max-width: 90vw;
-	overflow: visible;
-	max-height: 90vh;
+	@include dialog-base;
 
-	&::backdrop {
-		background: rgba(0, 0, 0, .55);
-		backdrop-filter: blur(2px);
-		-webkit-backdrop-filter: blur(2px);
-	}
-
-	&[open] {
-		display: flex;
-		flex-direction: column;
+	label {
+		color: var(--ul-grey-8);
 	}
 
 	.panel-header {
 		@include panel-header($spread: true);
 	}
 
-	.dialog-close {
-		@extend .ul-dialog-close;
+	// Tinted header background is specific to the .ul-dialog shell.
+	.dialog-header {
+		background-color: var(--ul-grey-2);
 	}
-}
-
-.ul-dialog-header {
-	@include panel-header($spread: true);
-	color: var(--ul-text-1);
 }
 
 .ul-dialog-body {
@@ -95,6 +127,7 @@
 	@include dialog-footer;
 }
 
+// Alias kept for backwards-compatibility; prefer .dialog-close going forward.
 .ul-dialog-close {
 	@include icon-btn(28px);
 	outline: none;
@@ -107,8 +140,8 @@
 }
 
 .ul-panel-header {
-	@include panel-header($font-size: .9rem, $bg: var(--ul-surface-2));
-	color: var(--ul-text-1);
+	@include panel-header($font-size: .9rem, $bg: var(--ul-grey-1));
+	color: var(--ul-grey-8);
 
 	i,
 	.material-icons {
@@ -140,9 +173,9 @@
 	gap: $space-sm;
 	padding: .6rem $space-md;
 	border-top: 1px solid var(--ul-border);
-	background: var(--ul-surface-2);
+	background: var(--ul-grey-1);
 	font-size: .82rem;
-	color: var(--ul-text-2);
+	color: var(--ul-grey-7);
 	text-decoration: none;
 	transition: color .12s;
 
@@ -158,13 +191,21 @@
 .ul-panel-empty {
 	padding: 1.25rem;
 	font-size: .88rem;
-	color: var(--ul-text-3);
+	color: var(--ul-grey-6);
 	text-align: center;
 	font-style: italic;
 
 	a {
 		color: $primary-color;
 	}
+}
+
+// ── Spinner ───────────────────────────────────────────────────────────────────
+// Reusable inline spinner for loading states outside of button contexts.
+// For button loading states, use @mixin btn-loading-spinner from _mixins.scss.
+
+.ul-spinner {
+	@include spinner;
 }
 
 // ── Badges ────────────────────────────────────────────────────────────────────
@@ -182,33 +223,39 @@
 	white-space: nowrap;
 
 	&--primary {
-		background: rgba($primary-color, .12);
-		color: $primary-color;
-		border-color: rgba($primary-color, .25);
+		background: $primary-color;
+		color: $color-blue-1700;
+		border-color: color.scale($primary-color, $lightness: -10%);
 	}
 
 	&--success {
 		background: $success-bg;
-		color: $success-color;
-		border-color: color.adjust($success-bg, $lightness: -12%);
+		color: $color-green-1700;
+		border-color: color.adjust($success-bg, $lightness: -10%);
 	}
 
 	&--warning {
 		background: $warning-bg;
-		color: $warning-color;
-		border-color: color.adjust($warning-bg, $lightness: -12%);
+		color: $color-amber-1700;
+		border-color: color.adjust($warning-bg, $lightness: -10%);
 	}
 
 	&--danger {
 		background: $danger-bg;
-		color: $danger-color;
-		border-color: $danger-border;
+		color: $color-red-1700;
+		border-color: color.scale($danger-color, $lightness: -10%);
 	}
 
 	&--neutral {
-		background: var(--ul-surface-3);
-		color: var(--ul-text-2);
+		background: var(--ul-grey-4);
+		color: var(--ul-black);
 		border-color: var(--ul-border);
+	}
+
+	&--accent-1 {
+		background: $color-yellow-500;
+		color: $color-yellow-1700;
+		border-color: $color-yellow-700;
 	}
 }
 
@@ -226,14 +273,18 @@
 	@include dropdown-item;
 
 	&--danger {
-		color: $danger-color;
+		color: $color-red-1300;
 
 		.material-icons {
-			color: $danger-color;
+			color: $color-red-1300;
 		}
 
 		&:hover {
 			background: $danger-bg;
+
+			.material-icons {
+				color: $color-red-1500;
+			}
 		}
 	}
 }
@@ -256,7 +307,7 @@
 	padding: .55rem 1.1rem;
 	font-size: .875rem;
 	font-weight: 500;
-	color: var(--ul-text-3);
+	color: var(--ul-grey-6);
 	border: none;
 	background: none;
 	cursor: pointer;
@@ -273,7 +324,7 @@
 	}
 
 	&:hover {
-		color: var(--ul-text-1);
+		color: var(--ul-grey-8);
 	}
 
 	&--active,
@@ -319,27 +370,27 @@
 	}
 
 	&--info {
-		background: rgba($primary-color, .08);
-		color: $primary-color;
-		border-color: rgba($primary-color, .2);
+		background: $color-blue-100;
+		color: $color-blue-900;
+		border-color: $color-blue-300;
 	}
 
 	&--success {
-		background: $success-bg;
-		color: $success-color;
-		border-color: color.adjust($success-bg, $lightness: -12%);
+		background: $color-green-100;
+		color: $color-green-900;
+		border-color: $color-green-300;
 	}
 
 	&--warning {
-		background: $warning-bg;
-		color: $warning-color;
-		border-color: color.adjust($warning-bg, $lightness: -12%);
+		background: $color-amber-100;
+		color: $color-amber-900;
+		border-color: $color-amber-300;
 	}
 
 	&--danger {
-		background: $danger-bg;
-		color: $danger-color;
-		border-color: $danger-border;
+		background: $color-red-100;
+		color: $color-red-900;
+		border-color: $color-red-300;
 	}
 }
 
@@ -353,9 +404,9 @@
 	border-radius: $radius-full;
 	font-size: .8rem;
 	font-weight: 500;
-	background: var(--ul-surface-3);
-	border: 1px solid var(--ul-border);
-	color: var(--ul-text-2);
+	background: var(--ul-grey-4);
+	border: 1px solid var(--ul-grey-2b);
+	color: var(--ul-grey-8);
 	line-height: 1.4;
 
 	.material-icons {
@@ -367,10 +418,66 @@
 		transition: background .12s, border-color .12s;
 
 		&:hover {
-			background: var(--ul-surface-2);
+			background: var(--ul-grey-1);
 			border-color: var(--ul-border-strong);
 		}
 	}
 }
 
-// About page styles → _about.scss
+.ul-radio-button {
+	display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .3rem;
+    padding: .75em 1.25em;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+	background-color: var(--ul-grey-0);
+    border: 2px solid var(--ul-grey-2b);
+    transition: border-color .15s, background .15s;
+    min-width: 80px;
+	opacity: 0.8;
+
+    input[type="radio"] {
+        display: none;
+    }
+    .material-icons {
+        font-size: 1.6rem;
+        color: var(--ul-grey-6);
+        transition: color .15s;
+    }
+
+    &.active,
+    &:has(input:checked) {
+        color: #{$color-indigo-500};
+		background-color: var(--ul-grey-1a);
+		border-color: #{$color-indigo-500};
+		opacity: 1;
+
+        .material-icons {
+			color: #{$color-indigo-500};
+        }
+    }
+
+    &:hover:not(.active) {
+		opacity: 1;
+        background-color: var(--ul-grey-0b);
+		border-color: var(--ul-grey-4);
+    }
+}
+
+// - Dark Mode
+[data-theme="dark"] {
+	
+	.ul-dropdown-item {
+		&--danger {
+			color: $color-red-100;
+			
+			.material-icons {
+				color: $color-red-100;
+			}
+		}
+	}
+}

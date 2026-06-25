@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    model.py                                                                                             *
-*        Path:    /dashboard/models/profile/model.py                                                                   *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 from __future__ import annotations
 
 import math
@@ -41,10 +15,12 @@ from django.db.models import (
     Index,
     IntegerField,
     OneToOneField,
+    SlugField,
     TextChoices,
     TextField,
     UUIDField,
 )
+from django.utils.text import slugify
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.profile.queryset import Manager
@@ -67,7 +43,7 @@ def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
 class VisibilityChoice(TextChoices):
     """Who can see a particular piece of profile data, or who can perform an action."""
 
-    ANYONE = "anyone", "Anyone"
+    ANYONE = "anyone", "Anyone (Logged In)"
     FRIENDS = "friends", "Friends Only"
     COMMON_PIN = "common_pin", "Users with a pin in common"
     COMMON_FRIEND = "common_friend", "Users with a friend in common"
@@ -79,6 +55,7 @@ class MapViewChoice(TextChoices):
     STREET = "street", "Street"
     SATELLITE = "satellite", "Satellite"
     TOPOGRAPHIC = "topographic", "Topographic"
+    REMEMBER = "remember", "Remember"
 
 
 class MapCenterMode(TextChoices):
@@ -88,9 +65,18 @@ class MapCenterMode(TextChoices):
     REMEMBER = "remember", "Remember last position"
 
 
+class ThemeChoice(TextChoices):
+    SYSTEM = "system", "System (follows your OS)"
+    LIGHT = "light", "Light"
+    DARK = "dark", "Dark"
+
+
 class Profile(abstract.Model):
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
+    # URL slug - globally unique. Auto-generated from username on first save.
+    slug = SlugField(max_length=150, null=True, blank=True, unique=True)
     avatar = ImageField(upload_to="avatars/", null=True, blank=True)
+    profile_setup_complete = BooleanField(default=True)
     bio = TextField(null=True, blank=True)
     area = CharField(max_length=255, null=True, blank=True)
     birth_date = DateField(null=True, blank=True)
@@ -134,8 +120,36 @@ class Profile(abstract.Model):
         ),
     )
 
+    # Contact information and its visibility
+    phone_number = CharField(max_length=30, blank=True, default="")
+    signal_username = CharField(max_length=100, blank=True, default="")
+    discord_username = CharField(max_length=100, blank=True, default="")
+    whatsapp_number = CharField(max_length=30, blank=True, default="")
+    telegram_username = CharField(max_length=100, blank=True, default="")
+    matrix_handle = CharField(max_length=200, blank=True, default="")
+    contact_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.FRIENDS,
+        help_text="Who can see your contact methods (phone, Signal, Discord, etc.).",
+    )
+
     # Style preferences
-    dark_mode = BooleanField(default=False)
+    theme_mode = CharField(
+        max_length=10,
+        choices=ThemeChoice.choices,
+        default=ThemeChoice.SYSTEM,
+    )
+    hide_tooltips = BooleanField(
+        default=False,
+        help_text="When enabled, hover/focus tooltips are hidden across the entire site.",
+    )
+    map_dark_mode = CharField(
+        max_length=10,
+        choices=ThemeChoice.choices,
+        default=ThemeChoice.LIGHT,
+        help_text="When to apply a dark tile layer on the map. System follows your OS preference. Satellite is always unaffected.",
+    )
     default_map_view = CharField(
         max_length=20,
         choices=MapViewChoice.choices,
@@ -201,6 +215,25 @@ class Profile(abstract.Model):
     @property
     def full_name(self):
         return self.user.get_full_name()
+
+    def _generate_slug(self) -> str:
+        """Derive a slug that is globally unique across all profiles."""
+        base = slugify(self.user.username)[:145] or "user"
+        candidate = base
+        n = 2
+        qs = Profile.objects.all()
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+        while qs.filter(slug=candidate).exists():
+            candidate = f"{base}-{n}"
+            n += 1
+        return candidate
+
+    def save(self, *args, **kwargs) -> None:
+        """Auto-generate a unique slug from the username if not already set."""
+        if not self.slug:
+            self.slug = self._generate_slug()
+        super().save(*args, **kwargs)
 
     def compute_map_center(self) -> tuple[float, float] | None:
         """Find the densest geographic cluster of pins and return its centroid.
@@ -353,6 +386,63 @@ class Profile(abstract.Model):
             return False
         # This viewer's filter must allow the uploader.
         return _check(self.viewer_photo_filter, self, uploader)
+
+    def can_view_contact_info(self, viewer: Profile | None) -> bool:
+        """Return True if viewer may see this profile's contact methods.
+
+        Args:
+            viewer: The profile requesting access, or None for anonymous visitors.
+
+        Returns:
+            True when the viewer passes the contact_visibility setting.
+        """
+        if viewer is not None and self.pk == viewer.pk:
+            return True
+
+        def _ck(visibility: str, subject: Profile, other: Profile) -> bool:
+            if visibility == VisibilityChoice.ANYONE:
+                return True
+            if visibility == VisibilityChoice.NO_ONE:
+                return False
+            if visibility == VisibilityChoice.FRIENDS:
+                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+                return Friendship.objects.filter(
+                    models.Q(from_profile=subject, to_profile=other) | models.Q(from_profile=other, to_profile=subject),
+                    status=FriendshipStatus.ACCEPTED,
+                ).exists()
+            if visibility == VisibilityChoice.COMMON_PIN:
+                from urbanlens.dashboard.models.pin.model import Pin
+
+                my_locs = set(Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True))
+                their_locs = set(Pin.objects.filter(profile=other, location__isnull=False).values_list("location_id", flat=True))
+                return bool(my_locs & their_locs)
+            if visibility == VisibilityChoice.COMMON_FRIEND:
+                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+                accepted = FriendshipStatus.ACCEPTED
+                my_friends = (
+                    set(Friendship.objects.filter(from_profile=subject, status=accepted).values_list("to_profile_id", flat=True))
+                    | set(Friendship.objects.filter(to_profile=subject, status=accepted).values_list("from_profile_id", flat=True))
+                )
+                their_friends = (
+                    set(Friendship.objects.filter(from_profile=other, status=accepted).values_list("to_profile_id", flat=True))
+                    | set(Friendship.objects.filter(to_profile=other, status=accepted).values_list("from_profile_id", flat=True))
+                )
+                return bool(my_friends & their_friends)
+            if visibility == VisibilityChoice.COMMON_TRIP:
+                from urbanlens.dashboard.models.trips.model import TripMembership
+
+                my_trips = set(TripMembership.objects.filter(profile=subject).values_list("trip_id", flat=True))
+                their_trips = set(TripMembership.objects.filter(profile=other).values_list("trip_id", flat=True))
+                return bool(my_trips & their_trips)
+            return False
+
+        if self.contact_visibility == VisibilityChoice.ANYONE:
+            return True
+        if viewer is None:
+            return False
+        return _ck(self.contact_visibility, self, viewer)
 
     def __str__(self):
         return self.username

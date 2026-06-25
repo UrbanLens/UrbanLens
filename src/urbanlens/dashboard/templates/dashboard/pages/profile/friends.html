@@ -5,7 +5,7 @@
 
     {# ── Page header ──────────────────────────────────────────────────────────── #}
     <div class="friends-page-header">
-        <a href="{% url 'profile.view_user' profile.uuid %}" class="friends-back-link">
+        <a href="{% url 'profile.view_user' profile.slug %}" class="friends-back-link">
             <i class="material-icons">arrow_back</i>
             {% if is_own_profile %}My Profile{% else %}{{ profile.full_name|default:profile.username }}'s Profile{% endif %}
         </a>
@@ -43,7 +43,7 @@
                 <div class="invite-form-row">
                     <input type="email" name="email" class="invite-email-input"
                            placeholder="friend@example.com" required autocomplete="email">
-                    <button type="submit" class="btn-primary">
+                    <button type="submit" class="btn btn--primary">
                         <i class="material-icons">send</i> Send
                     </button>
                 </div>
@@ -70,7 +70,7 @@
                 <div class="friend-avatar friend-avatar-placeholder">{{ req.from_profile.username|first|upper }}</div>
                 {% endif %}
                 <div class="friend-request-info">
-                    <a href="{% url 'profile.view_user' req.from_profile.uuid %}" class="friend-request-name">
+                    <a href="{% url 'profile.view_user' req.from_profile.slug %}" class="friend-request-name">
                         {{ req.from_profile.full_name|default:req.from_profile.username }}
                     </a>
                     <span class="friend-request-sub">@{{ req.from_profile.username }}</span>
@@ -111,7 +111,7 @@
         <ul class="friend-grid friend-grid--page">
             {% for friend in friends %}
             <li class="friend-card friend-card--page">
-                <a href="{% url 'profile.view_user' friend.uuid %}" class="friend-card-link">
+                <a href="{% url 'profile.view_user' friend.slug %}" class="friend-card-link">
                     {% if friend.avatar %}
                     <img class="friend-avatar" src="{{ friend.avatar.url }}" alt="{{ friend.username }}">
                     {% else %}

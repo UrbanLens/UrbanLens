@@ -6,12 +6,14 @@ import contextlib
 from decimal import Decimal
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
+from PIL import Image as PILImage
+from PIL.ExifTags import GPSTAGS
 
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
@@ -24,26 +26,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _extract_gps_coords(image_file) -> tuple[float, float] | None:
+def _get_gps_ifd(image_file: IO[bytes]) -> dict[int, Any] | None:
+    """Return the raw EXIF GPS IFD for an image file, if present."""
+    image_file.seek(0)
+    img = PILImage.open(image_file)
+    exif = img.getexif()
+    if not exif:
+        return None
+    return exif.get_ifd(0x8825) or None  # 34853 - GPSInfo IFD tag
+
+
+def _extract_gps_coords(image_file: IO[bytes]) -> tuple[float, float] | None:
     """Return (latitude, longitude) from EXIF GPS tags, or None if not present."""
     try:
-        from PIL import Image as PILImage
-        from PIL.ExifTags import GPSTAGS
-
-        image_file.seek(0)
-        img = PILImage.open(image_file)
-        exif = img.getexif()
-        if not exif:
-            return None
-        gps_ifd = exif.get_ifd(0x8825)  # 34853 - GPSInfo IFD tag
-        if not gps_ifd:
-            return None
-        gps_data = {GPSTAGS.get(k, k): v for k, v in gps_ifd.items()}
-        if "GPSLatitude" not in gps_data or "GPSLongitude" not in gps_data:
-            return None
-        lat = _dms_to_decimal(gps_data["GPSLatitude"], gps_data.get("GPSLatitudeRef", "N"))
-        lng = _dms_to_decimal(gps_data["GPSLongitude"], gps_data.get("GPSLongitudeRef", "E"))
-        return lat, lng
+        gps_ifd = _get_gps_ifd(image_file)
     except Exception as exc:
         logger.debug("EXIF GPS extraction failed: %s", exc)
         return None
@@ -51,8 +47,17 @@ def _extract_gps_coords(image_file) -> tuple[float, float] | None:
         with contextlib.suppress(Exception):
             image_file.seek(0)
 
+    if not gps_ifd:
+        return None
+    gps_data = {GPSTAGS.get(k, k): v for k, v in gps_ifd.items()}
+    if "GPSLatitude" not in gps_data or "GPSLongitude" not in gps_data:
+        return None
+    lat = _dms_to_decimal(gps_data["GPSLatitude"], gps_data.get("GPSLatitudeRef", "N"))
+    lng = _dms_to_decimal(gps_data["GPSLongitude"], gps_data.get("GPSLongitudeRef", "E"))
+    return lat, lng
 
-def _dms_to_decimal(dms, ref: str) -> float:
+
+def _dms_to_decimal(dms: tuple[float, ...], ref: str) -> float:
     """Convert a DMS tuple from EXIF to a signed decimal degree."""
     degrees, minutes, seconds = (float(x) for x in dms)
     decimal = degrees + minutes / 60.0 + seconds / 3600.0
@@ -80,19 +85,19 @@ def _image_to_json(img: Image, request: HttpRequest, viewer_profile: Profile | N
 class PinGalleryView(LoginRequiredMixin, View):
     """HTML gallery panel for the pin detail page (loaded via HTMX)."""
 
-    def _get_context(self, request: HttpRequest, pin_uuid: str) -> dict:
-        pin = get_object_or_404(Pin, uuid=pin_uuid)
+    def _get_context(self, request: HttpRequest, pin_slug: str) -> dict:
+        pin = get_object_or_404(Pin, slug=pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(pin=pin).select_related("profile").visible_to(profile)
         return {"pin": pin, "images": images, "profile": profile, "context_type": "pin"}
 
-    def get(self, request: HttpRequest, pin_uuid: str) -> HttpResponse:
-        ctx = self._get_context(request, pin_uuid)
+    def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
+        ctx = self._get_context(request, pin_slug)
         return render(request, "dashboard/partials/_photo_gallery.html", ctx)
 
-    def post(self, request: HttpRequest, pin_uuid: str) -> JsonResponse:
+    def post(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
         """Upload an image to a pin."""
-        pin = get_object_or_404(Pin, uuid=pin_uuid)
+        pin = get_object_or_404(Pin, slug=pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
         if not image_file:
@@ -117,8 +122,8 @@ class PinGalleryView(LoginRequiredMixin, View):
 class PinGalleryJsonView(LoginRequiredMixin, View):
     """JSON endpoint for the pin photo map layer."""
 
-    def get(self, request: HttpRequest, pin_uuid: str) -> JsonResponse:
-        pin = get_object_or_404(Pin, uuid=pin_uuid)
+    def get(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
+        pin = get_object_or_404(Pin, slug=pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(pin=pin).select_related("profile").visible_to(profile).with_coords()
         data = [_image_to_json(img, request, profile) for img in images]
@@ -128,12 +133,12 @@ class PinGalleryJsonView(LoginRequiredMixin, View):
 class PinImageView(LoginRequiredMixin, View):
     """Reposition or delete a single image on a pin."""
 
-    def _get_image(self, image_id: int, pin_uuid: str) -> Image:
-        return get_object_or_404(Image, pk=image_id, pin__uuid=pin_uuid)
+    def _get_image(self, image_id: int, pin_slug: str) -> Image:
+        return get_object_or_404(Image, pk=image_id, pin__slug=pin_slug)
 
-    def post(self, request: HttpRequest, pin_uuid: str, image_id: int) -> JsonResponse:
+    def post(self, request: HttpRequest, pin_slug: str, image_id: int) -> JsonResponse:
         """Update lat/lng when the user drags the photo marker on the map."""
-        img = self._get_image(image_id, pin_uuid)
+        img = self._get_image(image_id, pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404
@@ -146,8 +151,8 @@ class PinImageView(LoginRequiredMixin, View):
             return JsonResponse({"error": str(exc)}, status=400)
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
-    def delete(self, request: HttpRequest, pin_uuid: str, image_id: int) -> HttpResponse:
-        img = self._get_image(image_id, pin_uuid)
+    def delete(self, request: HttpRequest, pin_slug: str, image_id: int) -> HttpResponse:
+        img = self._get_image(image_id, pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404
@@ -162,18 +167,18 @@ class PinImageView(LoginRequiredMixin, View):
 class WikiGalleryView(LoginRequiredMixin, View):
     """HTML gallery panel for the location wiki page."""
 
-    def _get_context(self, request: HttpRequest, location_uuid: str) -> dict:
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def _get_context(self, request: HttpRequest, location_slug: str) -> dict:
+        location = get_object_or_404(Location, slug=location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(location=location).select_related("profile").visible_to(profile)
         return {"location": location, "images": images, "profile": profile, "context_type": "wiki"}
 
-    def get(self, request: HttpRequest, location_uuid: str) -> HttpResponse:
-        ctx = self._get_context(request, location_uuid)
+    def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        ctx = self._get_context(request, location_slug)
         return render(request, "dashboard/partials/_photo_gallery.html", ctx)
 
-    def post(self, request: HttpRequest, location_uuid: str) -> JsonResponse:
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
+        location = get_object_or_404(Location, slug=location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
         if not image_file:
@@ -197,8 +202,8 @@ class WikiGalleryView(LoginRequiredMixin, View):
 class WikiGalleryJsonView(LoginRequiredMixin, View):
     """JSON endpoint for the wiki photo map layer."""
 
-    def get(self, request: HttpRequest, location_uuid: str) -> JsonResponse:
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def get(self, request: HttpRequest, location_slug: str) -> JsonResponse:
+        location = get_object_or_404(Location, slug=location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(location=location).select_related("profile").visible_to(profile).with_coords()
         data = [_image_to_json(img, request, profile) for img in images]
@@ -208,11 +213,11 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
 class WikiImageView(LoginRequiredMixin, View):
     """Reposition or delete a single image on a location wiki."""
 
-    def _get_image(self, image_id: int, location_uuid: str) -> Image:
-        return get_object_or_404(Image, pk=image_id, location__uuid=location_uuid)
+    def _get_image(self, image_id: int, location_slug: str) -> Image:
+        return get_object_or_404(Image, pk=image_id, location__slug=location_slug)
 
-    def post(self, request: HttpRequest, location_uuid: str, image_id: int) -> JsonResponse:
-        img = self._get_image(image_id, location_uuid)
+    def post(self, request: HttpRequest, location_slug: str, image_id: int) -> JsonResponse:
+        img = self._get_image(image_id, location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404
@@ -225,8 +230,8 @@ class WikiImageView(LoginRequiredMixin, View):
             return JsonResponse({"error": str(exc)}, status=400)
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
-    def delete(self, request: HttpRequest, location_uuid: str, image_id: int) -> HttpResponse:
-        img = self._get_image(image_id, location_uuid)
+    def delete(self, request: HttpRequest, location_slug: str, image_id: int) -> HttpResponse:
+        img = self._get_image(image_id, location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404

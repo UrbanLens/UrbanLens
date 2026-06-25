@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    maps.py                                                                                              *
-*        Path:    /dashboard/services/google/maps.py                                                                   *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2024-01-01                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2024-01-17     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 from __future__ import annotations
 
 import csv
@@ -38,6 +12,7 @@ from fastkml import kml
 import requests
 from tqdm import tqdm
 
+from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.services.gateway import Gateway
@@ -106,6 +81,14 @@ class GoogleMapsGateway(Gateway):
         """
         Get a satellite view image for the given latitude and longitude.
         """
+        from django.core.cache import cache
+
+        THIRTY_DAYS = 30 * 24 * 3600
+        cache_key = f"satellite_view_{float(latitude):.6f}_{float(longitude):.6f}_{zoom}_{size}_{maptype}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         static_map_url = "https://maps.googleapis.com/maps/api/staticmap"
         params = {
             "center": f"{latitude},{longitude}",
@@ -116,7 +99,8 @@ class GoogleMapsGateway(Gateway):
         }
         response = self.session.get(static_map_url, params=params)
         response.raise_for_status()
-        return response.content  # Returns the raw bytes of the image
+        cache.set(cache_key, response.content, THIRTY_DAYS)
+        return response.content
 
     def get_street_view(
         self,
@@ -268,7 +252,7 @@ class GoogleMapsGateway(Gateway):
                 continue
             try:
                 latitude, longitude = gateway.extract_coordinates_from_url(url)
-            except Exception as exc:
+            except ValueError as exc:
                 logger.warning("Failed to extract coordinates from URL %s: %s", url, exc)
                 yield None
                 continue
@@ -424,7 +408,7 @@ class GoogleMapsGateway(Gateway):
                                 else:
                                     exists_count += 1
                                 if tags:
-                                    pin.tags.add(*tags)
+                                    pin.badges.add(*tags)
                                 if file_pins is not None:
                                     file_pins.append(pin)
                                 # Backfill: if the import carried a CID but no existing
@@ -457,13 +441,16 @@ class GoogleMapsGateway(Gateway):
                 # Apply a per-file tag to every pin produced from this file.
                 if file_pins:
                     from urbanlens.dashboard.models.badges.model import Badge
+
                     tag_name = _filename_stem(filename)
                     file_tag = Badge.objects.filter(
-                        profile=user_profile, name__iexact=tag_name,
+                        profile=user_profile,
+                        name__iexact=tag_name,
                     ).first() or Badge.objects.create(profile=user_profile, name=tag_name)
                     for pin in file_pins:
-                        pin.tags.add(file_tag)
+                        pin.badges.add(file_tag)
         except Exception as exc:
+            # TODO: specify exception type
             logger.exception("Unexpected error during streaming import: %s", exc)
             yield sse({"type": "error", "message": f"Import failed unexpectedly: {exc}"})
             return
@@ -483,6 +470,229 @@ class GoogleMapsGateway(Gateway):
         # the frontend can distinguish them from the pin-import events above.
         if location_history_files:
             yield from import_location_history_streaming(location_history_files, user_profile)
+
+    def parse_for_preview(
+        self,
+        files: list[tuple[str, bytes]],
+        user_profile: Profile,
+    ) -> list[dict[str, Any]]:
+        """Parse uploaded files without importing, returning serialisable preview data.
+
+        Args:
+            files: List of ``(filename, raw_bytes)`` pairs (archives already expanded).
+            user_profile: The profile associated with the import (used by CSV geocoding).
+
+        Returns:
+            List of dicts, one per file, each with keys:
+                - ``stem`` (str): filename without extension, used as list/category name.
+                - ``pins`` (list[dict]): serialisable pin dicts with keys
+                  ``name``, ``lat``, ``lng``, ``description``, ``cid``.
+        """
+        from urbanlens.dashboard.services.archive_extractor import validate_content_type
+
+        result: list[dict[str, Any]] = []
+        for filename, raw_bytes in files:
+            fmt = validate_content_type(filename, raw_bytes)
+            if fmt is None or fmt == "location_history":
+                continue
+
+            stem = _filename_stem(filename)
+            try:
+                text = raw_bytes.decode("utf-8")
+                if fmt == "json":
+                    raw_pins: list[dict[str, Any]] = self.takeout_json_to_dict(text, user_profile)
+                elif fmt == "kml":
+                    raw_pins = self.takeout_kml_to_dict(text, user_profile)
+                elif fmt == "csv":
+                    raw_pins = list[dict[str, Any]](self._csv_row_iter(text, user_profile))
+                else:
+                    continue
+            except Exception as exc:
+                # TODO: specify exception type
+                logger.warning("Failed to parse '%s' for preview: %s", filename, exc)
+                continue
+
+            pins: list[dict[str, Any]] = []
+            for p in raw_pins:
+                if p is None:
+                    continue
+                lat = p.get("latitude")
+                lng = p.get("longitude")
+                if lat is None or lng is None:
+                    continue
+                pins.append(
+                    {
+                        "name": (p.get("name") or p.get("nickname") or "")[:255],
+                        "lat": float(lat),
+                        "lng": float(lng),
+                        "description": (p.get("description") or "")[:500],
+                        "cid": p.get("cid"),
+                    },
+                )
+
+            if pins:
+                result.append({"stem": stem, "pins": pins})
+
+        return result
+
+    def import_preview_streaming(
+        self,
+        confirmed_lists: list[dict[str, Any]],
+        user_profile: Profile,
+        auto_tag: bool = True,
+    ):
+        r"""Stream import events for user-confirmed pin selections from the preview step.
+
+        Each ``confirmed_lists`` entry must have:
+            - ``stem`` (str): list name used for category creation.
+            - ``create_category`` (bool): create a ``kind="category"`` badge from *stem*.
+            - ``badge_ids`` (list[int]): badge IDs to apply to every pin in the list.
+            - ``pins`` (list[dict]): dicts with ``name``, ``lat``, ``lng``,
+              ``description``, ``cid``, ``badge_ids`` (list[int]), and optionally
+              ``is_private`` (bool) fields.  Private pins are never linked to a
+              shared Location and do not create a community wiki entry.
+
+        Yields:
+            str: SSE-formatted data lines (same event shapes as ``import_pins_streaming``).
+
+        Args:
+            confirmed_lists: User-confirmed selection from the preview step.
+            user_profile: Profile to import pins for.
+        """
+
+        def sse(data: dict) -> str:
+            return f"data: {json.dumps(data)}\n\n"
+
+        total = sum(len(lst.get("pins", [])) for lst in confirmed_lists)
+        if total == 0:
+            yield sse({"type": "error", "message": "No pins selected for import."})
+            return
+
+        yield sse({"type": "start", "total": total})
+
+        created_count = 0
+        exists_count = 0
+        skipped_count = 0
+        current = 0
+
+        try:
+            for lst in confirmed_lists:
+                stem = lst.get("stem", "")
+                list_badge_ids = lst.get("badge_ids") or []
+                create_category = bool(lst.get("create_category", False))
+
+                list_badges = list(Badge.objects.filter(id__in=list_badge_ids)) if list_badge_ids else []
+
+                category_badge = None
+                if create_category and stem:
+                    category_badge, _ = Badge.objects.get_or_create(
+                        profile=user_profile,
+                        name__iexact=stem,
+                        defaults={"name": stem, "kind": "category"},
+                    )
+
+                for pin_dict in lst.get("pins", []):
+                    current += 1
+                    pin_name = (pin_dict.get("name") or "")[:255]
+                    lat = pin_dict.get("lat")
+                    lng = pin_dict.get("lng")
+                    description = pin_dict.get("description") or ""
+                    cid = pin_dict.get("cid")
+                    pin_badge_ids = pin_dict.get("badge_ids") or []
+                    is_private = bool(pin_dict.get("is_private", False))
+
+                    try:
+                        # Private pins are never linked to a shared Location.
+                        location = (
+                            None
+                            if is_private
+                            else (Location.objects.by_cid(cid).first() if cid else None)
+                        )
+
+                        pin_defaults: dict[str, Any] = {
+                            "profile": user_profile,
+                            "nickname": pin_name,
+                            "description": description,
+                            "is_private": is_private,
+                        }
+
+                        if location:
+                            pin_defaults["location"] = location
+                            lookup_lat = location.latitude
+                            lookup_lon = location.longitude
+                        else:
+                            pin_defaults["latitude"] = lat
+                            pin_defaults["longitude"] = lng
+                            lookup_lat = lat
+                            lookup_lon = lng
+
+                        pin, created = Pin.objects.get_nearby_or_create(
+                            latitude=lookup_lat,
+                            longitude=lookup_lon,
+                            profile=user_profile,
+                            defaults=pin_defaults,
+                        )
+
+                        if pin:
+                            if created:
+                                created_count += 1
+                                if auto_tag:
+                                    try:
+                                        pin.suggest_category(append_suggestion=True)
+                                    except Exception:
+                                        # TODO: Handle specific exception type.
+                                        logger.warning("suggest_category failed for pin %s", pin.pk, exc_info=True)
+                            else:
+                                exists_count += 1
+
+                            if list_badges:
+                                pin.badges.add(*list_badges)
+                            if category_badge:
+                                pin.badges.add(category_badge)
+                            if pin_badge_ids:
+                                extra = list(Badge.objects.filter(id__in=pin_badge_ids))
+                                if extra:
+                                    pin.badges.add(*extra)
+
+                            if cid and not location and pin.location_id and not pin.location.cid:
+                                pin.location.cid = cid
+                                pin.location.save(update_fields=["cid"])
+                        else:
+                            skipped_count += 1
+
+                    except Exception as exc:
+                        # TODO: Handle specific exception type.
+                        logger.warning("Failed to import pin '%s': %s", pin_name, exc)
+                        skipped_count += 1
+
+                    percent = min(100, int(current / total * 100)) if total > 0 else 100
+                    yield sse(
+                        {
+                            "type": "progress",
+                            "current": current,
+                            "total": total,
+                            "percent": percent,
+                            "created": created_count,
+                            "exists": exists_count,
+                            "skipped": skipped_count,
+                            "name": pin_name,
+                        },
+                    )
+
+        except Exception as exc:
+            logger.exception("Unexpected error during preview import: %s", exc)
+            yield sse({"type": "error", "message": f"Import failed unexpectedly: {exc}"})
+            return
+
+        yield sse(
+            {
+                "type": "complete",
+                "total": total,
+                "created": created_count,
+                "exists": exists_count,
+                "skipped": skipped_count,
+            },
+        )
 
     def takeout_kml_to_dict(self, file_contents: str, user_profile: Profile) -> list[dict[str, Any]]:
         try:

@@ -4,7 +4,7 @@
 // ── Pin list membership panel (on pin detail page) ───────────────────────────
 
 .pinlist-panel {
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     overflow: hidden;
@@ -15,11 +15,11 @@
     align-items: center;
     gap: 8px;
     padding: 0.75rem 1rem;
-    background: var(--ul-surface-2);
+    background: var(--ul-grey-1);
     border-bottom: 1px solid var(--ul-border);
     font-weight: 600;
     font-size: 0.9rem;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
 
     i {
         font-size: 1.1rem;
@@ -50,7 +50,7 @@
     }
 
     &.is-member {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
     }
 }
 
@@ -58,7 +58,7 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -103,7 +103,7 @@
     }
 
     &:hover {
-        background: #e3f2fd;
+        background: $color-blue-50;
         color: $primary-color;
     }
 
@@ -132,7 +132,7 @@
     color: $text-secondary;
     text-decoration: none;
     border-top: 1px solid var(--ul-border);
-    background: var(--ul-surface-2);
+    background: var(--ul-grey-1);
     transition: color 0.12s;
 
     i {
@@ -147,7 +147,7 @@
 // ── Tags (replaces pin lists) ─────────────────────────────────────────────────
 
 
-.tag-header {
+.badge-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -155,10 +155,10 @@
     gap: 1rem;
     margin-bottom: 1.75rem;
 
-    .tag-title {
+    .badge-title {
         font-size: 1.6rem;
         font-weight: 700;
-        color: $text-primary;
+        color: var(--ul-grey-9);
         margin: 0 0 0.25rem;
     }
 
@@ -171,8 +171,8 @@
 
 // Create card
 .tag-create-card {
-    background: var(--ul-surface-1);
-    border: 1px solid var(--ul-border);
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-0b);
     border-radius: $radius-md;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
@@ -180,8 +180,8 @@
 
 // Tag cards
 .tag-card {
-    background: var(--ul-surface-1);
-    border: 1px solid var(--ul-border);
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-0b);
     border-radius: $radius-md;
     margin-bottom: 0.75rem;
     overflow: hidden;
@@ -192,6 +192,7 @@
     align-items: center;
     gap: 1rem;
     padding: 0.9rem 1rem;
+    background: var(--ul-grey-0a);
 }
 
 .tag-card-icon {
@@ -269,7 +270,7 @@
     font-size: 0.78rem;
     font-weight: 500;
     color: $text-secondary;
-    background: var(--ul-surface-3);
+    background: var(--ul-grey-4);
     border-radius: 999px;
     padding: 2px 7px 2px 5px;
     border: 1px solid var(--ul-border);
@@ -281,8 +282,8 @@
 
     &.tag-stat--children {
         color: $primary-color;
-        background: #eff6ff;
-        border-color: #bfdbfe;
+        background: var(--ul-grey-0a);
+        border-color: $ui-blue-200;
 
         i {
             opacity: 1;
@@ -291,7 +292,7 @@
 
     &.tag-stat--total {
         color: $text-secondary;
-        background: var(--ul-surface-2);
+        background: var(--ul-grey-1);
         border-color: var(--ul-border);
         font-style: italic;
     }
@@ -318,16 +319,34 @@
     font-size: 0.7rem;
     font-weight: 500;
     color: $text-muted;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     border-radius: 4px;
     padding: 1px 5px;
+
+    // Lock-icon-only variant used for protected system items
+    &--protected {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 3px;
+        opacity: 0.45;
+        transition: opacity .15s;
+
+        .material-icons {
+            font-size: 0.8rem;
+            line-height: 1;
+        }
+
+        &:hover {
+            opacity: 0.75;
+        }
+    }
 }
 
 .tag-customized-badge {
     font-size: 0.7rem;
     font-weight: 500;
-    color: var(--ul-text-4);
-    background: #7c63d4;
+    color: var(--ul-grey-5);
+    background: var(--ul-accent-purple);
     border-radius: 4px;
     padding: 1px 5px;
 }
@@ -440,7 +459,7 @@
 }
 
 .color-clear {
-    background: var(--ul-surface-1) !important;
+    background: var(--ul-grey-0) !important;
     color: $text-muted;
 
     i {
@@ -477,17 +496,17 @@
     padding: 3px 8px;
     border-radius: 20px;
     border: 1px solid var(--ul-border);
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
 
     &:hover {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
     }
 
     &:has(input:checked) {
-        background: #dbeafe;
-        border-color: #93c5fd;
-        color: #1d4ed8;
+        background: $ui-blue-100;
+        border-color: $ui-blue-300;
+        color: $ui-blue-700;
         font-weight: 600;
         box-shadow: 0 0 0 2px rgba(59, 130, 246, .15);
     }
@@ -495,70 +514,32 @@
     input {
         margin: 0;
         cursor: pointer;
-        accent-color: #1d4ed8;
+        accent-color: $ui-blue-700;
     }
 }
 
-// ── Global dialog header / close (applies to all <dialog> elements) ───────────
-
-.dialog-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .5rem;
-    padding: .75rem 1rem;
-    border-bottom: 1px solid var(--ul-border);
+// ── Badge kind chip (shown in parent selectors to distinguish tag / category / status) ──
+.badge-kind-chip {
+    display: inline-block;
+    margin-left: auto;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: .7rem;
     font-weight: 600;
-    font-size: .95rem;
-    flex-shrink: 0;
-}
-
-.dialog-close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    color: var(--ul-text-3);
-    transition: background .15s, color .15s;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    line-height: 1.6;
     flex-shrink: 0;
 
-    .material-icons {
-        font-size: 1.1rem;
-    }
-
-    &:hover {
-        background: var(--ul-hover-bg);
-        color: var(--ul-text-1);
-    }
+    &--tag      { background: #dbeafe; color: #1d4ed8; }
+    &--category { background: #dcfce7; color: #15803d; }
+    &--status   { background: #fef3c7; color: #b45309; }
 }
 
 // ── Tag edit dialog ────────────────────────────────────────────────────────────
+// overflow: visible is provided by @include dialog-base, keeping icon-picker panels visible.
 .tag-edit-dialog {
-    width: min(52em, calc(100vw - 2rem));
-    max-height: 90vh;
-    border-radius: $radius-md;
-    border: none;
-    padding: 0;
-    box-shadow: $shadow-dialog;
-    // visible so icon picker panel (position:absolute) is not clipped by the dialog
-    overflow: visible;
-
-    // Flex column so header stays fixed and body scrolls
-    &[open] {
-        display: flex;
-        flex-direction: column;
-    }
-
-    &::backdrop {
-        background: rgba(0, 0, 0, .55);
-        backdrop-filter: blur(2px);
-        -webkit-backdrop-filter: blur(2px);
-    }
+    @include dialog-base(52em);
 }
 
 .tag-edit-dialog-body {
@@ -578,7 +559,7 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: var(--ul-surface-2);
+    background: var(--ul-grey-1);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     padding: .75rem 1rem;
@@ -613,9 +594,9 @@
 
 .tag-merge-warning {
     font-size: .82rem;
-    color: #b45309;
-    background: #fffbeb;
-    border: 1px solid #fde68a;
+    color: var(--ul-accent-amber-fg);
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-accent-amber-bg);
     border-radius: $radius-sm;
     padding: .5rem .75rem;
     margin-top: .5rem;
@@ -632,7 +613,7 @@
 // ── Tag membership panel (on pin detail page) ─────────────────────────────────
 
 .tag-panel {
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     overflow: hidden;
@@ -646,7 +627,7 @@
     font-weight: 600;
     font-size: 0.9rem;
     border-bottom: 1px solid var(--ul-border);
-    background: var(--ul-surface-2);
+    background: var(--ul-grey-1);
 
     i {
         color: $primary-color;
@@ -751,7 +732,7 @@
     color: $text-secondary;
     text-decoration: none;
     border-top: 1px solid var(--ul-border);
-    background: var(--ul-surface-2);
+    background: var(--ul-grey-1);
     transition: color 0.12s;
 
     i {
@@ -784,7 +765,7 @@
     padding: 4px 10px;
     border-radius: 20px;
     border: 2px solid var(--ul-border);
-    background: var(--ul-surface-2);
+    background: var(--ul-grey-1);
     font-size: 0.82rem;
     cursor: pointer;
     transition: border-color 0.12s, background 0.12s;
@@ -808,7 +789,7 @@
 
     &:hover {
         border-color: var(--tag-color, #{$primary-color});
-        background: var(--ul-surface-3);
+        background: var(--ul-grey-4);
     }
 
     &:has(.import-tag-checkbox:checked) {
@@ -850,12 +831,12 @@
 // SortableJS ghost state
 .tag-card--ghost {
     opacity: 0.4;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     border-color: $primary-color;
 }
 
 // ── Tag header right-side controls ────────────────────────────────────────────
-.tag-header-right {
+.badge-header-right {
     display: flex;
     align-items: center;
     gap: .75rem;
@@ -870,7 +851,7 @@
 }
 
 .tag-view-btn {
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     border: none;
     padding: 5px 9px;
     cursor: pointer;
@@ -890,13 +871,13 @@
     }
 
     &:hover {
-        background: var(--ul-surface-3);
-        color: var(--ul-text-1);
+        background: var(--ul-grey-4);
+        color: var(--ul-grey-8);
     }
 
     &.active {
         background: $primary-color;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-9);
     }
 }
 
@@ -985,17 +966,6 @@
     }
 }
 
-// Connector dot on tree branch items
-.tag-tree-children>.tag-tree-item::before {
-    content: '';
-    position: absolute;
-    left: -1.15rem;
-    top: 1.25rem;
-    width: .65rem;
-    height: 2px;
-    background: var(--ul-border);
-}
-
 #tag-rows.tag-view--tree,
 #category-rows.tag-view--tree {
 
@@ -1019,7 +989,7 @@
     transition: background .1s;
 
     &:hover {
-        background: var(--ul-surface-3);
+        background: var(--ul-grey-4);
 
         .cat-select-check {
             border-color: $primary-color;
@@ -1033,9 +1003,9 @@
     .cat-select-check {
         width: 18px;
         height: 18px;
-        border: 2px solid #cbd5e1;
+        border: 2px solid $ui-slate-300;
         border-radius: 4px;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         flex-shrink: 0;
         display: flex;
         align-items: center;
@@ -1090,13 +1060,13 @@
     border-radius: $radius-md;
     border: 1px solid transparent;
     margin-bottom: 1rem;
-    background: var(--ul-surface-2);
+    background: var(--ul-grey-1);
     border-color: var(--ul-border);
     transition: background .18s, border-color .18s;
 
     &.cat-sel-bar--active {
-        background: #eff6ff;
-        border-color: #bfdbfe;
+        background: var(--ul-grey-0a);
+        border-color: $ui-blue-200;
     }
 }
 
@@ -1110,7 +1080,7 @@
     font-size: .875rem;
     font-weight: 600;
     color: $primary-color;
-    background: #dbeafe;
+    background: $ui-blue-100;
     padding: 2px 10px;
     border-radius: 20px;
 }
@@ -1126,12 +1096,12 @@
     align-items: center;
     gap: .3rem;
     padding: .4rem .8rem;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     font-size: .825rem;
     font-weight: 500;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     cursor: pointer;
     transition: background .12s, border-color .12s, color .12s, opacity .12s;
 
@@ -1140,9 +1110,9 @@
     }
 
     &:hover:not(:disabled) {
-        background: var(--ul-surface-3);
+        background: var(--ul-grey-4);
         border-color: var(--ul-border-strong);
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
     }
 
     &:disabled {
@@ -1152,29 +1122,13 @@
 }
 
 .cat-sel-merge-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
+    @include btn-primary;
     padding: .4rem .9rem;
-    background: $primary-color;
-    color: var(--ul-text-4);
-    border: none;
-    border-radius: $radius-sm;
     font-size: .875rem;
     font-weight: 600;
-    cursor: pointer;
-    transition: background .15s, opacity .15s;
-
-    i {
-        font-size: .95rem;
-    }
-
-    &:hover:not(:disabled) {
-        background: color.adjust($primary-color, $lightness: -8%);
-    }
 
     &:disabled {
-        background: #94a3b8;
+        background: $ui-slate-400;
         cursor: not-allowed;
         opacity: .6;
     }
@@ -1182,45 +1136,27 @@
 
 .cat-sel-edit-btn {
     &:hover:not(:disabled) {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         border-color: $primary-color;
         color: $primary-color;
     }
 }
 
 .cat-sel-delete-btn {
-    border-color: #fca5a5;
-    color: #dc2626;
+    border-color: $ui-red-300;
+    color: $ui-red-600;
 
     &:hover:not(:disabled) {
-        background: var(--ul-surface-1);
-        border-color: #dc2626;
-        color: #b91c1c;
+        background: var(--ul-grey-0);
+        border-color: $ui-red-600;
+        color: $ui-red-700;
     }
 }
 
 // ── Multi-merge dialog ────────────────────────────────────────────────────────
 
 .cat-merge-dialog {
-    width: min(520px, 95vw);
-    max-height: 90vh;
-    overflow: hidden;
-    border: none;
-    border-radius: $radius-md;
-    box-shadow: 0 8px 40px rgba(0, 0, 0, .2);
-    padding: 0;
-    // do NOT set display here - the browser hides dialog:not([open]) via UA stylesheet
-
-    &[open] {
-        display: flex;
-        flex-direction: column;
-    }
-
-    &::backdrop {
-        background: rgba(0, 0, 0, .55);
-        backdrop-filter: blur(2px);
-        -webkit-backdrop-filter: blur(2px);
-    }
+    @include dialog-base(520px);
 }
 
 .cat-merge-dialog-body {
@@ -1293,7 +1229,7 @@
     align-items: center;
     gap: .75rem;
     padding: .6rem .75rem;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
     transition: border-color .12s;
@@ -1319,7 +1255,7 @@
 .cat-merge-mini-name {
     font-weight: 600;
     font-size: .9rem;
-    color: $text-primary;
+    color: var(--ul-grey-9);
 }
 
 .cat-merge-mini-meta {
@@ -1377,7 +1313,7 @@
     flex-direction: column;
     gap: .6rem;
     padding: .75rem;
-    background: var(--ul-surface-2);
+    background: var(--ul-grey-1);
     border: 1px solid var(--ul-border);
     border-radius: $radius-sm;
 
@@ -1443,51 +1379,19 @@
 }
 
 .cat-merge-dialog-footer {
-    display: flex;
-    gap: .75rem;
-    align-items: center;
-    padding: 1rem 1.5rem 1.25rem;
-    border-top: 1px solid var(--ul-border);
-    flex-shrink: 0;
-}
-
-@keyframes cat-spin {
-    to {
-        transform: rotate(360deg);
-    }
+    @include dialog-footer;
+    align-items: center;  // vertically aligns the spinner with action buttons
 }
 
 .cat-merge-spinner {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    border: 2px solid rgba(255, 255, 255, .35);
-    border-top-color: var(--ul-text-4);
-    border-radius: 50%;
-    animation: cat-spin .65s linear infinite;
-    vertical-align: middle;
-    flex-shrink: 0;
+    @include spinner;
 }
 
 // ── Bulk-edit dialog ──────────────────────────────────────────────────────────
 
 .cat-bulk-edit-dialog {
-    width: min(520px, 95vw);
+    @include dialog-base(520px);
     max-height: 85vh;
-    border: none;
-    border-radius: $radius-md;
-    box-shadow: $shadow-dialog;
-    padding: 0;
-    overflow: hidden;
-
-    &[open] {
-        display: flex;
-        flex-direction: column;
-    }
-
-    &::backdrop {
-        background: rgba(0, 0, 0, .45);
-    }
 }
 
 .cat-bulk-edit-body {
@@ -1595,7 +1499,7 @@
 }
 
 .sr-star--on {
-    color: #f59e0b;
+    color: $ui-amber-500;
 }
 
 // Emoji icon display (tag cards, map pins)
@@ -1650,7 +1554,7 @@
     padding: .6rem 1.25rem;
     font-size: .9rem;
     font-weight: 500;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     border: none;
     background: none;
     cursor: pointer;
@@ -1666,7 +1570,7 @@
     }
 
     &:hover {
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
     }
 
     &.active {
@@ -1688,8 +1592,8 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: var(--ul-surface-1);
-    border: 1px solid var(--ul-border);
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-0b);
     border-radius: $radius-md;
     padding: .6rem .85rem;
     cursor: grab;
@@ -1705,7 +1609,7 @@
 
     &.priority-item--ghost {
         opacity: .4;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         border-color: $primary-color;
     }
 }
@@ -1725,7 +1629,7 @@
     width: 34px;
     height: 34px;
     border-radius: $radius-sm;
-    background: var(--ul-surface-3);
+    background: var(--ul-grey-4);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1781,15 +1685,18 @@
     padding: 2px 8px;
     border-radius: 20px;
     margin-left: 3px;
+    color: var(--ul-grey-0);
 
-    &.priority-kind-badge--tag {
-        background: #dbeafe;
-        color: #1d4ed8;
+    &--tag {
+        background-color: #{$color-purple-500};
     }
 
-    &.priority-kind-badge--category {
-        background: #dcfce7;
-        color: #15803d;
+    &--category {
+        background-color: #{$color-blue-500};
+    }
+
+    &--status {
+        background-color: #{$color-green-500};
     }
 }
 
@@ -1797,7 +1704,7 @@
     font-size: .78rem;
     font-weight: 600;
     color: $text-secondary;
-    background: var(--ul-surface-3);
+    background: var(--ul-grey-4);
     border: 1px solid var(--ul-border);
     border-radius: 20px;
     padding: 1px 9px;
@@ -1833,7 +1740,7 @@
             font-size: .875rem;
             font-weight: 500;
             color: $text-secondary;
-            background: var(--ul-surface-2);
+            background: var(--ul-grey-1);
             transition: border-color .13s, background .13s, color .13s;
             height: 2.5em;
 
@@ -1859,7 +1766,7 @@
 
         &:hover span {
             border-color: var(--ul-border-strong);
-            background: var(--ul-surface-3);
+            background: var(--ul-grey-4);
         }
     }
 }
@@ -1882,8 +1789,8 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: var(--ul-surface-1);
-    border: 1px solid var(--ul-border);
+    background: var(--ul-grey-0a);
+    border: 1px solid var(--ul-grey-0b);
     border-radius: $radius-md;
     padding: .6rem .85rem;
     transition: box-shadow .12s;
@@ -1902,7 +1809,7 @@
     width: 36px;
     height: 36px;
     border-radius: $radius-sm;
-    background: var(--ul-surface-3);
+    background: var(--ul-grey-4);
     border: 1px solid var(--ul-border);
     display: flex;
     align-items: center;
@@ -1926,7 +1833,7 @@
 .tag-row-name {
     font-size: .95rem;
     font-weight: 500;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     @include truncate;
 }
 
@@ -1961,13 +1868,13 @@
     }
 
     &:hover {
-        background: var(--ul-surface-3);
-        color: var(--ul-text-1);
+        background: var(--ul-grey-4);
+        color: var(--ul-grey-8);
     }
 
     &.tag-row-action--danger:hover {
-        background: #fee2e2;
-        color: #dc2626;
+        background: var(--ul-grey-0a);
+        color: $ui-red-600;
     }
 }
 
@@ -2016,7 +1923,7 @@
         }
 
         &:hover {
-            color: var(--ul-text-1);
+            color: var(--ul-grey-8);
         }
     }
 
@@ -2035,8 +1942,8 @@
         align-items: flex-start;
         gap: 10px;
         padding: 14px 16px 16px;
-        background: var(--ul-surface-2, #f8fafc);
-        border: 1px solid var(--ul-border, #e2e8f0);
+        background: var(--ul-grey-1, $ui-slate-50);
+        border: 1px solid var(--ul-border, $ui-slate-200);
         border-top: none;
         border-radius: 0 0 12px 12px;
         margin-bottom: 1rem;
@@ -2051,10 +1958,10 @@
         flex: 1 1 220px;
         min-width: 180px;
         padding: 7px 12px 7px 36px;
-        border: 1.5px solid var(--ul-border, #cbd5e1);
+        border: 1.5px solid var(--ul-border, $ui-slate-300);
         border-radius: 999px;
         font-size: .82rem;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         color: inherit;
         outline: none;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
@@ -2082,12 +1989,12 @@
         gap: 4px;
         padding: 5px 11px;
         border-radius: 999px;
-        background: var(--ul-surface-1);
-        border: 1.5px solid var(--ul-border, #e2e8f0);
+        background: var(--ul-grey-0);
+        border: 1.5px solid var(--ul-border, $ui-slate-200);
         font-size: .75rem;
         font-weight: 500;
         cursor: pointer;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         transition: background .13s, border-color .13s, color .13s, box-shadow .13s;
         user-select: none;
         white-space: nowrap;
@@ -2119,8 +2026,8 @@
         gap: 5px;
         align-items: center;
         padding: 4px 6px;
-        background: var(--ul-surface-1, #fff);
-        border: 1.5px solid var(--ul-border, #e2e8f0);
+        background: var(--ul-grey-0, #fff);
+        border: 1.5px solid var(--ul-border, $ui-slate-200);
         border-radius: 10px;
     }
 
@@ -2138,7 +2045,7 @@
         }
 
         &.active {
-            border-color: var(--ul-text-1);
+            border-color: var(--ul-grey-8);
             box-shadow: 0 0 0 2px rgba(255, 255, 255, .7), 0 0 0 4px var(--ul-color-accent);
             transform: scale(1.15);
         }
@@ -2149,12 +2056,12 @@
         align-items: center;
         gap: 3px;
         font-size: .73rem;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         cursor: pointer;
         padding: 5px 9px;
         border-radius: 999px;
-        border: 1.5px solid var(--ul-border, #e2e8f0);
-        background: var(--ul-surface-1);
+        border: 1.5px solid var(--ul-border, $ui-slate-200);
+        background: var(--ul-grey-0);
         transition: color .12s, border-color .12s, background .12s;
         white-space: nowrap;
 
@@ -2216,12 +2123,12 @@
         gap: 6px;
         padding: 7px 14px;
         border-radius: $radius-sm;
-        border: 2px solid var(--ul-border, #e2e8f0);
-        background: var(--ul-surface-2, #f8fafc);
+        border: 2px solid var(--ul-border, $ui-slate-200);
+        background: var(--ul-grey-1, $ui-slate-50);
         cursor: pointer;
         font-size: .875rem;
         font-weight: 500;
-        color: var(--ul-text-2, #475569);
+        color: var(--ul-grey-7, $ui-slate-600);
         transition: border-color .13s, background .13s, color .13s, box-shadow .13s;
         white-space: nowrap;
         height: 2.5em;
@@ -2233,14 +2140,14 @@
         }
 
         &:hover {
-            border-color: var(--ul-border-strong, #94a3b8);
-            background: var(--ul-surface-3, #f1f5f9);
+            border-color: var(--ul-border-strong, $ui-slate-400);
+            background: var(--ul-grey-4, $ui-slate-100);
         }
 
         &.active {
-            border-color: #6366f1;
-            background: color-mix(in srgb, #6366f1 10%, white);
-            color: #4f46e5;
+            border-color: $ui-indigo-500;
+            background: color-mix(in srgb, $ui-indigo-500 10%, white);
+            color: $ui-indigo-600;
             font-weight: 600;
 
             .material-icons {
@@ -2266,7 +2173,7 @@
         border: 1px solid transparent;
         background: transparent;
         cursor: pointer;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         transition: background .13s, border-color .13s, color .13s;
         opacity: 0;
         pointer-events: none;
@@ -2278,9 +2185,9 @@
     }
 
     .priority-edit-btn:hover {
-        background: #eef2ff;
-        border-color: #a5b4fc;
-        color: #4f46e5;
+        background: var(--ul-grey-0a);
+        border-color: $ui-indigo-300;
+        color: $ui-indigo-600;
     }
 
     .priority-edit-btn .material-icons {
@@ -2311,10 +2218,10 @@
     width: 34px;
     height: 34px;
     border-radius: $radius-sm;
-    border: 1px solid var(--ul-border, #e2e8f0);
-    background: var(--ul-surface-1, #fff);
+    border: 1px solid var(--ul-border, $ui-slate-200);
+    background: var(--ul-grey-0, #fff);
     cursor: pointer;
-    color: var(--ul-text-3, #64748b);
+    color: var(--ul-grey-6, $ui-slate-500);
     transition: background .12s, border-color .12s, color .12s;
 
     .material-icons {
@@ -2322,15 +2229,15 @@
     }
 
     &:hover {
-        background: var(--ul-surface-3, #f1f5f9);
-        border-color: var(--ul-border-strong, #94a3b8);
-        color: var(--ul-text-1, #1e293b);
+        background: var(--ul-grey-4, $ui-slate-100);
+        border-color: var(--ul-border-strong, $ui-slate-400);
+        color: var(--ul-grey-8, $ui-slate-800);
     }
 
     &.deselect-mode {
-        background: #eff6ff;
-        border-color: #60a5fa;
-        color: #2563eb;
+        background: var(--ul-grey-0a);
+        border-color: $ui-blue-400;
+        color: $ui-blue-600;
     }
 }
 
@@ -2346,7 +2253,7 @@
     align-items: center;
     gap: 4px;
     padding: 6px 8px;
-    background: var(--ul-surface-2);
+    background: var(--ul-grey-1);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--ul-border);
@@ -2361,7 +2268,7 @@
 
 [data-theme="dark"] .org-bulk-bar {
     // Slightly elevated surface with a visible border so it reads against the dark page
-    background: var(--ul-surface-3);
+    background: var(--ul-grey-4);
     border-color: var(--ul-border-strong);
 }
 
@@ -2376,7 +2283,7 @@
     align-items: center;
     font-size: .8rem;
     font-weight: 700;
-    color: #3b82f6;
+    color: $ui-blue-500;
     padding: 4px 12px;
     background: rgba(59, 130, 246, .1);
     border-radius: 999px;
@@ -2396,7 +2303,7 @@
     border: none;
     background: transparent;
     cursor: pointer;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     transition: background .12s, color .12s;
     flex-shrink: 0;
 
@@ -2406,7 +2313,7 @@
 
     &:hover {
         background: rgba(220, 38, 38, .12);
-        color: #dc2626;
+        color: $ui-red-600;
     }
 }
 
@@ -2420,27 +2327,13 @@
 }
 
 .org-bulk-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+    @include btn-ghost;
     padding: 6px 14px;
     border-radius: 999px;
     font-size: .8rem;
-    font-weight: 500;
-    cursor: pointer;
-    border: 1.5px solid transparent;
-    background: transparent;
-    color: var(--ul-text-2);
-    transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
 
     .material-icons {
         font-size: .95rem;
-    }
-
-    &:hover {
-        background: var(--ul-hover-bg);
-        border-color: var(--ul-border-strong);
-        color: var(--ul-text-1);
     }
 
     &:disabled {
@@ -2452,18 +2345,18 @@
 .org-bulk-btn--edit:hover {
     background: var(--ul-hover-bg-primary);
     border-color: rgba(59, 130, 246, .4);
-    color: #3b82f6;
+    color: $ui-blue-500;
 }
 
 .org-bulk-btn--merge {
-    background: #6366f1;
-    color: #fff;
-    border-color: #6366f1;
+    background: $ui-indigo-500;
+    color: var(--ul-grey-4);
+    border-color: $ui-indigo-500;
     box-shadow: 0 1px 4px rgba(99, 102, 241, .3);
 
     &:hover:not(:disabled) {
-        background: #4f46e5;
-        border-color: #4f46e5;
+        background: $ui-indigo-600;
+        border-color: $ui-indigo-600;
         box-shadow: 0 2px 8px rgba(99, 102, 241, .4);
     }
 
@@ -2477,12 +2370,12 @@
 }
 
 .org-bulk-btn--delete {
-    color: #ef4444;
+    color: $ui-red-500;
 
     &:hover {
         background: rgba(239, 68, 68, .1);
         border-color: rgba(239, 68, 68, .3);
-        color: #dc2626;
+        color: $ui-red-600;
     }
 }
 
@@ -2506,5 +2399,34 @@
 
     p {
         margin: 0;
+    }
+}
+
+// ── Organize page: responsive rules ──────────────────────────────────────────
+
+@include down($breakpoint-sm) {
+    // Tab bar: allow horizontal scroll instead of wrapping/overflow
+    .organize-tab-bar {
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+
+        &::-webkit-scrollbar {
+            display: none;
+        }
+    }
+
+    // Slightly compact tabs on small screens
+    .organize-tab {
+        padding: .55rem .85rem;
+        font-size: .82rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    // Page header: reduce font size on phones
+    .organize-page-header .organize-title {
+        font-size: 1.25rem;
     }
 }

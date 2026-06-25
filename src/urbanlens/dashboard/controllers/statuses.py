@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -12,6 +13,9 @@ from django.views import View
 
 from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Badge
 from urbanlens.dashboard.models.pin.model import Pin
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +26,7 @@ _BASE_CTX = {
 }
 
 
-def _rows_ctx(profile, extra: dict | None = None) -> dict:
+def _rows_ctx(profile: Profile, extra: dict | None = None) -> dict:
     statuses = (
         Badge.objects.statuses()
         .for_profile(profile)
@@ -77,6 +81,10 @@ class StatusCreateView(LoginRequiredMixin, View):
             color=request.POST.get("color") or None,
             order=int(request.POST.get("order", 0)),
         )
+        parent_ids = request.POST.getlist("parent_ids")
+        if parent_ids:
+            valid_parents = Badge.objects.visible_to(profile).filter(id__in=parent_ids).exclude(id=badge.id)
+            badge.parents.set(valid_parents)
         return render(
             request,
             "dashboard/partials/status_rows.html",
@@ -100,10 +108,12 @@ class StatusEditView(LoginRequiredMixin, View):
         badge = get_object_or_404(Badge, id=status_id, kind="status")
         if badge.profile is None or badge.profile.user != request.user:
             return HttpResponseForbidden()
+        available_parents = Badge.objects.visible_to(request.user.profile).ordered().exclude(id=status_id)
+        parent_ids = set(badge.parents.values_list("id", flat=True))
         return render(
             request,
             "dashboard/partials/status_edit_form.html",
-            {**_BASE_CTX, "badge": badge},
+            {**_BASE_CTX, "badge": badge, "available_parents": available_parents, "parent_ids": parent_ids},
         )
 
     def post(self, request, status_id, *args, **kwargs):
@@ -143,21 +153,22 @@ class StatusEditView(LoginRequiredMixin, View):
         profile = request.user.profile
 
         if kind_changed and new_kind == "tag":
-            # Migrate status → tag: remove from pin.statuses, add to pin.tags.
-            for pin in Pin.objects.filter(statuses=badge, profile=profile):
-                pin.tags.add(badge)
-                pin.statuses.remove(badge)
             badge.kind = "tag"
             badge.profile = profile
-
         elif kind_changed and new_kind == "category":
-            # Migrate status → category: remove from pin.statuses, add to pin.categories.
-            for pin in Pin.objects.filter(statuses=badge, profile=profile):
-                pin.categories.add(badge)
-                pin.statuses.remove(badge)
             badge.kind = "category"
 
         badge.save()
+
+        if kind_changed:
+            badge.parents.clear()
+        else:
+            parent_ids = request.POST.getlist("parent_ids")
+            if parent_ids:
+                valid_parents = Badge.objects.visible_to(profile).filter(id__in=parent_ids).exclude(id=status_id)
+                badge.parents.set(valid_parents)
+            else:
+                badge.parents.clear()
 
         response = render(request, "dashboard/partials/status_rows.html", _rows_ctx(request.user.profile))
         if kind_changed:
@@ -190,37 +201,37 @@ class StatusDeleteView(LoginRequiredMixin, View):
 class StatusMembershipView(LoginRequiredMixin, View):
     """Add or remove a status badge from a specific pin (HTMX panel on pin detail page)."""
 
-    def get(self, request, pin_uuid, *args, **kwargs):
+    def get(self, request, pin_slug, *args, **kwargs):
         """Render the status panel for a pin.
 
         Args:
             request: The HTTP request.
-            pin_uuid: UUID of the target pin.
+            pin_slug: UUID of the target pin.
 
         Returns:
             Rendered status_panel.html partial.
         """
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = request.user.profile
         all_statuses = Badge.objects.statuses().for_profile(profile).ordered()
-        member_ids = set(pin.statuses.values_list("id", flat=True))
+        member_ids = set(pin.badges.filter(kind="status").values_list("id", flat=True))
         return render(
             request,
             "dashboard/partials/status_panel.html",
             {"pin": pin, "all_statuses": all_statuses, "member_ids": member_ids},
         )
 
-    def post(self, request, pin_uuid, *args, **kwargs):
+    def post(self, request, pin_slug, *args, **kwargs):
         """Toggle a status badge on a pin.
 
         Args:
             request: The HTTP request with POST data (status_id, action).
-            pin_uuid: UUID of the target pin.
+            pin_slug: UUID of the target pin.
 
         Returns:
             Rendered status_panel.html partial.
         """
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         status_id = request.POST.get("status_id")
         action = request.POST.get("action")  # "add" or "remove"
 
@@ -228,12 +239,12 @@ class StatusMembershipView(LoginRequiredMixin, View):
         badge = get_object_or_404(Badge.objects.statuses().for_profile(profile), id=status_id)
 
         if action == "add":
-            pin.statuses.add(badge)
+            pin.badges.add(badge)
         elif action == "remove":
-            pin.statuses.remove(badge)
+            pin.badges.remove(badge)
 
         all_statuses = Badge.objects.statuses().for_profile(profile).ordered()
-        member_ids = set(pin.statuses.values_list("id", flat=True))
+        member_ids = set(pin.badges.filter(kind="status").values_list("id", flat=True))
         return render(
             request,
             "dashboard/partials/status_panel.html",
@@ -268,9 +279,7 @@ class StatusMultiMergeView(LoginRequiredMixin, View):
         sources = Badge.objects.filter(id__in=source_ids, kind="status", profile=profile, is_protected=False)
 
         for src in sources:
-            for pin in Pin.objects.filter(statuses=src, profile=profile):
-                pin.statuses.add(target)
-                pin.statuses.remove(src)
+            target.pins.add(*src.pins.all())
             src.delete()
 
         return render(request, "dashboard/partials/status_rows.html", _rows_ctx(profile))

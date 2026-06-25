@@ -49,7 +49,7 @@
 
     .wx-time {
         font-size: .65rem;
-        color: #888;
+        color: var(--ul-grey-6);
         font-weight: 700;
         line-height: 1.3;
         letter-spacing: .02em;
@@ -65,20 +65,20 @@
     .wx-temp {
         font-size: 1rem;
         font-weight: 700;
-        color: #1a1a1a;
+        color: $ui-gray-900;
         line-height: 1.1;
 
         .wx-unit {
             font-size: .6rem;
             font-weight: 400;
-            color: #999;
+            color: var(--ul-grey-6);
             vertical-align: super;
         }
     }
 
     .wx-condition {
         font-size: .63rem;
-        color: #666;
+        color: var(--ul-grey-7);
         @include truncate;
         max-width: 66px;
     }
@@ -87,7 +87,7 @@
         display: flex;
         gap: .3rem;
         font-size: .6rem;
-        color: #aaa;
+        color: var(--ul-grey-6);
         margin-top: .1rem;
 
         span {
@@ -113,7 +113,7 @@
     border: none;
     background: transparent;
     cursor: pointer;
-    color: #666;
+    color: var(--ul-grey-7);
     outline: none;
     transition: background .15s, color .15s;
     flex-shrink: 0;
@@ -125,7 +125,7 @@
     &:hover,
     &:focus {
         background: rgba(0, 0, 0, .07);
-        color: #222;
+        color: var(--ul-grey-8);
         outline: none;
     }
 }
@@ -150,7 +150,7 @@
     border: 1px solid color-mix(in srgb, var(--tag-color, #6366f1) 30%, transparent);
     font-size: .78rem;
     font-weight: 500;
-    color: #333;
+    color: var(--ul-grey-8);
     line-height: 1.3;
 
     .tag-chip-icon {
@@ -170,20 +170,20 @@
         cursor: pointer;
         font-size: .75rem;
         line-height: 1;
-        color: #555;
+        color: var(--ul-grey-7);
         transition: background .12s, color .12s;
         padding: 0;
 
         &:hover {
             background: rgba(200, 0, 0, .2);
-            color: #c00;
+            color: var(--ul-color-danger-accent);
         }
     }
 }
 
 .tag-chips-empty {
     font-size: .82rem;
-    color: #aaa;
+    color: var(--ul-grey-6);
     font-style: italic;
 }
 
@@ -198,7 +198,7 @@
         border-bottom: 2px solid var(--ul-border);
         padding: 0 .5rem;
         flex-shrink: 0;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
     }
 
     .tad-tab {
@@ -210,18 +210,18 @@
         background: transparent;
         font-size: .8rem;
         font-weight: 500;
-        color: #64748b;
+        color: $ui-slate-500;
         cursor: pointer;
         transition: color .12s, border-color .12s;
         white-space: nowrap;
 
         &:hover {
-            color: #6366f1;
+            color: $ui-indigo-500;
         }
 
         &--active {
-            color: #6366f1;
-            border-bottom-color: #6366f1;
+            color: $ui-indigo-500;
+            border-bottom-color: $ui-indigo-500;
         }
     }
 
@@ -237,11 +237,11 @@
         box-sizing: border-box;
         outline: none;
         flex-shrink: 0;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         color: inherit;
 
         &:focus {
-            border-color: #6366f1;
+            border-color: $ui-indigo-500;
             box-shadow: 0 0 0 3px rgba(99, 102, 241, .12);
         }
     }
@@ -293,125 +293,68 @@
     .tad-kind-pill {
         display: inline-flex;
         align-items: center;
-        padding: .1rem .45rem;
+        padding: 0.5em 1em;
         border-radius: 999px;
         font-size: .7rem;
         font-weight: 600;
         letter-spacing: .03em;
         text-transform: uppercase;
         flex-shrink: 0;
+        color: $color-grey-0;
 
         &--tag {
-            background: #ede9fe;
-            color: #6d28d9;
+            background-color: #{$color-purple-900};
+            color: #{$color-purple-100};
         }
 
         &--category {
-            background: #dbeafe;
-            color: #1d4ed8;
+            background-color: #{$color-blue-900};
+            color: #{$color-blue-100};
         }
 
         &--status {
-            background: #dcfce7;
-            color: #15803d;
+            background-color: #{$color-green-900};
+            color: #{$color-green-100};
         }
     }
 }
 
-// ── Dark mode: badge dialog ──────────────────────────────────────────────────
+// ── Dark mode: tag-add-dialog feature colors ─────────────────────────────────
+// Structural colors (background, text, border) are now fully token-driven via
+// @include dialog-base and var(--ul-*) custom properties. Only the feature-
+// specific indigo accent colours need explicit dark overrides here.
 [data-theme="dark"] {
-
-    .tag-add-dialog,
-    .visit-add-dialog,
-    .detail-pin-add-dialog,
-    .trip-create-dialog,
-    .pin-edit-dialog {
-        background: #1e1e2e;
-        color: #e2e8f0;
-
-        .dialog-header {
-            border-bottom-color: #334155;
-            background: #1e1e2e;
-        }
-
-        .dialog-close {
-            color: #94a3b8;
-
-            &:hover {
-                background: rgba(255, 255, 255, .08);
-                color: #e2e8f0;
-            }
-        }
-
-        .dialog-footer {
-            border-top-color: #334155;
-
-            .dialog-manage-link {
-                color: #64748b;
-
-                &:hover {
-                    color: #94a3b8;
-                }
-            }
-        }
-    }
-
     .tag-add-dialog {
         .tad-tabs {
-            background: #181825;
-            border-bottom-color: #334155;
+            border-bottom-color: var(--ul-border);
         }
 
         .tad-tab {
-            color: #64748b;
+            color: var(--ul-grey-6);
 
             &:hover {
-                color: #818cf8;
+                color: $ui-indigo-400;
             }
 
             &--active {
-                color: #818cf8;
-                border-bottom-color: #818cf8;
+                color: $ui-indigo-400;
+                border-bottom-color: $ui-indigo-400;
             }
         }
 
         .dialog-search {
-            background: #0f0f1a;
-            border-color: #334155;
-            color: #e2e8f0;
+            background: var(--ul-grey-1);
+            border-color: var(--ul-border);
 
             &:focus {
-                border-color: #818cf8;
+                border-color: $ui-indigo-400;
                 box-shadow: 0 0 0 3px rgba(129, 140, 248, .15);
-            }
-
-            &::placeholder {
-                color: #475569;
             }
         }
 
         .tag-dialog-btn {
-            color: #e2e8f0;
-
             &:hover {
                 background: rgba(129, 140, 248, .12);
-            }
-        }
-
-        .tad-kind-pill {
-            &--tag {
-                background: #2d2060;
-                color: #a78bfa;
-            }
-
-            &--category {
-                background: #1e2f5e;
-                color: #93c5fd;
-            }
-
-            &--status {
-                background: #14382a;
-                color: #6ee7b7;
             }
         }
     }
@@ -421,7 +364,7 @@
 .visit-empty {
     padding: .6rem 1rem;
     font-size: .85rem;
-    color: #999;
+    color: var(--ul-grey-6);
     font-style: italic;
 }
 
@@ -435,7 +378,7 @@
         align-items: flex-start;
         gap: .5rem;
         padding: .5rem 1rem;
-        border-bottom: 1px solid #f0f0f0;
+        border-bottom: 1px solid var(--ul-border);
 
         &:last-child {
             border-bottom: none;
@@ -457,12 +400,12 @@
 
     .visit-time {
         font-size: .82rem;
-        color: #777;
+        color: var(--ul-grey-6);
     }
 
     .visit-source {
         font-size: .75rem;
-        color: #aaa;
+        color: var(--ul-grey-6);
         display: inline-flex;
         align-items: center;
         gap: 2px;
@@ -470,31 +413,18 @@
 
     .visit-notes {
         font-size: .82rem;
-        color: #666;
+        color: var(--ul-grey-7);
         margin-top: .2rem;
         padding: 0 1rem .35rem;
     }
 
     .visit-delete-btn {
+        @include icon-btn-danger(24px);
         margin-left: auto;
-        background: none;
-        border: none;
-        cursor: pointer;
-        color: #ccc;
-        padding: 2px;
-        border-radius: 4px;
         outline: none;
 
-        &:hover,
         &:focus {
-            color: #dc2626;
-            background: #fee2e2;
             outline: none;
-        }
-
-        .material-icons {
-            font-size: 1rem;
-            display: block;
         }
     }
 }
@@ -509,31 +439,7 @@
     }
 
     .form-row {
-        display: flex;
-        flex-direction: column;
-        gap: .3rem;
-
-        label {
-            font-size: .82rem;
-            font-weight: 600;
-            color: #555;
-        }
-
-        input,
-        textarea {
-            padding: .45rem .65rem;
-            border: 1px solid var(--ul-border);
-            border-radius: 8px;
-            font-size: .88rem;
-            outline: none;
-            width: 100%;
-            box-sizing: border-box;
-
-            &:focus {
-                border-color: #6366f1;
-                box-shadow: 0 0 0 3px rgba(99, 102, 241, .12);
-            }
-        }
+        @include form-row;
 
         textarea {
             resize: vertical;
@@ -599,10 +505,10 @@
     align-items: center;
     gap: .65rem;
     padding: .65rem 1rem;
-    background: linear-gradient(90deg, #ecfeff 0%, #f0f9ff 100%);
-    border-bottom: 1px solid #bae6fd;
+    background: linear-gradient(90deg, $ui-cyan-50 0%, $ui-sky-50 100%);
+    border-bottom: 1px solid $ui-sky-200;
     font-size: .83rem;
-    color: #0369a1;
+    color: $ui-sky-700;
 
     .material-icons {
         font-size: 1rem;
@@ -620,8 +526,8 @@
     gap: .3rem;
     white-space: nowrap;
     padding: .3rem .7rem;
-    background: #0891b2;
-    color: var(--ul-text-4);
+    background: $ui-cyan-600;
+    color: var(--ul-grey-5);
     border-radius: 7px;
     font-size: .8rem;
     font-weight: 600;
@@ -633,7 +539,7 @@
     }
 
     &:hover {
-        background: #0e7490;
+        background: $ui-cyan-700;
     }
 }
 
@@ -680,7 +586,7 @@
 
 .security-indicators {
     padding: .5rem 1rem .75rem;
-    border-top: 1px solid #f1f5f9;
+    border-top: 1px solid $ui-slate-100;
     display: flex;
     flex-direction: column;
     gap: .4rem;
@@ -691,7 +597,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .04em;
-    color: #64748b;
+    color: $ui-slate-500;
 }
 
 .security-chips {
@@ -710,21 +616,21 @@
     border: 1px solid transparent;
 
     &--no {
-        background: #dcfce7;
-        color: #166534;
-        border-color: #bbf7d0;
+        background: $ui-green-100;
+        color: $ui-green-800;
+        border-color: $ui-green-200;
     }
 
     &--some {
-        background: #fef9c3;
-        color: #854d0e;
-        border-color: #fde68a;
+        background: var(--ul-accent-amber-bg);
+        color: $ui-amber-800;
+        border-color: $ui-amber-200;
     }
 
     &--everywhere {
-        background: #fee2e2;
-        color: #991b1b;
-        border-color: #fca5a5;
+        background: var(--ul-grey-0a);
+        color: -red-800;
+        border-color: $ui-red-300;
     }
 }
 
@@ -735,7 +641,7 @@
     padding: 0;
 
     &[open] .form-section-summary {
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid $ui-slate-200;
         border-radius: 8px 8px 0 0;
     }
 
@@ -744,18 +650,18 @@
         padding: .55rem .9rem;
         font-size: .85rem;
         font-weight: 600;
-        color: #475569;
-        background: var(--ul-surface-1);
+        color: $ui-slate-600;
+        background: var(--ul-grey-0);
         border-radius: 8px;
         cursor: pointer;
         user-select: none;
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-0);
         }
 
         &::marker {
-            color: #94a3b8;
+            color: $ui-slate-400;
         }
     }
 }
@@ -775,7 +681,7 @@
     label {
         font-size: .78rem;
         font-weight: 600;
-        color: #475569;
+        color: $ui-slate-600;
     }
 
     select {
@@ -784,11 +690,11 @@
         border: 1px solid var(--ul-border);
         ;
         border-radius: 6px;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
 
         &:focus {
             outline: none;
-            border-color: #93c5fd;
+            border-color: $ui-blue-300;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
         }
     }
@@ -804,11 +710,11 @@
     @for $i from 1 through 5 {
         &:has(.sr-star-btn:nth-child(#{$i}):hover) {
             .sr-star-btn:nth-child(-n+#{$i}) {
-                color: #f59e0b;
+                color: $ui-amber-500;
             }
 
             .sr-star-btn:not(:nth-child(-n+#{$i})) {
-                color: #d1d5db;
+                color: $ui-gray-300;
             }
         }
     }
@@ -820,14 +726,14 @@
     cursor: pointer;
     font-size: 2rem;
     line-height: 1;
-    color: #d1d5db;
+    color: $ui-gray-300;
     padding: 1px 2px;
     border-radius: 3px;
     transition: color .1s, transform .1s;
     outline: none;
 
     &--on {
-        color: #f59e0b;
+        color: $ui-amber-500;
     }
 
     &:hover {
@@ -842,7 +748,7 @@
 
 .star-rating-interactive--priority .sr-star-btn {
     &--on {
-        color: #6366f1;
+        color: $ui-indigo-500;
     }
 }
 
@@ -850,11 +756,11 @@
     @for $i from 1 through 5 {
         &:has(.sr-star-btn:nth-child(#{$i}):hover) {
             .sr-star-btn:nth-child(-n+#{$i}) {
-                color: #6366f1;
+                color: $ui-indigo-500;
             }
 
             .sr-star-btn:not(:nth-child(-n+#{$i})) {
-                color: #d1d5db;
+                color: $ui-gray-300;
             }
         }
     }
@@ -863,7 +769,7 @@
 // Vulnerability - red scale (higher = more exposed/risky)
 .star-rating-interactive--vulnerability .sr-star-btn {
     &--on {
-        color: #ef4444;
+        color: $ui-red-500;
     }
 }
 
@@ -871,11 +777,11 @@
     @for $i from 1 through 5 {
         &:has(.sr-star-btn:nth-child(#{$i}):hover) {
             .sr-star-btn:nth-child(-n+#{$i}) {
-                color: #ef4444;
+                color: $ui-red-500;
             }
 
             .sr-star-btn:not(:nth-child(-n+#{$i})) {
-                color: #d1d5db;
+                color: $ui-gray-300;
             }
         }
     }
@@ -887,7 +793,7 @@
     cursor: pointer;
     font-size: .9rem;
     font-weight: 700;
-    color: #9ca3af;
+    color: $ui-gray-400;
     padding: 0 4px;
     line-height: 1;
     margin-left: 2px;
@@ -895,7 +801,7 @@
     outline: none;
 
     &:hover {
-        color: #dc2626;
+        color: $ui-red-600;
         outline: none;
     }
 
@@ -905,7 +811,7 @@
 }
 
 .panel-header {
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
 }
 
 // ── Pin details card theming (pin overview / location details page) ────────
@@ -926,7 +832,7 @@ body.page-location-details {
             }
 
             &:nth-child(even) {
-                background: var(--ul-surface-1);
+                background: var(--ul-grey-0);
             }
         }
 
@@ -989,9 +895,9 @@ body.page-location-details {
     margin-top: .6rem;
     padding: .55rem .9rem;
     border-radius: 8px;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    color: #1d4ed8;
+    background: var(--ul-grey-0a);
+    border: 1px solid $ui-blue-200;
+    color: $ui-blue-700;
     text-decoration: none;
     font-size: .83rem;
     font-weight: 600;
@@ -1008,9 +914,9 @@ body.page-location-details {
     }
 
     &:hover {
-        background: #dbeafe;
-        border-color: #93c5fd;
-        color: #1e40af;
+        background: $ui-blue-100;
+        border-color: $ui-blue-300;
+        color: $ui-blue-800;
     }
 }
 
@@ -1023,8 +929,8 @@ body.page-location-details {
 
     .card-header {
         .badge {
-            background: #e2e8f0;
-            color: #64748b;
+            background: $ui-slate-200;
+            color: $ui-slate-500;
             border-radius: 99px;
             font-size: .72rem;
             font-weight: 700;
@@ -1044,7 +950,7 @@ body.page-location-details {
     align-items: flex-start;
     gap: .65rem;
     padding: .75rem 1rem;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid $ui-slate-100;
     transition: opacity .2s;
 
     &:last-child {
@@ -1065,19 +971,19 @@ body.page-location-details {
 .pin-note-text {
     margin: 0 0 .25rem;
     font-size: .88rem;
-    color: #1e293b;
+    color: $ui-slate-800;
     white-space: pre-wrap;
     word-break: break-word;
 }
 
 .pin-note-date {
     font-size: .75rem;
-    color: #94a3b8;
+    color: $ui-slate-400;
 }
 
 .pin-notes-empty {
     padding: 1.25rem 1rem;
-    color: #94a3b8;
+    color: $ui-slate-400;
     font-size: .85rem;
     font-style: italic;
     margin: 0;
@@ -1099,7 +1005,7 @@ body.page-location-details {
 
         &:focus {
             outline: none;
-            border-color: #93c5fd;
+            border-color: $ui-blue-300;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
         }
     }
@@ -1131,19 +1037,19 @@ body.page-location-details {
     border: 1px solid var(--ul-border);
     border-radius: 10px;
     overflow: visible;
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
 
     &--unlinked {
         display: flex;
         align-items: center;
         gap: .5rem;
         padding: .6rem .85rem;
-        color: #6b7280;
+        color: $ui-gray-500;
         font-size: .84rem;
 
         .material-icons {
             font-size: 1.05rem;
-            color: #d1d5db;
+            color: $ui-gray-300;
         }
     }
 }
@@ -1157,7 +1063,7 @@ body.page-location-details {
 
 .pin-location-icon {
     font-size: 1.2rem;
-    color: #6366f1;
+    color: $ui-indigo-500;
     flex-shrink: 0;
 }
 
@@ -1174,13 +1080,13 @@ body.page-location-details {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .06em;
-    color: #9ca3af;
+    color: $ui-gray-400;
 }
 
 .pin-location-name {
     font-size: .88rem;
     font-weight: 600;
-    color: #1e40af;
+    color: $ui-blue-800;
     text-decoration: none;
     display: inline-flex;
     align-items: center;
@@ -1212,12 +1118,12 @@ body.page-location-details {
 .pin-loc-detach-btn {
     font-size: .75rem;
     padding: .2rem .5rem;
-    color: #dc2626;
-    border-color: #fca5a5;
+    color: $ui-red-600;
+    border-color: $ui-red-300;
 
     &:hover {
-        background: var(--ul-surface-1);
-        border-color: #dc2626;
+        background: var(--ul-grey-0);
+        border-color: $ui-red-600;
     }
 }
 
@@ -1225,7 +1131,7 @@ body.page-location-details {
 
 .pin-loc-picker {
     border-top: 1px solid var(--ul-border);
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
     border-radius: 0 0 10px 10px;
 }
 
@@ -1238,14 +1144,14 @@ body.page-location-details {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .06em;
-    color: #9ca3af;
+    color: $ui-gray-400;
 }
 
 .pin-loc-picker-close {
     background: none;
     border: none;
     cursor: pointer;
-    color: #9ca3af;
+    color: $ui-gray-400;
     padding: 0;
     display: inline-flex;
 
@@ -1254,7 +1160,7 @@ body.page-location-details {
     }
 
     &:hover {
-        color: #374151;
+        color: $ui-gray-700;
     }
 }
 
@@ -1263,11 +1169,11 @@ body.page-location-details {
     align-items: center;
     justify-content: space-between;
     padding: .45rem .85rem;
-    border-top: 1px solid #f3f4f6;
+    border-top: 1px solid $ui-gray-100;
     gap: .5rem;
 
     &--current {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
     }
 }
 
@@ -1282,7 +1188,7 @@ body.page-location-details {
 .pin-loc-option-name {
     font-size: .84rem;
     font-weight: 500;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     @include truncate;
 }
 
@@ -1290,8 +1196,8 @@ body.page-location-details {
     font-size: .65rem;
     font-weight: 700;
     text-transform: uppercase;
-    background: #dbeafe;
-    color: #1d4ed8;
+    background: $ui-blue-100;
+    color: $ui-blue-700;
     border-radius: 8px;
     padding: .1rem .4rem;
     white-space: nowrap;
@@ -1307,7 +1213,7 @@ body.page-location-details {
 .pin-loc-picker-empty {
     padding: .65rem .85rem;
     font-size: .82rem;
-    color: #9ca3af;
+    color: $ui-gray-400;
     display: flex;
     align-items: center;
     gap: .35rem;
@@ -1320,25 +1226,11 @@ body.page-location-details {
 // ── Location conflict dialog (map page) ───────────────────────────────────────
 
 .loc-conflict-dialog {
-    width: min(90vw, 520px);
-    padding: 0;
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 16px 48px rgba(0, 0, 0, .25);
-    overflow: hidden;
+    @include dialog-base(520px);
 
-    .dialog-header {
-        display: flex;
-        align-items: center;
-        gap: .45rem;
-        padding: .75rem 1rem;
-        border-bottom: 1px solid var(--ul-border);
-        font-weight: 600;
-        font-size: .9rem;
-
-        .dialog-close {
-            margin-left: auto;
-        }
+    // dialog-close inside header sits at the right edge
+    .dialog-header .dialog-close {
+        margin-left: auto;
     }
 }
 
@@ -1348,7 +1240,7 @@ body.page-location-details {
 
 .loc-conflict-intro {
     font-size: .83rem;
-    color: #4b5563;
+    color: $ui-gray-600;
     margin: 0 0 .75rem;
 }
 
@@ -1368,15 +1260,15 @@ body.page-location-details {
     gap: .5rem;
 
     &--current {
-        background: var(--ul-surface-1);
-        border-color: #bae6fd;
+        background: var(--ul-grey-0);
+        border-color: $ui-sky-200;
     }
 }
 
 .loc-conflict-option-name {
     font-size: .86rem;
     font-weight: 500;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     flex: 1;
     min-width: 0;
     @include truncate;
@@ -1385,8 +1277,8 @@ body.page-location-details {
 .loc-conflict-badge {
     font-size: .65rem;
     font-weight: 700;
-    background: #dbeafe;
-    color: #1d4ed8;
+    background: $ui-blue-100;
+    color: $ui-blue-700;
     border-radius: 8px;
     padding: .1rem .4rem;
     margin-left: .4rem;
@@ -1406,8 +1298,8 @@ body.page-location-details {
     display: flex;
     align-items: flex-start;
     gap: .75rem;
-    background: #fffbeb;
-    border: 1px solid #fcd34d;
+    background: var(--ul-grey-0);
+    border: 1px solid $ui-amber-300;
     border-radius: 10px;
     padding: .85rem 1rem;
     margin-bottom: 1.25rem;
@@ -1416,7 +1308,7 @@ body.page-location-details {
 
 .wiki-lcn-icon {
     font-size: 1.2rem;
-    color: #f59e0b;
+    color: $ui-amber-500;
     flex-shrink: 0;
     margin-top: .05rem;
 }
@@ -1424,10 +1316,10 @@ body.page-location-details {
 .wiki-lcn-body {
     flex: 1;
     font-size: .84rem;
-    color: #374151;
+    color: $ui-gray-700;
 
     strong {
-        color: #92400e;
+        color: $ui-amber-800;
     }
 }
 
@@ -1442,8 +1334,8 @@ body.page-location-details {
     display: inline-flex;
     align-items: center;
     gap: .3rem;
-    background: var(--ul-surface-1);
-    border: 1px solid #fcd34d;
+    background: var(--ul-grey-0);
+    border: 1px solid $ui-amber-300;
     border-radius: 8px;
     padding: .2rem .55rem;
 }
@@ -1451,7 +1343,7 @@ body.page-location-details {
 .wiki-lcn-link {
     font-size: .82rem;
     font-weight: 500;
-    color: #1d4ed8;
+    color: $ui-blue-700;
     text-decoration: none;
 
     &:hover {
@@ -1465,7 +1357,7 @@ body.page-location-details {
     cursor: pointer;
     font-size: .75rem;
     font-weight: 600;
-    color: #6d28d9;
+    color: $ui-violet-700;
     padding: 0;
 
     &:hover {
@@ -1477,7 +1369,7 @@ body.page-location-details {
     background: none;
     border: none;
     cursor: pointer;
-    color: #9ca3af;
+    color: $ui-gray-400;
     padding: 0;
     flex-shrink: 0;
     display: flex;
@@ -1488,7 +1380,7 @@ body.page-location-details {
     }
 
     &:hover {
-        color: #374151;
+        color: $ui-gray-700;
     }
 }
 
@@ -1500,7 +1392,7 @@ body.page-location-details {
     }
 
     .pin-location-panel {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         border-color: var(--ul-border);
 
         &--unlinked {
@@ -1517,7 +1409,7 @@ body.page-location-details {
     }
 
     .pin-location-name {
-        color: #93c5fd;
+        color: $ui-blue-300;
     }
 
     .pin-loc-change-btn {
@@ -1526,17 +1418,17 @@ body.page-location-details {
     }
 
     .pin-loc-detach-btn {
-        color: #f87171;
-        border-color: rgba(248, 113, 113, .3);
+        color: $ui-red-400;
+        border-color: rgba($ui-red-400, .3);
 
         &:hover {
             background: rgba(220, 38, 38, .1);
-            border-color: #f87171;
+            border-color: $ui-red-400;
         }
     }
 
     .pin-loc-picker {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         border-color: var(--ul-border);
     }
 
@@ -1556,16 +1448,6 @@ body.page-location-details {
         color: var(--ul-text);
     }
 
-    .loc-conflict-dialog {
-        background: var(--ul-surface-1);
-        color: var(--ul-text);
-
-        .dialog-header {
-            border-color: var(--ul-border);
-            background: var(--ul-surface-1);
-        }
-    }
-
     .loc-conflict-intro {
         color: var(--ul-muted);
     }
@@ -1575,7 +1457,7 @@ body.page-location-details {
 
         &--current {
             background: rgba(59, 130, 246, .08);
-            border-color: #3b82f6;
+            border-color: $ui-blue-500;
         }
     }
 
@@ -1592,21 +1474,21 @@ body.page-location-details {
         color: var(--ul-text);
 
         strong {
-            color: #fbbf24;
+            color: $ui-amber-400;
         }
     }
 
     .wiki-lcn-item {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         border-color: rgba(245, 158, 11, .3);
     }
 
     .wiki-lcn-link {
-        color: #93c5fd;
+        color: $ui-blue-300;
     }
 
     .wiki-lcn-switch-btn {
-        color: #c4b5fd;
+        color: $ui-violet-300;
     }
 
     .wiki-lcn-dismiss {
@@ -1634,18 +1516,18 @@ body.page-location-details {
     // Map section: slate
     .location-map.card .card-header {
         @extend .panel-header;
-        background: var(--ul-surface-1);
-        color: #1e293b;
-        border-bottom-color: #e2e8f0;
+        background: var(--ul-grey-0);
+        color: $ui-slate-800;
+        border-bottom-color: $ui-slate-200;
 
         .material-icons {
-            color: #64748b;
+            color: $ui-slate-500;
             opacity: 1;
         }
 
         span,
         h3 {
-            color: #1e293b;
+            color: $ui-slate-800;
         }
     }
 }
@@ -1653,35 +1535,18 @@ body.page-location-details {
 // ── Pin note delete button ────────────────────────────────────────────────
 
 .pin-note-delete-btn {
+    @include icon-btn-danger(28px);
     flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: none;
-    background: transparent;
-    border-radius: 6px;
-    cursor: pointer;
-    color: #94a3b8;
     outline: none;
-    transition: color .15s, background .15s;
 
-    .material-icons {
-        font-size: 1.1rem;
-    }
-
-    &:hover,
     &:focus {
-        color: #dc2626;
-        background: #fee2e2;
         outline: none;
     }
 }
 
 // ── Pin detail page layout ─────────────────────────────────────────────────
 body.page-location-details {
-    background: var(--ul-surface-1);
+    background: var(--ul-grey-0);
 }
 
 body.page-location-details div.section {
@@ -1697,11 +1562,15 @@ body.page-location-details div.section {
     .location-details {
         .details-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: .35rem .75rem;
             padding: .75rem 1rem;
 
-            @media (min-width: 1024px) {
+            @include up($breakpoint-sm) {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            @include up($breakpoint-md) {
                 grid-template-columns: repeat(3, 1fr);
             }
 
@@ -1733,13 +1602,13 @@ body.page-location-details div.section {
                 font-size: .7rem;
                 text-transform: uppercase;
                 letter-spacing: .05em;
-                color: var(--ul-text-3, #9ca3af);
+                color: var(--ul-grey-6, #9ca3af);
                 font-weight: 600;
             }
 
             .field-value {
                 font-size: .92rem;
-                color: var(--ul-text-1, #1e293b);
+                color: var(--ul-grey-8, #1e293b);
             }
         }
     }
@@ -1782,7 +1651,7 @@ body.page-location-details div.section {
 
                 .smithsonian-title {
                     font-size: .75rem;
-                    color: #555;
+                    color: var(--ul-grey-7);
                 }
             }
         }
@@ -1805,7 +1674,7 @@ body.page-location-details div.section {
             }
 
             &:hover {
-                background: var(--ul-surface-2, #f8fafc);
+                background: var(--ul-grey-1, #f8fafc);
             }
         }
 
@@ -1852,7 +1721,7 @@ body.page-location-details div.section {
             gap: .25rem;
             font-size: .72rem;
             font-weight: 500;
-            color: var(--ul-text-3, #6b7280);
+            color: var(--ul-grey-6, #6b7280);
             letter-spacing: .01em;
         }
 
@@ -1898,7 +1767,7 @@ body.page-location-details div.section {
 
         .search-result-snippet {
             font-size: .8rem;
-            color: var(--ul-text-2, #555);
+            color: var(--ul-grey-7, #555);
             margin: 0;
             line-height: 1.5;
             display: -webkit-box;
@@ -1917,11 +1786,11 @@ body.page-location-details div.section {
     grid-template-columns: 1fr;
     align-items: start;
 
-    @media (min-width: 640px) {
+    @include up($breakpoint-xs) {
         grid-template-columns: 1fr 1fr;
     }
 
-    @media (min-width: 1024px) {
+    @include up($breakpoint-md) {
         grid-template-columns: 1fr 1fr 1fr;
     }
 }

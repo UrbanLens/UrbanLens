@@ -1,32 +1,8 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-    Custom argparse Action.
+"""*
+Custom argparse Action.
 
-    Modified from https://stackoverflow.com/questions/43968006/support-for-enum-arguments-in-argparse
-
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    action.py                                                                                            *
-*        Path:    /action.py                                                                                           *
-*        Project: utils                                                                                                *
-*        Version: <<projectversion>>                                                                                   *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2023 Urban Lens                                                                                 *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
+Modified from https://stackoverflow.com/questions/43968006/support-for-enum-arguments-in-argparse
+"""
 
 import argparse
 import enum

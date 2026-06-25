@@ -2,13 +2,10 @@
 
 // ── App navigation bar ───────────────────────────────────────────────────────
 
-$nav-bg: #2b2b2b;
-$nav-text: rgba(255, 255, 255, 0.85);
-$nav-text-hover: #fff;
-$nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.1);
+$nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($color-grey-9, 0.1);
 
 .app-nav {
-    background: $nav-bg;
+    background: #{$ui-indigo-950};
     height: 4rem;
     position: relative;
     z-index: 1100; // must exceed Leaflet's control-container (1000)
@@ -42,8 +39,34 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
 .app-nav-brand-name {
     font-size: 1rem;
     font-weight: 700;
-    color: $nav-text-hover;
+    color: var(--ul-grey-0);
     letter-spacing: -0.01em;
+}
+
+// ── Mobile hamburger ─────────────────────────────────────────────────────────
+
+.app-nav-hamburger {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.75);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+    margin-left: auto;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.12);
+    }
+
+    .material-icons {
+        font-size: 1.4rem;
+    }
 }
 
 // Primary links
@@ -65,13 +88,13 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     border-radius: 6px;
     font-size: 0.875rem;
     font-weight: 500;
-    color: $nav-text;
+    color: var(--ul-grey-3);
     text-decoration: none;
     transition: background 0.15s, color 0.15s;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: $nav-text-hover;
+        background: rgba(255, 255, 255, 0.3);
+        color: var(--ul-black);
     }
 }
 
@@ -94,7 +117,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #9aa0a6;
+    background: $ui-avatar-neutral;
 }
 
 // Top-level so it works inside .nav-avatar, .nav-dropdown-avatar, and any other circular container
@@ -113,7 +136,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     height: 100%;
     font-size: 0.8rem;
     font-weight: 700;
-    color: var(--ul-text-4);
+    color: var(--ul-grey-5);
     text-transform: uppercase;
     user-select: none;
 
@@ -137,12 +160,11 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     border-radius: 8px;
     padding: 4px 8px 4px 4px;
     cursor: pointer;
-    color: $nav-text;
+    color: var(--ul-grey-4);
     transition: background 0.15s, border-color 0.15s;
 
     &:hover {
         background: rgba(255, 255, 255, 0.1);
-        color: $nav-text-hover;
     }
 
     .nav-is-open &,
@@ -199,7 +221,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #9aa0a6;
+    background: $ui-avatar-neutral;
 }
 
 .nav-dropdown-user-text {
@@ -215,13 +237,13 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
 .nav-dropdown-fullname {
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--ul-text-1);
+    color: var(--ul-grey-8);
     @include truncate;
 }
 
 .nav-dropdown-username {
     font-size: 0.8rem;
-    color: var(--ul-text-2);
+    color: var(--ul-grey-7);
     @include truncate;
 }
 
@@ -246,17 +268,17 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
     }
 
     &--signout {
-        color: #c62828;
+        color: #{$color-red-900};
 
         .material-icons {
-            color: #c62828;
+            color: #{$color-red-900};
         }
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-0);
 
             .material-icons {
-                color: #c62828;
+                color: #{$color-red-900};
             }
         }
     }
@@ -268,10 +290,15 @@ $nav-dropdown-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.
 }
 
 .page-footer {
-    background-color: $dark-neutral-color;
+    background-color: #{$ui-indigo-950};
+    color: var(--ul-grey-4);
     position: sticky;
     bottom: 0;
     z-index: 15; // above div.container (z-index: 1)
+
+    a {
+        color: var(--ul-grey-3);
+    }
 }
 
 div.container {
@@ -349,12 +376,12 @@ nav .brand-logo img {
 
     &:hover {
         background: rgba(255, 255, 255, .12);
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 
     &[aria-expanded="true"] {
         background: rgba(255, 255, 255, .14);
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 
     .nav-notif-icon {
@@ -370,8 +397,8 @@ nav .brand-logo img {
     height: 16px;
     padding: 0 4px;
     border-radius: 8px;
-    background: #ef4444;
-    color: var(--ul-text-4);
+    background: #{$color-red-700};
+    color: var(--ul-grey-5);
     font-size: .68rem;
     font-weight: 700;
     line-height: 16px;
@@ -405,7 +432,7 @@ nav .brand-logo img {
     &__title {
         font-size: .9rem;
         font-weight: 600;
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
     }
 }
 
@@ -441,7 +468,7 @@ nav .brand-logo img {
     position: relative;
 
     &:hover {
-        background: var(--ul-surface-2);
+        background: var(--ul-grey-1);
     }
 
     // ── Read state: deemphasised ─────────────────────────────────────────
@@ -453,12 +480,12 @@ nav .brand-logo img {
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--ul-surface-3);
+        background: var(--ul-grey-4);
         margin-top: .1rem;
 
         .material-icons {
             font-size: 1rem;
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
         }
     }
 
@@ -470,21 +497,21 @@ nav .brand-logo img {
     &__title {
         font-size: .84rem;
         font-weight: 400;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         margin: 0 0 .15rem;
         @include truncate;
     }
 
     &__msg {
         font-size: .79rem;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         margin: 0 0 .2rem;
         @include truncate;
     }
 
     &__time {
         font-size: .7rem;
-        color: var(--ul-text-3);
+        color: var(--ul-grey-6);
         margin: 0;
     }
 
@@ -493,82 +520,82 @@ nav .brand-logo img {
         width: 7px;
         height: 7px;
         border-radius: 50%;
-        background: #6366f1;
+        background: $ui-indigo-500;
         margin-top: .45rem;
     }
 
     // ── Unread state: prominent ──────────────────────────────────────────
     &--unread {
-        background: var(--ul-surface-1);
-        border-left-color: #6366f1;
+        background: var(--ul-grey-0);
+        border-left-color: $ui-indigo-500;
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-0);
         }
 
         .notif-item__icon-wrap {
-            background: #ede9fe;
+            background: var(--ul-accent-purple-bg);
 
             .material-icons {
-                color: #6366f1;
+                color: $ui-indigo-500;
             }
         }
 
         .notif-item__title {
             font-weight: 600;
-            color: var(--ul-text-1);
+            color: var(--ul-grey-8);
         }
 
         .notif-item__msg {
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
         }
 
         .notif-item__time {
-            color: var(--ul-text-3);
+            color: var(--ul-grey-6);
         }
     }
 
     // ── Icon colour variants by type ────────────────────────────────────
     &--unread &__icon-wrap--friend_request,
     &--unread &__icon-wrap--friend_accepted {
-        background: #dcfce7;
+        background: $ui-green-100;
 
         .material-icons {
-            color: #16a34a;
+            color: $ui-green-600;
         }
     }
 
     &--unread &__icon-wrap--added_to_trip,
     &--unread &__icon-wrap--trip_updated {
-        background: #dbeafe;
+        background: $ui-blue-100;
 
         .material-icons {
-            color: #2563eb;
+            color: $ui-blue-600;
         }
     }
 
     &--unread &__icon-wrap--comment_reply,
     &--unread &__icon-wrap--comment_liked {
-        background: #fce7f3;
+        background: $ui-pink-100;
 
         .material-icons {
-            color: #db2777;
+            color: $ui-pink-600;
         }
     }
 
     &--unread &__icon-wrap--error {
-        background: #fee2e2;
+        background: var(--ul-grey-0a);
 
         .material-icons {
-            color: #dc2626;
+            color: $ui-red-600;
         }
     }
 
     &--unread &__icon-wrap--warning {
-        background: #fef3c7;
+        background: var(--ul-accent-amber-bg);
 
         .material-icons {
-            color: #d97706;
+            color: var(--ul-accent-amber);
         }
     }
 }
@@ -577,7 +604,7 @@ nav .brand-logo img {
     padding: 1.5rem 1rem;
     text-align: center;
     font-size: .84rem;
-    color: var(--ul-text-3);
+    color: var(--ul-grey-6);
     margin: 0;
 }
 
@@ -605,21 +632,21 @@ nav .brand-logo img {
     }
 
     &--accept {
-        background: #dcfce7;
-        color: #15803d;
+        background: $ui-green-100;
+        color: $ui-green-700;
 
         &:hover {
-            background: #bbf7d0;
+            background: $ui-green-200;
         }
     }
 
     &--decline {
-        background: var(--ul-surface-3, #f1f5f9);
-        color: var(--ul-text-2, #475569);
+        background: var(--ul-grey-4, #f1f5f9);
+        color: var(--ul-grey-7, #475569);
 
         &:hover {
-            background: #fee2e2;
-            color: #dc2626;
+            background: var(--ul-grey-0a);
+            color: $ui-red-600;
         }
     }
 }
@@ -628,8 +655,8 @@ nav .brand-logo img {
 
 .notif-prefs {
     &__saved {
-        background: #dcfce7;
-        color: #166534;
+        background: $ui-green-100;
+        color: $ui-green-800;
         border-radius: 6px;
         padding: .5rem .85rem;
         font-size: .84rem;
@@ -644,7 +671,7 @@ nav .brand-logo img {
         th {
             padding: .4rem .6rem;
             text-align: center;
-            color: #6b7280;
+            color: $ui-gray-500;
             font-weight: 600;
             font-size: .78rem;
             border-bottom: 1px solid var(--ul-border);
@@ -656,16 +683,16 @@ nav .brand-logo img {
     }
 
     &__row {
-        border-bottom: 1px solid #f3f4f6;
+        border-bottom: 1px solid $ui-gray-100;
 
         &:hover {
-            background: var(--ul-surface-1);
+            background: var(--ul-grey-0);
         }
     }
 
     &__label {
         padding: .5rem .6rem;
-        color: #374151;
+        color: $ui-gray-700;
         font-weight: 500;
     }
 
@@ -697,5 +724,69 @@ nav .brand-logo img {
 
     &__footer {
         padding: .85rem 0 .2rem;
+    }
+}
+
+// ── Mobile nav drawer ─────────────────────────────────────────────────────────
+
+.app-nav-drawer {
+    display: none;
+    flex-direction: column;
+    background: #{$dark-primary};
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 0.5rem 0.75rem 0.75rem;
+    z-index: $z-nav;
+    position: relative;
+
+    &.is-open {
+        display: flex;
+    }
+
+    .app-nav-drawer-links {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+    }
+
+    .app-nav-link {
+        display: flex;
+        align-items: center;
+        height: 2.6rem;
+        padding: 0 0.75rem;
+        border-radius: 6px;
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: var(--ul-grey-4);
+        text-decoration: none;
+        transition: background 0.15s, color 0.15s;
+
+        &:hover,
+        &:focus {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--ul-grey-9);
+        }
+    }
+}
+
+// ── Responsive: cap notification panel width, show hamburger on small screens ─
+
+.nav-notif-panel {
+    width: min(340px, 90vw);
+}
+
+@include down($breakpoint-sm) {
+    .app-nav-hamburger {
+        display: flex;
+    }
+
+    .app-nav-links {
+        display: none;
+    }
+
+    .app-nav-right {
+        margin-left: 0;
     }
 }

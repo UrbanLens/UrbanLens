@@ -42,4 +42,6 @@ class BadgeSerializer(serializers.ModelSerializer):
         Returns:
             Pin count.
         """
+        if (count := getattr(obj, "pin_count", None)) is not None:
+            return count
         return obj.pins.count()

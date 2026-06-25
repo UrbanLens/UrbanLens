@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 class PinAliasView(LoginRequiredMixin, View):
     """GET: HTMX panel listing a pin's aliases.  POST: add a new alias."""
 
-    def get(self, request, pin_uuid):
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+    def get(self, request, pin_slug):
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         aliases = pin.aliases.order_by("name")
         return render(
             request,
@@ -31,8 +31,8 @@ class PinAliasView(LoginRequiredMixin, View):
             {"pin": pin, "aliases": aliases},
         )
 
-    def post(self, request, pin_uuid):
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+    def post(self, request, pin_slug):
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         name = (request.POST.get("name") or "").strip()
         if not name:
             return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
@@ -49,8 +49,8 @@ class PinAliasView(LoginRequiredMixin, View):
 
 
 class PinAliasDeleteView(LoginRequiredMixin, View):
-    def delete(self, request, pin_uuid, alias_id):
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+    def delete(self, request, pin_slug, alias_id):
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         get_object_or_404(PinAlias, id=alias_id, pin=pin).delete()
         aliases = pin.aliases.order_by("name")
         return render(
@@ -63,8 +63,8 @@ class PinAliasDeleteView(LoginRequiredMixin, View):
 class LocationAliasView(LoginRequiredMixin, View):
     """GET: HTMX partial listing a location's aliases.  POST: add a new alias."""
 
-    def get(self, request, location_uuid):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def get(self, request, location_slug):
+        location = get_object_or_404(Location, slug=location_slug)
         aliases = location.aliases.order_by("name")
         return render(
             request,
@@ -72,8 +72,8 @@ class LocationAliasView(LoginRequiredMixin, View):
             {"location": location, "aliases": aliases},
         )
 
-    def post(self, request, location_uuid):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def post(self, request, location_slug):
+        location = get_object_or_404(Location, slug=location_slug)
         name = (request.POST.get("name") or "").strip()
         if not name:
             return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
@@ -96,8 +96,8 @@ class LocationAliasView(LoginRequiredMixin, View):
 
 
 class LocationAliasDeleteView(LoginRequiredMixin, View):
-    def delete(self, request, location_uuid, alias_id):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def delete(self, request, location_slug, alias_id):
+        location = get_object_or_404(Location, slug=location_slug)
         alias = get_object_or_404(LocationAlias, id=alias_id, location=location)
         alias_name = alias.name
         alias.delete()

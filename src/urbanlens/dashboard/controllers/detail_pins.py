@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 class DetailPinPanelView(LoginRequiredMixin, View):
     """HTMX partial: list of personal detail pins for a single user pin."""
 
-    def get(self, request, pin_uuid):
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+    def get(self, request, pin_slug):
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         detail_pins = (
             pin.detail_pins.select_related("location").order_by("pin_type", "nickname")
         )
@@ -36,9 +36,9 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             },
         )
 
-    def post(self, request, pin_uuid):
+    def post(self, request, pin_slug):
         """Create a new personal detail pin under the given parent pin."""
-        parent = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+        parent = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         try:
             body = json.loads(request.body)
         except (json.JSONDecodeError, ValueError):
@@ -71,12 +71,12 @@ class DetailPinPanelView(LoginRequiredMixin, View):
 class DetailPinEditView(LoginRequiredMixin, View):
     """Edit or delete a single personal detail pin."""
 
-    def _get_detail_pin(self, request, pin_uuid, detail_pin_uuid):
-        parent = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+    def _get_detail_pin(self, request, pin_slug, detail_pin_uuid):
+        parent = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         return get_object_or_404(Pin, uuid=detail_pin_uuid, parent_pin=parent)
 
-    def post(self, request, pin_uuid, detail_pin_uuid):
-        detail_pin = self._get_detail_pin(request, pin_uuid, detail_pin_uuid)
+    def post(self, request, pin_slug, detail_pin_uuid):
+        detail_pin = self._get_detail_pin(request, pin_slug, detail_pin_uuid)
         try:
             body = json.loads(request.body)
         except (json.JSONDecodeError, ValueError):
@@ -104,8 +104,8 @@ class DetailPinEditView(LoginRequiredMixin, View):
         detail_pin.save()
         return JsonResponse({"ok": True})
 
-    def delete(self, request, pin_uuid, detail_pin_uuid):
-        detail_pin = self._get_detail_pin(request, pin_uuid, detail_pin_uuid)
+    def delete(self, request, pin_slug, detail_pin_uuid):
+        detail_pin = self._get_detail_pin(request, pin_slug, detail_pin_uuid)
         detail_pin.delete()
         return HttpResponse("", status=200)
 
@@ -113,8 +113,8 @@ class DetailPinEditView(LoginRequiredMixin, View):
 class DetailPinJsonView(LoginRequiredMixin, View):
     """Return personal detail pins as JSON for Leaflet rendering on the pin details page."""
 
-    def get(self, request, pin_uuid):
-        pin = get_object_or_404(Pin, uuid=pin_uuid, profile__user=request.user)
+    def get(self, request, pin_slug):
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         detail_pins = (
             pin.detail_pins.order_by("pin_type", "nickname")
         )
@@ -124,8 +124,8 @@ class DetailPinJsonView(LoginRequiredMixin, View):
 class LocationDetailPinJsonView(LoginRequiredMixin, View):
     """Return community detail pins for a location (wiki map overlay)."""
 
-    def get(self, request, location_uuid):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def get(self, request, location_slug):
+        location = get_object_or_404(Location, slug=location_slug)
         detail_pins = (
             Pin.objects.filter(parent_location=location, parent_pin__isnull=True)
             .select_related("profile__user")
@@ -162,12 +162,12 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             },
         )
 
-    def get(self, request, location_uuid):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def get(self, request, location_slug):
+        location = get_object_or_404(Location, slug=location_slug)
         return self._render(request, location)
 
-    def post(self, request, location_uuid):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def post(self, request, location_slug):
+        location = get_object_or_404(Location, slug=location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
@@ -206,8 +206,8 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
 class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
     """Move a community detail pin and record a LocationEdit."""
 
-    def post(self, request, location_uuid, detail_pin_uuid):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def post(self, request, location_slug, detail_pin_uuid):
+        location = get_object_or_404(Location, slug=location_slug)
         detail_pin = get_object_or_404(Pin, uuid=detail_pin_uuid, parent_location=location)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
@@ -243,8 +243,8 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
 class LocationWikiDetailPinDeleteView(LoginRequiredMixin, View):
     """Delete a single community detail pin and record a LocationEdit."""
 
-    def delete(self, request, location_uuid, detail_pin_uuid):
-        location = get_object_or_404(Location, uuid=location_uuid)
+    def delete(self, request, location_slug, detail_pin_uuid):
+        location = get_object_or_404(Location, slug=location_slug)
         detail_pin = get_object_or_404(Pin, uuid=detail_pin_uuid, parent_location=location)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 

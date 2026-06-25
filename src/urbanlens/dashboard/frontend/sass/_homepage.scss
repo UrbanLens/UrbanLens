@@ -11,8 +11,8 @@ body.page-index {
         justify-content: center;
         text-align: center;
         padding: 4rem 1.5rem;
-        background: linear-gradient(160deg, #1e1b4b 0%, #312e81 45%, #4338ca 75%, #3b82f6 100%);
-        color: var(--ul-text-4);
+        background: linear-gradient(160deg, $ui-indigo-950 0%, $ui-indigo-900 45%, $ui-indigo-700 75%, $ui-blue-500 100%);
+        color: var(--ul-grey-5);
     }
 
     .home-eyebrow {
@@ -20,7 +20,7 @@ body.page-index {
         font-weight: 700;
         letter-spacing: .14em;
         text-transform: uppercase;
-        color: #a5b4fc;
+        color: $ui-indigo-300;
         margin: 0 0 .9rem;
     }
 
@@ -29,19 +29,19 @@ body.page-index {
         font-weight: 800;
         line-height: 1.12;
         letter-spacing: -.03em;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
         margin: 0 0 1.1rem;
         max-width: 720px;
 
         em {
             font-style: normal;
-            color: #a5b4fc;
+            color: $ui-indigo-300;
         }
     }
 
     .home-subtitle {
         font-size: 1.1rem;
-        color: #c7d2fe;
+        color: $ui-indigo-200;
         max-width: 540px;
         margin: 0 0 2.75rem;
         line-height: 1.65;
@@ -66,11 +66,11 @@ body.page-index {
         transition: background .15s, transform .1s, box-shadow .15s;
 
         &--primary {
-            background: var(--ul-surface-1);
-            color: #4338ca;
+            background: var(--ul-grey-0);
+            color: $ui-indigo-700;
 
             &:hover {
-                background: var(--ul-surface-1);
+                background: var(--ul-grey-0);
                 transform: translateY(-2px);
                 box-shadow: 0 6px 20px rgba(255, 255, 255, .25);
             }
@@ -78,7 +78,7 @@ body.page-index {
 
         &--secondary {
             background: rgba(255, 255, 255, .12);
-            color: var(--ul-text-4);
+            color: var(--ul-grey-4);
             border: 1.5px solid rgba(255, 255, 255, .35);
 
             &:hover {
@@ -90,7 +90,7 @@ body.page-index {
 
     .home-features {
         padding: 4.5rem 1.5rem;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
     }
 
     .home-features-inner {
@@ -102,13 +102,13 @@ body.page-index {
         text-align: center;
         font-size: 1.8rem;
         font-weight: 700;
-        color: #1e1b4b;
+        color: $ui-indigo-950;
         margin: 0 0 .5rem;
     }
 
     .home-section-subtitle {
         text-align: center;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         margin: 0 0 2.75rem;
         font-size: .95rem;
     }
@@ -120,7 +120,7 @@ body.page-index {
     }
 
     .home-feature-card {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
         border-radius: 14px;
         padding: 1.75rem 1.5rem;
         border: 1px solid var(--ul-border);
@@ -136,7 +136,7 @@ body.page-index {
     .home-feature-icon {
         width: 56px;
         height: 56px;
-        background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+        background: linear-gradient(135deg, $ui-indigo-50, $ui-indigo-100);
         border-radius: 14px;
         display: flex;
         align-items: center;
@@ -144,7 +144,7 @@ body.page-index {
         margin: 0 auto 1.1rem;
 
         .material-icons {
-            color: #4f46e5;
+            color: $ui-indigo-600;
             font-size: 1.6rem;
         }
     }
@@ -152,13 +152,13 @@ body.page-index {
     .home-feature-title {
         font-size: 1.05rem;
         font-weight: 700;
-        color: #1e1b4b;
+        color: $ui-indigo-950;
         margin: 0 0 .45rem;
     }
 
     .home-feature-desc {
         font-size: .875rem;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         margin: 0;
         line-height: 1.55;
     }
@@ -166,19 +166,19 @@ body.page-index {
     .home-cta-section {
         padding: 4rem 1.5rem;
         text-align: center;
-        background: linear-gradient(135deg, #312e81, #4338ca);
-        color: var(--ul-text-4);
+        background: linear-gradient(135deg, $ui-indigo-900, $ui-indigo-700);
+        color: var(--ul-grey-5);
     }
 
     .home-cta-title {
         font-size: 1.8rem;
         font-weight: 700;
         margin: 0 0 .6rem;
-        color: var(--ul-text-4);
+        color: var(--ul-grey-5);
     }
 
     .home-cta-text {
-        color: #c7d2fe;
+        color: $ui-indigo-200;
         margin: 0 0 1.75rem;
         font-size: .95rem;
     }

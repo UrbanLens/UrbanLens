@@ -13,7 +13,7 @@
 
     {# ── Title + details (swappable) ──────────────────────────────────── #}
     <div id="pin-overview"
-         hx-get="{% url 'pin.overview' pin.uuid %}"
+         hx-get="{% url 'pin.overview' pin.slug %}"
          hx-trigger="load"
          hx-swap="outerHTML">
         <div class="pin-overview-title-row">
@@ -32,7 +32,8 @@
 
             {# ── Map sidebar panel (Details + Photos tabs) ── #}
             <div id="detail-pin-list-panel" class="detail-pin-list-panel" style="display:none">
-                <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle">
+                <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle"
+                        data-tooltip="Show or hide your personal detail markers and annotations for this location.">
                     <i class="material-icons">layers</i>
                     <span id="detail-pin-count-label">0 Layers</span>
                     <i class="material-icons detail-pin-list-chevron" id="detail-pin-list-chevron">expand_more</i>
@@ -59,7 +60,9 @@
 
             {# ── Bottom-left map controls ── #}
             <div class="map-bottom-controls">
-                <button id="edit-campus-btn" class="map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()">
+                <button id="edit-campus-btn" class="map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()"
+                        data-tooltip="Draw or resize the boundary polygon for this location. Pins dropped inside this boundary are automatically linked to this wiki entry."
+                        data-tooltip-pos="below">
                     <i class="material-icons">pentagon</i> Edit Boundary
                 </button>
                 <div id="campus-save-controls" class="map-overlay-btn-group" style="display:none">
@@ -99,7 +102,9 @@
                         </button>
                     </div>
                     <button type="button" class="map-overlay-btn map-overlay-btn--add-detail"
-                            id="add-detail-btn" onclick="toggleAddDetailMenu()">
+                            id="add-detail-btn" onclick="toggleAddDetailMenu()"
+                            data-tooltip="Add a personal detail marker, shape, or text to this map. Only you can see theses details."
+                            data-tooltip-pos="below">
                         <i class="material-icons">add_location_alt</i> Add Detail
                         <i class="material-icons add-detail-chevron">expand_less</i>
                     </button>
@@ -110,7 +115,7 @@
             <div id="markup-form-panel" class="markup-form-panel" style="display:none">
                 <div class="markup-form-header">
                     <span id="markup-form-title">Draw Arrow</span>
-                    <button type="button" class="btn-icon-sm" onclick="cancelMarkupDraw()">
+                    <button type="button" class="btn--icon-sm" onclick="cancelMarkupDraw()">
                         <i class="material-icons">close</i>
                     </button>
                 </div>
@@ -133,7 +138,7 @@
                                oninput="document.getElementById('markup-width-label').textContent=this.value">
                     </label>
                     <div class="form-actions">
-                        <button type="button" class="btn-ghost" onclick="_cancelCurrentDraw()">Cancel</button>
+                        <button type="button" class="btn btn--ghost" onclick="_cancelCurrentDraw()">Cancel</button>
                     </div>
                 </div>
             </div>
@@ -175,7 +180,7 @@
                     <label class="markup-form-label-row">
                         Security Type
                         <select id="markup-edit-security" class="markup-form-select">
-                            <option value="">— None —</option>
+                            <option value="">- None -</option>
                             <option value="fence">Fence</option>
                             <option value="camera">Camera</option>
                             <option value="alarm">Alarm</option>
@@ -187,8 +192,8 @@
                         </select>
                     </label>
                     <div class="form-actions" style="margin-top:.5rem">
-                        <button type="button" class="submit-button" onclick="saveMarkupEdit()">Save</button>
-                        <button type="button" class="btn-ghost" onclick="closeMarkupEditDialog()">Cancel</button>
+                        <button type="button" class="submit-button btn btn--primary btn--lg" onclick="saveMarkupEdit()">Save</button>
+                        <button type="button" class="btn btn--ghost" onclick="closeMarkupEditDialog()">Cancel</button>
                     </div>
                 </div>
             </dialog>
@@ -197,7 +202,7 @@
             <div id="text-place-panel" class="markup-form-panel" style="display:none">
                 <div class="markup-form-header">
                     <span>Add Text Label</span>
-                    <button type="button" class="btn-icon-sm" onclick="cancelTextPlacement()">
+                    <button type="button" class="btn--icon-sm" onclick="cancelTextPlacement()">
                         <i class="material-icons">close</i>
                     </button>
                 </div>
@@ -225,7 +230,7 @@
                                oninput="document.getElementById('text-size-label').textContent=this.value">
                     </label>
                     <div class="form-actions">
-                        <button type="button" class="btn-ghost" onclick="cancelTextPlacement()">Cancel</button>
+                        <button type="button" class="btn btn--ghost" onclick="cancelTextPlacement()">Cancel</button>
                     </div>
                 </div>
             </div>
@@ -237,7 +242,7 @@
     {# ── Info row: visits | badges | aliases ──────────────────────────── #}
     <div class="pin-info-row">
 
-        <div hx-get="{% url 'pin.visits' pin.uuid %}"
+        <div hx-get="{% url 'pin.visits' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML"
              class="visit-history card">
@@ -248,7 +253,7 @@
             <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
         </div>
 
-        <div hx-get="{% url 'category.pin' pin.uuid %}"
+        <div hx-get="{% url 'category.pin' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML"
              class="tag-panel">
@@ -259,7 +264,7 @@
             <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
         </div>
 
-        <div hx-get="{% url 'pin.aliases' pin.uuid %}"
+        <div hx-get="{% url 'pin.aliases' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML"
              id="pin-aliases-panel"
@@ -277,7 +282,7 @@
     <div class="pin-media-row">
 
         <div id="satellite-view-section" class="satellite-view card"
-             hx-get="{% url 'pin.satellite_view' pin.uuid %}"
+             hx-get="{% url 'pin.satellite_view' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML">
             <div class="card-header">
@@ -291,7 +296,7 @@
         </div>
 
         <div id="street-view-section" class="street-view card"
-             hx-get="{% url 'pin.street_view' pin.uuid %}"
+             hx-get="{% url 'pin.street_view' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML">
             <div class="card-header">
@@ -310,7 +315,7 @@
     <div class="pin-media-row">
 
         <div id="smithsonian-section" class="smithsonian-images card"
-             hx-get="{% url 'smithsonian_images' pin.uuid %}"
+             hx-get="{% url 'smithsonian_images' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML">
             <div class="card-header">
@@ -325,7 +330,7 @@
 
         {% if pin.has_meaningful_name %}
         <div id="web-search-section" class="web-search card"
-             hx-get="{% url 'pin.web_search' pin.uuid %}"
+             hx-get="{% url 'pin.web_search' pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML">
             <div class="card-header">
@@ -343,7 +348,7 @@
 
     {# ── Photo gallery (full width) ────────────────────────────────────── #}
     <div id="pin-gallery-panel"
-         hx-get="{% url 'pin.gallery' pin.uuid %}"
+         hx-get="{% url 'pin.gallery' pin.slug %}"
          hx-trigger="load"
          hx-swap="outerHTML">
         <div class="card">
@@ -357,7 +362,7 @@
 
     {# ── Comments (full width) ─────────────────────────────────────────── #}
     <div id="comment-panel"
-         hx-get="{% url 'pin.comments' pin.uuid %}"
+         hx-get="{% url 'pin.comments' pin.slug %}"
          hx-trigger="load"
          hx-swap="outerHTML">
         <div class="card">
@@ -374,7 +379,7 @@
 {# ── Pin edit dialog ────────────────────────────────────────────────────── #}
 <dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Edit Pin" %}
-    <form hx-post="{% url 'pin.edit' pin.uuid %}"
+    <form hx-post="{% url 'pin.edit' pin.slug %}"
           hx-target="#pin-overview"
           hx-swap="outerHTML"
           hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}"
@@ -460,8 +465,8 @@
         </div>
 
         <div class="form-actions">
-            <button type="submit" class="submit-button">Save Changes</button>
-            <button type="button" class="btn-ghost"
+            <button type="submit" class="submit-button btn btn--primary btn--lg">Save Changes</button>
+            <button type="button" class="btn btn--ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </form>
@@ -546,10 +551,10 @@
         <input type="hidden" id="dp-lat" name="latitude">
         <input type="hidden" id="dp-lon" name="longitude">
         <div class="form-actions">
-            <button type="submit" id="detail-pin-submit-btn" class="submit-button" disabled>
+            <button type="submit" id="detail-pin-submit-btn" class="submit-button btn btn--primary btn--lg" disabled>
                 Add Pin
             </button>
-            <button type="button" class="btn-ghost cancel-btn" id="detail-pin-cancel-btn">
+            <button type="button" class="btn btn--ghost cancel-btn" id="detail-pin-cancel-btn">
                 Cancel
             </button>
         </div>
@@ -626,8 +631,8 @@
                           placeholder="Any useful details…"></textarea>
             </div>
             <div class="form-actions">
-                <button type="submit" class="submit-button">Save Changes</button>
-                <button type="button" class="btn-ghost" onclick="document.getElementById('detail-pin-edit-dialog').close()">Cancel</button>
+                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Changes</button>
+                <button type="button" class="btn btn--ghost" onclick="document.getElementById('detail-pin-edit-dialog').close()">Cancel</button>
             </div>
         </form>
     </div>
@@ -713,6 +718,17 @@
 
     setTimeout(() => map.invalidateSize(), 300);
 
+    // Re-validate map size on resize and orientation change (important on mobile)
+    (function () {
+        let _resizeTimer;
+        function onResize() {
+            clearTimeout(_resizeTimer);
+            _resizeTimer = setTimeout(() => map.invalidateSize(), 150);
+        }
+        window.addEventListener('resize', onResize);
+        window.addEventListener('orientationchange', () => setTimeout(() => map.invalidateSize(), 300));
+    }());
+
     // ── Detail pins layer ─────────────────────────────────────────────────────
     const _detailPinColors = {
         building: '#6b7280', entrance: '#16a34a', poi: '#d97706',
@@ -734,7 +750,7 @@
     L.control.layers(_baseLayers, _overlays, { position: 'topright', collapsed: true }).addTo(map);
 
     // URL base for detail pin edit/delete: strip the placeholder UUID off the end
-    const _dpEditBase = "{% url 'pin.detail_pin.edit' pin.uuid '00000000-0000-0000-0000-000000000000' %}"
+    const _dpEditBase = "{% url 'pin.detail_pin.edit' pin.slug '00000000-0000-0000-0000-000000000000' %}"
         .replace('00000000-0000-0000-0000-000000000000/', '');
 
     let _detailPins = []; // { uuid, name, pin_type, icon, color, latitude, longitude, marker }
@@ -889,7 +905,7 @@
     });
 
     function loadDetailPins() {
-        fetch("{% url 'pin.detail_pins.json' pin.uuid %}")
+        fetch("{% url 'pin.detail_pins.json' pin.slug %}")
             .then(r => r.json())
             .then(data => {
                 _detailPinLayer.clearLayers();
@@ -937,9 +953,9 @@
     loadDetailPins();
 
     // ── Markup layer ──────────────────────────────────────────────────────────
-    const _markupJsonUrl  = "{% url 'pin.markup.json' pin.uuid %}";
-    const _markupPostUrl  = "{% url 'pin.markup' pin.uuid %}";
-    const _markupEditBase = "{% url 'pin.markup.edit' pin.uuid '00000000-0000-0000-0000-000000000000' %}"
+    const _markupJsonUrl  = "{% url 'pin.markup.json' pin.slug %}";
+    const _markupPostUrl  = "{% url 'pin.markup' pin.slug %}";
+    const _markupEditBase = "{% url 'pin.markup.edit' pin.slug '00000000-0000-0000-0000-000000000000' %}"
         .replace('00000000-0000-0000-0000-000000000000/', '');
 
     // Profile defaults (0-100 percent, converted to 0-1 for Leaflet)
@@ -1345,7 +1361,7 @@
     });
 
     // Load gallery photos on page load
-    fetch("{% url 'pin.gallery.json' pin.uuid %}")
+    fetch("{% url 'pin.gallery.json' pin.slug %}")
         .then(r => r.json())
         .then(data => {
             _photoPanelItems = [];
@@ -1667,7 +1683,7 @@
     }
 
     // ── Campus boundary editor ────────────────────────────────────────────────
-    const campusApiUrl = "{% url 'campus.pin' pin.uuid %}";
+    const campusApiUrl = "{% url 'campus.pin' pin.slug %}";
     const campusItems = new L.FeatureGroup().addTo(map);
     const campusStyle = { color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 };
     let campusDrawControl = null;
@@ -2130,7 +2146,7 @@
             submitBtn.textContent = 'Saving…';
             const data = {};
             new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
-            fetch("{% url 'pin.detail_pins' pin.uuid %}", {
+            fetch("{% url 'pin.detail_pins' pin.slug %}", {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
                 body: JSON.stringify(data),
@@ -2159,7 +2175,7 @@
 
     // ── Photo map layer ───────────────────────────────────────────────────────
     const _photoLayerMarkers = {};  // id → { marker, img }
-    const _photoJsonUrl   = "{% url 'pin.gallery.json' pin.uuid %}";
+    const _photoJsonUrl   = "{% url 'pin.gallery.json' pin.slug %}";
 
     function _photoMarkerHtml(img, size) {
         return `<div class="photo-map-marker" style="width:${size}px;height:${size}px">` +

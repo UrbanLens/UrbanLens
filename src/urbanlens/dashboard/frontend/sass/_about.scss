@@ -3,7 +3,7 @@
 
 // ── About page ────────────────────────────────────────────────────────────────
 
-body.page-about {
+.page-about {
 
     // Shared inner width
     .about-section-inner,
@@ -16,18 +16,19 @@ body.page-about {
     // ── Hero ──────────────────────────────────────────────────────────────────
     .about-hero {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr;
         align-items: center;
         gap: 3rem;
         min-height: 60vh;
-        padding: 5rem 6vw 4rem;
-        background: linear-gradient(145deg, #1e1b4b 0%, #312e81 50%, #4338ca 80%, #3b82f6 100%);
-        color: #fff;
+        padding: 3rem 1.5rem 2.5rem;
+        text-align: center;
+        background: linear-gradient(145deg, $ui-indigo-950 0%, $ui-indigo-900 50%, $ui-indigo-700 80%, $ui-blue-500 100%);
+        color: var(--ul-grey-4);
 
-        @media (max-width: 820px) {
-            grid-template-columns: 1fr;
-            text-align: center;
-            padding: 3rem 1.5rem 2.5rem;
+        @include up($breakpoint-sm) {
+            grid-template-columns: 1fr 1fr;
+            text-align: left;
+            padding: 5rem 6vw 4rem;
         }
     }
 
@@ -36,7 +37,7 @@ body.page-about {
         font-weight: 700;
         letter-spacing: .16em;
         text-transform: uppercase;
-        color: #a5b4fc;
+        color: $ui-indigo-300;
         margin: 0 0 1rem;
     }
 
@@ -45,25 +46,25 @@ body.page-about {
         font-weight: 800;
         line-height: 1.13;
         letter-spacing: -.03em;
-        color: #fff;
+        color: var(--ul-grey-0);
         margin: 0 0 1.1rem;
 
         em {
             font-style: normal;
-            color: #a5b4fc;
+            color: $ui-indigo-300;
         }
     }
 
     .about-subtitle {
         font-size: 1.05rem;
-        color: #c7d2fe;
+        color: $ui-indigo-200;
         line-height: 1.7;
         max-width: 500px;
-        margin: 0 0 2rem;
+        margin: 0 auto 2rem;
 
-        @media (max-width: 820px) {
-            margin-left: auto;
-            margin-right: auto;
+        @include up($breakpoint-sm) {
+            margin-left: 0;
+            margin-right: 0;
         }
     }
 
@@ -71,64 +72,21 @@ body.page-about {
         display: flex;
         gap: .85rem;
         flex-wrap: wrap;
+        justify-content: center;
 
-        @media (max-width: 820px) {
-            justify-content: center;
-        }
-    }
-
-    .about-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: .4rem;
-        padding: .7rem 1.6rem;
-        border-radius: 9px;
-        font-size: .95rem;
-        font-weight: 700;
-        text-decoration: none;
-        transition: background .15s, transform .1s, box-shadow .15s;
-        border: 2px solid transparent;
-
-        .material-icons {
-            font-size: 1.05rem;
-        }
-
-        &--primary {
-            background: #fff;
-            color: #4338ca;
-
-            &:hover {
-                background: var(--ul-surface-1);
-                transform: translateY(-2px);
-                box-shadow: 0 6px 18px rgba(255, 255, 255, .22);
-            }
-        }
-
-        &--ghost {
-            background: transparent;
-            color: #c7d2fe;
-            border-color: rgba(255, 255, 255, .35);
-
-            &:hover {
-                background: rgba(255, 255, 255, .08);
-                border-color: rgba(255, 255, 255, .55);
-            }
-        }
-
-        &--lg {
-            padding: .9rem 2.2rem;
-            font-size: 1rem;
+        @include up($breakpoint-sm) {
+            justify-content: flex-start;
         }
     }
 
     // ── Hero visual (decorative map mock) ─────────────────────────────────────
     .about-hero-visual {
-        display: flex;
+        display: none;
         align-items: center;
         justify-content: center;
 
-        @media (max-width: 820px) {
-            display: none;
+        @include up($breakpoint-sm) {
+            display: flex;
         }
     }
 
@@ -155,7 +113,7 @@ body.page-about {
 
         .material-icons {
             font-size: 1.2rem;
-            color: #fff;
+            color: var(--ul-grey-0);
         }
 
         &--1 {
@@ -195,31 +153,31 @@ body.page-about {
 
         &--2 {
             top: 150px;
-            left: 118px;
-            width: 120px;
+            left: 121px;
+            width: 102px;
             height: 2px;
-            transform: rotate(140deg);
+            transform: rotate(136deg);
         }
     }
 
     // ── Shared section chrome ─────────────────────────────────────────────────
     .about-section {
         padding: 5rem 0;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
     }
 
     .about-values-section {
         padding: 5rem 0;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
     }
 
     .about-features-section {
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
     }
 
     .about-audience-section {
         padding: 5rem 0;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-0);
     }
 
     .about-section-label {
@@ -234,7 +192,7 @@ body.page-about {
     .about-section-title {
         font-size: clamp(1.6rem, 3vw, 2.25rem);
         font-weight: 800;
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
         margin: 0 0 1.25rem;
         letter-spacing: -.02em;
         line-height: 1.2;
@@ -242,7 +200,7 @@ body.page-about {
 
     .about-section-body {
         font-size: 1.05rem;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         line-height: 1.75;
         max-width: 700px;
         margin: 0 0 1.1rem;
@@ -257,8 +215,8 @@ body.page-about {
     }
 
     .about-pillar {
-        background: var(--ul-surface-1);
-        border: 1px solid var(--ul-border);
+        background: var(--ul-grey-0a);
+        border: 1px solid var(--ul-grey-1b);
         border-radius: 12px;
         padding: 1.5rem;
     }
@@ -282,13 +240,13 @@ body.page-about {
     .about-pillar-title {
         font-size: 1rem;
         font-weight: 700;
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
         margin: 0 0 .4rem;
     }
 
     .about-pillar-body {
         font-size: .9rem;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         line-height: 1.6;
         margin: 0;
     }
@@ -303,8 +261,8 @@ body.page-about {
 
     .about-value-card {
         padding: 1.75rem;
-        background: var(--ul-surface-1);
-        border: 1px solid var(--ul-border);
+        background: var(--ul-grey-0a);
+        border: 1px solid var(--ul-grey-3b);
         border-radius: 12px;
         position: relative;
     }
@@ -321,13 +279,13 @@ body.page-about {
     .about-value-title {
         font-size: 1rem;
         font-weight: 700;
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
         margin: 0 0 .5rem;
     }
 
     .about-value-body {
         font-size: .88rem;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         line-height: 1.65;
         margin: 0;
     }
@@ -342,34 +300,28 @@ body.page-about {
 
     .about-feature-row {
         display: grid;
-        grid-template-columns: 220px 1fr;
+        grid-template-columns: 1fr;
         gap: 3rem;
         align-items: start;
 
-        @media (max-width: 720px) {
-            grid-template-columns: 1fr;
+        @include up($breakpoint-sm) {
+            grid-template-columns: 220px 1fr;
         }
 
         &--flip {
-            grid-template-columns: 1fr 220px;
-
-            @media (max-width: 720px) {
-                grid-template-columns: 1fr;
+            @include up($breakpoint-sm) {
+                grid-template-columns: 1fr 220px;
             }
 
             .about-feature-visual {
-                order: 2;
-
-                @media (max-width: 720px) {
-                    order: 0;
+                @include up($breakpoint-sm) {
+                    order: 2;
                 }
             }
 
             .about-feature-text {
-                order: 1;
-
-                @media (max-width: 720px) {
-                    order: 0;
+                @include up($breakpoint-sm) {
+                    order: 1;
                 }
             }
         }
@@ -401,14 +353,14 @@ body.page-about {
     .about-feature-title {
         font-size: 1.3rem;
         font-weight: 800;
-        color: var(--ul-text-1);
+        color: var(--ul-grey-8);
         margin: 0 0 .6rem;
         letter-spacing: -.02em;
     }
 
     .about-feature-body {
         font-size: .975rem;
-        color: var(--ul-text-2);
+        color: var(--ul-grey-7);
         line-height: 1.75;
         margin: 0 0 1rem;
     }
@@ -426,7 +378,7 @@ body.page-about {
             align-items: center;
             gap: .5rem;
             font-size: .88rem;
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
 
             &::before {
                 content: '✓';
@@ -448,21 +400,21 @@ body.page-about {
 
     .about-audience-card {
         padding: 1.5rem;
-        background: var(--ul-surface-1);
-        border: 1px solid var(--ul-border);
+        background: var(--ul-grey-0a);
+        border: 1px solid var(--ul-grey-3b);
         border-radius: 12px;
         text-align: center;
 
         h3 {
             font-size: .975rem;
             font-weight: 700;
-            color: var(--ul-text-1);
+            color: var(--ul-grey-8);
             margin: .75rem 0 .45rem;
         }
 
         p {
             font-size: .875rem;
-            color: var(--ul-text-2);
+            color: var(--ul-grey-7);
             line-height: 1.6;
             margin: 0;
         }
@@ -476,23 +428,34 @@ body.page-about {
 
     // ── CTA ───────────────────────────────────────────────────────────────────
     .about-cta-section {
-        background: linear-gradient(135deg, #1e1b4b 0%, #4338ca 100%);
+        background: linear-gradient(135deg, $ui-indigo-950 0%, $ui-indigo-700 100%);
         padding: 5rem 1.5rem;
         text-align: center;
-        color: #fff;
+        color: var(--ul-grey-4);
     }
 
     .about-cta-title {
         font-size: clamp(1.75rem, 3.5vw, 2.5rem);
         font-weight: 800;
-        color: #fff;
+        color: var(--ul-grey-0);
         margin: 0 0 .75rem;
         letter-spacing: -.025em;
     }
 
     .about-cta-body {
         font-size: 1.05rem;
-        color: #c7d2fe;
+        color: $ui-indigo-200;
         margin: 0 0 2rem;
+    }
+}
+
+
+[data-theme="dark"] {
+    .page-about {
+        .about-cta-title,
+        .about-title,
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--ul-grey-9);
+        }
     }
 }

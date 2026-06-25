@@ -1,7 +1,7 @@
 """Tests for BraveSearchGateway.
 
 Covers _mask_secret, _validate, _parse, and search().
-All HTTP is mocked — no real network access occurs.
+All HTTP is mocked - no real network access occurs.
 """
 from __future__ import annotations
 
@@ -169,7 +169,7 @@ class BraveParseTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# search() — HTTP integration
+# search() - HTTP integration
 # ---------------------------------------------------------------------------
 
 class BraveSearchHTTPTests(TestCase):

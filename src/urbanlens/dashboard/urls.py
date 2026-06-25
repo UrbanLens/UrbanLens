@@ -1,29 +1,3 @@
-"""*********************************************************************************************************************
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    METADATA:                                                                                                         *
-*                                                                                                                      *
-*        File:    urls.py                                                                                              *
-*        Path:    /dashboard/urls.py                                                                                   *
-*        Project: urbanlens                                                                                            *
-*        Version: 0.0.2                                                                                                *
-*        Created: 2023-12-24                                                                                           *
-*        Author:  Jess Mann                                                                                            *
-*        Email:   jess@urbanlens.org                                                                                 *
-*        Copyright (c) 2025 Jess Mann                                                                                  *
-*                                                                                                                      *
-* -------------------------------------------------------------------------------------------------------------------- *
-*                                                                                                                      *
-*    LAST MODIFIED:                                                                                                    *
-*                                                                                                                      *
-*        2023-12-24     By Jess Mann                                                                                   *
-*                                                                                                                      *
-*********************************************************************************************************************"""
-
 # Generic imports
 from __future__ import annotations
 
@@ -49,12 +23,15 @@ from urbanlens.dashboard.controllers import (
     markup,
     notifications,
     organize,
+    people_badges,
     pin,
     pin_edit,
     settings,
+    setup,
     site_admin,
     statuses,
     tags,
+    tools,
     trip,
     userprofile,
     visits,
@@ -99,10 +76,14 @@ urlpatterns = [
     ),
     path("rest/", include(router.urls)),
     re_path("^$", IndexController.as_view(), name="home"),
-    path("about/", TemplateView.as_view(
-        template_name="dashboard/pages/about/index.html",
-        extra_context={"page_name": "about"},
-    ), name="about"),
+    path(
+        "about/",
+        TemplateView.as_view(
+            template_name="dashboard/pages/about/index.html",
+            extra_context={"page_name": "about"},
+        ),
+        name="about",
+    ),
     path(
         "map/",
         include(
@@ -111,6 +92,7 @@ urlpatterns = [
                 path("init/", maps.MapController.as_view({"get": "init_map"}), name="map.init"),
                 path("pins/", maps.MapController.as_view({"get": "map_pins_json"}), name="map.pins"),
                 path("pins/meta/", maps.MapController.as_view({"get": "map_pins_meta"}), name="map.pins.meta"),
+                path("pins/<slug:pin_slug>/", maps.MapController.as_view({"get": "map_pin_json"}), name="map.pin.json"),
                 path(
                     "campus/",
                     campus.CampusController.as_view({"get": "list_campuses"}),
@@ -122,7 +104,7 @@ urlpatterns = [
                     name="pin.add",
                 ),
                 path(
-                    "edit/<uuid:pin_uuid>/",
+                    "edit/<slug:pin_slug>/",
                     maps.MapController.as_view({"get": "get_edit_pin", "post": "edit_pin"}),
                     name="pin.edit",
                 ),
@@ -132,166 +114,166 @@ urlpatterns = [
                     name="map.search",
                 ),
                 path(
-                    "upload_image/<uuid:pin_uuid>/",
+                    "upload_image/<slug:pin_slug>/",
                     maps.MapController.as_view({"post": "upload_image"}),
                     name="pin.upload_image",
                 ),
                 path(
-                    "change_category/<uuid:pin_uuid>/",
+                    "change_category/<slug:pin_slug>/",
                     maps.MapController.as_view({"post": "change_category"}),
                     name="pin.change_category",
                 ),
-                # path('delete/<uuid:pin_uuid>/', MapController.delete_pin, name='delete_pin'),
-                # path('add_review/<uuid:pin_uuid>/', map.MapController.as_view(), name='add_review'),
+                # path('delete/<slug:pin_slug>/', MapController.delete_pin, name='delete_pin'),
+                # path('add_review/<slug:pin_slug>/', map.MapController.as_view(), name='add_review'),
                 path(
                     "pin/",
                     include(
                         [
-                            path("<uuid:pin_uuid>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
+                            path("<slug:pin_slug>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
                             path(
-                                "<uuid:pin_uuid>/campus/",
+                                "<slug:pin_slug>/campus/",
                                 campus.CampusController.as_view({"get": "get_campus", "post": "save_campus"}),
                                 name="campus.pin",
                             ),
                             path(
-                                "<uuid:pin_uuid>/smithsonian/",
+                                "<slug:pin_slug>/smithsonian/",
                                 pin.PinController.as_view({"get": "get_smithsonian_images"}),
                                 name="smithsonian_images",
                             ),
                             path(
-                                "<uuid:pin_uuid>/google/",
+                                "<slug:pin_slug>/google/",
                                 pin.PinController.as_view({"get": "get_google_images"}),
                                 name="google_images",
                             ),
                             path(
-                                "<uuid:pin_uuid>/search/",
+                                "<slug:pin_slug>/search/",
                                 pin.PinController.as_view({"get": "web_search"}),
                                 name="pin.web_search",
                             ),
                             path(
-                                "<uuid:pin_uuid>/satellite_view/",
+                                "<slug:pin_slug>/satellite_view/",
                                 pin.PinController.as_view({"get": "satellite_view_google_image"}),
                                 name="pin.satellite_view",
                             ),
                             path(
-                                "<uuid:pin_uuid>/street_view/",
+                                "<slug:pin_slug>/street_view/",
                                 pin.PinController.as_view({"get": "street_view"}),
                                 name="pin.street_view",
                             ),
                             path(
-                                "<uuid:pin_uuid>/weather/",
+                                "<slug:pin_slug>/weather/",
                                 pin.PinController.as_view({"get": "weather_forecast"}),
                                 name="pin.weather_forecast",
                             ),
                             path(
-                                "<uuid:pin_uuid>/visits/",
+                                "<slug:pin_slug>/visits/",
                                 visits.VisitHistoryView.as_view(),
                                 name="pin.visits",
                             ),
                             path(
-                                "<uuid:pin_uuid>/visits/<int:visit_id>/delete/",
+                                "<slug:pin_slug>/visits/<int:visit_id>/delete/",
                                 visits.VisitDeleteView.as_view(),
                                 name="pin.visit.delete",
                             ),
                             path(
-                                "<uuid:pin_uuid>/detail-pins/",
+                                "<slug:pin_slug>/detail-pins/",
                                 detail_pins.DetailPinPanelView.as_view(),
                                 name="pin.detail_pins",
                             ),
                             path(
-                                "<uuid:pin_uuid>/detail-pins/json/",
+                                "<slug:pin_slug>/detail-pins/json/",
                                 detail_pins.DetailPinJsonView.as_view(),
                                 name="pin.detail_pins.json",
                             ),
                             path(
-                                "<uuid:pin_uuid>/detail-pins/<uuid:detail_pin_uuid>/",
+                                "<slug:pin_slug>/detail-pins/<uuid:detail_pin_uuid>/",
                                 detail_pins.DetailPinEditView.as_view(),
                                 name="pin.detail_pin.edit",
                             ),
                             path(
-                                "<uuid:pin_uuid>/markup/json/",
+                                "<slug:pin_slug>/markup/json/",
                                 markup.MarkupJsonView.as_view(),
                                 name="pin.markup.json",
                             ),
                             path(
-                                "<uuid:pin_uuid>/markup/",
+                                "<slug:pin_slug>/markup/",
                                 markup.MarkupView.as_view(),
                                 name="pin.markup",
                             ),
                             path(
-                                "<uuid:pin_uuid>/markup/<uuid:markup_uuid>/",
+                                "<slug:pin_slug>/markup/<uuid:markup_uuid>/",
                                 markup.MarkupEditView.as_view(),
                                 name="pin.markup.edit",
                             ),
                             path(
-                                "<uuid:pin_uuid>/overview/",
+                                "<slug:pin_slug>/overview/",
                                 pin_edit.PinOverviewView.as_view(),
                                 name="pin.overview",
                             ),
                             path(
-                                "<uuid:pin_uuid>/edit/",
+                                "<slug:pin_slug>/edit/",
                                 pin_edit.PinEditView.as_view(),
                                 name="pin.edit",
                             ),
                             path(
-                                "<uuid:pin_uuid>/notes/",
+                                "<slug:pin_slug>/notes/",
                                 pin_edit.PinNotesView.as_view(),
                                 name="pin.notes",
                             ),
                             path(
-                                "<uuid:pin_uuid>/notes/<int:note_id>/delete/",
+                                "<slug:pin_slug>/notes/<int:note_id>/delete/",
                                 pin_edit.PinNoteDeleteView.as_view(),
                                 name="pin.note.delete",
                             ),
                             path(
-                                "<uuid:pin_uuid>/link/",
+                                "<slug:pin_slug>/link/",
                                 pin_edit.PinRelinkView.as_view(),
                                 name="pin.link",
                             ),
                             path(
-                                "<uuid:pin_uuid>/link/<uuid:location_uuid>/",
+                                "<slug:pin_slug>/link/<slug:location_slug>/",
                                 pin_edit.PinRelinkView.as_view(),
                                 name="pin.link.to",
                             ),
                             path(
-                                "<uuid:pin_uuid>/aliases/",
+                                "<slug:pin_slug>/aliases/",
                                 aliases.PinAliasView.as_view(),
                                 name="pin.aliases",
                             ),
                             path(
-                                "<uuid:pin_uuid>/aliases/<int:alias_id>/delete/",
+                                "<slug:pin_slug>/aliases/<int:alias_id>/delete/",
                                 aliases.PinAliasDeleteView.as_view(),
                                 name="pin.alias.delete",
                             ),
                             path(
-                                "<uuid:pin_uuid>/comments/",
+                                "<slug:pin_slug>/comments/",
                                 comments.PinCommentsView.as_view(),
                                 name="pin.comments",
                             ),
                             path(
-                                "<uuid:pin_uuid>/comments/<int:comment_id>/delete/",
+                                "<slug:pin_slug>/comments/<int:comment_id>/delete/",
                                 comments.PinCommentDeleteView.as_view(),
                                 name="pin.comment.delete",
                             ),
                             path(
-                                "<uuid:pin_uuid>/gallery/",
+                                "<slug:pin_slug>/gallery/",
                                 image_gallery.PinGalleryView.as_view(),
                                 name="pin.gallery",
                             ),
                             path(
-                                "<uuid:pin_uuid>/gallery/json/",
+                                "<slug:pin_slug>/gallery/json/",
                                 image_gallery.PinGalleryJsonView.as_view(),
                                 name="pin.gallery.json",
                             ),
                             path(
-                                "<uuid:pin_uuid>/gallery/<int:image_id>/",
+                                "<slug:pin_slug>/gallery/<int:image_id>/",
                                 image_gallery.PinImageView.as_view(),
                                 name="pin.gallery.image",
                             ),
                             # No-trailing-slash variant so DELETE/POST fetch calls work even
                             # when APPEND_SLASH would otherwise downgrade the method to GET.
                             path(
-                                "<uuid:pin_uuid>/gallery/<int:image_id>",
+                                "<slug:pin_slug>/gallery/<int:image_id>",
                                 image_gallery.PinImageView.as_view(),
                             ),
                             path(
@@ -307,6 +289,16 @@ urlpatterns = [
                                             "upload/",
                                             pin.PinController.as_view({"post": "upload_takeout"}),
                                             name="pin.upload.takeout",
+                                        ),
+                                        path(
+                                            "preview/",
+                                            pin.PinController.as_view({"post": "parse_for_preview"}),
+                                            name="pin.import.preview",
+                                        ),
+                                        path(
+                                            "confirmed/",
+                                            pin.PinController.as_view({"post": "import_confirmed"}),
+                                            name="pin.import.confirmed",
                                         ),
                                     ],
                                 ),
@@ -324,11 +316,29 @@ urlpatterns = [
                 path("", userprofile.ViewProfileView.as_view(), name="profile.view"),
                 path("edit/", userprofile.EditProfileView.as_view(), name="profile.edit"),
                 path("edit/field/", userprofile.ProfileFieldUpdateView.as_view(), name="profile.field.update"),
-                path("<uuid:profile_uuid>/", userprofile.ViewProfileView.as_view(), name="profile.view_user"),
-                path("<uuid:profile_uuid>/note/", userprofile.ProfileNoteView.as_view(), name="profile.note"),
-                path("<uuid:profile_uuid>/note/<int:note_id>/delete/", userprofile.ProfileNoteDeleteView.as_view(), name="profile.note.delete"),
-                path("<uuid:profile_uuid>/note/<int:note_id>/edit/", userprofile.ProfileNoteEditView.as_view(), name="profile.note.edit"),
-                path("<uuid:profile_uuid>/badge/<int:badge_id>/", userprofile.ProfileBadgeToggleView.as_view(), name="profile.badge_toggle"),
+                path("edit/social/verify/", userprofile.SocialLinkVerifyView.as_view(), name="profile.social.verify"),
+                path("<slug:profile_slug>/", userprofile.ViewProfileView.as_view(), name="profile.view_user"),
+                path("<slug:profile_slug>/note/", userprofile.ProfileNoteView.as_view(), name="profile.note"),
+                path(
+                    "<slug:profile_slug>/note/<int:note_id>/delete/",
+                    userprofile.ProfileNoteDeleteView.as_view(),
+                    name="profile.note.delete",
+                ),
+                path(
+                    "<slug:profile_slug>/note/<int:note_id>/edit/",
+                    userprofile.ProfileNoteEditView.as_view(),
+                    name="profile.note.edit",
+                ),
+                path(
+                    "<slug:profile_slug>/badge/<int:badge_id>/",
+                    userprofile.ProfileBadgeToggleView.as_view(),
+                    name="profile.badge_toggle",
+                ),
+                path(
+                    "<slug:profile_slug>/trust/",
+                    userprofile.ProfileTrustView.as_view(),
+                    name="profile.trust",
+                ),
             ],
         ),
     ),
@@ -352,7 +362,7 @@ urlpatterns = [
                 path("bulk-convert-status/", tags.TagBulkConvertToStatusView.as_view(), name="tag.bulk_convert_status"),
                 path("multi-merge/", tags.TagMultiMergeView.as_view(), name="tag.multi_merge"),
                 path("<int:tag_id>/customize/", tags.TagCustomizeView.as_view(), name="tag.customize"),
-                path("pin/<uuid:pin_uuid>/", tags.TagMembershipView.as_view(), name="tag.membership"),
+                path("pin/<slug:pin_slug>/", tags.TagMembershipView.as_view(), name="tag.membership"),
             ],
         ),
     ),
@@ -423,82 +433,82 @@ urlpatterns = [
         include(
             [
                 path(
-                    "<uuid:location_uuid>/wiki/",
+                    "<slug:location_slug>/wiki/",
                     location_wiki.LocationWikiView.as_view(),
                     name="location.wiki",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/edit/",
+                    "<slug:location_slug>/wiki/edit/",
                     location_wiki.LocationWikiEditView.as_view(),
                     name="location.wiki.edit",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/bbox/",
+                    "<slug:location_slug>/wiki/bbox/",
                     location_wiki.LocationWikiBboxView.as_view(),
                     name="location.wiki.bbox",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/history/",
+                    "<slug:location_slug>/wiki/history/",
                     location_wiki.LocationWikiHistoryView.as_view(),
                     name="location.wiki.history",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/history/<int:edit_id>/revert/",
+                    "<slug:location_slug>/wiki/history/<int:edit_id>/revert/",
                     location_wiki.LocationWikiRevertView.as_view(),
                     name="location.wiki.revert",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/detail-pins/json/",
+                    "<slug:location_slug>/wiki/detail-pins/json/",
                     detail_pins.LocationDetailPinJsonView.as_view(),
                     name="location.wiki.detail_pins.json",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/detail-pins/panel/",
+                    "<slug:location_slug>/wiki/detail-pins/panel/",
                     detail_pins.LocationWikiDetailPinView.as_view(),
                     name="location.wiki.detail_pins.panel",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/detail-pins/<uuid:detail_pin_uuid>/delete/",
+                    "<slug:location_slug>/wiki/detail-pins/<uuid:detail_pin_uuid>/delete/",
                     detail_pins.LocationWikiDetailPinDeleteView.as_view(),
                     name="location.wiki.detail_pin.delete",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/detail-pins/<uuid:detail_pin_uuid>/edit/",
+                    "<slug:location_slug>/wiki/detail-pins/<uuid:detail_pin_uuid>/edit/",
                     detail_pins.LocationWikiDetailPinEditView.as_view(),
                     name="location.wiki.detail_pin.edit",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/comments/",
+                    "<slug:location_slug>/wiki/comments/",
                     comments.WikiCommentsView.as_view(),
                     name="location.wiki.comments",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/comments/<int:comment_id>/delete/",
+                    "<slug:location_slug>/wiki/comments/<int:comment_id>/delete/",
                     comments.WikiCommentDeleteView.as_view(),
                     name="location.wiki.comment.delete",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/aliases/",
+                    "<slug:location_slug>/wiki/aliases/",
                     aliases.LocationAliasView.as_view(),
                     name="location.wiki.aliases",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/aliases/<int:alias_id>/delete/",
+                    "<slug:location_slug>/wiki/aliases/<int:alias_id>/delete/",
                     aliases.LocationAliasDeleteView.as_view(),
                     name="location.wiki.alias.delete",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/gallery/",
+                    "<slug:location_slug>/wiki/gallery/",
                     image_gallery.WikiGalleryView.as_view(),
                     name="location.wiki.gallery",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/gallery/json/",
+                    "<slug:location_slug>/wiki/gallery/json/",
                     image_gallery.WikiGalleryJsonView.as_view(),
                     name="location.wiki.gallery.json",
                 ),
                 path(
-                    "<uuid:location_uuid>/wiki/gallery/<int:image_id>/",
+                    "<slug:location_slug>/wiki/gallery/<int:image_id>/",
                     image_gallery.WikiImageView.as_view(),
                     name="location.wiki.gallery.image",
                 ),
@@ -516,20 +526,68 @@ urlpatterns = [
                 path("<uuid:trip_uuid>/edit/", trip.TripEditView.as_view(), name="trips.edit"),
                 path("<uuid:trip_uuid>/delete/", trip.TripDeleteView.as_view(), name="trips.delete"),
                 path("<uuid:trip_uuid>/activities/", trip.TripActivitiesView.as_view(), name="trips.activities"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/delete/", trip.TripActivityDeleteView.as_view(), name="trips.activity.delete"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/edit/", trip.TripActivityEditView.as_view(), name="trips.activity.edit"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/status/", trip.TripActivityStatusView.as_view(), name="trips.activity.status"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/move/", trip.TripActivityMoveView.as_view(), name="trips.activity.move"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/position/", trip.TripActivityPositionView.as_view(), name="trips.activity.position"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/vote/", trip.TripActivityVoteView.as_view(), name="trips.activity.vote"),
-                path("<uuid:trip_uuid>/activities/<int:activity_id>/complete/", trip.TripActivityCompleteView.as_view(), name="trips.activity.complete"),
-                path("<uuid:trip_uuid>/child-trip-search/", trip.TripChildTripSearchView.as_view(), name="trips.child_trip_search"),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/delete/",
+                    trip.TripActivityDeleteView.as_view(),
+                    name="trips.activity.delete",
+                ),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/edit/",
+                    trip.TripActivityEditView.as_view(),
+                    name="trips.activity.edit",
+                ),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/status/",
+                    trip.TripActivityStatusView.as_view(),
+                    name="trips.activity.status",
+                ),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/move/",
+                    trip.TripActivityMoveView.as_view(),
+                    name="trips.activity.move",
+                ),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/position/",
+                    trip.TripActivityPositionView.as_view(),
+                    name="trips.activity.position",
+                ),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/vote/",
+                    trip.TripActivityVoteView.as_view(),
+                    name="trips.activity.vote",
+                ),
+                path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/complete/",
+                    trip.TripActivityCompleteView.as_view(),
+                    name="trips.activity.complete",
+                ),
+                path(
+                    "<uuid:trip_uuid>/child-trip-search/",
+                    trip.TripChildTripSearchView.as_view(),
+                    name="trips.child_trip_search",
+                ),
                 path("<uuid:trip_uuid>/comments/", trip.TripCommentsView.as_view(), name="trips.comments"),
-                path("<uuid:trip_uuid>/comments/<int:comment_id>/delete/", trip.TripCommentDeleteView.as_view(), name="trips.comment.delete"),
-                path("<uuid:trip_uuid>/comments/<int:comment_id>/react/", comments.TripCommentReactionView.as_view(), name="trips.comment.react"),
+                path(
+                    "<uuid:trip_uuid>/comments/<int:comment_id>/delete/",
+                    trip.TripCommentDeleteView.as_view(),
+                    name="trips.comment.delete",
+                ),
+                path(
+                    "<uuid:trip_uuid>/comments/<int:comment_id>/react/",
+                    comments.TripCommentReactionView.as_view(),
+                    name="trips.comment.react",
+                ),
                 path("<uuid:trip_uuid>/members/", trip.TripMembersView.as_view(), name="trips.members"),
-                path("<uuid:trip_uuid>/members/<int:profile_id>/remove/", trip.TripMemberRemoveView.as_view(), name="trips.member.remove"),
-                path("<uuid:trip_uuid>/members/<int:profile_id>/organizer/", trip.TripMemberOrganizerView.as_view(), name="trips.member.organizer"),
+                path(
+                    "<uuid:trip_uuid>/members/<int:profile_id>/remove/",
+                    trip.TripMemberRemoveView.as_view(),
+                    name="trips.member.remove",
+                ),
+                path(
+                    "<uuid:trip_uuid>/members/<int:profile_id>/organizer/",
+                    trip.TripMemberOrganizerView.as_view(),
+                    name="trips.member.organizer",
+                ),
                 path("<uuid:trip_uuid>/rsvp/", trip.TripMemberRSVPView.as_view(), name="trips.rsvp"),
                 path("<uuid:trip_uuid>/leave/", trip.TripLeaveView.as_view(), name="trips.leave"),
                 path("<uuid:trip_uuid>/settings/", trip.TripSettingsView.as_view(), name="trips.settings"),
@@ -551,12 +609,20 @@ urlpatterns = [
                 path("bulk-delete/", categories.CategoryBulkDeleteView.as_view(), name="category.bulk_delete"),
                 path("bulk-edit/", categories.CategoryBulkEditView.as_view(), name="category.bulk_edit"),
                 path("bulk-convert/", categories.CategoryBulkConvertView.as_view(), name="category.bulk_convert"),
-                path("bulk-convert-status/", categories.CategoryBulkConvertToStatusView.as_view(), name="category.bulk_convert_status"),
+                path(
+                    "bulk-convert-status/",
+                    categories.CategoryBulkConvertToStatusView.as_view(),
+                    name="category.bulk_convert_status",
+                ),
                 path("rows/", categories.CategoryRowsView.as_view(), name="category.rows"),
                 path("<int:cat_id>/customize/", categories.CategoryCustomizeView.as_view(), name="category.customize"),
                 path("reorder/", categories.CategoryReorderView.as_view(), name="category.reorder"),
-                path("pin/<uuid:pin_uuid>/", categories.CategoryPinMembershipView.as_view(), name="category.pin"),
-                path("location/<uuid:location_uuid>/", categories.CategoryLocationMembershipView.as_view(), name="category.location"),
+                path("pin/<slug:pin_slug>/", categories.CategoryPinMembershipView.as_view(), name="category.pin"),
+                path(
+                    "location/<slug:location_slug>/",
+                    categories.CategoryLocationMembershipView.as_view(),
+                    name="category.location",
+                ),
             ],
         ),
     ),
@@ -579,7 +645,19 @@ urlpatterns = [
                 path("<int:status_id>/delete/", statuses.StatusDeleteView.as_view(), name="status.delete"),
                 path("bulk-delete/", statuses.StatusBulkDeleteView.as_view(), name="status.bulk_delete"),
                 path("multi-merge/", statuses.StatusMultiMergeView.as_view(), name="status.multi_merge"),
-                path("pin/<uuid:pin_uuid>/", statuses.StatusMembershipView.as_view(), name="status.membership"),
+                path("pin/<slug:pin_slug>/", statuses.StatusMembershipView.as_view(), name="status.membership"),
+            ],
+        ),
+    ),
+    path(
+        "people/",
+        include(
+            [
+                path("rows/", people_badges.PeopleBadgeRowsView.as_view(), name="people.rows"),
+                path("create/", people_badges.PeopleBadgeCreateView.as_view(), name="people.create"),
+                path("<int:badge_id>/edit/", people_badges.PeopleBadgeEditView.as_view(), name="people.edit"),
+                path("<int:badge_id>/delete/", people_badges.PeopleBadgeDeleteView.as_view(), name="people.delete"),
+                path("multi-merge/", people_badges.PeopleBadgeMultiMergeView.as_view(), name="people.multi_merge"),
             ],
         ),
     ),
@@ -599,13 +677,48 @@ urlpatterns = [
             [
                 path("dropdown/", notifications.NotificationDropdownView.as_view(), name="notifications.dropdown"),
                 path("read-all/", notifications.NotificationMarkAllReadView.as_view(), name="notifications.read_all"),
-                path("unread-count/", notifications.NotificationUnreadCountView.as_view(), name="notifications.unread_count"),
-                path("preferences/", notifications.NotificationPreferencesView.as_view(), name="notifications.preferences"),
-                path("<int:notification_id>/read/", notifications.NotificationMarkReadView.as_view(), name="notifications.read"),
+                path(
+                    "unread-count/",
+                    notifications.NotificationUnreadCountView.as_view(),
+                    name="notifications.unread_count",
+                ),
+                path(
+                    "preferences/",
+                    notifications.NotificationPreferencesView.as_view(),
+                    name="notifications.preferences",
+                ),
+                path(
+                    "<int:notification_id>/read/",
+                    notifications.NotificationMarkReadView.as_view(),
+                    name="notifications.read",
+                ),
             ],
         ),
     ),
+    path(
+        "tools/",
+        include(
+            [
+                path("", tools.ToolsIndexView.as_view(), name="tools.index"),
+                path("export/start/", tools.ExportStartView.as_view(), name="tools.export.start"),
+                path("export/status/<str:job_id>/", tools.ExportStatusView.as_view(), name="tools.export.status"),
+                path("export/download/<str:job_id>/", tools.ExportDownloadView.as_view(), name="tools.export.download"),
+            ],
+        ),
+    ),
+    path("setup/", setup.SetupWizardView.as_view(), name="setup"),
     path("site-admin/", site_admin.SiteAdminView.as_view(), name="site_admin"),
+    path("site-admin/stats/", site_admin.SiteAdminStatsView.as_view(), name="site_admin_stats"),
+    path(
+        "site-admin/ui-components/",
+        site_admin.SiteAdminUIComponentsView.as_view(),
+        name="site_admin_ui_components",
+    ),
+    path(
+        "site-admin/dev/toggle-theme/",
+        site_admin.DevToolbarToggleThemeView.as_view(),
+        name="dev_toolbar.toggle_theme",
+    ),
     path("test_ai/", pin.PinController.as_view({"get": "test_ai"}), name="test_ai"),
     path("", include("social_django.urls", namespace="social")),
     re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),

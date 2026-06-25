@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
@@ -18,9 +18,13 @@ from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment, TripMembership
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from django.db.models import QuerySet
+    from django.http import HttpRequest
 
     from urbanlens.dashboard.controllers.comments import _ReactionData
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.trips.model import TripActivityVote as _TripActivityVote
     from urbanlens.dashboard.services.openweather.gateway import WeatherForecastGateway
 
@@ -28,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 def _apply_trip_visibility_filter(
-    sensitive: list,
+    sensitive: list[TripActivity],
     viewer: Profile,
     hidden_out: set[int],
 ) -> None:
@@ -46,10 +50,12 @@ def _apply_trip_visibility_filter(
     from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
     from urbanlens.dashboard.models.pin.model import Pin
 
-    no_one_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.NO_ONE]
-    common_pin_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_PIN]
-    friends_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.FRIENDS]
-    c_friend_acts = [a for a in sensitive if a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_FRIEND]
+    # Activities where the adder's account was deleted: treat as most restrictive.
+    hidden_out.update(a.id for a in sensitive if a.added_by is None)
+    no_one_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.NO_ONE]
+    common_pin_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_PIN]
+    friends_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.FRIENDS]
+    c_friend_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_FRIEND]
     # COMMON_TRIP: viewer is already in this trip - treat as visible.
 
     hidden_out.update(act.id for act in no_one_acts)
@@ -107,7 +113,8 @@ def _apply_trip_visibility_filter(
             adder_flat: set[int] = set()
             for pair in adder_friends:
                 adder_flat.update(pair)
-            adder_flat.discard(act.added_by_id)
+            if act.added_by_id is not None:
+                adder_flat.discard(act.added_by_id)
 
             if not (viewer_flat & adder_flat):
                 hidden_out.add(act.id)
@@ -126,7 +133,7 @@ class _CommentData(TypedDict):
     replies: list[_ReplyData]
 
 
-def _trip_or_403(request, trip_uuid, profile: Profile) -> Trip | HttpResponse:
+def _trip_or_403(request: HttpRequest, trip_uuid: str, profile: Profile) -> Trip | HttpResponse:
     """Return the Trip if the profile is creator or member.
 
     Renders the same styled "not found" page for both missing trips and
@@ -170,7 +177,7 @@ def _activity_qs(trip: Trip) -> QuerySet:
     )
 
 
-def _activity_coords(act) -> tuple[float, float] | None:
+def _activity_coords(act: TripActivity) -> tuple[float, float] | None:
     """Return (lat, lng) for an activity, respecting override fields.
 
     Priority: lat_override/lng_override → pin effective coords → location coords.
@@ -188,7 +195,7 @@ def _activity_coords(act) -> tuple[float, float] | None:
     return None
 
 
-def _compute_activity_index_map(activities) -> dict[int, int]:
+def _compute_activity_index_map(activities: Iterable[TripActivity]) -> dict[int, int]:
     """Return {activity_id: map_index} for activities visible on the map (excludes completed/hidden)."""
     index_map: dict[int, int] = {}
     idx = 1
@@ -226,17 +233,17 @@ def _parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.
     return datetime.datetime.combine(d, t)
 
 
-def _resolve_location(body: dict):
+def _resolve_location(body: dict[str, Any]) -> Location | None:
     """Resolve a location from POST body fields.
 
-    Priority: location_uuid → geocoded lat/lng → None.
+    Priority: location_slug → geocoded lat/lng → None.
     Creates a new Location row when geocoded coordinates are supplied.
     """
     from urbanlens.dashboard.models.location.model import Location
 
-    location_uuid = (body.get("location_uuid") or "").strip()
-    if location_uuid:
-        return Location.objects.filter(uuid=location_uuid).first()
+    location_slug = (body.get("location_slug") or "").strip()
+    if location_slug:
+        return Location.objects.filter(slug=location_slug).first()
 
     geocoded_lat = (body.get("geocoded_lat") or "").strip()
     geocoded_lng = (body.get("geocoded_lng") or "").strip()
@@ -276,7 +283,7 @@ def _can_perform(profile: Profile, trip: Trip, level: str) -> bool:
     return False
 
 
-def _render_members_panel(request, trip: Trip, profile: Profile) -> HttpResponse:
+def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Re-render the members panel partial."""
     members = trip.memberships.select_related("profile__user").order_by("profile__user__username")
     return render(
@@ -286,7 +293,7 @@ def _render_members_panel(request, trip: Trip, profile: Profile) -> HttpResponse
     )
 
 
-def _render_activities_panel(request, trip: Trip, profile: Profile) -> HttpResponse:
+def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Re-render the activities panel with index map, vote counts, and per-activity permissions."""
     from urbanlens.dashboard.models.trips.model import TripActivityVote
 
@@ -615,12 +622,20 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
 
         today = datetime.date.today()
-        if activity.scheduled_at is None or activity.scheduled_at.date() > today:
-            activity.scheduled_at = datetime.datetime.combine(
-                today,
-                activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
-            )
+        completed_date_str = request.POST.get("completed_date", "")
+        if completed_date_str:
+            try:
+                completed_date = datetime.date.fromisoformat(completed_date_str)
+                completed_date = min(completed_date, today)
+            except ValueError:
+                completed_date = today
+        else:
+            completed_date = today
 
+        activity.scheduled_at = datetime.datetime.combine(
+            completed_date,
+            activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
+        )
         activity.status = TripActivity.STATUS_COMPLETED
         activity.save(update_fields=["status", "scheduled_at", "updated"])
 
@@ -674,7 +689,7 @@ class TripActivityVoteView(LoginRequiredMixin, View):
         return _render_activities_panel(request, trip, profile)
 
 
-def _render_trip_comments(request, trip: Trip, profile: Profile) -> HttpResponse:
+def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Build comment panel context with activity mentions and re-render."""
     from urbanlens.dashboard.controllers.comments import _ALLOWED_EMOJIS, _aggregate_reactions
     from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
@@ -1324,7 +1339,7 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
         return JsonResponse({"results": results})
 
 
-def _build_activity_forecasts(activities: list, gateway: WeatherForecastGateway) -> list[dict]:
+def _build_activity_forecasts(activities: list[TripActivity], gateway: WeatherForecastGateway) -> list[dict]:
     """For each activity, find the closest 3-hourly forecast slot at its location/time.
 
     Returns a list of dicts with keys:

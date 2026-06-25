@@ -21,6 +21,9 @@ from django.utils.html import conditional_escape, format_html
 from django.utils.safestring import SafeString, mark_safe
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import TripActivity
 
@@ -126,7 +129,7 @@ def viewer_pinned_uuids(profile: Profile) -> set[uuid.UUID]:
     return {uuid.UUID(str(u)) for u in raw}
 
 
-def filter_visible_comments(comments, profile: Profile):
+def filter_visible_comments(comments: Iterable[Comment], profile: Profile) -> list[Comment]:
     """Filter a queryset/list of Comment objects to those visible to profile."""
     pinned = viewer_pinned_uuids(profile)
     return [c for c in comments if is_visible_to(c.text, pinned)]

@@ -15,6 +15,7 @@
             icon: "{{ pin.icon|default_if_none:'' }}",
             color: "{{ pin.color|default_if_none:'' }}",
             uuid: "{{ pin.uuid }}",
+            slug: "{{ pin.slug }}",
             name: "{{ pin.name|default_if_none:''|escapejs }}",
             description: "{{ pin.description|default_if_none:''|escapejs }}",
             rating: "{{ pin.rating|stringformat:'s' }}",
@@ -23,7 +24,7 @@
             last_visited: "{{ pin.last_visited|default_if_none:'Never'|escapejs }}",
             tags: "{{ pin.tags|default_if_none:''|escapejs }}",
             tags_data: {{ pin.tags_data_json|default:'[]'|safe }},
-            viewLocationUrl: "{% url 'pin.details' pin.uuid %}"
+            viewLocationUrl: "{% url 'pin.details' pin.slug %}"
         };
         if (p.latitude && p.longitude) {
             const m = _buildMarker(p);
