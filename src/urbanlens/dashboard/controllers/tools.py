@@ -119,7 +119,7 @@ def _export_pins(profile: Any, temp_dir: str, base_url: str) -> None:
     for pin in pins:
         name = pin.nickname or (pin.location.name if pin.location else "")
         note = pin.description or ""
-        url = f"{base_url.rstrip('/')}dashboard/map/pin/{pin.slug}/" if pin.slug else ""
+        url = f"{base_url.rstrip('/')}/dashboard/map/pin/{pin.slug}/" if pin.slug else ""
         tags = ", ".join(b.name for b in pin.badges.all() if hasattr(b, "name"))
         writer.writerow([name, note, url, tags, ""])
 
@@ -324,10 +324,13 @@ def _build_zip(export_dir: str, temp_dir: str) -> None:
 
 
 class ToolsIndexView(LoginRequiredMixin, View):
-    """Renders the Tools landing page."""
+    """Renders the Tools landing page (data export, invite friend, etc.)."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
         """Render tools/index.html.
+
+        Friend invitations use the existing ``friend.invite_email`` endpoint;
+        this view only serves the tools UI shell.
 
         Args:
             request: The authenticated HTTP request.

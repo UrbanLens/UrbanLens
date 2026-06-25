@@ -90,6 +90,12 @@
     }
 }
 
+#trip-list {
+    .trip-card {
+        background-color: var(--ul-grey-1);
+    }
+}
+
 .trip-card-link {
     display: flex;
     align-items: center;
@@ -1555,11 +1561,7 @@
 }
 
 .location-suggestion-geocoded {
-    background: var(--ul-accent-amber-bg);
-
-    &:hover {
-        background: var(--ul-accent-amber-bg);
-    }
+    background-color: var(--ul-grey-1);
 
     &::before {
         content: '📍 ';
@@ -1783,7 +1785,7 @@
     .trip-weather-day-dow {
         font-weight: 700;
         font-size: .88rem;
-        color: $primary-color;
+        color: var(--ul-grey-9);
     }
 
     .trip-weather-day-date {
@@ -2018,7 +2020,7 @@
 
     &:hover {
         background: var(--ul-grey-4);
-        color: $text-secondary;
+        color: var(--ul-grey-0);
     }
 
     &--active {

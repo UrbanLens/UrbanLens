@@ -17,11 +17,11 @@ Includes hx-get polling while status is pending/running; removes itself when don
         <span>Your export is ready.</span>
     </div>
     <div class="export-done-actions">
-        <a href="{% url 'tools.export.download' job_id=job_id %}" class="btn btn-primary">
+        <a href="{% url 'tools.export.download' job_id=job_id %}" class="btn btn--primary">
             <i class="material-icons">download</i>
             Download ZIP
         </a>
-        <button type="button" class="btn btn-secondary" onclick="location.reload()">
+        <button type="button" class="btn btn--ghost" onclick="location.reload()">
             <i class="material-icons">refresh</i>
             New export
         </button>

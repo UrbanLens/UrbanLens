@@ -349,8 +349,6 @@
     }
 
     .trip-weather-panel {
-        background: $dk-panel-bg;
-        border-color: $dk-panel-border;
 
         .trip-weather-header .trip-weather-title {
             color: $ui-slate-200;
@@ -358,11 +356,10 @@
     }
 
     .trip-weather-day {
-        border-color: $dk-panel-border;
-        background: $dk-panel-bg;
+        background-color: var(--ul-grey-1);
 
         .trip-weather-day-header {
-            background: linear-gradient(135deg, $dk-navy 0%, $dk-panel-bg-alt 100%);
+            background-color: var(--ul-grey-0b);
             border-bottom-color: $dk-panel-border;
         }
     }
@@ -739,7 +736,13 @@
     }
 
     .view-toggle-group {
-        background: var(--ul-grey-4);
+        background-color: var(--ul-grey-4);
+    }
+
+    .card-header {
+        .view-toggle-group {
+            background-color: var(--ul-grey-1);
+        }
     }
 
     .view-toggle-btn {
@@ -967,7 +970,7 @@
 
     .card {
         .comment-input {
-            background-color: var(--ul-grey-0a);
+            background-color: var(--ul-grey-1);
         }
     }
 

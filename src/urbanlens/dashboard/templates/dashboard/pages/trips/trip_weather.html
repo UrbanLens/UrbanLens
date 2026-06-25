@@ -16,76 +16,70 @@
 
     <div class="trip-weather-days">
         {% for day, entries in grouped %}
-        <div class="trip-weather-day">
+            {% if day %}
+            <div class="trip-weather-day">
 
-            <div class="trip-weather-day-header">
-                {% if day %}
-                <span class="trip-weather-day-dow">{{ day|date:"l" }}</span>
-                <span class="trip-weather-day-date">{{ day|date:"M j, Y" }}</span>
-                {% else %}
-                <span class="trip-weather-day-dow">Unscheduled</span>
-                {% endif %}
-            </div>
-
-            <div class="trip-weather-activities">
-                {% for af in entries %}
-                <div class="trip-weather-activity">
-
-                    <div class="trip-weather-activity-info">
-                        {% if af.scheduled_at %}
-                        <span class="trip-weather-activity-time">{{ af.scheduled_at|time:"g:i A" }}</span>
-                        {% endif %}
-                        <span class="trip-weather-activity-name">
-                            {{ af.location_name|default:af.activity.title|default:"Activity" }}
-                        </span>
-                    </div>
-
-                    <div class="trip-weather-activity-forecast">
-                        {% if af.no_coords %}
-                        <span class="trip-weather-na">
-                            <i class="material-icons">location_off</i> No location data
-                        </span>
-                        {% elif not af.scheduled_at %}
-                        <span class="trip-weather-na">
-                            <i class="material-icons">schedule</i> No scheduled time
-                        </span>
-                        {% elif af.out_of_range %}
-                        <span class="trip-weather-na">
-                            <i class="material-icons">event_busy</i> Outside 5-day forecast
-                        </span>
-                        {% elif af.slot %}
-                        {% with s=af.slot %}
-                        <div class="trip-weather-slot-inline">
-                            <img class="trip-weather-slot-icon"
-                                 src="https://openweathermap.org/img/wn/{{ s.weather.0.icon }}@2x.png"
-                                 alt="{{ s.weather.0.description }}"
-                                 loading="lazy">
-                            <div class="trip-weather-slot-temps">
-                                <span class="trip-weather-slot-temp">{{ s.main.temp|floatformat:0 }}°F</span>
-                                <span class="trip-weather-slot-feels">Feels {{ s.main.feels_like|floatformat:0 }}°</span>
-                            </div>
-                            <div class="trip-weather-slot-right">
-                                <p class="trip-weather-slot-desc">{{ s.weather.0.description|capfirst }}</p>
-                                <div class="trip-weather-slot-meta">
-                                    <span title="Humidity"><i class="material-icons">water_drop</i> {{ s.main.humidity }}%</span>
-                                    <span title="Wind"><i class="material-icons">air</i> {{ s.wind.speed|floatformat:0 }} mph</span>
-                                    {% if s.pop %}<span title="Precipitation probability"><i class="material-icons">umbrella</i> {% widthratio s.pop 1 100 %}%</span>{% endif %}
-                                </div>
-                            </div>
-                        </div>
-                        {% endwith %}
-                        {% else %}
-                        <span class="trip-weather-na">
-                            <i class="material-icons">cloud_off</i> No data
-                        </span>
-                        {% endif %}
-                    </div>
-
+                <div class="trip-weather-day-header">
+                    <span class="trip-weather-day-dow">{{ day|date:"l" }}</span>
+                    <span class="trip-weather-day-date">{{ day|date:"M j, Y" }}</span>
                 </div>
-                {% endfor %}
-            </div>
 
-        </div>
+                <div class="trip-weather-activities">
+                    {% for af in entries %}
+                        {% if af.scheduled_at %}
+                        <div class="trip-weather-activity">
+
+                            <div class="trip-weather-activity-info">
+                                <span class="trip-weather-activity-time">{{ af.scheduled_at|time:"g:i A" }}</span>
+                                <span class="trip-weather-activity-name">
+                                    {{ af.location_name|default:af.activity.title|default:"Activity" }}
+                                </span>
+                            </div>
+
+                            <div class="trip-weather-activity-forecast">
+                                {% if af.no_coords %}
+                                <span class="trip-weather-na">
+                                    <i class="material-icons">location_off</i> No location data
+                                </span>
+                                {% elif af.out_of_range %}
+                                <span class="trip-weather-na">
+                                    <i class="material-icons">event_busy</i> Outside 5-day forecast
+                                </span>
+                                {% elif af.slot %}
+                                {% with s=af.slot %}
+                                <div class="trip-weather-slot-inline">
+                                    <img class="trip-weather-slot-icon"
+                                        src="https://openweathermap.org/img/wn/{{ s.weather.0.icon }}@2x.png"
+                                        alt="{{ s.weather.0.description }}"
+                                        loading="lazy">
+                                    <div class="trip-weather-slot-temps">
+                                        <span class="trip-weather-slot-temp">{{ s.main.temp|floatformat:0 }}°F</span>
+                                        <span class="trip-weather-slot-feels">Feels {{ s.main.feels_like|floatformat:0 }}°</span>
+                                    </div>
+                                    <div class="trip-weather-slot-right">
+                                        <p class="trip-weather-slot-desc">{{ s.weather.0.description|capfirst }}</p>
+                                        <div class="trip-weather-slot-meta">
+                                            <span title="Humidity"><i class="material-icons">water_drop</i> {{ s.main.humidity }}%</span>
+                                            <span title="Wind"><i class="material-icons">air</i> {{ s.wind.speed|floatformat:0 }} mph</span>
+                                            {% if s.pop %}<span title="Precipitation probability"><i class="material-icons">umbrella</i> {% widthratio s.pop 1 100 %}%</span>{% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endwith %}
+                                {% else %}
+                                <span class="trip-weather-na">
+                                    <i class="material-icons">cloud_off</i> No data
+                                </span>
+                                {% endif %}
+                            </div>
+
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+
+            </div>
+            {% endif %}
         {% endfor %}
     </div>
 

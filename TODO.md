@@ -36,6 +36,7 @@ Features planned for this release.
 * Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]
 * On pin details page, clicking edit, the dialog doesn't scroll when overflowing page height. [UL-215]
 * BUG: On main map: "Failed to delete pin" on a pin I created by right clicking. [UL-216]
+* Trip Details > Adding Pin: The suggestions are only geocoded, not pin searches. [UL-227]
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
@@ -81,6 +82,7 @@ Features planned for this release.
 * Add tooltips to help guide users through the app when my assumptions about what is intuitive are incorrect. [UL-17]
 * Verify the UX for changing the kind of a badge (do other properties get updated too, and is that clear?) [UL-155]
 * UI Bug in Dark Mode: Organize page -> Merge dialog doesn't show titles of cats being merged. [UL-191]
+* Verify: Child trips work as expected. [UL-228]
 
 # Future Features
 Features planned for future releases.
@@ -110,7 +112,6 @@ Features planned for future releases.
 * Check for wikipedia entry for a pin, cache it, display data from it if it exists. I suppose this requires the wikipedia entry includes an address, which matches the pin, in order to avoid name collisions. [UL-64]
 * Gallery photos can have additional metadata, including: an angle of view, floor, room, etc. [UL-65]
 * Types of friends: "connections", "friends", "close friends", etc? I'm not sure this is needed in light of people badges. However, the mobile app idea of "connect with explorer" would encourage adding someone as a connection without necessarily wanting them to be a friend. I suppose this is also useful in the web app if you regularly encounter someone you may want to DM or keep track of, but don't want them to be impacted by your privacy and sharing settings. [UL-66]
-* Export data feature, allowing users to control and own their data as much as possible. The complexity here is "what format so this is at all useful?" Probably mimic google maps export formats, I guess? [UL-67]
 * Import data feature, so users can migrate from the publicly available app to their own private server if they wish. [UL-68]
 * Outside of app error logging. Alerts on certain kinds of errors. [UL-69]
 * Address DDOS, spamming, etc. [UL-70]
@@ -197,6 +198,13 @@ Features planned for future releases.
 * "Import from map" feature to load pins from a different service (mapquest, google custom map, etc). Maybe? Does this encourage pin hoarding, or is it just useful? Is it even useful? [UL-222]
 * If task UL-222 is implemented, then we could have a "subscribe to map" feature that would automatically pull updates. [UL-223]
 * Using haveibeenpwned, do not allow the use of compromised passwords. (Is this overreach? Probably not, but maybe. We want to ensure the security of the site and its data as much as possible.) [UL-224]
+* On pin details page, when street view is unavailable, hide the section. [UL-225]
+* Gracefully handle slug changes when the pin (or location) name changes. This is relevant in cases where the slug was created with an incorrect or empty name, and we don't want to have its slug forever be "no-location" or "dropped-pin". [UL-226]
+* Ensure dialogs that are closed have their data cleared (this occurred on the trip details page) [UL-229]
+* Trip Detail Page > Add Pin Dialog: "Proposed / Confirmed" toggle looks weird. Hide location checkbox doesn't have an active state. Explanation of hide location should be a tooltip, not raw text below. The option for a Child Trip is great, but it should replace the pin selection area, not look like it's a separate option from pin selection. [UL-230]
+* Trip Detail Page > Activities: After adding an activity with "hidden", the user who added the activity can't see the pin. That user should be able to, regardless of privacy settings... but we should show a "hidden" icon to make it clear that others may not see it. [UL-231]
+* Replace "added by {username}" with nothing or "added by you" for the same user in order to reduce text and simplify the ui. [UL-232]
+* UI Bug: Trip Details Page > Activity section: When no confirmed activities exist, and you click on the activity tab, the content section seems to disappear, rather than existing with no content. [UL-233]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

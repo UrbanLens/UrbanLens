@@ -102,7 +102,28 @@
             </div>
         </div>
 
+        {# ── Invite friend card ──────────────────────────────────────────────── #}
+        <div class="ul-card tools-card" id="invite-friend-card">
+            <div class="ul-card-header">
+                <i class="material-icons">person_add_alt</i>
+                <h3>Invite a Friend</h3>
+            </div>
+
+            <div class="ul-card-body">
+                <p class="tools-card-desc">
+                    Send a friend request to someone already on UrbanLens, or email an invitation
+                    to join. When they sign up, they'll be invited to become your friend.
+                </p>
+
+                <div class="tools-card-actions">
+                    {% include "dashboard/partials/_invite_friend_button.html" with button_class="btn btn--primary tools-invite-btn" dialog_id="invite-friend-dialog-tools" %}
+                </div>
+            </div>
+        </div>
+
     </div>{# /tools-grid #}
+
+    {% include "dashboard/partials/_invite_friend_dialog.html" with dialog_id="invite-friend-dialog-tools" result_id="invite-result-tools" %}
 </div>
 
 <style>
@@ -237,9 +258,16 @@
     color: var(--ul-grey-5);
 }
 
-.export-actions {
+.export-actions,
+.tools-card-actions {
     padding-top: .75rem;
     border-top: 1px solid var(--ul-border);
+}
+
+.tools-invite-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
 }
 
 .export-submit-btn {

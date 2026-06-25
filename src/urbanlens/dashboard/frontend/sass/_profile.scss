@@ -1700,6 +1700,25 @@ body .edit-profile-page .edit-username-input {
     padding: 8px 14px;
     font-size: .85rem;
     font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    white-space: nowrap;
+
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &.btn-friend--compact {
+        margin-left: 0;
+        padding: 5px 11px;
+        font-size: .78rem;
+        font-weight: 600;
+
+        .material-icons {
+            font-size: 1rem;
+        }
+    }
 }
 
 .invite-dialog {
@@ -2082,7 +2101,16 @@ a.profile-stat--link {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: .75rem;
     margin-bottom: .75rem;
+}
+
+.profile-section-actions {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-shrink: 0;
+    margin-left: auto;
 }
 
 .profile-section-count {
@@ -2620,6 +2648,15 @@ a.profile-stat--link {
     // Stack invite form email + button on narrow screens
     .invite-form-row {
         flex-direction: column;
+    }
+
+    .profile-section-header {
+        flex-wrap: wrap;
+    }
+
+    .profile-section-actions {
+        width: 100%;
+        justify-content: flex-end;
     }
 
     // Reduce profile hero padding on phones
