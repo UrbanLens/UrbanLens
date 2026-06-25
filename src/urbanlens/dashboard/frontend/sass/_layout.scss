@@ -333,7 +333,7 @@
 
 .card {
     @include surface($radius-sm);
-    box-shadow: $shadow-sm;
+    box-shadow: 3px 3px 10px rgba(0,0,0,.08);
 
     .card-header {
         @include panel-header($bg: var(--ul-grey-1));

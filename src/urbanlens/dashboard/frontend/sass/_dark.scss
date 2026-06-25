@@ -1,6 +1,14 @@
 @use 'sass:color';
 @use 'variables' as *;
 
+$section-shadow: 3px 3px 10px rgba(0,0,0,.2);
+
+@mixin standard-section {
+    background: var(--ul-grey-0);
+    border-color: var(--ul-black);
+    box-shadow: $section-shadow;
+}
+
 [data-theme="dark"] {
     background: var(--ul-grey-1);
     color: var(--ul-grey-8);
@@ -327,7 +335,9 @@
     }
 
     .card {
-        background-color: var(--ul-grey-1);
+        @include standard-section;
+        border-radius: 10px;
+
         .card-header {
             background-color: var(--ul-grey-0b);
         }
@@ -394,8 +404,10 @@
         color: $ui-green-300;
     }
 
+    .profile-stat,
+    .profile-section,
     .profile-hero {
-        background: var(--ul-grey-0);
+        @include standard-section;
     }
 
     .profile-full-name {
@@ -713,7 +725,7 @@
     }
 
     .trip-panel .card-header {
-        border-bottom-color: var(--ul-border);
+        border-bottom-color: var(--ul-grey-2);
 
         .badge {
             background: var(--ul-grey-4);
@@ -948,8 +960,13 @@
         }
     }
 
+    .card {
+        .comment-input {
+            background-color: var(--ul-grey-0a);
+    }
+
     .reaction-pill {
-        background: var(--ul-grey-4);
+        background-color: var(--ul-grey-4);
 
         &:hover {
             background: var(--ul-grey-1);

@@ -336,9 +336,13 @@
 .comment-compose-field {
     flex: 1;
     min-width: 0;
+}
 
-    textarea {
-        background-color: var(--ul-grey-0a);
+.card {
+    .comment-compose-field {
+        textarea {
+            background-color: var(--ul-grey-0a);
+        }
     }
 }
 
