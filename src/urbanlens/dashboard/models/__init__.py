@@ -26,3 +26,4 @@ from urbanlens.dashboard.models.profile.note import ProfileNote
 from urbanlens.dashboard.models.profile.trust import ProfileTrust
 from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant, SiteFeature, SubscriptionRole, UserSubscription

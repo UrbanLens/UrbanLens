@@ -190,6 +190,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         Test the AI. TODO Temporary function that can be deleted at any time with no side effects.
         """
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+
+        if not user_has_feature(request.user, SiteFeature.AI):
+            return JsonResponse({"error": "AI features require an active subscription."}, status=403)
+
         profile = Profile.objects.get(pk=1)
         pin, _created = Pin.objects.get_nearby_or_create(
             latitude=43.0423439,
