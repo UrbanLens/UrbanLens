@@ -85,11 +85,14 @@
 	outline: none;
 }
 
-.form-row--two-col {
+.ul-form-row {
 	@include form-row;
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: $space-sm $space-md;
+	&--two-col {
+		@include form-row;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: $space-sm $space-md;
+	}
 }
 
 // ── Dialog component ──────────────────────────────────────────────────────────
