@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from django.test import Client, RequestFactory
+from django.test import Client, RequestFactory, override_settings
 from django.urls import reverse
 from model_bakery import baker
 
@@ -47,6 +47,7 @@ class PersonalizedTitleTests(TestCase):
         self.assertEqual(personalized_map_title(user), "founder's Map")
 
 
+@override_settings(ALLOWED_HOSTS=["testserver", "urbanlens.org", "maps.example.com"])
 class SetupWizardAppTitleTests(TestCase):
     """Setup wizard enforces branding rules on non-official hosts."""
 

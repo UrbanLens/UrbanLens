@@ -130,6 +130,7 @@ Features planned for future releases.
 * XLS import
 * Ensure AI sandboxing. This isn't really necessary now, but would be necessary prior to any MCP usage for security reasons, and would also allow for local AI models. (ollama, etc)
 * Create separate logged-in homepage (small map, widgets, links to other pages, commonly visited pins, etc)
+* "View my profile as..." feature to help explain to user's how privacy settings are being applied.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

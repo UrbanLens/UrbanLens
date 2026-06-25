@@ -1569,7 +1569,7 @@
     document.getElementById('toggle-map-buttons').addEventListener('click', function() {
         const panel = document.getElementById('map-buttons');
         const collapsed = panel.classList.toggle('collapsed');
-        this.title = collapsed ? 'Expand map controls' : 'Collapse map controls';
+        this.dataset.tooltip = collapsed ? 'Expand map controls' : 'Collapse map controls';
     });
 
     // ── Filter panel ──────────────────────────────────────────────────────

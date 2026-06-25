@@ -1522,6 +1522,16 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: linear-gradient(135deg, $cluster-l-start 0%, $cluster-l-end 100%);
 }
 
+/* Controls */
+.leaflet-control-container {
+    .leaflet-control {
+        a {
+            background-color: var(--ul-surface-0);
+            color: var(--ul-text-3);
+        }
+    }
+}
+
 /* ── Map tile loading - dim tile pane while images download ─────── */
 #map .leaflet-tile-pane {
     transition: opacity 0.35s ease;

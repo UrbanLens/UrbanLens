@@ -256,24 +256,27 @@ class StyleSettingsFormTests(TestCase):
     def _profile(self):
         return baker.make("auth.User").profile
 
+    def _style_data(self, theme: str, map_dark_mode: str = ThemeChoice.SYSTEM) -> dict:
+        return {"theme_mode": theme, "map_dark_mode": map_dark_mode}
+
     def test_system_theme_is_valid(self) -> None:
         profile = self._profile()
-        form = StyleSettingsForm(data={"theme_mode": ThemeChoice.SYSTEM}, instance=profile)
+        form = StyleSettingsForm(data=self._style_data(ThemeChoice.SYSTEM), instance=profile)
         self.assertTrue(form.is_valid(), form.errors)
 
     def test_dark_theme_is_valid(self) -> None:
         profile = self._profile()
-        form = StyleSettingsForm(data={"theme_mode": ThemeChoice.DARK}, instance=profile)
+        form = StyleSettingsForm(data=self._style_data(ThemeChoice.DARK), instance=profile)
         self.assertTrue(form.is_valid(), form.errors)
 
     def test_light_theme_is_valid(self) -> None:
         profile = self._profile()
-        form = StyleSettingsForm(data={"theme_mode": ThemeChoice.LIGHT}, instance=profile)
+        form = StyleSettingsForm(data=self._style_data(ThemeChoice.LIGHT), instance=profile)
         self.assertTrue(form.is_valid(), form.errors)
 
     def test_saving_dark_theme_persists_to_db(self) -> None:
         profile = self._profile()
-        form = StyleSettingsForm(data={"theme_mode": ThemeChoice.DARK}, instance=profile)
+        form = StyleSettingsForm(data=self._style_data(ThemeChoice.DARK), instance=profile)
         self.assertTrue(form.is_valid(), form.errors)
         form.save()
         profile.refresh_from_db()
@@ -283,7 +286,7 @@ class StyleSettingsFormTests(TestCase):
         profile = self._profile()
         Profile.objects.filter(pk=profile.pk).update(theme_mode=ThemeChoice.DARK)
         profile.refresh_from_db()
-        form = StyleSettingsForm(data={"theme_mode": ThemeChoice.LIGHT}, instance=profile)
+        form = StyleSettingsForm(data=self._style_data(ThemeChoice.LIGHT), instance=profile)
         self.assertTrue(form.is_valid(), form.errors)
         form.save()
         profile.refresh_from_db()

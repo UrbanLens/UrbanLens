@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
+from django.contrib.auth.models import User
 from django.test import RequestFactory
 from model_bakery import baker
 
@@ -12,7 +13,6 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.pin_edit import PinEditView
 from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import Profile
 
 
 class PinEditCategoryUpdateTests(TestCase):
@@ -20,7 +20,7 @@ class PinEditCategoryUpdateTests(TestCase):
 
     def setUp(self) -> None:
         self.factory = RequestFactory()
-        self.profile = baker.make(Profile)
+        self.profile = baker.make(User).profile
         self.user = self.profile.user
         self.pin = baker.make(Pin, profile=self.profile)
         self.existing_cat = baker.make(

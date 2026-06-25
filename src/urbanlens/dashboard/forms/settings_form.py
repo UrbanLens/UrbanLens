@@ -76,15 +76,14 @@ class PrivacySettingsForm(forms.ModelForm):
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Trip Pins",
         help_text=(
-            "When you share one of your pins as a trip activity, who can see the "
-            "actual location? Members outside this setting will only see the pin name."
+            "Who can see pins you share to a trip? Other trip members will only see the pin name."
         ),
     )
     viewer_photo_filter = forms.ChoiceField(
         choices=VisibilityChoice.choices,
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Show Photos From",
-        help_text="Whose photos you want to see. Photos from users outside this setting will be blurred.",
+        help_text="Photos you want to see. Other photos will be blurred.",
     )
 
     class Meta:

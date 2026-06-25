@@ -43,7 +43,7 @@ def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
 class VisibilityChoice(TextChoices):
     """Who can see a particular piece of profile data, or who can perform an action."""
 
-    ANYONE = "anyone", "Anyone"
+    ANYONE = "anyone", "Anyone (Logged In)"
     FRIENDS = "friends", "Friends Only"
     COMMON_PIN = "common_pin", "Users with a pin in common"
     COMMON_FRIEND = "common_friend", "Users with a friend in common"
@@ -218,7 +218,7 @@ class Profile(abstract.Model):
 
     def _generate_slug(self) -> str:
         """Derive a slug that is globally unique across all profiles."""
-        base = slugify(self.user.username)[:150] or "user"
+        base = slugify(self.user.username)[:145] or "user"
         candidate = base
         n = 2
         qs = Profile.objects.all()

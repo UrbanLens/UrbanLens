@@ -30,13 +30,16 @@ _TITLE_NORMALIZE_RE = re.compile(r"[^a-zA-Z0-9]+")
 def _request_host(request) -> str:
     """Return the request hostname without port or leading ``www.``.
 
+    Reads directly from META to avoid DisallowedHost exceptions; this function
+    is used only for branding decisions, not security validation.
+
     Args:
         request: The current HttpRequest.
 
     Returns:
         Lowercase hostname.
     """
-    host = request.get_host().split(":")[0].lower()
+    host = request.META.get("HTTP_HOST", "").split(":")[0].lower()
     if host.startswith("www."):
         return host[4:]
     return host
@@ -102,11 +105,13 @@ def app_title_name_suggestions(user: User) -> list[str]:
         user: The bootstrap administrator.
 
     Returns:
-        Human-readable title suggestions.
+        Human-readable title suggestions, personalized to the admin user.
     """
     first = (user.first_name or "").strip()
-    first.split()[0] if first else user.username
+    display_name = first.split()[0] if first else user.username
     return [
+        f"{display_name}'s Map",
+        f"{display_name}'s Urbex Atlas",
         "Private Lens",
         "Urbex Tracker",
         "Urban Atlas",
@@ -366,6 +371,7 @@ class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
             if not title:
                 return HttpResponse(status=400)
             if not is_official_urbanlens_site(request) and is_reserved_urbanlens_title(title):
+                logger.warning("Reserved UrbanLens title (%s) on domain (%s)", title, _request_host(request))
                 return JsonResponse(
                     {
                         "error": URBANLENS_TITLE_NOTICE,
@@ -379,6 +385,7 @@ class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         if action == "complete":
             if not is_official_urbanlens_site(request) and is_reserved_urbanlens_title(site.app_title):
+                logger.warning("Reserved UrbanLens title (%s) on domain (%s)", site.app_title, _request_host(request))
                 return JsonResponse(
                     {
                         "error": URBANLENS_TITLE_NOTICE,

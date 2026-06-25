@@ -104,7 +104,7 @@ class StyleSettingsFormValidationTests(TestCase):
 
     def _submit(self, theme: str) -> StyleSettingsForm:
         profile = _profile()
-        return StyleSettingsForm(data={"theme_mode": theme}, instance=profile)
+        return StyleSettingsForm(data={"theme_mode": theme, "map_dark_mode": ThemeChoice.SYSTEM}, instance=profile)
 
     def test_system_is_valid(self) -> None:
         form = self._submit(ThemeChoice.SYSTEM)
@@ -139,7 +139,7 @@ class StyleSettingsFormSaveTests(TestCase):
     """StyleSettingsForm.save() must persist the theme_mode to the Profile."""
 
     def _save_theme(self, profile: Profile, theme: str) -> Profile:
-        form = StyleSettingsForm(data={"theme_mode": theme}, instance=profile)
+        form = StyleSettingsForm(data={"theme_mode": theme, "map_dark_mode": ThemeChoice.SYSTEM}, instance=profile)
         self.assertTrue(form.is_valid(), form.errors)
         form.save()
         profile.refresh_from_db()

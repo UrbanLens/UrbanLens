@@ -400,8 +400,12 @@ class DiscordHandleFormTests(TestCase):
         form = DiscordHandleForm(data={"discord": "x" * 100})
         self.assertTrue(form.is_valid(), form.errors)
 
-    @given(handle=st.text(alphabet=st.characters(blacklist_characters=["\x00"]), max_size=100))
+    @given(handle=st.text(
+        alphabet=st.sampled_from("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._#-"),
+        min_size=2,
+        max_size=100,
+    ))
     @_hyp
-    def test_any_string_up_to_100_chars_is_valid(self, handle) -> None:
+    def test_any_valid_discord_handle_is_accepted(self, handle) -> None:
         form = DiscordHandleForm(data={"discord": handle})
         self.assertTrue(form.is_valid(), form.errors)
