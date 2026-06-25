@@ -290,6 +290,17 @@
         color: $color-green-400;
     }
 
+    .edit-card {
+        box-shadow: var(--ul-shadow-md);
+    }
+
+    .edit-card-title {
+        border-bottom-color: var(--ul-border);
+    }
+
+    .edit-username-hint--ok  { color: $color-green-400; }
+    .edit-username-hint--bad { color: $ui-red-400; }
+
     .settings-cluster-value {
         color: var(--ul-grey-7);
     }

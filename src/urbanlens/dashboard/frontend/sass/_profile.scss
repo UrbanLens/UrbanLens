@@ -828,7 +828,7 @@
 .edit-profile-title {
     font-size: 1.75rem;
     font-weight: 700;
-    color: $text-color;
+    color: var(--ul-text);
     margin: 0;
 }
 
@@ -840,17 +840,18 @@
 }
 
 .edit-card {
-    background: var(--ul-grey-0);
+    background: var(--ul-grey-0a);
     border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
+    box-shadow: var(--ul-shadow-sm);
 }
 
 .edit-card-title {
     font-size: 1.1rem;
     font-weight: 600;
-    color: $text-color;
+    color: var(--ul-text);
     margin: 0 0 1.25rem;
     padding-bottom: 0.75rem;
     border-bottom: 1px solid var(--ul-border);
@@ -858,7 +859,7 @@
 
 .edit-card-desc {
     font-size: 0.875rem;
-    color: $text-secondary;
+    color: var(--ul-muted);
     margin: -0.5rem 0 1rem;
 }
 
@@ -877,7 +878,7 @@
     display: block;
     font-size: 0.85rem;
     font-weight: 600;
-    color: $text-secondary;
+    color: var(--ul-muted);
     margin-bottom: 0.3rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -1009,6 +1010,151 @@ textarea.edit-textarea {
     @include btn-primary;
     padding: 10px 24px;
     font-weight: 600;
+}
+
+// ── Edit profile: setup / welcome banner ──────────────────────────────────────
+
+.edit-setup-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, $ui-indigo-900, $ui-indigo-700);
+    color: #fff;
+    border-radius: $radius-md;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+}
+
+.setup-banner-icon {
+    font-size: 1.6rem;
+    opacity: .9;
+    flex-shrink: 0;
+}
+
+.setup-banner-text {
+    flex: 1;
+
+    strong { display: block; font-size: .95rem; }
+    span   { font-size: .82rem; opacity: .85; }
+}
+
+.setup-banner-skip {
+    background: rgba(255, 255, 255, .15);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, .3);
+    border-radius: $radius-sm;
+    padding: 6px 14px;
+    font-size: .82rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    white-space: nowrap;
+
+    &:hover { background: rgba(255, 255, 255, .25); }
+}
+
+// ── Edit profile: username input group ────────────────────────────────────────
+
+.edit-username-wrap {
+    display: flex;
+    align-items: center;
+}
+
+.edit-username-at {
+    display: flex;
+    align-items: center;
+    height: 3rem;
+    flex: 0 0 auto;
+    padding: 0 10px;
+    border: 1px solid var(--ul-border);
+    border-right: none;
+    border-radius: $radius-sm 0 0 $radius-sm;
+    font-size: .9rem;
+    background: var(--ul-grey-1);
+    color: var(--ul-muted);
+    white-space: nowrap;
+    user-select: none;
+}
+
+body .edit-profile-page .edit-username-input {
+    height: 3rem;
+    border-left: none;
+    border-radius: 0 $radius-sm $radius-sm 0;
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.edit-username-hint {
+    font-size: .78rem;
+    margin-left: 8px;
+    white-space: nowrap;
+}
+
+.edit-username-hint--ok  { color: $color-green-800; }
+.edit-username-hint--bad { color: $color-red-700; }
+
+.edit-field-hint {
+    font-size: .75rem;
+    color: var(--ul-muted);
+    margin: 4px 0 0;
+}
+
+// ── Edit profile: avatar source picker ────────────────────────────────────────
+
+.edit-avatar-layout {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.edit-avatar-current-wrap { flex-shrink: 0; }
+
+.edit-avatar-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.edit-avatar-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: $radius-sm + 2;
+    border: 1.5px solid var(--ul-border);
+    background: var(--ul-grey-0a);
+    font-size: .75rem;
+    color: var(--ul-muted);
+    min-width: 64px;
+    transition: border-color .15s, box-shadow .15s;
+
+    &:hover {
+        border-color: $ui-indigo-600;
+        box-shadow: 0 0 0 3px rgba($ui-indigo-600, .12);
+    }
+
+    .material-icons { font-size: 1.6rem; color: var(--ul-muted); }
+}
+
+.edit-avatar-option-img {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.edit-avatar-emoji-circle {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    line-height: 1;
 }
 
 // Social link list inside the edit card
