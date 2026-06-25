@@ -712,31 +712,6 @@
         color: $color-blue-500;
     }
 
-    .trip-header-btn {
-
-        &--edit,
-        &--settings {
-
-            &:hover,
-            &:focus {
-                background: var(--ul-grey-1);
-                color: $color-blue-500;
-                border-color: var(--ul-border);
-            }
-        }
-
-        &--delete {
-            color: var(--ul-grey-6);
-
-            &:hover,
-            &:focus {
-                background: rgba($ui-red-600, .12);
-                color: $ui-red-400;
-                border-color: rgba($ui-red-600, .3);
-            }
-        }
-    }
-
     .trip-panel .card-header {
         border-bottom-color: var(--ul-border);
 
