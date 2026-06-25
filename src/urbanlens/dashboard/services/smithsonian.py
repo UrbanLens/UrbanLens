@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from django.core.cache import cache
 import requests
 
+from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -17,8 +18,7 @@ class SmithsonianGateway(Gateway):
     base_url: str = "https://api.si.edu/openaccess/api/v1.0/search"
 
     def get_data(self, search_term: str) -> list[dict]:
-        # Create a unique cache key based on the search term
-        cache_key = f"smithsonian_{search_term}"
+        cache_key = make_cache_key("smithsonian", search_term)
         # Try to get the data from the cache
         data = cache.get(cache_key)
         # If the data is not in the cache

@@ -6,18 +6,18 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 
+from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.smithsonian import SmithsonianGateway
-
 
 _hyp = settings(max_examples=50, deadline=None)
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _gateway() -> SmithsonianGateway:
     """Return a SmithsonianGateway with a stub session (no real HTTP)."""
@@ -38,10 +38,10 @@ def _make_row(title: str = "Test Image", content_url: str = "http://example.com/
             "descriptiveNonRepeating": {
                 "online_media": {
                     "media": [
-                        {"content": content_url, "thumbnail": thumb_url}
-                    ]
-                }
-            }
+                        {"content": content_url, "thumbnail": thumb_url},
+                    ],
+                },
+            },
         },
     }
 
@@ -151,8 +151,7 @@ class SmithsonianGetDataCacheMissTests(TestCase):
             self.gw.get_data("abandoned mill")
             mock_cache.set.assert_called_once()
             args = mock_cache.set.call_args
-            # Cache key should contain the search term
-            self.assertIn("abandoned mill", args[0][0])
+            self.assertEqual(args[0][0], make_cache_key("smithsonian", "abandoned mill"))
             # TTL should be 86400 seconds (24 hours)
             self.assertEqual(args[0][2], 86400)
 
@@ -210,12 +209,12 @@ class SmithsonianGetDataCacheHitTests(TestCase):
             self.gw.get_data("factory")
             mock_cache.set.assert_not_called()
 
-    def test_cache_key_includes_search_term(self):
+    def test_cache_key_is_derived_from_search_term(self):
         with patch("urbanlens.dashboard.services.smithsonian.cache") as mock_cache:
             mock_cache.get.return_value = self.cached_data
             self.gw.get_data("unique_term_xyz")
             call_args = mock_cache.get.call_args
-            self.assertIn("unique_term_xyz", call_args[0][0])
+            self.assertEqual(call_args[0][0], make_cache_key("smithsonian", "unique_term_xyz"))
 
 
 # ---------------------------------------------------------------------------
