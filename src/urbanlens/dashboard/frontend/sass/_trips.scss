@@ -231,61 +231,6 @@
     }
 }
 
-// Trip header action buttons - icon-only, unobtrusive
-.trip-header-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
-    cursor: pointer;
-    border: 1px solid transparent;
-    background: transparent;
-    padding: 0;
-    transition: background .15s, color .15s, border-color .15s;
-
-    .material-icons {
-        font-size: 1.15rem;
-    }
-
-    &--edit {
-        color: var(--ul-grey-6);
-
-        &:hover,
-        &:focus {
-            background: var(--ul-grey-4);
-            color: $ui-blue-500;
-            border-color: var(--ul-border);
-            outline: none;
-        }
-    }
-
-    &--settings {
-        color: var(--ul-grey-6);
-
-        &:hover,
-        &:focus {
-            background: var(--ul-grey-4);
-            color: $ui-blue-500;
-            border-color: var(--ul-border);
-            outline: none;
-        }
-    }
-
-    &--delete {
-        color: var(--ul-border);
-
-        &:hover,
-        &:focus {
-            background: var(--ul-grey-0a);
-            color: $ui-red-600;
-            border-color: $ui-red-300;
-            outline: none;
-        }
-    }
-}
-
 .trip-detail-body {
     display: grid;
     grid-template-columns: 1fr;
