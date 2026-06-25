@@ -15,28 +15,6 @@
     }
 }
 
-// Shared "Add" button used in card headers across trips, detail pins, etc.
-.detail-pin-add-btn {
-    margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: .25rem;
-    padding: .3rem .75rem;
-    border: none;
-    border-radius: 6px;
-    background: $ui-blue-600;
-    color: var(--ul-grey-7);
-    font-size: .8rem;
-    cursor: pointer;
-    outline: none;
-
-    &:hover,
-    &:focus {
-        background: $ui-blue-700;
-        outline: none;
-    }
-}
-
 // Shared destructive icon button - used in detail pins, trip panels, etc.
 .detail-pin-action-btn {
     @include icon-btn-danger(28px);

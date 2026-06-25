@@ -336,6 +336,10 @@
 .comment-compose-field {
     flex: 1;
     min-width: 0;
+
+    textarea {
+        background-color: var(--ul-grey-0a);
+    }
 }
 
 .comment-input-wrap {
@@ -740,11 +744,7 @@
 }
 
 .comment-empty {
-    padding: 1.25rem 1rem;
-    text-align: center;
-    font-size: .84rem;
-    color: $ui-gray-400;
-    margin: 0;
+    display: none;
 }
 
 // ── @mention autocomplete ──────────────────────────────────────────────────────

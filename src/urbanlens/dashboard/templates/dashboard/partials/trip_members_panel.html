@@ -4,9 +4,9 @@
         <span>Members</span>
         {% if members %}<span class="badge">{{ members|length }}</span>{% endif %}
         {% if profile == trip.creator %}
-        <button type="button" class="detail-pin-add-btn"
+        <button type="button" class="btn btn--sm btn--primary"
                 onclick="document.getElementById('add-member-dialog').showModal()">
-            <i class="material-icons">person_add</i> Add
+            <i class="material-icons">add</i>
         </button>
         {% endif %}
     </div>

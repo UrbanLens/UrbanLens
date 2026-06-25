@@ -326,6 +326,13 @@
         }
     }
 
+    .card {
+        background-color: var(--ul-grey-1);
+        .card-header {
+            background-color: var(--ul-grey-0b);
+        }
+    }
+
     .trip-weather-panel {
         background: $dk-panel-bg;
         border-color: $dk-panel-border;
@@ -1001,10 +1008,6 @@
         background: var(--ul-grey-1);
     }
 
-    .comment-empty {
-        color: var(--ul-grey-6);
-    }
-
     .mention-dropdown {
         box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
     }
@@ -1185,6 +1188,8 @@
     }
 
     .priority-item {
+        background-color: var(--ul-grey-0a);
+
         &:hover {
             box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
         }
@@ -1213,19 +1218,18 @@
     }
 
     .priority-kind-badge {
+        color: var(--ul-grey-9);
+
         &--tag {
             background-color: #{$color-purple-1100};
-            color: #{$color-purple-1300};
         }
 
         &--category {
             background-color: #{$color-blue-1100};
-            color: #{$color-blue-1300};
         }
 
         &--status {
             background-color: #{$color-green-1100};
-            color: #{$color-green-1300};
         }
     }
 

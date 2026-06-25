@@ -1585,7 +1585,7 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: var(--ul-grey-0a);
+    background: var(--ul-grey-0);
     border: 1px solid var(--ul-grey-0b);
     border-radius: $radius-md;
     padding: .6rem .85rem;
@@ -1678,20 +1678,18 @@
     padding: 2px 8px;
     border-radius: 20px;
     margin-left: 3px;
+    color: var(--ul-grey-0);
 
     &--tag {
         background-color: #{$color-purple-500};
-        color: #{$color-purple-900};
     }
 
     &--category {
         background-color: #{$color-blue-500};
-        color: #{$color-blue-900};
     }
 
     &--status {
         background-color: #{$color-green-500};
-        color: #{$color-green-900};
     }
 }
 

@@ -251,6 +251,12 @@
 		color: var(--ul-black);
 		border-color: var(--ul-border);
 	}
+
+	&--accent-1 {
+		background: $color-yellow-500;
+		color: $color-yellow-1700;
+		border-color: $color-yellow-700;
+	}
 }
 
 // ── Dropdown ──────────────────────────────────────────────────────────────────
