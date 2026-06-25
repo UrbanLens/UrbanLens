@@ -1,6 +1,10 @@
+import logging
+
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.pin.model import Pin
+
+logger = logging.getLogger(__name__)
 
 
 class PinSerializer(serializers.ModelSerializer):
@@ -47,4 +51,9 @@ class PinSerializer(serializers.ModelSerializer):
         pin = Pin.objects.create(**validated_data)
         pin.user = user
         pin.save()
+        try:
+            pin.suggest_category(append_suggestion=True)
+        except Exception:
+            # TODO: Handle specific exception type.
+            logger.warning("suggest_category failed for pin %s", pin.pk, exc_info=True)
         return pin

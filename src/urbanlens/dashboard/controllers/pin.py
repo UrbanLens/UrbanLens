@@ -582,6 +582,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         try:
             payload = request.data
             confirmed_lists = payload.get("lists", [])
+            auto_tag = bool(payload.get("auto_tag", True))
         except (ValueError, KeyError):
             return JsonResponse({"error": "Invalid JSON payload."}, status=400)
 
@@ -592,7 +593,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         gateway = GoogleMapsGateway(api_key=settings.google_maps_api_key or "")
 
         response = StreamingHttpResponse(
-            gateway.import_preview_streaming(confirmed_lists, profile),
+            gateway.import_preview_streaming(confirmed_lists, profile, auto_tag=auto_tag),
             content_type="text/event-stream",
         )
         response["Cache-Control"] = "no-cache"

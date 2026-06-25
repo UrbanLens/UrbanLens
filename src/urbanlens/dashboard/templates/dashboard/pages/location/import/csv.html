@@ -495,6 +495,10 @@
         </div>
         <div class="iw-footer">
             <span id="iw-selected-count" style="margin-right:auto"></span>
+            <label class="iw-meta-row" style="font-size:.85rem;color:#5f6368;cursor:pointer">
+                <input type="checkbox" id="iw-auto-tag" checked>
+                Auto Tag
+            </label>
             <button id="iw-btn-back" class="btn btn--ghost" style="padding:9px 16px;border-radius:8px;border:1.5px solid #e0e0e0;background:none;cursor:pointer;font-size:.88rem;color:#5f6368;">← Back</button>
             <button id="iw-btn-confirm" class="submit-button btn btn--primary btn--lg" disabled>Import</button>
         </div>
@@ -927,6 +931,7 @@ $('iw-btn-confirm').addEventListener('click', async function () {
     if (!parsedData) return;
 
     var payload = {
+        auto_tag: $('iw-auto-tag').checked,
         lists: parsedData.lists.map(function (lst, idx) {
             var catEl = document.getElementById('iw-cat-' + idx);
             return {

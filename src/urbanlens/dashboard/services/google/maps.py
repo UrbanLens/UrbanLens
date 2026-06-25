@@ -539,6 +539,7 @@ class GoogleMapsGateway(Gateway):
         self,
         confirmed_lists: list[dict[str, Any]],
         user_profile: Profile,
+        auto_tag: bool = True,
     ):
         r"""Stream import events for user-confirmed pin selections from the preview step.
 
@@ -635,6 +636,12 @@ class GoogleMapsGateway(Gateway):
                         if pin:
                             if created:
                                 created_count += 1
+                                if auto_tag:
+                                    try:
+                                        pin.suggest_category(append_suggestion=True)
+                                    except Exception:
+                                        # TODO: Handle specific exception type.
+                                        logger.warning("suggest_category failed for pin %s", pin.pk, exc_info=True)
                             else:
                                 exists_count += 1
 

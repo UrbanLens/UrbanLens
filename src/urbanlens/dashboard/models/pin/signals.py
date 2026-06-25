@@ -1,9 +1,7 @@
 import logging
-import os
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-import requests
 
 from urbanlens.dashboard.models.pin import Pin
 
@@ -28,27 +26,3 @@ def invalidate_profile_map_center(sender: type[Pin], instance: Pin, created: boo
         map_center_latitude=None,
         map_center_longitude=None,
     )
-
-
-@receiver(post_save, sender=Pin, dispatch_uid="pin_suggest_categories")
-def suggest_and_add_categories(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
-    """
-    Suggests categories for a newly created Pin instance and adds them.
-
-    Args:
-        sender (Model class): The model class.
-        instance (Pin): The actual instance being saved.
-        created (bool): True if a new record was created.
-        **kwargs: Additional keyword arguments.
-
-    """
-    if not created:
-        return
-
-    # Perform the category suggestion and addition only for new instances.
-    # M2M changes from add_category(save=False) are committed by .add() directly;
-    # no save() needed here.
-    try:
-        instance.suggest_category(append_suggestion=True)
-    except (requests.RequestException, ValueError):
-        logger.warning("suggest_category failed for pin %s", instance.pk, exc_info=True)
