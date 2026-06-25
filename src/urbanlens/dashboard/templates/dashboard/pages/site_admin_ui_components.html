@@ -4,7 +4,7 @@
 
 {% block content %}
 <style>
-.ui-kit-page { max-width: 960px; margin: 0 auto; padding: 0 1rem 3rem; }
+.ui-kit-page { max-width: 960px; margin: 0 auto; padding: 0 1rem 3rem; margin-top: 2rem; }
 .ui-kit-header { margin-bottom: 1.75rem; }
 .ui-kit-grid { display: flex; flex-direction: column; gap: 1.5rem; }
 .ui-kit-section { background: var(--ul-grey-0); border: 1px solid var(--ul-border); border-radius: 8px; overflow: visible; }
@@ -32,10 +32,7 @@
             UI Components
         </h1>
         <p class="site-admin-subtitle">
-            Visual reference for reusable classes from
-            <code>_buttons.scss</code>, <code>_mixins.scss</code>,
-            <code>_components.scss</code>, and <code>_toastr.scss</code>.
-            Development environment only.
+            Visual reference for reusable classes throughout the application.
         </p>
         <div class="site-admin-nav-links" style="margin-top:.5rem">
             <a href="{% url 'site_admin' %}" class="btn btn--ghost btn--sm">
@@ -90,19 +87,19 @@
                     <span class="ui-kit-label">Legacy &amp; icon-only</span>
                     <div class="ui-kit-row">
                         <button type="button" class="submit-button btn btn--primary btn--lg">Submit button</button>
-                        <button type="button" class="btn-icon" title="Edit">
+                        <button type="button" class="btn-icon" title="btn-icon">
                             <i class="material-icons">edit</i>
                         </button>
-                        <button type="button" class="btn-icon btn-icon--primary" title="Primary">
+                        <button type="button" class="btn-icon btn-icon--primary" title="btn-icon--primary">
                             <i class="material-icons">star</i>
                         </button>
-                        <button type="button" class="btn-icon btn-icon--danger" title="Delete">
+                        <button type="button" class="btn-icon btn-icon--danger" title="btn-icon--danger">
                             <i class="material-icons">delete</i>
                         </button>
-                        <button type="button" class="btn-icon btn-icon--active" title="Active">
+                        <button type="button" class="btn-icon btn-icon--active" title="btn-icon--active">
                             <i class="material-icons">favorite</i>
                         </button>
-                        <button type="button" class="btn-icon btn-icon--global-edit" title="Global edit">
+                        <button type="button" class="btn-icon btn-icon--global-edit" title="btn-icon--global-edit">
                             <i class="material-icons">public</i>
                         </button>
                     </div>
@@ -114,14 +111,14 @@
         <section class="ui-kit-section">
             <div class="ui-kit-section__header">
                 <h2>Form inputs</h2>
-                <p><code>.ul-form-row</code> and the <code>ul-input</code> mixin</p>
+                <p><code>.form-row</code> and the <code>ul-input</code> mixin</p>
             </div>
             <div class="ui-kit-section__body">
-                <div class="ul-form-row" style="max-width:360px">
+                <div class="form-row" style="max-width:360px">
                     <label for="ui-kit-text">Text input</label>
                     <input type="text" id="ui-kit-text" placeholder="Placeholder text">
                 </div>
-                <div class="ul-form-row ul-form-row--two-col">
+                <div class="form-row form-row--two-col">
                     <div>
                         <label for="ui-kit-email">Email</label>
                         <input type="email" id="ui-kit-email" value="user@example.com">
@@ -131,14 +128,14 @@
                         <input type="number" id="ui-kit-number" value="42">
                     </div>
                 </div>
-                <div class="ul-form-row" style="max-width:360px">
+                <div class="form-row" style="max-width:360px">
                     <label for="ui-kit-select">Select</label>
                     <select id="ui-kit-select">
                         <option>Option one</option>
                         <option>Option two</option>
                     </select>
                 </div>
-                <div class="ul-form-row" style="max-width:360px">
+                <div class="form-row" style="max-width:360px">
                     <label for="ui-kit-textarea">Textarea</label>
                     <textarea id="ui-kit-textarea" rows="3">Multi-line content.</textarea>
                 </div>
@@ -352,7 +349,7 @@
         </button>
     </div>
     <div class="ul-dialog-body">
-        <div class="ul-form-row">
+        <div class="form-row">
             <label for="ui-kit-dialog-input">Name</label>
             <input type="text" id="ui-kit-dialog-input" placeholder="Enter a value">
         </div>

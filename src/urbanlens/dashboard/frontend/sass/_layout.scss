@@ -337,6 +337,7 @@
 
     .card-header {
         @include panel-header($bg: var(--ul-grey-1));
+        border-radius: $radius-sm;
 
         .material-icons {
             font-size: 1.1rem;

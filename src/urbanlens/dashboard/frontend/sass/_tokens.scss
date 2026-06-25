@@ -579,7 +579,7 @@ $z-nav: 1100;
     --ul-button-text: var(--ul-grey-9);
     --ul-button-hover-bg: #{$accent-1};
     --ul-button-hover-border: #{$accent-1-dark};
-    --ul-button-hover-text: var(--ul-grey-9);
+    --ul-button-hover-text: var(--ul-grey-0);
 
     // Tooltips - intentionally dark in both themes for legibility
     --ul-tooltip-bg: rgba(14, 17, 26, 0.94);
@@ -628,6 +628,7 @@ $z-nav: 1100;
 
     --ul-border: #{$color-grey-4b};
     --ul-border-strong: #{$color-grey-6b};
+    --ul-button-hover-border: var(--ul-grey-0);
 
     --ul-shadow-sm: 0 1px 3px rgba(0, 0, 0, .3);
     --ul-shadow-md: 0 4px 16px rgba(0, 0, 0, .4);
