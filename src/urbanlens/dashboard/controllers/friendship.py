@@ -6,6 +6,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
+from django.urls import reverse
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
@@ -86,6 +87,33 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
     }
 
 
+def notify_friend_request(from_profile: Profile, to_profile: Profile) -> None:
+    """Create an in-app notification when a friend request is sent.
+
+    Args:
+        from_profile: Profile sending the request.
+        to_profile: Profile receiving the request.
+    """
+    try:
+        pref = to_profile.notification_preferences.friend_request
+    except Exception:
+        pref = DeliveryPreference.SITE
+
+    if pref == DeliveryPreference.NONE:
+        return
+
+    NotificationLog.objects.create(
+        profile=to_profile,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.FRIEND_REQUEST,
+        title="New friend request",
+        message=f"{from_profile.username} wants to be your friend.",
+        url=reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)}),
+        source_profile=from_profile,
+    )
+
+
 class FriendController(LoginRequiredMixin, GenericViewSet):
     def request_friend(self, request: HttpRequest, profile_id: int):
         if not isinstance(request.user, User):
@@ -160,25 +188,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if not friendship:
             return HttpResponse("Could not request friend.", status=400)
 
-        # Notify the recipient if their preference allows it
-        try:
-            pref = to_profile.notification_preferences.friend_request
-        except Exception:
-            pref = DeliveryPreference.SITE
-
-        if pref != DeliveryPreference.NONE:
-            from django.urls import reverse
-
-            NotificationLog.objects.create(
-                profile=to_profile,
-                status=Status.UNREAD,
-                importance=Importance.MEDIUM,
-                notification_type=NotificationType.FRIEND_REQUEST,
-                title="New friend request",
-                message=f"{requesting.username} wants to be your friend.",
-                url=reverse("profile.view_user", kwargs={"profile_slug": requesting.slug or str(requesting.uuid)}),
-                source_profile=requesting,
-            )
+        notify_friend_request(requesting, to_profile)
 
         return render(
             request,
@@ -447,6 +457,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             friendship = Friendship.request(from_profile=inviter, to_profile=to_profile.pk)
             if not friendship:
                 return HttpResponse("Could not send friend request.", status=400)
+
+            notify_friend_request(inviter, to_profile)
 
             return render(
                 request,

@@ -254,7 +254,8 @@ class VerifyEmailView(View):
             profile.save(update_fields=["profile_setup_complete"])
 
         # Auto-send friend request from any pending email invitations
-        _process_pending_invitations(user)
+        invite_token = request.session.pop("pending_invite_token", None)
+        _process_pending_invitations(user, invite_token=invite_token)
 
         return render(request, "registration/verify_email_confirm.html", {"valid": True})
 
@@ -413,30 +414,62 @@ class PostLoginRedirectView(View):
 # ── Invitation processing ──────────────────────────────────────────────────
 
 
-def _process_pending_invitations(user: User) -> None:
+def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
+    """Return open invitations matching the user's email and/or signup invite token."""
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+
+    pending_by_id: dict[int, FriendInvitation] = {}
+
+    for invitation in FriendInvitation.objects.filter(
+        email__iexact=user.email,
+        accepted_at__isnull=True,
+        expires_at__gt=timezone.now(),
+    ).select_related("inviter"):
+        pending_by_id[invitation.pk] = invitation
+
+    if invite_token:
+        token_invitation = (
+            FriendInvitation.objects.filter(
+                token=invite_token,
+                accepted_at__isnull=True,
+                expires_at__gt=timezone.now(),
+            )
+            .select_related("inviter")
+            .first()
+        )
+        if token_invitation:
+            pending_by_id[token_invitation.pk] = token_invitation
+
+    return list(pending_by_id.values())
+
+
+def _apply_pending_invitation(invitation, profile) -> None:
+    """Create a friend request and notification for one pending invitation."""
+    from urbanlens.dashboard.controllers.friendship import notify_friend_request
+    from urbanlens.dashboard.models.friendship.model import Friendship
+
+    if invitation.inviter == profile:
+        return
+    friendship = Friendship.request(from_profile=invitation.inviter, to_profile=profile.pk)
+    if not friendship:
+        return
+    notify_friend_request(invitation.inviter, profile)
+    invitation.mark_accepted()
+
+
+def _process_pending_invitations(user: User, invite_token: str | None = None) -> None:
     """After a new user's email is verified, auto-create friend requests from any matching invitations.
 
     Args:
         user: The newly-verified User.
+        invite_token: Optional invitation token stored during signup from an invite link.
     """
     try:
-        from django.utils import timezone
-
-        from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
-        from urbanlens.dashboard.models.friendship.model import Friendship
-
-        pending = FriendInvitation.objects.filter(
-            email__iexact=user.email,
-            accepted_at__isnull=True,
-            expires_at__gt=timezone.now(),
-        ).select_related("inviter")
-
-        profile = user.profile
-        for invitation in pending:
-            if invitation.inviter == profile:
-                continue
-            Friendship.request(from_profile=invitation.inviter, to_profile=profile.pk)
-            invitation.mark_accepted()
+        profile, _ = Profile.objects.get_or_create(user=user)
+        for invitation in _collect_pending_invitations(user, invite_token):
+            _apply_pending_invitation(invitation, profile)
     except Exception:
         logger.exception("Error processing pending invitations for %s", user.email)
 
