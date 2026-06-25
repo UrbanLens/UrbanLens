@@ -7,7 +7,7 @@ from datetime import timedelta
 import json
 import logging
 import os
-from pathlib import Path
+import time
 
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.views import redirect_to_login
@@ -22,9 +22,10 @@ from urbanlens.dashboard.models.site_settings import (
     SearchProviderChoice,
     SiteSettings,
 )
-from urbanlens.dashboard.services.site_admin import complete_site_admin_onboarding
+from urbanlens.dashboard.services.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
 
 logger = logging.getLogger(__name__)
+_APP_STARTED_MONOTONIC = time.monotonic()
 
 
 def _monthly_series(queryset, date_field: str, months: int = 12) -> tuple[list[str], list[int]]:
@@ -60,16 +61,21 @@ def _monthly_series(queryset, date_field: str, months: int = 12) -> tuple[list[s
     return labels, counts
 
 
+def _format_duration(seconds: float) -> str:
+    days = int(seconds // 86400)
+    hours = int((seconds % 86400) // 3600)
+    minutes = int((seconds % 3600) // 60)
+    return f"{days}d {hours}h {minutes}m"
+
+
+def _app_uptime() -> str:
+    """Return uptime for the current Django app process, not the host server."""
+    return _format_duration(max(0, time.monotonic() - _APP_STARTED_MONOTONIC))
+
+
 def _server_uptime() -> str:
-    """Return a human-readable uptime string, or an empty string if unavailable."""
-    try:
-        seconds = float(Path("/proc/uptime").read_text(encoding="ascii").split()[0])
-        days = int(seconds // 86400)
-        hours = int((seconds % 86400) // 3600)
-        minutes = int((seconds % 3600) // 60)
-        return f"{days}d {hours}h {minutes}m"
-    except (OSError, ValueError):
-        return ""
+    """Backward-compatible alias for the app uptime metric."""
+    return _app_uptime()
 
 
 def _dir_size_mb(path: str) -> float:
@@ -263,11 +269,14 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         total_users = User.objects.count()
         active_users_30d = User.objects.filter(last_login__gte=thirty_days_ago).count()
         new_users_30d = User.objects.filter(date_joined__gte=thirty_days_ago).count()
-        total_locations = Location.objects.count()
-        new_locations_30d = Location.objects.filter(created__gte=thirty_days_ago).count()
+        total_locations = Location.objects.filter(pins__isnull=False).distinct().count()
+        new_locations_30d = Location.objects.filter(pins__isnull=False, created__gte=thirty_days_ago).distinct().count()
         total_pins = Pin.objects.count()
         total_photos = Image.objects.count()
         total_friendships = Friendship.objects.count()
+        from urbanlens.dashboard.models.subscriptions import UserSubscription
+        total_subscriptions = UserSubscription.objects.filter(revoked_at__isnull=True).count()
+        total_site_admins = User.objects.filter(groups__name=SITE_ADMIN_GROUP_NAME).distinct().count()
 
         # Reviews and trips are optional models - guard against missing tables.
         try:
@@ -288,7 +297,7 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         # Top locations by pin count
         top_locations = list(
-            Location.objects.annotate_pin_count()
+            Location.objects.filter(pins__isnull=False).distinct().annotate_pin_count()
             .order_by("-pin_count")[:10]
             .values("name", "slug", "pin_count"),
         ) if hasattr(Location.objects, "annotate_pin_count") else []
@@ -298,7 +307,7 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         location_labels, location_counts = _monthly_series(Location.objects, "created")
 
         # ── Server stats ──────────────────────────────────────────────────────
-        uptime = _server_uptime()
+        uptime = _app_uptime()
         media_root = getattr(django_settings, "MEDIA_ROOT", "")
         media_size_mb = _dir_size_mb(media_root) if media_root else None
 
@@ -319,6 +328,8 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             "total_pins": total_pins,
             "total_photos": total_photos,
             "total_friendships": total_friendships,
+            "total_subscriptions": total_subscriptions,
+            "total_site_admins": total_site_admins,
             "total_reviews": total_reviews,
             "total_trips": total_trips,
             "new_trips_30d": new_trips_30d,
@@ -337,3 +348,66 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             "server_time": now,
         }
         return render(request, "dashboard/pages/site_admin_stats.html", context)
+
+
+class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Manage subscription grants without exposing a general user directory."""
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+
+    def get(self, request):
+        from urbanlens.dashboard.models.subscriptions import SubscriptionRole, UserSubscription
+
+        SubscriptionRole.ensure_defaults()
+        grants = UserSubscription.objects.filter(granted_by=request.user, revoked_at__isnull=True).select_related("user", "role")
+        return render(
+            request,
+            "dashboard/pages/site_admin_subscriptions.html",
+            {
+                "page_name": "site-admin-subscriptions",
+                "roles": SubscriptionRole.objects.all(),
+                "grants": grants,
+                "saved": request.GET.get("saved"),
+                "error": request.GET.get("error"),
+            },
+        )
+
+    def post(self, request):
+        from urllib.parse import urlencode
+
+        from django.contrib.auth.models import User
+        from django.db.models import Q
+
+        from urbanlens.dashboard.models.subscriptions import SubscriptionRole, UserSubscription, grant_subscription
+
+        SubscriptionRole.ensure_defaults()
+        action = request.POST.get("action", "grant")
+        if action == "revoke":
+            UserSubscription.objects.filter(pk=request.POST.get("subscription_id"), granted_by=request.user).update(revoked_at=timezone.now())
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=revoked")
+
+        if action == "update":
+            sub = UserSubscription.objects.filter(pk=request.POST.get("subscription_id"), granted_by=request.user).first()
+            if sub:
+                sub.set_duration_months(_parse_duration_months(request.POST.get("duration_months")))
+                sub.save(update_fields=["expires_at", "updated"])
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=updated")
+
+        identifier = request.POST.get("user_identifier", "").strip()
+        role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
+        user = User.objects.filter(Q(username__iexact=identifier) | Q(email__iexact=identifier), is_active=True).first()
+        if not identifier or not role or not user:
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "User or role not found."}))
+        grant_subscription(user, role, request.user, _parse_duration_months(request.POST.get("duration_months")))
+        return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=granted")
+
+
+def _parse_duration_months(raw: str | None) -> int | None:
+    """Parse form duration; blank/indefinite means no expiry."""
+    if not raw or raw == "indefinite":
+        return None
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return None

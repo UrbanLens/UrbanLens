@@ -17,6 +17,7 @@ import zipfile
 
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.cache import cache
 from django.http import FileResponse, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views import View
@@ -33,29 +34,32 @@ def _export_dir(job_id: str) -> str:
     return os.path.join(settings.MEDIA_ROOT, "exports", job_id)
 
 
-def _write_status(export_dir: str, status: str, progress: int, message: str, user_id: int | None = None) -> None:
-    status_file = os.path.join(export_dir, "status.json")
-    existing: dict[str, Any] = {}
-    if os.path.exists(status_file):
-        with open(status_file, encoding="utf-8") as fh:
-            existing = json.load(fh)
+class ExportJobStatus:
+    """Cache-backed progress state for a user export job.
 
-    data: dict[str, Any] = {"status": status, "progress": progress, "message": message}
-    if user_id is not None:
-        data["user_id"] = user_id
-    elif "user_id" in existing:
-        data["user_id"] = existing["user_id"]
+    The export archive remains on disk because it is the final downloadable
+    artifact, but transient status belongs in the application cache rather than
+    a JSON sidecar file in MEDIA_ROOT.
+    """
 
-    with open(status_file, "w", encoding="utf-8") as fh:
-        json.dump(data, fh)
+    def __init__(self, job_id: str) -> None:
+        self.job_id = job_id
+        self.cache_key = f"dashboard:export:{job_id}:status"
 
+    def write(self, status: str, progress: int, message: str, user_id: int | None = None) -> None:
+        existing = self.read()
+        data: dict[str, Any] = {"status": status, "progress": progress, "message": message}
+        if user_id is not None:
+            data["user_id"] = user_id
+        elif "user_id" in existing:
+            data["user_id"] = existing["user_id"]
+        cache.set(self.cache_key, data, timeout=_EXPORT_TTL_SECONDS)
 
-def _read_status(export_dir: str) -> dict[str, Any]:
-    status_file = os.path.join(export_dir, "status.json")
-    if not os.path.exists(status_file):
-        return {}
-    with open(status_file, encoding="utf-8") as fh:
-        return json.load(fh)
+    def read(self) -> dict[str, Any]:
+        return cache.get(self.cache_key) or {}
+
+    def delete(self) -> None:
+        cache.delete(self.cache_key)
 
 
 def _export_error_partial(request: HttpRequest, job_id: str, message: str) -> HttpResponse:
@@ -76,8 +80,13 @@ def _export_error_partial(request: HttpRequest, job_id: str, message: str) -> Ht
     )
 
 
-def _schedule_cleanup(export_dir: str) -> None:
-    timer = threading.Timer(_EXPORT_TTL_SECONDS, shutil.rmtree, args=[export_dir], kwargs={"ignore_errors": True})
+def _schedule_cleanup(export_dir: str, job_status: ExportJobStatus | None = None) -> None:
+    def cleanup_export() -> None:
+        shutil.rmtree(export_dir, ignore_errors=True)
+        if job_status is not None:
+            job_status.delete()
+
+    timer = threading.Timer(_EXPORT_TTL_SECONDS, cleanup_export)
     timer.daemon = True
     timer.start()
 
@@ -253,8 +262,8 @@ def _run_export(user_id: int, export_types: list[str], export_dir: str, base_url
         profile = user.profile
     except Exception:
         logger.exception("Export: could not load user %s", user_id)
-        _write_status(export_dir, "error", 0, "Failed to load user data.")
-        _schedule_cleanup(export_dir)
+        ExportJobStatus(os.path.basename(export_dir)).write("error", 0, "Failed to load user data.")
+        _schedule_cleanup(export_dir, ExportJobStatus(os.path.basename(export_dir)))
         return
 
     temp_dir = os.path.join(export_dir, "data")
@@ -275,9 +284,9 @@ def _run_export(user_id: int, export_types: list[str], export_dir: str, base_url
         _run_export_steps(profile, export_types, exporters, step, total_steps, export_dir=export_dir, temp_dir=temp_dir, base_url=base_url, user_id=user_id)
     except Exception:
         logger.exception("Export failed for user %s", user_id)
-        _write_status(export_dir, "error", 0, "Export failed. Please try again.")
+        ExportJobStatus(os.path.basename(export_dir)).write("error", 0, "Export failed. Please try again.")
     finally:
-        _schedule_cleanup(export_dir)
+        _schedule_cleanup(export_dir, ExportJobStatus(os.path.basename(export_dir)))
 
 
 def _run_export_steps(
@@ -296,17 +305,17 @@ def _run_export_steps(
         if key not in export_types:
             continue
         fn, msg = exporters[key]
-        _write_status(export_dir, "running", max(5, int(step / total_steps * 85)), msg)
+        ExportJobStatus(os.path.basename(export_dir)).write("running", max(5, int(step / total_steps * 85)), msg)
         if key == "pins":
             fn(profile, temp_dir, base_url)
         else:
             fn(profile, temp_dir)
         step += 1
 
-    _write_status(export_dir, "running", 90, "Creating archive…")
+    ExportJobStatus(os.path.basename(export_dir)).write("running", 90, "Creating archive…")
     _build_zip(export_dir, temp_dir)
     shutil.rmtree(temp_dir, ignore_errors=True)
-    _write_status(export_dir, "done", 100, "Export ready!")
+    ExportJobStatus(os.path.basename(export_dir)).write("done", 100, "Export ready!")
 
 
 def _build_zip(export_dir: str, temp_dir: str) -> None:
@@ -366,7 +375,7 @@ class ExportStartView(LoginRequiredMixin, View):
         job_id = str(uuid.uuid4())
         exp_dir = _export_dir(job_id)
         os.makedirs(exp_dir, exist_ok=True)
-        _write_status(exp_dir, "pending", 0, "Preparing export…", user_id=request.user.pk)
+        ExportJobStatus(job_id).write("pending", 0, "Preparing export…", user_id=request.user.pk)
 
         base_url = request.build_absolute_uri("/")
         thread = threading.Thread(
@@ -404,8 +413,7 @@ class ExportStatusView(LoginRequiredMixin, View):
             logger.error("Invalid job ID: %s", job_id)  # noqa: TRY400
             return _export_error_partial(request, job_id, "Invalid export job. Please start a new export.")
 
-        exp_dir = _export_dir(job_id)
-        data = _read_status(exp_dir)
+        data = ExportJobStatus(job_id).read()
 
         if not data:
             logger.debug("Job not found or expired: job %s, user %s", job_id, request.user.pk)
@@ -443,7 +451,7 @@ class ExportDownloadView(LoginRequiredMixin, View):
             return redirect("tools.index")
 
         exp_dir = _export_dir(job_id)
-        data = _read_status(exp_dir)
+        data = ExportJobStatus(job_id).read()
 
         if not data or data.get("user_id") != request.user.pk:
             # TODO: Candidate for sending out a notice
