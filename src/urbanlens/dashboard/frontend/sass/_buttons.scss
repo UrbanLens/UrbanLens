@@ -140,10 +140,10 @@ input[type="submit"] {
 }
 
 // ── Icon-only buttons ─────────────────────────────────────────────────────────
-// .ul-icon-btn is canonical. .btn-icon is a legacy alias that shares the same
+// .btn-icon is canonical. .btn-icon is a legacy alias that shares the same
 // base styles so existing templates keep working without changes.
 .btn-icon,
-.ul-icon-btn {
+.btn-icon {
 	@include icon-btn(30px);
 	color: var(--ul-grey-7);
 
@@ -162,7 +162,7 @@ input[type="submit"] {
 		&:hover {
 			color: $color-red-1300;
 			border-color: $color-red-1500;
-			background: $color-red-500;
+			background-color: $color-red-500;
 		}
 	}
 
@@ -171,38 +171,27 @@ input[type="submit"] {
 
 		&:hover,
 		&:focus {
-			background: $accent-1-light;
+			background-color: $accent-1-light;
 			color: $accent-1-dark;
 		}
 	}
 
 	&--global-edit {
-		color: $accent-2;
+		color: $color-amber-500;
 
 		&:hover,
 		&:focus {
-			background: $accent-2-light;
-			color: var(--ul-black);
+			background-color: $color-amber-500;
+			border-color: $color-amber-500;
+			color: $color-amber-1700;
 		}
 	}
 }
 
-.ul-icon-btn {
-	&--primary:hover {
-		background: var(--ul-hover-bg-primary);
-		color: $primary-color;
-	}
-
-	&--danger:hover {
-		background: $danger-bg;
-		color: $danger-color;
-	}
-}
-
 // Absolutely-positioned corner close button used in legacy card/panel contexts.
-// Extends .ul-icon-btn for the base appearance; position overrides make it stick to its container.
+// Extends .btn-icon for the base appearance; position overrides make it stick to its container.
 .btn-close {
-	@extend .ul-icon-btn;
+	@extend .btn-icon;
 	position: absolute;
 	top: 0.5em;
 	right: 0.5em;

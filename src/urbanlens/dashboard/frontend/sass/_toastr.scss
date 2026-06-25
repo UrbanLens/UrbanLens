@@ -72,6 +72,7 @@ $_warning-bg:  $toast-warning-bg;
             height:        3px;
             border-radius: 0 0 $radius-sm $radius-sm;
             opacity:       .55;
+            background-color: rgba(255, 255, 255, .45);
         }
 
         .toast-close-button {
@@ -95,8 +96,6 @@ $_warning-bg:  $toast-warning-bg;
     > .toast-success {
         background-color: $_success-bg;
         border-left-color: color.adjust($_success-bg, $lightness: -8%);
-
-        .toast-progress { background-color: rgba(255, 255, 255, .45); }
     }
 
     // ── Error ─────────────────────────────────────────────────────────────────
@@ -104,9 +103,6 @@ $_warning-bg:  $toast-warning-bg;
     > .toast-error {
         background-color: $_error-bg;
         border-left-color: color.adjust($_error-bg, $lightness: -8%);
-        color: var(--ul-grey-4);
-
-        .toast-progress { background-color: rgba(255, 255, 255, .45); }
     }
 
     // ── Info ──────────────────────────────────────────────────────────────────
@@ -114,9 +110,6 @@ $_warning-bg:  $toast-warning-bg;
     > .toast-info {
         background-color: $_info-bg;
         border-left-color: color.adjust($_info-bg, $lightness: -8%);
-        color: var(--ul-grey-4);
-
-        .toast-progress { background-color: rgba(255, 255, 255, .45); }
     }
 
     // ── Warning ───────────────────────────────────────────────────────────────
@@ -124,8 +117,5 @@ $_warning-bg:  $toast-warning-bg;
     > .toast-warning {
         background-color: $_warning-bg;
         border-left-color: color.adjust($_warning-bg, $lightness: -8%);
-        color: var(--ul-grey-4);
-
-        .toast-progress { background-color: rgba(255, 255, 255, .45); }
     }
 }
