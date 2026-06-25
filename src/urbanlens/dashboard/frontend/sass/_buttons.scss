@@ -20,6 +20,12 @@
 		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
 	}
 
+	&:disabled {
+		background: var(--ul-grey-4);
+		border-color: var(--ul-grey-5b);
+		color: var(--ul-grey-9a);
+	}
+
 	.material-icons {
 		font-size: 1.05em;
 		flex-shrink: 0;
@@ -73,6 +79,10 @@
 		&:focus,
 		&:hover {
 			background: color.scale($danger-bg, $lightness: -4%);
+
+			i.material-icons {
+				color: $color-red-1300;
+			}		
 		}
 	}
 

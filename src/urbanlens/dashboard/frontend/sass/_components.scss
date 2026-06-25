@@ -267,14 +267,18 @@
 	@include dropdown-item;
 
 	&--danger {
-		color: $danger-color;
+		color: $color-red-1300;
 
 		.material-icons {
-			color: $danger-color;
+			color: $color-red-1300;
 		}
 
 		&:hover {
 			background: $danger-bg;
+
+			.material-icons {
+				color: $color-red-1500;
+			}
 		}
 	}
 }
@@ -361,25 +365,25 @@
 
 	&--info {
 		background: $color-blue-100;
-		color: $color-blue-1700;
+		color: $color-blue-1300;
 		border-color: $color-blue-300;
 	}
 
 	&--success {
 		background: $color-green-100;
-		color: $color-green-1700;
+		color: $color-green-1300;
 		border-color: $color-green-300;
 	}
 
 	&--warning {
 		background: $color-amber-100;
-		color: $color-amber-1700;
+		color: $color-amber-1300;
 		border-color: $color-amber-300;
 	}
 
 	&--danger {
 		background: $color-red-100;
-		color: $color-red-1700;
+		color: $color-red-1300;
 		border-color: $color-red-300;
 	}
 }
@@ -425,7 +429,7 @@
     font-size: .85rem;
     color: var(--ul-grey-7);
 	background-color: var(--ul-grey-0);
-    border: 2px solid var(--ul-grey-0b);
+    border: 2px solid #{$color-indigo-500};
     transition: border-color .15s, background .15s;
     min-width: 80px;
 	opacity: 0.8;
@@ -442,6 +446,7 @@
     &.active,
     &:has(input:checked) {
         color: #{$color-indigo-500};
+		background-color: var(--ul-grey-1a);
 		opacity: 1;
 
         .material-icons {
@@ -451,6 +456,7 @@
 
     &:hover:not(.active) {
 		opacity: 1;
-        background: var(--ul-grey-1);
+        background-color: var(--ul-grey-0b);
+		border-color: var(--ul-grey-4);
     }
 }

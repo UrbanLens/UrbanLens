@@ -44,6 +44,7 @@ $_warning-bg:  $toast-warning-bg;
         padding:            $space-sm $space-md $space-sm ($space-md + 1rem + $space-xs);
         background-size:    1rem;
         background-position: 1rem center;
+        color:              var(--ul-grey-0);
 
         cursor: pointer;
         transition: opacity .15s ease, box-shadow .15s ease;
@@ -94,7 +95,6 @@ $_warning-bg:  $toast-warning-bg;
     > .toast-success {
         background-color: $_success-bg;
         border-left-color: color.adjust($_success-bg, $lightness: -8%);
-        color: var(--ul-grey-4);
 
         .toast-progress { background-color: rgba(255, 255, 255, .45); }
     }
