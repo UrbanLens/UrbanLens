@@ -36,12 +36,12 @@ def _resize_custom_icon(uploaded_file: UploadedFile) -> UploadedFile:
         from django.core.files.uploadedfile import InMemoryUploadedFile
         from PIL import Image
 
-        img = Image.open(uploaded_file)
+        img: Image.Image = Image.open(uploaded_file)
         if max(img.width, img.height) <= _ICON_MAX_PX:
             uploaded_file.seek(0)
             return uploaded_file
 
-        img: Image.Image = img.convert("RGBA") if img.mode in {"RGBA", "P", "PA"} else img.convert("RGB")
+        img = img.convert("RGBA") if img.mode in {"RGBA", "P", "PA"} else img.convert("RGB")
         img.thumbnail((_ICON_MAX_PX, _ICON_MAX_PX), Image.Resampling.LANCZOS)
         fmt = "PNG" if img.mode == "RGBA" else "JPEG"
         out = io.BytesIO()
