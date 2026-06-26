@@ -216,16 +216,21 @@ class Pin(abstract.Model):
 
     @property
     def effective_color(self) -> str | None:
-        """Color hex string for this pin, from the icon-winning badge or next badge with a color.
+        """Color hex for the map icon circle, when one applies.
+
+        Only an explicit ``pin.color`` or the badge that supplies the displayed icon
+        may contribute. Other badges on the pin (e.g. a yellow tag when a green
+        icon tag has no color) must not produce a circle.
 
         Prefetch badges (with customizations) when calling in bulk (e.g. get_map_data).
         """
+        if self.color:
+            return self.color
+        if self.custom_icon or self.icon:
+            return None
         winning = self._winning_display_badge()
-        if winning and winning.effective_color:
+        if winning:
             return winning.effective_color
-        for badge in self._display_badges():
-            if badge.effective_color:
-                return badge.effective_color
         return None
 
     # Names produced by Google Maps when a place has no real identity. A pin
@@ -438,7 +443,7 @@ class Pin(abstract.Model):
             "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.badges.filter(kind="status")],
             "profile": self.profile.id,
             "rating": self.rating,
-            "color": self.color or self.effective_color,
+            "color": self.effective_color,
             "tags": [
                 {"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon}
                 for t in self.badges.filter(kind="tag")
@@ -455,7 +460,7 @@ class Pin(abstract.Model):
             "latitude": self.effective_latitude,
             "longitude": self.effective_longitude,
             "icon": self.icon or self.effective_icon,
-            "color": self.color or self.effective_color,
+            "color": self.effective_color,
             "bg_color": self.detail_bg_color or "",
             "bg_opacity": self.detail_bg_opacity,
             "border_color": self.detail_border_color or "",

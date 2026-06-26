@@ -20,12 +20,13 @@ from urbanlens.dashboard.models.pin.model import Pin
 
 
 class PinEffectiveColorTests(TestCase):
-    """effective_color returns the color of the highest-order display badge that has one."""
+    """effective_color returns map icon circle color from pin override or icon badge only."""
 
     def _make_pin(self) -> Pin:
         pin = Pin()
         pin.nickname = None
         pin.icon = None
+        pin.custom_icon = None
         pin.color = None
         return pin
 
@@ -38,7 +39,7 @@ class PinEffectiveColorTests(TestCase):
         self.assertIsNone(self._make_pin().effective_color)
 
     @patch.object(Pin, "badges")
-    def test_returns_none_when_tags_have_no_color(self, mock_badges: MagicMock) -> None:
+    def test_returns_none_when_icon_badge_has_no_color(self, mock_badges: MagicMock) -> None:
         tag = MagicMock()
         tag.effective_color = None
         tag.effective_icon = "star"
@@ -48,7 +49,7 @@ class PinEffectiveColorTests(TestCase):
         self.assertIsNone(self._make_pin().effective_color)
 
     @patch.object(Pin, "badges")
-    def test_returns_first_tag_color(self, mock_badges: MagicMock) -> None:
+    def test_returns_icon_badge_color(self, mock_badges: MagicMock) -> None:
         tag = MagicMock()
         tag.effective_color = "#ff0000"
         tag.effective_icon = "star"
@@ -58,22 +59,22 @@ class PinEffectiveColorTests(TestCase):
         self.assertEqual(self._make_pin().effective_color, "#ff0000")
 
     @patch.object(Pin, "badges")
-    def test_skips_tag_without_color_uses_next(self, mock_badges: MagicMock) -> None:
-        tag_no_color = MagicMock()
-        tag_no_color.effective_color = None
-        tag_no_color.effective_icon = "star"
-        tag_no_color.custom_icon = None
-        tag_no_color.icon_is_overridden = False
-        tag_with_color = MagicMock()
-        tag_with_color.effective_color = "#00ff00"
-        tag_with_color.effective_icon = None
-        tag_with_color.custom_icon = None
-        tag_with_color.icon_is_overridden = False
-        self._mock_badges(mock_badges, [tag_no_color, tag_with_color])
-        self.assertEqual(self._make_pin().effective_color, "#00ff00")
+    def test_does_not_use_color_from_non_icon_badge(self, mock_badges: MagicMock) -> None:
+        icon_badge = MagicMock()
+        icon_badge.effective_color = None
+        icon_badge.effective_icon = "star"
+        icon_badge.custom_icon = None
+        icon_badge.icon_is_overridden = False
+        other_badge = MagicMock()
+        other_badge.effective_color = "#FFEB3B"
+        other_badge.effective_icon = None
+        other_badge.custom_icon = None
+        other_badge.icon_is_overridden = False
+        self._mock_badges(mock_badges, [icon_badge, other_badge])
+        self.assertIsNone(self._make_pin().effective_color)
 
     @patch.object(Pin, "badges")
-    def test_first_tag_color_wins_over_later_tags(self, mock_badges: MagicMock) -> None:
+    def test_icon_badge_color_wins_over_later_badges(self, mock_badges: MagicMock) -> None:
         tag1 = MagicMock()
         tag1.effective_color = "#0000ff"
         tag1.effective_icon = "star"
@@ -86,6 +87,23 @@ class PinEffectiveColorTests(TestCase):
         tag2.icon_is_overridden = False
         self._mock_badges(mock_badges, [tag1, tag2])
         self.assertEqual(self._make_pin().effective_color, "#0000ff")
+
+    def test_pin_color_override_wins_without_badges(self) -> None:
+        pin = self._make_pin()
+        pin.color = "#123456"
+        self.assertEqual(pin.effective_color, "#123456")
+
+    @patch.object(Pin, "badges")
+    def test_explicit_pin_icon_ignores_badge_colors(self, mock_badges: MagicMock) -> None:
+        tag = MagicMock()
+        tag.effective_color = "#4CAF50"
+        tag.effective_icon = "star"
+        tag.custom_icon = None
+        tag.icon_is_overridden = False
+        self._mock_badges(mock_badges, [tag])
+        pin = self._make_pin()
+        pin.icon = "star"
+        self.assertIsNone(pin.effective_color)
 
 
 # ── has_meaningful_name ────────────────────────────────────────────────────────

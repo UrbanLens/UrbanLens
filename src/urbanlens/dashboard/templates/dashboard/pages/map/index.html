@@ -584,7 +584,7 @@
             const raw = localStorage.getItem(_CACHE_KEY);
             if (!raw) return null;
             const c = JSON.parse(raw);
-            if (c.v !== 5 || c.profileUuid !== _PROFILE_UUID) return null;
+            if (c.v !== 6 || c.profileUuid !== _PROFILE_UUID) return null;
             if (Date.now() - c.ts > _CACHE_MAX) { localStorage.removeItem(_CACHE_KEY); return null; }
             // App UUID mismatch = DB was wiped or app was redeployed with a fresh database.
             // Clear cache so ghost pins from the old DB don't appear on the map.
@@ -602,7 +602,7 @@
         const ts = Date.now();
         try {
             const payload = JSON.stringify({
-                v: 5, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
+                v: 6, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
                 lastUpdated: _lastKnownUpdated,
                 tiles: [..._fetchedTiles],
                 pins: Object.fromEntries([..._pinStore.entries()].map(([k, v]) => [k, _slimPin(v)])),
@@ -787,12 +787,8 @@
 
     function _resolvePinColor(pin) {
         const bad = v => !v || v === 'None' || v === 'null';
-        if (!bad(pin.color)) return pin.color;
-        const tags = pin.tags_data || [];
-        const iconTag = tags.find(t => t.icon && t.icon === pin.icon);
-        if (iconTag && !bad(iconTag.color)) return iconTag.color;
-        const colored = tags.find(t => !bad(t.color));
-        return colored ? colored.color : null;
+        // Server sends icon-only color in pin.color; do not fall back to other tags.
+        return bad(pin.color) ? null : pin.color;
     }
 
     function _buildMarker(pin) {
