@@ -171,6 +171,293 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     }
 }
 
+
+// ── Site admin page ───────────────────────────────────────────────────────
+
+.site-admin-page {
+    //max-width: 680px;
+    //margin: 2rem auto;
+    //padding: 0 1rem;
+}
+
+.site-admin-header {
+    margin-bottom: 1.5rem;
+}
+
+.site-admin-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    color: var(--ul-grey-8);
+    margin: 0 0 .25rem;
+
+    .material-icons {
+        font-size: 1.6rem;
+        color: $ui-blue-500;
+    }
+}
+
+.site-admin-subtitle {
+    color: var(--ul-grey-7);
+    font-size: .9rem;
+    margin: 0;
+}
+
+.site-admin-notice {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .7rem 1rem;
+    border-radius: 8px;
+    font-size: .875rem;
+    font-weight: 500;
+    margin-bottom: 1rem;
+
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &--success {
+        background: $ui-green-100;
+        color: $ui-green-600;
+        border: 1px solid $ui-green-200;
+    }
+}
+
+.site-admin-card {
+    margin-bottom: 1.5rem;
+}
+
+.site-admin-form {
+    padding: 1.25rem 1rem;
+
+    .form-row {
+        margin-bottom: 1.25rem;
+    }
+
+    label {
+        display: block;
+        font-size: .8rem;
+        font-weight: 600;
+        color: var(--ul-grey-7);
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        margin-bottom: .35rem;
+    }
+
+    .form-help {
+        font-size: .82rem;
+        color: var(--ul-grey-6);
+        margin: 0 0 .45rem;
+    }
+
+    input[type="number"] {
+        width: 120px;
+        padding: .5rem .75rem;
+        border: 1.5px solid var(--ul-border);
+        ;
+        border-radius: 8px;
+        font-size: .9rem;
+        color: var(--ul-grey-8);
+        outline: none;
+        transition: border-color .15s;
+
+        &:focus {
+            border-color: $ui-blue-500;
+        }
+    }
+
+    .form-actions {
+        padding-top: .5rem;
+    }
+}
+
+// ── Site admin statistics page ─────────────────────────────────────────────
+
+.stats-kpi-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.stats-kpi-section-title {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .82rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ul-grey-7);
+    margin: 0 0 .75rem;
+
+    .material-icons {
+        font-size: 1.15rem;
+        color: $ui-blue-500;
+    }
+}
+
+.stats-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.stats-kpi-card {
+    display: flex;
+    align-items: center;
+    gap: .9rem;
+    background: var(--ul-grey-1);
+    border: 1px solid var(--ul-border);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+}
+
+.stats-kpi-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    flex-shrink: 0;
+}
+
+.stats-kpi-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--ul-grey-8);
+}
+
+.stats-kpi-label {
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--ul-grey-7);
+    margin-top: .1rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.stats-kpi-sub {
+    font-size: .75rem;
+    color: var(--ul-grey-5);
+    margin-top: .15rem;
+}
+
+.stats-charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stats-chart-card {
+    margin-bottom: 0 !important;
+}
+
+.stats-chart-wrap {
+    height: 240px;
+    padding: 1rem;
+}
+
+.stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .88rem;
+
+    th,
+    td {
+        padding: .55rem .9rem;
+        text-align: left;
+        border-bottom: 1px solid var(--ul-border);
+    }
+
+    th {
+        font-size: .75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--ul-grey-7);
+    }
+}
+
+.stats-table-rank {
+    color: var(--ul-grey-6);
+    width: 2.5rem;
+}
+
+.stats-table-count {
+    font-weight: 600;
+    text-align: right;
+}
+
+.stats-table-link {
+    color: var(--ul-accent);
+    text-decoration: none;
+
+    &:hover {
+        text-decoration: underline;
+    }
+}
+
+.stats-health-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    padding: 1rem 1.25rem 1.25rem;
+}
+
+.stats-health-item {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+}
+
+.stats-health-icon {
+    font-size: 1.6rem !important;
+}
+
+.stats-health-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--ul-grey-8);
+
+    &--ok {
+        color: $ui-green-600;
+    }
+
+    &--warn {
+        color: $ui-orange-600;
+    }
+
+    &--muted {
+        color: var(--ul-grey-6);
+    }
+
+    code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: .92em;
+        font-weight: 500;
+    }
+}
+
+.stats-health-label {
+    font-size: .75rem;
+    color: var(--ul-grey-6);
+}
+
+.stats-timestamp {
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+}
+
 // - Dark Mode
 [data-theme="dark"] {
     
