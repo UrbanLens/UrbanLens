@@ -333,6 +333,32 @@ class Profile(abstract.Model):
             return float(self.map_center_latitude), float(self.map_center_longitude)
         return self.compute_map_center()
 
+    def get_map_center_template_context(self) -> dict[str, float | str | None]:
+        """Return template variables for client-side map centering.
+
+        Mirrors the main map page: server coordinates when the profile mode
+        supplies them, plus a pin-cluster fallback for GPS mode when the browser
+        denies geolocation.
+
+        Returns:
+            Dict with ``map_center_lat``, ``map_center_lng``, ``map_center_mode``,
+            ``gps_fallback_lat``, and ``gps_fallback_lng`` keys.
+        """
+        map_center = self.get_map_center()
+        gps_fallback: tuple[float, float] | None = None
+        if self.map_center_mode == MapCenterMode.GPS:
+            if self.map_center_latitude is not None and self.map_center_longitude is not None:
+                gps_fallback = (float(self.map_center_latitude), float(self.map_center_longitude))
+            else:
+                gps_fallback = self.compute_map_center()
+        return {
+            "map_center_lat": map_center[0] if map_center else None,
+            "map_center_lng": map_center[1] if map_center else None,
+            "map_center_mode": self.map_center_mode,
+            "gps_fallback_lat": gps_fallback[0] if gps_fallback else None,
+            "gps_fallback_lng": gps_fallback[1] if gps_fallback else None,
+        }
+
     def can_view_photos_from(self, uploader: Profile) -> bool:
         """Return True if this profile is allowed to see photos uploaded by ``uploader``.
 

@@ -227,6 +227,17 @@
                 </div>
             </div>
             <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#64748b">call_split</i>
+                <div>
+                    {% if git_branch %}
+                    <div class="stats-health-value"><code>{{ git_branch }}</code></div>
+                    {% else %}
+                    <div class="stats-health-value stats-health-value--muted">Unknown</div>
+                    {% endif %}
+                    <div class="stats-health-label">Git Branch</div>
+                </div>
+            </div>
+            <div class="stats-health-item">
                 <i class="material-icons stats-health-icon" style="color:#64748b">commit</i>
                 <div>
                     <div class="stats-health-value"><code>{{ deployed_commit_short }}</code></div>

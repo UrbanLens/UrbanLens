@@ -342,7 +342,12 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         media_root = getattr(django_settings, "MEDIA_ROOT", "")
         media_size_mb = _dir_size_mb(media_root) if media_root else None
 
-        from urbanlens.core.version import format_short_commit, get_git_commit_at_start, get_git_update_status
+        from urbanlens.core.version import (
+            format_short_commit,
+            get_current_git_branch,
+            get_git_commit_at_start,
+            get_git_update_status,
+        )
 
         python_version = sys.version.split()[0]
         django_version = django.__version__
@@ -378,6 +383,7 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             "python_version": python_version,
             "django_version": django_version,
             "app_version": app_version,
+            "git_branch": get_current_git_branch(),
             "deployed_commit_short": format_short_commit(git_update.deployed_commit),
             "current_commit_short": format_short_commit(git_update.current_commit),
             "upstream_commit_short": format_short_commit(git_update.upstream_commit),

@@ -110,6 +110,28 @@ def get_current_git_commit() -> str | None:
     return _git_rev_parse("HEAD")
 
 
+def get_current_git_branch() -> str | None:
+    """Return the name of the current git branch.
+
+    Returns:
+        Branch name such as ``main``, or ``None`` when git is unavailable.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+            cwd=_GIT_CWD,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+
+    branch = result.stdout.strip()
+    return branch or None
+
+
 def _git_fetch() -> bool:
     """Refresh remote-tracking refs from configured remotes.
 

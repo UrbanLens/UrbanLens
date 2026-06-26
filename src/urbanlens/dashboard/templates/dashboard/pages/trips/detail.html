@@ -450,8 +450,8 @@
     const cards = [
         {
             id: 'trip-map', icon: 'route', target: '#trip-map-wrap',
-            eyebrow: 'Route overview', title: 'The map turns activities with locations into a trip route',
-            body: 'Numbered markers mirror the activity order. Completed stops can be hidden or shown with the history button.',
+            eyebrow: 'Route overview', title: 'The map turns activities into a trip route',
+            body: 'Numbered markers show the activity order. Completed stops can be hidden or shown with the history button.',
             button: 'Show map', action: function () { document.getElementById('trip-map-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
             ready: function () { return !!document.getElementById('trip-map-wrap'); },
         },
@@ -519,6 +519,13 @@
 
     if (!mapEl) return;
 
+    var _MAP_CENTER_MODE   = '{{ map_center_mode|default:"gps" }}';
+    var _SERVER_CENTER_LAT = {{ map_center_lat|default:"null" }};
+    var _SERVER_CENTER_LNG = {{ map_center_lng|default:"null" }};
+    var _GPS_FALLBACK_LAT  = {{ gps_fallback_lat|default:"null" }};
+    var _GPS_FALLBACK_LNG  = {{ gps_fallback_lng|default:"null" }};
+    var _CONTINENT_ZOOM    = 3;
+
     var _map = null;
     var _markersGroup = null;
     var _markers = {};   // activity_id → L.Marker
@@ -558,6 +565,51 @@
         document.getElementById('activity-location-uuid').value = '';
         document.getElementById('activity-location-display').textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
         document.getElementById('add-activity-dialog').showModal();
+    }
+
+    function _defaultCenter() {
+        if (_SERVER_CENTER_LAT !== null && _SERVER_CENTER_LNG !== null) {
+            return [_SERVER_CENTER_LAT, _SERVER_CENTER_LNG];
+        }
+        if (_GPS_FALLBACK_LAT !== null && _GPS_FALLBACK_LNG !== null) {
+            return [_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG];
+        }
+        return [40.7128, -74.0060];
+    }
+
+    function _applyMapCenter(callback) {
+        if (_MAP_CENTER_MODE === 'gps' && navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function (pos) { callback(pos.coords.latitude, pos.coords.longitude); },
+                function () {
+                    var center = _defaultCenter();
+                    callback(center[0], center[1]);
+                },
+                { timeout: 8000, maximumAge: 300000 }
+            );
+            return;
+        }
+        var center = _defaultCenter();
+        callback(center[0], center[1]);
+    }
+
+    function _setContinentView() {
+        _applyMapCenter(function (lat, lng) {
+            if (_map) _map.setView([lat, lng], _CONTINENT_ZOOM);
+        });
+    }
+
+    function _showEmptyMap() {
+        wrapEl.hidden = false;
+        mapEl.hidden = false;
+        if (emptyEl) emptyEl.hidden = false;
+
+        if (!_map) _initMap();
+        else {
+            _markersGroup.clearLayers();
+            _markers = {};
+        }
+        _setContinentView();
     }
 
     function _initMap() {
@@ -619,9 +671,7 @@
             var points = data.points || [];
 
             if (!points.length) {
-                if (!_map) {
-                    wrapEl.hidden = true;
-                }
+                _showEmptyMap();
                 return;
             }
 

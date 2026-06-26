@@ -7,6 +7,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.core.version import (
     format_short_commit,
     get_app_version,
+    get_current_git_branch,
     get_git_update_status,
     pull_latest_git_code,
 )
@@ -36,6 +37,19 @@ class FormatShortCommitTests(TestCase):
 
     def test_missing_commit_returns_em_dash(self) -> None:
         self.assertEqual(format_short_commit(None), "—")
+
+
+class GetCurrentGitBranchTests(TestCase):
+    """get_current_git_branch reads the checked-out branch name."""
+
+    def test_returns_branch_name(self) -> None:
+        completed = mock.Mock(returncode=0, stdout="main\n", stderr="")
+        with mock.patch("urbanlens.core.version.subprocess.run", return_value=completed):
+            self.assertEqual(get_current_git_branch(), "main")
+
+    def test_git_failure_returns_none(self) -> None:
+        with mock.patch("urbanlens.core.version.subprocess.run", side_effect=OSError("no git")):
+            self.assertIsNone(get_current_git_branch())
 
 
 class GitUpdateStatusTests(TestCase):

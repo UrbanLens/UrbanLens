@@ -36,18 +36,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.badges.model import KIND_USER
 
         filter_badges = Badge.objects.exclude(kind=KIND_USER).visible_to(profile).ordered()
-        map_center = profile.get_map_center()
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
-
-        # When GPS mode is active, the JS centers the map via geolocation.  If
-        # the user denies the permission request we fall back to the pin-cluster
-        # centroid so they still land on a sensible view (not mid-Atlantic NYC).
-        gps_fallback: tuple[float, float] | None = None
-        if profile.map_center_mode == MapCenterMode.GPS:
-            if profile.map_center_latitude is not None and profile.map_center_longitude is not None:
-                gps_fallback = (float(profile.map_center_latitude), float(profile.map_center_longitude))
-            else:
-                gps_fallback = profile.compute_map_center()
 
         site = SiteSettings.get_current()
         show_pin_count = site.show_dev_admin_features(request.user)
@@ -66,16 +55,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "pin_count": pin_count,
                 "show_pin_count": show_pin_count,
                 "use_pin_cache": profile.use_pin_cache,
-                "map_center_lat": map_center[0] if map_center else None,
-                "map_center_lng": map_center[1] if map_center else None,
-                "map_center_mode": profile.map_center_mode,
+                **profile.get_map_center_template_context(),
                 "map_default_zoom": (
                     profile.remembered_map_zoom
                     if profile.map_center_mode == MapCenterMode.REMEMBER and profile.remembered_map_zoom
                     else profile.map_default_zoom or 13
                 ),
-                "gps_fallback_lat": gps_fallback[0] if gps_fallback else None,
-                "gps_fallback_lng": gps_fallback[1] if gps_fallback else None,
                 "default_map_view": profile.default_map_view,
                 "map_dark_mode": profile.map_dark_mode,
             },

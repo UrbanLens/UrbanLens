@@ -1213,11 +1213,21 @@
     }
 
     .trip-map-empty {
-        padding: 1.25rem;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 500;
+        max-width: calc(100% - 2rem);
+        padding: .65rem 1rem;
         text-align: center;
         color: var(--ul-grey-7);
         font-size: .88rem;
         margin: 0;
+        pointer-events: none;
+        background: color-mix(in srgb, var(--ul-grey-0) 88%, transparent);
+        border-radius: 8px;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, .12);
     }
 }
 

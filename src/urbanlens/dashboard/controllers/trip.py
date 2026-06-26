@@ -443,6 +443,7 @@ class TripDetailView(LoginRequiredMixin, View):
                 "profile": profile,
                 "page_name": "trip-detail",
                 "viewer_is_organizer": _is_organizer(profile, trip),
+                **profile.get_map_center_template_context(),
             },
         )
 

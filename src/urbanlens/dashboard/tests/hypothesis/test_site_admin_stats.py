@@ -241,6 +241,7 @@ class SiteAdminStatsViewContextTests(TestCase):
         ctx = self._get_context()
         self.assertIn("app_version", ctx)
         self.assertIn("deployed_commit_short", ctx)
+        self.assertIn("git_branch", ctx)
         self.assertIn("git_has_newer_commits", ctx)
         self.assertIn("git_available", ctx)
         self.assertIsInstance(ctx["app_version"], str)
