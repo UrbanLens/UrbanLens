@@ -1637,9 +1637,9 @@
     }
 
     &.trip-map-marker--highlighted {
-        background: $ui-orange-500;
+        background: $color-amber-500;
         transform: scale(1.25);
-        box-shadow: 0 3px 10px rgba($ui-orange-500, .5);
+        box-shadow: 0 3px 10px rgba($color-amber-500, .5);
     }
 }
 
