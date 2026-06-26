@@ -85,6 +85,41 @@
             toastr[fn](d.message || '');
         });
 
+        // Global request error notifications for HTMX and fetch/AJAX calls.
+        (function () {
+            function _toastError(message) {
+                if (window.toastr) toastr.error(message || 'Request failed. Please try again.');
+            }
+            document.body.addEventListener('htmx:responseError', function (evt) {
+                var xhr = evt.detail && evt.detail.xhr;
+                _toastError('Request failed' + (xhr && xhr.status ? ' (HTTP ' + xhr.status + ')' : '') + '.');
+            });
+            document.body.addEventListener('htmx:sendError', function () { _toastError('Network error sending request.'); });
+            document.body.addEventListener('htmx:timeout', function () { _toastError('Request timed out.'); });
+            document.body.addEventListener('htmx:abort', function () { _toastError('Request was cancelled.'); });
+
+            var nativeFetch = window.fetch;
+            if (nativeFetch && !nativeFetch.__urbanLensWrapped) {
+                var wrappedFetch = function () {
+                    return nativeFetch.apply(this, arguments).then(function (response) {
+                        if (!response.ok) _toastError('Request failed (HTTP ' + response.status + ').');
+                        return response;
+                    }).catch(function (err) {
+                        if (err && err.name === 'AbortError') _toastError('Request timed out.');
+                        else _toastError('Network request failed.');
+                        throw err;
+                    });
+                };
+                wrappedFetch.__urbanLensWrapped = true;
+                window.fetch = wrappedFetch;
+            }
+            if (window.jQuery) {
+                jQuery(document).ajaxError(function (_event, jqxhr, settings, errorThrown) {
+                    _toastError('Request failed' + (jqxhr && jqxhr.status ? ' (HTTP ' + jqxhr.status + ')' : '') + '.');
+                });
+            }
+        }());
+
         // Global: disable submit buttons during HTMX form requests to prevent double-submit
         (function () {
             function _submitBtns(el) {
