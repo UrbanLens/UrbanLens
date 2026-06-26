@@ -93,6 +93,19 @@ DATABASES = {
         'PORT': os.getenv("UL_DB_PORT", '5432'),
     },
 }
+# Valkey/Redis cache. Used for per-profile map pin payloads and Django's
+# transient application cache when UL_VALKEY_URL/UL_REDIS_URL is configured.
+VALKEY_URL = os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
+if VALKEY_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": VALKEY_URL,
+            "KEY_PREFIX": "urbanlens",
+            "TIMEOUT": 300,
+        },
+    }
+
 DATABASE_ROUTERS = ['urbanlens.dashboard.dbrouters.DBRouter']
 
 

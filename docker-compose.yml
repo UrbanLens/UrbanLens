@@ -29,6 +29,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      valkey:
+        condition: service_healthy
 
     volumes:
       - logs:/var/log
@@ -63,6 +65,7 @@ services:
       - UL_NPS_API_KEY=${UL_NPS_API_KEY}
       - UL_OPENAI_API_KEY=${UL_OPENAI_API_KEY}
       - UL_SMITHSONIAN_API_KEY=${UL_SMITHSONIAN_API_KEY}
+      - UL_VALKEY_URL=${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -117,6 +120,26 @@ services:
       timeout: 10s
       retries: 9
 
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
+  valkey:
+    container_name: urbanlens_valkey
+    image: valkey/valkey:7-alpine
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory-policy", "allkeys-lru"]
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_valkey
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     logging:
       driver: "json-file"
       options:

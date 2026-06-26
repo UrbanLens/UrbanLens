@@ -5,7 +5,6 @@ from typing import Any
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Prefetch
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -21,6 +20,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
+from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -257,11 +257,26 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 # TODO: Handle specific exception type.
                 logger.warning("Invalid bbox parameter: %s -> %s", bbox_str, e)
 
-        map_data = self.get_map_data(request, query)
-        for pin_dict in map_data:
+        cursor = _safe_positive_int(request.GET.get("cursor"))
+        limit = _safe_positive_int(request.GET.get("limit"))
+        include_total = request.GET.get("include_total") == "1"
+        cached_page = MapPinCache(profile).get_or_build_page(
+            query,
+            cursor=cursor,
+            limit=limit,
+            include_total=include_total,
+        )
+        for pin_dict in cached_page.page.pins:
             pin_dict["viewLocationUrl"] = f"/dashboard/map/pin/{pin_dict['slug']}/"
 
-        return JsonResponse({"pins": map_data})
+        payload: dict[str, Any] = {
+            "pins": cached_page.page.pins,
+            "next_cursor": cached_page.page.next_cursor,
+            "cache": "hit" if cached_page.hit else "miss",
+        }
+        if cached_page.page.total is not None:
+            payload["total"] = cached_page.page.total
+        return JsonResponse(payload)
 
     def map_pins_meta(self, request, *args, **kwargs):
         """Return the latest pin update timestamp and app UUID for client-side cache invalidation.
@@ -276,7 +291,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         from django.db.models import Max
 
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
-
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = Pin.objects.filter(profile=profile).root_pins().aggregate(last_updated=Max("updated"))
         last_updated = result["last_updated"]
@@ -320,15 +334,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if query is None:
             query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
 
-        query = query.prefetch_related(
-            Prefetch("badges", queryset=Badge.objects.with_customizations_for(profile)),
-        )
-
-        map_data: list[dict[str, Any]] = []
-        for pin in query:
-            d = pin.to_json()
-            d["id"] = pin.pk
-            map_data.append(d)
+        map_data = MapPinPayloadService(profile).all(query)
 
         for pin in map_data:
             if "description" in pin and pin["description"] is None:
@@ -370,6 +376,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 pin["status"] = pin["status"].replace("_", " ").capitalize()
 
         return map_data
+
+
+def _safe_positive_int(value: str | None) -> int | None:
+    try:
+        parsed = int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed and parsed > 0 else None
 
 
 def _create_location_with_canonical_name(lat: float, lon: float) -> Location:
