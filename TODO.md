@@ -18,6 +18,7 @@ Features planned for this release.
 * Add descriptions to badges that are pre-populated. [UL-245]
 * Cleanup Github readme roadmap. [UL-246]
 * Remove work account from github project. [UL-247]
+* Require HTTPS [UL-254]
 
 ## Medium Features
 
@@ -37,6 +38,7 @@ Features planned for this release.
 * Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]
 * On pin details page, clicking edit, the dialog doesn't scroll when overflowing page height. [UL-215]
 * Trip Details > Adding Pin: The suggestions are only geocoded, not pin searches. [UL-227]
+* Starting map option: Remember doesn't appear to work. [UL-255]
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]

@@ -426,7 +426,7 @@
     const _GPS_FALLBACK_LNG  = {{ gps_fallback_lng|default:"null" }};
     const _defaultZoom       = {{ map_default_zoom|default:13 }};
     const _DEFAULT_MAP_VIEW  = '{{ default_map_view|default:"street" }}';
-    const _MAP_DARK_MODE     = '{{ map_dark_mode|default:"light" }}';
+    let _MAP_DARK_MODE       = '{{ map_dark_mode|default:"light" }}';
     // Per-profile key for remembering active layers across sessions.
     const _LAYER_CACHE_KEY   = `ul_layers_v1_${_PROFILE_UUID}`;
     const _serverCenter      = (_SERVER_CENTER_LAT !== null && _SERVER_CENTER_LNG !== null)
@@ -1163,6 +1163,12 @@
     if (_MAP_DARK_MODE === 'system') {
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', _syncBaseLayer);
     }
+
+    // Dev toolbar: apply map dark mode without a full page reload.
+    window.applyMapDarkMode = function (mode) {
+        _MAP_DARK_MODE = mode;
+        _syncBaseLayer();
+    };
 
     // ── Apply initial base layer from user preference ─────────────────────────
     // standardLayer / darkLayer is the bottom-most base; satellite/topo sit on top.

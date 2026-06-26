@@ -43,7 +43,8 @@ def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``show_dev_toolbar`` and ``dev_toolbar_theme_mode``.
+        dict with ``show_dev_toolbar``, ``dev_toolbar_theme_mode``, and
+        ``dev_toolbar_map_dark_mode``.
     """
     show = False
     try:
@@ -55,16 +56,20 @@ def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
         logger.exception("Error adding dev toolbar")
 
     theme_mode = ""
+    map_dark_mode = ""
     if show and isinstance(request.user, User):
         try:
             theme_mode = request.user.profile.theme_mode
+            map_dark_mode = request.user.profile.map_dark_mode
         except Exception:
             # TODO: Is this exception expected? If not, remove this. If yes, catch the specific exception type.
             theme_mode = ""
+            map_dark_mode = ""
 
     return {
         "show_dev_toolbar": show,
         "dev_toolbar_theme_mode": theme_mode,
+        "dev_toolbar_map_dark_mode": map_dark_mode,
     }
 
 

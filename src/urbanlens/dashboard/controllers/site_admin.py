@@ -236,6 +236,34 @@ class DevToolbarToggleThemeView(LoginRequiredMixin, PermissionRequiredMixin, Vie
         return response
 
 
+class DevToolbarToggleMapDarkModeView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Toggle the current user's map dark mode between light and dark (dev toolbar).
+
+    POST /site-admin/dev/toggle-map-dark-mode/
+    """
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+
+    def post(self, request):
+        from urbanlens.dashboard.models.profile.model import Profile, ThemeChoice
+
+        settings = SiteSettings.get_current()
+        if not settings.is_development_environment():
+            return HttpResponse(status=403)
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if profile.map_dark_mode == ThemeChoice.DARK:
+            profile.map_dark_mode = ThemeChoice.LIGHT
+        else:
+            profile.map_dark_mode = ThemeChoice.DARK
+        profile.save(update_fields=["map_dark_mode"])
+
+        response = HttpResponse(status=204)
+        response["HX-Trigger"] = json.dumps({"devMapDarkModeChanged": profile.map_dark_mode})
+        return response
+
+
 class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """Site usage statistics dashboard.
 

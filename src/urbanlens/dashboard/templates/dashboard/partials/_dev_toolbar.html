@@ -1,5 +1,5 @@
 {# Admin-only dev toolbar - shown when the site environment is Development. #}
-<div id="dev-toolbar" class="dev-toolbar{% if dev_toolbar_theme_mode == 'dark' %} dev-toolbar--dark-active{% endif %}" data-collapsed="false">
+<div id="dev-toolbar" class="dev-toolbar dev-toolbar--no-transition{% if dev_toolbar_theme_mode == 'dark' %} dev-toolbar--dark-active{% endif %}" data-collapsed="false">
     <div class="dev-toolbar__header">
         <button type="button"
                 class="dev-toolbar__drag-handle"
@@ -41,6 +41,21 @@
             <span class="dev-toolbar__theme-label">{% if dev_toolbar_theme_mode == 'dark' %}Dark{% elif dev_toolbar_theme_mode == 'light' %}Light{% else %}Theme{% endif %}</span>
         </button>
         <button type="button"
+                class="dev-toolbar__tool dev-toolbar__theme-toggle dev-toolbar__map-dark-toggle"
+                id="dev-toolbar-map-dark-toggle"
+                title="Toggle map dark mode"
+                aria-label="Toggle map dark mode"
+                data-map-dark-mode="{{ dev_toolbar_map_dark_mode|default:'' }}"
+                hx-post="{% url 'dev_toolbar.toggle_map_dark_mode' %}"
+                hx-swap="none"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+            <span class="dev-toolbar__theme-icons" aria-hidden="true">
+                <i class="material-icons dev-toolbar__theme-icon dev-toolbar__theme-icon--light{% if dev_toolbar_map_dark_mode == 'light' %} is-active{% endif %}">light_mode</i>
+                <i class="material-icons dev-toolbar__theme-icon dev-toolbar__theme-icon--dark{% if dev_toolbar_map_dark_mode == 'dark' %} is-active{% endif %}">dark_mode</i>
+            </span>
+            <span class="dev-toolbar__theme-label">{% if dev_toolbar_map_dark_mode == 'dark' %}Map dark{% elif dev_toolbar_map_dark_mode == 'light' %}Map light{% else %}Map{% endif %}</span>
+        </button>
+        <button type="button"
                 class="dev-toolbar__tool"
                 id="dev-toolbar-refresh-pin-cache"
                 title="Clear local pin cache and reload from server"
@@ -61,8 +76,106 @@
     var body = document.getElementById('dev-toolbar-body');
     var storageKey = 'dev-toolbar-collapsed';
     var positionKey = 'dev-toolbar-position';
+    var POSITION_TRANSITION_MS = 350;
+    var positionAnimating = false;
+    var reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    var defaultAnchors = {
+        left: parseFloat(getComputedStyle(toolbar).left) || 16,
+        bottom: parseFloat(getComputedStyle(toolbar).bottom) || 48,
+    };
 
-    function setCollapsed(collapsed) {
+    function positionAnimationsEnabled() {
+        return !reducedMotionQuery.matches;
+    }
+
+    function hasCustomPosition() {
+        try { return !!localStorage.getItem(positionKey); } catch (_) { return false; }
+    }
+
+    function getSavedPosition() {
+        try {
+            var raw = localStorage.getItem(positionKey);
+            if (!raw) return null;
+            var pos = JSON.parse(raw);
+            if (typeof pos.left === 'number' && typeof pos.top === 'number') {
+                return clampPosition(pos.left, pos.top);
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    function ensurePixelPosition() {
+        if (toolbar.style.top && toolbar.style.left) return;
+        var rect = toolbar.getBoundingClientRect();
+        toolbar.style.bottom = 'auto';
+        toolbar.style.right = 'auto';
+        toolbar.style.left = rect.left + 'px';
+        toolbar.style.top = rect.top + 'px';
+    }
+
+    function getDefaultPosition() {
+        var height = toolbar.offsetHeight;
+        return clampPosition(
+            defaultAnchors.left,
+            window.innerHeight - height - defaultAnchors.bottom,
+        );
+    }
+
+    function applyDefaultPosition() {
+        toolbar.style.left = '';
+        toolbar.style.top = '';
+        toolbar.style.bottom = '';
+        toolbar.style.right = '';
+    }
+
+    function finishPositionAnimation() {
+        positionAnimating = false;
+        toolbar.classList.remove('dev-toolbar--position-animating');
+    }
+
+    function animateToPosition(left, top, onComplete) {
+        ensurePixelPosition();
+        positionAnimating = true;
+        toolbar.classList.remove('dev-toolbar--no-transition');
+        toolbar.classList.add('dev-toolbar--position-animating');
+
+        var finished = false;
+        function complete() {
+            if (finished) return;
+            finished = true;
+            toolbar.removeEventListener('transitionend', onTransitionEnd);
+            clearTimeout(fallbackTimer);
+            finishPositionAnimation();
+            if (onComplete) onComplete();
+        }
+
+        function onTransitionEnd(e) {
+            if (e.target !== toolbar) return;
+            if (e.propertyName === 'left' || e.propertyName === 'top') complete();
+        }
+
+        toolbar.addEventListener('transitionend', onTransitionEnd);
+        var fallbackTimer = setTimeout(complete, POSITION_TRANSITION_MS + 50);
+
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+                toolbar.style.left = left + 'px';
+                toolbar.style.top = top + 'px';
+            });
+        });
+    }
+
+    function setCollapsed(collapsed, instant) {
+        var wasCollapsed = toolbar.dataset.collapsed === 'true';
+        if (wasCollapsed === collapsed) return;
+
+        var animate = instant !== true && positionAnimationsEnabled() && hasCustomPosition();
+        var expandTarget = null;
+        if (!collapsed && animate) {
+            ensurePixelPosition();
+            expandTarget = getSavedPosition();
+        }
+
         toolbar.dataset.collapsed = collapsed ? 'true' : 'false';
         if (body) {
             body.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
@@ -77,18 +190,44 @@
             collapseBtn.title = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
         }
         try { localStorage.setItem(storageKey, collapsed ? '1' : '0'); } catch (_) {}
-        if (toolbar.style.top) {
-            var rect = toolbar.getBoundingClientRect();
-            applyPosition(rect.left, rect.top, true);
+
+        if (collapsed) {
+            if (animate) {
+                requestAnimationFrame(function () {
+                    var target = getDefaultPosition();
+                    animateToPosition(target.left, target.top, applyDefaultPosition);
+                });
+            } else {
+                applyDefaultPosition();
+            }
+        } else if (expandTarget) {
+            requestAnimationFrame(function () {
+                animateToPosition(expandTarget.left, expandTarget.top);
+            });
+        } else {
+            restorePosition();
         }
     }
 
     try {
-        if (localStorage.getItem(storageKey) === '1') setCollapsed(true);
-    } catch (_) {}
+        if (localStorage.getItem(storageKey) === '1') {
+            setCollapsed(true, true);
+        } else {
+            restorePosition();
+        }
+    } catch (_) {
+        restorePosition();
+    }
+
+    requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+            toolbar.classList.remove('dev-toolbar--no-transition');
+        });
+    });
 
     if (collapseBtn) {
         collapseBtn.addEventListener('click', function () {
+            if (positionAnimating) return;
             setCollapsed(toolbar.dataset.collapsed !== 'true');
         });
     }
@@ -107,6 +246,7 @@
 
     function applyPosition(left, top, persist) {
         var pos = clampPosition(left, top);
+        toolbar.classList.add('dev-toolbar--no-transition');
         toolbar.style.bottom = 'auto';
         toolbar.style.right = 'auto';
         toolbar.style.left = pos.left + 'px';
@@ -114,28 +254,21 @@
         if (persist) {
             try { localStorage.setItem(positionKey, JSON.stringify(pos)); } catch (_) {}
         }
+        requestAnimationFrame(function () {
+            toolbar.classList.remove('dev-toolbar--no-transition');
+        });
     }
 
     function resetPosition() {
-        toolbar.style.left = '';
-        toolbar.style.top = '';
-        toolbar.style.bottom = '';
-        toolbar.style.right = '';
+        applyDefaultPosition();
         try { localStorage.removeItem(positionKey); } catch (_) {}
     }
 
     function restorePosition() {
-        try {
-            var raw = localStorage.getItem(positionKey);
-            if (!raw) return;
-            var pos = JSON.parse(raw);
-            if (typeof pos.left === 'number' && typeof pos.top === 'number') {
-                applyPosition(pos.left, pos.top, false);
-            }
-        } catch (_) {}
+        var saved = getSavedPosition();
+        if (!saved) return;
+        applyPosition(saved.left, saved.top, false);
     }
-
-    restorePosition();
 
     if (resetPositionBtn) {
         resetPositionBtn.addEventListener('click', function () {
@@ -162,10 +295,12 @@
         }
 
         dragHandle.addEventListener('pointerdown', function (e) {
+            if (toolbar.dataset.collapsed === 'true' || positionAnimating) return;
             if (e.button !== 0) return;
             e.preventDefault();
             dragging = true;
             toolbar.classList.add('dev-toolbar--dragging');
+            toolbar.classList.add('dev-toolbar--no-transition');
             dragHandle.setPointerCapture(e.pointerId);
             var rect = toolbar.getBoundingClientRect();
             startX = e.clientX;
@@ -188,6 +323,7 @@
     }
 
     window.addEventListener('resize', function () {
+        if (toolbar.dataset.collapsed === 'true') return;
         if (toolbar.style.top) {
             var rect = toolbar.getBoundingClientRect();
             applyPosition(rect.left, rect.top, true);
@@ -232,6 +368,51 @@
         applyTheme(theme);
         var isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
         updateThemeToggle(isDark);
+    });
+
+    function isMapDarkEffective(mode) {
+        if (mode === 'dark') return true;
+        if (mode === 'light') return false;
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    function updateMapDarkToggle(storedMode) {
+        var btn = document.getElementById('dev-toolbar-map-dark-toggle');
+        if (!btn) return;
+        btn.dataset.mapDarkMode = storedMode;
+        var isDark = isMapDarkEffective(storedMode);
+        var lightIcon = btn.querySelector('.dev-toolbar__theme-icon--light');
+        var darkIcon = btn.querySelector('.dev-toolbar__theme-icon--dark');
+        var label = btn.querySelector('.dev-toolbar__theme-label');
+        if (lightIcon) lightIcon.classList.toggle('is-active', !isDark);
+        if (darkIcon) darkIcon.classList.toggle('is-active', isDark);
+        if (label) {
+            if (storedMode === 'system') {
+                label.textContent = 'Map';
+            } else {
+                label.textContent = isDark ? 'Map dark' : 'Map light';
+            }
+        }
+        btn.title = isDark
+            ? 'Map dark mode active - click to switch to light'
+            : 'Map light mode active - click to switch to dark';
+    }
+
+    function syncMapDarkToggleFromDom() {
+        var btn = document.getElementById('dev-toolbar-map-dark-toggle');
+        if (!btn) return;
+        updateMapDarkToggle(btn.dataset.mapDarkMode || 'light');
+    }
+
+    syncMapDarkToggleFromDom();
+
+    document.body.addEventListener('devMapDarkModeChanged', function (e) {
+        var mode = typeof e.detail === 'string' ? e.detail : (e.detail && e.detail.value);
+        if (!mode) return;
+        updateMapDarkToggle(mode);
+        if (typeof window.applyMapDarkMode === 'function') {
+            window.applyMapDarkMode(mode);
+        }
     });
 
     var pinCacheBtn = document.getElementById('dev-toolbar-refresh-pin-cache');

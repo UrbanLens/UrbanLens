@@ -3,7 +3,7 @@
 
 .dev-toolbar {
     position: fixed;
-    bottom: 1rem;
+    bottom: 3rem;
     left: 1rem;
     z-index: 10050;
     min-width: 10rem;
@@ -15,9 +15,23 @@
     font-size: 0.8125rem;
     color: var(--ul-text, #0f172a);
     overflow: hidden;
+    transition:
+        left 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.25s ease;
+
+    &.dev-toolbar--no-transition,
+    &.dev-toolbar--dragging {
+        transition: none;
+    }
+
+    &.dev-toolbar--position-animating {
+        pointer-events: none;
+    }
 
     &[data-collapsed='true'] {
         min-width: 0;
+        opacity: 0.5;
 
         .dev-toolbar__chevron {
             transform: rotate(-90deg);
@@ -43,6 +57,12 @@
     &.dev-toolbar--dragging {
         user-select: none;
         cursor: grabbing;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dev-toolbar {
+        transition: opacity 0.15s ease;
     }
 }
 
