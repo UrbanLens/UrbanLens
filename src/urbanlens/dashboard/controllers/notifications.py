@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -14,6 +14,8 @@ from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, St
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
 
 if TYPE_CHECKING:
+    from django.http import HttpResponse
+
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -33,6 +35,12 @@ _PREF_FIELDS = [
 def _get_or_create_prefs(profile: Profile) -> NotificationPreference:
     prefs, _ = NotificationPreference.objects.get_or_create(profile=profile)
     return prefs
+
+
+def _trigger_badge_refresh(response: HttpResponse) -> HttpResponse:
+    """Attach an HTMX trigger so the nav bell badge refreshes."""
+    response["HX-Trigger"] = json.dumps({"notifCountRefresh": {}})
+    return response
 
 
 class NotificationDropdownView(LoginRequiredMixin, View):
@@ -59,10 +67,20 @@ class NotificationMarkReadView(LoginRequiredMixin, View):
 
     def post(self, request, notification_id):
         profile = request.user.profile
-        notification = get_object_or_404(NotificationLog, id=notification_id, profile=profile)
-        notification.status = Status.READ
-        notification.save(update_fields=["status", "updated"])
-        return HttpResponse("", status=204)
+        notification = get_object_or_404(
+            NotificationLog.objects.select_related("source_profile"),
+            id=notification_id,
+            profile=profile,
+        )
+        if notification.status != Status.READ:
+            notification.status = Status.READ
+            notification.save(update_fields=["status", "updated"])
+        response = render(
+            request,
+            "dashboard/partials/notification_item.html",
+            {"n": notification},
+        )
+        return _trigger_badge_refresh(response)
 
 
 class NotificationMarkAllReadView(LoginRequiredMixin, View):
@@ -71,7 +89,7 @@ class NotificationMarkAllReadView(LoginRequiredMixin, View):
     def post(self, request):
         profile = request.user.profile
         NotificationLog.objects.for_profile(profile).unread().mark_read()
-        return render(
+        response = render(
             request,
             "dashboard/partials/notification_dropdown.html",
             {
@@ -81,6 +99,7 @@ class NotificationMarkAllReadView(LoginRequiredMixin, View):
                 "unread_count": 0,
             },
         )
+        return _trigger_badge_refresh(response)
 
 
 class NotificationPreferencesView(LoginRequiredMixin, View):

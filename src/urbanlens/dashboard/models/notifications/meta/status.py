@@ -25,6 +25,6 @@ class Status(TextChoices):
 
     """
 
-    UNREAD = "read", _("Notifcation is unread: has not been seen.")
-    READ = "unread", _("Notifcaiton has been seen.")
+    UNREAD = "unread", _("Notification is unread: has not been seen.")
+    READ = "read", _("Notification has been seen.")
     DISMISSED = "dismissed", _("Notification was dismissed.")

@@ -174,10 +174,32 @@
             e.stopPropagation();
             notifWrap.classList.contains('is-open') ? closeNotif() : openNotif();
         });
+
+        document.body.addEventListener('notifCountRefresh', function () {
+            var badgeWrap = document.getElementById('notif-badge-wrap');
+            if (badgeWrap) htmx.trigger(badgeWrap, 'load');
+        });
+
         document.body.addEventListener('htmx:afterSwap', function (ev) {
             if (ev.detail.target.id === 'notif-dropdown-wrap') {
                 htmx.trigger(document.getElementById('notif-badge-wrap'), 'load');
             }
+        });
+
+        document.body.addEventListener('htmx:afterRequest', function (ev) {
+            var elt = ev.detail.elt;
+            if (!elt || !elt.classList || !elt.classList.contains('notif-item')) return;
+            if (!ev.detail.successful) return;
+            var url = elt.dataset.notifUrl;
+            if (url && elt.classList.contains('notif-item--unread')) {
+                window.location = url;
+            }
+        });
+
+        document.getElementById('notif-dropdown-wrap').addEventListener('click', function (ev) {
+            var item = ev.target.closest('.notif-item--link:not(.notif-item--unread)');
+            if (!item || !item.dataset.notifUrl) return;
+            window.location = item.dataset.notifUrl;
         });
     }
 

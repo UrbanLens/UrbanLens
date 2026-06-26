@@ -44,6 +44,11 @@ class NotificationLog(abstract.Model):
 
     objects = Manager()
 
+    @property
+    def is_unread(self) -> bool:
+        """True when this notification has not been read yet."""
+        return self.status == Status.UNREAD
+
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_notifications"
         get_latest_by = "updated"

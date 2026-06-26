@@ -337,22 +337,12 @@ class SiteSettingsSingletonTests(TestCase):
 # ── TDD: Status enum values are swapped (bug demonstration) ───────────────────
 
 class NotificationStatusBugTests(TestCase):
-    """TDD: Status enum member names and stored values are inconsistent.
+    """Status enum member names must match their stored database values."""
 
-    Status.UNREAD has value "read" and Status.READ has value "unread".
-    The names and database values are reversed, which is confusing and
-    error-prone when the DB is inspected or when new code is added.
-
-    These tests document the EXPECTED correct behaviour. They currently fail
-    because of the naming inversion in status.py.
-    """
-
-    @unittest.expectedFailure
     def test_unread_value_should_be_unread(self) -> None:
         """Status.UNREAD.value should be 'unread', not 'read'."""
         self.assertEqual(Status.UNREAD.value, "unread")
 
-    @unittest.expectedFailure
     def test_read_value_should_be_read(self) -> None:
         """Status.READ.value should be 'read', not 'unread'."""
         self.assertEqual(Status.READ.value, "read")

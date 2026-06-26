@@ -2,7 +2,7 @@
   <div class="notif-dropdown__header">
     <span class="notif-dropdown__title">Notifications</span>
     {% if unread_count %}
-    <button class="notif-mark-all-btn"
+    <button type="button" class="notif-mark-all-btn"
             hx-post="{% url 'notifications.read_all' %}"
             hx-target="#notif-dropdown"
             hx-swap="outerHTML"
@@ -13,77 +13,16 @@
   </div>
 
   {% if notifications %}
-  <ul class="notif-list">
+  <ul class="notif-list" role="list">
     {% for n in notifications %}
-    {% if n.notification_type == 'friend_request' %}
-    {# Friend requests get inline Accept/Decline buttons instead of click-to-navigate #}
-    <li class="notif-item{% if n.status == 'unread' %} notif-item--unread{% endif %} notif-item--friend-req"
-        id="notif-{{ n.id }}">
-      <div class="notif-item__icon-wrap notif-item__icon-wrap--friend_request">
-        <i class="material-icons">person_add</i>
-      </div>
-      <div class="notif-item__body">
-        {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
-        {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
-        <p class="notif-item__time">{{ n.created|timesince }} ago</p>
-        {% if n.source_profile_id and n.status == 'unread' %}
-        <div class="notif-friend-actions">
-          <button type="button" class="btn-notif-friend btn-notif-friend--accept"
-                  hx-post="{% url 'friend.respond' n.source_profile_id %}"
-                  hx-vals='{"action": "accept"}'
-                  hx-target="#notif-dropdown-wrap"
-                  hx-swap="innerHTML"
-                  hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-            <i class="material-icons">check</i> Accept
-          </button>
-          <button type="button" class="btn-notif-friend btn-notif-friend--decline"
-                  hx-post="{% url 'friend.respond' n.source_profile_id %}"
-                  hx-vals='{"action": "decline"}'
-                  hx-target="#notif-dropdown-wrap"
-                  hx-swap="innerHTML"
-                  hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-            <i class="material-icons">close</i> Decline
-          </button>
-        </div>
-        {% endif %}
-      </div>
-      {% if n.status == 'unread' %}<div class="notif-item__dot"></div>{% endif %}
-    </li>
-    {% else %}
-    <li class="notif-item{% if n.status == 'unread' %} notif-item--unread{% endif %}"
-        id="notif-{{ n.id }}"
-        hx-post="{% url 'notifications.read' n.id %}"
-        hx-swap="none"
-        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-        hx-trigger="click"
-        {% if n.url %}onclick="window.location='{{ n.url }}'"{% endif %}>
-
-      <div class="notif-item__icon-wrap notif-item__icon-wrap--{{ n.notification_type }}">
-        <i class="material-icons">
-          {% if n.notification_type == 'friend_accepted' %}people
-          {% elif n.notification_type == 'added_to_trip' %}directions
-          {% elif n.notification_type == 'trip_updated' %}map
-          {% elif n.notification_type == 'comment_reply' %}reply
-          {% elif n.notification_type == 'comment_liked' %}favorite
-          {% elif n.notification_type == 'wiki_updated' %}article
-          {% elif n.notification_type == 'error' %}error
-          {% elif n.notification_type == 'warning' %}warning
-          {% else %}notifications{% endif %}
-        </i>
-      </div>
-
-      <div class="notif-item__body">
-        {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
-        {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
-        <p class="notif-item__time">{{ n.created|timesince }} ago</p>
-      </div>
-
-      {% if n.status == 'unread' %}<div class="notif-item__dot"></div>{% endif %}
-    </li>
-    {% endif %}
+    {% include "dashboard/partials/notification_item.html" %}
     {% endfor %}
   </ul>
   {% else %}
-  <p class="notif-empty">No notifications yet.</p>
+  <div class="notif-empty">
+    <i class="material-icons notif-empty__icon" aria-hidden="true">notifications_none</i>
+    <p class="notif-empty__text">You're all caught up</p>
+    <p class="notif-empty__hint">New activity will appear here</p>
+  </div>
   {% endif %}
 </div>

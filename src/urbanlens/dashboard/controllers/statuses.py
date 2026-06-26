@@ -6,8 +6,8 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from django.db.models import Case, IntegerField, Value, When
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Case, IntegerField, Value, When
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -29,6 +29,7 @@ def _selected_parents_first(queryset, parent_ids):
             output_field=IntegerField(),
         ),
     ).order_by("_selected_parent", "-order", "name", "id")
+
 
 _BASE_CTX = {
     "icon_choices": ICON_CHOICES,
