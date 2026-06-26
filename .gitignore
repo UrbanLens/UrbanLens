@@ -5,6 +5,7 @@
 __pycache__/
 *.pyc
 **/frontend/static/admin/
+**/frontend/static/**/*.css
 
 # Libraries (npm, etc)
 node_modules
