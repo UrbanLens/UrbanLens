@@ -1,38 +1,109 @@
 {% if trips %}
 <ul class="trip-card-list">
     {% for t in trips %}
-    <li class="trip-card" id="trip-card-{{ t.uuid }}">
+    <li class="trip-card trip-card--{{ t.timeline_status }}" id="trip-card-{{ t.uuid }}">
         <a href="{% url 'trips.detail' t.uuid %}" class="trip-card-link">
-            <div class="trip-card-icon">
-                <i class="material-icons">flight_takeoff</i>
+            <div class="trip-card-accent" aria-hidden="true"></div>
+
+            <div class="trip-card-top">
+                <span class="trip-card-status trip-card-status--{{ t.timeline_status }}">
+                    {% if t.timeline_status == 'upcoming' %}Upcoming
+                    {% elif t.timeline_status == 'active' %}In progress
+                    {% elif t.timeline_status == 'past' %}Completed
+                    {% else %}Planning{% endif %}
+                </span>
+                <span class="trip-card-updated" title="Last updated {{ t.updated|date:'M j, Y g:i A' }}">
+                    Updated {{ t.updated|timesince }} ago
+                </span>
             </div>
-            <div class="trip-card-body">
-                <span class="trip-card-name">{{ t.name }}</span>
-                {% if t.description %}
-                <span class="trip-card-desc">{{ t.description|truncatechars:100 }}</span>
+
+            <h2 class="trip-card-name">{{ t.name }}</h2>
+
+            {% if t.start_date %}
+            <div class="trip-card-dates">
+                <i class="material-icons" aria-hidden="true">event</i>
+                <span>
+                    {{ t.start_date|date:"M j, Y" }}{% if t.end_date %} – {{ t.end_date|date:"M j, Y" }}{% endif %}
+                </span>
+                {% if t.duration_days %}
+                <span class="trip-card-duration">{{ t.duration_days }} day{{ t.duration_days|pluralize }}</span>
                 {% endif %}
+            </div>
+            {% else %}
+            <div class="trip-card-dates trip-card-dates--muted">
+                <i class="material-icons" aria-hidden="true">event</i>
+                <span>Dates not set</span>
+            </div>
+            {% endif %}
+
+            {% if t.description %}
+            <p class="trip-card-desc">{{ t.description|truncatechars:120 }}</p>
+            {% endif %}
+
+            <div class="trip-card-stats">
+                <span class="trip-card-stat" title="Activities on this trip">
+                    <i class="material-icons" aria-hidden="true">place</i>
+                    {{ t.activity_count }} activit{{ t.activity_count|pluralize:"y,ies" }}
+                </span>
+                <span class="trip-card-stat" title="Trip members">
+                    <i class="material-icons" aria-hidden="true">group</i>
+                    {{ t.member_count }} member{{ t.member_count|pluralize }}
+                </span>
+                {% if t.comment_count %}
+                <span class="trip-card-stat" title="Comments on this trip">
+                    <i class="material-icons" aria-hidden="true">chat_bubble_outline</i>
+                    {{ t.comment_count }} comment{{ t.comment_count|pluralize }}
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="trip-card-footer">
+                <div class="trip-card-members" aria-label="{{ t.member_count }} member{{ t.member_count|pluralize }}">
+                    {% for membership in t.memberships.all|slice:":4" %}
+                    <span class="trip-card-member-avatar" title="@{{ membership.profile.user.username }}">
+                        {% if membership.profile.avatar %}
+                        <img src="{{ membership.profile.avatar.url }}" alt="" class="trip-card-member-avatar-img">
+                        {% else %}
+                        <span class="trip-card-member-avatar-initial">{{ membership.profile.user.username|first|upper }}</span>
+                        {% endif %}
+                    </span>
+                    {% endfor %}
+                    {% if t.member_count > 4 %}
+                    <span class="trip-card-member-overflow">+{{ t.member_count|add:"-4" }}</span>
+                    {% endif %}
+                </div>
+
                 <div class="trip-card-meta">
-                    {% if t.start_date %}
-                    <span class="trip-card-dates">
-                        <i class="material-icons">event</i>
-                        {{ t.start_date|date:"M j, Y" }}{% if t.end_date %} - {{ t.end_date|date:"M j, Y" }}{% endif %}
+                    {% if profile and t.creator_id == profile.id %}
+                    <span class="trip-card-role">
+                        <i class="material-icons" aria-hidden="true">star</i>
+                        Your trip
+                    </span>
+                    {% elif t.creator %}
+                    <span class="trip-card-creator">
+                        <i class="material-icons" aria-hidden="true">person</i>
+                        @{{ t.creator.user.username }}
                     </span>
                     {% endif %}
-                    <span class="trip-card-creator">
-                        <i class="material-icons">person</i>
-                        {{ t.creator.user.username|default:"Unknown" }}
-                    </span>
                 </div>
+
+                <i class="material-icons trip-card-arrow" aria-hidden="true">arrow_forward</i>
             </div>
-            <i class="material-icons trip-card-arrow">chevron_right</i>
         </a>
     </li>
     {% endfor %}
 </ul>
 {% else %}
 <div class="trips-empty">
-    <i class="material-icons trips-empty-icon">flight_takeoff</i>
-    <p>No trips yet.</p>
-    <p>Create a trip to start planning your next adventure!</p>
+    <div class="trips-empty-icon-wrap">
+        <i class="material-icons trips-empty-icon">flight_takeoff</i>
+    </div>
+    <h2 class="trips-empty-title">No trips yet</h2>
+    <p class="trips-empty-text">Create a trip to plan stops, invite friends, and track your route.</p>
+    <button type="button" class="btn btn--primary"
+            onclick="document.getElementById('create-trip-dialog').showModal()">
+        <i class="material-icons">add</i>
+        New Trip
+    </button>
 </div>
 {% endif %}

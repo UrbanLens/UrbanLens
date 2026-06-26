@@ -698,21 +698,56 @@
         color: $color-blue-500;
     }
 
+    .trips-empty .trips-empty-icon-wrap {
+        background: linear-gradient(135deg, rgba(255, 255, 255, .04), rgba(255, 255, 255, .02));
+        border-color: var(--ul-grey-2);
+    }
+
     .trips-empty .trips-empty-icon {
-        color: var(--ul-grey-6);
+        color: $color-blue-500;
+    }
+
+    .trips-empty .trips-empty-title {
+        color: var(--ul-grey-7);
     }
 
     .trip-card:hover {
         border-color: $ui-blue-500;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, .35);
     }
 
-    .trip-card-icon {
-        background: $dk-navy;
-
-        .material-icons {
-            color: $color-blue-500;
+    .trip-card-status {
+        &--upcoming {
+            background: rgba($color-blue-500, .15);
+            color: $ui-blue-300;
+            border-color: rgba($color-blue-500, .25);
         }
+
+        &--active {
+            background: rgba($ui-green-500, .15);
+            color: $ui-green-300;
+            border-color: rgba($ui-green-500, .25);
+        }
+
+        &--planning {
+            background: rgba($ui-amber-500, .15);
+            color: $ui-amber-300;
+            border-color: rgba($ui-amber-500, .25);
+        }
+    }
+
+    .trip-card-stat {
+        background: var(--ul-grey-1);
+        border-color: var(--ul-grey-2);
+    }
+
+    .trip-card-member-avatar {
+        border-color: var(--ul-grey-0);
+        background: $dk-navy;
+    }
+
+    .trip-card-role {
+        color: $ui-amber-300 !important;
     }
 
     .trip-back-link:hover {

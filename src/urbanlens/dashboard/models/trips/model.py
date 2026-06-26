@@ -17,8 +17,10 @@ from django.db.models import (
     UUIDField,
 )
 from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, TextField
+from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.trips.queryset import Manager
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -88,8 +90,30 @@ class Trip(abstract.Model):
         help_text="Who can leave comments.",
     )
 
+    objects = Manager()
+
     def __str__(self) -> str:
         return self.name or f"Trip #{self.id}"
+
+    @property
+    def timeline_status(self) -> str:
+        """Coarse timeline label for list cards (`planning`, `upcoming`, `active`, or `past`)."""
+        today = timezone.now().date()
+        if not self.start_date:
+            return "planning"
+        if self.start_date > today:
+            return "upcoming"
+        end = self.end_date or self.start_date
+        if end < today:
+            return "past"
+        return "active"
+
+    @property
+    def duration_days(self) -> int | None:
+        """Inclusive day count when both start and end dates are set, else ``None``."""
+        if self.start_date and self.end_date:
+            return (self.end_date - self.start_date).days + 1
+        return None
 
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_trips"

@@ -31,6 +31,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _trips_for_list(profile: Profile) -> QuerySet[Trip]:
+    """Return annotated trips for the list page.
+
+    Args:
+        profile: The viewer's profile.
+
+    Returns:
+        Queryset of trips the profile belongs to, with list stats prefetched.
+    """
+    return Trip.objects.for_list_page(profile)
+
+
 def _apply_trip_visibility_filter(
     sensitive: list[TripActivity],
     viewer: Profile,
@@ -372,8 +384,12 @@ class TripListView(LoginRequiredMixin, View):
 
     def get(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trips = Trip.objects.filter(profiles=profile).select_related("creator__user").order_by("-created")
-        return render(request, "dashboard/pages/trips/index.html", {"trips": trips, "page_name": "trips"})
+        trips = _trips_for_list(profile)
+        return render(
+            request,
+            "dashboard/pages/trips/index.html",
+            {"trips": trips, "profile": profile, "page_name": "trips"},
+        )
 
 
 class TripCreateView(LoginRequiredMixin, View):
@@ -403,8 +419,8 @@ class TripCreateView(LoginRequiredMixin, View):
         )
         TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes"})
 
-        trips = Trip.objects.filter(profiles=profile).select_related("creator__user").order_by("-created")
-        return render(request, "dashboard/partials/trip_list_partial.html", {"trips": trips})
+        trips = _trips_for_list(profile)
+        return render(request, "dashboard/partials/trip_list_partial.html", {"trips": trips, "profile": profile})
 
 
 class TripDetailView(LoginRequiredMixin, View):
