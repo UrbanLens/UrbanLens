@@ -118,6 +118,7 @@ urlpatterns = [
                     maps.MapController.as_view({"post": "upload_image"}),
                     name="pin.upload_image",
                 ),
+                # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
                 path(
                     "change_category/<slug:pin_slug>/",
                     maps.MapController.as_view({"post": "change_category"}),

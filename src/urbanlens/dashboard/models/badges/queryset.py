@@ -37,19 +37,28 @@ class BadgeQuerySet(abstract.QuerySet):
 
     def tags(self) -> Self:
         """Return only items with kind='tag'."""
+        # Don't hardcode strings
         return self.filter(kind="tag")
 
     def categories(self) -> Self:
         """Return only items with kind='category'."""
+        # Don't hardcode strings
         return self.filter(kind="category")
 
     def statuses(self) -> Self:
         """Return only items with kind='status'."""
+        # Don't hardcode strings
         return self.filter(kind="status")
 
     def user_badges(self) -> Self:
         """Return only items with kind='user' (for annotating profiles privately)."""
+        # TODO: Don't hardcode 'user' string
         return self.filter(kind="user")
+    
+    def location_badges(self) -> Self:
+        """Return only items with kind='location'."""
+        # TODO: Don't hardcode 'location' string
+        return self.exclude(kind="user")
 
     def with_customizations_for(self, profile: Profile | int) -> Self:
         """Prefetch this user's BadgeCustomizations into _user_customizations attr."""

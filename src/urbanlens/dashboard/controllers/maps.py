@@ -215,6 +215,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse(status=200)
 
     def change_category(self, request, pin_slug, *args, **kwargs):
+        # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
+        
         category_id = request.POST.get("category")
         pin = Pin.objects.get(slug=pin_slug)
         pin.change_category(category_id)

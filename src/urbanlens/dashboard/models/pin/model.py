@@ -24,7 +24,7 @@ from django.db.models.fields import BooleanField, CharField, DateField, DateTime
 from django.utils.text import slugify
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.abstract.choices import SecurityLevel, TextChoices
+from urbanlens.dashboard.models.abstract.choices import TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager
 
 if TYPE_CHECKING:
@@ -43,7 +43,7 @@ class PinType(TextChoices):
     OTHER = "other", "Other"
 
 
-class Pin(abstract.Model):
+class Pin(abstract.SecurityModel, abstract.AddressableModel):
     """A user's personal record for a physical location.
 
     Pin is the *personal* half of the two-model design:
@@ -54,21 +54,6 @@ class Pin(abstract.Model):
     their own Pin that references the same Location. Everything stored here is
     specific to that one user: their custom label, notes, visit history, status,
     priority, and an optional coordinate override to reposition the marker.
-
-    What does NOT belong here:
-    - Canonical address components (street, city, state …) → Location / AddressableMixin
-    - Authoritative coordinates → Location.latitude / Location.longitude
-    - Google Maps CID or cached place name → Location
-    - Place-level categories shared across users → Location.categories
-
-    Nullable override fields - None means "inherit from Location":
-    - name      → falls back to location.name       (use effective_name)
-    - latitude  → falls back to location.latitude   (use effective_latitude)
-    - longitude → falls back to location.longitude  (use effective_longitude)
-
-    Address and place metadata are accessed through proxy properties defined
-    below that delegate to self.location.  Do not add address fields directly
-    to Pin - they live on AddressableMixin which only Location inherits.
     """
 
     # Public-facing identifier. Non-sequential so users cannot enumerate other pins.
@@ -92,13 +77,23 @@ class Pin(abstract.Model):
     priority = IntegerField(default=0)
     vulnerability = IntegerField(default=0)
     last_visited = DateTimeField(null=True, blank=True)
-    # Per-user coordinate override. None = use location.latitude/longitude (see effective_latitude/longitude).
-    # Only set these when the user wants to reposition the marker from the canonical Location coords.
-    latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     custom_icon = ImageField(upload_to="pin_custom_icons/", null=True, blank=True)
     pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
     point = PointField(geography=True, default=Point(0, 0))
+    
+    # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
+    # when the user explicitly picks a color in the dialog.
+    color = CharField(max_length=20, null=True, blank=True)
+
+    # Detail-pin circle styling: background fill and border around the icon.
+    # Opacity stored as 0-100 integer (percent).
+    detail_bg_color = CharField(max_length=20, null=True, blank=True)
+    detail_bg_opacity = IntegerField(default=80)
+    detail_border_color = CharField(max_length=20, null=True, blank=True)
+    detail_border_opacity = IntegerField(default=100)
+
+    date_abandoned = DateField(null=True, blank=True)
+    date_last_active = DateField(null=True, blank=True)
 
     profile = ForeignKey(
         "dashboard.Profile",
@@ -119,29 +114,6 @@ class Pin(abstract.Model):
         blank=True,
         related_name="pins",
     )
-    # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
-    # when the user explicitly picks a color in the dialog.
-    color = CharField(max_length=20, null=True, blank=True)
-
-    # Detail-pin circle styling: background fill and border around the icon.
-    # Opacity stored as 0-100 integer (percent).
-    detail_bg_color = CharField(max_length=20, null=True, blank=True)
-    detail_bg_opacity = IntegerField(default=80)
-    detail_border_color = CharField(max_length=20, null=True, blank=True)
-    detail_border_opacity = IntegerField(default=100)
-
-    # Security indicators: how prevalent each security feature is, per this user's observation.
-    fences = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    alarms = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    cameras = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    security = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    signs = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    vps = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    plywood = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    locked = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    date_abandoned = DateField(null=True, blank=True)
-    date_last_active = DateField(null=True, blank=True)
-
     # Self-referential FK for personal detail pins (private to pin owner).
     parent_pin = ForeignKey(
         "self",
@@ -162,6 +134,8 @@ class Pin(abstract.Model):
     if TYPE_CHECKING:
         profile_id: int
         location_id: int | None
+        parent_location_id: int | None
+        parent_pin_id: int | None
         reviews: ReviewManager
 
     objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -170,20 +144,11 @@ class Pin(abstract.Model):
     # Effective values - resolve overrides against the linked Location
     # ------------------------------------------------------------------
 
-    def _display_badges(self):
-        """Badges that participate in map icon/color priority (tags, categories, statuses).
-
-        Prefetch badges (with customizations) when calling in bulk (e.g. get_map_data).
-        """
-        from urbanlens.dashboard.models.badges.model import KIND_USER
-
-        return self.badges.exclude(kind=KIND_USER).order_by("-order")
-
     def _winning_display_badge(self) -> Badge | None:
         """Badge supplying the map icon, when the icon is inherited from a badge."""
         if self.custom_icon or self.icon:
             return None
-        for badge in self._display_badges():
+        for badge in self.badges.location_badges().order_by("-order"):
             if badge.custom_icon and not badge.icon_is_overridden:
                 return badge
             if badge.effective_icon:
@@ -206,7 +171,7 @@ class Pin(abstract.Model):
             return self.custom_icon.url
         if self.icon:
             return self.icon
-        for badge in self._display_badges():
+        for badge in self.badges.location_badges().order_by("-order"):
             if badge.custom_icon and not badge.icon_is_overridden:
                 return badge.custom_icon.url
             icon = badge.effective_icon
@@ -232,10 +197,6 @@ class Pin(abstract.Model):
         if winning:
             return winning.effective_color
         return None
-
-    # Names produced by Google Maps when a place has no real identity. A pin
-    # whose effective_name is one of these has no useful search query to build.
-    _MEANINGLESS_NAMES: frozenset[str] = frozenset({"Dropped pin", "No Information Available", ""})
 
     @property
     def effective_name(self) -> str:
@@ -273,55 +234,6 @@ class Pin(abstract.Model):
         return None
 
     # ------------------------------------------------------------------
-    # Location proxies
-    # Address, place name, and geo metadata all live on the shared Location.
-    # These properties are convenience accessors so callers don't need to
-    # write `pin.location.city` everywhere - but the data is NOT duplicated
-    # on Pin.  Never add address fields directly to this model.
-    # ------------------------------------------------------------------
-
-    @property
-    def place_name(self) -> str | None:
-        return self.location.place_name if self.location else None
-
-    @property
-    def address(self) -> str | None:
-        return self.location.address if self.location else None
-
-    @property
-    def address_basic(self) -> str | None:
-        return self.location.address_basic if self.location else None
-
-    @property
-    def address_extended(self) -> str | None:
-        return self.location.address_extended if self.location else None
-
-    @property
-    def state(self) -> str | None:
-        return self.location.state if self.location else None
-
-    @property
-    def county(self) -> str | None:
-        return self.location.county if self.location else None
-
-    @property
-    def city(self) -> str | None:
-        return self.location.city if self.location else None
-
-    @property
-    def country(self) -> str | None:
-        return self.location.country if self.location else None
-
-    @property
-    def cached_place_name(self) -> str | None:
-        return self.location.cached_place_name if self.location else None
-
-    def has_place_name(self) -> bool:
-        if not self.location:
-            return False
-        return self.location.has_place_name()
-
-    # ------------------------------------------------------------------
     # Rating
     # ------------------------------------------------------------------
 
@@ -340,6 +252,8 @@ class Pin(abstract.Model):
     # ------------------------------------------------------------------
 
     def change_category(self, category_id: int) -> None:
+        # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
+        
         from urbanlens.dashboard.models.badges.model import Badge
 
         category = Badge.objects.get(id=category_id, kind="category")
@@ -349,6 +263,7 @@ class Pin(abstract.Model):
 
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
         """Suggest a category using the pin's personal context and location metadata."""
+        # TODO: This probably needs to be abstracted a bit due to the addition of generic badges (categories and tags). It should probably also live somewhere else.
         from urbanlens.dashboard.services.ai.factory import get_gateway
         from urbanlens.dashboard.services.ai.keywords import categorize_by_keywords
 
@@ -407,6 +322,7 @@ class Pin(abstract.Model):
                     self.save()
                 return category
         except Exception as e:
+            # TODO: Catch specific exception type
             logger.exception("failed to add category %s to pin -> %s", category_name, e)
         return None
 
@@ -480,16 +396,7 @@ class Pin(abstract.Model):
             n += 1
         return candidate
 
-    def save(self, *args, **kwargs) -> None:
-        if not self.slug:
-            self.slug = self._generate_slug()
-        lat = self.effective_latitude
-        lon = self.effective_longitude
-        if lat is not None and lon is not None:
-            self.point = Point(float(lon), float(lat), srid=4326)
-        super().save(*args, **kwargs)
-
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.AddressableModel.Meta):
         db_table = "dashboard_user_pins"
         get_latest_by = "updated"
         indexes = [

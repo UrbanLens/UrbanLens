@@ -5,9 +5,11 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import re
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -57,8 +59,6 @@ def _apply_trip_visibility_filter(
         viewer:    The profile viewing the trip.
         hidden_out: Mutable set to add hidden activity IDs into.
     """
-    from django.db.models import Q
-
     from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
     from urbanlens.dashboard.models.pin.model import Pin
 
@@ -959,10 +959,6 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         q = (request.GET.get("q") or "").strip()
         if len(q) < 2:
             return JsonResponse({"results": []})
-
-        import re
-
-        from django.db.models import Q
 
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import Pin

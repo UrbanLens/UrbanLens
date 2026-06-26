@@ -29,7 +29,7 @@ _DEFAULT_BBOX_DEGREES = 0.00045
 logger = logging.getLogger(__name__)
 
 
-class Location(abstract.AddressableMixin, abstract.Model):
+class Location(abstract.SecurityModel, abstract.AddressableModel):
     """Shared, globally recognised data about a physical place.
 
     Location is the *global* half of the two-model design:
@@ -50,8 +50,7 @@ class Location(abstract.AddressableMixin, abstract.Model):
 
     Address fields (street_number, route, locality, etc.) are inherited from
     AddressableMixin and accessed via the state/city/county/address properties
-    defined there.  Pin does NOT inherit AddressableMixin; it proxies those
-    same properties through its location FK.
+    defined there.
     """
 
     # Public-facing identifier. Non-sequential so users cannot infer location counts
@@ -63,30 +62,12 @@ class Location(abstract.AddressableMixin, abstract.Model):
     # Canonical name of the place - NOT a user's personal label (that's Pin.nickname).
     name = CharField(max_length=255)
     description = TextField(null=True, blank=True)
-    # Authoritative coordinates for this place. Pin may override these per-user.
-    latitude = DecimalField(max_digits=9, decimal_places=6)
-    longitude = DecimalField(max_digits=9, decimal_places=6)
-    point = PointField(geography=True, default=Point(0, 0))
 
     # Bounding box for this location. Used to auto-link new pins whose coordinates
     # fall within this polygon. Defaults to a small circle (~50 m) around the point.
     # Users can expand this to cover a campus or multi-building site via the wiki.
     bounding_box = PolygonField(geography=True, null=True, blank=True, srid=4326)
 
-    # Google Maps CID - unsigned 64-bit identifier embedded in place URLs.
-    # Stored as Decimal to handle values above signed int64 range (> 2^63-1).
-    # Used to de-duplicate Location rows on import and to look up Places API data.
-    cid = DecimalField(max_digits=20, decimal_places=0, null=True, blank=True, unique=True)
-
-    # Security indicators: how prevalent each security feature is at this place.
-    fences = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    alarms = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    cameras = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    security = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    signs = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    vps = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    plywood = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
-    locked = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
     date_abandoned = DateField(null=True, blank=True)
     date_last_active = DateField(null=True, blank=True)
 
@@ -110,38 +91,8 @@ class Location(abstract.AddressableMixin, abstract.Model):
             return self.date_abandoned - timedelta(days=1)
         return None
 
-    @property
-    def place_name(self) -> str | None:
-        if self.cached_place_name:
-            return self.cached_place_name
-        return self.get_place_name()
-
-    def get_place_name(self) -> str | None:
-        """Fetch the canonical place name from Google and cache it."""
-        if self.latitude is None or self.longitude is None or not (-90 <= float(self.latitude) <= 90) or not (-180 <= float(self.longitude) <= 180):
-            return "No Information Available"
-        try:
-            result = GoogleGeocodingGateway(api_key=settings.google_maps_api_key).get_place_name(
-                self.latitude,
-                self.longitude,
-            )
-        except Exception as exc:
-            logger.debug("Google place-name lookup failed for location %s: %s", self.pk or self.name, exc)
-            result = None
-        if not result:
-            result = "No Information Available"
-        if not self.cached_place_name:
-            self.cached_place_name = result
-            if self.pk:
-                # Use update() to persist without triggering post_save signals
-                Location.objects.filter(pk=self.pk).update(cached_place_name=result)
-        return result
-
-    def has_place_name(self) -> bool:
-        name = self.place_name
-        return bool(name) and name != "No Information Available"
-
     def change_category(self, category_id: int) -> None:
+        # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
         from urbanlens.dashboard.models.badges.model import Badge
 
         category = Badge.objects.get(id=category_id, kind="category")
@@ -150,6 +101,7 @@ class Location(abstract.AddressableMixin, abstract.Model):
         self.save()
 
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
+        # TODO: This probably needs to be abstracted a bit due to the addition of generic badges (categories and tags). It should probably also live somewhere else.
         from urbanlens.dashboard.services.ai.factory import get_gateway
 
         instructions = (
@@ -234,26 +186,7 @@ class Location(abstract.AddressableMixin, abstract.Model):
             n += 1
         return candidate
 
-    def save(self, *args, **kwargs) -> None:
-        if not self.slug:
-            self.slug = self._generate_slug()
-        if self.latitude is not None and self.longitude is not None:
-            self.point = Point(float(self.longitude), float(self.latitude), srid=4326)
-            if self.bounding_box is None:
-                bbox = self.point.buffer(_DEFAULT_BBOX_DEGREES)
-                if isinstance(bbox, Polygon):
-                    bbox.srid = 4326
-                    self.bounding_box = bbox
-                else:
-                    logger.warning(
-                        "Failed to create bounding box for location %s (%s, %s)",
-                        self.name,
-                        self.latitude,
-                        self.longitude,
-                    )
-        super().save(*args, **kwargs)
-
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.AddressableModel.Meta):
         db_table = "dashboard_locations"
         get_latest_by = "updated"
         indexes = [

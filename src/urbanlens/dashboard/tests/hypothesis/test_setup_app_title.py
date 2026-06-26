@@ -73,7 +73,8 @@ class SetupWizardAppTitleTests(TestCase):
         response = self.client.get(reverse("setup"), HTTP_HOST="maps.example.com")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Jess's Map")
+        self.assertEqual(response.context["setup_app_title"], "Jess's Map")
+        self.assertContains(response, "Jess's Map", html=True)
         settings = SiteSettings.get_current()
         self.assertEqual(settings.app_title, "Jess's Map")
 
@@ -103,11 +104,8 @@ class SetupWizardAppTitleTests(TestCase):
         response = self.client.get(reverse("setup"), HTTP_HOST="urbanlens.org")
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "title-reserved-notice")
-        self.assertNotContains(
-            response,
-            "please choose a different name",
-        )
+        self.assertNotContains(response, "title-reserved-notice", html=True)
+        self.assertNotContains(response, "please choose a different name", html=True)
 
     def test_setup_get_shows_title_notice_element_on_non_official_host(self) -> None:
         response = self.client.get(reverse("setup"), HTTP_HOST="maps.example.com")

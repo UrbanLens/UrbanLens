@@ -16,6 +16,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.badges.queryset import BadgeQuerySet
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.tests.hypothesis.strategies import (
     latitude,
@@ -267,10 +268,9 @@ class PinEffectiveIconTests(TestCase):
         pin = self._make_pin_with_icon(icon=icon_key, custom_icon=None)
         self.assertEqual(pin.effective_icon, icon_key)
 
-    @patch.object(Pin, "tags")
-    def test_none_icon_returns_none_when_no_tags(self, mock_tags: MagicMock) -> None:
-        # Patch at class level: ManyToManyDescriptor.__set__ rejects instance assignment.
-        mock_tags.order_by.return_value = iter([])
+    @patch.object(BadgeQuerySet, "location_badges")
+    def test_none_icon_returns_none_when_no_tags(self, mock_badges_qs: MagicMock) -> None:
+        mock_badges_qs.return_value = BadgeQuerySet().none()
         pin = self._make_pin_with_icon(icon=None, custom_icon=None)
         self.assertIsNone(pin.effective_icon)
 

@@ -2,7 +2,7 @@
 
 Covers:
 - _monthly_series() label count, ordering, and accuracy
-- _server_uptime() parsing and error handling
+- _server_uptime() monotonic uptime formatting
 - _dir_size_mb() size computation and error handling
 - SiteAdminStatsView access control and context completeness
 """
@@ -85,49 +85,36 @@ class MonthlySeriesLabelTests(TestCase):
 
 
 class ServerUptimeTests(TestCase):
-    """_server_uptime parses /proc/uptime and degrades gracefully when unavailable."""
+    """_server_uptime reports app process uptime via the monotonic clock."""
 
-    def test_returns_empty_string_on_file_not_found(self) -> None:
-        with mock.patch(
-            "urbanlens.dashboard.controllers.site_admin.Path",
-        ) as mock_path:
-            mock_path.return_value.read_text.side_effect = OSError("no such file")
-            result = _server_uptime()
-        self.assertEqual(result, "")
-
-    def test_returns_empty_string_on_value_error(self) -> None:
-        with mock.patch(
-            "urbanlens.dashboard.controllers.site_admin.Path",
-        ) as mock_path:
-            mock_path.return_value.read_text.return_value = "not a number blah"
-            result = _server_uptime()
-        self.assertEqual(result, "")
+    def _uptime_at(self, elapsed_seconds: float) -> str:
+        """Return _server_uptime() when monotonic has advanced by ``elapsed_seconds``."""
+        with mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 0.0):
+            with mock.patch(
+                "urbanlens.dashboard.controllers.site_admin.time.monotonic",
+                return_value=elapsed_seconds,
+            ):
+                return _server_uptime()
 
     def test_parses_days_hours_minutes_correctly(self) -> None:
         # 1 day + 2 hours + 3 minutes = 86400 + 7200 + 180 = 93780 seconds
         seconds = 86400 + 7200 + 180
-        with mock.patch(
-            "urbanlens.dashboard.controllers.site_admin.Path",
-        ) as mock_path:
-            mock_path.return_value.read_text.return_value = f"{seconds}.0 0.0\n"
-            result = _server_uptime()
-        self.assertEqual(result, "1d 2h 3m")
+        self.assertEqual(self._uptime_at(seconds), "1d 2h 3m")
 
     def test_zero_seconds_returns_zero_string(self) -> None:
-        with mock.patch(
-            "urbanlens.dashboard.controllers.site_admin.Path",
-        ) as mock_path:
-            mock_path.return_value.read_text.return_value = "0.0 0.0\n"
-            result = _server_uptime()
-        self.assertEqual(result, "0d 0h 0m")
+        self.assertEqual(self._uptime_at(0), "0d 0h 0m")
 
     def test_exactly_one_hour(self) -> None:
-        with mock.patch(
-            "urbanlens.dashboard.controllers.site_admin.Path",
-        ) as mock_path:
-            mock_path.return_value.read_text.return_value = "3600.0 0.0\n"
-            result = _server_uptime()
-        self.assertEqual(result, "0d 1h 0m")
+        self.assertEqual(self._uptime_at(3600), "0d 1h 0m")
+
+    def test_never_returns_negative_uptime(self) -> None:
+        with mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 100.0):
+            with mock.patch(
+                "urbanlens.dashboard.controllers.site_admin.time.monotonic",
+                return_value=50.0,
+            ):
+                result = _server_uptime()
+        self.assertEqual(result, "0d 0h 0m")
 
 
 # ── _dir_size_mb ──────────────────────────────────────────────────────────────
