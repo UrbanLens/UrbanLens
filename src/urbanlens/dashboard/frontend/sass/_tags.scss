@@ -1530,13 +1530,19 @@
 }
 
 .organize-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
     margin-bottom: 1.5rem;
 
+    .organize-page-title,
     .organize-title {
         font-size: 1.6rem;
         font-weight: 700;
         color: $text-primary;
-        margin: 0 0 .25rem;
+        margin: 0;
     }
 
     .organize-subtitle {
@@ -1544,6 +1550,17 @@
         color: $text-secondary;
         margin: 0;
     }
+}
+
+.organize-page-header-actions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.organize-panel-intro {
+    margin: 0 0 1.25rem;
 }
 
 .organize-tab-bar {
@@ -2429,8 +2446,15 @@
     }
 
     // Page header: reduce font size on phones
+    .organize-page-header .organize-page-title,
     .organize-page-header .organize-title {
         font-size: 1.25rem;
+    }
+
+    .organize-page-header-actions {
+        width: 100%;
+        margin-left: 0;
+        justify-content: flex-end;
     }
 }
 

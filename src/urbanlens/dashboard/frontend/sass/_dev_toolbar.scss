@@ -21,27 +21,70 @@
             transform: rotate(-90deg);
         }
     }
+
+    &.dev-toolbar--dragging {
+        user-select: none;
+        cursor: grabbing;
+    }
 }
 
 .dev-toolbar__header {
+    display: flex;
+    align-items: stretch;
     border-bottom: 1px solid var(--ul-border, #e2e8f0);
 }
 
-.dev-toolbar__toggle {
-    display: flex;
+%dev-toolbar-header-control {
+    display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    width: 100%;
-    padding: 0.45rem 0.65rem;
+    justify-content: center;
     border: 0;
     background: var(--ul-grey-muted, #f8fafc);
     color: inherit;
-    cursor: pointer;
-    text-align: left;
     font: inherit;
 
     &:hover {
         background: var(--ul-hover-bg, #f1f5f9);
+    }
+}
+
+.dev-toolbar__drag-handle {
+    @extend %dev-toolbar-header-control;
+    flex: 0 0 auto;
+    padding: 0.45rem 0.35rem;
+    cursor: grab;
+    color: var(--ul-text-muted, #94a3b8);
+
+    .material-icons {
+        font-size: 1.15rem !important;
+    }
+
+    &:active,
+    .dev-toolbar--dragging & {
+        cursor: grabbing;
+    }
+}
+
+.dev-toolbar__toggle {
+    @extend %dev-toolbar-header-control;
+    flex: 1 1 auto;
+    gap: 0.35rem;
+    min-width: 0;
+    padding: 0.45rem 0.65rem;
+    cursor: pointer;
+    text-align: left;
+}
+
+.dev-toolbar__reset-position {
+    @extend %dev-toolbar-header-control;
+    flex: 0 0 auto;
+    padding: 0.45rem 0.5rem;
+    cursor: pointer;
+    color: var(--ul-text-muted, #64748b);
+    border-left: 1px solid var(--ul-border, #e2e8f0);
+
+    .material-icons {
+        font-size: 1.05rem !important;
     }
 }
 

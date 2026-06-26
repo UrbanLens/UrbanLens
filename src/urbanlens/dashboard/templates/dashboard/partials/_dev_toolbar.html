@@ -1,9 +1,23 @@
 {# Admin-only dev toolbar - shown when the site environment is Development. #}
 <div id="dev-toolbar" class="dev-toolbar{% if dev_toolbar_theme_mode == 'dark' %} dev-toolbar--dark-active{% endif %}" data-collapsed="false">
     <div class="dev-toolbar__header">
+        <button type="button"
+                class="dev-toolbar__drag-handle"
+                id="dev-toolbar-drag"
+                title="Drag to move"
+                aria-label="Drag toolbar">
+            <i class="material-icons" aria-hidden="true">drag_indicator</i>
+        </button>
         <button type="button" class="dev-toolbar__toggle" id="dev-toolbar-collapse" title="Collapse toolbar" aria-expanded="true">
             <i class="material-icons dev-toolbar__chevron">expand_more</i>
             <span class="dev-toolbar__title">Dev Tools</span>
+        </button>
+        <button type="button"
+                class="dev-toolbar__reset-position"
+                id="dev-toolbar-reset-position"
+                title="Reset position"
+                aria-label="Reset toolbar position">
+            <i class="material-icons" aria-hidden="true">restart_alt</i>
         </button>
     </div>
     <div class="dev-toolbar__body" id="dev-toolbar-body">
@@ -37,8 +51,11 @@
     if (!toolbar) return;
 
     var collapseBtn = document.getElementById('dev-toolbar-collapse');
+    var dragHandle = document.getElementById('dev-toolbar-drag');
+    var resetPositionBtn = document.getElementById('dev-toolbar-reset-position');
     var body = document.getElementById('dev-toolbar-body');
     var storageKey = 'dev-toolbar-collapsed';
+    var positionKey = 'dev-toolbar-position';
 
     function setCollapsed(collapsed) {
         toolbar.dataset.collapsed = collapsed ? 'true' : 'false';
@@ -59,6 +76,107 @@
             setCollapsed(toolbar.dataset.collapsed !== 'true');
         });
     }
+
+    function clampPosition(left, top) {
+        var rect = toolbar.getBoundingClientRect();
+        var width = rect.width || toolbar.offsetWidth;
+        var height = rect.height || toolbar.offsetHeight;
+        var maxLeft = Math.max(0, window.innerWidth - width);
+        var maxTop = Math.max(0, window.innerHeight - height);
+        return {
+            left: Math.min(Math.max(0, left), maxLeft),
+            top: Math.min(Math.max(0, top), maxTop),
+        };
+    }
+
+    function applyPosition(left, top, persist) {
+        var pos = clampPosition(left, top);
+        toolbar.style.bottom = 'auto';
+        toolbar.style.right = 'auto';
+        toolbar.style.left = pos.left + 'px';
+        toolbar.style.top = pos.top + 'px';
+        if (persist) {
+            try { localStorage.setItem(positionKey, JSON.stringify(pos)); } catch (_) {}
+        }
+    }
+
+    function resetPosition() {
+        toolbar.style.left = '';
+        toolbar.style.top = '';
+        toolbar.style.bottom = '';
+        toolbar.style.right = '';
+        try { localStorage.removeItem(positionKey); } catch (_) {}
+    }
+
+    function restorePosition() {
+        try {
+            var raw = localStorage.getItem(positionKey);
+            if (!raw) return;
+            var pos = JSON.parse(raw);
+            if (typeof pos.left === 'number' && typeof pos.top === 'number') {
+                applyPosition(pos.left, pos.top, false);
+            }
+        } catch (_) {}
+    }
+
+    restorePosition();
+
+    if (resetPositionBtn) {
+        resetPositionBtn.addEventListener('click', function () {
+            resetPosition();
+        });
+    }
+
+    if (dragHandle) {
+        var dragging = false;
+        var startX = 0;
+        var startY = 0;
+        var startLeft = 0;
+        var startTop = 0;
+
+        function stopDragging(e) {
+            if (!dragging) return;
+            dragging = false;
+            toolbar.classList.remove('dev-toolbar--dragging');
+            if (e && dragHandle.hasPointerCapture(e.pointerId)) {
+                dragHandle.releasePointerCapture(e.pointerId);
+            }
+            var rect = toolbar.getBoundingClientRect();
+            applyPosition(rect.left, rect.top, true);
+        }
+
+        dragHandle.addEventListener('pointerdown', function (e) {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            dragging = true;
+            toolbar.classList.add('dev-toolbar--dragging');
+            dragHandle.setPointerCapture(e.pointerId);
+            var rect = toolbar.getBoundingClientRect();
+            startX = e.clientX;
+            startY = e.clientY;
+            startLeft = rect.left;
+            startTop = rect.top;
+            toolbar.style.bottom = 'auto';
+            toolbar.style.right = 'auto';
+            toolbar.style.left = startLeft + 'px';
+            toolbar.style.top = startTop + 'px';
+        });
+
+        dragHandle.addEventListener('pointermove', function (e) {
+            if (!dragging) return;
+            applyPosition(startLeft + (e.clientX - startX), startTop + (e.clientY - startY), false);
+        });
+
+        dragHandle.addEventListener('pointerup', stopDragging);
+        dragHandle.addEventListener('pointercancel', stopDragging);
+    }
+
+    window.addEventListener('resize', function () {
+        if (toolbar.style.top) {
+            var rect = toolbar.getBoundingClientRect();
+            applyPosition(rect.left, rect.top, true);
+        }
+    });
 
     function applyTheme(theme) {
         var root = document.getElementById('html-root');

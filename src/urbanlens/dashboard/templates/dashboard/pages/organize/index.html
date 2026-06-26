@@ -8,6 +8,33 @@
         <h1 class="organize-page-title">Organize
             {% include "dashboard/partials/_tooltip_help.html" with text="Tags label pins, categories group them by type, statuses track visit progress, and priority controls which icon wins when a pin has several." wide=True %}
         </h1>
+        <div class="organize-page-header-actions">
+            <div class="badge-header-right" id="org-header-actions">
+                <div class="tag-view-toggle" id="org-header-view-toggle" role="group" aria-label="View mode">
+                    <button type="button" class="tag-view-btn org-header-view-btn active" data-view="list" title="List view">
+                        <i class="material-icons">view_list</i>
+                    </button>
+                    <button type="button" class="tag-view-btn org-header-view-btn" data-view="gallery" title="Gallery view">
+                        <i class="material-icons">grid_view</i>
+                    </button>
+                    <button type="button" class="tag-view-btn org-header-view-btn" data-view="tree" title="Tree view">
+                        <i class="material-icons">account_tree</i>
+                    </button>
+                </div>
+                <div class="tag-view-toggle--sel">
+                    <button type="button" class="tag-view-btn--sel" id="org-header-sel-all" title="Select all">
+                        <i class="material-icons">checklist</i>
+                    </button>
+                </div>
+                <button type="button" class="btn btn--ghost btn--sm" id="org-header-filter-btn" title="Filter">
+                    <i class="material-icons">filter_list</i> Filter
+                    <span class="org-filter-active-dot"></span>
+                </button>
+                <button type="button" class="btn btn--primary" id="org-header-create-btn" type="button" title="Create" style="padding:.4rem .55rem;min-width:0;">
+                    <i class="material-icons" style="font-size:1.2rem;">add</i>
+                </button>
+            </div>
+        </div>
     </div>
 
     {# ── Tab bar ──────────────────────────────────────────────────────────────── #}
@@ -39,37 +66,6 @@
     {# ══════════════════════════════════════════════════════════════════════════ #}
     <div class="organize-panel tag-page" id="panel-categories" role="tabpanel"
          {% if active_tab != 'categories' %}hidden{% endif %}>
-
-        <div class="badge-header">
-            <div>
-                <h1 class="tag-subtitle"></h1>
-            </div>
-            <div class="badge-header-right">
-                <div class="tag-view-toggle" role="group" aria-label="Category view mode">
-                    <button type="button" class="tag-view-btn tag-view-btn--cats active" data-view="list" title="List view">
-                        <i class="material-icons">view_list</i>
-                    </button>
-                    <button type="button" class="tag-view-btn tag-view-btn--cats" data-view="gallery" title="Gallery view">
-                        <i class="material-icons">grid_view</i>
-                    </button>
-                    <button type="button" class="tag-view-btn tag-view-btn--cats" data-view="tree" title="Tree view">
-                        <i class="material-icons">account_tree</i>
-                    </button>
-                </div>
-                <div class="tag-view-toggle--sel">
-                    <button type="button" class="tag-view-btn--sel" id="cat-sel-all" title="Select all categories">
-                        <i class="material-icons">checklist</i>
-                    </button>
-                </div>
-                <button type="button" class="btn btn--ghost btn--sm" id="cat-filter-btn" title="Filter categories" onclick="toggleOrgFilter('cat')">
-                    <i class="material-icons">filter_list</i> Filter
-                    <span class="org-filter-active-dot"></span>
-                </button>
-                <button class="btn btn--primary" id="new-category-btn" type="button" title="New Category" style="padding:.4rem .55rem;min-width:0;">
-                    <i class="material-icons" style="font-size:1.2rem;">add</i>
-                </button>
-            </div>
-        </div>
 
         <div id="cat-filter-bar" class="org-filter-bar">
             <input type="search" id="cat-filter-search" class="org-filter-search" placeholder="Search categories…" oninput="applyOrgFilter('cat')" autocomplete="off">
@@ -171,37 +167,6 @@
     {# ══════════════════════════════════════════════════════════════════════════ #}
     <div class="organize-panel tag-page" id="panel-tags" role="tabpanel"
          {% if active_tab != 'tags' %}hidden{% endif %}>
-
-        <div class="badge-header">
-            <div>
-                <h1 class="tag-subtitle"></h1>
-            </div>
-            <div class="badge-header-right">
-                <div class="tag-view-toggle" role="group" aria-label="Tag view mode">
-                    <button type="button" class="tag-view-btn tag-view-btn--tags active" data-view="list" title="List view">
-                        <i class="material-icons">view_list</i>
-                    </button>
-                    <button type="button" class="tag-view-btn tag-view-btn--tags" data-view="gallery" title="Gallery view">
-                        <i class="material-icons">grid_view</i>
-                    </button>
-                    <button type="button" class="tag-view-btn tag-view-btn--tags" data-view="tree" title="Tree view">
-                        <i class="material-icons">account_tree</i>
-                    </button>
-                </div>
-                <div class="tag-view-toggle--sel">
-                    <button type="button" class="tag-view-btn--sel" id="tag-sel-all" title="Select all tags">
-                        <i class="material-icons">checklist</i>
-                    </button>
-                </div>
-                <button type="button" class="btn btn--ghost btn--sm" id="tag-filter-btn" title="Filter tags" onclick="toggleOrgFilter('tag')">
-                    <i class="material-icons">filter_list</i> Filter
-                    <span class="org-filter-active-dot"></span>
-                </button>
-                <button class="btn btn--primary" id="new-tag-btn" type="button" title="New Tag" style="padding:.4rem .55rem;min-width:0;">
-                    <i class="material-icons" style="font-size:1.2rem;">add</i>
-                </button>
-            </div>
-        </div>
 
         <div id="tag-filter-bar" class="org-filter-bar">
             <input type="search" id="tag-filter-search" class="org-filter-search" placeholder="Search tags…" oninput="applyOrgFilter('tag')" autocomplete="off">
@@ -315,37 +280,6 @@
     {# ══════════════════════════════════════════════════════════════════════════ #}
     <div class="organize-panel tag-page" id="panel-status" role="tabpanel"
          {% if active_tab != 'status' %}hidden{% endif %}>
-
-        <div class="badge-header">
-            <div>
-                <h1 class="tag-subtitle"></h1>
-            </div>
-            <div class="badge-header-right">
-                <div class="tag-view-toggle" role="group" aria-label="Status view mode">
-                    <button type="button" class="tag-view-btn tag-view-btn--status active" data-view="list" title="List view">
-                        <i class="material-icons">view_list</i>
-                    </button>
-                    <button type="button" class="tag-view-btn tag-view-btn--status" data-view="gallery" title="Gallery view">
-                        <i class="material-icons">grid_view</i>
-                    </button>
-                    <button type="button" class="tag-view-btn tag-view-btn--status" data-view="tree" title="Tree view">
-                        <i class="material-icons">account_tree</i>
-                    </button>
-                </div>
-                <div class="tag-view-toggle--sel">
-                    <button type="button" class="tag-view-btn--sel" id="status-sel-all" title="Select all statuses">
-                        <i class="material-icons">checklist</i>
-                    </button>
-                </div>
-                <button type="button" class="btn btn--ghost btn--sm" id="status-filter-btn" title="Filter statuses" onclick="toggleOrgFilter('status')">
-                    <i class="material-icons">filter_list</i> Filter
-                    <span class="org-filter-active-dot"></span>
-                </button>
-                <button class="btn btn--primary" id="new-status-btn" type="button" title="New Status" style="padding:.4rem .55rem;min-width:0;">
-                    <i class="material-icons" style="font-size:1.2rem;">add</i>
-                </button>
-            </div>
-        </div>
 
         <div id="status-filter-bar" class="org-filter-bar">
             <input type="search" id="status-filter-search" class="org-filter-search" placeholder="Search statuses…" oninput="applyOrgFilter('status')" autocomplete="off">
@@ -514,40 +448,7 @@
     <div class="organize-panel tag-page" id="panel-people" role="tabpanel"
          {% if active_tab != 'people' %}hidden{% endif %}>
 
-        <div class="badge-header">
-            <div>
-                <p class="tag-subtitle">Private labels applied to other users. Only visible to you.</p>
-            </div>
-            <div class="badge-header-right">
-                <div class="tag-view-toggle" role="group" aria-label="People view mode">
-                    <button type="button" class="tag-view-btn tag-view-btn--people active" data-view="list" title="List view">
-                        <i class="material-icons">view_list</i>
-                    </button>
-                    <button type="button" class="tag-view-btn tag-view-btn--people" data-view="gallery" title="Gallery view">
-                        <i class="material-icons">grid_view</i>
-                    </button>
-                    <button type="button" class="tag-view-btn tag-view-btn--people" data-view="tree" title="Tree view">
-                        <i class="material-icons">account_tree</i>
-                    </button>
-                </div>
-                <div class="tag-view-toggle--sel">
-                    <button type="button" class="tag-view-btn--sel" id="people-sel-all" title="Select all labels">
-                        <i class="material-icons">checklist</i>
-                    </button>
-                </div>
-                <button type="button" class="btn btn--ghost btn--sm" id="people-filter-btn" title="Filter labels" onclick="toggleOrgFilter('people')">
-                    <i class="material-icons">filter_list</i> Filter
-                    <span class="org-filter-active-dot"></span>
-                </button>
-                <button type="button" class="btn btn--primary btn--sm" id="people-badge-create-btn"
-                        hx-get="{% url 'people.create' %}"
-                        hx-target="#people-badge-edit-dialog-body"
-                        hx-swap="innerHTML"
-                        onclick="document.getElementById('people-badge-edit-dialog').showModal()">
-                    <i class="material-icons">add</i> New Label
-                </button>
-            </div>
-        </div>
+        <p class="tag-subtitle organize-panel-intro">Private labels applied to other users. Only visible to you.</p>
 
         <div id="people-filter-bar" class="org-filter-bar">
             <input type="search" id="people-filter-search" class="org-filter-search"
@@ -1189,7 +1090,7 @@ function clearOrgFilter(ns) {
 
 function applyOrgFilter(ns) {
     var bar = document.getElementById(ns + '-filter-bar');
-    var filterBtn = document.getElementById(ns + '-filter-btn');
+    var filterBtn = document.getElementById('org-header-filter-btn');
     var rowsId = ns === 'cat' ? 'category-rows' : (ns + '-rows');
     var rows = document.getElementById(rowsId);
     if (!rows) return;
@@ -1207,7 +1108,9 @@ function applyOrgFilter(ns) {
     }
 
     var hasActive = search || activeChips.size > 0 || activeColor;
-    if (filterBtn) filterBtn.classList.toggle('has-filter', hasActive);
+    if (filterBtn && (!window._orgHeader || window._orgHeader.getFilterNs() === ns)) {
+        filterBtn.classList.toggle('has-filter', hasActive);
+    }
 
     // Build a set of card ids that have children (from parents data on sibling cards)
     var cardSel;
@@ -1309,6 +1212,95 @@ document.body.addEventListener('htmx:afterSwap', function(e) {
 }());
 </script>
 
+{# ── Shared page-header toolbar (one DOM block, tab-specific handlers) ─────── #}
+<script>
+window._orgHeader = (function() {
+    var tabs = {};
+    var activeTab = '{{ active_tab|escapejs }}';
+    var tabFilterNs = { categories: 'cat', tags: 'tag', status: 'status', people: 'people' };
+    var actionsEl, filterBtn, selAllBtn, createBtn, viewToggle, wired = false;
+
+    function register(tabKey, cfg) {
+        tabs[tabKey] = cfg;
+    }
+
+    function getFilterNs() {
+        return tabFilterNs[activeTab] || null;
+    }
+
+    function syncViewButtons(view) {
+        document.querySelectorAll('.org-header-view-btn').forEach(function(btn) {
+            btn.classList.toggle('active', btn.dataset.view === view);
+        });
+    }
+
+    function syncCreateButton(cfg) {
+        if (!createBtn || !cfg) return;
+        createBtn.className = 'btn btn--primary' + (cfg.createCompact ? ' btn--sm' : '');
+        if (cfg.createIconOnly) {
+            createBtn.style.padding = '.4rem .55rem';
+            createBtn.style.minWidth = '0';
+        } else {
+            createBtn.style.padding = '';
+            createBtn.style.minWidth = '';
+        }
+        createBtn.title = cfg.createTitle || '';
+        createBtn.innerHTML = cfg.createHtml || '';
+    }
+
+    function setTab(tabKey) {
+        activeTab = tabKey;
+        if (!actionsEl) actionsEl = document.getElementById('org-header-actions');
+        var cfg = tabs[tabKey];
+        if (actionsEl) actionsEl.hidden = !cfg;
+        if (!cfg) return;
+        if (viewToggle) viewToggle.setAttribute('aria-label', cfg.viewAriaLabel || 'View mode');
+        if (filterBtn) filterBtn.title = cfg.filterTitle || 'Filter';
+        syncCreateButton(cfg);
+        syncViewButtons(cfg.getView ? cfg.getView() : 'list');
+        if (cfg.updateSelAllBtn) cfg.updateSelAllBtn();
+        var ns = tabFilterNs[tabKey];
+        if (ns && typeof applyOrgFilter === 'function') applyOrgFilter(ns);
+    }
+
+    function wireButtons() {
+        if (wired) return;
+        wired = true;
+        actionsEl = document.getElementById('org-header-actions');
+        filterBtn = document.getElementById('org-header-filter-btn');
+        selAllBtn = document.getElementById('org-header-sel-all');
+        createBtn = document.getElementById('org-header-create-btn');
+        viewToggle = document.getElementById('org-header-view-toggle');
+
+        document.querySelectorAll('.org-header-view-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var cfg = tabs[activeTab];
+                if (cfg && cfg.setView) cfg.setView(btn.dataset.view);
+            });
+        });
+        if (selAllBtn) selAllBtn.addEventListener('click', function() {
+            var cfg = tabs[activeTab];
+            if (cfg && cfg.onSelAll) cfg.onSelAll();
+        });
+        if (filterBtn) filterBtn.addEventListener('click', function() {
+            var ns = getFilterNs();
+            if (ns) toggleOrgFilter(ns);
+        });
+        if (createBtn) createBtn.addEventListener('click', function() {
+            var cfg = tabs[activeTab];
+            if (cfg && cfg.onCreate) cfg.onCreate();
+        });
+    }
+
+    function init() {
+        wireButtons();
+        setTab(activeTab);
+    }
+
+    return { register: register, setTab: setTab, getFilterNs: getFilterNs, syncViewButtons: syncViewButtons, init: init };
+})();
+</script>
+
 {# ── Tab switching ─────────────────────────────────────────────────────────── #}
 <script>
 (function() {
@@ -1322,6 +1314,7 @@ document.body.addEventListener('htmx:afterSwap', function(e) {
             panels.forEach(function(p) { p.hidden = true; });
             var panel = document.getElementById('panel-' + target);
             if (panel) panel.hidden = false;
+            if (window._orgHeader) window._orgHeader.setTab(target);
             localStorage.setItem('organize_tab', target);
             var url = new URL(window.location.href);
             url.searchParams.set('tab', target);
@@ -1332,7 +1325,8 @@ document.body.addEventListener('htmx:afterSwap', function(e) {
             // Clear selection and close all filter bars when switching tabs
             if (window._orgBulkClear) window._orgBulkClear();
             document.querySelectorAll('.org-filter-bar.open').forEach(function(bar) { bar.classList.remove('open'); });
-            document.querySelectorAll('#tag-filter-btn, #cat-filter-btn, #status-filter-btn').forEach(function(btn) { btn.classList.remove('has-filter'); });
+            var headerFilterBtn = document.getElementById('org-header-filter-btn');
+            if (headerFilterBtn) headerFilterBtn.classList.remove('has-filter');
         });
     });
 
@@ -1414,7 +1408,7 @@ window._orgBulkSync = function(n, opts) {
     }
 
     function _updateTagSelAllBtn() {
-        var btn = document.getElementById('tag-sel-all'); if (!btn) return;
+        var btn = document.getElementById('org-header-sel-all'); if (!btn) return;
         var visIds = _getVisibleTagIds();
         var allSel = visIds.length > 0 && visIds.every(function(id) { return _tagSelected.has(id); });
         btn.classList.toggle('deselect-mode', allSel);
@@ -1442,9 +1436,7 @@ window._orgBulkSync = function(n, opts) {
         if (!rows) return;
         rows.classList.remove('tag-view--list', 'tag-view--gallery', 'tag-view--tree');
         rows.classList.add('tag-view--' + _tagCurrentView);
-        document.querySelectorAll('.tag-view-btn--tags').forEach(function(btn) {
-            btn.classList.toggle('active', btn.dataset.view === _tagCurrentView);
-        });
+        if (window._orgHeader) window._orgHeader.syncViewButtons(_tagCurrentView);
         if (_tagCurrentView === 'tree') {
             renderTagTree(rows);
         } else {
@@ -1526,19 +1518,6 @@ window._orgBulkSync = function(n, opts) {
         if (cp) cp.querySelectorAll('.color-swatch').forEach(function(b){b.classList.remove('selected');});
         var cv = document.getElementById('new-tag-color-value'); if (cv) cv.value = '';
     }
-    document.getElementById('new-tag-btn').addEventListener('click', function() {
-        var f = document.getElementById('new-tag-form');
-        resetNewTagForm(); if (f && !f.open) f.showModal();
-    });
-
-    // ── View toggle ───────────────────────────────────────────────────────────
-    document.querySelectorAll('.tag-view-btn--tags').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            _tagCurrentView = btn.dataset.view;
-            localStorage.setItem('tag_view', _tagCurrentView);
-            applyTagView();
-        });
-    });
 
     // ── Selection ─────────────────────────────────────────────────────────────
     document.getElementById('tag-rows').addEventListener('click', function(e) {
@@ -1571,13 +1550,6 @@ window._orgBulkSync = function(n, opts) {
         var wrap = cb.closest('.cat-select-wrap');
         var idx = wrap ? allWraps.indexOf(wrap) : -1;
         if (idx >= 0) _lastTagClickIdx = idx;
-        _syncTagCheckboxes(); _updateTagBar();
-    });
-    document.getElementById('tag-sel-all').addEventListener('click', function() {
-        var visIds = _getVisibleTagIds();
-        var allSel = visIds.length > 0 && visIds.every(function(id) { return _tagSelected.has(id); });
-        if (allSel) { visIds.forEach(function(id) { _tagSelected.delete(id); }); }
-        else { visIds.forEach(function(id) { _tagSelected.add(id); }); }
         _syncTagCheckboxes(); _updateTagBar();
     });
 
@@ -1809,6 +1781,27 @@ window._orgBulkSync = function(n, opts) {
     });
 
     // ── Init ──────────────────────────────────────────────────────────────────
+    window._orgHeader.register('tags', {
+        filterTitle: 'Filter tags',
+        viewAriaLabel: 'Tag view mode',
+        createTitle: 'New Tag',
+        createIconOnly: true,
+        createHtml: '<i class="material-icons" style="font-size:1.2rem;">add</i>',
+        getView: function() { return _tagCurrentView; },
+        setView: function(v) { _tagCurrentView = v; localStorage.setItem('tag_view', v); applyTagView(); },
+        onSelAll: function() {
+            var visIds = _getVisibleTagIds();
+            var allSel = visIds.length > 0 && visIds.every(function(id) { return _tagSelected.has(id); });
+            if (allSel) { visIds.forEach(function(id) { _tagSelected.delete(id); }); }
+            else { visIds.forEach(function(id) { _tagSelected.add(id); }); }
+            _syncTagCheckboxes(); _updateTagBar();
+        },
+        updateSelAllBtn: _updateTagSelAllBtn,
+        onCreate: function() {
+            var f = document.getElementById('new-tag-form');
+            resetNewTagForm(); if (f && !f.open) f.showModal();
+        },
+    });
     applyTagView();
 })();
 </script>
@@ -1845,7 +1838,7 @@ window._orgBulkSync = function(n, opts) {
     }
 
     function _updateCatSelAllBtn() {
-        var btn = document.getElementById('cat-sel-all'); if (!btn) return;
+        var btn = document.getElementById('org-header-sel-all'); if (!btn) return;
         var visIds = _getVisibleCatIds();
         var allSel = visIds.length > 0 && visIds.every(function(id) { return _catSelected.has(id); });
         btn.classList.toggle('deselect-mode', allSel);
@@ -1871,9 +1864,7 @@ window._orgBulkSync = function(n, opts) {
         var rows = document.getElementById('category-rows'); if (!rows) return;
         rows.classList.remove('tag-view--list','tag-view--gallery','tag-view--tree');
         rows.classList.add('tag-view--' + _catCurrentView);
-        document.querySelectorAll('.tag-view-btn--cats').forEach(function(btn) {
-            btn.classList.toggle('active', btn.dataset.view === _catCurrentView);
-        });
+        if (window._orgHeader) window._orgHeader.syncViewButtons(_catCurrentView);
         if (_catCurrentView==='tree') {
             renderCatTree(rows);
         } else {
@@ -1937,17 +1928,6 @@ window._orgBulkSync = function(n, opts) {
         var cp=document.getElementById('new-cat-color-picker'); if(cp)cp.querySelectorAll('.color-swatch').forEach(function(b){b.classList.remove('selected');});
         var cv=document.getElementById('new-cat-color-value'); if(cv)cv.value='';
     }
-    document.getElementById('new-category-btn').addEventListener('click', function() {
-        var f=document.getElementById('new-category-form');
-        resetNewCatForm(); if(f && !f.open) f.showModal();
-    });
-
-    // ── View toggle ───────────────────────────────────────────────────────────
-    document.querySelectorAll('.tag-view-btn--cats').forEach(function(btn){
-        btn.addEventListener('click', function(){
-            _catCurrentView=btn.dataset.view; localStorage.setItem('category_view',_catCurrentView); applyCatView();
-        });
-    });
 
     // ── Selection ─────────────────────────────────────────────────────────────
     document.getElementById('category-rows').addEventListener('click', function(e) {
@@ -1980,14 +1960,6 @@ window._orgBulkSync = function(n, opts) {
         var wrap = cb.closest('.cat-select-wrap');
         var idx = wrap ? allWraps.indexOf(wrap) : -1;
         if (idx >= 0) _lastCatClickIdx = idx;
-        _syncCatCheckboxes(); _updateCatBar();
-    });
-    var catSelAll = document.getElementById('cat-sel-all');
-    if (catSelAll) catSelAll.addEventListener('click', function() {
-        var visIds = _getVisibleCatIds();
-        var allSel = visIds.length > 0 && visIds.every(function(id) { return _catSelected.has(id); });
-        if (allSel) { visIds.forEach(function(id) { _catSelected.delete(id); }); }
-        else { visIds.forEach(function(id) { _catSelected.add(id); }); }
         _syncCatCheckboxes(); _updateCatBar();
     });
 
@@ -2199,6 +2171,27 @@ window._orgBulkSync = function(n, opts) {
     });
 
     // ── Init ──────────────────────────────────────────────────────────────────
+    window._orgHeader.register('categories', {
+        filterTitle: 'Filter categories',
+        viewAriaLabel: 'Category view mode',
+        createTitle: 'New Category',
+        createIconOnly: true,
+        createHtml: '<i class="material-icons" style="font-size:1.2rem;">add</i>',
+        getView: function() { return _catCurrentView; },
+        setView: function(v) { _catCurrentView = v; localStorage.setItem('category_view', v); applyCatView(); },
+        onSelAll: function() {
+            var visIds = _getVisibleCatIds();
+            var allSel = visIds.length > 0 && visIds.every(function(id) { return _catSelected.has(id); });
+            if (allSel) { visIds.forEach(function(id) { _catSelected.delete(id); }); }
+            else { visIds.forEach(function(id) { _catSelected.add(id); }); }
+            _syncCatCheckboxes(); _updateCatBar();
+        },
+        updateSelAllBtn: _updateCatSelAllBtn,
+        onCreate: function() {
+            var f = document.getElementById('new-category-form');
+            resetNewCatForm(); if (f && !f.open) f.showModal();
+        },
+    });
     applyCatView();
 })();
 </script>
@@ -2210,15 +2203,6 @@ window._orgBulkSync = function(n, opts) {
     var _statusMergeTargetId = null;
     var _lastStatusClickIdx = -1;
     var _statusCurrentView = localStorage.getItem('status_view') || 'list';
-
-    // New status toggle
-    var newStatusBtn = document.getElementById('new-status-btn');
-    var newStatusForm = document.getElementById('new-status-form');
-    if (newStatusBtn && newStatusForm) {
-        newStatusBtn.addEventListener('click', function() {
-            if (!newStatusForm.open) newStatusForm.showModal();
-        });
-    }
 
     function _escHtml(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -2259,7 +2243,7 @@ window._orgBulkSync = function(n, opts) {
     }
 
     function _updateStatusSelAllBtn() {
-        var btn = document.getElementById('status-sel-all'); if (!btn) return;
+        var btn = document.getElementById('org-header-sel-all'); if (!btn) return;
         var visIds = _getVisibleStatusIds();
         var allSel = visIds.length > 0 && visIds.every(function(id) { return _statusSelected.has(id); });
         btn.classList.toggle('deselect-mode', allSel);
@@ -2301,9 +2285,7 @@ window._orgBulkSync = function(n, opts) {
         var rows = document.getElementById('status-rows'); if (!rows) return;
         rows.classList.remove('tag-view--list', 'tag-view--gallery', 'tag-view--tree');
         rows.classList.add('tag-view--' + _statusCurrentView);
-        document.querySelectorAll('.tag-view-btn--status').forEach(function(btn) {
-            btn.classList.toggle('active', btn.dataset.view === _statusCurrentView);
-        });
+        if (window._orgHeader) window._orgHeader.syncViewButtons(_statusCurrentView);
         if (_statusCurrentView === 'tree') {
             renderOrganizeTree(rows, 'status');
         } else {
@@ -2311,14 +2293,6 @@ window._orgBulkSync = function(n, opts) {
             rows.querySelectorAll('.tag-card').forEach(function(c) { c.style.display = ''; });
         }
     }
-
-    document.querySelectorAll('.tag-view-btn--status').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            _statusCurrentView = btn.dataset.view;
-            localStorage.setItem('status_view', _statusCurrentView);
-            _applyStatusView();
-        });
-    });
 
     // ── Merge dialog ──────────────────────────────────────────────────────────
     function _getStatusCardData(id) {
@@ -2444,18 +2418,6 @@ window._orgBulkSync = function(n, opts) {
         _syncStatusSelBar();
     });
 
-    var selAllBtn = document.getElementById('status-sel-all');
-    if (selAllBtn) {
-        selAllBtn.addEventListener('click', function() {
-            var visIds = _getVisibleStatusIds();
-            var allSel = visIds.length > 0 && visIds.every(function(id) { return _statusSelected.has(id); });
-            if (allSel) { visIds.forEach(function(id) { _statusSelected.delete(id); }); }
-            else { visIds.forEach(function(id) { _statusSelected.add(id); }); }
-            _lastStatusClickIdx = -1;
-            _syncStatusSelBar();
-        });
-    }
-
     // ── HTMX hooks ────────────────────────────────────────────────────────────
     document.getElementById('status-rows').addEventListener('htmx:afterSwap', function() {
         _statusSelected.clear(); _lastStatusClickIdx = -1; _syncStatusSelBar();
@@ -2469,6 +2431,28 @@ window._orgBulkSync = function(n, opts) {
     });
 
     // ── Init ──────────────────────────────────────────────────────────────────
+    window._orgHeader.register('status', {
+        filterTitle: 'Filter statuses',
+        viewAriaLabel: 'Status view mode',
+        createTitle: 'New Status',
+        createIconOnly: true,
+        createHtml: '<i class="material-icons" style="font-size:1.2rem;">add</i>',
+        getView: function() { return _statusCurrentView; },
+        setView: function(v) { _statusCurrentView = v; localStorage.setItem('status_view', v); _applyStatusView(); },
+        onSelAll: function() {
+            var visIds = _getVisibleStatusIds();
+            var allSel = visIds.length > 0 && visIds.every(function(id) { return _statusSelected.has(id); });
+            if (allSel) { visIds.forEach(function(id) { _statusSelected.delete(id); }); }
+            else { visIds.forEach(function(id) { _statusSelected.add(id); }); }
+            _lastStatusClickIdx = -1;
+            _syncStatusSelBar();
+        },
+        updateSelAllBtn: _updateStatusSelAllBtn,
+        onCreate: function() {
+            var f = document.getElementById('new-status-form');
+            if (f && !f.open) f.showModal();
+        },
+    });
     _applyStatusView();
 })();
 </script>
@@ -2565,13 +2549,10 @@ window._orgBulkSync = function(n, opts) {
         var rows = document.getElementById('people-badge-rows'); if (!rows) return;
         rows.classList.remove('tag-view--list', 'tag-view--gallery', 'tag-view--tree');
         rows.classList.add('tag-view--' + _peopleCurrentView);
-        document.querySelectorAll('.tag-view-btn--people').forEach(function(btn) { btn.classList.toggle('active', btn.dataset.view === _peopleCurrentView); });
+        if (window._orgHeader) window._orgHeader.syncViewButtons(_peopleCurrentView);
         if (_peopleCurrentView === 'tree') { renderOrganizeTree(rows, 'people'); }
         else { var tr = rows.querySelector('.tag-tree-root'); if (tr) tr.remove(); rows.querySelectorAll('.tag-card').forEach(function(c) { c.style.display = ''; }); }
     }
-    document.querySelectorAll('.tag-view-btn--people').forEach(function(btn) {
-        btn.addEventListener('click', function() { _peopleCurrentView = btn.dataset.view; localStorage.setItem('people_view', _peopleCurrentView); _applyPeopleView(); });
-    });
 
     var peopleRows = document.getElementById('people-badge-rows');
     if (peopleRows) peopleRows.addEventListener('change', function (e) {
@@ -2582,18 +2563,6 @@ window._orgBulkSync = function(n, opts) {
         _syncPeopleSelBar();
     });
 
-    var peopleSelAllBtn = document.getElementById('people-sel-all');
-    if (peopleSelAllBtn) {
-        peopleSelAllBtn.addEventListener('click', function () {
-            var rows = _getRows().filter(function (r) { return r.style.display !== 'none'; });
-            var ids = rows.map(function (r) { return parseInt(r.dataset.peopleId, 10); });
-            var allSel = ids.length > 0 && ids.every(function (id) { return _peopleSelected.has(id); });
-            ids.forEach(function (id) { if (allSel) _peopleSelected.delete(id); else _peopleSelected.add(id); });
-            _syncPeopleSelBar();
-            _applyPeopleCheck();
-        });
-    }
-
     // ── Filter ────────────────────────────────────────────────────────────────
     // Wrap applyOrgFilter to handle the 'people' namespace, which uses .org-selectable
     // rows (not .tag-card elements that the global implementation expects).
@@ -2601,7 +2570,7 @@ window._orgBulkSync = function(n, opts) {
     window.applyOrgFilter = function (ns) {
         if (ns !== 'people') { if (_origApplyFilter) _origApplyFilter(ns); return; }
         var bar = document.getElementById('people-filter-bar');
-        var filterBtn = document.getElementById('people-filter-btn');
+        var filterBtn = document.getElementById('org-header-filter-btn');
         var q = (document.getElementById('people-filter-search') || {}).value || '';
         q = q.toLowerCase().trim();
         var activeChips = new Set();
@@ -2612,7 +2581,9 @@ window._orgBulkSync = function(n, opts) {
             if (colorDot) activeColor = (colorDot.dataset.filter || '').replace('color:', '').toLowerCase();
         }
         var hasActive = q || activeChips.size > 0 || activeColor;
-        if (filterBtn) filterBtn.classList.toggle('has-filter', !!hasActive);
+        if (filterBtn && window._orgHeader && window._orgHeader.getFilterNs() === 'people') {
+            filterBtn.classList.toggle('has-filter', !!hasActive);
+        }
         _getRows().forEach(function (row) {
             var name = (row.dataset.peopleName || '').toLowerCase();
             if (q && !name.includes(q)) { row.style.display = 'none'; return; }
@@ -2698,7 +2669,39 @@ window._orgBulkSync = function(n, opts) {
         }).catch(function (err) { toastr.error('Delete failed: ' + err.message); });
     }
     if (peopleRows) peopleRows.addEventListener('htmx:afterSwap', function() { _peopleSelected.clear(); _peopleMergeTargetId = null; _syncPeopleSelBar(); _applyPeopleView(); applyOrgFilter('people'); });
+    window._orgHeader.register('people', {
+        filterTitle: 'Filter labels',
+        viewAriaLabel: 'People view mode',
+        createTitle: 'New Label',
+        createCompact: true,
+        createIconOnly: false,
+        createHtml: '<i class="material-icons">add</i> New Label',
+        getView: function() { return _peopleCurrentView; },
+        setView: function(v) { _peopleCurrentView = v; localStorage.setItem('people_view', v); _applyPeopleView(); },
+        onSelAll: function() {
+            var rows = _getRows().filter(function(r) { return r.style.display !== 'none'; });
+            var ids = rows.map(function(r) { return parseInt(r.dataset.peopleId, 10); });
+            var allSel = ids.length > 0 && ids.every(function(id) { return _peopleSelected.has(id); });
+            ids.forEach(function(id) { if (allSel) _peopleSelected.delete(id); else _peopleSelected.add(id); });
+            _syncPeopleSelBar();
+            _applyPeopleCheck();
+        },
+        updateSelAllBtn: function() {
+            var btn = document.getElementById('org-header-sel-all'); if (!btn) return;
+            var rows = _getRows().filter(function(r) { return r.style.display !== 'none'; });
+            var ids = rows.map(function(r) { return parseInt(r.dataset.peopleId, 10); });
+            var allSel = ids.length > 0 && ids.every(function(id) { return _peopleSelected.has(id); });
+            btn.classList.toggle('deselect-mode', allSel);
+            btn.title = allSel ? 'Deselect all' : 'Select all labels';
+            btn.innerHTML = allSel ? '<i class="material-icons">remove_done</i>' : '<i class="material-icons">checklist</i>';
+        },
+        onCreate: function() {
+            htmx.ajax('GET', '{% url "people.create" %}', { target: '#people-badge-edit-dialog-body', swap: 'innerHTML' });
+            document.getElementById('people-badge-edit-dialog').showModal();
+        },
+    });
     _applyPeopleView();
+    window._orgHeader.init();
 }());
 </script>
 {% endblock %}

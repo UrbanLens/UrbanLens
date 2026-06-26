@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import validator
+from pydantic import field_validator
 
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
 from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes
@@ -18,9 +18,9 @@ class Production(BaseEnvironment):
             **data,
         )
 
-    @validator("debug_override")
+    @field_validator("debug_override")
     @classmethod
-    def debug_override_must_be_off(cls, value):
+    def debug_override_must_be_off(cls, value: DebugTypes) -> DebugTypes:
         """
         Debug mode is not allowed in production
         """
