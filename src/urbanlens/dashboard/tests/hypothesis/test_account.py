@@ -95,7 +95,7 @@ class EmailVerificationMarkVerifiedTests(TestCase):
         before = timezone.now()
         ev.mark_verified()
         after = timezone.now()
-        assert ev.verified_at is not None
+        assert ev.verified_at is not None  # nosec B101
         self.assertGreaterEqual(ev.verified_at, before)
         self.assertLessEqual(ev.verified_at, after)
 

@@ -60,20 +60,20 @@ class ValidateBirthDateTests(TestCase):
         future = _today() + timedelta(days=1)
         error = validate_birth_date(future)
         self.assertIsNotNone(error)
-        assert error is not None
+        assert error is not None  # nosec B101
         self.assertIn("future", error.lower())
 
     def test_today_returns_age_error(self) -> None:
         error = validate_birth_date(_today())
         self.assertIsNotNone(error)
-        assert error is not None
+        assert error is not None  # nosec B101
         self.assertIn(str(_MIN_AGE_YEARS), error)
 
     def test_twelve_years_ago_returns_age_error(self) -> None:
         too_young = _past_date(_MIN_AGE_YEARS - 1)
         error = validate_birth_date(too_young)
         self.assertIsNotNone(error)
-        assert error is not None
+        assert error is not None  # nosec B101
         self.assertIn(str(_MIN_AGE_YEARS), error)
 
     def test_exactly_min_age_years_ago_returns_none(self) -> None:
@@ -104,7 +104,7 @@ class ValidateBirthDateTests(TestCase):
         if value > today:
             error = validate_birth_date(value)
             self.assertIsNotNone(error)
-            assert error is not None
+            assert error is not None  # nosec B101
             self.assertIn("future", error.lower())
 
 
@@ -126,7 +126,7 @@ class ValidateStartedExploringTests(TestCase):
         future = _today() + timedelta(days=1)
         error = validate_started_exploring(future)
         self.assertIsNotNone(error)
-        assert error is not None
+        assert error is not None  # nosec B101
         self.assertIn("future", error.lower())
 
     def test_far_future_returns_error(self) -> None:
@@ -246,7 +246,7 @@ class PrivacySettingsFormTests(TestCase):
     def test_friends_is_excluded_from_request_visibility_choices(self) -> None:
         form = PrivacySettingsForm()
         field = form.fields["friend_request_visibility"]
-        assert isinstance(field, django_forms.ChoiceField)
+        assert isinstance(field, django_forms.ChoiceField)  # nosec B101
         request_choice_values = [k for k, _ in field.choices]
         self.assertNotIn(VisibilityChoice.FRIENDS, request_choice_values)
 

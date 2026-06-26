@@ -116,7 +116,7 @@ class PinEffectiveCoordinateTests(TestCase):
         loc = _make_location("Place", lat=Decimal("0"), lon=Decimal("0"))
         pin = _make_pin(latitude=lat, longitude=lon, location=loc)
         result = pin.effective_latitude
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertAlmostEqual(result, float(lat), places=6)
 
     @given(latitude, longitude)
@@ -125,7 +125,7 @@ class PinEffectiveCoordinateTests(TestCase):
         loc = _make_location("Place", lat=Decimal("0"), lon=Decimal("0"))
         pin = _make_pin(latitude=lat, longitude=lon, location=loc)
         result = pin.effective_longitude
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertAlmostEqual(result, float(lon), places=6)
 
     @given(latitude, longitude)
@@ -134,7 +134,7 @@ class PinEffectiveCoordinateTests(TestCase):
         loc = _make_location("Place", lat=lat, lon=lon)
         pin = _make_pin(latitude=None, longitude=None, location=loc)
         result = pin.effective_latitude
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertAlmostEqual(result, float(lat), places=6)
 
     @given(latitude, longitude)
@@ -143,7 +143,7 @@ class PinEffectiveCoordinateTests(TestCase):
         loc = _make_location("Place", lat=lat, lon=lon)
         pin = _make_pin(latitude=None, longitude=None, location=loc)
         result = pin.effective_longitude
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertAlmostEqual(result, float(lon), places=6)
 
     def test_effective_latitude_is_none_when_no_override_and_no_location(self) -> None:
@@ -168,8 +168,8 @@ class PinEffectiveCoordinateTests(TestCase):
         pin = _make_pin(latitude=pin_lat, longitude=pin_lon, location=loc)
         eff_lat = pin.effective_latitude
         eff_lon = pin.effective_longitude
-        assert eff_lat is not None
-        assert eff_lon is not None
+        assert eff_lat is not None  # nosec B101
+        assert eff_lon is not None  # nosec B101
         self.assertAlmostEqual(eff_lat, float(pin_lat), places=6)
         self.assertAlmostEqual(eff_lon, float(pin_lon), places=6)
 
@@ -237,7 +237,7 @@ class PinEffectiveDateLastActiveTests(TestCase):
     def test_inferred_date_difference_is_exactly_one_day(self, abandoned: date) -> None:
         pin = _make_pin(date_last_active=None, date_abandoned=abandoned)
         inferred = pin.effective_date_last_active
-        assert inferred is not None
+        assert inferred is not None  # nosec B101
         self.assertEqual((abandoned - inferred).days, 1)
 
 

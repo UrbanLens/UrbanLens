@@ -95,7 +95,7 @@ class GetMapCenterCustomModeTests(TestCase):
         )
         result = profile.get_map_center()
         self.assertIsNotNone(result)
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertAlmostEqual(result[0], 42.65, places=4)
         self.assertAlmostEqual(result[1], -73.75, places=4)
 
@@ -106,7 +106,7 @@ class GetMapCenterCustomModeTests(TestCase):
             map_custom_longitude=decimal.Decimal("20.000000"),
         )
         result = profile.get_map_center()
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertIsInstance(result[0], float)
         self.assertIsInstance(result[1], float)
 
@@ -142,7 +142,7 @@ class GetMapCenterCustomModeTests(TestCase):
         )
         result = profile.get_map_center()
         self.assertIsNotNone(result)
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertAlmostEqual(result[0], float(lat), places=5)
         self.assertAlmostEqual(result[1], float(lng), places=5)
 
@@ -160,7 +160,7 @@ class GetMapCenterAutoCachedTests(TestCase):
         )
         result = profile.get_map_center()
         self.assertIsNotNone(result)
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertAlmostEqual(result[0], 42.65, places=4)
         self.assertAlmostEqual(result[1], -73.75, places=4)
 
@@ -171,7 +171,7 @@ class GetMapCenterAutoCachedTests(TestCase):
             map_center_longitude=decimal.Decimal("20.000000"),
         )
         result = profile.get_map_center()
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertIsInstance(result[0], float)
         self.assertIsInstance(result[1], float)
 
@@ -207,7 +207,7 @@ class GetMapCenterAutoColdTests(TestCase):
         baker.make(Pin, profile=profile, location=location, latitude=40.0, longitude=-74.0)
         result = profile.get_map_center()
         self.assertIsNotNone(result)
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertAlmostEqual(result[0], 40.0, places=2)
         self.assertAlmostEqual(result[1], -74.0, places=2)
 

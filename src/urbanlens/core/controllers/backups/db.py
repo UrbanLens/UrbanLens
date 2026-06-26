@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 import logging
 import os
-import subprocess
+from pathlib import Path
+from shutil import which
+import subprocess  # nosec B404
 from threading import Lock
 
 from django.core.signals import request_finished
@@ -70,8 +72,12 @@ class DatabaseBackup:
         if not db_user or not db_name:
             raise RuntimeError("Database USER and NAME must be configured for backups.")
 
+        pg_dump = which("pg_dump")
+        if pg_dump is None:
+            raise FileNotFoundError("pg_dump executable not found on PATH")
+
         pg_dump_command = [
-            "pg_dump",
+            str(Path(pg_dump).resolve()),
             "-U",
             db_user,
             "-h",
@@ -84,7 +90,7 @@ class DatabaseBackup:
         ]
 
         try:
-            subprocess.run(pg_dump_command, check=True)
+            subprocess.run(pg_dump_command, check=True)  # nosec B603
             logger.info("Backup completed successfully: %s", backup_filename)
 
             # Update the last backup date
