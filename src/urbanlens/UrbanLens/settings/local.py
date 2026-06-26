@@ -21,6 +21,7 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or get_random_secret_key()
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+# TODO: Change default
 ALLOWED_HOSTS = ['urbanlens.org', 'localhost', 'localhost:21080']
 
 # Application definition
@@ -161,7 +162,7 @@ SECURE_SSL_REDIRECT = not UNSAFE_ALLOW_HTTP
 # Internal container health checks hit /health over HTTP on the app port.
 SECURE_REDIRECT_EXEMPT = [r"^health"]
 
-# http://urbanlens.org, http://urbanlens.com, https://urbanlens.org, https://urbanlens.com, etc
+# TODO: Change domains default
 protocols = ['https://']
 domains = ['urbanlens.org', 'localhost', 'localhost:21080']
 subdomains = ['www.', '']

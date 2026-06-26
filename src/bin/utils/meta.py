@@ -1,20 +1,3 @@
-"""
-
-Metadata:
-
-        File: types.py
-        Project: Urban Lens
-
-        Author: Jess Mann
-        Email: jess@urbanlens.org
-
-
-        Modified By: Jess Mann
-
-        Copyright (c) 2022 UrbanLens
-"""
-
-# Generic imports
 from __future__ import annotations
 
 from enum import Enum

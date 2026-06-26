@@ -1,16 +1,3 @@
-################################################################################
-#                                                                              #
-# Metadata:                                                                    #
-#                                                                              #
-#     File: .prospector.yaml                                                   #
-#     Project: UrbanLens                                                       #
-#     Author: Jess Mann                                                        #
-#     Email: jess@urbanlens.org                                              #
-#                                                                              #
-#     -----                                                                    #
-#                                                                              #
-#     Copyright (c) 2023 UrbanLens                                             #
-################################################################################
 output-format: text
 
 strictness: veryhigh

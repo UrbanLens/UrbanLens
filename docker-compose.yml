@@ -1,15 +1,3 @@
-################################################################################
-#                                                                              #
-# Metadata:                                                                    #
-#                                                                              #
-# 	File: docker-compose.yml                                                   #
-# 	Author: Jess Mann                                                          #
-# 	Email: jess@urbanlens.org                                                  #
-#                                                                              #
-# 	-----                                                                      #
-#                                                                              #
-# 	Copyright (c) 2023 Urban Lens                                              #
-################################################################################
 services:
   app:
     container_name: urbanlens_app

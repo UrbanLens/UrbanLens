@@ -1,23 +1,3 @@
-################################################################################
-#                                                                              #
-# Metadata:                                                                    #
-#                                                                              #
-# 	File: Dockerfile                                                           #
-# 	Project: src                                                               #
-#
-# 	Author: Jess Mann                                                          #
-# 	Email: jess@urbanlens.org                                                    #
-#                                                                              #
-# 	-----                                                                      #
-#                                                                              #
-#
-# 	Modified By: Jess Mann                                                     #
-#                                                                              #
-# 	-----                                                                      #
-#                                                                              #
-# 	Copyright (c) 2023 Urban Lens                                               #
-################################################################################
-
 # Allow future upgrades
 ARG PYTHON_BASE_IMAGE_VERSION=3.12-bookworm
 ARG UL_DATABASE_NAME

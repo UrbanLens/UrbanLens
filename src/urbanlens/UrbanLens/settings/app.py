@@ -51,6 +51,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     root_urlconf : str = Field(default = 'urbanlens.UrbanLens.urls', description = "The root urlconf")
     admin_username : str = Field(default = 'Admin', description = "The username to use for the admin user")
     admin_email : str = Field(default = 'admin@yourdomain.com', description = "The email to use for the admin user")
+    # TODO: Change default
     allowed_hosts : list[str] = Field(default = ['urbanlens.org'], description = "The allowed hosts")
     language_code : str = Field(default = 'en-us', description = "The language code")
     time_zone : str = Field(default = 'EST', description = "The time zone")

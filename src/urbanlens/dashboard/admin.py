@@ -1,18 +1,3 @@
-"""
-Metadata:
-
-        File: admin.py
-        Project: UrbanLens
-
-        Author: Jess Mann
-        Email: jess@urbanlens.org
-
-
-        Modified By: Jess Mann
-
-        Copyright (c) 2023 Urban Lens
-"""
-
 from django.contrib import admin
 from django.http import HttpRequest, HttpResponseRedirect
 from django.urls import reverse

@@ -1,20 +1,3 @@
-"""
-
-Metadata:
-
-        File: exceptions.py
-        Project: Urban Lens
-
-        Author: Jess Mann
-        Email: jess@urbanlens.org
-
-
-        Modified By: Jess Mann
-
-        Copyright (c) 2022 UrbanLens
-"""
-
-
 class AppError(Exception):
     """
     A base exception that all our custom app exceptions extend from.
