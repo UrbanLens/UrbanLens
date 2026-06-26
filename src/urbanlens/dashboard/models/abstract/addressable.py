@@ -135,7 +135,7 @@ class AddressableModel(Model):
             self.cached_place_name = result
             if self.pk:
                 # Use update() to persist without triggering post_save signals
-                self.objects.filter(pk=self.pk).update(cached_place_name=result)
+                self.__class__.objects.filter(pk=self.pk).update(cached_place_name=result)
         return result
 
     def has_place_name(self) -> bool:
