@@ -411,7 +411,12 @@ class SiteAdminPullLatestCodeView(LoginRequiredMixin, PermissionRequiredMixin, V
                 status=403,
             )
 
-        from urbanlens.core.version import get_current_git_commit, pull_latest_git_code
+        from urbanlens.core.version import (
+            apply_pending_migrations,
+            get_current_git_commit,
+            pull_latest_git_code,
+            trigger_development_app_reload,
+        )
 
         before_commit = get_current_git_commit()
         ok, message = pull_latest_git_code()
@@ -421,12 +426,32 @@ class SiteAdminPullLatestCodeView(LoginRequiredMixin, PermissionRequiredMixin, V
             return JsonResponse({"ok": False, "message": message}, status=500)
 
         changed = bool(before_commit and after_commit and before_commit != after_commit)
+        migration_ok = True
+        migration_message = "Database migrations were not needed because the code was already up to date."
+        reload_ok = True
+        reload_message = "Development server reload was not needed because the code was already up to date."
+
+        if changed:
+            migration_ok, migration_message = apply_pending_migrations()
+            if not migration_ok:
+                return JsonResponse({"ok": False, "message": migration_message, "details": message}, status=500)
+
+            reload_ok, reload_message = trigger_development_app_reload()
+            if not reload_ok:
+                return JsonResponse({"ok": False, "message": reload_message, "details": message}, status=500)
+
         return JsonResponse(
             {
                 "ok": True,
                 "changed": changed,
-                "message": "Code updated. Refreshing the site..." if changed else "Code is already up to date.",
+                "message": (
+                    "Code updated, migrations applied, and app reload requested."
+                    if changed
+                    else "Code is already up to date."
+                ),
                 "details": message,
+                "migration_details": migration_message,
+                "reload_details": reload_message,
             },
         )
 
