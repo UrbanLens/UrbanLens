@@ -84,6 +84,12 @@ class StatusCreateView(LoginRequiredMixin, View):
         if not name:
             return HttpResponse("Name is required.", status=400)
 
+        parent_ids = request.POST.getlist("parent_ids")
+        order = int(request.POST.get("order", 0))
+        parent_order = Badge.initial_order_for_parents(profile, parent_ids)
+        if parent_order is not None:
+            order = parent_order
+
         badge = Badge.objects.create(
             kind="status",
             profile=profile,
@@ -91,9 +97,8 @@ class StatusCreateView(LoginRequiredMixin, View):
             description=request.POST.get("description", "").strip() or None,
             icon=request.POST.get("icon") or None,
             color=request.POST.get("color") or None,
-            order=int(request.POST.get("order", 0)),
+            order=order,
         )
-        parent_ids = request.POST.getlist("parent_ids")
         if parent_ids:
             valid_parents = Badge.objects.visible_to(profile).filter(id__in=parent_ids).exclude(id=badge.id)
             badge.parents.set(valid_parents)

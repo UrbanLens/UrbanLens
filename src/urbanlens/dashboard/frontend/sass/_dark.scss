@@ -1293,6 +1293,21 @@
     .priority-order-badge {
         background: var(--ul-grey-1);
         color: var(--ul-grey-7);
+
+        &:hover {
+            background: var(--ul-grey-2);
+            color: var(--ul-accent, #{$primary-color});
+        }
+    }
+
+    .priority-order-input {
+        background: var(--ul-grey-0);
+        color: var(--ul-grey-9);
+    }
+
+    .priority-item--editing-order {
+        border-color: rgba($primary-color, .45);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, .35);
     }
 
     .priority-kind-badge {

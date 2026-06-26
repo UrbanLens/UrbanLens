@@ -113,6 +113,9 @@ class TagCreateView(LoginRequiredMixin, View):
             custom_icon = _resize_custom_icon(custom_icon)
         order = int(request.POST.get("order", 0))
         parent_ids = request.POST.getlist("parent_ids")
+        parent_order = Badge.initial_order_for_parents(profile, parent_ids)
+        if parent_order is not None:
+            order = parent_order
 
         tag = Badge.objects.create(
             kind="tag",

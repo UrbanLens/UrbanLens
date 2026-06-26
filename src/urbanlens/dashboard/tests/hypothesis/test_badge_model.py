@@ -442,3 +442,33 @@ class BadgeGetBadgeAndDescendantsTests(TestCase):
         b = baker.make(Badge, name="s", profile=None, kind=KIND_TAG)
         result = Badge.get_badge_and_descendants(b.pk)
         self.assertIsInstance(result, set)
+
+
+# ── Badge.initial_order_for_parents ───────────────────────────────────────────
+
+class BadgeInitialOrderForParentsTests(TestCase):
+    """initial_order_for_parents() derives order from selected parent badges."""
+
+    def setUp(self) -> None:
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+
+    def test_returns_none_without_parent_ids(self) -> None:
+        self.assertIsNone(Badge.initial_order_for_parents(self.profile, []))
+
+    def test_returns_none_when_parents_not_visible(self) -> None:
+        other = baker.make("auth.User")
+        hidden = baker.make(Badge, name="hidden", profile=other.profile, kind=KIND_TAG, order=50)
+        self.assertIsNone(Badge.initial_order_for_parents(self.profile, [hidden.pk]))
+
+    def test_single_parent_order_minus_one(self) -> None:
+        parent = baker.make(Badge, name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
+        self.assertEqual(Badge.initial_order_for_parents(self.profile, [parent.pk]), 19)
+
+    def test_multiple_parents_uses_lowest_order(self) -> None:
+        hospital = baker.make(Badge, name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
+        pennsylvania = baker.make(Badge, name="Pennsylvania", profile=self.profile, kind=KIND_TAG, order=35)
+        self.assertEqual(
+            Badge.initial_order_for_parents(self.profile, [hospital.pk, pennsylvania.pk]),
+            19,
+        )

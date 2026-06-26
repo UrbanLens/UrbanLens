@@ -13,6 +13,7 @@ from django.db.models import (
     Index,
     IntegerField,
     ManyToManyField,
+    Min,
     TextField,
 )
 
@@ -113,6 +114,40 @@ class Badge(abstract.Model):
         """True if this user has explicitly set an icon override (bypasses custom_icon)."""
         c = self._get_customization()
         return c is not None and c.icon is not None
+
+    @classmethod
+    def initial_order_for_parents(
+        cls,
+        profile: Profile,
+        parent_ids: list[str] | list[int],
+    ) -> int | None:
+        """Return ``order`` for a new badge placed just above its highest-priority parent.
+
+        When parents are chosen at creation time, the new badge is placed immediately
+        above the highest-priority parent among them. When multiple parents are
+        selected, the parent with the smallest ``order`` value is used (e.g.
+        Hospital at order 20 rather than Pennsylvania at order 35). The new badge
+        receives that parent's ``order`` minus one (20 → 19).
+
+        Args:
+            profile: Owner profile used to resolve visible parent badges.
+            parent_ids: Primary keys of selected parent badges.
+
+        Returns:
+            Computed order, or ``None`` when ``parent_ids`` is empty or no valid
+            parents are found (callers should keep the default creation order).
+        """
+        if not parent_ids:
+            return None
+        result = (
+            cls.objects.visible_to(profile)
+            .filter(id__in=parent_ids)
+            .aggregate(reference_order=Min("order"))
+        )
+        reference_order = result["reference_order"]
+        if reference_order is None:
+            return None
+        return reference_order - 1
 
     @classmethod
     def get_badge_and_descendants(cls, badge_id: int) -> set[int]:

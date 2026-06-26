@@ -435,7 +435,7 @@
                     <i class="material-icons">edit</i>
                 </button>
                 {% endif %}
-                <span class="priority-order-badge">{{ forloop.counter }}</span>
+                <button type="button" class="priority-order-badge" title="Change position">{{ forloop.counter }}</button>
             </div>
             {% empty %}
             <div class="tag-empty">
@@ -883,7 +883,7 @@
         {
             id: 'drag-priority', icon: 'drag_indicator', target: '#priority-list .priority-drag-handle, #priority-list',
             eyebrow: 'Reorder visually', title: 'Drag important labels upward',
-            body: 'Put high-signal labels like access status, hazards, or key categories near the top so the map stays readable at a glance.',
+            body: 'Put more specific labels near the top, and less specific labels near the bottom, so the map stays readable at a glance.',
             button: 'Open Priority', action: function () { document.querySelector('[data-tab="priority"]')?.click(); document.getElementById('priority-list')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
             ready: function () { return !!document.getElementById('priority-list'); },
         },
@@ -2650,10 +2650,25 @@ window._orgBulkSync = function(n, opts) {
 <script>
 (function() {
     var _prioritySortable = null;
+    var _priorityOrderEditing = null;
+
+    function _priorityOrderBadge(item) {
+        return item.querySelector('button.priority-order-badge');
+    }
+
+    function _createPriorityOrderBadge(value) {
+        var badge = document.createElement('button');
+        badge.type = 'button';
+        badge.className = 'priority-order-badge';
+        badge.title = 'Change position';
+        badge.textContent = value;
+        return badge;
+    }
 
     function _savePriorityOrder(list) {
         var items = Array.from(list.querySelectorAll('.priority-item[data-id]')).map(function(el, i) {
-            el.querySelector('.priority-order-badge').textContent = i + 1;
+            var badge = _priorityOrderBadge(el);
+            if (badge) badge.textContent = i + 1;
             return { id: parseInt(el.dataset.id, 10) };
         });
         return fetch('{% url "organize.priority.save" %}', {
@@ -2666,18 +2681,108 @@ window._orgBulkSync = function(n, opts) {
         }).catch(function(err) { toastr.error('Save failed: ' + err.message); });
     }
 
+    function _finishPriorityOrderEdit(commit) {
+        if (!_priorityOrderEditing) return;
+        var edit = _priorityOrderEditing;
+        _priorityOrderEditing = null;
+        edit.item.classList.remove('priority-item--editing-order');
+
+        if (!commit) {
+            edit.input.replaceWith(_createPriorityOrderBadge(edit.originalValue));
+            return;
+        }
+
+        var list = edit.list;
+        var total = list.querySelectorAll('.priority-item[data-id]').length;
+        var newPos = parseInt(edit.input.value, 10);
+        if (isNaN(newPos)) {
+            edit.input.replaceWith(_createPriorityOrderBadge(edit.originalValue));
+            return;
+        }
+        newPos = Math.max(1, Math.min(total, newPos));
+
+        var items = Array.from(list.querySelectorAll('.priority-item[data-id]'));
+        var currentIdx = items.indexOf(edit.item);
+        var targetIdx = newPos - 1;
+
+        if (currentIdx === targetIdx) {
+            edit.input.replaceWith(_createPriorityOrderBadge(edit.originalValue));
+            return;
+        }
+
+        edit.item.remove();
+        var remaining = Array.from(list.querySelectorAll('.priority-item[data-id]'));
+        if (targetIdx >= remaining.length) list.appendChild(edit.item);
+        else list.insertBefore(edit.item, remaining[targetIdx]);
+
+        edit.input.replaceWith(_createPriorityOrderBadge(newPos));
+        _savePriorityOrder(list);
+    }
+
+    function _beginPriorityOrderEdit(badge) {
+        if (_priorityOrderEditing) _finishPriorityOrderEdit(false);
+        var item = badge.closest('.priority-item');
+        var list = document.getElementById('priority-list');
+        if (!item || !list) return;
+
+        var originalValue = parseInt(badge.textContent, 10);
+        var total = list.querySelectorAll('.priority-item[data-id]').length;
+        var input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'priority-order-badge priority-order-input';
+        input.min = 1;
+        input.max = total;
+        input.value = originalValue;
+        input.setAttribute('aria-label', 'Position in list');
+        input.inputMode = 'numeric';
+
+        badge.replaceWith(input);
+        item.classList.add('priority-item--editing-order');
+        _priorityOrderEditing = { item: item, input: input, originalValue: originalValue, list: list, cancelled: false };
+
+        input.focus();
+        input.select();
+
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                _finishPriorityOrderEdit(true);
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (_priorityOrderEditing) _priorityOrderEditing.cancelled = true;
+                _finishPriorityOrderEdit(false);
+            }
+        });
+
+        input.addEventListener('blur', function() {
+            setTimeout(function() {
+                if (!_priorityOrderEditing || _priorityOrderEditing.input !== input) return;
+                if (_priorityOrderEditing.cancelled) return;
+                _finishPriorityOrderEdit(true);
+            }, 0);
+        });
+    }
+
     function _initPrioritySortable() {
         var list = document.getElementById('priority-list');
         if (!list) return;
         if (_prioritySortable) { _prioritySortable.destroy(); _prioritySortable = null; }
         _prioritySortable = new Sortable(list, {
             animation: 150,
+            handle: '.priority-drag-handle',
             ghostClass: 'priority-item--ghost',
             onEnd: function() { _savePriorityOrder(list); },
         });
     }
 
     document.getElementById('priority-list').addEventListener('click', function(e) {
+        var badge = e.target.closest('.priority-order-badge');
+        if (badge) {
+            e.preventDefault();
+            _beginPriorityOrderEdit(badge);
+            return;
+        }
         var btn = e.target.closest('[data-priority-jump]'); if (!btn) return;
         var item = btn.closest('.priority-item'); var list = document.getElementById('priority-list');
         if (!item || !list) return;

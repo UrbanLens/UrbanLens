@@ -1676,12 +1676,8 @@ dialog.tag-create-card.ul-dialog {
     border: 1px solid var(--ul-grey-0b);
     border-radius: $radius-md;
     padding: .6rem .85rem;
-    cursor: grab;
+    cursor: default;
     transition: box-shadow .12s, background .12s;
-
-    &:active {
-        cursor: grabbing;
-    }
 
     &:hover {
         box-shadow: 0 2px 8px rgba(0, 0, 0, .07);
@@ -1699,6 +1695,11 @@ dialog.tag-create-card.ul-dialog {
     display: flex;
     align-items: center;
     flex-shrink: 0;
+    cursor: grab;
+
+    &:active {
+        cursor: grabbing;
+    }
 
     i {
         font-size: 1.2rem;
@@ -1783,6 +1784,8 @@ dialog.tag-create-card.ul-dialog {
 .priority-order-badge {
     font-size: .78rem;
     font-weight: 600;
+    font-family: inherit;
+    line-height: 1.45;
     color: $text-secondary;
     background: var(--ul-grey-4);
     border: 1px solid var(--ul-border);
@@ -1790,6 +1793,48 @@ dialog.tag-create-card.ul-dialog {
     padding: 1px 9px;
     min-width: 32px;
     text-align: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
+
+    &:hover {
+        background: var(--ul-grey-3);
+        border-color: rgba($primary-color, .45);
+        color: $primary-color;
+    }
+
+    &:focus-visible {
+        outline: 2px solid $primary-color;
+        outline-offset: 2px;
+    }
+}
+
+.priority-order-input {
+    width: 3.25rem;
+    padding: 1px 6px;
+    color: $text-primary;
+    background: var(--ul-grey-0);
+    border: 2px solid $primary-color;
+    box-shadow: 0 0 0 3px rgba($primary-color, .14);
+    cursor: text;
+    -moz-appearance: textfield;
+
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    &:hover {
+        background: var(--ul-grey-0);
+        color: $text-primary;
+    }
+}
+
+.priority-item--editing-order {
+    cursor: default;
+    border-color: rgba($primary-color, .35);
+    box-shadow: 0 2px 12px rgba($primary-color, .12);
 }
 
 .priority-save-row {

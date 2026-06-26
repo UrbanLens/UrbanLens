@@ -94,6 +94,9 @@ class CategoryCreateView(LoginRequiredMixin, View):
         color = request.POST.get("color") or None
         order = int(request.POST.get("order", 0))
         parent_ids = request.POST.getlist("parent_ids")
+        parent_order = Badge.initial_order_for_parents(profile, parent_ids)
+        if parent_order is not None:
+            order = parent_order
 
         category = Badge.objects.create(
             kind="category",
