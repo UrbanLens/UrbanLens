@@ -435,7 +435,15 @@
                     <i class="material-icons">edit</i>
                 </button>
                 {% endif %}
-                <button type="button" class="priority-order-badge" title="Change position">{{ forloop.counter }}</button>
+                <div class="priority-order-editor">
+                    <button type="button" class="priority-order-badge" title="Change position">{{ forloop.counter }}</button>
+                    <input type="number" class="priority-order-input" aria-hidden="true" tabindex="-1"
+                           aria-label="Position in list" inputmode="numeric">
+                    <button type="button" class="priority-order-save" aria-hidden="true" tabindex="-1"
+                            aria-label="Save position">
+                        <i class="material-icons" aria-hidden="true">check</i>
+                    </button>
+                </div>
             </div>
             {% empty %}
             <div class="tag-empty">
@@ -2653,19 +2661,40 @@ window._orgBulkSync = function(n, opts) {
     var _priorityOrderEditing = null;
 
     function _priorityOrderBadge(item) {
-        return item.querySelector('button.priority-order-badge');
+        var editor = item.querySelector('.priority-order-editor');
+        return editor ? editor.querySelector('.priority-order-badge') : null;
     }
 
-    function _createPriorityOrderBadge(value) {
-        var badge = document.createElement('button');
-        badge.type = 'button';
-        badge.className = 'priority-order-badge';
-        badge.title = 'Change position';
-        badge.textContent = value;
-        return badge;
+    function _flashPriorityOrderSaved(item) {
+        item.classList.remove('priority-item--order-saved');
+        void item.offsetWidth;
+        item.classList.add('priority-item--order-saved');
+        var badge = _priorityOrderBadge(item);
+        if (badge) {
+            badge.classList.remove('priority-order-badge--flash');
+            void badge.offsetWidth;
+            badge.classList.add('priority-order-badge--flash');
+        }
+        window.setTimeout(function() {
+            item.classList.remove('priority-item--order-saved');
+        }, 650);
     }
 
-    function _savePriorityOrder(list) {
+    function _closeOrderEditor(restoreValue) {
+        if (!_priorityOrderEditing) return;
+        var edit = _priorityOrderEditing;
+        _priorityOrderEditing = null;
+        edit.item.classList.remove('priority-item--editing-order');
+        edit.editor.classList.remove('is-editing');
+        edit.badge.textContent = restoreValue;
+        edit.input.value = restoreValue;
+        edit.input.setAttribute('aria-hidden', 'true');
+        edit.input.tabIndex = -1;
+        edit.saveBtn.setAttribute('aria-hidden', 'true');
+        edit.saveBtn.tabIndex = -1;
+    }
+
+    function _savePriorityOrder(list, flashItem) {
         var items = Array.from(list.querySelectorAll('.priority-item[data-id]')).map(function(el, i) {
             var badge = _priorityOrderBadge(el);
             if (badge) badge.textContent = i + 1;
@@ -2677,26 +2706,20 @@ window._orgBulkSync = function(n, opts) {
             body: JSON.stringify({ items: items }),
         }).then(function(r) {
             if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); });
+            if (flashItem) _flashPriorityOrderSaved(flashItem);
             toastr.success('Priority order saved.');
         }).catch(function(err) { toastr.error('Save failed: ' + err.message); });
     }
 
-    function _finishPriorityOrderEdit(commit) {
+    function _commitOrderEditor() {
         if (!_priorityOrderEditing) return;
         var edit = _priorityOrderEditing;
-        _priorityOrderEditing = null;
-        edit.item.classList.remove('priority-item--editing-order');
-
-        if (!commit) {
-            edit.input.replaceWith(_createPriorityOrderBadge(edit.originalValue));
-            return;
-        }
-
         var list = edit.list;
         var total = list.querySelectorAll('.priority-item[data-id]').length;
         var newPos = parseInt(edit.input.value, 10);
+
         if (isNaN(newPos)) {
-            edit.input.replaceWith(_createPriorityOrderBadge(edit.originalValue));
+            _closeOrderEditor(edit.originalValue);
             return;
         }
         newPos = Math.max(1, Math.min(total, newPos));
@@ -2705,63 +2728,92 @@ window._orgBulkSync = function(n, opts) {
         var currentIdx = items.indexOf(edit.item);
         var targetIdx = newPos - 1;
 
-        if (currentIdx === targetIdx) {
-            edit.input.replaceWith(_createPriorityOrderBadge(edit.originalValue));
-            return;
-        }
+        _closeOrderEditor(newPos);
+
+        if (currentIdx === targetIdx) return;
 
         edit.item.remove();
         var remaining = Array.from(list.querySelectorAll('.priority-item[data-id]'));
         if (targetIdx >= remaining.length) list.appendChild(edit.item);
         else list.insertBefore(edit.item, remaining[targetIdx]);
 
-        edit.input.replaceWith(_createPriorityOrderBadge(newPos));
-        _savePriorityOrder(list);
+        _savePriorityOrder(list, edit.item);
+    }
+
+    function _cancelOrderEditor() {
+        if (!_priorityOrderEditing) return;
+        _closeOrderEditor(_priorityOrderEditing.originalValue);
     }
 
     function _beginPriorityOrderEdit(badge) {
-        if (_priorityOrderEditing) _finishPriorityOrderEdit(false);
+        if (_priorityOrderEditing) {
+            if (_priorityOrderEditing.badge === badge) return;
+            _cancelOrderEditor();
+        }
+
+        var editor = badge.closest('.priority-order-editor');
         var item = badge.closest('.priority-item');
         var list = document.getElementById('priority-list');
-        if (!item || !list) return;
+        if (!editor || !item || !list) return;
 
+        var input = editor.querySelector('.priority-order-input');
+        var saveBtn = editor.querySelector('.priority-order-save');
         var originalValue = parseInt(badge.textContent, 10);
         var total = list.querySelectorAll('.priority-item[data-id]').length;
-        var input = document.createElement('input');
-        input.type = 'number';
-        input.className = 'priority-order-badge priority-order-input';
+
         input.min = 1;
         input.max = total;
         input.value = originalValue;
-        input.setAttribute('aria-label', 'Position in list');
-        input.inputMode = 'numeric';
+        input.removeAttribute('aria-hidden');
+        input.tabIndex = 0;
+        saveBtn.removeAttribute('aria-hidden');
+        saveBtn.tabIndex = 0;
 
-        badge.replaceWith(input);
+        editor.classList.add('is-editing');
         item.classList.add('priority-item--editing-order');
-        _priorityOrderEditing = { item: item, input: input, originalValue: originalValue, list: list, cancelled: false };
+        _priorityOrderEditing = {
+            item: item,
+            editor: editor,
+            badge: badge,
+            input: input,
+            saveBtn: saveBtn,
+            originalValue: originalValue,
+            list: list,
+            cancelled: false,
+        };
 
-        input.focus();
-        input.select();
+        window.requestAnimationFrame(function() {
+            input.focus();
+            input.select();
+        });
 
-        input.addEventListener('keydown', function(e) {
+        input.onkeydown = function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                _finishPriorityOrderEdit(true);
+                _commitOrderEditor();
             } else if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopPropagation();
                 if (_priorityOrderEditing) _priorityOrderEditing.cancelled = true;
-                _finishPriorityOrderEdit(false);
+                _cancelOrderEditor();
             }
-        });
+        };
 
-        input.addEventListener('blur', function() {
-            setTimeout(function() {
+        input.onblur = function() {
+            window.setTimeout(function() {
                 if (!_priorityOrderEditing || _priorityOrderEditing.input !== input) return;
                 if (_priorityOrderEditing.cancelled) return;
-                _finishPriorityOrderEdit(true);
+                var active = document.activeElement;
+                if (active === saveBtn || saveBtn.contains(active)) return;
+                _commitOrderEditor();
             }, 0);
-        });
+        };
+
+        saveBtn.onpointerdown = function(e) { e.preventDefault(); };
+        saveBtn.onclick = function(e) {
+            e.preventDefault();
+            _commitOrderEditor();
+        };
     }
 
     function _initPrioritySortable() {
@@ -2772,7 +2824,7 @@ window._orgBulkSync = function(n, opts) {
             animation: 150,
             handle: '.priority-drag-handle',
             ghostClass: 'priority-item--ghost',
-            onEnd: function() { _savePriorityOrder(list); },
+            onEnd: function() { _savePriorityOrder(list, null); },
         });
     }
 
@@ -2788,7 +2840,7 @@ window._orgBulkSync = function(n, opts) {
         if (!item || !list) return;
         if (btn.dataset.priorityJump === 'top') list.insertBefore(item, list.firstElementChild);
         else list.appendChild(item);
-        _savePriorityOrder(list);
+        _savePriorityOrder(list, item);
     });
 
     window._initPrioritySortable = _initPrioritySortable;

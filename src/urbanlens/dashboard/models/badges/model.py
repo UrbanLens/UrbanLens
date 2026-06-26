@@ -41,15 +41,6 @@ class Badge(abstract.Model):
     of the former PinList model: they carry an icon, custom icon, color, description,
     and ordering weight that feeds into Pin.effective_icon's priority chain.
     """
-
-    # NULL = global tag visible to all users; non-null = owned by one user.
-    profile = ForeignKey(
-        "dashboard.Profile",
-        on_delete=CASCADE,
-        null=True,
-        blank=True,
-        related_name="custom_tags",
-    )
     name = CharField(max_length=255)
     description = TextField(null=True, blank=True)
     # Hex color string chosen from COLOR_CHOICES (e.g. "#2196F3").
@@ -62,6 +53,15 @@ class Badge(abstract.Model):
     order = IntegerField(default=0)
     # Protected badges (e.g. the built-in "Visited" status) cannot be deleted or renamed.
     is_protected = BooleanField(default=False)
+    # NULL = global tag visible to all users; non-null = owned by one user.
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="custom_tags",
+    )
+    
     # Hierarchical parents - symmetrical=False so parent→child is one direction.
     parents: ManyToManyField[Badge, Badge] = ManyToManyField(
         "self",

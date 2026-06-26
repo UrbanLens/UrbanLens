@@ -1296,13 +1296,18 @@
 
         &:hover {
             background: var(--ul-grey-2);
-            color: var(--ul-accent, #{$primary-color});
+            color: var(--ul-accent);
         }
     }
 
     .priority-order-input {
         background: var(--ul-grey-0);
-        color: var(--ul-grey-9);
+        color: var(--ul-text);
+    }
+
+    .priority-order-save {
+        background: var(--ul-grey-1);
+        color: var(--ul-accent);
     }
 
     .priority-item--editing-order {

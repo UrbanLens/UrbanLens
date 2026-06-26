@@ -1781,43 +1781,92 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
+.priority-order-editor {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    height: 1.65rem;
+    max-width: 2.75rem;
+    overflow: hidden;
+    transition: max-width .22s cubic-bezier(.4, 0, .2, 1);
+
+    &.is-editing {
+        max-width: 5.75rem;
+    }
+}
+
 .priority-order-badge {
     font-size: .78rem;
     font-weight: 600;
     font-family: inherit;
     line-height: 1.45;
-    color: $text-secondary;
+    color: var(--ul-grey-7);
     background: var(--ul-grey-4);
     border: 1px solid var(--ul-border);
     border-radius: 20px;
     padding: 1px 9px;
-    min-width: 32px;
+    min-width: 2rem;
+    width: 2.25rem;
+    box-sizing: border-box;
     text-align: center;
     cursor: pointer;
     flex-shrink: 0;
-    transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
+    transition: opacity .18s ease, transform .18s ease, background .12s, border-color .12s, color .12s, box-shadow .12s;
 
     &:hover {
         background: var(--ul-grey-3);
         border-color: rgba($primary-color, .45);
-        color: $primary-color;
+        color: var(--ul-accent);
     }
 
     &:focus-visible {
         outline: 2px solid $primary-color;
         outline-offset: 2px;
     }
+
+    .priority-order-editor.is-editing & {
+        opacity: 0;
+        transform: scale(.88);
+        pointer-events: none;
+        position: absolute;
+        inset: 0 auto auto 0;
+        visibility: hidden;
+    }
+
+    &.priority-order-badge--flash {
+        animation: priority-order-badge-flash .55s ease-out;
+    }
 }
 
 .priority-order-input {
-    width: 3.25rem;
-    padding: 1px 6px;
-    color: $text-primary;
+    width: 0;
+    min-width: 0;
+    max-width: 0;
+    box-sizing: border-box;
+    font-size: .78rem;
+    font-weight: 600;
+    font-family: inherit;
+    line-height: 1.45;
+    padding: 0;
+    color: var(--ul-text);
+    -webkit-text-fill-color: var(--ul-text);
+    caret-color: var(--ul-text);
     background: var(--ul-grey-0);
-    border: 2px solid $primary-color;
-    box-shadow: 0 0 0 3px rgba($primary-color, .14);
+    border: 0 solid var(--ul-accent);
+    border-radius: 20px;
+    box-shadow: none;
+    text-align: center;
+    flex-shrink: 0;
     cursor: text;
+    opacity: 0;
+    transform: scale(.88);
+    pointer-events: none;
+    overflow: hidden;
     -moz-appearance: textfield;
+    transition: opacity .18s ease, transform .18s ease, width .22s ease, min-width .22s ease, max-width .22s ease, padding .22s ease, border-width .22s ease, box-shadow .18s ease;
 
     &::-webkit-outer-spin-button,
     &::-webkit-inner-spin-button {
@@ -1825,9 +1874,62 @@ dialog.tag-create-card.ul-dialog {
         margin: 0;
     }
 
+    .priority-order-editor.is-editing & {
+        width: 2.35rem;
+        min-width: 2.35rem;
+        max-width: 2.35rem;
+        padding: 1px 4px;
+        border-width: 2px;
+        box-shadow: 0 0 0 3px var(--ul-color-accent-ring);
+        opacity: 1;
+        transform: scale(1);
+        pointer-events: auto;
+    }
+}
+
+.priority-order-save {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 0;
+    min-width: 0;
+    height: 1.65rem;
+    padding: 0;
+    border: 0 solid var(--ul-border);
+    border-radius: 50%;
+    background: var(--ul-grey-4);
+    color: var(--ul-accent);
+    cursor: pointer;
+    flex-shrink: 0;
+    opacity: 0;
+    transform: scale(.75);
+    pointer-events: none;
+    overflow: hidden;
+    transition: opacity .18s ease .04s, transform .18s ease .04s, width .22s ease .04s, min-width .22s ease .04s, border-width .22s ease .04s, background .12s, color .12s;
+
+    .material-icons {
+        font-size: .95rem;
+        pointer-events: none;
+    }
+
     &:hover {
-        background: var(--ul-grey-0);
-        color: $text-primary;
+        background: var(--ul-color-accent-bg);
+        border-color: var(--ul-accent);
+        color: var(--ul-color-accent-fg);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--ul-accent);
+        outline-offset: 2px;
+    }
+
+    .priority-order-editor.is-editing & {
+        width: 1.65rem;
+        min-width: 1.65rem;
+        border-width: 1px;
+        opacity: 1;
+        transform: scale(1);
+        pointer-events: auto;
     }
 }
 
@@ -1835,6 +1937,39 @@ dialog.tag-create-card.ul-dialog {
     cursor: default;
     border-color: rgba($primary-color, .35);
     box-shadow: 0 2px 12px rgba($primary-color, .12);
+}
+
+.priority-item--order-saved {
+    animation: priority-order-row-saved .6s ease-out;
+}
+
+@keyframes priority-order-row-saved {
+    0% {
+        background-color: var(--ul-color-accent-bg);
+        border-color: var(--ul-accent);
+    }
+
+    100% {
+        background-color: var(--ul-grey-0);
+        border-color: var(--ul-grey-0b);
+    }
+}
+
+@keyframes priority-order-badge-flash {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 var(--ul-color-accent-ring);
+    }
+
+    35% {
+        transform: scale(1.08);
+        box-shadow: 0 0 0 4px var(--ul-color-accent-ring);
+    }
+
+    100% {
+        transform: scale(1);
+        box-shadow: none;
+    }
 }
 
 .priority-save-row {
