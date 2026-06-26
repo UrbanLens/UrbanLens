@@ -1,0 +1,56 @@
+{% load dashboard_tags %}
+{# Shared organize badge row/card template for tags, categories, statuses, and people labels. #}
+<div class="tag-card" id="{{ kind }}-card-{{ badge.id }}" data-id="{{ badge.id }}" data-kind="{{ kind }}"
+     {% if kind == 'tag' %}data-tag-id="{{ badge.id }}" data-tag-name="{{ badge.effective_name }}" data-tag-color="{{ badge.effective_color|default:'' }}" data-tag-icon="{{ badge.effective_icon|default:'' }}" data-tag-custom-icon="{% if badge.custom_icon %}{{ badge.custom_icon.url }}{% endif %}" data-tag-desc="{{ badge.description|default:'' }}" data-tag-pin-count="{{ badge.pin_count }}" data-tag-parents="{% for p in badge.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}"{% endif %}
+     {% if kind == 'category' %}data-category-id="{{ badge.id }}" data-category-name="{{ badge.name }}" data-category-color="{{ badge.color|default:'' }}" data-category-icon="{{ badge.icon|default:'' }}" data-category-desc="{{ badge.description|default:'' }}" data-category-pin-count="{{ badge.pin_count }}" data-category-location-count="{{ badge.location_count }}" data-category-parents="{% for p in badge.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}"{% endif %}
+     {% if kind == 'status' %}data-status-id="{{ badge.id }}" data-status-name="{{ badge.name }}" data-status-color="{{ badge.color|default:'' }}" data-status-icon="{{ badge.icon|default:'' }}" data-status-pin-count="{{ badge.pin_count }}" data-status-protected="{{ badge.is_protected|yesno:'true,false' }}" data-status-parents="{% for p in badge.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}"{% endif %}
+     {% if kind == 'people' %}data-people-id="{{ badge.id }}" data-people-name="{{ badge.name }}" data-people-color="{{ badge.color|default:'' }}" data-people-icon="{{ badge.icon|default:'' }}" data-people-pin-count="0" data-people-parents="{% for p in badge.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}"{% endif %}>
+    <div class="tag-card-view ul-section" id="{{ kind }}-view-{{ badge.id }}">
+        {% if selectable %}
+        <label class="cat-select-wrap" title="Select">
+            <input type="checkbox" class="{{ select_class }}" data-{{ select_data_name }}-id="{{ badge.id }}" data-id="{{ badge.id }}" data-name="{{ badge.name }}">
+            <span class="cat-select-check"></span>
+        </label>
+        {% endif %}
+
+        <div class="tag-card-icon" {% if display_color %}style="background:{{ display_color }}22; border-color:{{ display_color }}44;"{% endif %}>
+            {% if badge.custom_icon and kind == 'tag' and not badge.icon_is_overridden %}
+                <img src="{{ badge.custom_icon.url }}" alt="" class="tag-icon-img">
+            {% elif display_icon %}
+                {% if display_icon|is_material_icon %}<i class="material-icons tag-icon-std" {% if display_color %}style="color:{{ display_color }}"{% endif %}>{{ display_icon }}</i>{% else %}<span class="tag-icon-emoji">{{ display_icon }}</span>{% endif %}
+            {% else %}
+                <i class="material-icons tag-icon-std tag-icon-empty">{{ empty_icon }}</i>
+            {% endif %}
+        </div>
+
+        <div class="tag-card-body">
+            <div class="tag-card-name">
+                {{ display_name }}
+                {% if kind == 'tag' and not badge.profile %}<span class="tag-global-badge" data-tooltip="Shared tag managed site-wide. You can customize how it looks on your pins without changing it for others." data-tooltip-pos="below">global</span>{% endif %}
+                {% if kind == 'tag' and badge.is_customized %}<span class="tag-customized-badge" data-tooltip="You changed this tag's icon, color, or name for your own pins only." data-tooltip-pos="below">custom</span>{% endif %}
+                {% if kind == 'status' and badge.is_protected %}<span class="tag-global-badge tag-global-badge--protected" title="This status cannot be deleted or renamed" aria-label="Protected – cannot be deleted or renamed"><i class="material-icons" aria-hidden="true">lock</i></span>{% endif %}
+                {% if kind == 'people' and badge.is_protected %}<span class="tag-global-badge tag-global-badge--protected"><i class="material-icons" aria-hidden="true">lock</i></span>{% endif %}
+                {% if kind == 'people' and not badge.profile %}<span class="tag-global-badge">global</span>{% endif %}
+            </div>
+            {% if badge.description %}<div class="tag-card-desc">{{ badge.description }}</div>{% endif %}
+            <div class="tag-card-meta">
+                {% if kind != 'people' %}<span class="tag-stat" title="Pins"><i class="material-icons">push_pin</i>{{ badge.pin_count }}</span>{% endif %}
+                {% with child_count=badge.children.count %}{% if child_count %}<span class="tag-stat tag-stat--children" title="{{ child_count }} child badges"><i class="material-icons">account_tree</i>{{ child_count }}</span>{% endif %}{% endwith %}
+                {% if kind == 'tag' %}{% with child_count=badge.children.count %}{% if child_count %}<span class="tag-stat tag-stat--total" title="Total pins including sub-tags"><i class="material-icons">functions</i>{{ badge|tag_total_pins }}</span>{% endif %}{% endwith %}{% endif %}
+                {% if display_color %}<span class="tag-color-dot" style="background:{{ display_color }};" title="{{ display_color }}"></span>{% endif %}
+                {% if badge.parents.exists %}<span class="tag-parents-summary"><i class="material-icons" style="font-size:.9rem;">subdirectory_arrow_right</i>{% for parent in badge.parents.all %}{{ parent.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+            </div>
+        </div>
+
+        <div class="tag-card-actions">
+            {% if kind == 'tag' and not badge.profile %}
+                <button type="button" class="btn btn--icon{% if badge.is_customized %} btn-icon--active{% endif %}" title="Customize your display of this global tag" hx-get="{% url 'tag.customize' badge.id %}" hx-target="#tag-edit-dialog-body" hx-swap="innerHTML"><i class="material-icons">tune</i></button>
+                {% if can_edit_global %}<button type="button" class="btn btn--icon btn-icon--global-edit" title="Edit global tag" hx-get="{% url 'tag.edit' badge.id %}" hx-target="#tag-edit-dialog-body" hx-swap="innerHTML"><i class="material-icons">edit</i></button><form hx-post="{{ delete_url }}" hx-target="{{ rows_target }}" hx-swap="innerHTML" hx-confirm="Delete '{{ badge.name }}'? Pins will NOT be deleted." style="display:inline;">{% csrf_token %}<button type="submit" class="btn-icon btn-icon--danger" title="Delete"><i class="material-icons">delete</i></button></form>{% endif %}
+            {% elif editable %}
+                <button type="button" class="btn btn--icon" title="Edit" hx-get="{{ edit_url }}" hx-target="{{ edit_target }}" hx-swap="innerHTML"><i class="material-icons">edit</i></button>
+                {% if merge_url %}<button type="button" class="btn btn--icon" title="Merge" hx-get="{{ merge_url }}" hx-target="{{ edit_target }}" hx-swap="innerHTML"><i class="material-icons">merge</i></button>{% elif kind == 'people' %}<button type="button" class="btn btn--icon" title="Merge" onclick="peopleMergeSingle({{ badge.id }}, '{{ badge.name|escapejs }}')"><i class="material-icons">merge</i></button>{% elif kind == 'status' %}<button type="button" class="btn btn--icon" title="Merge" onclick="organizeSelectForMerge('status', {{ badge.id }})"><i class="material-icons">merge</i></button>{% endif %}
+            {% endif %}
+            {% if deletable %}<form hx-post="{{ delete_url }}" hx-target="{{ rows_target }}" hx-swap="innerHTML" hx-confirm="Delete '{{ badge.name }}'? Pins will NOT be deleted." style="display:inline;">{% csrf_token %}<button type="submit" class="btn-icon btn-icon--danger" title="Delete"><i class="material-icons">delete</i></button></form>{% endif %}
+        </div>
+    </div>
+</div>
