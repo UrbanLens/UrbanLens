@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
-from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser, User
 from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, Q, TextChoices, UniqueConstraint
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+
+if TYPE_CHECKING:
+    from django.contrib.auth.base_user import AbstractBaseUser
 
 
 class SiteFeature(TextChoices):

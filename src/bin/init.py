@@ -25,6 +25,7 @@ def resolve_executable(name: str) -> str:
         raise UnrecoverableError(f"Required executable not found on PATH: {name}")
     return resolved
 
+
 # Resolve from this file's location: src/bin/init.py → src/ → project root
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 SRC_DIR = ROOT_DIR / "src"
