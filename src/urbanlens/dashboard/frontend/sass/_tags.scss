@@ -884,7 +884,8 @@
 // ── Gallery view ──────────────────────────────────────────────────────────────
 #tag-rows.tag-view--gallery,
 #category-rows.tag-view--gallery,
-#status-rows.tag-view--gallery {
+#status-rows.tag-view--gallery,
+#people-badge-rows.tag-view--gallery {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: .75rem;
@@ -967,7 +968,9 @@
 }
 
 #tag-rows.tag-view--tree,
-#category-rows.tag-view--tree {
+#category-rows.tag-view--tree,
+#status-rows.tag-view--tree,
+#people-badge-rows.tag-view--tree {
 
     .tag-drag-handle,
     .tag-order-badge {
