@@ -97,10 +97,10 @@
             </div>
         </div>
 
-        <div class="tag-create-card" id="new-category-form" style="display:none;">
+        <dialog class="tag-create-card ul-dialog" id="new-category-form">
             <form hx-post="{% url 'category.create' %}" hx-target="#category-rows" hx-swap="innerHTML"
                   class="tag-form"
-                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-category-form').style.display='none'; toastr.success('Category created.'); }">
+                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-category-form').close(); toastr.success('Category created.'); }">
                 {% csrf_token %}
                 <div class="tag-form-grid">
                     <div class="form-field">
@@ -158,10 +158,10 @@
                 </div>
                 <div class="tag-form-actions">
                     <button type="submit" class="btn btn--primary">Create</button>
-                    <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-category-form').style.display='none'">Cancel</button>
+                    <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
                 </div>
             </form>
-        </div>
+        </dialog>
 
         <div id="category-rows">
             {% include 'dashboard/partials/category_rows.html' %}
@@ -230,10 +230,10 @@
             </div>
         </div>
 
-        <div class="tag-create-card" id="new-tag-form" style="display:none;">
+        <dialog class="tag-create-card ul-dialog" id="new-tag-form">
             <form hx-post="{% url 'tag.create' %}" hx-target="#tag-rows" hx-swap="innerHTML"
                   enctype="multipart/form-data" class="tag-form"
-                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-tag-form').style.display='none'; toastr.success('Tag created.'); }">
+                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-tag-form').close(); toastr.success('Tag created.'); }">
                 {% csrf_token %}
                 <div class="tag-form-grid">
                     <div class="form-field">
@@ -302,10 +302,10 @@
                 </div>
                 <div class="tag-form-actions">
                     <button type="submit" class="btn btn--primary">Create</button>
-                    <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-tag-form').style.display='none'">Cancel</button>
+                    <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
                 </div>
             </form>
-        </div>
+        </dialog>
 
         <div id="tag-rows">
             {% include 'dashboard/partials/tag_rows.html' %}
@@ -369,10 +369,10 @@
             </div>
         </div>
 
-        <div class="tag-create-card" id="new-status-form" style="display:none;">
+        <dialog class="tag-create-card ul-dialog" id="new-status-form">
             <form hx-post="{% url 'status.create' %}" hx-target="#status-rows" hx-swap="innerHTML"
                   class="tag-form"
-                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-status-form').style.display='none'; toastr.success('Status created.'); }">
+                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-status-form').close(); toastr.success('Status created.'); }">
                 {% csrf_token %}
                 <div class="tag-form-grid">
                     <div class="form-field">
@@ -430,10 +430,10 @@
                 </div>
                 <div class="tag-form-actions">
                     <button type="submit" class="btn btn--primary">Create</button>
-                    <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-status-form').style.display='none'">Cancel</button>
+                    <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
                 </div>
             </form>
-        </div>
+        </dialog>
 
         <div id="status-rows">
             {% include 'dashboard/partials/status_rows.html' %}
@@ -476,6 +476,10 @@
                     <span class="priority-item-name">{{ item.name }}</span>
                     <span class="priority-kind-badge priority-kind-badge--{{ item.kind }}">{{ item.kind }}</span>
                     {% if not item.profile %}<span class="tag-global-badge">global</span>{% endif %}
+                </div>
+                <div class="priority-jump-actions">
+                    <button type="button" class="priority-jump-btn" data-priority-jump="top" title="Send to top"><i class="material-icons">vertical_align_top</i></button>
+                    <button type="button" class="priority-jump-btn" data-priority-jump="bottom" title="Send to bottom"><i class="material-icons">vertical_align_bottom</i></button>
                 </div>
                 {% if item.kind == 'tag' %}
                 <button type="button" class="priority-edit-btn" title="Edit tag"
@@ -1269,6 +1273,9 @@ document.body.addEventListener('htmx:afterSwap', function(e) {
             var panel = document.getElementById('panel-' + target);
             if (panel) panel.hidden = false;
             localStorage.setItem('organize_tab', target);
+            var url = new URL(window.location.href);
+            url.searchParams.set('tab', target);
+            window.history.replaceState({}, '', url.toString());
             if (target === 'priority') {
                 if (window._initPrioritySortable) _initPrioritySortable();
             }
@@ -1471,7 +1478,7 @@ window._orgBulkSync = function(n, opts) {
     }
     document.getElementById('new-tag-btn').addEventListener('click', function() {
         var f = document.getElementById('new-tag-form');
-        if (f.style.display === 'none') { resetNewTagForm(); f.style.display = 'block'; } else { f.style.display = 'none'; }
+        resetNewTagForm(); if (f && !f.open) f.showModal();
     });
 
     // ── View toggle ───────────────────────────────────────────────────────────
@@ -1588,7 +1595,7 @@ window._orgBulkSync = function(n, opts) {
         })
         .then(function(html){
             document.getElementById('tag-merge-dialog').close();
-            document.getElementById('tag-rows').innerHTML=html;
+            var tagRowsEl=document.getElementById('tag-rows'); tagRowsEl.innerHTML=html; if(window.htmx) htmx.process(tagRowsEl);
             _tagMergeTargetId=null; _onTagRowsUpdated(); toastr.success('Tags merged successfully.');
         }).catch(function(err){toastr.error('Merge failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
     });
@@ -1603,7 +1610,7 @@ window._orgBulkSync = function(n, opts) {
             body:JSON.stringify({ids:ids}),
         }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
         .then(function(html){
-            document.getElementById('tag-rows').innerHTML=html; _onTagRowsUpdated();
+            var tagRowsEl=document.getElementById('tag-rows'); tagRowsEl.innerHTML=html; if(window.htmx) htmx.process(tagRowsEl); _onTagRowsUpdated();
             toastr.success(n===1?'1 tag deleted.':n+' tags deleted.');
         }).catch(function(err){toastr.error('Delete failed: '+err.message);});
     }
@@ -1723,7 +1730,7 @@ window._orgBulkSync = function(n, opts) {
                 return r.text();
             }).then(function(html){
                 document.getElementById('tag-bulk-edit-dialog').close();
-                document.getElementById('tag-rows').innerHTML=html; _onTagRowsUpdated();
+                var tagRowsEl=document.getElementById('tag-rows'); tagRowsEl.innerHTML=html; if(window.htmx) htmx.process(tagRowsEl); _onTagRowsUpdated();
                 toastr.success(ids.length===1?'1 tag converted.':ids.length+' tags converted.');
             }).catch(function(err){toastr.error('Convert failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
         } else {
@@ -1738,7 +1745,7 @@ window._orgBulkSync = function(n, opts) {
             }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
             .then(function(html){
                 document.getElementById('tag-bulk-edit-dialog').close();
-                document.getElementById('tag-rows').innerHTML=html; _onTagRowsUpdated(); toastr.success('Tags updated.');
+                var tagRowsEl=document.getElementById('tag-rows'); tagRowsEl.innerHTML=html; if(window.htmx) htmx.process(tagRowsEl); _onTagRowsUpdated(); toastr.success('Tags updated.');
             }).catch(function(err){toastr.error('Edit failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
         }
     });
@@ -1882,7 +1889,7 @@ window._orgBulkSync = function(n, opts) {
     }
     document.getElementById('new-category-btn').addEventListener('click', function() {
         var f=document.getElementById('new-category-form');
-        if(f.style.display==='none'){resetNewCatForm(); f.style.display='block';} else {f.style.display='none';}
+        resetNewCatForm(); if(f && !f.open) f.showModal();
     });
 
     // ── View toggle ───────────────────────────────────────────────────────────
@@ -1996,7 +2003,7 @@ window._orgBulkSync = function(n, opts) {
         })
         .then(function(html){
             document.getElementById('cat-merge-dialog').close();
-            document.getElementById('category-rows').innerHTML=html;
+            var catRowsEl=document.getElementById('category-rows'); catRowsEl.innerHTML=html; if(window.htmx) htmx.process(catRowsEl);
             _catMergeTargetId=null; _onCatRowsUpdated(); toastr.success('Categories merged successfully.');
         }).catch(function(err){toastr.error('Merge failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
     });
@@ -2011,7 +2018,7 @@ window._orgBulkSync = function(n, opts) {
             body:JSON.stringify({ids:ids}),
         }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
         .then(function(html){
-            document.getElementById('category-rows').innerHTML=html; _onCatRowsUpdated();
+            var catRowsEl=document.getElementById('category-rows'); catRowsEl.innerHTML=html; if(window.htmx) htmx.process(catRowsEl); _onCatRowsUpdated();
             toastr.success(n===1?'1 category deleted.':n+' categories deleted.');
         }).catch(function(err){toastr.error('Delete failed: '+err.message);});
     }
@@ -2113,7 +2120,7 @@ window._orgBulkSync = function(n, opts) {
                 return r.text();
             }).then(function(html){
                 document.getElementById('cat-bulk-edit-dialog').close();
-                document.getElementById('category-rows').innerHTML=html; _onCatRowsUpdated();
+                var catRowsEl=document.getElementById('category-rows'); catRowsEl.innerHTML=html; if(window.htmx) htmx.process(catRowsEl); _onCatRowsUpdated();
                 toastr.success(ids.length===1?'1 category converted.':ids.length+' categories converted.');
             }).catch(function(err){toastr.error('Convert failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
         } else {
@@ -2128,7 +2135,7 @@ window._orgBulkSync = function(n, opts) {
             }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
             .then(function(html){
                 document.getElementById('cat-bulk-edit-dialog').close();
-                document.getElementById('category-rows').innerHTML=html; _onCatRowsUpdated(); toastr.success('Categories updated.');
+                var catRowsEl=document.getElementById('category-rows'); catRowsEl.innerHTML=html; if(window.htmx) htmx.process(catRowsEl); _onCatRowsUpdated(); toastr.success('Categories updated.');
             }).catch(function(err){toastr.error('Edit failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
         }
     });
@@ -2159,7 +2166,7 @@ window._orgBulkSync = function(n, opts) {
     var newStatusForm = document.getElementById('new-status-form');
     if (newStatusBtn && newStatusForm) {
         newStatusBtn.addEventListener('click', function() {
-            newStatusForm.style.display = newStatusForm.style.display === 'none' ? '' : 'none';
+            if (!newStatusForm.open) newStatusForm.showModal();
         });
     }
 
@@ -2333,7 +2340,7 @@ window._orgBulkSync = function(n, opts) {
         })
         .then(function(html) {
             document.getElementById('status-merge-dialog').close();
-            document.getElementById('status-rows').innerHTML = html;
+            var statusRowsEl=document.getElementById('status-rows'); statusRowsEl.innerHTML = html; if(window.htmx) htmx.process(statusRowsEl);
             _statusMergeTargetId = null; _statusSelected.clear(); _lastStatusClickIdx = -1; _syncStatusSelBar();
             applyOrgFilter('status');
             toastr.success('Statuses merged successfully.');
@@ -2406,6 +2413,21 @@ window._orgBulkSync = function(n, opts) {
 (function() {
     var _prioritySortable = null;
 
+    function _savePriorityOrder(list) {
+        var items = Array.from(list.querySelectorAll('.priority-item[data-id]')).map(function(el, i) {
+            el.querySelector('.priority-order-badge').textContent = i + 1;
+            return { id: parseInt(el.dataset.id, 10) };
+        });
+        return fetch('{% url "organize.priority.save" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({ items: items }),
+        }).then(function(r) {
+            if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); });
+            toastr.success('Priority order saved.');
+        }).catch(function(err) { toastr.error('Save failed: ' + err.message); });
+    }
+
     function _initPrioritySortable() {
         var list = document.getElementById('priority-list');
         if (!list) return;
@@ -2413,22 +2435,18 @@ window._orgBulkSync = function(n, opts) {
         _prioritySortable = new Sortable(list, {
             animation: 150,
             ghostClass: 'priority-item--ghost',
-            onEnd: function() {
-                var items = Array.from(list.querySelectorAll('.priority-item[data-id]')).map(function(el, i) {
-                    el.querySelector('.priority-order-badge').textContent = i + 1;
-                    return { id: parseInt(el.dataset.id, 10) };
-                });
-                fetch('{% url "organize.priority.save" %}', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-                    body: JSON.stringify({ items: items }),
-                }).then(function(r) {
-                    if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); });
-                    toastr.success('Priority order saved.');
-                }).catch(function(err) { toastr.error('Save failed: ' + err.message); });
-            },
+            onEnd: function() { _savePriorityOrder(list); },
         });
     }
+
+    document.getElementById('priority-list').addEventListener('click', function(e) {
+        var btn = e.target.closest('[data-priority-jump]'); if (!btn) return;
+        var item = btn.closest('.priority-item'); var list = document.getElementById('priority-list');
+        if (!item || !list) return;
+        if (btn.dataset.priorityJump === 'top') list.insertBefore(item, list.firstElementChild);
+        else list.appendChild(item);
+        _savePriorityOrder(list);
+    });
 
     window._initPrioritySortable = _initPrioritySortable;
 
@@ -2457,8 +2475,8 @@ window._orgBulkSync = function(n, opts) {
         var bar = document.getElementById('org-bulk-bar');
         var cnt = document.getElementById('org-bulk-count');
         if (!bar) return;
-        if (n === 0) { bar.classList.remove('active'); bar.dataset.scope = ''; return; }
-        bar.classList.add('active');
+        if (n === 0) { window._orgBulkClear(); return; }
+        bar.classList.add('visible');
         bar.dataset.scope = 'people';
         cnt.textContent = n + ' label' + (n === 1 ? '' : 's') + ' selected';
         window._orgBulk = {
@@ -2467,6 +2485,7 @@ window._orgBulkSync = function(n, opts) {
             merge: function () { _openPeopleMergeDialog(); },
             del: function () { if (confirm('Delete ' + _peopleSelected.size + ' label(s)?')) _bulkDeletePeople(); },
         };
+        _orgBulkSync(n, { hasEdit: n === 1, hasMerge: true, hasDel: true });
     }
 
     function _applyPeopleCheck() {
@@ -2476,12 +2495,13 @@ window._orgBulkSync = function(n, opts) {
         });
     }
 
-    document.querySelectorAll('.people-sel-cb').forEach(function (cb) {
-        cb.addEventListener('change', function () {
-            var id = parseInt(this.dataset.id, 10);
-            if (this.checked) _peopleSelected.add(id); else _peopleSelected.delete(id);
-            _syncPeopleSelBar();
-        });
+    var peopleRows = document.getElementById('people-badge-rows');
+    if (peopleRows) peopleRows.addEventListener('change', function (e) {
+        var cb = e.target.closest('.people-sel-cb');
+        if (!cb) return;
+        var id = parseInt(cb.dataset.id, 10);
+        if (cb.checked) _peopleSelected.add(id); else _peopleSelected.delete(id);
+        _syncPeopleSelBar();
     });
 
     var peopleSelAllBtn = document.getElementById('people-sel-all');
@@ -2576,7 +2596,7 @@ window._orgBulkSync = function(n, opts) {
             }).then(function (r) { if (!r.ok) return r.text().then(function (t) { throw new Error(t || r.statusText); }); return r.text(); })
             .then(function (html) {
                 document.getElementById('people-merge-dialog').close();
-                document.getElementById('people-badge-rows').innerHTML = html;
+                var peopleRowsEl=document.getElementById('people-badge-rows'); peopleRowsEl.innerHTML = html; if(window.htmx) htmx.process(peopleRowsEl);
                 _peopleSelected.clear(); _peopleMergeTargetId = null; _syncPeopleSelBar();
                 toastr.success('Labels merged.');
             }).catch(function (err) { toastr.error('Merge failed: ' + err.message); btn.disabled = false; btn.innerHTML = saved; });

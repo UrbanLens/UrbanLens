@@ -10,6 +10,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from django.db.models import Case, IntegerField, Value, When
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -24,6 +25,16 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+
+def _selected_parents_first(queryset, parent_ids):
+    return queryset.annotate(
+        _selected_parent=Case(
+            When(id__in=parent_ids, then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        ),
+    ).order_by("_selected_parent", "-order", "name", "id")
 
 _CTX_BASE = {
     "icon_choices": ICON_CHOICES,
@@ -116,8 +127,11 @@ class CategoryEditView(LoginRequiredMixin, View):
         """
         profile = request.user.profile
         category = get_object_or_404(Badge, id=cat_id, kind="category", profile=profile)
-        available_parents = Badge.objects.visible_to(profile).ordered().exclude(id=cat_id)
         parent_ids = set(category.parents.values_list("id", flat=True))
+        available_parents = _selected_parents_first(
+            Badge.objects.visible_to(profile).exclude(id=cat_id),
+            parent_ids,
+        )
         return render(
             request,
             "dashboard/partials/category_edit_form.html",
@@ -626,8 +640,11 @@ class CategoryCustomizeView(LoginRequiredMixin, View):
         """
         profile = request.user.profile
         category = get_object_or_404(Badge, id=cat_id, kind="category", profile=profile)
-        available_parents = Badge.objects.visible_to(profile).ordered().exclude(id=cat_id)
         parent_ids = set(category.parents.values_list("id", flat=True))
+        available_parents = _selected_parents_first(
+            Badge.objects.visible_to(profile).exclude(id=cat_id),
+            parent_ids,
+        )
         return render(
             request,
             "dashboard/partials/category_edit_form.html",
