@@ -1,13 +1,1 @@
-{% if statuses %}
-{% for badge in statuses %}
-    {% url 'status.edit' badge.id as edit_url %}
-    {% url 'status.delete' badge.id as delete_url %}
-    {% if badge.is_protected %}
-        {% include 'dashboard/partials/_organize_badge_card.html' with kind='status' display_name=badge.name display_icon=badge.icon display_color=badge.color empty_icon='flag' selectable=True select_class='status-select-cb' select_data_name='status' editable=True deletable=False edit_url=edit_url edit_target='#status-edit-dialog-body' delete_url=delete_url rows_target='#status-rows' %}
-    {% else %}
-        {% include 'dashboard/partials/_organize_badge_card.html' with kind='status' display_name=badge.name display_icon=badge.icon display_color=badge.color empty_icon='flag' selectable=True select_class='status-select-cb' select_data_name='status' editable=True deletable=True edit_url=edit_url edit_target='#status-edit-dialog-body' delete_url=delete_url rows_target='#status-rows' %}
-    {% endif %}
-{% endfor %}
-{% else %}
-<div class="tag-empty"><i class="material-icons">flag_circle</i><p>No status labels yet. Create one to get started.</p></div>
-{% endif %}
+{% include 'dashboard/partials/organize_badge_rows.html' with badges=statuses kind='status' empty_icon='flag' empty_message='No status labels yet. Create one to get started.' edit_url_name='status.edit' merge_url_name='status.merge' delete_url_name='status.delete' select_class='status-select-cb' select_data_name='status' selectable=True editable=True deletable=True edit_target='#status-edit-dialog-body' rows_target='#status-rows' %}

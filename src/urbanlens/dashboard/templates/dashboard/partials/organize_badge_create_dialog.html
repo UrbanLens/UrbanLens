@@ -1,0 +1,58 @@
+{% load dashboard_tags %}
+<dialog class="tag-create-card ul-dialog" id="{{ form_id }}">
+    <form hx-post="{% url create_url_name %}" hx-target="{{ rows_target }}" hx-swap="innerHTML"
+          {% if allow_custom_icon %}enctype="multipart/form-data"{% endif %} class="tag-form"
+          hx-on::after-request="if(event.detail.successful){ document.getElementById('{{ form_id }}').close(); toastr.success('{{ singular_title }} created.'); }">
+        {% csrf_token %}
+        <div class="tag-form-grid">
+            <div class="form-field">
+                <label class="form-label" for="new-{{ ns }}-name">{{ singular_title }} name</label>
+                <input id="new-{{ ns }}-name" name="name" type="text" class="form-input" placeholder="{{ name_placeholder }}" required>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="new-{{ ns }}-order">Order (higher = higher priority)</label>
+                <input id="new-{{ ns }}-order" name="order" type="number" class="form-input" value="0">
+            </div>
+        </div>
+        <div class="form-field">
+            <label class="form-label" for="new-{{ ns }}-desc">Description (optional)</label>
+            <textarea id="new-{{ ns }}-desc" name="description" class="form-input" rows="2" placeholder="{{ desc_placeholder }}"></textarea>
+        </div>
+        <div class="tag-icon-color-row">
+            <div class="form-field">
+                <label class="form-label">Icon</label>
+                <div class="icon-picker-wrap">
+                    {% with picker_id='new-'|add:ns current_icon='' field_name='icon' %}{% include 'dashboard/partials/_icon_picker.html' %}{% endwith %}
+                </div>
+                {% if allow_custom_icon %}
+                <div class="icon-custom-upload-area" style="margin-top:8px;">
+                    <img id="new-{{ ns }}-custom-preview" class="icon-custom-preview-thumb" style="display:none" alt="">
+                    <label class="icon-custom-upload-btn" title="Upload a custom image icon"><i class="material-icons">upload</i> Upload custom
+                        <input type="file" name="custom_icon" id="new-{{ ns }}-custom-input" accept="image/*" style="display:none" onchange="showBadgeCustomPreview(this,'new-{{ ns }}-custom-preview')">
+                    </label>
+                </div>
+                {% endif %}
+            </div>
+            <div class="form-field">
+                <label class="form-label">Color</label>
+                <div class="color-picker" id="new-{{ ns }}-color-picker">
+                    <input type="hidden" name="color" id="new-{{ ns }}-color-value">
+                    {% for hex, label in color_choices %}
+                    <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};" onclick="pickColor('new-{{ ns }}-color-picker','new-{{ ns }}-color-value','{{ hex }}',this)"></button>
+                    {% endfor %}
+                    <button type="button" class="color-swatch color-clear" title="No color" onclick="pickColor('new-{{ ns }}-color-picker','new-{{ ns }}-color-value','',this)"><i class="material-icons" style="font-size:1rem;">block</i></button>
+                </div>
+            </div>
+        </div>
+        <div class="form-field">
+            <label class="form-label">Parent badges (optional)</label>
+            <input type="text" class="form-input tag-parent-search" placeholder="Search badges…" oninput="filterParentOptions(this,'parent-select-new-{{ ns }}')" autocomplete="off">
+            <div class="tag-parent-select" id="parent-select-new-{{ ns }}">
+                {% for b in parent_items %}
+                <label class="tag-parent-option"><input type="checkbox" name="parent_ids" value="{{ b.id }}">{% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %} {{ b.name }} <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span></label>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="tag-form-actions"><button type="submit" class="btn btn--primary">Create</button><button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button></div>
+    </form>
+</dialog>

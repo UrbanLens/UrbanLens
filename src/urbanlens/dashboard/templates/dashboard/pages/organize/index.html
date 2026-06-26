@@ -63,317 +63,13 @@
     </div>
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# CATEGORIES PANEL                                                          #}
+    {# BADGE PANELS: tags, categories, and statuses share one Badge template.     #}
     {# ══════════════════════════════════════════════════════════════════════════ #}
-    <div class="organize-panel tag-page" id="panel-categories" role="tabpanel"
-         {% if active_tab != 'categories' %}hidden{% endif %}>
+    {% include 'dashboard/partials/organize_badge_panel.html' with tab='categories' ns='cat' form_id='new-category-form' filter_ns='cat' kind='category' singular_title='Category' plural_lower='categories' badges=categories rows_id='category-rows' rows_target='#category-rows' create_url_name='category.create' edit_url_name='category.edit' merge_url_name='category.merge' delete_url_name='category.delete' select_class='cat-select-cb' select_data_name='cat' edit_target='#category-edit-dialog-body' empty_icon='category' name_placeholder='e.g. Hospital' desc_placeholder='What type of place is this?' empty_message='No categories yet. Create one to start organizing your pins and locations.' parent_items=priority_items selectable=True editable=True deletable=True %}
 
-        <div id="cat-filter-bar" class="org-filter-bar">
-            <input type="search" id="cat-filter-search" class="org-filter-search" placeholder="Search categories…" oninput="applyOrgFilter('cat')" autocomplete="off">
-            <div class="org-filter-chips">
-                <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">image</i> Has icon</button>
-                <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">hide_image</i> No icon</button>
-                <button type="button" class="org-filter-chip" data-filter="has-children" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">account_tree</i> Has children</button>
-                <button type="button" class="org-filter-chip" data-filter="has-parents" onclick="toggleOrgChip(this,'cat')"><i class="material-icons">call_merge</i> Has parents</button>
-                <div class="org-filter-color-row">
-                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color" data-mutex="no-color"
-                            title="Show only items with a color" onclick="toggleOrgChip(this,'cat')">
-                        <i class="material-icons">palette</i>
-                    </button>
-                    {% for hex, label in color_choices %}
-                    <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
-                            style="background:{{ hex }};" onclick="toggleOrgChip(this,'cat')"></button>
-                    {% endfor %}
-                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color" data-mutex="has-color"
-                            title="Show only items without a color" onclick="toggleOrgChip(this,'cat')">
-                        <i class="material-icons">block</i>
-                    </button>
-                </div>
-                <button type="button" class="org-filter-clear" onclick="clearOrgFilter('cat')">✕ Clear</button>
-            </div>
-        </div>
+    {% include 'dashboard/partials/organize_badge_panel.html' with tab='tags' ns='tag' form_id='new-tag-form' filter_ns='tag' kind='tag' singular_title='Tag' plural_lower='tags' badges=tags rows_id='tag-rows' rows_target='#tag-rows' create_url_name='tag.create' edit_url_name='tag.edit' merge_url_name='tag.merge' delete_url_name='tag.delete' select_class='tag-select-cb' select_data_name='tag' edit_target='#tag-edit-dialog-body' empty_icon='label' name_placeholder='e.g. Road trip' desc_placeholder='What is this tag for?' empty_message='No tags yet. Create one to start organizing your pins.' allow_custom_icon=True parent_items=priority_items selectable=True editable=True deletable=True %}
 
-        <dialog class="tag-create-card ul-dialog" id="new-category-form">
-            <form hx-post="{% url 'category.create' %}" hx-target="#category-rows" hx-swap="innerHTML"
-                  class="tag-form"
-                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-category-form').close(); toastr.success('Category created.'); }">
-                {% csrf_token %}
-                <div class="tag-form-grid">
-                    <div class="form-field">
-                        <label class="form-label" for="new-cat-name">Category name</label>
-                        <input id="new-cat-name" name="name" type="text" class="form-input" placeholder="e.g. Hospital" required>
-                    </div>
-                    <div class="form-field">
-                        <label class="form-label" for="new-cat-order">Order (higher = higher priority)</label>
-                        <input id="new-cat-order" name="order" type="number" class="form-input" value="0">
-                    </div>
-                </div>
-                <div class="form-field">
-                    <label class="form-label" for="new-cat-desc">Description (optional)</label>
-                    <textarea id="new-cat-desc" name="description" class="form-input" rows="2" placeholder="What type of place is this?"></textarea>
-                </div>
-                <div class="tag-icon-color-row">
-                    <div class="form-field">
-                        <label class="form-label">Icon</label>
-                        <div class="icon-picker-wrap">
-                            {% with picker_id="new-cat" current_icon="" field_name="icon" %}
-                            {% include 'dashboard/partials/_icon_picker.html' %}
-                            {% endwith %}
-                        </div>
-                    </div>
-                    <div class="form-field">
-                        <label class="form-label">Color</label>
-                        <div class="color-picker" id="new-cat-color-picker">
-                            <input type="hidden" name="color" id="new-cat-color-value">
-                            {% for hex, label in color_choices %}
-                            <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
-                                    onclick="pickColor('new-cat-color-picker','new-cat-color-value','{{ hex }}',this)"></button>
-                            {% endfor %}
-                            <button type="button" class="color-swatch color-clear" title="No color"
-                                    onclick="pickColor('new-cat-color-picker','new-cat-color-value','',this)">
-                                <i class="material-icons" style="font-size:1rem;">block</i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-field">
-                    <label class="form-label">Parent badges (optional)</label>
-                    <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
-                           oninput="filterParentOptions(this,'parent-select-new-cat')" autocomplete="off">
-                    <div class="tag-parent-select" id="parent-select-new-cat">
-                        {% for b in priority_items %}
-                        <label class="tag-parent-option">
-                            <input type="checkbox" name="parent_ids" value="{{ b.id }}">
-                            {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
-                            {{ b.name }}
-                            <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
-                <div class="tag-form-actions">
-                    <button type="submit" class="btn btn--primary">Create</button>
-                    <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-                </div>
-            </form>
-        </dialog>
-
-        <div id="category-rows">
-            {% include 'dashboard/partials/category_rows.html' %}
-        </div>
-    </div>{# end #panel-categories #}
-
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# TAGS PANEL                                                                #}
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    <div class="organize-panel tag-page" id="panel-tags" role="tabpanel"
-         {% if active_tab != 'tags' %}hidden{% endif %}>
-
-        <div id="tag-filter-bar" class="org-filter-bar">
-            <input type="search" id="tag-filter-search" class="org-filter-search" placeholder="Search tags…" oninput="applyOrgFilter('tag')" autocomplete="off">
-            <div class="org-filter-chips">
-                <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">image</i> Has icon</button>
-                <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">hide_image</i> No icon</button>
-                <button type="button" class="org-filter-chip" data-filter="has-children" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">account_tree</i> Has children</button>
-                <button type="button" class="org-filter-chip" data-filter="has-parents" onclick="toggleOrgChip(this,'tag')"><i class="material-icons">call_merge</i> Has parents</button>
-                <div class="org-filter-color-row">
-                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color" data-mutex="no-color"
-                            title="Show only items with a color" onclick="toggleOrgChip(this,'tag')">
-                        <i class="material-icons">palette</i>
-                    </button>
-                    {% for hex, label in color_choices %}
-                    <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
-                            style="background:{{ hex }};" onclick="toggleOrgChip(this,'tag')"></button>
-                    {% endfor %}
-                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color" data-mutex="has-color"
-                            title="Show only items without a color" onclick="toggleOrgChip(this,'tag')">
-                        <i class="material-icons">block</i>
-                    </button>
-                </div>
-                <button type="button" class="org-filter-clear" onclick="clearOrgFilter('tag')">✕ Clear</button>
-            </div>
-        </div>
-
-        <dialog class="tag-create-card ul-dialog" id="new-tag-form">
-            <form hx-post="{% url 'tag.create' %}" hx-target="#tag-rows" hx-swap="innerHTML"
-                  enctype="multipart/form-data" class="tag-form"
-                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-tag-form').close(); toastr.success('Tag created.'); }">
-                {% csrf_token %}
-                <div class="tag-form-grid">
-                    <div class="form-field">
-                        <label class="form-label" for="new-tag-name">Tag name</label>
-                        <input id="new-tag-name" name="name" type="text" class="form-input" placeholder="e.g. Road trip" required>
-                    </div>
-                    <div class="form-field">
-                        <label class="form-label" for="new-tag-order">
-                            {% include "dashboard/partials/_tooltip_label.html" with label="Order (higher = higher priority)" help="When a pin has multiple tags, higher-order tags appear first in lists and can win on the map icon." %}
-                        </label>
-                        <input id="new-tag-order" name="order" type="number" class="form-input" value="0">
-                    </div>
-                </div>
-                <div class="form-field">
-                    <label class="form-label" for="new-tag-desc">Description (optional)</label>
-                    <textarea id="new-tag-desc" name="description" class="form-input" rows="2" placeholder="What is this tag for?"></textarea>
-                </div>
-                <div class="tag-icon-color-row">
-                    <div class="form-field">
-                        <label class="form-label">Icon</label>
-                        <div class="icon-picker-wrap">
-                            {% with picker_id="new-tag" current_icon="" field_name="icon" %}
-                            {% include 'dashboard/partials/_icon_picker.html' %}
-                            {% endwith %}
-                        </div>
-                        <div class="icon-custom-upload-area" style="margin-top:8px;">
-                            <img id="new-tag-custom-preview" class="icon-custom-preview-thumb" style="display:none" alt="">
-                            <label class="icon-custom-upload-btn" title="Upload a custom image icon">
-                                <i class="material-icons">upload</i> Upload custom
-                                <input type="file" name="custom_icon" id="new-tag-custom-input" accept="image/*" style="display:none"
-                                       onchange="showTagCustomPreview(this)">
-                            </label>
-                        </div>
-                    </div>
-                    <div class="form-field">
-                        <label class="form-label">Color</label>
-                        <div class="color-picker" id="new-tag-color-picker">
-                            <input type="hidden" name="color" id="new-tag-color-value">
-                            {% for hex, label in color_choices %}
-                            <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
-                                    onclick="pickColor('new-tag-color-picker','new-tag-color-value','{{ hex }}',this)"></button>
-                            {% endfor %}
-                            <button type="button" class="color-swatch color-clear" title="No color"
-                                    onclick="pickColor('new-tag-color-picker','new-tag-color-value','',this)">
-                                <i class="material-icons" style="font-size:1rem;">block</i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-field">
-                    <label class="form-label">
-                        {% include "dashboard/partials/_tooltip_label.html" with label="Parent badges (optional)" help="Child tags inherit organization from parents." wide=True %}
-                    </label>
-                    <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
-                           oninput="filterParentOptions(this,'parent-select-new-tag')" autocomplete="off">
-                    <div class="tag-parent-select" id="parent-select-new-tag">
-                        {% for b in priority_items %}
-                        <label class="tag-parent-option">
-                            <input type="checkbox" name="parent_ids" value="{{ b.id }}">
-                            {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
-                            {{ b.name }}
-                            <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
-                <div class="tag-form-actions">
-                    <button type="submit" class="btn btn--primary">Create</button>
-                    <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-                </div>
-            </form>
-        </dialog>
-
-        <div id="tag-rows">
-            {% include 'dashboard/partials/tag_rows.html' %}
-        </div>
-    </div>{# end #panel-tags #}
-
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# STATUS PANEL                                                              #}
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    <div class="organize-panel tag-page" id="panel-status" role="tabpanel"
-         {% if active_tab != 'status' %}hidden{% endif %}>
-
-        <div id="status-filter-bar" class="org-filter-bar">
-            <input type="search" id="status-filter-search" class="org-filter-search" placeholder="Search statuses…" oninput="applyOrgFilter('status')" autocomplete="off">
-            <div class="org-filter-chips">
-                <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'status')"><i class="material-icons">image</i> Has icon</button>
-                <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'status')"><i class="material-icons">hide_image</i> No icon</button>
-                <div class="org-filter-color-row">
-                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color" data-mutex="no-color"
-                            title="Show only items with a color" onclick="toggleOrgChip(this,'status')">
-                        <i class="material-icons">palette</i>
-                    </button>
-                    {% for hex, label in color_choices %}
-                    <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
-                            style="background:{{ hex }};" onclick="toggleOrgChip(this,'status')"></button>
-                    {% endfor %}
-                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color" data-mutex="has-color"
-                            title="Show only items without a color" onclick="toggleOrgChip(this,'status')">
-                        <i class="material-icons">block</i>
-                    </button>
-                </div>
-                <button type="button" class="org-filter-clear" onclick="clearOrgFilter('status')">✕ Clear</button>
-            </div>
-        </div>
-
-        <dialog class="tag-create-card ul-dialog" id="new-status-form">
-            <form hx-post="{% url 'status.create' %}" hx-target="#status-rows" hx-swap="innerHTML"
-                  class="tag-form"
-                  hx-on::after-request="if(event.detail.successful){ document.getElementById('new-status-form').close(); toastr.success('Status created.'); }">
-                {% csrf_token %}
-                <div class="tag-form-grid">
-                    <div class="form-field">
-                        <label class="form-label" for="new-status-name">Status name</label>
-                        <input id="new-status-name" name="name" type="text" class="form-input" placeholder="e.g. Under renovation" required>
-                    </div>
-                    <div class="form-field">
-                        <label class="form-label" for="new-status-order">Order</label>
-                        <input id="new-status-order" name="order" type="number" class="form-input" value="0">
-                    </div>
-                </div>
-                <div class="form-field">
-                    <label class="form-label" for="new-status-desc">Description (optional)</label>
-                    <textarea id="new-status-desc" name="description" class="form-input" rows="2" placeholder="What does this status mean?"></textarea>
-                </div>
-                <div class="tag-icon-color-row">
-                    <div class="form-field">
-                        <label class="form-label">Icon</label>
-                        <div class="icon-picker-wrap">
-                            {% with picker_id="new-status" current_icon="" field_name="icon" %}
-                            {% include 'dashboard/partials/_icon_picker.html' %}
-                            {% endwith %}
-                        </div>
-                    </div>
-                    <div class="form-field">
-                        <label class="form-label">Color</label>
-                        <div class="color-picker" id="new-status-color-picker">
-                            <input type="hidden" name="color" id="new-status-color-value">
-                            {% for hex, label in color_choices %}
-                            <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
-                                    onclick="pickColor('new-status-color-picker','new-status-color-value','{{ hex }}',this)"></button>
-                            {% endfor %}
-                            <button type="button" class="color-swatch color-clear" title="No color"
-                                    onclick="pickColor('new-status-color-picker','new-status-color-value','',this)">
-                                <i class="material-icons" style="font-size:1rem;">block</i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-field">
-                    <label class="form-label">Parent badges (optional)</label>
-                    <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
-                           oninput="filterParentOptions(this,'parent-select-new-status')" autocomplete="off">
-                    <div class="tag-parent-select" id="parent-select-new-status">
-                        {% for b in priority_items %}
-                        <label class="tag-parent-option">
-                            <input type="checkbox" name="parent_ids" value="{{ b.id }}">
-                            {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
-                            {{ b.name }}
-                            <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
-                <div class="tag-form-actions">
-                    <button type="submit" class="btn btn--primary">Create</button>
-                    <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-                </div>
-            </form>
-        </dialog>
-
-        <div id="status-rows">
-            {% include 'dashboard/partials/status_rows.html' %}
-        </div>
-    </div>{# end #panel-status #}
+    {% include 'dashboard/partials/organize_badge_panel.html' with tab='status' ns='status' form_id='new-status-form' filter_ns='status' kind='status' singular_title='Status' plural_lower='statuses' badges=statuses rows_id='status-rows' rows_target='#status-rows' create_url_name='status.create' edit_url_name='status.edit' merge_url_name='status.merge' delete_url_name='status.delete' select_class='status-select-cb' select_data_name='status' edit_target='#status-edit-dialog-body' empty_icon='flag' name_placeholder='e.g. Under renovation' desc_placeholder='What does this status mean?' empty_message='No status labels yet. Create one to get started.' parent_items=priority_items selectable=True editable=True deletable=True %}
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
     {# PRIORITY PANEL                                                            #}
@@ -447,76 +143,9 @@
     </div>{# end #panel-priority #}
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# PEOPLE PANEL                                                               #}
+    {# PEOPLE PANEL: people labels are Badge(kind='people') too.                 #}
     {# ══════════════════════════════════════════════════════════════════════════ #}
-    <div class="organize-panel tag-page" id="panel-people" role="tabpanel"
-         {% if active_tab != 'people' %}hidden{% endif %}>
-
-        <p class="tag-subtitle organize-panel-intro">Private labels applied to other users. Only visible to you.</p>
-
-        <div id="people-filter-bar" class="org-filter-bar">
-            <input type="search" id="people-filter-search" class="org-filter-search"
-                   placeholder="Search labels…" oninput="applyOrgFilter('people')" autocomplete="off">
-            <div class="org-filter-chips">
-                <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon"
-                        onclick="toggleOrgChip(this,'people')"><i class="material-icons">image</i> Has icon</button>
-                <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon"
-                        onclick="toggleOrgChip(this,'people')"><i class="material-icons">hide_image</i> No icon</button>
-                <div class="org-filter-color-row">
-                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color"
-                            data-mutex="no-color" title="Show only items with a color"
-                            onclick="toggleOrgChip(this,'people')">
-                        <i class="material-icons">palette</i>
-                    </button>
-                    {% for hex, label in color_choices %}
-                    <button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}"
-                            style="background:{{ hex }};" onclick="toggleOrgChip(this,'people')"></button>
-                    {% endfor %}
-                    <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color"
-                            data-mutex="has-color" title="Show only items without a color"
-                            onclick="toggleOrgChip(this,'people')">
-                        <i class="material-icons">block</i>
-                    </button>
-                </div>
-                <button type="button" class="org-filter-clear" onclick="clearOrgFilter('people')">✕ Clear</button>
-            </div>
-        </div>
-
-        <div id="people-badge-rows">
-            {% include "dashboard/partials/people_badge_rows.html" %}
-        </div>
-
-    </div>{# end #panel-people #}
-
-    {# People-badge edit dialog #}
-    <dialog id="people-badge-edit-dialog" class="ul-dialog">
-        {% include "dashboard/partials/_dialog_header.html" with title="Edit Label" title_id="people-badge-edit-dialog-title" %}
-        <div id="people-badge-edit-dialog-body" class="ul-dialog-body"></div>
-    </dialog>
-
-    {# People-badge merge dialog #}
-    <dialog id="people-merge-dialog" class="cat-merge-dialog ul-dialog">
-        {% include "dashboard/partials/_dialog_header.html" with title="Merge Labels" title_id="people-merge-dialog-title" %}
-        <div class="cat-merge-dialog-body">
-            <div class="cat-merge-section">
-                <div class="cat-merge-section-label"><i class="material-icons">check_circle</i> Surviving label</div>
-                <div id="people-merge-target-card" class="cat-merge-target-card"></div>
-            </div>
-            <div class="cat-merge-divider"><i class="material-icons">merge</i><span>Merge these into it</span></div>
-            <div class="cat-merge-section">
-                <div class="cat-merge-section-label"><i class="material-icons">delete_sweep</i> Will be deleted after merge</div>
-                <div id="people-merge-sources-list" class="cat-merge-sources-list"></div>
-            </div>
-            <p class="cat-merge-warning"><i class="material-icons">warning</i>
-               Assignments to the merged labels will transfer to the surviving label. This cannot be undone.</p>
-        </div>
-        <div class="cat-merge-dialog-footer">
-            <button type="button" id="people-merge-confirm-btn" class="btn btn--primary">
-                <i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge
-            </button>
-            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-        </div>
-    </dialog>
+    {% include 'dashboard/partials/organize_badge_panel.html' with tab='people' ns='people' form_id='new-people-form' filter_ns='people' kind='people' singular_title='Label' plural_lower='labels' badges=user_badges parent_items=user_badges rows_id='people-badge-rows' rows_target='#people-badge-rows' create_url_name='people.create' edit_url_name='people.edit' delete_url_name='people.delete' select_class='people-sel-cb' select_data_name='people' edit_target='#people-badge-edit-dialog-body' empty_icon='person' name_placeholder='e.g. Friend, Frequent Explorer' desc_placeholder='Who should this label apply to?' empty_message='No people labels yet. Create one to start organizing people.' selectable=True editable=True deletable=True %}
 
 </div>{# end .organize-page #}
 
@@ -542,330 +171,22 @@
     </button>
 </div>
 
-{# ── Tag edit dialog ──────────────────────────────────────────────────────── #}
-<dialog id="tag-edit-dialog" class="tag-edit-dialog ul-dialog">
-    {% include "dashboard/partials/_dialog_header.html" with title="Edit Tag" title_id="tag-edit-dialog-title" %}
-    <div id="tag-edit-dialog-body" class="tag-edit-dialog-body"></div>
-</dialog>
+{# ── Badge edit dialogs (shared template for tag/category/status) ───────────── #}
+{% include 'dashboard/partials/organize_badge_edit_dialog.html' with dialog_id='tag-edit-dialog' title='Edit Tag' title_id='tag-edit-dialog-title' body_id='tag-edit-dialog-body' %}
+{% include 'dashboard/partials/organize_badge_edit_dialog.html' with dialog_id='category-edit-dialog' title='Edit Category' title_id='category-edit-dialog-title' body_id='category-edit-dialog-body' %}
+{% include 'dashboard/partials/organize_badge_edit_dialog.html' with dialog_id='status-edit-dialog' title='Edit Status' title_id='status-edit-dialog-title' body_id='status-edit-dialog-body' %}
+{% include 'dashboard/partials/organize_badge_edit_dialog.html' with dialog_id='people-badge-edit-dialog' title='Edit Label' title_id='people-badge-edit-dialog-title' body_id='people-badge-edit-dialog-body' %}
 
-{# ── Tag multi-merge dialog ────────────────────────────────────────────────── #}
-<dialog id="tag-merge-dialog" class="cat-merge-dialog ul-dialog">
-    {% include "dashboard/partials/_dialog_header.html" with title="Merge Tags" title_id="tag-merge-dialog-title" %}
-    <div class="cat-merge-dialog-body">
-        <div class="cat-merge-section">
-            <div class="cat-merge-section-label"><i class="material-icons">check_circle</i> Surviving tag</div>
-            <div id="tag-merge-target-card" class="cat-merge-target-card"></div>
-        </div>
-        <div class="cat-merge-edit-section">
-            <div class="cat-merge-edit-row">
-                <div class="form-field" style="flex:1;min-width:0">
-                    <label class="form-label cat-merge-edit-label" for="tag-merge-edit-name">Name</label>
-                    <input type="text" class="form-input" id="tag-merge-edit-name" placeholder="Tag name">
-                </div>
-                <div class="form-field cat-merge-edit-icon-field">
-                    <label class="form-label cat-merge-edit-label">Icon <span class="cat-merge-edit-hint">(emoji or icon name)</span></label>
-                    <div class="cat-merge-edit-icon-wrap">
-                        <div id="tag-merge-edit-icon-preview" class="cat-merge-edit-icon-preview"></div>
-                        <input type="text" class="form-input" id="tag-merge-edit-icon" placeholder="e.g. ⭐ or label" oninput="updateMergeIconPreview('tag')">
-                    </div>
-                </div>
-            </div>
-            <div class="form-field">
-                <label class="form-label cat-merge-edit-label">Color</label>
-                <div class="color-picker cat-merge-color-picker" id="tag-merge-color-picker">
-                    <input type="hidden" id="tag-merge-edit-color">
-                    {% for hex, label in color_choices %}
-                    <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
-                            onclick="pickColor('tag-merge-color-picker','tag-merge-edit-color','{{ hex }}',this); updateMergeIconPreview('tag')"></button>
-                    {% endfor %}
-                    <button type="button" class="color-swatch color-clear" title="No color"
-                            onclick="pickColor('tag-merge-color-picker','tag-merge-edit-color','',this); updateMergeIconPreview('tag')">
-                        <i class="material-icons" style="font-size:.85rem;">block</i>
-                    </button>
-                </div>
-            </div>
-        </div>
-        <div class="cat-merge-divider"><i class="material-icons">merge</i><span>Merge these into it</span></div>
-        <div class="cat-merge-section">
-            <div class="cat-merge-section-label"><i class="material-icons">delete_sweep</i> Will be deleted after merge
-                <span class="cat-merge-hint">- click <i class="material-icons" style="font-size:.85rem;vertical-align:middle">swap_vert</i> to swap</span>
-            </div>
-            <div id="tag-merge-sources-list" class="cat-merge-sources-list"></div>
-        </div>
-        <p class="cat-merge-warning"><i class="material-icons">warning</i> All pins will be transferred to the surviving tag. This cannot be undone.</p>
-    </div>
-    <div class="cat-merge-dialog-footer">
-        <button type="button" id="tag-merge-confirm-btn" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
-        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-    </div>
-</dialog>
+{# ── Badge merge dialogs (shared template for tag/category/status) ──────────── #}
+{% include 'dashboard/partials/organize_badge_merge_dialog.html' with ns='tag' title='Merge Tags' %}
+{% include 'dashboard/partials/organize_badge_merge_dialog.html' with ns='cat' title='Merge Categories' %}
+{% include 'dashboard/partials/organize_badge_merge_dialog.html' with ns='status' title='Merge Statuses' %}
+{% include 'dashboard/partials/organize_badge_merge_dialog.html' with ns='people' title='Merge Labels' %}
 
-{# ── Tag bulk-edit dialog ──────────────────────────────────────────────────── #}
-<dialog id="tag-bulk-edit-dialog" class="cat-bulk-edit-dialog ul-dialog">
-    {% include "dashboard/partials/_dialog_header.html" with title="Edit Tags" title_id="tag-bulk-edit-title" %}
-    <div class="cat-bulk-edit-body">
-        <div class="cat-bulk-field">
-            <label class="form-label">Convert type</label>
-            <div class="org-convert-grid">
-                <button type="button" class="org-convert-btn" id="tag-bulk-convert-to-cat" onclick="_setTagBulkConvert('category')">
-                    <i class="material-icons">category</i>
-                    <span class="org-convert-btn-label">To Categories</span>
-                    <span class="org-convert-btn-desc">Personal labels for organizing by type</span>
-                </button>
-                <button type="button" class="org-convert-btn" id="tag-bulk-convert-to-status" onclick="_setTagBulkConvert('status')">
-                    <i class="material-icons">flag_circle</i>
-                    <span class="org-convert-btn-label">To Statuses</span>
-                    <span class="org-convert-btn-desc">Track pin state (visited, active…)</span>
-                </button>
-            </div>
-            <p class="form-hint" id="tag-bulk-convert-hint" hidden></p>
-        </div>
-        <div id="tag-bulk-main-fields">
-        <div class="cat-bulk-field">
-            <label class="form-label">Icon</label>
-            <div class="icon-picker-wrap" id="tag-bulk-icon-wrap">
-                {% with picker_id="tag-bulk-edit" current_icon="" field_name="bulk_icon" %}
-                {% include 'dashboard/partials/_icon_picker.html' %}
-                {% endwith %}
-            </div>
-            <label class="cat-bulk-nochange-label">
-                <input type="checkbox" id="tag-bulk-icon-nochange" checked>
-                <span>No change - leave icon unchanged</span>
-            </label>
-        </div>
-        <div class="cat-bulk-field">
-            <label class="form-label">Color</label>
-            <div class="color-picker" id="tag-bulk-color-picker">
-                <input type="hidden" id="tag-bulk-color-value">
-                {% for hex, label in color_choices %}
-                <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
-                        onclick="pickColor('tag-bulk-color-picker','tag-bulk-color-value','{{ hex }}',this); document.getElementById('tag-bulk-color-nochange').checked=false; _updateTagBulkState();"></button>
-                {% endfor %}
-                <button type="button" class="color-swatch color-clear" title="No color"
-                        onclick="pickColor('tag-bulk-color-picker','tag-bulk-color-value','',this); document.getElementById('tag-bulk-color-nochange').checked=false; _updateTagBulkState();">
-                    <i class="material-icons" style="font-size:1rem;">block</i>
-                </button>
-            </div>
-            <label class="cat-bulk-nochange-label">
-                <input type="checkbox" id="tag-bulk-color-nochange" checked>
-                <span>No change - leave color unchanged</span>
-            </label>
-        </div>
-        <div class="cat-bulk-field">
-            <label class="form-label">Add parent badges</label>
-            <p class="cat-bulk-parents-hint">Checked badges will be <strong>added</strong> as parents. Existing parents are not removed.</p>
-            <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
-                   oninput="filterParentOptions(this,'tag-bulk-parent-select')" autocomplete="off">
-            <div class="tag-parent-select" id="tag-bulk-parent-select">
-                {% for b in priority_items %}
-                <label class="tag-parent-option">
-                    <input type="checkbox" class="tag-bulk-parent-cb" value="{{ b.id }}">
-                    {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
-                    {{ b.name }}
-                    <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
-                </label>
-                {% endfor %}
-            </div>
-        </div>
-        </div>{# end tag-bulk-main-fields #}
-    </div>
-    <div class="cat-bulk-edit-footer">
-        <button type="button" id="tag-bulk-edit-confirm" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
-        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-    </div>
-</dialog>
+{# ── Badge bulk-edit dialogs use the shared edit field structure. ─────────── #}
+{% include 'dashboard/partials/organize_badge_bulk_edit_dialog.html' with ns='tag' title='Edit Tags' picker_id='tag-bulk-edit' %}
 
-{# ── Category edit dialog ──────────────────────────────────────────────────── #}
-<dialog id="category-edit-dialog" class="tag-edit-dialog ul-dialog">
-    {% include "dashboard/partials/_dialog_header.html" with title="Edit Category" title_id="category-edit-dialog-title" %}
-    <div id="category-edit-dialog-body" class="tag-edit-dialog-body"></div>
-</dialog>
-
-{# ── Status edit dialog ────────────────────────────────────────────────────── #}
-<dialog id="status-edit-dialog" class="tag-edit-dialog ul-dialog">
-    {% include "dashboard/partials/_dialog_header.html" with title="Edit Status" title_id="status-edit-dialog-title" %}
-    <div id="status-edit-dialog-body" class="tag-edit-dialog-body"></div>
-</dialog>
-
-{# ── Category multi-merge dialog ───────────────────────────────────────────── #}
-<dialog id="cat-merge-dialog" class="cat-merge-dialog ul-dialog">
-    {% include "dashboard/partials/_dialog_header.html" with title="Merge Categories" title_id="cat-merge-dialog-title" %}
-    <div class="cat-merge-dialog-body">
-        <div class="cat-merge-section">
-            <div class="cat-merge-section-label"><i class="material-icons">check_circle</i> Surviving category</div>
-            <div id="cat-merge-target-card" class="cat-merge-target-card"></div>
-        </div>
-        <div class="cat-merge-edit-section">
-            <div class="cat-merge-edit-row">
-                <div class="form-field" style="flex:1;min-width:0">
-                    <label class="form-label cat-merge-edit-label" for="cat-merge-edit-name">Name</label>
-                    <input type="text" class="form-input" id="cat-merge-edit-name" placeholder="Category name">
-                </div>
-                <div class="form-field cat-merge-edit-icon-field">
-                    <label class="form-label cat-merge-edit-label">Icon <span class="cat-merge-edit-hint">(emoji or icon name)</span></label>
-                    <div class="cat-merge-edit-icon-wrap">
-                        <div id="cat-merge-edit-icon-preview" class="cat-merge-edit-icon-preview"></div>
-                        <input type="text" class="form-input" id="cat-merge-edit-icon" placeholder="e.g. 🏥 or category" oninput="updateMergeIconPreview('cat')">
-                    </div>
-                </div>
-            </div>
-            <div class="form-field">
-                <label class="form-label cat-merge-edit-label">Color</label>
-                <div class="color-picker cat-merge-color-picker" id="cat-merge-color-picker">
-                    <input type="hidden" id="cat-merge-edit-color">
-                    {% for hex, label in color_choices %}
-                    <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
-                            onclick="pickColor('cat-merge-color-picker','cat-merge-edit-color','{{ hex }}',this); updateMergeIconPreview('cat')"></button>
-                    {% endfor %}
-                    <button type="button" class="color-swatch color-clear" title="No color"
-                            onclick="pickColor('cat-merge-color-picker','cat-merge-edit-color','',this); updateMergeIconPreview('cat')">
-                        <i class="material-icons" style="font-size:.85rem;">block</i>
-                    </button>
-                </div>
-            </div>
-        </div>
-        <div class="cat-merge-divider"><i class="material-icons">merge</i><span>Merge these into it</span></div>
-        <div class="cat-merge-section">
-            <div class="cat-merge-section-label"><i class="material-icons">delete_sweep</i> Will be deleted after merge
-                <span class="cat-merge-hint">- click <i class="material-icons" style="font-size:.85rem;vertical-align:middle">swap_vert</i> to swap</span>
-            </div>
-            <div id="cat-merge-sources-list" class="cat-merge-sources-list"></div>
-        </div>
-        <p class="cat-merge-warning"><i class="material-icons">warning</i> All pins and locations will be transferred to the surviving category. This cannot be undone.</p>
-    </div>
-    <div class="cat-merge-dialog-footer">
-        <button type="button" id="cat-merge-confirm-btn" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
-        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-    </div>
-</dialog>
-
-{# ── Category bulk-edit dialog ─────────────────────────────────────────────── #}
-<dialog id="cat-bulk-edit-dialog" class="cat-bulk-edit-dialog ul-dialog">
-    {% include "dashboard/partials/_dialog_header.html" with title="Edit Categories" title_id="cat-bulk-edit-title" %}
-    <div class="cat-bulk-edit-body">
-        <div class="cat-bulk-field">
-            <label class="form-label">Convert type</label>
-            <div class="org-convert-grid">
-                <button type="button" class="org-convert-btn" id="cat-bulk-convert-to-tag" onclick="_setCatBulkConvert('tag')">
-                    <i class="material-icons">label</i>
-                    <span class="org-convert-btn-label">To Tags</span>
-                    <span class="org-convert-btn-desc">Personal labels on your pins</span>
-                </button>
-                <button type="button" class="org-convert-btn" id="cat-bulk-convert-to-status" onclick="_setCatBulkConvert('status')">
-                    <i class="material-icons">flag_circle</i>
-                    <span class="org-convert-btn-label">To Statuses</span>
-                    <span class="org-convert-btn-desc">Track pin state (visited, active…)</span>
-                </button>
-            </div>
-            <p class="form-hint" id="cat-bulk-convert-hint" hidden></p>
-        </div>
-        <div id="cat-bulk-main-fields">
-        <div class="cat-bulk-field">
-            <label class="form-label">Icon</label>
-            <div class="icon-picker-wrap" id="cat-bulk-icon-wrap">
-                {% with picker_id="cat-bulk-edit" current_icon="" field_name="bulk_icon" %}
-                {% include 'dashboard/partials/_icon_picker.html' %}
-                {% endwith %}
-            </div>
-            <label class="cat-bulk-nochange-label">
-                <input type="checkbox" id="cat-bulk-icon-nochange" checked>
-                <span>No change - leave icon unchanged</span>
-            </label>
-        </div>
-        <div class="cat-bulk-field">
-            <label class="form-label">Color</label>
-            <div class="color-picker" id="cat-bulk-color-picker">
-                <input type="hidden" id="cat-bulk-color-value">
-                {% for hex, label in color_choices %}
-                <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
-                        onclick="pickColor('cat-bulk-color-picker','cat-bulk-color-value','{{ hex }}',this); document.getElementById('cat-bulk-color-nochange').checked=false; _updateCatBulkState();"></button>
-                {% endfor %}
-                <button type="button" class="color-swatch color-clear" title="No color"
-                        onclick="pickColor('cat-bulk-color-picker','cat-bulk-color-value','',this); document.getElementById('cat-bulk-color-nochange').checked=false; _updateCatBulkState();">
-                    <i class="material-icons" style="font-size:1rem;">block</i>
-                </button>
-            </div>
-            <label class="cat-bulk-nochange-label">
-                <input type="checkbox" id="cat-bulk-color-nochange" checked>
-                <span>No change - leave color unchanged</span>
-            </label>
-        </div>
-        <div class="cat-bulk-field">
-            <label class="form-label">Add parent badges</label>
-            <p class="cat-bulk-parents-hint">Checked badges will be <strong>added</strong> as parents. Existing parents are not removed.</p>
-            <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
-                   oninput="filterParentOptions(this,'cat-bulk-parent-select')" autocomplete="off">
-            <div class="tag-parent-select" id="cat-bulk-parent-select">
-                {% for b in priority_items %}
-                <label class="tag-parent-option">
-                    <input type="checkbox" class="cat-bulk-parent-cb" value="{{ b.id }}">
-                    {% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %}
-                    {{ b.name }}
-                    <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
-                </label>
-                {% endfor %}
-            </div>
-        </div>
-        </div>{# end cat-bulk-main-fields #}
-    </div>
-    <div class="cat-bulk-edit-footer">
-        <button type="button" id="cat-bulk-edit-confirm" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
-        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-    </div>
-</dialog>
-
-{# ── Status multi-merge dialog ─────────────────────────────────────────────── #}
-<dialog id="status-merge-dialog" class="cat-merge-dialog ul-dialog">
-    {% include "dashboard/partials/_dialog_header.html" with title="Merge Statuses" title_id="status-merge-dialog-title" %}
-    <div class="cat-merge-dialog-body">
-        <div class="cat-merge-section">
-            <div class="cat-merge-section-label"><i class="material-icons">check_circle</i> Surviving status</div>
-            <div id="status-merge-target-card" class="cat-merge-target-card"></div>
-        </div>
-        <div class="cat-merge-edit-section" id="status-merge-edit-section">
-            <div class="cat-merge-edit-row">
-                <div class="form-field" style="flex:1;min-width:0">
-                    <label class="form-label cat-merge-edit-label" for="status-merge-edit-name">Name</label>
-                    <input type="text" class="form-input" id="status-merge-edit-name" placeholder="Status name">
-                </div>
-                <div class="form-field cat-merge-edit-icon-field">
-                    <label class="form-label cat-merge-edit-label">Icon <span class="cat-merge-edit-hint">(emoji or icon name)</span></label>
-                    <div class="cat-merge-edit-icon-wrap">
-                        <div id="status-merge-edit-icon-preview" class="cat-merge-edit-icon-preview"></div>
-                        <input type="text" class="form-input" id="status-merge-edit-icon" placeholder="e.g. ✅ or flag" oninput="updateMergeIconPreview('status')">
-                    </div>
-                </div>
-            </div>
-            <div class="form-field">
-                <label class="form-label cat-merge-edit-label">Color</label>
-                <div class="color-picker cat-merge-color-picker" id="status-merge-color-picker">
-                    <input type="hidden" id="status-merge-edit-color">
-                    {% for hex, label in color_choices %}
-                    <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};"
-                            onclick="pickColor('status-merge-color-picker','status-merge-edit-color','{{ hex }}',this); updateMergeIconPreview('status')"></button>
-                    {% endfor %}
-                    <button type="button" class="color-swatch color-clear" title="No color"
-                            onclick="pickColor('status-merge-color-picker','status-merge-edit-color','',this); updateMergeIconPreview('status')">
-                        <i class="material-icons" style="font-size:.85rem;">block</i>
-                    </button>
-                </div>
-            </div>
-        </div>
-        <div class="cat-merge-divider"><i class="material-icons">merge</i><span>Merge these into it</span></div>
-        <div class="cat-merge-section">
-            <div class="cat-merge-section-label"><i class="material-icons">delete_sweep</i> Will be deleted after merge
-                <span id="status-merge-swap-hint" class="cat-merge-hint">- click <i class="material-icons" style="font-size:.85rem;vertical-align:middle">swap_vert</i> to swap</span>
-            </div>
-            <div id="status-merge-sources-list" class="cat-merge-sources-list"></div>
-        </div>
-        <p class="cat-merge-warning"><i class="material-icons">warning</i> All pin status assignments will be transferred to the surviving status. This cannot be undone.</p>
-    </div>
-    <div class="cat-merge-dialog-footer">
-        <button type="button" id="status-merge-confirm-btn" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">merge</i> Merge</button>
-        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-    </div>
-</dialog>
-
+{% include 'dashboard/partials/organize_badge_bulk_edit_dialog.html' with ns='cat' title='Edit Categories' picker_id='cat-bulk-edit' %}
 
 <script>
 (function initOrganizeOnboarding() {
@@ -1105,6 +426,15 @@ var _mergeEditUrlTpl = {
     status: '{% url "status.edit" 99999 %}'
 };
 function _mergeEditUrl(ns, id) { return _mergeEditUrlTpl[ns].replace('99999', id); }
+
+function showBadgeCustomPreview(input, previewId) {
+    if (!input.files || !input.files[0]) return;
+    var preview = document.getElementById(previewId);
+    if (!preview) return;
+    var reader = new FileReader();
+    reader.onload = function(e) { preview.src = e.target.result; preview.style.display = 'block'; };
+    reader.readAsDataURL(input.files[0]);
+}
 
 function showTagCustomPreview(input) {
     if (!input.files || !input.files[0]) return;
@@ -1847,11 +1177,11 @@ window._orgBulkSync = function(n, opts) {
         if (hint) {
             hint.hidden = !converting;
             if (converting) hint.textContent = _tagBulkConvertTarget === 'category'
-                ? 'All pin memberships will be migrated. Parent links will be cleared. You will be redirected to the categories tab.'
-                : 'All pin memberships will be migrated. Parent links will be cleared. You will be redirected to the status tab.';
+                ? 'All pin memberships will be migrated. Selected parent links will be added after conversion. You will be redirected to the categories tab.'
+                : 'All pin memberships will be migrated. Selected parent links will be added after conversion. You will be redirected to the status tab.';
         }
         var mainFields = document.getElementById('tag-bulk-main-fields');
-        if (mainFields) { mainFields.style.opacity = converting ? '0.4' : ''; mainFields.style.pointerEvents = converting ? 'none' : ''; }
+        if (mainFields) { mainFields.style.opacity = ''; mainFields.style.pointerEvents = ''; }
         var btn = document.getElementById('tag-bulk-edit-confirm');
         if (btn && !btn.disabled) btn.innerHTML = converting
             ? '<i class="material-icons" style="font-size:1rem;vertical-align:middle">swap_horiz</i> Convert to ' + (_tagBulkConvertTarget === 'category' ? 'Categories' : 'Statuses')
@@ -1897,6 +1227,7 @@ window._orgBulkSync = function(n, opts) {
             cnn.checked=false; if(cv) cv.value=sc;
             if (sc&&cp2) { var sw=cp2.querySelector('[data-color="'+sc+'"]'); if(sw) sw.classList.add('selected'); }
         } else { cnn.checked=true; if(cv) cv.value=''; }
+        document.getElementById('tag-bulk-order-nochange').checked=true; document.getElementById('tag-bulk-order-value').value='0'; document.getElementById('tag-bulk-description-nochange').checked=true; document.getElementById('tag-bulk-description-value').value='';
         document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb').forEach(function(cb){cb.checked=false;});
         _tagBulkConvertTarget = null;
         document.querySelectorAll('#tag-bulk-edit-dialog .org-convert-btn').forEach(function(b){b.classList.remove('active');});
@@ -1924,15 +1255,23 @@ window._orgBulkSync = function(n, opts) {
     document.getElementById('icon-grid-tag-bulk-edit').addEventListener('click', function(e) {
         if (e.target.closest('.icon-picker-item')) { document.getElementById('tag-bulk-icon-nochange').checked=false; _updateTagBulkState(); }
     });
+    ['tag-bulk-order-value','tag-bulk-description-value'].forEach(function(id){ var el=document.getElementById(id); if(el) el.addEventListener('input', function(){ document.getElementById(id.replace('-value','-nochange')).checked=false; }); });
     document.getElementById('tag-bulk-edit-confirm').addEventListener('click', function() {
         var ids = Array.from(_tagSelected).map(function(id){return parseInt(id,10);});
         var converting = !!_tagBulkConvertTarget;
         var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> '+(converting?'Converting…':'Saving…');
+        var body = {ids:ids};
+        if (!document.getElementById('tag-bulk-order-nochange').checked) { var ov=document.getElementById('tag-bulk-order-value'); body.order=ov?ov.value:''; }
+        if (!document.getElementById('tag-bulk-description-nochange').checked) { var dv=document.getElementById('tag-bulk-description-value'); body.description=dv?dv.value:''; }
+        if (!document.getElementById('tag-bulk-icon-nochange').checked) { var iv=document.getElementById('icon-value-tag-bulk-edit'); body.icon=iv?iv.value:''; }
+        if (!document.getElementById('tag-bulk-color-nochange').checked) { var cv=document.getElementById('tag-bulk-color-value'); body.color=cv?cv.value:''; }
+        body.add_parent_ids=[];
+        document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb:checked').forEach(function(cb){body.add_parent_ids.push(parseInt(cb.value,10));});
         if (converting) {
             var convertUrl = _tagBulkConvertTarget === 'status' ? '{% url "tag.bulk_convert_status" %}' : '{% url "tag.bulk_convert" %}';
             fetch(convertUrl, {
                 method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
-                body:JSON.stringify({ids:ids}),
+                body:JSON.stringify(body),
             }).then(function(r){
                 if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);});
                 return r.text();
@@ -1942,11 +1281,6 @@ window._orgBulkSync = function(n, opts) {
                 toastr.success(ids.length===1?'1 tag converted.':ids.length+' tags converted.');
             }).catch(function(err){toastr.error('Convert failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
         } else {
-            var body = {ids:ids};
-            if (!document.getElementById('tag-bulk-icon-nochange').checked) { var iv=document.getElementById('icon-value-tag-bulk-edit'); body.icon=iv?iv.value:''; }
-            if (!document.getElementById('tag-bulk-color-nochange').checked) { var cv=document.getElementById('tag-bulk-color-value'); body.color=cv?cv.value:''; }
-            body.add_parent_ids=[];
-            document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb:checked').forEach(function(cb){body.add_parent_ids.push(parseInt(cb.value,10));});
             fetch('{% url "tag.bulk_edit" %}', {
                 method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
                 body:JSON.stringify(body),
@@ -2255,11 +1589,11 @@ window._orgBulkSync = function(n, opts) {
         if(hint){
             hint.hidden=!converting;
             if(converting) hint.textContent = _catBulkConvertTarget === 'tag'
-                ? 'All pin memberships will be migrated. Parent links will be cleared. You will be redirected to the tags tab.'
-                : 'All pin memberships will be migrated. Parent links will be cleared. You will be redirected to the status tab.';
+                ? 'All pin memberships will be migrated. Selected parent links will be added after conversion. You will be redirected to the tags tab.'
+                : 'All pin memberships will be migrated. Selected parent links will be added after conversion. You will be redirected to the status tab.';
         }
         var mainFields=document.getElementById('cat-bulk-main-fields');
-        if(mainFields){mainFields.style.opacity=converting?'0.4':''; mainFields.style.pointerEvents=converting?'none':'';}
+        if(mainFields){mainFields.style.opacity=''; mainFields.style.pointerEvents='';}
         var btn=document.getElementById('cat-bulk-edit-confirm');
         if(btn&&!btn.disabled)btn.innerHTML=converting
             ?'<i class="material-icons" style="font-size:1rem;vertical-align:middle">swap_horiz</i> Convert to ' + (_catBulkConvertTarget === 'tag' ? 'Tags' : 'Statuses')
@@ -2295,6 +1629,7 @@ window._orgBulkSync = function(n, opts) {
         if(cp2)cp2.querySelectorAll('.color-swatch').forEach(function(b){b.classList.remove('selected');});
         if(sc!==null){cnn.checked=false; if(cv)cv.value=sc; if(sc&&cp2){var sw=cp2.querySelector('[data-color="'+sc+'"]'); if(sw)sw.classList.add('selected');}}
         else{cnn.checked=true; if(cv)cv.value='';}
+        document.getElementById('cat-bulk-order-nochange').checked=true; document.getElementById('cat-bulk-order-value').value='0'; document.getElementById('cat-bulk-description-nochange').checked=true; document.getElementById('cat-bulk-description-value').value='';
         document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb').forEach(function(cb){cb.checked=false;});
         _catBulkConvertTarget = null;
         document.querySelectorAll('#cat-bulk-edit-dialog .org-convert-btn').forEach(function(b){b.classList.remove('active');});
@@ -2315,15 +1650,23 @@ window._orgBulkSync = function(n, opts) {
     document.getElementById('icon-grid-cat-bulk-edit').addEventListener('click', function(e){
         if(e.target.closest('.icon-picker-item')){document.getElementById('cat-bulk-icon-nochange').checked=false; _updateCatBulkState();}
     });
+    ['cat-bulk-order-value','cat-bulk-description-value'].forEach(function(id){ var el=document.getElementById(id); if(el) el.addEventListener('input', function(){ document.getElementById(id.replace('-value','-nochange')).checked=false; }); });
     document.getElementById('cat-bulk-edit-confirm').addEventListener('click', function(){
         var ids=Array.from(_catSelected).map(function(id){return parseInt(id,10);});
         var converting=!!_catBulkConvertTarget;
         var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> '+(converting?'Converting…':'Saving…');
+        var body={ids:ids};
+        if(!document.getElementById('cat-bulk-order-nochange').checked){var ov=document.getElementById('cat-bulk-order-value'); body.order=ov?ov.value:'';}
+        if(!document.getElementById('cat-bulk-description-nochange').checked){var dv=document.getElementById('cat-bulk-description-value'); body.description=dv?dv.value:'';}
+        if(!document.getElementById('cat-bulk-icon-nochange').checked){var iv=document.getElementById('icon-value-cat-bulk-edit'); body.icon=iv?iv.value:'';}
+        if(!document.getElementById('cat-bulk-color-nochange').checked){var cv=document.getElementById('cat-bulk-color-value'); body.color=cv?cv.value:'';}
+        body.add_parent_ids=[];
+        document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb:checked').forEach(function(cb){body.add_parent_ids.push(parseInt(cb.value,10));});
         if(converting){
             var convertUrl = _catBulkConvertTarget === 'status' ? '{% url "category.bulk_convert_status" %}' : '{% url "category.bulk_convert" %}';
             fetch(convertUrl, {
                 method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
-                body:JSON.stringify({ids:ids}),
+                body:JSON.stringify(body),
             }).then(function(r){
                 if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);});
                 return r.text();
@@ -2333,11 +1676,6 @@ window._orgBulkSync = function(n, opts) {
                 toastr.success(ids.length===1?'1 category converted.':ids.length+' categories converted.');
             }).catch(function(err){toastr.error('Convert failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
         } else {
-            var body={ids:ids};
-            if(!document.getElementById('cat-bulk-icon-nochange').checked){var iv=document.getElementById('icon-value-cat-bulk-edit'); body.icon=iv?iv.value:'';}
-            if(!document.getElementById('cat-bulk-color-nochange').checked){var cv=document.getElementById('cat-bulk-color-value'); body.color=cv?cv.value:'';}
-            body.add_parent_ids=[];
-            document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb:checked').forEach(function(cb){body.add_parent_ids.push(parseInt(cb.value,10));});
             fetch('{% url "category.bulk_edit" %}', {
                 method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
                 body:JSON.stringify(body),
@@ -2858,25 +2196,35 @@ window._orgBulkSync = function(n, opts) {
     });
 
     // ── Filter ────────────────────────────────────────────────────────────────
-    // Wrap applyOrgFilter to handle the 'people' namespace, which uses .org-selectable
-    // rows (not .tag-card elements that the global implementation expects).
+    // Wrap applyOrgFilter to handle people rows while preserving the shared filter UI.
     var _origApplyFilter = window._applyOrgFilterImpl;
     window._applyOrgFilterImpl = function (ns) {
         if (ns !== 'people') { if (_origApplyFilter) _origApplyFilter(ns); return; }
         var q = _orgSharedFilter.search.toLowerCase().trim();
         var activeChips = _orgSharedFilter.chips;
         var activeColor = _orgSharedFilter.color;
-        _getRows().forEach(function (row) {
+        var rows = _getRows();
+        var hasChildrenSet = new Set();
+        if (activeChips.has('has-children')) {
+            rows.forEach(function(row) {
+                (row.dataset.peopleParents || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean).forEach(function(pid) { hasChildrenSet.add(pid); });
+            });
+        }
+        rows.forEach(function (row) {
+            var idVal = row.dataset.peopleId;
             var name = (row.dataset.peopleName || '').toLowerCase();
             if (q && !name.includes(q)) { row.style.display = 'none'; return; }
             var hasIcon = !!(row.dataset.peopleIcon || '');
             var color = (row.dataset.peopleColor || '').toLowerCase();
             var hasColor = !!color;
+            var hasParents = (row.dataset.peopleParents || '').split(',').some(function(p) { return p.trim() !== ''; });
             var show = true;
             if (activeChips.has('has-icon') && !hasIcon) show = false;
             if (activeChips.has('no-icon') && hasIcon) show = false;
             if (activeChips.has('has-color') && !hasColor) show = false;
             if (activeChips.has('no-color') && hasColor) show = false;
+            if (activeChips.has('has-children') && !hasChildrenSet.has(String(idVal))) show = false;
+            if (activeChips.has('has-parents') && !hasParents) show = false;
             if (activeColor && color !== activeColor) show = false;
             row.style.display = show ? '' : 'none';
         });
@@ -2979,8 +2327,10 @@ window._orgBulkSync = function(n, opts) {
             btn.innerHTML = allSel ? '<i class="material-icons">remove_done</i>' : '<i class="material-icons">checklist</i>';
         },
         onCreate: function() {
-            htmx.ajax('GET', '{% url "people.create" %}', { target: '#people-badge-edit-dialog-body', swap: 'innerHTML' });
-            document.getElementById('people-badge-edit-dialog').showModal();
+            var f = document.getElementById('new-people-form');
+            if (!f) return;
+            f.querySelector('form')?.reset();
+            f.showModal();
         },
     });
     _applyPeopleView();

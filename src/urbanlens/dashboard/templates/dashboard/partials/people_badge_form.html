@@ -7,10 +7,21 @@
     class="tag-form">
     {% csrf_token %}
 
+    <div class="tag-form-grid">
+        <div class="form-field">
+            <label class="form-label" for="people-badge-name">Label name</label>
+            <input id="people-badge-name" name="name" type="text" class="form-input"
+                   value="{{ badge.name|default:'' }}" placeholder="e.g. Friend, Frequent Explorer" required autofocus>
+        </div>
+        <div class="form-field">
+            <label class="form-label" for="people-badge-order">Order (higher = higher priority)</label>
+            <input id="people-badge-order" name="order" type="number" class="form-input" value="{{ badge.order|default:0 }}">
+        </div>
+    </div>
+
     <div class="form-field">
-        <label class="form-label" for="people-badge-name">Label name</label>
-        <input id="people-badge-name" name="name" type="text" class="form-input"
-               value="{{ badge.name|default:'' }}" placeholder="e.g. Friend, Frequent Explorer" required autofocus>
+        <label class="form-label" for="people-badge-desc">Description (optional)</label>
+        <textarea id="people-badge-desc" name="description" class="form-input" rows="2" placeholder="Who should this label apply to?">{{ badge.description|default:'' }}</textarea>
     </div>
 
     <div class="tag-icon-color-row">
@@ -42,7 +53,7 @@
 
     <div class="form-field">
         <label class="form-label">Parent badges (optional)</label>
-        <p class="form-hint">Selected parents are shown first. Parent badges enable the same hierarchy view and cross-kind behavior as tags, categories, and statuses.</p>
+        <p class="form-hint">Selected parents are shown first. People-label parents can only be other people labels.</p>
         <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
                oninput="filterParentOptions(this,'parent-select-people-badge')" autocomplete="off">
         <div class="tag-parent-select" id="parent-select-people-badge">

@@ -75,7 +75,7 @@ class PeopleBadgeCreateView(LoginRequiredMixin, View):
         Returns:
             Rendered people_badge_form.html with no badge instance.
         """
-        available_parents = Badge.objects.visible_to(request.user.profile).order_by("-order", "name", "id")
+        available_parents = _people_badges(request.user.profile)
         return render(
             request,
             "dashboard/partials/people_badge_form.html",
@@ -96,16 +96,22 @@ class PeopleBadgeCreateView(LoginRequiredMixin, View):
         if not name:
             return HttpResponse("Name is required.", status=400)
 
+        try:
+            order = int(request.POST.get("order") or 0)
+        except (TypeError, ValueError):
+            order = 0
         badge = Badge.objects.create(
             kind=KIND_USER,
             profile=profile,
             name=name,
+            description=request.POST.get("description", "").strip(),
             icon=request.POST.get("icon") or None,
             color=request.POST.get("color") or None,
+            order=order,
         )
         parent_ids = request.POST.getlist("parent_ids")
         if parent_ids:
-            valid_parents = Badge.objects.visible_to(profile).filter(id__in=parent_ids).exclude(id=badge.id)
+            valid_parents = Badge.objects.user_badges().visible_to(profile).filter(id__in=parent_ids).exclude(id=badge.id)
             badge.parents.set(valid_parents)
 
         return render(request, "dashboard/partials/people_badge_rows.html", _rows_ctx(profile))
@@ -137,7 +143,7 @@ class PeopleBadgeEditView(LoginRequiredMixin, View):
             return err
         parent_ids = set(badge.parents.values_list("id", flat=True))
         available_parents = _selected_parents_first(
-            Badge.objects.visible_to(request.user.profile).exclude(id=badge.id),
+            Badge.objects.user_badges().visible_to(request.user.profile).exclude(id=badge.id),
             parent_ids,
         )
         return render(
@@ -165,11 +171,16 @@ class PeopleBadgeEditView(LoginRequiredMixin, View):
             return HttpResponse("Name is required.", status=400)
 
         badge.name = name
+        badge.description = request.POST.get("description", "").strip()
         badge.icon = request.POST.get("icon") or None
         badge.color = request.POST.get("color") or None
-        badge.save(update_fields=["name", "icon", "color", "updated"])
+        try:
+            badge.order = int(request.POST.get("order") or 0)
+        except (TypeError, ValueError):
+            badge.order = 0
+        badge.save(update_fields=["name", "description", "icon", "color", "order", "updated"])
         parent_ids = request.POST.getlist("parent_ids")
-        valid_parents = Badge.objects.visible_to(request.user.profile).filter(id__in=parent_ids).exclude(id=badge.id)
+        valid_parents = Badge.objects.user_badges().visible_to(request.user.profile).filter(id__in=parent_ids).exclude(id=badge.id)
         badge.parents.set(valid_parents)
 
         return render(request, "dashboard/partials/people_badge_rows.html", _rows_ctx(request.user.profile))

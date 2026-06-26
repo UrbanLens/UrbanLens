@@ -1,13 +1,1 @@
-{% if user_badges %}
-{% for badge in user_badges %}
-    {% url 'people.edit' badge.id as edit_url %}
-    {% url 'people.delete' badge.id as delete_url %}
-    {% if badge.profile %}
-        {% include 'dashboard/partials/_organize_badge_card.html' with kind='people' display_name=badge.name display_icon=badge.icon display_color=badge.color empty_icon='person' selectable=True select_class='people-sel-cb' select_data_name='people' editable=True deletable=True edit_url=edit_url edit_target='#people-badge-edit-dialog-body' delete_url=delete_url rows_target='#people-badge-rows' %}
-    {% else %}
-        {% include 'dashboard/partials/_organize_badge_card.html' with kind='people' display_name=badge.name display_icon=badge.icon display_color=badge.color empty_icon='person' selectable=True select_class='people-sel-cb' select_data_name='people' editable=False deletable=False edit_url=edit_url edit_target='#people-badge-edit-dialog-body' delete_url=delete_url rows_target='#people-badge-rows' %}
-    {% endif %}
-{% endfor %}
-{% else %}
-<div class="tag-empty" id="people-badge-empty"><i class="material-icons">people_outline</i><p>No people labels yet. Click <strong>+ New Label</strong> to create one.</p></div>
-{% endif %}
+{% include 'dashboard/partials/organize_badge_rows.html' with badges=user_badges kind='people' empty_icon='person' empty_message='No people labels yet. Create one to start organizing people.' edit_url_name='people.edit' delete_url_name='people.delete' select_class='people-sel-cb' select_data_name='people' selectable=True editable=True deletable=True edit_target='#people-badge-edit-dialog-body' rows_target='#people-badge-rows' %}

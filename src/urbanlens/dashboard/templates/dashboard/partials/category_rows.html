@@ -1,10 +1,1 @@
-{% if categories %}
-{% for badge in categories %}
-    {% url 'category.edit' badge.id as edit_url %}
-    {% url 'category.merge' badge.id as merge_url %}
-    {% url 'category.delete' badge.id as delete_url %}
-    {% include 'dashboard/partials/_organize_badge_card.html' with kind='category' display_name=badge.name display_icon=badge.icon display_color=badge.color empty_icon='category' selectable=True select_class='cat-select-cb' select_data_name='cat' editable=True deletable=True edit_url=edit_url merge_url=merge_url edit_target='#category-edit-dialog-body' delete_url=delete_url rows_target='#category-rows' %}
-{% endfor %}
-{% else %}
-<div class="tag-empty"><i class="material-icons">category</i><p>No categories yet. Create one to start organizing your pins and locations.</p></div>
-{% endif %}
+{% include 'dashboard/partials/organize_badge_rows.html' with badges=categories kind='category' empty_icon='category' empty_message='No categories yet. Create one to start organizing your pins and locations.' edit_url_name='category.edit' merge_url_name='category.merge' delete_url_name='category.delete' select_class='cat-select-cb' select_data_name='cat' selectable=True editable=True deletable=True edit_target='#category-edit-dialog-body' rows_target='#category-rows' %}
