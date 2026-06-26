@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Case, IntegerField, Value, When
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -29,6 +30,16 @@ _CTX_BASE = {
 def _people_badges(profile: Profile) -> BadgeQuerySet:
     """Return the user's visible KIND_USER badges in display order."""
     return Badge.objects.user_badges().visible_to(profile).ordered()
+
+
+def _selected_parents_first(queryset, parent_ids):
+    return queryset.annotate(
+        _selected_parent=Case(
+            When(id__in=parent_ids, then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        ),
+    ).order_by("_selected_parent", "-order", "name", "id")
 
 
 def _rows_ctx(profile: Profile) -> dict:
@@ -64,7 +75,12 @@ class PeopleBadgeCreateView(LoginRequiredMixin, View):
         Returns:
             Rendered people_badge_form.html with no badge instance.
         """
-        return render(request, "dashboard/partials/people_badge_form.html", _CTX_BASE)
+        available_parents = Badge.objects.visible_to(request.user.profile).order_by("-order", "name", "id")
+        return render(
+            request,
+            "dashboard/partials/people_badge_form.html",
+            {**_CTX_BASE, "available_parents": available_parents, "parent_ids": set()},
+        )
 
     def post(self, request, *args, **kwargs):
         """Create a new KIND_USER badge and return refreshed rows.
@@ -80,13 +96,17 @@ class PeopleBadgeCreateView(LoginRequiredMixin, View):
         if not name:
             return HttpResponse("Name is required.", status=400)
 
-        Badge.objects.create(
+        badge = Badge.objects.create(
             kind=KIND_USER,
             profile=profile,
             name=name,
             icon=request.POST.get("icon") or None,
             color=request.POST.get("color") or None,
         )
+        parent_ids = request.POST.getlist("parent_ids")
+        if parent_ids:
+            valid_parents = Badge.objects.visible_to(profile).filter(id__in=parent_ids).exclude(id=badge.id)
+            badge.parents.set(valid_parents)
 
         return render(request, "dashboard/partials/people_badge_rows.html", _rows_ctx(profile))
 
@@ -115,7 +135,16 @@ class PeopleBadgeEditView(LoginRequiredMixin, View):
         badge, err = self._get_badge(request, badge_id)
         if err:
             return err
-        return render(request, "dashboard/partials/people_badge_form.html", {**_CTX_BASE, "badge": badge})
+        parent_ids = set(badge.parents.values_list("id", flat=True))
+        available_parents = _selected_parents_first(
+            Badge.objects.visible_to(request.user.profile).exclude(id=badge.id),
+            parent_ids,
+        )
+        return render(
+            request,
+            "dashboard/partials/people_badge_form.html",
+            {**_CTX_BASE, "badge": badge, "available_parents": available_parents, "parent_ids": parent_ids},
+        )
 
     def post(self, request, badge_id, *args, **kwargs):
         """Save changes to a people badge and return refreshed rows.
@@ -139,6 +168,9 @@ class PeopleBadgeEditView(LoginRequiredMixin, View):
         badge.icon = request.POST.get("icon") or None
         badge.color = request.POST.get("color") or None
         badge.save(update_fields=["name", "icon", "color", "updated"])
+        parent_ids = request.POST.getlist("parent_ids")
+        valid_parents = Badge.objects.visible_to(request.user.profile).filter(id__in=parent_ids).exclude(id=badge.id)
+        badge.parents.set(valid_parents)
 
         return render(request, "dashboard/partials/people_badge_rows.html", _rows_ctx(request.user.profile))
 
@@ -160,7 +192,7 @@ class PeopleBadgeDeleteView(LoginRequiredMixin, View):
         if badge.profile is None or badge.profile.user != request.user:
             return HttpResponseForbidden()
         badge.delete()
-        return HttpResponse("")
+        return render(request, "dashboard/partials/people_badge_rows.html", _rows_ctx(request.user.profile))
 
 
 class PeopleBadgeMultiMergeView(LoginRequiredMixin, View):
