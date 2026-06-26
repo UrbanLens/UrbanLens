@@ -2430,3 +2430,61 @@
         font-size: 1.25rem;
     }
 }
+
+// Organize rows expose destructive/edit actions only while the row is being used.
+.organize-page {
+    .tag-card-actions,
+    .tag-row-actions,
+    .priority-edit-btn,
+    .priority-jump-actions {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.12s ease;
+    }
+
+    .tag-card:hover .tag-card-actions,
+    .tag-card:focus-within .tag-card-actions,
+    .tag-row:hover .tag-row-actions,
+    .tag-row:focus-within .tag-row-actions,
+    .priority-item:hover .priority-edit-btn,
+    .priority-item:focus-within .priority-edit-btn,
+    .priority-item:hover .priority-jump-actions,
+    .priority-item:focus-within .priority-jump-actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .priority-jump-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .priority-jump-btn {
+        border: 0;
+        background: transparent;
+        color: #64748b;
+        border-radius: 999px;
+        cursor: pointer;
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        &:hover {
+            background: #eef6ff;
+            color: #1976d2;
+        }
+
+        i {
+            font-size: 1rem;
+        }
+    }
+
+    dialog.tag-create-card {
+        width: min(720px, calc(100vw - 2rem));
+        max-height: min(86vh, 760px);
+        overflow: auto;
+    }
+}
