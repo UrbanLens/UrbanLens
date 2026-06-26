@@ -101,19 +101,20 @@
 
 .trip-card {
     position: relative;
-    background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
+    background-color: var(--ul-grey-0b);
     border-radius: 14px;
     overflow: hidden;
     transition: box-shadow .2s, border-color .2s, transform .2s;
 
     &:hover {
         box-shadow: 0 10px 28px rgba(0, 0, 0, .08);
-        border-color: $ui-blue-300;
+        background-color: rgba($color-blue-1700, .05);
+        border-color: $color-blue-300;
         transform: translateY(-2px);
 
         .trip-card-arrow {
-            color: $ui-blue-500;
+            color: $color-blue-500;
             transform: translateX(2px);
         }
     }

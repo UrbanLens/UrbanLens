@@ -9,6 +9,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from rest_framework.viewsets import GenericViewSet
 
+from urbanlens.dashboard.controllers.notifications import _trigger_badge_refresh
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
@@ -402,7 +403,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             .order_by("-created")[:20]
         )
         unread_count = NotificationLog.objects.for_profile(viewer_profile).unread().count()
-        return render(
+        response = render(
             request,
             "dashboard/partials/notification_dropdown.html",
             {
@@ -410,6 +411,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 "unread_count": unread_count,
             },
         )
+        return _trigger_badge_refresh(response)
 
     def invite_by_email(self, request: HttpRequest):
         """Invite a friend by email address.

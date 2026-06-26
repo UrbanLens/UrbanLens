@@ -551,11 +551,11 @@ nav .brand-logo img {
     // ── Unread state: clear emphasis ─────────────────────────────────────
     &--unread {
         cursor: pointer;
-        background: linear-gradient(90deg, rgba($primary-color, .07) 0%, transparent 72%);
+        background: linear-gradient(90deg, rgba($primary-color, .07) 0%, transparent 100%);
         border-left-color: $primary-color;
 
         &:hover {
-            background: linear-gradient(90deg, rgba($primary-color, .11) 0%, var(--ul-grey-1) 72%);
+            background: linear-gradient(90deg, rgba($primary-color, .11) 0%, transparent 100%);
         }
 
         .notif-item__icon-wrap {

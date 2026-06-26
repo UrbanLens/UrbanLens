@@ -34,7 +34,7 @@
                     <i class="material-icons nav-notif-icon">notifications</i>
                     <span id="notif-badge-wrap"
                           hx-get="{% url 'notifications.unread_count' %}"
-                          hx-trigger="load"
+                          hx-trigger="load, notifCountRefresh from:body"
                           hx-swap="innerHTML">
                     </span>
                 </button>
@@ -175,14 +175,12 @@
             notifWrap.classList.contains('is-open') ? closeNotif() : openNotif();
         });
 
-        document.body.addEventListener('notifCountRefresh', function () {
-            var badgeWrap = document.getElementById('notif-badge-wrap');
-            if (badgeWrap) htmx.trigger(badgeWrap, 'load');
-        });
-
         document.body.addEventListener('htmx:afterSwap', function (ev) {
-            if (ev.detail.target.id === 'notif-dropdown-wrap') {
-                htmx.trigger(document.getElementById('notif-badge-wrap'), 'load');
+            var t = ev.detail.target;
+            if (!t) return;
+            if (t.id === 'notif-dropdown-wrap' || t.id === 'notif-dropdown' ||
+                (t.classList && t.classList.contains('notif-item'))) {
+                htmx.trigger(document.body, 'notifCountRefresh');
             }
         });
 

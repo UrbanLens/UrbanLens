@@ -39,7 +39,7 @@ def _get_or_create_prefs(profile: Profile) -> NotificationPreference:
 
 def _trigger_badge_refresh(response: HttpResponse) -> HttpResponse:
     """Attach an HTMX trigger so the nav bell badge refreshes."""
-    response["HX-Trigger"] = json.dumps({"notifCountRefresh": {}})
+    response["HX-Trigger"] = json.dumps({"notifCountRefresh": {"target": "body"}})
     return response
 
 

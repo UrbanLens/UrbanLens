@@ -654,11 +654,11 @@
     }
 
     .notif-item--unread {
-        background: linear-gradient(90deg, rgba($ui-violet-600, .14) 0%, transparent 72%);
+        background: linear-gradient(90deg, rgba($ui-violet-600, .14) 0%, transparent 100%);
         border-left-color: $ui-violet-600;
 
         &:hover {
-            background: linear-gradient(90deg, rgba($ui-violet-600, .2) 0%, var(--ul-grey-1) 72%);
+            background: linear-gradient(90deg, rgba($ui-violet-600, .2) 0%, transparent 100%);
         }
 
         .notif-item__icon-wrap {
