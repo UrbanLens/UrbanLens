@@ -3,7 +3,7 @@
 <div class="site-admin-page page-content subscription-admin-page">
   <div class="site-admin-header">
     <h1 class="site-admin-title"><i class="material-icons">workspace_premium</i> Subscription Access</h1>
-    <p class="site-admin-subtitle">Grant and manage feature roles for specific users by username or email.</p>
+    <p class="site-admin-subtitle">Gift subscription access to users.</p>
     <div class="site-admin-nav-links"><a href="{% url 'site_admin' %}" class="btn btn--ghost"><i class="material-icons">arrow_back</i> Settings</a></div>
   </div>
   {% if saved %}
@@ -77,11 +77,11 @@
                   {% csrf_token %}
                   <input type="hidden" name="subscription_id" value="{{ grant.id }}">
                   <select name="duration_months">
-                    <option value="indefinite">Indefinite</option>
                     <option value="1">1 month</option>
                     <option value="3">3 months</option>
                     <option value="6">6 months</option>
                     <option value="12">12 months</option>
+                    <option value="indefinite">Indefinite</option>
                   </select>
                   <button class="btn btn--ghost" name="action" value="update">Update</button>
                   <button class="btn btn--danger" name="action" value="revoke">Revoke</button>

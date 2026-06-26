@@ -216,6 +216,8 @@ Features planned for future releases.
 * When all notifications are marked read, the notification counter above the bell doesn't update until page refresh. [UL-242]
 * When you are friends with a user, the "add friend" button on their profile shouldn't show up. Instead, it should be "remove friend". Implement the remove friend feature for this. [UL-243]
 * Add site admin setting to make the site invite only, and suspend public signups. [UL-244]
+* Loopnet API or Scraping [UL-248]
+* Get pin / location bounding box from external service (i.e. property boundaries), or attempt ML building boundaries detection. [UL-249]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
