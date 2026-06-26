@@ -27,7 +27,6 @@ Features planned for this release.
 
 ## Bug Fixes
 * When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]
-* On admin stats page: Uptime is incorrect (tracking server uptime, not app uptime). Time charts don't display. Locations count is wrong. [UL-149]
 * During import pins, checking "create badge", the badge is created, but the pins aren't added to it. (They are added to already existing badges you select, though) [UL-150]
 * UI Bug: Multi-select toolbar in dark mode [UL-151]
 * When changing a category to a tag, the tag is visually shown twice in the list until page refresh. [UL-152]
@@ -84,6 +83,7 @@ Features planned for this release.
 * Verify the UX for changing the kind of a badge (do other properties get updated too, and is that clear?) [UL-155]
 * UI Bug in Dark Mode: Organize page -> Merge dialog doesn't show titles of cats being merged. [UL-191]
 * Verify: Child trips work as expected. [UL-228]
+* On admin stats page: Uptime is incorrect (tracking server uptime, not app uptime). Time charts don't display. Locations count is wrong. [UL-149]
 
 # Future Features
 Features planned for future releases.

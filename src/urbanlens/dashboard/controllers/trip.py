@@ -1485,7 +1485,7 @@ class TripWeatherView(LoginRequiredMixin, View):
             if not activities:
                 pass  # no upcoming activities - leave error/grouped empty to hide the section
             else:
-                try:  # noqa: PLW0717
+                try:
                     gateway = WeatherForecastGateway()
                     activity_forecasts = _build_activity_forecasts(activities, gateway)
 
