@@ -7,8 +7,10 @@ from datetime import timedelta
 import json
 import logging
 import os
+import sys
 import time
 
+import django
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.views import redirect_to_login
 from django.http import HttpResponse, HttpResponseRedirect
@@ -23,6 +25,7 @@ from urbanlens.dashboard.models.site_settings import (
     SiteSettings,
 )
 from urbanlens.dashboard.services.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
+from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 logger = logging.getLogger(__name__)
 _APP_STARTED_MONOTONIC = time.monotonic()
@@ -311,11 +314,12 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         media_root = getattr(django_settings, "MEDIA_ROOT", "")
         media_size_mb = _dir_size_mb(media_root) if media_root else None
 
-        import sys
+        from urbanlens.core.version import format_short_commit, get_git_commit_at_start, get_git_update_status
 
-        import django
         python_version = sys.version.split()[0]
         django_version = django.__version__
+        app_version = app_settings.app_version
+        git_update = get_git_update_status(get_git_commit_at_start())
 
         context = {
             "page_name": "site-admin-stats",
@@ -345,6 +349,12 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             "media_size_mb": media_size_mb,
             "python_version": python_version,
             "django_version": django_version,
+            "app_version": app_version,
+            "deployed_commit_short": format_short_commit(git_update.deployed_commit),
+            "current_commit_short": format_short_commit(git_update.current_commit),
+            "git_commits_ahead": git_update.commits_ahead,
+            "git_has_newer_commits": git_update.has_newer_commits,
+            "git_available": git_update.git_available,
             "server_time": now,
         }
         return render(request, "dashboard/pages/site_admin_stats.html", context)

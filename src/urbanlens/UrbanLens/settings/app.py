@@ -5,7 +5,7 @@ from pathlib import Path
 import logging
 from typing import Any, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_core import Url
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic._internal._model_construction import ModelMetaclass
@@ -44,6 +44,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     """
     project_root: Path = Field(default=DEFAULT_ROOT, description="The root directory of the project")
     project_name: str = Field(default='URBANLENS', description="The name of the project")
+    app_version: str = Field(default="", description="Semantic application version from pyproject.toml")
     environment_name: str = Field(default=EnvironmentTypes.LOCAL, description="The name of the environment")
     debug_override: bool | None = Field(description="Whether or not to enable debugging", alias='DEBUG', default=None)
     secret_key : str = Field(default = '1t5v24s98-fcbas23-vfsd238vc-asfdioj322', description = "The secret key")
@@ -199,6 +200,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         if self.environment is None:
             raise RuntimeError("Environment has not been initialized.")
         return self.environment
+
+    @model_validator(mode="after")
+    def _resolve_version_metadata(self) -> Self:
+        """Populate version metadata from pyproject.toml when not configured."""
+        from urbanlens.core.version import get_app_version
+
+        if not self.app_version:
+            self.app_version = get_app_version()
+        return self
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

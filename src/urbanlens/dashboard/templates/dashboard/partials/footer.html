@@ -1,3 +1,6 @@
 <footer class="page-footer">
+    {% if app_version %}
+    <span class="page-footer__version" aria-label="Application version">v{{ app_version }}</span>
+    {% endif %}
     <h5 id="github">This project is open source. Check out our <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.</h5>
 </footer>

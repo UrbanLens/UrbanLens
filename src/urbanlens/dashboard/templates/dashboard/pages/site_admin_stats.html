@@ -187,6 +187,62 @@
     </div>
     {% endif %}
 
+    {# ── Application Section ──────────────────────────────────────────────── #}
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-icons">apps</i>
+            <span>Application</span>
+        </div>
+        <div class="stats-health-grid">
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#6366f1">sell</i>
+                <div>
+                    <div class="stats-health-value">v{{ app_version }}</div>
+                    <div class="stats-health-label">App Version</div>
+                </div>
+            </div>
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#64748b">commit</i>
+                <div>
+                    <div class="stats-health-value"><code>{{ deployed_commit_short }}</code></div>
+                    <div class="stats-health-label">Running Commit</div>
+                </div>
+            </div>
+            {% if git_available and current_commit_short != deployed_commit_short %}
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#64748b">commit</i>
+                <div>
+                    <div class="stats-health-value"><code>{{ current_commit_short }}</code></div>
+                    <div class="stats-health-label">Current HEAD</div>
+                </div>
+            </div>
+            {% endif %}
+            <div class="stats-health-item">
+                {% if not git_available %}
+                <i class="material-icons stats-health-icon" style="color:#94a3b8">help_outline</i>
+                <div>
+                    <div class="stats-health-value stats-health-value--muted">Unknown</div>
+                    <div class="stats-health-label">Update Status</div>
+                </div>
+                {% elif git_has_newer_commits %}
+                <i class="material-icons stats-health-icon" style="color:#d97706">new_releases</i>
+                <div>
+                    <div class="stats-health-value stats-health-value--warn">
+                        {{ git_commits_ahead }} newer commit{{ git_commits_ahead|pluralize }} available
+                    </div>
+                    <div class="stats-health-label">Rebuild or restart to deploy</div>
+                </div>
+                {% else %}
+                <i class="material-icons stats-health-icon" style="color:#16a34a">check_circle</i>
+                <div>
+                    <div class="stats-health-value stats-health-value--ok">Up to date</div>
+                    <div class="stats-health-label">Update Status</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
     {# ── Server health ─────────────────────────────────────────────────────── #}
     <div class="site-admin-card ul-section card">
         <div class="card-header">
@@ -381,6 +437,14 @@
     font-size: 1rem;
     font-weight: 600;
     color: var(--ul-grey-8, #0f172a);
+}
+.stats-health-value--ok { color: #16a34a; }
+.stats-health-value--warn { color: #d97706; }
+.stats-health-value--muted { color: var(--ul-grey-6, #94a3b8); }
+.stats-health-value code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .92em;
+    font-weight: 500;
 }
 .stats-health-label {
     font-size: .75rem;

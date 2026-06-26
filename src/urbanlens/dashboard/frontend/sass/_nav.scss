@@ -345,6 +345,17 @@ footer,
         float: right;
         margin-right: 1rem;
     }
+
+    .page-footer__version {
+        float: left;
+        margin-left: 1rem;
+        font-size: 0.72rem;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        color: var(--ul-grey-5);
+        opacity: 0.42;
+        user-select: none;
+    }
 }
 
 // Legacy brand-logo selector kept for any Materialize overrides

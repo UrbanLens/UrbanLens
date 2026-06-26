@@ -19,14 +19,21 @@ def add_site_settings(request: HttpRequest) -> dict[str, str]:
         request: The current HttpRequest.
 
     Returns:
-        dict with site_title available in all templates.
+        dict with site_title and app_version available in all templates.
     """
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
     try:
         from urbanlens.dashboard.models.site_settings import SiteSettings
         site = SiteSettings.get_current()
-        return {"site_title": site.app_title}
+        site_title = site.app_title
     except Exception:
-        return {"site_title": "UrbanLens"}
+        site_title = "UrbanLens"
+
+    return {
+        "site_title": site_title,
+        "app_version": app_settings.app_version,
+    }
 
 
 def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:

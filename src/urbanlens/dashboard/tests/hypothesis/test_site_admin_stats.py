@@ -250,6 +250,15 @@ class SiteAdminStatsViewContextTests(TestCase):
         self.assertIn("django_version", ctx)
         self.assertIn("server_time", ctx)
 
+    def test_context_has_app_software_info(self) -> None:
+        ctx = self._get_context()
+        self.assertIn("app_version", ctx)
+        self.assertIn("deployed_commit_short", ctx)
+        self.assertIn("git_has_newer_commits", ctx)
+        self.assertIn("git_available", ctx)
+        self.assertIsInstance(ctx["app_version"], str)
+        self.assertTrue(ctx["app_version"])
+
     def test_total_users_count_is_accurate(self) -> None:
         baker.make(User)
         baker.make(User)
