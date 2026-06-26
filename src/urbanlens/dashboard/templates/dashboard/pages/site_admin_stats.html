@@ -251,6 +251,18 @@
                 </div>
             </div>
             {% endif %}
+            {% if show_git_pull_button %}
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#2563eb">download</i>
+                <div>
+                    <button type="button" class="btn btn--primary btn--sm" id="git-pull-refresh-btn" data-url="{% url 'site_admin_pull_latest_code' %}">
+                        <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">sync</i>
+                        Pull &amp; Refresh
+                    </button>
+                    <div class="stats-health-label">Development tools</div>
+                </div>
+            </div>
+            {% endif %}
             <div class="stats-health-item">
                 {% if not git_available %}
                 <i class="material-icons stats-health-icon" style="color:#94a3b8">help_outline</i>
@@ -384,6 +396,44 @@
 
     makeBar('chart-users',     {{ chart_user_labels|safe }},     {{ chart_user_counts|safe }},     '#0891b2');
     makeBar('chart-locations', {{ chart_location_labels|safe }}, {{ chart_location_counts|safe }}, '#7c3aed');
+
+    var pullBtn = document.getElementById('git-pull-refresh-btn');
+    if (pullBtn) {
+        pullBtn.addEventListener('click', function () {
+            var originalHtml = pullBtn.innerHTML;
+            pullBtn.disabled = true;
+            pullBtn.innerHTML = '<span class="ul-spinner" aria-hidden="true"></span> Pulling...';
+            if (window.toastr) toastr.info('Pulling latest code...');
+
+            fetch(pullBtn.getAttribute('data-url'), {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRFToken': window.csrftoken || '{{ csrf_token }}'
+                },
+                credentials: 'same-origin'
+            })
+            .then(function (response) {
+                return response.json().catch(function () {
+                    return { ok: false, message: response.statusText || 'Unexpected server response.' };
+                }).then(function (payload) {
+                    if (!response.ok || !payload.ok) {
+                        throw new Error(payload.message || 'Could not pull latest code.');
+                    }
+                    return payload;
+                });
+            })
+            .then(function (payload) {
+                if (window.toastr) toastr.success(payload.message || 'Code updated. Refreshing...');
+                window.setTimeout(function () { window.location.reload(); }, payload.changed ? 1200 : 500);
+            })
+            .catch(function (err) {
+                pullBtn.disabled = false;
+                pullBtn.innerHTML = originalHtml;
+                if (window.toastr) toastr.error(err.message || 'Could not pull latest code.');
+            });
+        });
+    }
 }());
 </script>
 

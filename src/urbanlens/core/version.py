@@ -173,6 +173,38 @@ def _count_commits_ahead(base_commit: str, head_commit: str) -> int | None:
         return None
 
 
+def pull_latest_git_code() -> tuple[bool, str]:
+    """Pull the current branch from its upstream using a fast-forward-only update.
+
+    Returns:
+        ``(True, message)`` when git updated or was already current; otherwise
+        ``(False, message)`` with a safe, user-facing failure reason.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "pull", "--ff-only"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+            cwd=_GIT_CWD,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("git pull timed out", exc_info=True)
+        return False, "Timed out while pulling updates."
+    except OSError:
+        logger.warning("git pull could not be started", exc_info=True)
+        return False, "Could not start git pull on this server."
+
+    output = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
+    if result.returncode == 0:
+        return True, output or "Code is already up to date."
+
+    logger.warning("git pull failed with exit code %s: %s", result.returncode, output)
+    return False, output or "Git pull failed."
+
+
 def format_short_commit(commit: str | None, length: int = 7) -> str:
     """Return a shortened commit hash for display.
 

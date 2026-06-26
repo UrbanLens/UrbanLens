@@ -13,7 +13,7 @@ import time
 import django
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.views import redirect_to_login
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
@@ -385,9 +385,44 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             "git_has_newer_commits": git_update.has_newer_commits,
             "git_available": git_update.git_available,
             "git_remote_refreshed": git_update.remote_refreshed,
+            "show_git_pull_button": SiteSettings.get_current().show_dev_admin_features(request.user),
             "server_time": now,
         }
         return render(request, "dashboard/pages/site_admin_stats.html", context)
+
+
+class SiteAdminPullLatestCodeView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Development-only endpoint to pull latest code for local/dev deployments."""
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+
+    def post(self, request):
+        settings = SiteSettings.get_current()
+        if not settings.is_development_environment():
+            return JsonResponse(
+                {"ok": False, "message": "Pulling code from the admin UI is only available in development."},
+                status=403,
+            )
+
+        from urbanlens.core.version import get_current_git_commit, pull_latest_git_code
+
+        before_commit = get_current_git_commit()
+        ok, message = pull_latest_git_code()
+        after_commit = get_current_git_commit()
+
+        if not ok:
+            return JsonResponse({"ok": False, "message": message}, status=500)
+
+        changed = bool(before_commit and after_commit and before_commit != after_commit)
+        return JsonResponse(
+            {
+                "ok": True,
+                "changed": changed,
+                "message": "Code updated. Refreshing the site..." if changed else "Code is already up to date.",
+                "details": message,
+            },
+        )
 
 
 class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, View):

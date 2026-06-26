@@ -26,6 +26,8 @@ from urbanlens.dashboard.controllers.site_admin import (
     _monthly_series,
     _server_uptime,
 )
+from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.models.site_settings.meta import EnvironmentOverrideChoice
 from urbanlens.dashboard.services.site_admin import add_user_to_site_admin_group
 
 # ── _monthly_series ───────────────────────────────────────────────────────────
@@ -89,12 +91,11 @@ class ServerUptimeTests(TestCase):
 
     def _uptime_at(self, elapsed_seconds: float) -> str:
         """Return _server_uptime() when monotonic has advanced by ``elapsed_seconds``."""
-        with mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 0.0):
-            with mock.patch(
-                "urbanlens.dashboard.controllers.site_admin.time.monotonic",
-                return_value=elapsed_seconds,
-            ):
-                return _server_uptime()
+        with mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 0.0), mock.patch(
+            "urbanlens.dashboard.controllers.site_admin.time.monotonic",
+            return_value=elapsed_seconds,
+        ):
+            return _server_uptime()
 
     def test_parses_days_hours_minutes_correctly(self) -> None:
         # 1 day + 2 hours + 3 minutes = 86400 + 7200 + 180 = 93780 seconds
@@ -108,12 +109,11 @@ class ServerUptimeTests(TestCase):
         self.assertEqual(self._uptime_at(3600), "0d 1h 0m")
 
     def test_never_returns_negative_uptime(self) -> None:
-        with mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 100.0):
-            with mock.patch(
-                "urbanlens.dashboard.controllers.site_admin.time.monotonic",
-                return_value=50.0,
-            ):
-                result = _server_uptime()
+        with mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 100.0), mock.patch(
+            "urbanlens.dashboard.controllers.site_admin.time.monotonic",
+            return_value=50.0,
+        ):
+            result = _server_uptime()
         self.assertEqual(result, "0d 0h 0m")
 
 
@@ -260,3 +260,40 @@ class SiteAdminStatsViewContextTests(TestCase):
     def test_avg_pins_per_user_is_non_negative(self) -> None:
         ctx = self._get_context()
         self.assertGreaterEqual(ctx["avg_pins_per_user"], 0)
+
+
+class SiteAdminPullLatestCodeViewTests(TestCase):
+    """Code pulling is available only for site admins in development."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user: User = baker.make(User)
+        add_user_to_site_admin_group(self.user)
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_non_development_environment_returns_graceful_json_error(self) -> None:
+        site_settings = SiteSettings.get_current()
+        site_settings.environment_override = EnvironmentOverrideChoice.PRODUCTION
+        site_settings.save(update_fields=["environment_override"])
+
+        response = self.client.post(reverse("site_admin_pull_latest_code"))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(response.json()["ok"])
+
+    def test_development_environment_pulls_and_reports_success(self) -> None:
+        site_settings = SiteSettings.get_current()
+        site_settings.environment_override = EnvironmentOverrideChoice.DEVELOPMENT
+        site_settings.save(update_fields=["environment_override"])
+
+        with (
+            mock.patch("urbanlens.core.version.get_current_git_commit", side_effect=["abc", "def"]),
+            mock.patch("urbanlens.core.version.pull_latest_git_code", return_value=(True, "Updated")) as pull,
+        ):
+            response = self.client.post(reverse("site_admin_pull_latest_code"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+        self.assertTrue(response.json()["changed"])
+        pull.assert_called_once_with()
