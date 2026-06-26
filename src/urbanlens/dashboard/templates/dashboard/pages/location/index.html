@@ -1973,6 +1973,7 @@
 
     // ── Pin detail onboarding ────────────────────────────────────────────────
     (function initPinDetailOnboarding() {
+        {% if not request.user.profile.show_onboarding_tips %}return;{% endif %}
         const prefix = 'ul_onboarding_v1_pin_detail_{{ pin.uuid|default:pin.id }}';
         const sessionKey = prefix + '_later';
         const cards = [

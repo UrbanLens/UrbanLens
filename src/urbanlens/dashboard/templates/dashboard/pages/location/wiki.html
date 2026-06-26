@@ -858,6 +858,7 @@
 
     // ── Community wiki onboarding ───────────────────────────────────────────
     (function initWikiOnboarding() {
+        {% if not request.user.profile.show_onboarding_tips %}return;{% endif %}
         const prefix = 'ul_onboarding_v1_wiki_{{ location.uuid|default:location.id }}';
         const sessionKey = prefix + '_later';
         const cards = [

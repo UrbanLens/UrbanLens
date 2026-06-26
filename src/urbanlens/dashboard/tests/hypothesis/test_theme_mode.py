@@ -12,7 +12,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.settings_form import StyleSettingsForm
-from urbanlens.dashboard.models.profile.model import Profile, ThemeChoice
+from urbanlens.dashboard.models.profile.model import GuidanceLevel, Profile, ThemeChoice
 
 _db_settings = settings(
     max_examples=30,
@@ -104,7 +104,14 @@ class StyleSettingsFormValidationTests(TestCase):
 
     def _submit(self, theme: str) -> StyleSettingsForm:
         profile = _profile()
-        return StyleSettingsForm(data={"theme_mode": theme, "map_dark_mode": ThemeChoice.SYSTEM}, instance=profile)
+        return StyleSettingsForm(
+            data={
+                "theme_mode": theme,
+                "map_dark_mode": ThemeChoice.SYSTEM,
+                "guidance_level": GuidanceLevel.ALL,
+            },
+            instance=profile,
+        )
 
     def test_system_is_valid(self) -> None:
         form = self._submit(ThemeChoice.SYSTEM)
@@ -139,7 +146,10 @@ class StyleSettingsFormSaveTests(TestCase):
     """StyleSettingsForm.save() must persist the theme_mode to the Profile."""
 
     def _save_theme(self, profile: Profile, theme: str) -> Profile:
-        form = StyleSettingsForm(data={"theme_mode": theme, "map_dark_mode": ThemeChoice.SYSTEM}, instance=profile)
+        form = StyleSettingsForm(
+            data={"theme_mode": theme, "map_dark_mode": ThemeChoice.SYSTEM, "guidance_level": GuidanceLevel.ALL},
+            instance=profile,
+        )
         self.assertTrue(form.is_valid(), form.errors)
         form.save()
         profile.refresh_from_db()

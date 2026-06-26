@@ -1036,6 +1036,7 @@
         el.querySelector('.map-onboarding-x')?.addEventListener('click', () => { _setOnboardingLater(); _clearOnboarding(); });
     }
     function initMapOnboarding() {
+        if (!{% if request.user.profile.show_onboarding_tips %}true{% else %}false{% endif %}) return;
         if (_onboardingLater()) return;
         const card = _onboardingCards.find(c => c.shouldShow() && !_onboardingDismissed(c.id));
         if (card) setTimeout(() => _showOnboardingCard(card), 450);

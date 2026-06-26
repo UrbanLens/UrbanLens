@@ -71,6 +71,14 @@ class ThemeChoice(TextChoices):
     DARK = "dark", "Dark"
 
 
+class GuidanceLevel(TextChoices):
+    """How in-app help is shown: walkthrough cards and/or hover hints."""
+
+    ALL = "all", "Guides & hints"
+    TOOLTIPS = "tooltips", "Hints only"
+    NONE = "none", "Off"
+
+
 class Profile(abstract.Model):
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
     # URL slug - globally unique. Auto-generated from username on first save.
@@ -140,9 +148,11 @@ class Profile(abstract.Model):
         choices=ThemeChoice.choices,
         default=ThemeChoice.SYSTEM,
     )
-    hide_tooltips = BooleanField(
-        default=False,
-        help_text="When enabled, hover/focus tooltips are hidden across the entire site.",
+    guidance_level = CharField(
+        max_length=10,
+        choices=GuidanceLevel.choices,
+        default=GuidanceLevel.ALL,
+        help_text="Whether to show feature walkthroughs, and hover hints.",
     )
     map_dark_mode = CharField(
         max_length=10,
@@ -195,6 +205,16 @@ class Profile(abstract.Model):
     )
 
     objects = Manager()
+
+    @property
+    def show_onboarding_tips(self) -> bool:
+        """Whether contextual walkthrough cards should be shown."""
+        return self.guidance_level == GuidanceLevel.ALL
+
+    @property
+    def show_hover_tooltips(self) -> bool:
+        """Whether button hover/focus hints should be shown."""
+        return self.guidance_level != GuidanceLevel.NONE
 
     @property
     def username(self):

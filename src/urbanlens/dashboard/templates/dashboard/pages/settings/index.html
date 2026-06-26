@@ -180,17 +180,36 @@
                 {% endif %}
             </div>
 
-            <div class="settings-field settings-field--checkbox">
-                <label class="settings-checkbox-label">
-                    {{ style_form.hide_tooltips }}
-                    <span class="settings-checkbox-materialize"></span>
-                    <span>
-                        <span class="settings-label">{{ style_form.hide_tooltips.label }}</span>
-                        <p class="settings-help">{{ style_form.hide_tooltips.help_text }}</p>
-                    </span>
-                </label>
-                {% if style_form.hide_tooltips.errors %}
-                <p class="settings-error">{{ style_form.hide_tooltips.errors|join:", " }}</p>
+            <div class="settings-field">
+                <label class="settings-label">{{ style_form.guidance_level.label }}</label>
+                <p class="settings-help">{{ style_form.guidance_level.help_text }}</p>
+                <div class="settings-map-view-row">
+                    {% for radio in style_form.guidance_level %}
+                    <label class="settings-map-view-option ul-radio-button {% if radio.data.value == style_form.instance.guidance_level %}active{% endif %}"
+                           id="guidance-opt-{{ radio.data.value }}"
+                           onclick="applyGuidancePreview('{{ radio.data.value }}')">
+                        {{ radio.tag }}
+                        {% if radio.data.value == "all" %}
+                            <i class="material-icons">school</i><span>Guides &amp; hints</span>
+                        {% elif radio.data.value == "tooltips" %}
+                            <i class="material-icons">info_outline</i><span>Hints only</span>
+                        {% else %}
+                            <i class="material-icons">block</i><span>Off</span>
+                        {% endif %}
+                    </label>
+                    {% endfor %}
+                </div>
+                <p class="settings-help" id="guidance-help-detail" style="margin-top:.5rem">
+                    {% if style_form.instance.guidance_level == "all" %}
+                    Walkthrough cards on key pages, plus short hover hints on buttons.
+                    {% elif style_form.instance.guidance_level == "tooltips" %}
+                    Hover hints on buttons only — no walkthrough cards.
+                    {% else %}
+                    No walkthroughs or hover hints anywhere on the site.
+                    {% endif %}
+                </p>
+                {% if style_form.guidance_level.errors %}
+                <p class="settings-error">{{ style_form.guidance_level.errors|join:", " }}</p>
                 {% endif %}
             </div>
 
@@ -489,6 +508,25 @@ function applyMapDarkPreview(mode) {
     var optMap = { system: 'map-dark-opt-system', light: 'map-dark-opt-light', dark: 'map-dark-opt-dark' };
     var opt = document.getElementById(optMap[mode]);
     if (opt) opt.classList.add('active');
+}
+
+var _guidanceHelpText = {
+    all: 'Walkthrough cards on key pages, plus short hover hints on buttons.',
+    tooltips: 'Hover hints on buttons only — no walkthrough cards.',
+    none: 'No walkthroughs or hover hints anywhere on the site.',
+};
+
+function applyGuidancePreview(level) {
+    var root = document.getElementById('html-root');
+    if (root) root.classList.toggle('tooltips-disabled', level === 'none');
+    ['guidance-opt-all', 'guidance-opt-tooltips', 'guidance-opt-none'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+    });
+    var opt = document.getElementById('guidance-opt-' + level);
+    if (opt) opt.classList.add('active');
+    var detail = document.getElementById('guidance-help-detail');
+    if (detail && _guidanceHelpText[level]) detail.textContent = _guidanceHelpText[level];
 }
 
 // ── Map Center Preview ────────────────────────────────────────────────────────

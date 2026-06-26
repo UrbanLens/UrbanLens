@@ -22,7 +22,7 @@ from urbanlens.dashboard.forms.settings_form import (
     MapDisplayForm,
     StyleSettingsForm,
 )
-from urbanlens.dashboard.models.profile.model import MapCenterMode, MapViewChoice, Profile, ThemeChoice
+from urbanlens.dashboard.models.profile.model import GuidanceLevel, MapCenterMode, MapViewChoice, Profile, ThemeChoice
 from urbanlens.dashboard.tests.hypothesis.strategies import valid_zoom
 
 _db_settings = settings(
@@ -257,7 +257,11 @@ class StyleSettingsFormTests(TestCase):
         return baker.make("auth.User").profile
 
     def _style_data(self, theme: str, map_dark_mode: str = ThemeChoice.SYSTEM) -> dict:
-        return {"theme_mode": theme, "map_dark_mode": map_dark_mode}
+        return {
+            "theme_mode": theme,
+            "map_dark_mode": map_dark_mode,
+            "guidance_level": GuidanceLevel.ALL,
+        }
 
     def test_system_theme_is_valid(self) -> None:
         profile = self._profile()
@@ -291,6 +295,18 @@ class StyleSettingsFormTests(TestCase):
         form.save()
         profile.refresh_from_db()
         self.assertEqual(profile.theme_mode, ThemeChoice.LIGHT)
+
+    def test_saving_hints_only_guidance_persists_to_db(self) -> None:
+        profile = self._profile()
+        data = self._style_data(ThemeChoice.SYSTEM)
+        data["guidance_level"] = GuidanceLevel.TOOLTIPS
+        form = StyleSettingsForm(data=data, instance=profile)
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        profile.refresh_from_db()
+        self.assertEqual(profile.guidance_level, GuidanceLevel.TOOLTIPS)
+        self.assertTrue(profile.show_hover_tooltips)
+        self.assertFalse(profile.show_onboarding_tips)
 
 
 # ── ContactSettingsForm ───────────────────────────────────────────────────────

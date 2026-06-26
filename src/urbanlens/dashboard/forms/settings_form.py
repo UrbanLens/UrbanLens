@@ -2,7 +2,14 @@
 
 from django import forms
 
-from urbanlens.dashboard.models.profile.model import MapCenterMode, MapViewChoice, Profile, ThemeChoice, VisibilityChoice
+from urbanlens.dashboard.models.profile.model import (
+    GuidanceLevel,
+    MapCenterMode,
+    MapViewChoice,
+    Profile,
+    ThemeChoice,
+    VisibilityChoice,
+)
 
 
 class MarkupDefaultsForm(forms.ModelForm):
@@ -122,7 +129,7 @@ class ContactSettingsForm(forms.Form):
 
 
 class StyleSettingsForm(forms.ModelForm):
-    """Site-wide appearance - color theme, map dark mode, and tooltip visibility."""
+    """Site-wide appearance - color theme, map dark mode, and in-app help."""
 
     theme_mode = forms.ChoiceField(
         choices=ThemeChoice.choices,
@@ -136,16 +143,16 @@ class StyleSettingsForm(forms.ModelForm):
         label="Map Dark Mode",
         help_text="When to apply a dark tile layer on the map. System follows your OS preference. Satellite is unaffected.",
     )
-    hide_tooltips = forms.BooleanField(
-        required=False,
-        widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
-        label="Hide Tooltips",
-        help_text="Suppress hover and focus tooltips everywhere on the site.",
+    guidance_level = forms.ChoiceField(
+        choices=GuidanceLevel.choices,
+        widget=forms.RadioSelect(attrs={"class": "settings-radio"}),
+        label="In-app Help",
+        help_text="Choose how UrbanLens introduces features as you explore.",
     )
 
     class Meta:
         model = Profile
-        fields = ["theme_mode", "map_dark_mode", "hide_tooltips"]
+        fields = ["theme_mode", "map_dark_mode", "guidance_level"]
 
 
 class ContactMethodsForm(forms.ModelForm):
