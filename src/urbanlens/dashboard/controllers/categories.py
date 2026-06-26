@@ -313,8 +313,15 @@ class CategoryBulkEditView(LoginRequiredMixin, View):
         profile = request.user.profile
         has_icon = "icon" in data
         has_color = "color" in data
+        has_description = "description" in data
+        has_order = "order" in data
         icon = data.get("icon") or None
         color = data.get("color") or None
+        description = data.get("description", "")
+        try:
+            order = int(data.get("order") or 0)
+        except (TypeError, ValueError):
+            order = 0
         add_parent_ids = [int(x) for x in data.get("add_parent_ids", [])]
 
         categories = list(Badge.objects.filter(id__in=ids, kind="category", profile=profile))
@@ -326,6 +333,12 @@ class CategoryBulkEditView(LoginRequiredMixin, View):
             if has_color:
                 cat.color = color
                 update_fields.append("color")
+            if has_description:
+                cat.description = description
+                update_fields.append("description")
+            if has_order:
+                cat.order = order
+                update_fields.append("order")
             if update_fields:
                 cat.save(update_fields=update_fields)
 
@@ -359,11 +372,34 @@ class CategoryBulkConvertView(LoginRequiredMixin, View):
             return HttpResponse("No categories specified.", status=400)
 
         profile = request.user.profile
+        has_icon = "icon" in data
+        has_color = "color" in data
+        has_description = "description" in data
+        has_order = "order" in data
+        icon = data.get("icon") or None
+        color = data.get("color") or None
+        description = data.get("description", "")
+        try:
+            order = int(data.get("order") or 0)
+        except (TypeError, ValueError):
+            order = 0
+        add_parent_ids = [int(x) for x in data.get("add_parent_ids", [])]
         cats_to_convert = list(Badge.objects.filter(id__in=ids, kind="category", profile=profile))
+        valid_parents = list(Badge.objects.visible_to(profile).filter(id__in=add_parent_ids)) if add_parent_ids else []
         for category in cats_to_convert:
+            if has_icon:
+                category.icon = icon
+            if has_color:
+                category.color = color
+            if has_description:
+                category.description = description
+            if has_order:
+                category.order = order
             category.kind = "tag"
             category.parents.clear()
             category.save()
+            if valid_parents:
+                category.parents.add(*[p for p in valid_parents if p.id != category.id])
 
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
 
@@ -390,11 +426,34 @@ class CategoryBulkConvertToStatusView(LoginRequiredMixin, View):
             return HttpResponse("No categories specified.", status=400)
 
         profile = request.user.profile
+        has_icon = "icon" in data
+        has_color = "color" in data
+        has_description = "description" in data
+        has_order = "order" in data
+        icon = data.get("icon") or None
+        color = data.get("color") or None
+        description = data.get("description", "")
+        try:
+            order = int(data.get("order") or 0)
+        except (TypeError, ValueError):
+            order = 0
+        add_parent_ids = [int(x) for x in data.get("add_parent_ids", [])]
         cats_to_convert = list(Badge.objects.filter(id__in=ids, kind="category", profile=profile))
+        valid_parents = list(Badge.objects.visible_to(profile).filter(id__in=add_parent_ids)) if add_parent_ids else []
         for category in cats_to_convert:
+            if has_icon:
+                category.icon = icon
+            if has_color:
+                category.color = color
+            if has_description:
+                category.description = description
+            if has_order:
+                category.order = order
             category.kind = "status"
             category.parents.clear()
             category.save()
+            if valid_parents:
+                category.parents.add(*[p for p in valid_parents if p.id != category.id])
 
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
 
