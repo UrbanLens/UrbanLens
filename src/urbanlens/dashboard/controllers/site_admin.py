@@ -391,7 +391,10 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             "git_has_newer_commits": git_update.has_newer_commits,
             "git_available": git_update.git_available,
             "git_remote_refreshed": git_update.remote_refreshed,
-            "show_git_pull_button": SiteSettings.get_current().show_dev_admin_features(request.user),
+            "show_git_pull_button": (
+                SiteSettings.get_current().show_dev_admin_features(request.user)
+                and git_update.has_newer_commits
+            ),
             "server_time": now,
         }
         return render(request, "dashboard/pages/site_admin_stats.html", context)
