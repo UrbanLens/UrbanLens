@@ -710,6 +710,7 @@ urlpatterns = [
     path("setup/", setup.SetupWizardView.as_view(), name="setup"),
     path("site-admin/", site_admin.SiteAdminView.as_view(), name="site_admin"),
     path("site-admin/stats/", site_admin.SiteAdminStatsView.as_view(), name="site_admin_stats"),
+    path("site-admin/stats/pull-latest-code/", site_admin.SiteAdminPullLatestCodeView.as_view(), name="site_admin_pull_latest_code"),
     path("site-admin/subscriptions/", site_admin.SiteAdminSubscriptionsView.as_view(), name="site_admin_subscriptions"),
     path(
         "site-admin/ui-components/",

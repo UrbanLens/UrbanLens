@@ -8,6 +8,7 @@ from urbanlens.core.version import (
     format_short_commit,
     get_app_version,
     get_git_update_status,
+    pull_latest_git_code,
 )
 
 
@@ -94,3 +95,25 @@ class GitUpdateStatusTests(TestCase):
         self.assertTrue(status.has_newer_commits)
         self.assertEqual(status.commits_ahead, 2)
         self.assertEqual(status.upstream_commit, upstream)
+
+
+class PullLatestGitCodeTests(TestCase):
+    """pull_latest_git_code wraps git pull safely for the admin endpoint."""
+
+    def test_success_returns_message(self) -> None:
+        completed = mock.Mock(returncode=0, stdout="Already up to date.\n", stderr="")
+        with mock.patch("urbanlens.core.version.subprocess.run", return_value=completed) as run:
+            ok, message = pull_latest_git_code()
+
+        self.assertTrue(ok)
+        self.assertEqual(message, "Already up to date.")
+        run.assert_called_once()
+        self.assertIn("GIT_TERMINAL_PROMPT", run.call_args.kwargs["env"])
+
+    def test_failure_returns_safe_message(self) -> None:
+        completed = mock.Mock(returncode=1, stdout="", stderr="fatal: Not possible to fast-forward")
+        with mock.patch("urbanlens.core.version.subprocess.run", return_value=completed):
+            ok, message = pull_latest_git_code()
+
+        self.assertFalse(ok)
+        self.assertIn("fast-forward", message)
