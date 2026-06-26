@@ -141,7 +141,6 @@
                 </div>
                 <div class="form-field">
                     <label class="form-label">Parent badges (optional)</label>
-                    <p class="form-hint">Placing this category under a parent badge creates emergent behavior — e.g. under "Visited" its pins appear in visit filters.</p>
                     <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
                            oninput="filterParentOptions(this,'parent-select-new-cat')" autocomplete="off">
                     <div class="tag-parent-select" id="parent-select-new-cat">
@@ -281,7 +280,7 @@
                 </div>
                 <div class="form-field">
                     <label class="form-label">
-                        {% include "dashboard/partials/_tooltip_label.html" with label="Parent badges (optional)" help="Child tags inherit organization from parents. Placing a tag under a parent badge creates emergent behavior — e.g. under 'Visited' its pins appear in visit filters." wide=True %}
+                        {% include "dashboard/partials/_tooltip_label.html" with label="Parent badges (optional)" help="Child tags inherit organization from parents." wide=True %}
                     </label>
                     <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
                            oninput="filterParentOptions(this,'parent-select-new-tag')" autocomplete="off">
@@ -410,7 +409,6 @@
                 </div>
                 <div class="form-field">
                     <label class="form-label">Parent badges (optional)</label>
-                    <p class="form-hint">Placing this status under a parent badge creates emergent behavior — e.g. under "Visited" its pins appear in visit filters.</p>
                     <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
                            oninput="filterParentOptions(this,'parent-select-new-status')" autocomplete="off">
                     <div class="tag-parent-select" id="parent-select-new-status">
@@ -744,7 +742,7 @@
         </div>
         <div class="cat-bulk-field">
             <label class="form-label">Add parent badges</label>
-            <p class="cat-bulk-parents-hint">Checked badges will be <strong>added</strong> as parents. Existing parents are not removed. Cross-kind parents enable emergent behavior.</p>
+            <p class="cat-bulk-parents-hint">Checked badges will be <strong>added</strong> as parents. Existing parents are not removed.</p>
             <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
                    oninput="filterParentOptions(this,'tag-bulk-parent-select')" autocomplete="off">
             <div class="tag-parent-select" id="tag-bulk-parent-select">
@@ -883,7 +881,7 @@
         </div>
         <div class="cat-bulk-field">
             <label class="form-label">Add parent badges</label>
-            <p class="cat-bulk-parents-hint">Checked badges will be <strong>added</strong> as parents. Existing parents are not removed. Cross-kind parents enable emergent behavior.</p>
+            <p class="cat-bulk-parents-hint">Checked badges will be <strong>added</strong> as parents. Existing parents are not removed.</p>
             <input type="text" class="form-input tag-parent-search" placeholder="Search badges…"
                    oninput="filterParentOptions(this,'cat-bulk-parent-select')" autocomplete="off">
             <div class="tag-parent-select" id="cat-bulk-parent-select">
