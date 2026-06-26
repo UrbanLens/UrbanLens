@@ -352,9 +352,11 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             "app_version": app_version,
             "deployed_commit_short": format_short_commit(git_update.deployed_commit),
             "current_commit_short": format_short_commit(git_update.current_commit),
+            "upstream_commit_short": format_short_commit(git_update.upstream_commit),
             "git_commits_ahead": git_update.commits_ahead,
             "git_has_newer_commits": git_update.has_newer_commits,
             "git_available": git_update.git_available,
+            "git_remote_refreshed": git_update.remote_refreshed,
             "server_time": now,
         }
         return render(request, "dashboard/pages/site_admin_stats.html", context)

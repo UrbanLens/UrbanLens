@@ -41,7 +41,11 @@ class GitUpdateStatusTests(TestCase):
     """get_git_update_status compares deployed and current commits."""
 
     def test_no_git_repo_reports_unavailable(self) -> None:
-        with mock.patch("urbanlens.core.version.get_current_git_commit", return_value=None):
+        with (
+            mock.patch("urbanlens.core.version._git_fetch", return_value=False),
+            mock.patch("urbanlens.core.version.get_current_git_commit", return_value=None),
+            mock.patch("urbanlens.core.version.get_upstream_git_commit", return_value=None),
+        ):
             status = get_git_update_status("abc123")
         self.assertFalse(status.git_available)
         self.assertFalse(status.has_newer_commits)
@@ -49,11 +53,14 @@ class GitUpdateStatusTests(TestCase):
     def test_matching_commits_are_up_to_date(self) -> None:
         commit = "abc123def456"
         with (
+            mock.patch("urbanlens.core.version._git_fetch", return_value=True),
             mock.patch("urbanlens.core.version.get_current_git_commit", return_value=commit),
+            mock.patch("urbanlens.core.version.get_upstream_git_commit", return_value=commit),
             mock.patch("urbanlens.core.version._count_commits_ahead", return_value=0),
         ):
             status = get_git_update_status(commit)
         self.assertTrue(status.git_available)
+        self.assertTrue(status.remote_refreshed)
         self.assertFalse(status.has_newer_commits)
         self.assertEqual(status.commits_ahead, 0)
 
@@ -61,9 +68,29 @@ class GitUpdateStatusTests(TestCase):
         deployed = "abc123def456"
         current = "fed987cba654"
         with (
+            mock.patch("urbanlens.core.version._git_fetch", return_value=True),
             mock.patch("urbanlens.core.version.get_current_git_commit", return_value=current),
+            mock.patch("urbanlens.core.version.get_upstream_git_commit", return_value=current),
             mock.patch("urbanlens.core.version._count_commits_ahead", return_value=3),
         ):
             status = get_git_update_status(deployed)
         self.assertTrue(status.has_newer_commits)
         self.assertEqual(status.commits_ahead, 3)
+
+    def test_upstream_ahead_of_local_flags_update_available(self) -> None:
+        deployed = "abc123def456"
+        current = "abc123def456"
+        upstream = "fed987cba654"
+        with (
+            mock.patch("urbanlens.core.version._git_fetch", return_value=True),
+            mock.patch("urbanlens.core.version.get_current_git_commit", return_value=current),
+            mock.patch("urbanlens.core.version.get_upstream_git_commit", return_value=upstream),
+            mock.patch(
+                "urbanlens.core.version._count_commits_ahead",
+                side_effect=lambda _base, head: 0 if head == current else 2,
+            ),
+        ):
+            status = get_git_update_status(deployed)
+        self.assertTrue(status.has_newer_commits)
+        self.assertEqual(status.commits_ahead, 2)
+        self.assertEqual(status.upstream_commit, upstream)

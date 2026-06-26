@@ -217,6 +217,15 @@
                 </div>
             </div>
             {% endif %}
+            {% if git_available and upstream_commit_short and upstream_commit_short != current_commit_short and upstream_commit_short != deployed_commit_short %}
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#64748b">cloud</i>
+                <div>
+                    <div class="stats-health-value"><code>{{ upstream_commit_short }}</code></div>
+                    <div class="stats-health-label">Remote HEAD</div>
+                </div>
+            </div>
+            {% endif %}
             <div class="stats-health-item">
                 {% if not git_available %}
                 <i class="material-icons stats-health-icon" style="color:#94a3b8">help_outline</i>
@@ -230,7 +239,13 @@
                     <div class="stats-health-value stats-health-value--warn">
                         {{ git_commits_ahead }} newer commit{{ git_commits_ahead|pluralize }} available
                     </div>
-                    <div class="stats-health-label">Rebuild or restart to deploy</div>
+                    <div class="stats-health-label">
+                        {% if git_remote_refreshed and upstream_commit_short and upstream_commit_short != current_commit_short %}
+                        Pull and redeploy to update
+                        {% else %}
+                        Rebuild or restart to deploy
+                        {% endif %}
+                    </div>
                 </div>
                 {% else %}
                 <i class="material-icons stats-health-icon" style="color:#16a34a">check_circle</i>

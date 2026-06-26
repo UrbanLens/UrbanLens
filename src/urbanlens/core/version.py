@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version as pkg_version
 import logging
+import os
 from pathlib import Path
 import subprocess
 import tomllib
@@ -21,21 +22,25 @@ _GIT_CWD = DEFAULT_ROOT.parent
 
 @dataclass(frozen=True, slots=True)
 class GitUpdateStatus:
-    """Comparison between the deployed git commit and the current repository HEAD.
+    """Comparison between the deployed git commit and the latest known repository state.
 
     Attributes:
         deployed_commit: Git commit hash recorded at deploy or process start.
         current_commit: Current ``HEAD`` in the local git repository, if available.
-        commits_ahead: Number of commits on ``HEAD`` that are not in ``deployed_commit``.
+        upstream_commit: Upstream tracking branch commit after ``git fetch``, if available.
+        commits_ahead: Commits on the latest reference not in ``deployed_commit``.
         has_newer_commits: Whether ``commits_ahead`` is greater than zero.
         git_available: Whether git commands succeeded for the repository.
+        remote_refreshed: Whether ``git fetch`` completed successfully.
     """
 
     deployed_commit: str | None
     current_commit: str | None
+    upstream_commit: str | None
     commits_ahead: int | None
     has_newer_commits: bool
     git_available: bool
+    remote_refreshed: bool
 
 
 def get_app_version() -> str:
@@ -105,6 +110,38 @@ def get_current_git_commit() -> str | None:
     return _git_rev_parse("HEAD")
 
 
+def _git_fetch() -> bool:
+    """Refresh remote-tracking refs from configured remotes.
+
+    Returns:
+        ``True`` when ``git fetch`` completed successfully.
+    """
+    try:
+        subprocess.run(
+            ["git", "fetch", "--quiet", "--prune"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+            cwd=_GIT_CWD,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+    except (subprocess.SubprocessError, OSError):
+        logger.warning("git fetch failed; update status will use local refs only", exc_info=True)
+        return False
+
+    return True
+
+
+def get_upstream_git_commit() -> str | None:
+    """Return the commit hash for the current branch's upstream tracking ref.
+
+    Returns:
+        Full commit hash for ``@{u}``, or ``None`` when no upstream is configured.
+    """
+    return _git_rev_parse("@{u}")
+
+
 def _count_commits_ahead(base_commit: str, head_commit: str) -> int | None:
     """Count commits reachable from ``head_commit`` but not ``base_commit``.
 
@@ -151,40 +188,91 @@ def format_short_commit(commit: str | None, length: int = 7) -> str:
     return commit[:length]
 
 
+def _latest_reference_commit(
+    deployed_commit: str | None,
+    current_commit: str | None,
+    upstream_commit: str | None,
+) -> str | None:
+    """Pick the furthest known commit ahead of the deployed baseline.
+
+    Args:
+        deployed_commit: Commit hash recorded at deploy or process start.
+        current_commit: Current local ``HEAD`` hash.
+        upstream_commit: Upstream tracking branch commit after fetch.
+
+    Returns:
+        Commit hash farthest from ``deployed_commit``, preferring upstream when tied.
+    """
+    candidates: list[str] = []
+    if current_commit:
+        candidates.append(current_commit)
+    if upstream_commit:
+        candidates.append(upstream_commit)
+
+    if not candidates:
+        return None
+
+    if not deployed_commit or len(candidates) == 1:
+        return upstream_commit or current_commit
+
+    best_commit = candidates[0]
+    best_ahead = _count_commits_ahead(deployed_commit, best_commit) or 0
+    for candidate in candidates[1:]:
+        ahead = _count_commits_ahead(deployed_commit, candidate) or 0
+        if ahead > best_ahead or (ahead == best_ahead and candidate == upstream_commit):
+            best_commit = candidate
+            best_ahead = ahead
+
+    return best_commit
+
+
 def get_git_update_status(deployed_commit: str | None) -> GitUpdateStatus:
-    """Compare the deployed commit against the current repository ``HEAD``.
+    """Compare the deployed commit against local and remote repository state.
+
+    Runs ``git fetch`` before reading upstream refs so GitHub commits not yet
+    pulled locally are included in the update check.
 
     Args:
         deployed_commit: Commit hash recorded at deploy or process start.
 
     Returns:
-        GitUpdateStatus describing whether newer commits are available locally.
+        GitUpdateStatus describing whether newer commits are available.
     """
+    remote_refreshed = _git_fetch()
     current_commit = get_current_git_commit()
-    if current_commit is None:
+    upstream_commit = get_upstream_git_commit()
+
+    if current_commit is None and upstream_commit is None:
         return GitUpdateStatus(
             deployed_commit=deployed_commit,
             current_commit=None,
+            upstream_commit=None,
             commits_ahead=None,
             has_newer_commits=False,
             git_available=False,
+            remote_refreshed=remote_refreshed,
         )
 
     if not deployed_commit:
         return GitUpdateStatus(
             deployed_commit=None,
             current_commit=current_commit,
+            upstream_commit=upstream_commit,
             commits_ahead=0,
             has_newer_commits=False,
             git_available=True,
+            remote_refreshed=remote_refreshed,
         )
 
-    commits_ahead = _count_commits_ahead(deployed_commit, current_commit)
+    reference_commit = _latest_reference_commit(deployed_commit, current_commit, upstream_commit)
+    commits_ahead = _count_commits_ahead(deployed_commit, reference_commit) if reference_commit else None
     has_newer = commits_ahead is not None and commits_ahead > 0
     return GitUpdateStatus(
         deployed_commit=deployed_commit,
         current_commit=current_commit,
+        upstream_commit=upstream_commit,
         commits_ahead=commits_ahead,
         has_newer_commits=has_newer,
         git_available=True,
+        remote_refreshed=remote_refreshed,
     )
