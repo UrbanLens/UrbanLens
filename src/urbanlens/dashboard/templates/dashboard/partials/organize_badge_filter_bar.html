@@ -1,0 +1,15 @@
+<div id="{{ ns }}-filter-bar" class="org-filter-bar">
+    <input type="search" id="{{ ns }}-filter-search" class="org-filter-search" placeholder="Search {{ plural_lower }}…" oninput="applyOrgFilter('{{ filter_ns }}')" autocomplete="off">
+    <div class="org-filter-chips">
+        <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon" onclick="toggleOrgChip(this,'{{ filter_ns }}')"><i class="material-icons">image</i> Has icon</button>
+        <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon" onclick="toggleOrgChip(this,'{{ filter_ns }}')"><i class="material-icons">hide_image</i> No icon</button>
+        <button type="button" class="org-filter-chip" data-filter="has-children" onclick="toggleOrgChip(this,'{{ filter_ns }}')"><i class="material-icons">account_tree</i> Has children</button>
+        <button type="button" class="org-filter-chip" data-filter="has-parents" onclick="toggleOrgChip(this,'{{ filter_ns }}')"><i class="material-icons">call_merge</i> Has parents</button>
+        <div class="org-filter-color-row">
+            <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color" data-mutex="no-color" title="Show only items with a color" onclick="toggleOrgChip(this,'{{ filter_ns }}')"><i class="material-icons">palette</i></button>
+            {% for hex, label in color_choices %}<button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}" style="background:{{ hex }};" onclick="toggleOrgChip(this,'{{ filter_ns }}')"></button>{% endfor %}
+            <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color" data-mutex="has-color" title="Show only items without a color" onclick="toggleOrgChip(this,'{{ filter_ns }}')"><i class="material-icons">block</i></button>
+        </div>
+        <button type="button" class="org-filter-clear" onclick="clearOrgFilter('{{ filter_ns }}')">✕ Clear</button>
+    </div>
+</div>

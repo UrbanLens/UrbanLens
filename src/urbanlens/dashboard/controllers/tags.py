@@ -428,8 +428,15 @@ class TagBulkEditView(LoginRequiredMixin, View):
         profile = request.user.profile
         has_icon = "icon" in data
         has_color = "color" in data
+        has_description = "description" in data
+        has_order = "order" in data
         icon = data.get("icon") or None
         color = data.get("color") or None
+        description = data.get("description", "")
+        try:
+            order = int(data.get("order") or 0)
+        except (TypeError, ValueError):
+            order = 0
         add_parent_ids = [int(x) for x in data.get("add_parent_ids", [])]
 
         tags = list(Badge.objects.filter(id__in=ids, profile=profile, kind="tag"))
@@ -441,6 +448,12 @@ class TagBulkEditView(LoginRequiredMixin, View):
             if has_color:
                 tag.color = color
                 update_fields.append("color")
+            if has_description:
+                tag.description = description
+                update_fields.append("description")
+            if has_order:
+                tag.order = order
+                update_fields.append("order")
             if update_fields:
                 tag.save(update_fields=update_fields)
 
@@ -474,11 +487,34 @@ class TagBulkConvertView(LoginRequiredMixin, View):
             return HttpResponse("No tags specified.", status=400)
 
         profile = request.user.profile
+        has_icon = "icon" in data
+        has_color = "color" in data
+        has_description = "description" in data
+        has_order = "order" in data
+        icon = data.get("icon") or None
+        color = data.get("color") or None
+        description = data.get("description", "")
+        try:
+            order = int(data.get("order") or 0)
+        except (TypeError, ValueError):
+            order = 0
+        add_parent_ids = [int(x) for x in data.get("add_parent_ids", [])]
         tags_to_convert = list(Badge.objects.filter(id__in=ids, profile=profile, kind="tag"))
+        valid_parents = list(Badge.objects.visible_to(profile).filter(id__in=add_parent_ids)) if add_parent_ids else []
         for tag in tags_to_convert:
+            if has_icon:
+                tag.icon = icon
+            if has_color:
+                tag.color = color
+            if has_description:
+                tag.description = description
+            if has_order:
+                tag.order = order
             tag.kind = "category"
             tag.parents.clear()
             tag.save()
+            if valid_parents:
+                tag.parents.add(*[p for p in valid_parents if p.id != tag.id])
 
         return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM)))
 
@@ -505,12 +541,35 @@ class TagBulkConvertToStatusView(LoginRequiredMixin, View):
             return HttpResponse("No tags specified.", status=400)
 
         profile = request.user.profile
+        has_icon = "icon" in data
+        has_color = "color" in data
+        has_description = "description" in data
+        has_order = "order" in data
+        icon = data.get("icon") or None
+        color = data.get("color") or None
+        description = data.get("description", "")
+        try:
+            order = int(data.get("order") or 0)
+        except (TypeError, ValueError):
+            order = 0
+        add_parent_ids = [int(x) for x in data.get("add_parent_ids", [])]
         tags_to_convert = list(Badge.objects.filter(id__in=ids, profile=profile, kind="tag"))
+        valid_parents = list(Badge.objects.visible_to(profile).filter(id__in=add_parent_ids)) if add_parent_ids else []
         for tag in tags_to_convert:
+            if has_icon:
+                tag.icon = icon
+            if has_color:
+                tag.color = color
+            if has_description:
+                tag.description = description
+            if has_order:
+                tag.order = order
             tag.kind = "status"
             tag.profile = profile
             tag.parents.clear()
             tag.save()
+            if valid_parents:
+                tag.parents.add(*[p for p in valid_parents if p.id != tag.id])
 
         return render(request, "dashboard/partials/tag_rows.html", _rows_ctx(profile, request.user.has_perm(_PERM)))
 
