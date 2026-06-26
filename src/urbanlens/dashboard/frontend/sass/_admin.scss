@@ -1,0 +1,208 @@
+@use "sass:color";
+@use 'variables' as *;
+
+// ── Subscription admin ────────────────────────────────────────────────────────
+
+.subscription-grid {
+    display: grid;
+    grid-template-columns: minmax(280px, .9fr) 1.4fr;
+    gap: 1rem;
+
+    @media (max-width: 900px) {
+        grid-template-columns: 1fr;
+    }
+}
+
+.subscription-admin-page {
+    .role-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        border-radius: 999px;
+        padding: .25rem .65rem;
+        background: linear-gradient(135deg, #ede9fe, #cffafe);
+        color: #334155;
+        font-size: .82rem;
+        font-weight: 700;
+        white-space: nowrap;
+
+        .material-icons {
+            font-size: .95rem;
+        }
+    }
+}
+
+$subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px, .75fr) minmax(220px, 1.35fr);
+
+.subscription-list {
+    padding: 0 1rem 1.25rem;
+
+    &__head {
+        display: grid;
+        grid-template-columns: $subscription-list-cols;
+        gap: .75rem;
+        padding: .5rem .85rem .65rem;
+        font-size: .75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--ul-grey-7);
+    }
+
+    &__items {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: .6rem;
+    }
+
+    &__item {
+        display: grid;
+        grid-template-columns: $subscription-list-cols;
+        gap: .75rem;
+        align-items: center;
+        padding: .85rem;
+        background: var(--ul-grey-0);
+        border: 1px solid var(--ul-border);
+        border-radius: 10px;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, .06);
+        transition: border-color .15s, box-shadow .15s;
+
+        &:hover {
+            border-color: $ui-blue-300;
+            box-shadow: 0 6px 20px rgba(15, 23, 42, .08);
+        }
+    }
+
+    &__label {
+        display: none;
+        font-size: .72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--ul-grey-6);
+        margin-bottom: .25rem;
+    }
+
+    &__value {
+        min-width: 0;
+    }
+
+    &__username {
+        display: block;
+        font-size: .92rem;
+        color: var(--ul-grey-8);
+    }
+
+    &__email {
+        display: block;
+        margin-top: .15rem;
+        font-size: .78rem;
+        color: var(--ul-grey-6);
+        word-break: break-word;
+    }
+
+    &__indefinite {
+        color: var(--ul-grey-7);
+        font-style: italic;
+    }
+
+    &__empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: .5rem;
+        padding: 2.5rem 1rem;
+        color: var(--ul-grey-6);
+        font-size: .9rem;
+        background: var(--ul-grey-0);
+        border: 1px dashed var(--ul-border);
+        border-radius: 10px;
+
+        .material-icons {
+            font-size: 1.4rem;
+            opacity: .55;
+        }
+    }
+
+    @media (max-width: 900px) {
+        &__head {
+            display: none;
+        }
+
+        &__item {
+            grid-template-columns: 1fr;
+            gap: .85rem;
+            align-items: stretch;
+        }
+
+        &__label {
+            display: block;
+        }
+
+        &__col--actions .subscription-list__value {
+            width: 100%;
+        }
+    }
+}
+
+.inline-sub-form {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+    flex-wrap: wrap;
+
+    select {
+        min-width: 7.5rem;
+        padding: .45rem .65rem;
+        border: 1.5px solid var(--ul-border);
+        border-radius: 8px;
+        font-size: .85rem;
+        color: var(--ul-grey-8);
+        background: var(--ul-grey-0);
+        outline: none;
+        transition: border-color .15s;
+
+        &:focus {
+            border-color: $ui-blue-500;
+        }
+    }
+}
+
+// - Dark Mode
+[data-theme="dark"] {
+    
+    .subscription-admin-page .role-pill {
+        background: linear-gradient(135deg, rgba($ui-violet-600, .25), rgba($ui-blue-500, .2));
+        color: var(--ul-grey-8);
+    }
+
+    .subscription-list {
+        &__item,
+        &__empty {
+            background: var(--ul-grey-1);
+            border-color: var(--ul-border-strong);
+            box-shadow: none;
+
+            &:hover {
+                border-color: rgba($ui-blue-500, .35);
+            }
+        }
+
+        &__empty {
+            border-style: dashed;
+        }
+    }
+
+    .inline-sub-form select {
+        background: var(--ul-grey-1);
+        border-color: var(--ul-border-strong);
+        color: var(--ul-grey-8);
+
+        &:focus {
+            border-color: color.adjust($primary-color, $lightness: 10%);
+        }
+    }
+}
