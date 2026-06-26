@@ -193,7 +193,7 @@ def _export_photos(profile: Any, temp_dir: str) -> None:
         file_path = image.image.path if image.image else None
         filename = os.path.basename(file_path) if file_path else None
 
-        if file_path and os.path.exists(file_path):
+        if file_path and filename is not None and os.path.exists(file_path):
             dest = os.path.join(photos_dir, filename)
             # Avoid name collisions
             if os.path.exists(dest):

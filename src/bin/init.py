@@ -5,7 +5,8 @@ import logging
 import os
 from pathlib import Path
 import re
-import subprocess
+from shutil import which
+import subprocess  # nosec B404
 import sys
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,13 @@ class UnrecoverableError(Exception):
     An error that cannot be recovered. This will result in a sys.exit(1)
     """
 
+
+def resolve_executable(name: str) -> str:
+    """Return an absolute path for an expected executable on PATH."""
+    resolved = which(name)
+    if resolved is None:
+        raise UnrecoverableError(f"Required executable not found on PATH: {name}")
+    return resolved
 
 # Resolve from this file's location: src/bin/init.py → src/ → project root
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -132,10 +140,19 @@ class DjangoProjectInitializer:
         git_user = os.environ.get("GIT_NAME")
         git_email = os.environ.get("GIT_EMAIL")
         try:
+            git_executable = resolve_executable("git")
             if git_user:
-                subprocess.run(["git", "config", "--global", "user.name", git_user], check=True, cwd=ROOT_DIR)
+                subprocess.run(
+                    [git_executable, "config", "--global", "user.name", git_user],
+                    check=True,
+                    cwd=ROOT_DIR,
+                )  # nosec B603
             if git_email:
-                subprocess.run(["git", "config", "--global", "user.email", git_email], check=True, cwd=ROOT_DIR)
+                subprocess.run(
+                    [git_executable, "config", "--global", "user.email", git_email],
+                    check=True,
+                    cwd=ROOT_DIR,
+                )  # nosec B603
             logger.info("Git configured with username %s and email %s.", git_user, git_email)
 
         except subprocess.CalledProcessError as e:
@@ -345,7 +362,12 @@ class DjangoProjectInitializer:
 
         """
         try:
-            subprocess.run(command, check=True, cwd=cwd or ROOT_DIR)
+            resolved_command = [resolve_executable(command[0]), *command[1:]]
+            subprocess.run(
+                resolved_command,
+                check=True,
+                cwd=cwd or ROOT_DIR,
+            )  # nosec B603
             return True
 
         except subprocess.CalledProcessError as e:
@@ -443,8 +465,10 @@ class DjangoProjectInitializer:
             "-p",
             str(self.db_port),
             "-w",
+            "-v",
+            f"db_name={self.db_name}",
             "-c",
-            f"SELECT 1 FROM pg_database WHERE datname='{self.db_name}'",  # noqa: S608 - Safe data, but TODO: parameterize
+            "SELECT 1 FROM pg_database WHERE datname = :'db_name'",
         ]
         return self.run_command(command, "checking database", raise_error=False)
 

@@ -19,8 +19,8 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
+from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.utils.safestring import mark_safe
 from django.views import View, generic
 
 from urbanlens.dashboard.models.account import EmailVerification
@@ -369,9 +369,10 @@ class CustomLoginView(LoginView):
                     resend_url = reverse("resend_verification") + f"?email={quote(user.email)}"
                     form.errors["__all__"] = form.error_class(
                         [
-                            mark_safe(  # noqa: S308 - URL and text are internal, no user input
-                                "Your email address hasn't been verified yet. "
-                                f'<a href="{resend_url}" class="auth-inline-link">Resend verification email</a>',
+                            format_html(
+                                'Your email address hasn\'t been verified yet. '
+                                '<a href="{}" class="auth-inline-link">Resend verification email</a>',
+                                resend_url,
                             ),
                         ],
                     )

@@ -17,11 +17,12 @@ import re
 from typing import TYPE_CHECKING
 import uuid
 
-from django.utils.html import conditional_escape, format_html
-from django.utils.safestring import SafeString, mark_safe
+from django.utils.html import conditional_escape, format_html, format_html_join
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from django.utils.safestring import SafeString
 
     from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.models.profile.model import Profile
@@ -112,7 +113,7 @@ def render_comment_text(
         last_end = end
 
     parts.append(conditional_escape(text[last_end:]))
-    return mark_safe("".join(str(p) for p in parts))  # noqa: S308 - safe: all parts built via format_html/conditional_escape
+    return format_html_join("", "{}", ((part,) for part in parts))
 
 
 def viewer_pinned_uuids(profile: Profile) -> set[uuid.UUID]:
