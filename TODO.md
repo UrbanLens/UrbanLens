@@ -2,7 +2,6 @@
 Features planned for this release.
 
 ## UI Adjustments
-* Notification bar modernization (read/unread are not clear) [UL-3]
 * Tweak notifications, and make success/error states more clear. [UL-6]
 * Loading indicators for all ui actions that take time. (Creating pin, searching map, etc) [UL-8]
 
