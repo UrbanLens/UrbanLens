@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from django.contrib.auth.models import User
+from django.contrib.auth.base_user import AbstractBaseUser
+from django.contrib.auth.models import AnonymousUser, User
 from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, Q, TextChoices, UniqueConstraint
 from django.utils import timezone
 
@@ -105,9 +106,15 @@ class PendingSubscriptionGrant(abstract.Model):
         return int(self.duration_months)
 
 
-def user_has_feature(user: User, feature: SiteFeature | str) -> bool:
-    """Return whether the user has an active role granting the feature."""
-    if not user or not user.is_authenticated:
+def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeature | str) -> bool:
+    """Return whether the user has an active role granting the feature.
+
+    Anonymous users never have subscription-backed features. Keeping this
+    guard in the helper lets callers use ``request.user`` directly without
+    duplicating authentication/type checks throughout controllers and context
+    processors.
+    """
+    if not isinstance(user, User) or not user.is_authenticated:
         return False
     now = timezone.now()
     subscriptions = UserSubscription.objects.filter(

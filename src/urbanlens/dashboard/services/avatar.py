@@ -8,6 +8,8 @@ import secrets
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
+import requests
+
 from urbanlens.dashboard.models.colors import MaterialColor
 
 if TYPE_CHECKING:
@@ -154,15 +156,27 @@ class AvatarService:
             return None
 
         try:
-            import urllib.request
-
-            req = urllib.request.Request(url, headers={"User-Agent": "UrbanLens/1.0"})  # noqa: S310
-            with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
-                if resp.status != 200:
+            with requests.get(
+                url,
+                headers={"User-Agent": "UrbanLens/1.0"},
+                stream=True,
+                timeout=timeout,
+            ) as response:
+                if response.status_code != 200:
                     return None
-                data = resp.read(512 * 1024)  # cap at 512 KiB
-                return data or None
-        except Exception as exc:
-            # TODO: catch specific exception
+
+                chunks: list[bytes] = []
+                total_bytes = 0
+                max_bytes = 512 * 1024
+                for chunk in response.iter_content(chunk_size=8192):
+                    if not chunk:
+                        continue
+                    total_bytes += len(chunk)
+                    if total_bytes > max_bytes:
+                        logger.warning("Rejecting avatar response larger than %s bytes: %s", max_bytes, url)
+                        return None
+                    chunks.append(chunk)
+                return b"".join(chunks) or None
+        except requests.RequestException as exc:
             logger.debug("Avatar download failed for %s: %s", url, exc)
             return None
