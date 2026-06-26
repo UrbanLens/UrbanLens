@@ -457,6 +457,9 @@ class DjangoProjectInitializer:
             bool: True if the database exists, False otherwise
 
         """
+        # Connect directly to the target DB; psql exits non-zero if it does not exist.
+        # Do not query pg_database via -c with :'var' syntax - psql does not expand
+        # variables in -c commands, so PostgreSQL receives the literal :'db_name'.
         command = [
             "psql",
             "-U",
@@ -466,10 +469,10 @@ class DjangoProjectInitializer:
             "-p",
             str(self.db_port),
             "-w",
-            "-v",
-            f"db_name={self.db_name}",
+            "-d",
+            self.db_name,
             "-c",
-            "SELECT 1 FROM pg_database WHERE datname = :'db_name'",
+            "SELECT 1",
         ]
         return self.run_command(command, "checking database", raise_error=False)
 

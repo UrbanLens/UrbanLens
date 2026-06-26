@@ -429,10 +429,17 @@ class DbInitializer:
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
                 raise ValueError(f"Invalid psql variable name: {key!r}")
             cmd.extend(["-v", f"{key}={value}"])
-        cmd.extend([
-            "-c",
-            sql,
-        ])
+        if variables:
+            # psql expands :'var' only when SQL is read from stdin, not via -c.
+            return subprocess.run(  # nosec B603
+                cmd,
+                env=self._psql_env(),
+                input=sql.encode(),
+                check=check,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        cmd.extend(["-c", sql])
         return subprocess.run(cmd, env=self._psql_env(), check=check, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # nosec B603
 
     def _check_role_exists(self) -> bool:
