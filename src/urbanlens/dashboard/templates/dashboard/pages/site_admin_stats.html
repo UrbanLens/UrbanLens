@@ -291,20 +291,20 @@
                 </div>
                 {% endif %}
             </div>
+            {% if show_git_pull_button %}
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#2563eb">download</i>
+                <div>
+                    <button type="button" class="btn btn--primary btn--sm" id="git-pull-refresh-btn" data-url="{% url 'site_admin_pull_latest_code' %}">
+                        <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">sync</i>
+                        Pull &amp; Refresh
+                    </button>
+                    <div class="stats-health-label">Development tools</div>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
-    {% if show_git_pull_button %}
-    <div class="stats-health-item">
-        <i class="material-icons stats-health-icon" style="color:#2563eb">download</i>
-        <div>
-            <button type="button" class="btn btn--primary btn--sm" id="git-pull-refresh-btn" data-url="{% url 'site_admin_pull_latest_code' %}">
-                <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">sync</i>
-                Pull &amp; Refresh
-            </button>
-            <div class="stats-health-label">Development tools</div>
-        </div>
-    </div>
-    {% endif %}
 
     {# ── Server health ─────────────────────────────────────────────────────── #}
     <div class="site-admin-card ul-section card">
