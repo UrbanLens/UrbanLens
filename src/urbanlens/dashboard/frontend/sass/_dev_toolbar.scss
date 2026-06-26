@@ -17,8 +17,26 @@
     overflow: hidden;
 
     &[data-collapsed='true'] {
+        min-width: 0;
+
         .dev-toolbar__chevron {
             transform: rotate(-90deg);
+        }
+
+        .dev-toolbar__header {
+            border-bottom: 0;
+        }
+
+        .dev-toolbar__reset-position {
+            display: none;
+        }
+
+        .dev-toolbar__body {
+            max-height: 0;
+            opacity: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            pointer-events: none;
         }
     }
 
@@ -106,6 +124,13 @@
     flex-direction: column;
     padding: 0.35rem;
     gap: 0.25rem;
+    overflow: hidden;
+    max-height: 20rem;
+    opacity: 1;
+    transition:
+        max-height 0.2s ease,
+        opacity 0.15s ease,
+        padding 0.2s ease;
 }
 
 .dev-toolbar__tool {
