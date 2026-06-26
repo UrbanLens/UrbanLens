@@ -218,6 +218,7 @@ Features planned for future releases.
 * Add site admin setting to make the site invite only, and suspend public signups. [UL-244]
 * Loopnet API or Scraping [UL-248]
 * Get pin / location bounding box from external service (i.e. property boundaries), or attempt ML building boundaries detection. [UL-249]
+* Organize Page > Priority Tab: Provide mechanism for shifting an item to a specific position (e.g. "go to position 20"), and allow multi-select before dragging to drag as a group. [UL-250]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
@@ -229,7 +230,7 @@ Features planned for future releases.
 * Kubernetes [UL-78]
 * More API access for finding vintage photos and documents, location details, alerts, etc. [UL-79]
 * Reduce reliance on javascript further by migrating more of it to HTMX. [UL-80]
-* "Demolition Alert" feature. I'm not sure if this is practically possible, since regularly searching for every pin is out of the question. [UL-81]
+* "Demolition Alert" feature. I'm not sure if this is practically possible, since regularly searching for every pin is out of the question. Allow subscribed users to set alerts on specific pins. [UL-81]
 
 ### Native Mobile App
 * Automatically check off visit logs [UL-82]

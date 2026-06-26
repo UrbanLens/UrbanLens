@@ -2482,6 +2482,11 @@
         }
     }
 
+    .priority-item:first-child .priority-jump-btn.jump-top,
+    .priority-item:last-child .priority-jump-btn.jump-bottom {
+        display: none;
+    }
+
     dialog.tag-create-card {
         width: min(720px, calc(100vw - 2rem));
         max-height: min(86vh, 760px);
