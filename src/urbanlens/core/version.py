@@ -9,6 +9,7 @@ import logging
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tomllib
 
 from urbanlens.UrbanLens.settings.meta.app import DEFAULT_ROOT
@@ -193,6 +194,55 @@ def _count_commits_ahead(base_commit: str, head_commit: str) -> int | None:
         return int(result.stdout.strip())
     except ValueError:
         return None
+
+
+def apply_pending_migrations() -> tuple[bool, str]:
+    """Apply Django database migrations after a development code update.
+
+    Returns:
+        ``(True, message)`` when migrations completed; otherwise ``(False, message)``.
+    """
+    manage_py = DEFAULT_ROOT / "manage.py"
+    try:
+        result = subprocess.run(
+            [sys.executable, str(manage_py), "migrate", "--noinput"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=300,
+            cwd=DEFAULT_ROOT,
+            env=os.environ.copy(),
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("django migrate timed out after git pull", exc_info=True)
+        return False, "Timed out while applying database migrations."
+    except OSError:
+        logger.warning("django migrate could not be started after git pull", exc_info=True)
+        return False, "Could not start database migrations on this server."
+
+    output = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
+    if result.returncode == 0:
+        return True, output or "Database migrations are up to date."
+
+    logger.warning("django migrate failed with exit code %s: %s", result.returncode, output)
+    return False, output or "Database migrations failed."
+
+
+def trigger_development_app_reload() -> tuple[bool, str]:
+    """Force Django's development autoreloader to restart the app process.
+
+    The admin pull endpoint is development-only. Touching ``manage.py`` updates
+    a watched Python file's mtime without changing its contents, causing
+    ``runserver``'s autoreloader to restart and import the newly pulled code.
+    """
+    manage_py = DEFAULT_ROOT / "manage.py"
+    try:
+        os.utime(manage_py, None)
+    except OSError:
+        logger.warning("could not touch manage.py to trigger development reload", exc_info=True)
+        return False, "Could not signal the development server to reload."
+
+    return True, "Development server reload requested."
 
 
 def pull_latest_git_code() -> tuple[bool, str]:
