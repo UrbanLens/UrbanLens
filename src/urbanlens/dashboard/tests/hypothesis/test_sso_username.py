@@ -33,7 +33,7 @@ class SanitizeSsoUsernameTests(TestCase):
         raw = "a" * 40
         sanitized = _sanitize_sso_username(raw)
         self.assertIsNotNone(sanitized)
-        assert sanitized is not None
+        assert sanitized is not None  # nosec B101
         self.assertLessEqual(len(sanitized), 30)
 
 
@@ -101,4 +101,4 @@ def test_sanitize_email_local_part_is_valid_or_none(local: str, domain: str) -> 
     """Sanitized email prefixes always satisfy username rules when present."""
     sanitized = _sanitize_sso_username(f"{local}@{domain}")
     if sanitized is not None:
-        assert USERNAME_RE.match(sanitized)
+        assert USERNAME_RE.match(sanitized)  # nosec B101

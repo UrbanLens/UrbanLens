@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import re
 from shutil import which
-import subprocess
+import subprocess  # nosec B404
 import sys
 import textwrap
 import time
@@ -31,6 +31,19 @@ DEFAULT_DATA_PATH = os.environ.get("URBANLENS_DB_DATA_PATH", f"{DIR}/pgsql/data"
 DEFAULT_LOG_PATH = os.environ.get("URBANLENS_LOG_PATH", f"{DIR}/pgsql/pgsql.log")
 # Command to use to interact with the DB. This must be in our path.
 EXE = os.environ.get("URBANLENS_POSTGRES_BIN", "pg_ctl")
+
+
+def _resolve_executable(name: str) -> str:
+    """Return an absolute executable path, failing closed when it is unavailable."""
+    resolved = which(name) if not os.path.isabs(name) else name
+    if resolved is None:
+        raise FileNotFoundError(f'Required executable not found on PATH: "{name}"')
+    return str(Path(resolved).resolve())
+
+
+PSQL_EXE = os.environ.get("URBANLENS_PSQL_BIN", "psql")
+PG_DUMP_EXE = os.environ.get("URBANLENS_PG_DUMP_BIN", "pg_dump")
+PYTHON_EXE = str(Path(sys.executable).resolve())
 
 
 class Db:
@@ -118,7 +131,7 @@ class Db:
             raise ValueError(f'Data path not found: "{data_path}"')
         if not os.path.isfile(log_path):
             raise ValueError(f'Log path not found: "{log_path}"')
-        if which(EXE) is None:
+        if which(EXE) is None and not os.path.exists(EXE):
             raise FileNotFoundError(f'DB executable not found. Is "{EXE}" in your path?')
 
         # Set our paths. Note: This calls the property setter, which sanitizes them.
@@ -151,7 +164,7 @@ class Db:
             subprocess.CompletedProcess: The completed process result.
 
         """
-        cmd = [EXE, "-D", self.data_path, "-l", self.log_path]
+        cmd = [_resolve_executable(EXE), "-D", self.data_path, "-l", self.log_path]
         if pg_wait:
             cmd.append("-w")
         if with_server_opts:
@@ -160,7 +173,7 @@ class Db:
             cmd += ["-o", " ".join(server_opts)]
         cmd.append(command)
         kwargs.setdefault("check", True)
-        return subprocess.run(cmd, **kwargs)  # noqa: PLW1510 - kwargs setdefault above
+        return subprocess.run(cmd, **kwargs)  # noqa: PLW1510  # nosec B603
 
     def execute_sql(self, sql: str, database: str | None = None) -> int:
         """Run a SQL statement via psql and return the exit code.
@@ -174,7 +187,7 @@ class Db:
 
         """
         cmd = [
-            "psql",
+            _resolve_executable(PSQL_EXE),
             "-U",
             self.user,
             "-h",
@@ -186,7 +199,7 @@ class Db:
             "-c",
             sql,
         ]
-        return subprocess.call(cmd)
+        return subprocess.call(cmd)  # nosec B603
 
     def start(self) -> None:
         """Start the postgres server if it is not already running."""
@@ -256,8 +269,8 @@ class Db:
                 name = f"backup_{int(time.time())!s}_{count}.sql"
 
         try:
-            cmd = ["pg_dump", "-U", self.user, "-d", self.database, "-f", os.path.join(BACKUP_DIR, name)]
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            cmd = [_resolve_executable(PG_DUMP_EXE), "-U", self.user, "-d", self.database, "-f", os.path.join(BACKUP_DIR, name)]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # nosec B603
 
             with tqdm(total=100) as progress_bar:
                 while process.poll() is None:
@@ -382,7 +395,13 @@ class DbInitializer:
         env["PGPASSWORD"] = self.db_pass
         return env
 
-    def execute_sql(self, sql: str, database: str | None = None, check: bool = True) -> subprocess.CompletedProcess:
+    def execute_sql(
+        self,
+        sql: str,
+        database: str | None = None,
+        check: bool = True,
+        variables: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess:
         """Run a SQL statement via psql against the maintenance database.
 
         Args:
@@ -395,7 +414,7 @@ class DbInitializer:
 
         """
         cmd = [
-            "psql",
+            _resolve_executable(PSQL_EXE),
             "-U",
             self.db_user,
             "-h",
@@ -405,10 +424,16 @@ class DbInitializer:
             "-d",
             database or "postgres",
             "-w",
+        ]
+        for key, value in (variables or {}).items():
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+                raise ValueError(f"Invalid psql variable name: {key!r}")
+            cmd.extend(["-v", f"{key}={value}"])
+        cmd.extend([
             "-c",
             sql,
-        ]
-        return subprocess.run(cmd, env=self._psql_env(), check=check, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        ])
+        return subprocess.run(cmd, env=self._psql_env(), check=check, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # nosec B603
 
     def _check_role_exists(self) -> bool:
         """Return True if the db_user role already exists in this cluster.
@@ -421,10 +446,18 @@ class DbInitializer:
 
         """
         result = self.execute_sql(
-            f"SELECT COUNT(*) FROM pg_roles WHERE rolname='{self.db_user}'",  # noqa: S608
+            "SELECT COUNT(*) FROM pg_roles WHERE rolname = :'role_name'",
             check=False,
+            variables={"role_name": self.db_user},
         )
         return result.returncode == 0 and b"1" in result.stdout
+
+    @staticmethod
+    def _quote_identifier(identifier: str) -> str:
+        """Safely quote a PostgreSQL identifier for trusted administrative DDL."""
+        if "\x00" in identifier:
+            raise ValueError("PostgreSQL identifiers cannot contain NUL bytes")
+        return '"' + identifier.replace('"', '""') + '"'
 
     def _ensure_role(self) -> None:
         """Create the application login role if it does not already exist."""
@@ -432,7 +465,7 @@ class DbInitializer:
             logger.info("Role %s already exists.", self.db_user)
             return
         logger.info("Creating role %s ...", self.db_user)
-        self.execute_sql(f'CREATE ROLE "{self.db_user}" WITH LOGIN SUPERUSER')
+        self.execute_sql(f"CREATE ROLE {self._quote_identifier(self.db_user)} WITH LOGIN SUPERUSER")
 
     def check_db(self) -> bool:
         """Return True if the application database already exists.
@@ -445,9 +478,9 @@ class DbInitializer:
             bool: True if the database exists and is reachable, False otherwise.
 
         """
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603
             [
-                "psql",
+                _resolve_executable(PSQL_EXE),
                 "-U",
                 self.db_user,
                 "-h",
@@ -477,7 +510,7 @@ class DbInitializer:
             logger.info("Database %s already exists.", self.db_name)
         else:
             logger.info("Database %s does not exist. Creating...", self.db_name)
-            self.execute_sql(f'CREATE DATABASE "{self.db_name}"')
+            self.execute_sql(f"CREATE DATABASE {self._quote_identifier(self.db_name)}")
             if not self.check_db():
                 raise RuntimeError(f"Database {self.db_name} was not created.")
         self.enable_postgis()
@@ -495,7 +528,7 @@ class DbInitializer:
         manage = ROOT_DIR / "src" / "urbanlens" / "manage.py"
         env = os.environ.copy()
         env.setdefault("UL_DB_PASS", self.db_pass)
-        subprocess.run(["python", str(manage), "migrate"], check=True, cwd=ROOT_DIR, env=env)
+        subprocess.run([PYTHON_EXE, str(manage), "migrate"], check=True, cwd=ROOT_DIR, env=env)  # nosec B603
 
 
 class Actions(Enum):
@@ -592,8 +625,8 @@ def main():
             try:
                 # --username sets the superuser name so it matches UL_DB_USER.
                 # Without this, initdb defaults to the OS user.
-                subprocess.run(
-                    [EXE, "initdb", "-D", str(data_path), "-o", f"--username={db_user}"],
+                subprocess.run(  # nosec B603
+                    [_resolve_executable(EXE), "initdb", "-D", str(data_path), "-o", f"--username={db_user}"],
                     check=True,
                 )
             except subprocess.CalledProcessError:

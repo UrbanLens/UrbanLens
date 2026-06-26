@@ -21,9 +21,9 @@ def test_search_masks_forbidden_key_from_exception_and_logs(caplog) -> None:
     with pytest.raises(GoogleCustomSearchError) as excinfo:
         gateway.search("UrbanLens")
 
-    assert "SECRETKEY1234" not in str(excinfo.value)
-    assert "SECRETKEY1234" not in caplog.text
-    assert "SECR...1234" in caplog.text
+    assert "SECRETKEY1234" not in str(excinfo.value)  # nosec B101
+    assert "SECRETKEY1234" not in caplog.text  # nosec B101
+    assert "SECR...1234" in caplog.text  # nosec B101
 
 
 def test_search_rejects_missing_configuration_before_request() -> None:
@@ -39,4 +39,4 @@ def test_search_rejects_missing_configuration_before_request() -> None:
 def test_build_query_skips_empty_nested_terms() -> None:
     gateway = GoogleCustomSearchGateway(api_key="key", cx="cx")
 
-    assert gateway.build_query([None, [None, "Cincinnati"], "UrbanLens"]) == '("Cincinnati" OR "UrbanLens")'
+    assert gateway.build_query([None, [None, "Cincinnati"], "UrbanLens"]) == '("Cincinnati" OR "UrbanLens")'  # nosec B101

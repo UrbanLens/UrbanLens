@@ -144,7 +144,7 @@ class FriendshipBlockMuteTests(TestCase):
     def test_block_existing_friendship_updates_status(self) -> None:
         existing = _make_requested(self.profile_a, self.profile_b)
         f = Friendship.block(self.profile_a, self.profile_b)
-        assert f is not None
+        assert f is not None  # nosec B101
         f.refresh_from_db()
         self.assertEqual(f.pk, existing.pk)  # same row, updated
         self.assertEqual(f.status, FriendshipStatus.BLOCKED)

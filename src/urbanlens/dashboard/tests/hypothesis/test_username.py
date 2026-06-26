@@ -122,6 +122,6 @@ def test_normalize_username_key_is_idempotent(left: str) -> None:
     """Normalization is stable when applied repeatedly."""
     once = normalize_username_key(left)
     twice = normalize_username_key(once)
-    assert once == twice
+    assert once == twice  # nosec B101
     if USERNAME_RE.match(left):
-        assert normalize_username_key(left.casefold()) == once
+        assert normalize_username_key(left.casefold()) == once  # nosec B101

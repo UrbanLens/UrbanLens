@@ -155,7 +155,7 @@ class ProfileGetMapCenterTests(TestCase):
         )
         result = profile.get_map_center()
         self.assertIsNotNone(result)
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertAlmostEqual(result[0], 42.5, places=3)
         self.assertAlmostEqual(result[1], -73.5, places=3)
 
@@ -175,7 +175,7 @@ class ProfileGetMapCenterTests(TestCase):
         )
         result = profile.get_map_center()
         self.assertIsNotNone(result)
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertAlmostEqual(result[0], 40.0, places=3)
         self.assertAlmostEqual(result[1], -75.0, places=3)
 
@@ -197,7 +197,7 @@ class ProfileGetMapCenterTests(TestCase):
         )
         result = profile.get_map_center()
         self.assertIsNotNone(result)
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertIsInstance(result[0], float)
         self.assertIsInstance(result[1], float)
 
@@ -218,7 +218,7 @@ class ProfileComputeMapCenterTests(TestCase):
         baker.make("dashboard.Pin", profile=user.profile, location=location, latitude=None, longitude=None)
         result = user.profile.compute_map_center()
         self.assertIsNotNone(result)
-        assert result is not None
+        assert result is not None  # nosec B101
         self.assertAlmostEqual(result[0], 41.0, places=2)
         self.assertAlmostEqual(result[1], -74.0, places=2)
 

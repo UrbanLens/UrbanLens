@@ -77,7 +77,7 @@ class TextChoicesGetNameTests(TestCase):
         """The returned name should correspond to a real attribute (upper-case convention)."""
         name = SecurityLevel.get_name(value)
         self.assertIsNotNone(name)
-        assert name is not None
+        assert name is not None  # nosec B101
         self.assertTrue(hasattr(SecurityLevel, name), f"SecurityLevel has no attribute {name!r}")
 
     @given(security_level)

@@ -11,12 +11,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import re
-import subprocess
+import subprocess  # nosec B404
 import sys
 from typing import Any
 
 from djangofoundry import scripts
 from djangofoundry.scripts import app
+from packaging.requirements import InvalidRequirement, Requirement
 
 # Our imports
 from bin.utils.exceptions import DbStartError, UnsupportedCommandError
@@ -95,13 +96,15 @@ class App(scripts.App):
         """
         # TODO: This duplicates new functionality from djangofoundry. When the package is updated to version 0.8, remove this method without any other changes.
 
-        # Ensure that package_name is only 1 package
-        if len(package_name.split(" ")) > 1:
-            raise ValueError(f'package_name must be a single package. "{package_name}" contains more than one package.')
+        # Validate package_name as one PEP 508 requirement before passing it to pip.
+        try:
+            Requirement(package_name)
+        except InvalidRequirement as exc:
+            raise ValueError(f'package_name must be a single valid Python requirement: "{package_name}"') from exc
 
         # Install the package, capture output so that we can determine the version number of the package
         logger.info("Installing %s...", package_name)
-        install_output = subprocess.check_output(
+        install_output = subprocess.check_output(  # nosec B603
             [sys.executable, "-m", "pip", "install", package_name],
             stderr=subprocess.STDOUT,
         ).decode("utf-8")
