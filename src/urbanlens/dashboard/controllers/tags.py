@@ -8,6 +8,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from django.db.models import Case, IntegerField, Value, When
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -22,6 +23,16 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+
+def _selected_parents_first(queryset, parent_ids):
+    return queryset.annotate(
+        _selected_parent=Case(
+            When(id__in=parent_ids, then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        ),
+    ).order_by("_selected_parent", "-order", "name", "id")
 
 _ICON_MAX_PX = 256
 
@@ -134,8 +145,11 @@ class TagEditView(LoginRequiredMixin, View):
         elif tag.profile.user != request.user:
             return HttpResponseForbidden()
         profile = request.user.profile
-        available_parents = Badge.objects.visible_to(profile).ordered().exclude(id=tag_id)
         parent_ids = set(tag.parents.values_list("id", flat=True))
+        available_parents = _selected_parents_first(
+            Badge.objects.visible_to(profile).exclude(id=tag_id),
+            parent_ids,
+        )
         return render(
             request,
             "dashboard/partials/tag_edit_form.html",
