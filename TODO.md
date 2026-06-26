@@ -18,6 +18,8 @@ Features planned for this release.
 * Cleanup Github readme roadmap. [UL-246]
 * Remove work account from github project. [UL-247]
 * Require HTTPS [UL-254]
+* Password reset should go to application page, not django password reset page. [UL-256]
+* Password reset should work elegantly with SSO users. [UL-257]
 
 ## Medium Features
 

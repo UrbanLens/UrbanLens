@@ -7,15 +7,18 @@ import json
 import logging
 import os
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from django.db.models import QuerySet
 import redis
 from redis.exceptions import RedisError
 
 from urbanlens.dashboard.models.pin import Pin
-from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.map_pins.payload import MapPinPage, MapPinPayloadService
+
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 

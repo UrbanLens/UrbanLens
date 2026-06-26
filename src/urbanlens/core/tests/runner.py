@@ -113,6 +113,9 @@ class TestRunner(DiscoverRunner):
 
         # Mark settings as test mode for any code that checks settings.TESTING.
         conf.settings.TESTING = True
+        # The test client uses HTTP; HTTPS enforcement is validated separately.
+        conf.settings.UNSAFE_ALLOW_HTTP = True
+        conf.settings.SECURE_SSL_REDIRECT = False
 
         # Patch the AI gateway so no test ever makes a real external API call.
         # send_prompt is the single chokepoint shared by all LLMGateway subclasses.

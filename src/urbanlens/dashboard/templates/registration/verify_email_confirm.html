@@ -11,7 +11,7 @@
 </div>
 <h2 class="auth-info-title">Email verified!</h2>
 <p class="auth-info-text">Your account is now active. You can sign in and start exploring.</p>
-<a href="{% url 'login' %}" class="auth-submit-btn" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box">
+<a href="{% url 'login' %}" class="btn btn--primary auth-submit-btn" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box">
     Sign in
 </a>
 
@@ -28,10 +28,10 @@
 <form method="post" action="{% url 'resend_verification' %}" class="auth-form">
     {% csrf_token %}
     <input type="hidden" name="email" value="{{ email }}">
-    <button type="submit" class="auth-submit-btn">Resend verification email</button>
+    <button type="submit" class="btn btn--primary auth-submit-btn">Resend verification email</button>
 </form>
 {% else %}
-<a href="{% url 'resend_verification' %}" class="auth-submit-btn" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box">
+<a href="{% url 'resend_verification' %}" class="btn btn--primary auth-submit-btn" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box">
     Resend verification email
 </a>
 {% endif %}
@@ -45,7 +45,7 @@
     This verification link is invalid or has already been used.
     If you haven't verified yet, request a new link.
 </p>
-<a href="{% url 'resend_verification' %}" class="auth-submit-btn" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box">
+<a href="{% url 'resend_verification' %}" class="btn btn--primary auth-submit-btn" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box">
     Request a new link
 </a>
 {% endif %}

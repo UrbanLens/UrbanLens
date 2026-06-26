@@ -66,6 +66,7 @@ services:
       - UL_OPENAI_API_KEY=${UL_OPENAI_API_KEY}
       - UL_SMITHSONIAN_API_KEY=${UL_SMITHSONIAN_API_KEY}
       - UL_VALKEY_URL=${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

@@ -155,15 +155,24 @@ MEDIA_ROOT = os.path.join(PROJECT_ROOT, "media")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# TODO: Potentially remove 'http', and only allow 'localhost' in dev.
+# Reject plain HTTP unless UL_UNSAFE_ALLOW_HTTP is enabled (local dev only).
+UNSAFE_ALLOW_HTTP = os.getenv("UL_UNSAFE_ALLOW_HTTP", "False").lower() in ("true", "1", "yes")
+SECURE_SSL_REDIRECT = not UNSAFE_ALLOW_HTTP
+# Internal container health checks hit /health over HTTP on the app port.
+SECURE_REDIRECT_EXEMPT = [r"^health"]
+
 # http://urbanlens.org, http://urbanlens.com, https://urbanlens.org, https://urbanlens.com, etc
-protocols = ['http://', 'https://']
+protocols = ['https://']
 domains = ['urbanlens.org', 'localhost', 'localhost:21080']
 subdomains = ['www.', '']
+if UNSAFE_ALLOW_HTTP:
+    protocols.append('http://')
+
 # Trust the X-Forwarded-Proto header set by Nginx so Django builds https:// URLs
 # when sitting behind a reverse proxy that terminates SSL.
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
+
 
 CORS_ALLOWED_ORIGINS = [
     f'{protocol}{subdomain}{domain}'

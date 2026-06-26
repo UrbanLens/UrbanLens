@@ -172,18 +172,10 @@ body.page-auth {
 
 // ── Submit button ─────────────────────────────────────────────────────────
 .auth-submit-btn {
-    width: 100%;
-    padding: .8rem;
-    background: $ui-indigo-600;
-    color: var(--ul-grey-5);
-    border: none;
-    border-radius: 9px;
+    background-color: $ui-indigo-600;
+    color: #ffffff;
     font-size: 1rem;
     font-weight: 700;
-    cursor: pointer;
-    transition: background .15s, box-shadow .15s, transform .1s;
-    margin-top: .25rem;
-    font-family: inherit;
 
     &:hover {
         background: $ui-indigo-700;
@@ -219,51 +211,21 @@ body.page-auth {
 }
 
 // ── Social auth buttons ───────────────────────────────────────────────────
-.social-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: .7rem;
-    width: 100%;
-    padding: .7rem 1rem;
-    border-radius: 9px;
-    font-size: .93rem;
-    font-weight: 600;
-    text-decoration: none;
-    transition: background .15s, box-shadow .15s, transform .1s;
-    border: 1.5px solid transparent;
-    font-family: inherit;
-    cursor: pointer;
-
-    &:active {
-        transform: translateY(1px);
+.btn {
+    &--social {
+        @extend .btn--primary;
+        gap: .7rem;
+        // Hide border for social buttons, since they're all styled specially. Transparent to maintain spacing for hover border color changes.
+        border-color: transparent;
     }
 
     &--google {
         background: var(--ul-grey-0);
-        border-color: var(--ul-border);
-        color: $google-text;
-
-        &:hover {
-            background: var(--ul-grey-0);
-            box-shadow: 0 1px 6px rgba(0, 0, 0, .15);
-        }
-
-        .social-btn-icon svg {
-            display: block;
-        }
     }
 
     &--discord {
         background: $discord-brand;
-        border-color: $discord-brand;
-        color: var(--ul-grey-5);
-
-        &:hover {
-            background: $discord-brand-hover;
-            border-color: $discord-brand-hover;
-            box-shadow: 0 4px 12px rgba(88, 101, 242, .4);
-        }
+        color: var(--ul-grey-9);
     }
 }
 

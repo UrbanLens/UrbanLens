@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db.models import OuterRef, Prefetch, QuerySet, Subquery
 
 from urbanlens.dashboard.models.badges.model import Badge
-from urbanlens.dashboard.models.pin import Pin
-from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reviews.model import Review
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.pin import Pin
+    from urbanlens.dashboard.models.profile.model import Profile
 
 
 @dataclass(frozen=True)
