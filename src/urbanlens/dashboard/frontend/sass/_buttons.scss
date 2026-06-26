@@ -118,6 +118,28 @@
 			font-size: 1.1rem;
 		}
 	}
+	
+    &--social {
+        @extend .btn--primary;
+        gap: .7rem;
+        // Hide border for social buttons, since they're all styled specially. Transparent to maintain spacing for hover border color changes.
+        border-color: transparent;
+    }
+
+    &--google {
+        background: var(--ul-grey-0);
+    }
+
+    &--discord {
+        background: $discord-brand;
+        color: var(--ul-grey-9);
+    }
+}
+
+.social-btn-icon {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
 }
 
 // Filled CTA used in legacy dialogs and forms
