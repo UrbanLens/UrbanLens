@@ -1597,11 +1597,7 @@ dialog.tag-create-card.ul-dialog {
     gap: 1rem;
     margin-bottom: 1.5rem;
 
-    .organize-page-title,
-    .organize-title {
-        font-size: 1.6rem;
-        font-weight: 700;
-        color: $text-primary;
+    .organize-page-title {
         margin: 0;
     }
 
@@ -2683,12 +2679,6 @@ dialog.tag-create-card.ul-dialog {
         font-size: .82rem;
         white-space: nowrap;
         flex-shrink: 0;
-    }
-
-    // Page header: reduce font size on phones
-    .organize-page-header .organize-page-title,
-    .organize-page-header .organize-title {
-        font-size: 1.25rem;
     }
 
     .organize-page-header-actions {
