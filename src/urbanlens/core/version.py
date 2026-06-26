@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 PROJECT_NAME = "UrbanLens"
 PYPROJECT_PATH = DEFAULT_ROOT.parent / "pyproject.toml"
 _GIT_CWD = DEFAULT_ROOT.parent
+MANAGE_PY = DEFAULT_ROOT / "urbanlens" / "manage.py"
+_DJANGO_CWD = DEFAULT_ROOT.parent
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,15 +204,14 @@ def apply_pending_migrations() -> tuple[bool, str]:
     Returns:
         ``(True, message)`` when migrations completed; otherwise ``(False, message)``.
     """
-    manage_py = DEFAULT_ROOT / "manage.py"
     try:
         result = subprocess.run(
-            [sys.executable, str(manage_py), "migrate", "--noinput"],
+            [sys.executable, str(MANAGE_PY), "migrate", "--noinput"],
             capture_output=True,
             text=True,
             check=False,
             timeout=300,
-            cwd=DEFAULT_ROOT,
+            cwd=_DJANGO_CWD,
             env=os.environ.copy(),
         )
     except subprocess.TimeoutExpired:
@@ -235,9 +236,8 @@ def trigger_development_app_reload() -> tuple[bool, str]:
     a watched Python file's mtime without changing its contents, causing
     ``runserver``'s autoreloader to restart and import the newly pulled code.
     """
-    manage_py = DEFAULT_ROOT / "manage.py"
     try:
-        os.utime(manage_py, None)
+        os.utime(MANAGE_PY, None)
     except OSError:
         logger.warning("could not touch manage.py to trigger development reload", exc_info=True)
         return False, "Could not signal the development server to reload."
