@@ -1030,7 +1030,7 @@
             </div>
             <button type="button" class="map-onboarding-x" aria-label="Close onboarding tip"><i class="material-icons">close</i></button>`;
         host.appendChild(el);
-        el.querySelector('.map-onboarding-primary')?.addEventListener('click', () => { _clearOnboarding(); card.action(); });
+        el.querySelector('.map-onboarding-primary')?.addEventListener('click', () => { _setOnboardingDismissed(card.id); _clearOnboarding(); card.action(); });
         el.querySelector('.map-onboarding-later')?.addEventListener('click', () => { _setOnboardingLater(); _clearOnboarding(); });
         el.querySelector('.map-onboarding-dismiss')?.addEventListener('click', () => { _setOnboardingDismissed(card.id); _clearOnboarding(); });
         el.querySelector('.map-onboarding-x')?.addEventListener('click', () => { _setOnboardingLater(); _clearOnboarding(); });

@@ -1,0 +1,10 @@
+{% comment %}
+Anchor slot for a collapsible page explainer toggle icon.
+Place inline next to a section or page title; pair with _page_explainer.html using the same explainer_id.
+
+Usage:
+  <h2 class="badge-title">Priority Order {% include "dashboard/partials/_page_explainer_anchor.html" with explainer_id="priority-explainer" %}</h2>
+{% endcomment %}
+<span id="{{ anchor_id|default:explainer_id }}-anchor"
+      class="ul-explainer-anchor"
+      data-explainer-anchor-for="{{ explainer_id }}"></span>

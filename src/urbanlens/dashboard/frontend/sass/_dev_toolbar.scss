@@ -32,6 +32,8 @@
     }
 
     &[data-collapsed='true'] {
+        bottom: 1rem;
+        left: 8rem;
         min-width: 0;
         opacity: 0.5;
 

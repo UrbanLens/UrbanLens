@@ -914,7 +914,7 @@
                 '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don’t show again</button></div></div>' +
                 '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>';
             host.appendChild(el);
-            el.querySelector('.js-onboarding-action').addEventListener('click', function () { clear(); card.action(); });
+            el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
             el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));
             el.querySelector('.js-onboarding-dismiss').addEventListener('click', function () { dismiss(card.id); clear(); });
         }

@@ -1,0 +1,38 @@
+{% comment %}
+Reusable collapsible page explainer panel with optional visual column.
+
+Required:
+  explainer_id – unique key for localStorage and DOM id
+  heading      – main heading text
+
+Optional:
+  kicker           – eyebrow label above the heading
+  body             – supporting paragraph
+  anchor_id        – defaults to "{{ explainer_id }}-anchor"
+  visual_template  – path to an optional visual partial (rendered in the right column)
+  modifier         – extra BEM modifier, e.g. "priority"
+
+Usage:
+  <h2>Section title {% include "dashboard/partials/_page_explainer_anchor.html" with explainer_id="my-explainer" %}</h2>
+  {% include "dashboard/partials/_page_explainer.html" with explainer_id="my-explainer" kicker="Tip" heading="..." body="..." %}
+{% endcomment %}
+<div class="ul-page-explainer{% if modifier %} ul-page-explainer--{{ modifier }}{% endif %}"
+     id="{{ explainer_id }}"
+     data-explainer-id="{{ explainer_id }}"
+     data-explainer-anchor="#{{ anchor_id|default:explainer_id }}-anchor">
+    <button type="button" class="ul-explainer-collapse" aria-label="Hide explanation" title="Hide explanation">
+        <i class="material-icons" aria-hidden="true">expand_less</i>
+    </button>
+    <div class="ul-page-explainer__inner">
+        <div class="ul-page-explainer__copy">
+            {% if kicker %}<span class="ul-page-explainer__kicker">{{ kicker }}</span>{% endif %}
+            <h3 class="ul-page-explainer__heading">{{ heading }}</h3>
+            {% if body %}<p class="ul-page-explainer__body">{{ body }}</p>{% endif %}
+        </div>
+        {% if visual_template %}
+        <div class="ul-page-explainer__visual" aria-hidden="true">
+            {% include visual_template %}
+        </div>
+        {% endif %}
+    </div>
+</div>

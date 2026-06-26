@@ -383,31 +383,13 @@
 
         <div class="badge-header">
             <div>
-                <h2 class="badge-title">Priority Order</h2>
-                <p class="tag-subtitle">Drag to set the order icons will appear on your map. Higher items take precedence.</p>
+                <h2 class="badge-title">Priority Order
+                    {% include "dashboard/partials/_page_explainer_anchor.html" with explainer_id="priority-explainer" %}
+                </h2>
             </div>
         </div>
 
-        <div class="priority-explainer" id="priority-explainer">
-            <div class="priority-explainer-copy">
-                <span class="priority-explainer-kicker">Map icon decision</span>
-                <h3>When one pin has several labels, the highest priority label wins.</h3>
-                <p>Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent crowded or multi-labeled pins first.</p>
-            </div>
-            <div class="priority-explainer-visual" aria-hidden="true">
-                <div class="priority-visual-stack">
-                    <span class="priority-visual-chip priority-visual-chip--one"><i class="material-icons">factory</i> Abandoned factory</span>
-                    <span class="priority-visual-chip priority-visual-chip--two"><i class="material-icons">warning</i> Hazard</span>
-                    <span class="priority-visual-chip priority-visual-chip--three"><i class="material-icons">hiking</i> Trail stop</span>
-                </div>
-                <div class="priority-visual-arrow"><i class="material-icons">arrow_forward</i></div>
-                <div class="priority-visual-map-pin">
-                    <span class="priority-visual-pin-pulse"></span>
-                    <span class="priority-visual-pin"><i class="material-icons">factory</i></span>
-                    <span class="priority-visual-caption">Top item becomes the map marker</span>
-                </div>
-            </div>
-        </div>
+        {% include "dashboard/partials/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority label wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent crowded or multi-labeled pins first." visual_template="dashboard/partials/explainers/_priority_visual.html" %}
 
         <div id="priority-list" class="priority-list">
             {% for item in priority_items %}
@@ -937,7 +919,7 @@
             '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don’t show again</button></div></div>' +
             '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>';
         host.appendChild(el);
-        el.querySelector('.js-onboarding-action').addEventListener('click', function () { clear(); card.action(); });
+        el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
         el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));
         el.querySelector('.js-onboarding-dismiss').addEventListener('click', function () { dismiss(card.id); clear(); });
     }

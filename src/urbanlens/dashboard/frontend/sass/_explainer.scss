@@ -1,0 +1,330 @@
+// ── Collapsible page explainers ─────────────────────────────────────────────
+// Pair _page_explainer.html with _page_explainer_anchor.html next to a title.
+
+@use 'variables' as *;
+
+.ul-explainer-anchor {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    margin-left: .35rem;
+}
+
+.ul-explainer-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.65rem;
+    height: 1.65rem;
+    padding: 0;
+    border: 1px solid rgba(37, 99, 235, .24);
+    border-radius: 999px;
+    background: linear-gradient(135deg, rgba(37, 99, 235, .12), rgba(6, 182, 212, .1));
+    color: #2563eb;
+    cursor: pointer;
+    transition:
+        transform .22s ease,
+        box-shadow .22s ease,
+        background .22s ease,
+        border-color .22s ease,
+        opacity .22s ease;
+
+    &[hidden] {
+        display: none;
+    }
+
+    &.is-visible {
+        animation: ul-explainer-toggle-in .32s cubic-bezier(.2, .8, .2, 1);
+    }
+
+    .material-icons {
+        font-size: 1.05rem;
+    }
+
+    &:hover {
+        transform: scale(1.06);
+        border-color: rgba(37, 99, 235, .42);
+        box-shadow: 0 4px 14px rgba(37, 99, 235, .18);
+    }
+
+    &:focus-visible {
+        outline: 2px solid rgba(37, 99, 235, .55);
+        outline-offset: 2px;
+    }
+}
+
+@keyframes ul-explainer-toggle-in {
+    from {
+        opacity: 0;
+        transform: scale(.55);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.ul-page-explainer {
+    position: relative;
+    margin: 0 0 18px;
+    border-radius: 22px;
+    background: linear-gradient(135deg, rgba(37, 99, 235, .08), rgba(6, 182, 212, .08));
+    border: 1px solid rgba(37, 99, 235, .16);
+    box-shadow: 0 12px 34px rgba(15, 23, 42, .08);
+    overflow: hidden;
+
+    &[hidden] {
+        display: none;
+    }
+
+    &__inner {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+        gap: 18px;
+        align-items: center;
+        padding: 18px;
+    }
+
+    &__kicker {
+        display: inline-flex;
+        align-items: center;
+        margin-bottom: 5px;
+        color: #2563eb;
+        font-size: .68rem;
+        font-weight: 800;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+    }
+
+    &__heading {
+        margin: 0 0 7px;
+        font-size: 1.08rem;
+        letter-spacing: -.02em;
+        color: #172033;
+    }
+
+    &__body {
+        margin: 0;
+        color: #526071;
+        font-size: .88rem;
+        line-height: 1.5;
+    }
+
+    &__visual {
+        min-width: 0;
+    }
+
+    &--text-only &__inner {
+        grid-template-columns: 1fr;
+    }
+}
+
+.ul-explainer-collapse {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.85rem;
+    height: 1.85rem;
+    padding: 0;
+    border: 1px solid rgba(148, 163, 184, .28);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .82);
+    color: #64748b;
+    cursor: pointer;
+    transition:
+        transform .18s ease,
+        color .18s ease,
+        border-color .18s ease,
+        background .18s ease;
+
+    .material-icons {
+        font-size: 1.15rem;
+    }
+
+    &:hover {
+        color: #2563eb;
+        border-color: rgba(37, 99, 235, .35);
+        background: #fff;
+        transform: translateY(-1px);
+    }
+
+    &:focus-visible {
+        outline: 2px solid rgba(37, 99, 235, .55);
+        outline-offset: 2px;
+    }
+}
+
+.ul-explainer-ghost {
+    overflow: hidden;
+    border-radius: 22px;
+    box-shadow: 0 12px 34px rgba(15, 23, 42, .12);
+
+    &.is-shrinking {
+        border-radius: 999px;
+    }
+
+    .ul-explainer-collapse {
+        display: none;
+    }
+}
+
+// ── Priority explainer visual (optional column) ───────────────────────────────
+
+.ul-explainer-priority-visual {
+    display: grid;
+    grid-template-columns: 1fr 34px 118px;
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+}
+
+.priority-visual-stack {
+    display: grid;
+    gap: 8px;
+}
+
+.priority-visual-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .88);
+    border: 1px solid rgba(148, 163, 184, .24);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .08);
+    font-weight: 700;
+    font-size: .78rem;
+
+    .material-icons {
+        font-size: 1.1rem;
+    }
+}
+
+.priority-visual-chip--one {
+    transform: translateX(0);
+    border-color: rgba(37, 99, 235, .28);
+    color: #1d4ed8;
+}
+
+.priority-visual-chip--two {
+    transform: translateX(14px) scale(.96);
+    color: #b45309;
+}
+
+.priority-visual-chip--three {
+    transform: translateX(28px) scale(.92);
+    color: #047857;
+}
+
+.priority-visual-arrow {
+    display: grid;
+    place-items: center;
+    color: #2563eb;
+}
+
+.priority-visual-map-pin {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 6px;
+}
+
+.priority-visual-pin-pulse {
+    position: absolute;
+    top: 3px;
+    width: 58px;
+    height: 58px;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, .13);
+    animation: onboarding-throb 1.8s ease-in-out infinite;
+}
+
+.priority-visual-pin {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 54px;
+    height: 54px;
+    border-radius: 18px 18px 18px 4px;
+    transform: rotate(-45deg);
+    background: linear-gradient(135deg, #2563eb, #06b6d4);
+    color: #fff;
+    box-shadow: 0 14px 32px rgba(37, 99, 235, .32);
+
+    .material-icons {
+        transform: rotate(45deg);
+        font-size: 1.55rem;
+    }
+}
+
+.priority-visual-caption {
+    color: #64748b;
+    font-size: .68rem;
+    font-weight: 800;
+    text-align: center;
+    max-width: 118px;
+}
+
+@media (max-width: 860px) {
+    .ul-page-explainer__inner {
+        grid-template-columns: 1fr;
+    }
+
+    .ul-explainer-priority-visual {
+        grid-template-columns: 1fr 30px 96px;
+    }
+}
+
+[data-theme="dark"] {
+    .ul-explainer-toggle {
+        border-color: rgba(148, 163, 184, .22);
+        background: linear-gradient(135deg, rgba(37, 99, 235, .18), rgba(6, 182, 212, .14));
+        color: #93c5fd;
+    }
+
+    .ul-page-explainer {
+        background: linear-gradient(135deg, rgba(37, 99, 235, .15), rgba(6, 182, 212, .12));
+        border-color: rgba(148, 163, 184, .2);
+    }
+
+    .ul-page-explainer__heading {
+        color: #e5edf8;
+    }
+
+    .ul-page-explainer__body,
+    .priority-visual-caption {
+        color: #aab7c8;
+    }
+
+    .priority-visual-chip {
+        background: rgba(15, 23, 42, .72);
+        border-color: rgba(148, 163, 184, .18);
+    }
+
+    .ul-explainer-collapse {
+        background: rgba(15, 23, 42, .72);
+        border-color: rgba(148, 163, 184, .22);
+        color: #94a3b8;
+
+        &:hover {
+            background: rgba(30, 41, 59, .92);
+            color: #93c5fd;
+        }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ul-explainer-toggle.is-visible {
+        animation: none;
+    }
+
+    .priority-visual-pin-pulse {
+        animation: none;
+    }
+}
