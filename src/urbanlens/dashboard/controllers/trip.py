@@ -1082,7 +1082,7 @@ class TripMapDataView(LoginRequiredMixin, View):
             coords = _activity_coords(act)
 
             if coords and not act.location_hidden and act.id not in viewer_hidden_map:
-                label = act.title or (act.location.name if act.location else None) or f"Activity {index}"
+                label = act.effective_title
                 points.append(
                     {
                         "index": index,
@@ -1105,9 +1105,7 @@ class TripMapDataView(LoginRequiredMixin, View):
                     child_coords = _activity_coords(child_act)
                     if not child_coords:
                         continue
-                    child_label = (
-                        child_act.title or (child_act.location.name if child_act.location else None) or "Activity"
-                    )
+                    child_label = child_act.effective_title
                     points.append(
                         {
                             "index": None,
@@ -1404,13 +1402,7 @@ def _build_activity_forecasts(activities: list[TripActivity], gateway: WeatherFo
     for act in activities:
         coords = _activity_coords(act)
 
-        location_name = ""
-        if act.location:
-            location_name = act.location.name or ""
-        elif act.pin:
-            location_name = act.pin.effective_name or ""
-        if not location_name and act.title:
-            location_name = act.title
+        location_name = act.effective_title if act.effective_title != "Unnamed activity" else ""
 
         entry: dict = {
             "activity": act,

@@ -84,7 +84,7 @@ def render_comment_text(
             if activity is None:
                 mentions.append((m.start(), m.end(), conditional_escape(m.group(0))))
                 continue
-            act_name = conditional_escape(activity.title or str(activity))
+            act_name = conditional_escape(activity.effective_title)
             if activity.location:
                 try:
                     wiki_url = reverse("location.wiki", args=[str(activity.location.uuid)])

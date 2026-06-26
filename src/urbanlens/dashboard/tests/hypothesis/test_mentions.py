@@ -172,7 +172,7 @@ class RenderCommentTextTests(TestCase):
 
     def test_act_mention_resolved_from_index(self) -> None:
         activity = MagicMock()
-        activity.title ="Activity Alpha"
+        activity.effective_title = "Activity Alpha"
         activity.id = 7
         activity.location = None
         result = self._render("@act:1", set(), {1: activity})
@@ -186,7 +186,7 @@ class RenderCommentTextTests(TestCase):
         loc = MagicMock()
         loc.uuid = uuid.uuid4()
         activity = MagicMock()
-        activity.title ="Location Activity"
+        activity.effective_title = "Location Activity"
         activity.id = 42
         activity.location = loc
         with patch("django.urls.reverse", return_value="/wiki/test/"):

@@ -92,7 +92,7 @@
                         {% if item.effective_location_hidden %}
                             Secret Location
                         {% else %}
-                            {% firstof act.title act.location.name "Unnamed activity" %}
+                            {{ act.effective_title }}
                         {% endif %}
                     </span>
                     {% if act.scheduled_at %}

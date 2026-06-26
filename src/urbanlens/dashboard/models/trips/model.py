@@ -194,9 +194,25 @@ class TripActivity(abstract.Model):
         help_text="Hide location from the map. The activity still appears in the list as 'Secret Location'.",
     )
 
+    @property
+    def effective_title(self) -> str:
+        """Display label: custom title, linked pin name/address, location name/address, or fallback."""
+        if self.title:
+            return self.title
+        if self.pin:
+            pin_label = self.pin.display_label
+            if pin_label:
+                return pin_label
+        if self.location:
+            name = self.location.name
+            if name and name not in {"Dropped pin", "No Information Available", ""}:
+                return name
+            if self.location.address:
+                return self.location.address
+        return "Unnamed activity"
+
     def __str__(self) -> str:
-        loc = self.location.name if self.location else (self.title or "Activity")
-        return f"{loc} ({self.trip})"
+        return f"{self.effective_title} ({self.trip})"
 
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_trip_activities"

@@ -235,6 +235,104 @@ class TripActivitiesViewTests(TestCase):
         resp = client.get(self._url())
         self.assertEqual(resp.status_code, 403)
 
+    def test_post_pin_only_uses_pin_name_in_panel(self):
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        location = Location.objects.create(
+            name="Dropped pin",
+            latitude=51.5,
+            longitude=-0.12,
+        )
+        pin = Pin.objects.create(
+            profile=self.creator,
+            location=location,
+            nickname="Abandoned Factory",
+            latitude=51.5,
+            longitude=-0.12,
+        )
+        client = Client()
+        client.force_login(self.creator_user)
+        resp = client.post(
+            self._url(),
+            data=json.dumps({"pin_uuid": str(pin.uuid)}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Abandoned Factory")
+        self.assertNotContains(resp, "Unnamed activity")
+
+    def test_post_pin_without_name_uses_address_in_panel(self):
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        location = Location.objects.create(
+            name="Dropped pin",
+            latitude=51.5,
+            longitude=-0.12,
+            route="Baker Street,",
+            locality="London,",
+            administrative_area_level_1="England",
+        )
+        pin = Pin.objects.create(
+            profile=self.creator,
+            location=location,
+            latitude=51.5,
+            longitude=-0.12,
+        )
+        client = Client()
+        client.force_login(self.creator_user)
+        resp = client.post(
+            self._url(),
+            data=json.dumps({"pin_uuid": str(pin.uuid)}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Baker Street")
+        self.assertNotContains(resp, "Unnamed activity")
+
+
+class TripActivityEffectiveTitleTests(TestCase):
+    """TripActivity.effective_title resolves pin name/address when title is unset."""
+
+    def setUp(self):
+        super().setUp()
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.trip = _make_trip(self.profile)
+        self.location = Location.objects.create(
+            name="Dropped pin",
+            latitude=40.0,
+            longitude=-74.0,
+            route="Main St,",
+            locality="Springfield,",
+            administrative_area_level_1="IL",
+        )
+        self.pin = Pin.objects.create(
+            profile=self.profile,
+            location=self.location,
+            nickname="Old Mill",
+            latitude=40.0,
+            longitude=-74.0,
+        )
+
+    def test_custom_title_takes_priority(self):
+        activity = TripActivity.objects.create(trip=self.trip, title="Custom Label", pin=self.pin)
+        self.assertEqual(activity.effective_title, "Custom Label")
+
+    def test_pin_nickname_used_when_no_title(self):
+        activity = TripActivity.objects.create(trip=self.trip, pin=self.pin, location=self.location)
+        self.assertEqual(activity.effective_title, "Old Mill")
+
+    def test_pin_address_used_when_no_meaningful_name(self):
+        self.pin.nickname = None
+        self.pin.save(update_fields=["nickname"])
+        activity = TripActivity.objects.create(trip=self.trip, pin=self.pin, location=self.location)
+        self.assertIn("Main St", activity.effective_title)
+
 
 class TripActivityCompleteViewTests(TestCase):
     """POST /trips/<uuid>/activities/<id>/complete/ - marks activity completed."""

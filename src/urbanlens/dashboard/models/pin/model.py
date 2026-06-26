@@ -209,6 +209,15 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         return self.effective_name not in self._MEANINGLESS_NAMES
 
     @property
+    def display_label(self) -> str:
+        """Human-readable label: pin name when meaningful, otherwise street address."""
+        if self.has_meaningful_name:
+            return self.effective_name
+        if self.location and self.location.address:
+            return self.location.address
+        return self.address or self.effective_name or ""
+
+    @property
     def effective_latitude(self) -> float | None:
         """User's position override, or the location's latitude."""
         if self.latitude is not None:
