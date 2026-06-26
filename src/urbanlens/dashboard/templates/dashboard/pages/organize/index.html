@@ -1133,67 +1133,108 @@ function showTagCustomPreview(input) {
 }
 
 // ── Filter panel shared engine ──────────────────────────────────────────────
-// ns: 'tag' | 'cat' | 'status'
-// Cards must carry: data-{ns}-name, data-{ns}-icon, data-{ns}-color,
-//   data-{ns}-children (count), data-{ns}-parents (csv or count).
-var _orgFilters = {}; // ns → { search, chips: Set }
+// ns: 'tag' | 'cat' | 'status' | 'people'
+// View and filter state is shared across all tabs (except Priority, which has no toolbar).
+var ORG_FILTER_NAMESPACES = ['tag', 'cat', 'status', 'people'];
 
-function toggleOrgFilter(ns) {
-    var bar = document.getElementById(ns + '-filter-bar');
-    if (!bar) return;
-    bar.classList.toggle('open');
+function _loadOrgSharedFilter() {
+    try {
+        var raw = localStorage.getItem('organize_filter');
+        if (raw) {
+            var o = JSON.parse(raw);
+            return {
+                search: o.search || '',
+                chips: new Set(o.chips || []),
+                color: (o.color || '').toLowerCase(),
+            };
+        }
+    } catch (_) {}
+    return { search: '', chips: new Set(), color: '' };
 }
 
-function toggleOrgChip(btn, ns) {
-    btn.classList.toggle('active');
-    // Deactivate mutex pair
-    var mutex = btn.dataset.mutex;
-    if (mutex && btn.classList.contains('active')) {
-        var bar = document.getElementById(ns + '-filter-bar');
-        if (bar) bar.querySelectorAll('[data-filter="' + mutex + '"]').forEach(function(m) { m.classList.remove('active'); });
-    }
-    // Color dot: deactivate other color dots when activating one
-    if (btn.dataset.filter && btn.dataset.filter.startsWith('color:') && btn.classList.contains('active')) {
-        var colorBar = document.getElementById(ns + '-filter-bar');
-        if (colorBar) colorBar.querySelectorAll('.org-filter-color-dot.active').forEach(function(d) {
-            if (d !== btn) d.classList.remove('active');
-        });
-    }
-    applyOrgFilter(ns);
+var _orgSharedFilter = _loadOrgSharedFilter();
+
+function _saveOrgSharedFilter() {
+    try {
+        localStorage.setItem('organize_filter', JSON.stringify({
+            search: _orgSharedFilter.search,
+            chips: Array.from(_orgSharedFilter.chips),
+            color: _orgSharedFilter.color,
+        }));
+    } catch (_) {}
 }
 
-function clearOrgFilter(ns) {
+function _captureOrgFilterFromBar(ns) {
     var bar = document.getElementById(ns + '-filter-bar');
-    if (!bar) return;
-    bar.querySelectorAll('.org-filter-chip.active, .org-filter-color-dot.active').forEach(function(c) { c.classList.remove('active'); });
     var si = document.getElementById(ns + '-filter-search');
-    if (si) si.value = '';
-    applyOrgFilter(ns);
+    _orgSharedFilter.search = si ? si.value : '';
+    _orgSharedFilter.chips = new Set();
+    _orgSharedFilter.color = '';
+    if (bar) {
+        bar.querySelectorAll('.org-filter-chip.active').forEach(function(c) {
+            if (c.dataset.filter) _orgSharedFilter.chips.add(c.dataset.filter);
+        });
+        var colorDot = bar.querySelector('.org-filter-color-dot.active');
+        if (colorDot) {
+            _orgSharedFilter.color = (colorDot.dataset.filter || '').replace('color:', '').toLowerCase();
+        }
+    }
+    _saveOrgSharedFilter();
+}
+
+function _syncOrgFilterUI() {
+    ORG_FILTER_NAMESPACES.forEach(function(ns) {
+        var bar = document.getElementById(ns + '-filter-bar');
+        var si = document.getElementById(ns + '-filter-search');
+        if (si) si.value = _orgSharedFilter.search;
+        if (!bar) return;
+        bar.querySelectorAll('.org-filter-chip, .org-filter-color-dot').forEach(function(el) {
+            var f = el.dataset.filter;
+            if (!f) return;
+            if (f.startsWith('color:')) {
+                el.classList.toggle('active', f.replace('color:', '').toLowerCase() === _orgSharedFilter.color);
+            } else {
+                el.classList.toggle('active', _orgSharedFilter.chips.has(f));
+            }
+        });
+    });
+}
+
+function _updateOrgFilterBtn() {
+    var filterBtn = document.getElementById('org-header-filter-btn');
+    if (!filterBtn) return;
+    var search = _orgSharedFilter.search.toLowerCase().trim();
+    var hasActive = search || _orgSharedFilter.chips.size > 0 || _orgSharedFilter.color;
+    filterBtn.classList.toggle('has-filter', !!hasActive);
+}
+
+function applyAllOrgFilters(triggerNs) {
+    if (triggerNs) {
+        var si = document.getElementById(triggerNs + '-filter-search');
+        if (si) {
+            _orgSharedFilter.search = si.value;
+            _saveOrgSharedFilter();
+            _syncOrgFilterUI();
+        }
+    }
+    var impl = window._applyOrgFilterImpl;
+    if (!impl) return;
+    ORG_FILTER_NAMESPACES.forEach(function(ns) { impl(ns); });
+    _updateOrgFilterBtn();
 }
 
 function applyOrgFilter(ns) {
-    var bar = document.getElementById(ns + '-filter-bar');
-    var filterBtn = document.getElementById('org-header-filter-btn');
+    applyAllOrgFilters(ns);
+}
+
+function _applyOrgFilterCore(ns) {
     var rowsId = ns === 'cat' ? 'category-rows' : (ns + '-rows');
     var rows = document.getElementById(rowsId);
     if (!rows) return;
 
-    var search = '';
-    var si = document.getElementById(ns + '-filter-search');
-    if (si) search = si.value.toLowerCase().trim();
-
-    var activeChips = new Set();
-    var activeColor = '';
-    if (bar) {
-        bar.querySelectorAll('.org-filter-chip.active').forEach(function(c) { activeChips.add(c.dataset.filter); });
-        var colorDot = bar.querySelector('.org-filter-color-dot.active');
-        if (colorDot) activeColor = (colorDot.dataset.filter || '').replace('color:', '').toLowerCase();
-    }
-
-    var hasActive = search || activeChips.size > 0 || activeColor;
-    if (filterBtn && (!window._orgHeader || window._orgHeader.getFilterNs() === ns)) {
-        filterBtn.classList.toggle('has-filter', hasActive);
-    }
+    var search = _orgSharedFilter.search.toLowerCase().trim();
+    var activeChips = _orgSharedFilter.chips;
+    var activeColor = _orgSharedFilter.color;
 
     // Build a set of card ids that have children (from parents data on sibling cards)
     var cardSel;
@@ -1233,8 +1274,44 @@ function applyOrgFilter(ns) {
 
         card.style.display = show ? '' : 'none';
     });
-    // Notify tabs that visibility changed (for select-all button state)
     document.dispatchEvent(new CustomEvent('org:filter-applied', { detail: { ns: ns } }));
+}
+
+window._applyOrgFilterImpl = _applyOrgFilterCore;
+
+function toggleOrgFilter(ns) {
+    var bar = document.getElementById(ns + '-filter-bar');
+    if (!bar) return;
+    bar.classList.toggle('open');
+}
+
+function toggleOrgChip(btn, ns) {
+    btn.classList.toggle('active');
+    // Deactivate mutex pair
+    var mutex = btn.dataset.mutex;
+    if (mutex && btn.classList.contains('active')) {
+        var bar = document.getElementById(ns + '-filter-bar');
+        if (bar) bar.querySelectorAll('[data-filter="' + mutex + '"]').forEach(function(m) { m.classList.remove('active'); });
+    }
+    // Color dot: deactivate other color dots when activating one
+    if (btn.dataset.filter && btn.dataset.filter.startsWith('color:') && btn.classList.contains('active')) {
+        var colorBar = document.getElementById(ns + '-filter-bar');
+        if (colorBar) colorBar.querySelectorAll('.org-filter-color-dot.active').forEach(function(d) {
+            if (d !== btn) d.classList.remove('active');
+        });
+    }
+    _captureOrgFilterFromBar(ns);
+    _syncOrgFilterUI();
+    applyAllOrgFilters();
+}
+
+function clearOrgFilter(ns) {
+    _orgSharedFilter.search = '';
+    _orgSharedFilter.chips = new Set();
+    _orgSharedFilter.color = '';
+    _saveOrgSharedFilter();
+    _syncOrgFilterUI();
+    applyAllOrgFilters();
 }
 
 // ── Consolidated HTMX dialog opener (tag, category, status, priority) ────────
@@ -1303,12 +1380,39 @@ window._orgHeader = (function() {
     var tabFilterNs = { categories: 'cat', tags: 'tag', status: 'status', people: 'people' };
     var actionsEl, filterBtn, selAllBtn, createBtn, viewToggle, wired = false;
 
+    function _loadSharedView() {
+        var v = localStorage.getItem('organize_view');
+        if (v) return v;
+        return localStorage.getItem('tag_view')
+            || localStorage.getItem('category_view')
+            || localStorage.getItem('status_view')
+            || localStorage.getItem('people_view')
+            || 'list';
+    }
+
+    var sharedView = _loadSharedView();
+
     function register(tabKey, cfg) {
         tabs[tabKey] = cfg;
     }
 
     function getFilterNs() {
         return tabFilterNs[activeTab] || null;
+    }
+
+    function getSharedView() {
+        return sharedView;
+    }
+
+    function setSharedView(view) {
+        sharedView = view;
+        localStorage.setItem('organize_view', view);
+        syncViewButtons(view);
+        Object.keys(tabs).forEach(function(key) {
+            var cfg = tabs[key];
+            if (cfg && cfg.applyView) cfg.applyView();
+        });
+        if (typeof applyAllOrgFilters === 'function') applyAllOrgFilters();
     }
 
     function syncViewButtons(view) {
@@ -1340,10 +1444,9 @@ window._orgHeader = (function() {
         if (viewToggle) viewToggle.setAttribute('aria-label', cfg.viewAriaLabel || 'View mode');
         if (filterBtn) filterBtn.title = cfg.filterTitle || 'Filter';
         syncCreateButton(cfg);
-        syncViewButtons(cfg.getView ? cfg.getView() : 'list');
+        syncViewButtons(sharedView);
         if (cfg.updateSelAllBtn) cfg.updateSelAllBtn();
-        var ns = tabFilterNs[tabKey];
-        if (ns && typeof applyOrgFilter === 'function') applyOrgFilter(ns);
+        if (typeof _updateOrgFilterBtn === 'function') _updateOrgFilterBtn();
     }
 
     function wireButtons() {
@@ -1357,8 +1460,7 @@ window._orgHeader = (function() {
 
         document.querySelectorAll('.org-header-view-btn').forEach(function(btn) {
             btn.addEventListener('click', function() {
-                var cfg = tabs[activeTab];
-                if (cfg && cfg.setView) cfg.setView(btn.dataset.view);
+                setSharedView(btn.dataset.view);
             });
         });
         if (selAllBtn) selAllBtn.addEventListener('click', function() {
@@ -1375,12 +1477,31 @@ window._orgHeader = (function() {
         });
     }
 
-    function init() {
-        wireButtons();
-        setTab(activeTab);
+    function enforceMobileGalleryFallback() {
+        if (!window.matchMedia('(max-width: 767px)').matches) return;
+        if (sharedView === 'gallery') setSharedView('list');
     }
 
-    return { register: register, setTab: setTab, getFilterNs: getFilterNs, syncViewButtons: syncViewButtons, init: init };
+    function init() {
+        wireButtons();
+        enforceMobileGalleryFallback();
+        setTab(activeTab);
+        if (typeof _syncOrgFilterUI === 'function') {
+            _syncOrgFilterUI();
+            applyAllOrgFilters();
+        }
+        window.addEventListener('resize', enforceMobileGalleryFallback);
+    }
+
+    return {
+        register: register,
+        setTab: setTab,
+        getFilterNs: getFilterNs,
+        getSharedView: getSharedView,
+        setSharedView: setSharedView,
+        syncViewButtons: syncViewButtons,
+        init: init,
+    };
 })();
 </script>
 
@@ -1409,8 +1530,6 @@ window._orgHeader = (function() {
             // Clear selection and close all filter bars when switching tabs
             if (window._orgBulkClear) window._orgBulkClear();
             document.querySelectorAll('.org-filter-bar.open').forEach(function(bar) { bar.classList.remove('open'); });
-            var headerFilterBtn = document.getElementById('org-header-filter-btn');
-            if (headerFilterBtn) headerFilterBtn.classList.remove('has-filter');
         });
     });
 
@@ -1465,7 +1584,6 @@ window._orgBulkSync = function(n, opts) {
 (function() {
     var _tagSelected = new Set();
     var _tagMergeTargetId = null;
-    var _tagCurrentView = localStorage.getItem('tag_view') || 'list';
     var _lastTagClickIdx = -1;
 
     function _escHtml(s) {
@@ -1518,16 +1636,17 @@ window._orgBulkSync = function(n, opts) {
     function applyTagView() {
         var rows = document.getElementById('tag-rows');
         if (!rows) return;
+        var view = window._orgHeader.getSharedView();
         rows.classList.remove('tag-view--list', 'tag-view--gallery', 'tag-view--tree');
-        rows.classList.add('tag-view--' + _tagCurrentView);
-        if (window._orgHeader) window._orgHeader.syncViewButtons(_tagCurrentView);
-        if (_tagCurrentView === 'tree') {
+        rows.classList.add('tag-view--' + view);
+        if (window._orgHeader) window._orgHeader.syncViewButtons(view);
+        if (view === 'tree') {
             renderTagTree(rows);
         } else {
             var tr = rows.querySelector('.tag-tree-root'); if (tr) tr.remove();
             rows.querySelectorAll('.tag-card').forEach(function(c) { c.style.display = ''; });
         }
-        if (rows._sortable) rows._sortable.option('disabled', _tagCurrentView !== 'list');
+        if (rows._sortable) rows._sortable.option('disabled', view !== 'list');
     }
 
     function renderTagTree(rows) {
@@ -1871,8 +1990,9 @@ window._orgBulkSync = function(n, opts) {
         createTitle: 'New Tag',
         createIconOnly: true,
         createHtml: '<i class="material-icons" style="font-size:1.2rem;">add</i>',
-        getView: function() { return _tagCurrentView; },
-        setView: function(v) { _tagCurrentView = v; localStorage.setItem('tag_view', v); applyTagView(); },
+        getView: function() { return window._orgHeader.getSharedView(); },
+        setView: function(v) { window._orgHeader.setSharedView(v); },
+        applyView: applyTagView,
         onSelAll: function() {
             var visIds = _getVisibleTagIds();
             var allSel = visIds.length > 0 && visIds.every(function(id) { return _tagSelected.has(id); });
@@ -1895,7 +2015,6 @@ window._orgBulkSync = function(n, opts) {
 (function() {
     var _catSelected = new Set();
     var _catMergeTargetId = null;
-    var _catCurrentView = localStorage.getItem('category_view') || 'list';
     var _lastCatClickIdx = -1;
 
     function _escHtml(s) {
@@ -1946,10 +2065,11 @@ window._orgBulkSync = function(n, opts) {
 
     function applyCatView() {
         var rows = document.getElementById('category-rows'); if (!rows) return;
+        var view = window._orgHeader.getSharedView();
         rows.classList.remove('tag-view--list','tag-view--gallery','tag-view--tree');
-        rows.classList.add('tag-view--' + _catCurrentView);
-        if (window._orgHeader) window._orgHeader.syncViewButtons(_catCurrentView);
-        if (_catCurrentView==='tree') {
+        rows.classList.add('tag-view--' + view);
+        if (window._orgHeader) window._orgHeader.syncViewButtons(view);
+        if (view === 'tree') {
             renderCatTree(rows);
         } else {
             var tr=rows.querySelector('.tag-tree-root'); if(tr) tr.remove();
@@ -2261,8 +2381,9 @@ window._orgBulkSync = function(n, opts) {
         createTitle: 'New Category',
         createIconOnly: true,
         createHtml: '<i class="material-icons" style="font-size:1.2rem;">add</i>',
-        getView: function() { return _catCurrentView; },
-        setView: function(v) { _catCurrentView = v; localStorage.setItem('category_view', v); applyCatView(); },
+        getView: function() { return window._orgHeader.getSharedView(); },
+        setView: function(v) { window._orgHeader.setSharedView(v); },
+        applyView: applyCatView,
         onSelAll: function() {
             var visIds = _getVisibleCatIds();
             var allSel = visIds.length > 0 && visIds.every(function(id) { return _catSelected.has(id); });
@@ -2286,7 +2407,6 @@ window._orgBulkSync = function(n, opts) {
     var _statusSelected = new Set();
     var _statusMergeTargetId = null;
     var _lastStatusClickIdx = -1;
-    var _statusCurrentView = localStorage.getItem('status_view') || 'list';
 
     function _escHtml(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -2367,10 +2487,11 @@ window._orgBulkSync = function(n, opts) {
     // ── View toggle ───────────────────────────────────────────────────────────
     function _applyStatusView() {
         var rows = document.getElementById('status-rows'); if (!rows) return;
+        var view = window._orgHeader.getSharedView();
         rows.classList.remove('tag-view--list', 'tag-view--gallery', 'tag-view--tree');
-        rows.classList.add('tag-view--' + _statusCurrentView);
-        if (window._orgHeader) window._orgHeader.syncViewButtons(_statusCurrentView);
-        if (_statusCurrentView === 'tree') {
+        rows.classList.add('tag-view--' + view);
+        if (window._orgHeader) window._orgHeader.syncViewButtons(view);
+        if (view === 'tree') {
             renderOrganizeTree(rows, 'status');
         } else {
             var tr = rows.querySelector('.tag-tree-root'); if (tr) tr.remove();
@@ -2521,8 +2642,9 @@ window._orgBulkSync = function(n, opts) {
         createTitle: 'New Status',
         createIconOnly: true,
         createHtml: '<i class="material-icons" style="font-size:1.2rem;">add</i>',
-        getView: function() { return _statusCurrentView; },
-        setView: function(v) { _statusCurrentView = v; localStorage.setItem('status_view', v); _applyStatusView(); },
+        getView: function() { return window._orgHeader.getSharedView(); },
+        setView: function(v) { window._orgHeader.setSharedView(v); },
+        applyView: _applyStatusView,
         onSelAll: function() {
             var visIds = _getVisibleStatusIds();
             var allSel = visIds.length > 0 && visIds.every(function(id) { return _statusSelected.has(id); });
@@ -2595,7 +2717,6 @@ window._orgBulkSync = function(n, opts) {
     var _peopleSelected = new Set();
     var _peopleMergeTargetId = null;
     var _mergeUrl = '{% url "people.multi_merge" %}';
-    var _peopleCurrentView = localStorage.getItem('people_view') || 'list';
 
     function _getCsrf() { var m = document.cookie.match(/csrftoken=([^;]+)/); return m ? m[1] : ''; }
 
@@ -2631,10 +2752,11 @@ window._orgBulkSync = function(n, opts) {
 
     function _applyPeopleView() {
         var rows = document.getElementById('people-badge-rows'); if (!rows) return;
+        var view = window._orgHeader.getSharedView();
         rows.classList.remove('tag-view--list', 'tag-view--gallery', 'tag-view--tree');
-        rows.classList.add('tag-view--' + _peopleCurrentView);
-        if (window._orgHeader) window._orgHeader.syncViewButtons(_peopleCurrentView);
-        if (_peopleCurrentView === 'tree') { renderOrganizeTree(rows, 'people'); }
+        rows.classList.add('tag-view--' + view);
+        if (window._orgHeader) window._orgHeader.syncViewButtons(view);
+        if (view === 'tree') { renderOrganizeTree(rows, 'people'); }
         else { var tr = rows.querySelector('.tag-tree-root'); if (tr) tr.remove(); rows.querySelectorAll('.tag-card').forEach(function(c) { c.style.display = ''; }); }
     }
 
@@ -2650,24 +2772,12 @@ window._orgBulkSync = function(n, opts) {
     // ── Filter ────────────────────────────────────────────────────────────────
     // Wrap applyOrgFilter to handle the 'people' namespace, which uses .org-selectable
     // rows (not .tag-card elements that the global implementation expects).
-    var _origApplyFilter = window.applyOrgFilter;
-    window.applyOrgFilter = function (ns) {
+    var _origApplyFilter = window._applyOrgFilterImpl;
+    window._applyOrgFilterImpl = function (ns) {
         if (ns !== 'people') { if (_origApplyFilter) _origApplyFilter(ns); return; }
-        var bar = document.getElementById('people-filter-bar');
-        var filterBtn = document.getElementById('org-header-filter-btn');
-        var q = (document.getElementById('people-filter-search') || {}).value || '';
-        q = q.toLowerCase().trim();
-        var activeChips = new Set();
-        var activeColor = '';
-        if (bar) {
-            bar.querySelectorAll('.org-filter-chip.active').forEach(function (c) { activeChips.add(c.dataset.filter); });
-            var colorDot = bar.querySelector('.org-filter-color-dot.active');
-            if (colorDot) activeColor = (colorDot.dataset.filter || '').replace('color:', '').toLowerCase();
-        }
-        var hasActive = q || activeChips.size > 0 || activeColor;
-        if (filterBtn && window._orgHeader && window._orgHeader.getFilterNs() === 'people') {
-            filterBtn.classList.toggle('has-filter', !!hasActive);
-        }
+        var q = _orgSharedFilter.search.toLowerCase().trim();
+        var activeChips = _orgSharedFilter.chips;
+        var activeColor = _orgSharedFilter.color;
         _getRows().forEach(function (row) {
             var name = (row.dataset.peopleName || '').toLowerCase();
             if (q && !name.includes(q)) { row.style.display = 'none'; return; }
@@ -2760,8 +2870,9 @@ window._orgBulkSync = function(n, opts) {
         createCompact: true,
         createIconOnly: false,
         createHtml: '<i class="material-icons">add</i> New Label',
-        getView: function() { return _peopleCurrentView; },
-        setView: function(v) { _peopleCurrentView = v; localStorage.setItem('people_view', v); _applyPeopleView(); },
+        getView: function() { return window._orgHeader.getSharedView(); },
+        setView: function(v) { window._orgHeader.setSharedView(v); },
+        applyView: _applyPeopleView,
         onSelAll: function() {
             var rows = _getRows().filter(function(r) { return r.style.display !== 'none'; });
             var ids = rows.map(function(r) { return parseInt(r.dataset.peopleId, 10); });

@@ -634,7 +634,10 @@
 .apdlg-body {
     padding: 1rem 1.25rem;
     overflow-y: auto;
+    overflow-x: hidden;
     flex: 1;
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
     display: flex;
     flex-direction: column;
     gap: .85rem;
@@ -1248,22 +1251,32 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     margin-top: 4px;
 }
 
-/* ── Floating address search bar ──────────────────────────────────── */
+/* ── Floating address search bar (mobile-first) ───────────────────── */
 #addr-search-bar {
     position: absolute;
-    top: 12px;
-    left: 54px;
-    width: min(360px, calc(100% - 68px));
+    top: 10px;
+    left: 38px;
+    width: min(220px, calc(100vw - 58px));
     background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
-    border-radius: 24px;
+    border-radius: 18px;
     display: flex;
     align-items: center;
-    padding: 0 12px;
-    gap: 8px;
+    padding: 0 8px;
+    gap: 4px;
     z-index: 1000;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, .18), 0 0 0 0 transparent;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, .16), 0 0 0 0 transparent;
     transition: box-shadow .15s;
+
+    @include up($breakpoint-sm) {
+        top: 12px;
+        left: 54px;
+        width: min(360px, calc(100% - 68px));
+        border-radius: 24px;
+        padding: 0 12px;
+        gap: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .18), 0 0 0 0 transparent;
+    }
 }
 
 #addr-search-bar:focus-within {
@@ -1272,22 +1285,32 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 }
 
 .addr-search-icon {
-    font-size: 1rem;
+    font-size: 0.9rem;
     color: var(--ul-grey-7);
     flex-shrink: 0;
+
+    @include up($breakpoint-sm) {
+        font-size: 1rem;
+    }
 }
 
 #address-search-input {
     flex: 1;
+    min-width: 0;
     background: transparent;
     border: none;
     outline: none;
     color: var(--ul-grey-8);
-    font-size: 0.84rem;
-    padding: 10px 0;
+    font-size: 0.78rem;
+    padding: 6px 0;
 
     &::placeholder {
         color: var(--ul-grey-6);
+    }
+
+    @include up($breakpoint-sm) {
+        font-size: 0.84rem;
+        padding: 10px 0;
     }
 }
 
@@ -1315,15 +1338,22 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 
 #addr-search-suggestions {
     position: absolute;
-    top: 52px;
-    left: 54px;
-    width: min(360px, calc(100% - 68px));
+    top: 38px;
+    left: 38px;
+    width: min(220px, calc(100vw - 58px));
     background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
-    border-radius: 12px;
+    border-radius: 10px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, .16);
     z-index: 1000;
     overflow: hidden;
+
+    @include up($breakpoint-sm) {
+        top: 52px;
+        left: 54px;
+        width: min(360px, calc(100% - 68px));
+        border-radius: 12px;
+    }
 }
 
 .addr-suggestion {
@@ -1625,17 +1655,6 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     // Don't shift map-buttons sideways when filter panel opens (it's bottom now)
     #map.filter-open .map-buttons {
         right: 12px;
-    }
-
-    // Ensure address search bar doesn't overflow on very narrow screens
-    #addr-search-bar {
-        left: 10px;
-        width: calc(100% - 20px);
-    }
-
-    #addr-search-suggestions {
-        left: 10px;
-        width: calc(100% - 20px);
     }
 }
 

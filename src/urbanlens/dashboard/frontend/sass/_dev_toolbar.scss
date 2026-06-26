@@ -2,6 +2,8 @@
 @use 'variables' as *;
 
 .dev-toolbar {
+    // Hidden on phones/tablets; dev tooling is desktop-only.
+    display: none;
     position: fixed;
     bottom: 3rem;
     left: 1rem;
@@ -57,6 +59,10 @@
     &.dev-toolbar--dragging {
         user-select: none;
         cursor: grabbing;
+    }
+
+    @include up($breakpoint-sm) {
+        display: block;
     }
 }
 

@@ -169,13 +169,58 @@
     }
 }
 
-// Create card
+// Create card (inline panel on legacy tag/category pages)
 .tag-create-card {
     background: var(--ul-grey-0);
     border: 1px solid var(--ul-grey-0b);
     border-radius: $radius-md;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
+}
+
+// Create-badge modals on the organize page (native <dialog>)
+dialog.tag-create-card.ul-dialog {
+    margin: 0;
+    padding: 0;
+    border: none;
+
+    .tag-form {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex: 1;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 1rem;
+        box-sizing: border-box;
+    }
+
+    .tag-form-actions {
+        flex-shrink: 0;
+    }
+
+    .tag-form-grid {
+        grid-template-columns: 1fr;
+
+        @include up($breakpoint-xs) {
+            grid-template-columns: 1fr auto;
+        }
+    }
+
+    .tag-icon-color-row {
+        gap: 1rem;
+
+        @include up($breakpoint-sm) {
+            gap: 2rem;
+        }
+    }
+
+    @include up($breakpoint-sm) {
+        .tag-form {
+            padding: 1.5rem;
+        }
+    }
 }
 
 // Tag cards
@@ -543,11 +588,17 @@
 }
 
 .tag-edit-dialog-body {
-    padding: 1rem 1.25rem 1.25rem;
+    padding: 1rem 1rem 1.25rem;
     overflow-y: auto;
     overflow-x: hidden;
-    flex: 1; // fills remaining height within the flex dialog
+    flex: 1;
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
     border-radius: 0 0 $radius-md $radius-md; // clips child content at rounded corners
+
+    @include up($breakpoint-sm) {
+        padding: 1rem 1.25rem 1.25rem;
+    }
 }
 
 // ── Tag merge dialog form ─────────────────────────────────────────────────────
@@ -878,6 +929,15 @@
     &.active {
         background: $primary-color;
         color: var(--ul-grey-9);
+    }
+}
+
+// Gallery view is desktop-only on the unified organize page
+.org-header-view-btn[data-view="gallery"] {
+    display: none;
+
+    @include up($breakpoint-sm) {
+        display: flex;
     }
 }
 
@@ -2512,11 +2572,5 @@
     .priority-item:first-child .priority-jump-btn.jump-top,
     .priority-item:last-child .priority-jump-btn.jump-bottom {
         display: none;
-    }
-
-    dialog.tag-create-card {
-        width: min(720px, calc(100vw - 2rem));
-        max-height: min(86vh, 760px);
-        overflow: auto;
     }
 }
