@@ -110,19 +110,13 @@
     &:hover {
         box-shadow: 0 10px 28px rgba(0, 0, 0, .08);
         background-color: #{$color-blue-1700};
-        border-color: $color-blue-300;
+        border-color: $color-blue-1500;
         transform: translateY(-2px);
 
         .trip-card-arrow {
             color: $color-blue-500;
             transform: translateX(2px);
         }
-    }
-}
-
-#trip-list {
-    .trip-card {
-        background-color: var(--ul-grey-0);
     }
 }
 
