@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import contextlib
-from datetime import datetime
 import logging
 import math
 from math import atan2, cos, radians, sin, sqrt
@@ -10,13 +9,11 @@ from typing import TYPE_CHECKING, Self
 
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
-
-# Django Imports
 from django.db.models import F, Q
+from django.utils import timezone
 
 # App Imports
 from urbanlens.dashboard.models import abstract
-from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +42,7 @@ class PinQuerySet(abstract.QuerySet):
         return self.filter(last_visited__isnull=True)
 
     def not_visited_this_year(self):
-        return self.filter(last_visited__year__lt=datetime.now(tz=settings.TIME_ZONE).year)
+        return self.filter(last_visited__year__lt=timezone.now().year)
 
     def by_category(self, category):
         return self.filter(badges__name=category, badges__kind="category")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 import logging
 import os
 from pathlib import Path
@@ -59,10 +59,7 @@ class DatabaseBackup:
                     logger.exception("Failed to remove old backup: %s. Error: %s", file, e)
 
     def run(self) -> bool:
-        # TODO temporarily disable
-        datetime.now(tz=settings.TIME_ZONE).date()
-
-        backup_filename = f"backup_{datetime.now(tz=settings.TIME_ZONE).strftime('%Y%m%d_%H%M%S')}.sql"
+        backup_filename = f"backup_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.sql"
 
         db = settings.databases["default"]
         db_user = db.get("USER")
@@ -93,10 +90,6 @@ class DatabaseBackup:
         try:
             subprocess.run(pg_dump_command, check=True)  # nosec B603
             logger.info("Backup completed successfully: %s", backup_filename)
-
-            # Update the last backup date
-            datetime.now(tz=settings.TIME_ZONE).date()
-
             self.purge_old_backups()
         except subprocess.CalledProcessError as e:
             logger.exception("Error occurred while performing database backup: %s", e)
