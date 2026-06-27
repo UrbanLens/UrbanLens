@@ -1,13 +1,15 @@
 """QuerySet and manager for PinVisit."""
 from __future__ import annotations
 
+from typing import Self
+
 from urbanlens.dashboard.models import abstract
 
 
 class VisitQuerySet(abstract.QuerySet):
     """QuerySet for PinVisit records."""
 
-    def for_pin(self, pin_id: int) -> VisitQuerySet:
+    def for_pin(self, pin_id: int) -> Self:
         """Filter to visits for a specific pin.
 
         Args:
@@ -18,7 +20,7 @@ class VisitQuerySet(abstract.QuerySet):
         """
         return self.filter(pin_id=pin_id)
 
-    def manual(self) -> VisitQuerySet:
+    def manual(self) -> Self:
         """Filter to manually-recorded visits.
 
         Returns:
@@ -26,7 +28,7 @@ class VisitQuerySet(abstract.QuerySet):
         """
         return self.filter(source="manual")
 
-    def from_takeout(self) -> VisitQuerySet:
+    def from_takeout(self) -> Self:
         """Filter to visits imported from Google Takeout.
 
         Returns:

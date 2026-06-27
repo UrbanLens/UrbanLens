@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 import logging
 import os
 import time
 from typing import Any, Literal
+from urllib.parse import urlparse, urlunparse
 
 from celery import current_app
 from django.conf import settings as django_settings
@@ -206,8 +208,34 @@ def collect_valkey_stats() -> InfrastructureServiceStat:
         )
 
 
+_CELERY_STATS_CACHE_KEY = "dashboard:infra:celery_stats"
+_CELERY_STATS_TTL = 30  # seconds — limits blocking RPCs to at most once per 30s
+
+
 def collect_celery_stats() -> InfrastructureServiceStat:
-    """Collect Celery broker and worker statistics for the admin stats page."""
+    """Collect Celery broker and worker statistics for the admin stats page.
+
+    Results are cached for 30 seconds because each live collection makes up to five
+    synchronous broadcast RPCs (ping, stats, active, reserved, scheduled), each with
+    a 1-second timeout, which can block an admin page load for up to 5 seconds.
+    """
+    from django.core.cache import cache
+
+    with contextlib.suppress(Exception):
+        cached = cache.get(_CELERY_STATS_CACHE_KEY)
+        if cached is not None:
+            return cached  # type: ignore[return-value]
+
+    stat = _collect_celery_stats_live()
+
+    with contextlib.suppress(Exception):
+        cache.set(_CELERY_STATS_CACHE_KEY, stat, timeout=_CELERY_STATS_TTL)
+
+    return stat
+
+
+def _collect_celery_stats_live() -> InfrastructureServiceStat:
+    """Make live RPC calls to collect Celery worker statistics."""
     broker_url = getattr(django_settings, "CELERY_BROKER_URL", "")
     if not broker_url:
         return InfrastructureServiceStat(
@@ -272,11 +300,15 @@ def collect_celery_stats() -> InfrastructureServiceStat:
 
 def _redact_url(url: str) -> str:
     """Hide credentials in service URLs displayed to admins."""
-    if "@" not in url or "://" not in url:
+    try:
+        parsed = urlparse(url)
+    except Exception:
         return url
-    scheme, rest = url.split("://", 1)
-    _credentials, host = rest.split("@", 1)
-    return f"{scheme}://***@{host}"
+    if not parsed.password:
+        return url
+    host_port = f"{parsed.hostname}:{parsed.port}" if parsed.port else (parsed.hostname or "")
+    user_part = f"{parsed.username}:***" if parsed.username else "***"
+    return urlunparse(parsed._replace(netloc=f"{user_part}@{host_port}"))
 
 
 def collect_nginx_stats() -> InfrastructureServiceStat:
@@ -339,4 +371,5 @@ def collect_infrastructure_service_stats() -> tuple[InfrastructureServiceStat, .
         collect_postgres_stats(),
         collect_valkey_stats(),
         collect_celery_stats(),
+        collect_nginx_stats(),
     )

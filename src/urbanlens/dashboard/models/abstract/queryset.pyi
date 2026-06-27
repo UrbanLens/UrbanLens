@@ -1,6 +1,0 @@
-from djangofoundry import models
-
-class QuerySet(models.QuerySet): ...
-
-class Manager(models.Manager, QuerySet):
-    def all(self) -> QuerySet: ...

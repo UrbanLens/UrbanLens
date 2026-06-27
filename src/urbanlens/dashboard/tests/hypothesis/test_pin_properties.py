@@ -10,13 +10,11 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.badges.queryset import BadgeQuerySet
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.tests.hypothesis.strategies import (
     latitude,
@@ -24,7 +22,6 @@ from urbanlens.dashboard.tests.hypothesis.strategies import (
     nonempty_name,
     reasonable_date,
 )
-
 
 _FK_FIELDS: frozenset[str] = frozenset({"location"})
 
@@ -114,7 +111,7 @@ class PinEffectiveCoordinateTests(TestCase):
     @given(latitude, longitude)
     @settings(max_examples=300)
     def test_pin_override_latitude_takes_precedence(self, lat: Decimal, lon: Decimal) -> None:
-        loc = _make_location("Place", lat=Decimal("0"), lon=Decimal("0"))
+        loc = _make_location("Place", lat=Decimal(0), lon=Decimal(0))
         pin = _make_pin(latitude=lat, longitude=lon, location=loc)
         result = pin.effective_latitude
         assert result is not None  # nosec B101
@@ -123,7 +120,7 @@ class PinEffectiveCoordinateTests(TestCase):
     @given(latitude, longitude)
     @settings(max_examples=300)
     def test_pin_override_longitude_takes_precedence(self, lat: Decimal, lon: Decimal) -> None:
-        loc = _make_location("Place", lat=Decimal("0"), lon=Decimal("0"))
+        loc = _make_location("Place", lat=Decimal(0), lon=Decimal(0))
         pin = _make_pin(latitude=lat, longitude=lon, location=loc)
         result = pin.effective_longitude
         assert result is not None  # nosec B101
@@ -260,7 +257,7 @@ class PinEffectiveIconTests(TestCase):
         object.__setattr__(pin, "custom_icon", mock_cf if custom_icon else None)
         return pin
 
-    @given(st.text(min_size=1, max_size=50, alphabet=st.characters(min_codepoint=ord('a'), max_codepoint=ord('z'))))
+    @given(st.text(min_size=1, max_size=50, alphabet=st.characters(min_codepoint=ord("a"), max_codepoint=ord("z"))))
     @settings(max_examples=200)
     def test_text_icon_field_is_returned_when_set(self, icon_key: str) -> None:
         """When only the icon CharField is set, it must be returned."""
@@ -268,13 +265,14 @@ class PinEffectiveIconTests(TestCase):
         pin = self._make_pin_with_icon(icon=icon_key, custom_icon=None)
         self.assertEqual(pin.effective_icon, icon_key)
 
-    @patch.object(BadgeQuerySet, "location_badges")
-    def test_none_icon_returns_none_when_no_tags(self, mock_badges_qs: MagicMock) -> None:
-        mock_badges_qs.return_value = BadgeQuerySet().none()
+    def test_none_icon_returns_none_when_no_tags(self) -> None:
         pin = self._make_pin_with_icon(icon=None, custom_icon=None)
-        self.assertIsNone(pin.effective_icon)
+        mock_badges = MagicMock()
+        mock_badges.exclude.return_value.order_by.return_value = []
+        with patch.object(type(pin), "badges", new_callable=PropertyMock, return_value=mock_badges):
+            self.assertIsNone(pin.effective_icon)
 
-    @given(st.text(min_size=1, max_size=50, alphabet=st.characters(min_codepoint=ord('a'), max_codepoint=ord('z'))))
+    @given(st.text(min_size=1, max_size=50, alphabet=st.characters(min_codepoint=ord("a"), max_codepoint=ord("z"))))
     @settings(max_examples=100)
     def test_custom_icon_url_beats_icon_field(self, icon_key: str) -> None:
         """A custom uploaded icon takes priority over the text icon key."""

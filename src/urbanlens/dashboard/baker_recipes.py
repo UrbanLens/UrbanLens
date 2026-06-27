@@ -228,14 +228,6 @@ reaction: Recipe[Reaction] = Recipe(
     emoji="👍",
 )
 
-trip_comment_reaction: Recipe[Reaction] = Recipe(
-    "dashboard.Reaction",
-    profile=_make_profile,
-    comment=None,
-    trip_comment=foreign_key("dashboard.trip_comment"),
-    emoji="❤️",
-)
-
 # ── Reviews ───────────────────────────────────────────────────────────────────
 
 review: Recipe[Review] = Recipe(
@@ -305,6 +297,14 @@ trip_comment: Recipe[TripComment] = Recipe(
     author=_make_profile,
     text="A test trip comment.",
     parent=None,
+)
+
+trip_comment_reaction: Recipe[Reaction] = Recipe(
+    "dashboard.Reaction",
+    profile=_make_profile,
+    comment=None,
+    trip_comment=foreign_key("dashboard.trip_comment"),
+    emoji="❤️",
 )
 
 trip_activity_vote: Recipe[TripActivityVote] = Recipe(

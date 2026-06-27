@@ -77,12 +77,13 @@ def get_task_progress(task_id: str) -> TaskProgress:
     return TaskProgress(task_id=task_id, state=state, current=current, total=total, percent=percent, message=message)
 
 
-def safely_enqueue_task(task: Any, *args: Any, countdown: int | None = None, **kwargs: Any):
+def safely_enqueue_task(task: Any, *args: Any, countdown: int | None = None, **kwargs: Any) -> AsyncResult | None:
     """Queue a Celery task with consistent logging and broker exception handling."""
     try:
+        apply_kwargs: dict[str, Any] = {}
         if countdown is not None:
-            return task.apply_async(args=args, kwargs=kwargs, countdown=countdown)
-        return task.delay(*args, **kwargs)
+            apply_kwargs["countdown"] = countdown
+        return task.apply_async(args=args, kwargs=kwargs, **apply_kwargs)
     except (KombuError, ConnectionError, OSError, RuntimeError):
         logger.exception("Unable to enqueue Celery task %s", getattr(task, "name", task))
         return None

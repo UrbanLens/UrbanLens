@@ -338,7 +338,8 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
     # ------------------------------------------------------------------
 
     def __str__(self) -> str:
-        status_labels = ", ".join(s.name for s in self.badges.filter(kind="status")) or "None"
+        status_labels = ", ".join(s.name for s in self.badges.filter(kind="status")) if self.pk else "None"
+        
         return (
             f"Name: {self.effective_name}\n"
             f"Description: {self.description or ''}\n"

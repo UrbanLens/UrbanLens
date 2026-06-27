@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
@@ -102,7 +102,7 @@ class LocationManager(abstract.Manager.from_queryset(LocationQuerySet)):
         # Fallback: proximity for legacy rows without bounding_box
         return self.filter(bounding_box__isnull=True, point__distance_lte=(pt, D(m=50))).first()
 
-    def get_all_for_point(self, latitude: float, longitude: float) -> LocationQuerySet:
+    def get_all_for_point(self, latitude: float, longitude: float) -> Self:
         """Return ALL Locations whose bounding_box contains (lat, lon) as a QuerySet.
 
         Unlike get_for_point, this returns every match so callers can detect when a

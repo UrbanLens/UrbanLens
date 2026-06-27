@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Self
 
 from urbanlens.dashboard.models import abstract
 
@@ -16,19 +17,19 @@ class CampusQuerySet(abstract.QuerySet):
     records).  Filters here operate on region/boundary data.
     """
 
-    def defaults(self) -> CampusQuerySet:
+    def defaults(self) -> Self:
         """Admin-defined default campuses (profile=None)."""
         return self.filter(profile__isnull=True)
 
-    def for_profile(self, profile) -> CampusQuerySet:
+    def for_profile(self, profile) -> Self:
         """User-specific campus overrides belonging to a given profile."""
         return self.filter(profile=profile)
 
-    def for_location(self, location) -> CampusQuerySet:
+    def for_location(self, location) -> Self:
         """All campuses (default and user-specific) for a given location."""
         return self.filter(location=location)
 
-    def with_location(self) -> CampusQuerySet:
+    def with_location(self) -> Self:
         """Prefetch location so effective_polygon doesn't trigger extra queries."""
         return self.select_related("location")
 

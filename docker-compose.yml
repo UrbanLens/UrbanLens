@@ -115,6 +115,96 @@ services:
         max-size: "200k"
         max-file: "10"
 
+  celery-worker:
+    container_name: urbanlens_celery_worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - ENVIRONMENT=${ENVIRONMENT:-production}
+        - UL_DATABASE_USER=${UL_DB_USER:-postgres}
+        - UL_DATABASE_NAME=${UL_DB_NAME:-postgres}
+        - UL_DATABASE_PASS=${UL_DB_PASS:-postgres}
+        - UL_DATABASE_HOST=${UL_DB_HOST:-urbanlens_db}
+        - UL_DATABASE_PORT=${UL_DB_PORT:-5432}
+    command: ["python", "-m", "celery", "-A", "urbanlens.UrbanLens", "worker", "--loglevel=info", "--concurrency=2"]
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    volumes:
+      - logs:/var/log
+      - media_volume:/app/src/urbanlens/media
+    networks:
+      - app_network
+    environment:
+      - UL_DB_USER=${UL_DB_USER:-postgres}
+      - UL_DB_NAME=${UL_DB_NAME:-postgres}
+      - UL_DB_PASS=${UL_DB_PASS:-postgres}
+      - UL_DB_HOST=${UL_DB_HOST:-urbanlens_db}
+      - UL_DB_PORT=${UL_DB_PORT:-5432}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - UL_GOOGLE_CLIENT_ID=${UL_GOOGLE_CLIENT_ID}
+      - UL_GOOGLE_CLIENT_SECRET=${UL_GOOGLE_CLIENT_SECRET}
+      - UL_DISCORD_CLIENT_ID=${UL_DISCORD_CLIENT_ID}
+      - UL_DISCORD_CLIENT_SECRET=${UL_DISCORD_CLIENT_SECRET}
+      - UL_GOOGLE_PLACES_API_KEY=${UL_GOOGLE_PLACES_API_KEY}
+      - UL_GOOGLE_MAPS_API_KEY=${UL_GOOGLE_MAPS_API_KEY}
+      - UL_GOOGLE_SEARCH_API_KEY=${UL_GOOGLE_SEARCH_API_KEY}
+      - UL_GOOGLE_SEARCH_TENANT=${UL_GOOGLE_SEARCH_TENANT}
+      - UL_GOOGLE_SEARCH_CX=${UL_GOOGLE_SEARCH_CX:-${UL_GOOGLE_SEARCH_TENANT}}
+      - UL_OPENWEATHERMAP_API_KEY=${UL_OPENWEATHERMAP_API_KEY}
+      - UL_NPS_API_KEY=${UL_NPS_API_KEY}
+      - UL_OPENAI_API_KEY=${UL_OPENAI_API_KEY}
+      - UL_SMITHSONIAN_API_KEY=${UL_SMITHSONIAN_API_KEY}
+      - UL_VALKEY_URL=${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
+  celery-beat:
+    container_name: urbanlens_celery_beat
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - ENVIRONMENT=${ENVIRONMENT:-production}
+        - UL_DATABASE_USER=${UL_DB_USER:-postgres}
+        - UL_DATABASE_NAME=${UL_DB_NAME:-postgres}
+        - UL_DATABASE_PASS=${UL_DB_PASS:-postgres}
+        - UL_DATABASE_HOST=${UL_DB_HOST:-urbanlens_db}
+        - UL_DATABASE_PORT=${UL_DB_PORT:-5432}
+    command: ["python", "-m", "celery", "-A", "urbanlens.UrbanLens", "beat", "--loglevel=info"]
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    volumes:
+      - logs:/var/log
+    networks:
+      - app_network
+    environment:
+      - UL_DB_USER=${UL_DB_USER:-postgres}
+      - UL_DB_NAME=${UL_DB_NAME:-postgres}
+      - UL_DB_PASS=${UL_DB_PASS:-postgres}
+      - UL_DB_HOST=${UL_DB_HOST:-urbanlens_db}
+      - UL_DB_PORT=${UL_DB_PORT:-5432}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - UL_VALKEY_URL=${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
   valkey:
     container_name: urbanlens_valkey
     image: valkey/valkey:7-alpine

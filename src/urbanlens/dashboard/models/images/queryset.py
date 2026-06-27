@@ -1,7 +1,7 @@
 """QuerySet and Manager for the Image model."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from django.db.models import Manager, Q, QuerySet
 
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 class ImageQuerySet(QuerySet):
-    def visible_to(self, viewer_profile: Profile | None) -> ImageQuerySet:
+    def visible_to(self, viewer_profile: Profile | None) -> Self:
         """Filter to images the given viewer is allowed to see.
 
         Enforces two independent settings:
@@ -165,7 +165,7 @@ class ImageQuerySet(QuerySet):
         from urbanlens.dashboard.models.trips.model import TripMembership
         return set(TripMembership.objects.filter(profile_id=profile_id).values_list("trip_id", flat=True))
 
-    def with_coords(self) -> ImageQuerySet:
+    def with_coords(self) -> Self:
         """Filter to images that have GPS coordinates (suitable for the map layer)."""
         return self.filter(latitude__isnull=False, longitude__isnull=False)
 

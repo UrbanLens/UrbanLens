@@ -2,66 +2,30 @@
 
 from __future__ import annotations
 
-import csv
 from datetime import date
-import io
-import json
 import logging
 import os
-import pathlib
-import shutil
-from typing import Any
 import uuid
-import zipfile
 
-from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
-from django.core.cache import cache
-from django.core.exceptions import ObjectDoesNotExist
-from django.db import DatabaseError
 from django.http import FileResponse, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.services.export import (
+    EXPORT_TTL_SECONDS as _EXPORT_TTL_SECONDS,
+    ExportJobStatus,
+    cleanup_export_artifacts,
+    export_dir as _export_dir_fn,
+    schedule_export_cleanup,
+)
+
 logger = logging.getLogger(__name__)
-
-_EXPORT_TTL_SECONDS = 3600  # Clean up after 1 hour
-
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
 
 
 def _export_dir(job_id: str) -> str:
-    return os.path.join(settings.MEDIA_ROOT, "exports", job_id)
-
-
-class ExportJobStatus:
-    """Cache-backed progress state for a user export job.
-
-    The export archive remains on disk because it is the final downloadable
-    artifact, but transient status belongs in the application cache rather than
-    a JSON sidecar file in MEDIA_ROOT.
-    """
-
-    def __init__(self, job_id: str) -> None:
-        self.job_id = job_id
-        self.cache_key = f"dashboard:export:{job_id}:status"
-
-    def write(self, status: str, progress: int, message: str, user_id: int | None = None) -> None:
-        existing = self.read()
-        data: dict[str, Any] = {"status": status, "progress": progress, "message": message}
-        if user_id is not None:
-            data["user_id"] = user_id
-        elif "user_id" in existing:
-            data["user_id"] = existing["user_id"]
-        cache.set(self.cache_key, data, timeout=_EXPORT_TTL_SECONDS)
-
-    def read(self) -> dict[str, Any]:
-        return cache.get(self.cache_key) or {}
-
-    def delete(self) -> None:
-        cache.delete(self.cache_key)
+    return _export_dir_fn(job_id)
 
 
 def _export_error_partial(request: HttpRequest, job_id: str, message: str) -> HttpResponse:
@@ -80,268 +44,6 @@ def _export_error_partial(request: HttpRequest, job_id: str, message: str) -> Ht
         "dashboard/partials/export_progress.html",
         {"job_id": job_id, "status": "error", "message": message},
     )
-
-
-def cleanup_export_artifacts(export_dir: str, job_status: ExportJobStatus | None = None) -> None:
-    """Remove an export directory and optional cache-backed job status."""
-    shutil.rmtree(export_dir, ignore_errors=True)
-    if job_status is not None:
-        job_status.delete()
-
-
-def schedule_export_cleanup(export_dir: str, job_status: ExportJobStatus | None = None) -> None:
-    """Schedule export cleanup through Celery, falling back to immediate logging on enqueue failure."""
-    from urbanlens.dashboard.services.celery import safely_enqueue_task
-    from urbanlens.dashboard.tasks import cleanup_export_artifacts_task
-
-    result = safely_enqueue_task(
-        cleanup_export_artifacts_task,
-        export_dir,
-        job_status.job_id if job_status is not None else None,
-        countdown=_EXPORT_TTL_SECONDS,
-    )
-    if result is None:
-        logger.warning("Unable to schedule cleanup for export directory %s", export_dir)
-
-
-# ── Per-type export helpers (run inside thread) ────────────────────────────────
-
-
-def _export_profile(profile: Any, temp_dir: str) -> None:
-    data = {
-        "username": profile.user.username,
-        "email": profile.user.email,
-        "first_name": profile.user.first_name,
-        "last_name": profile.user.last_name,
-        "bio": profile.bio or "",
-        "area": profile.area or "",
-        "birth_date": str(profile.birth_date) if profile.birth_date else None,
-        "started_exploring": str(profile.started_exploring) if profile.started_exploring else None,
-        "theme_mode": profile.theme_mode,
-        "date_joined": str(profile.user.date_joined),
-    }
-    with open(os.path.join(temp_dir, "profile.json"), "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, ensure_ascii=False)
-
-
-def _export_pins(profile: Any, temp_dir: str, base_url: str) -> None:
-    from urbanlens.dashboard.models.pin.model import Pin
-
-    pins = (
-        Pin.objects.filter(profile=profile)
-        .select_related("location")
-        .prefetch_related("badges")
-        .order_by("created")
-    )
-
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow(["Title", "Note", "URL", "Tags", "Comment"])
-
-    for pin in pins:
-        name = pin.name or (pin.location.name if pin.location else "")
-        note = pin.description or ""
-        url = f"{base_url.rstrip('/')}/dashboard/map/pin/{pin.slug}/" if pin.slug else ""
-        tags = ", ".join(b.name for b in pin.badges.all() if hasattr(b, "name"))
-        writer.writerow([name, note, url, tags, ""])
-
-    pathlib.Path(os.path.join(temp_dir, "pins.csv")).write_text(buf.getvalue(), encoding="utf-8", newline="")
-
-
-def _export_comments(profile: Any, temp_dir: str) -> None:
-    from urbanlens.dashboard.models.comments.model import Comment
-
-    comments = (
-        Comment.objects.filter(profile=profile)
-        .select_related("pin__location", "location")
-        .order_by("created")
-    )
-
-    rows = []
-    for comment in comments:
-        if comment.pin:
-            target = comment.pin.name or (comment.pin.location.name if comment.pin.location else "")
-            target_type = "pin"
-        elif comment.location:
-            target = comment.location.name
-            target_type = "location"
-        else:
-            target = ""
-            target_type = ""
-
-        rows.append(
-            {
-                "id": comment.pk,
-                "target_type": target_type,
-                "target_name": target,
-                "text": comment.text,
-                "created": str(comment.created),
-            },
-        )
-
-    with open(os.path.join(temp_dir, "comments.json"), "w", encoding="utf-8") as fh:
-        json.dump(rows, fh, indent=2, ensure_ascii=False)
-
-
-def _export_photos(profile: Any, temp_dir: str) -> None:
-    from urbanlens.dashboard.models.images.model import Image
-
-    images = Image.objects.filter(profile=profile).select_related("pin__location", "location").order_by("created")
-
-    photos_dir = os.path.join(temp_dir, "photos")
-    os.makedirs(photos_dir, exist_ok=True)
-
-    metadata = []
-    for image in images:
-        if image.pin:
-            target = image.pin.name or (image.pin.location.name if image.pin.location else "")
-            target_type = "pin"
-        elif image.location:
-            target = image.location.name
-            target_type = "location"
-        else:
-            target = ""
-            target_type = ""
-
-        file_path = image.image.path if image.image else None
-        filename = os.path.basename(file_path) if file_path else None
-
-        if file_path and filename is not None and os.path.exists(file_path):
-            dest = os.path.join(photos_dir, filename)
-            # Avoid name collisions
-            if os.path.exists(dest):
-                base, ext = os.path.splitext(filename)
-                dest = os.path.join(photos_dir, f"{base}_{image.pk}{ext}")
-                filename = os.path.basename(dest)
-            shutil.copy2(file_path, dest)
-
-        metadata.append(
-            {
-                "id": image.pk,
-                "filename": filename,
-                "caption": image.caption or "",
-                "target_type": target_type,
-                "target_name": target,
-                "latitude": str(image.latitude) if image.latitude else None,
-                "longitude": str(image.longitude) if image.longitude else None,
-                "created": str(image.created),
-            },
-        )
-
-    with open(os.path.join(photos_dir, "metadata.json"), "w", encoding="utf-8") as fh:
-        json.dump(metadata, fh, indent=2, ensure_ascii=False)
-
-
-def _export_trips(profile: Any, temp_dir: str) -> None:
-    from urbanlens.dashboard.models.trips.model import Trip
-
-    trips = (
-        Trip.objects.filter(profiles=profile)
-        .prefetch_related("profiles__user")
-        .select_related("creator__user")
-        .order_by("created")
-    )
-
-    rows = []
-    for trip in trips:
-        rows.append(
-            {
-                "id": trip.pk,
-                "name": trip.name,
-                "description": trip.description or "",
-                "start_date": str(trip.start_date) if trip.start_date else None,
-                "end_date": str(trip.end_date) if trip.end_date else None,
-                "creator": trip.creator.user.username if trip.creator else None,
-                "members": [p.user.username for p in trip.profiles.all()],
-                "created": str(trip.created),
-            },
-        )
-
-    with open(os.path.join(temp_dir, "trips.json"), "w", encoding="utf-8") as fh:
-        json.dump(rows, fh, indent=2, ensure_ascii=False)
-
-
-# ── Celery export runner ────────────────────────────────────────────────────
-
-
-def _run_export(user_id: int, export_types: list[str], export_dir: str, base_url: str) -> bool:
-    """Run the export from a Celery worker."""
-    from django.contrib.auth import get_user_model
-
-    User = get_user_model()
-
-    try:
-        user = User.objects.select_related("profile").get(pk=user_id)
-        profile = user.profile
-    except (ObjectDoesNotExist, AttributeError):
-        logger.exception("Export: could not load user %s", user_id)
-        ExportJobStatus(os.path.basename(export_dir)).write("error", 0, "Failed to load user data.")
-        schedule_export_cleanup(export_dir, ExportJobStatus(os.path.basename(export_dir)))
-        return False
-
-    temp_dir = os.path.join(export_dir, "data")
-    os.makedirs(temp_dir, exist_ok=True)
-
-    total_steps = len(export_types) + 1  # +1 for zipping
-    step = 0
-
-    exporters = {
-        "profile": (_export_profile, "Exporting profile…"),
-        "pins": (_export_pins, "Exporting pins…"),
-        "comments": (_export_comments, "Exporting comments…"),
-        "photos": (_export_photos, "Exporting photos…"),
-        "trips": (_export_trips, "Exporting trips…"),
-    }
-
-    try:
-        _run_export_steps(profile, export_types, exporters, step, total_steps, export_dir=export_dir, temp_dir=temp_dir, base_url=base_url, user_id=user_id)
-        return True
-    except (OSError, DatabaseError, ValueError):
-        logger.exception("Export failed for user %s", user_id)
-        ExportJobStatus(os.path.basename(export_dir)).write("error", 0, "Export failed. Please try again.")
-        return False
-    finally:
-        schedule_export_cleanup(export_dir, ExportJobStatus(os.path.basename(export_dir)))
-
-
-def _run_export_steps(
-    profile: Any,
-    export_types: list[str],
-    exporters: dict[str, Any],
-    step: int,
-    total_steps: int,
-    *,
-    export_dir: str,
-    temp_dir: str,
-    base_url: str,
-    user_id: int,
-) -> None:
-    for key in ["profile", "pins", "comments", "photos", "trips"]:
-        if key not in export_types:
-            continue
-        fn, msg = exporters[key]
-        ExportJobStatus(os.path.basename(export_dir)).write("running", max(5, int(step / total_steps * 85)), msg)
-        if key == "pins":
-            fn(profile, temp_dir, base_url)
-        else:
-            fn(profile, temp_dir)
-        step += 1
-
-    ExportJobStatus(os.path.basename(export_dir)).write("running", 90, "Creating archive…")
-    _build_zip(export_dir, temp_dir)
-    shutil.rmtree(temp_dir, ignore_errors=True)
-    ExportJobStatus(os.path.basename(export_dir)).write("done", 100, "Export ready!")
-
-
-def _build_zip(export_dir: str, temp_dir: str) -> None:
-    today = date.today().isoformat()
-    zip_path = os.path.join(export_dir, "export.zip")
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for root, _dirs, files in os.walk(temp_dir):
-            for filename in files:
-                file_path = os.path.join(root, filename)
-                arcname = os.path.join(f"urbanlens_export_{today}", os.path.relpath(file_path, temp_dir))
-                zf.write(file_path, arcname)
 
 
 # ── Views ──────────────────────────────────────────────────────────────────────
@@ -396,7 +98,7 @@ class ExportStartView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_user_data_export
 
-        result = safely_enqueue_task(run_user_data_export, request.user.pk, export_types, exp_dir, base_url)
+        result = safely_enqueue_task(run_user_data_export, request.user.pk, export_types, exp_dir, base_url, job_id)
         if result is None:
             ExportJobStatus(job_id).write("error", 0, "Export queue is unavailable. Please try again later.", user_id=request.user.pk)
             return render(
@@ -441,7 +143,6 @@ class ExportStatusView(LoginRequiredMixin, View):
             return _export_error_partial(request, job_id, "Export job not found or expired. Please start a new export.")
 
         if data.get("user_id") != request.user.pk:
-            # TODO: Candidate for sending out a notice
             logger.warning("Attempting to view export for unauthorized user: job %s, user %s", job_id, request.user.pk)
             return _export_error_partial(
                 request,
@@ -475,7 +176,6 @@ class ExportDownloadView(LoginRequiredMixin, View):
         data = ExportJobStatus(job_id).read()
 
         if not data or data.get("user_id") != request.user.pk:
-            # TODO: Candidate for sending out a notice
             logger.warning("Attempting to download export for unauthorized user: job %s, user %s", job_id, request.user.pk)
             return redirect("tools.index")
 

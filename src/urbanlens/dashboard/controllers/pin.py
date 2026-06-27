@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -16,86 +16,11 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.services.search import get_search_gateway
+from urbanlens.dashboard.services.search import build_pin_search_query, format_search_date, get_search_gateway
 from urbanlens.dashboard.services.smithsonian import SmithsonianGateway
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
-
-
-def _format_relative_search_date(dt: datetime) -> str:
-    """Return a short relative display label for a parsed search-result date."""
-    now = datetime.now(tz=UTC)
-    delta = now - dt
-    if delta.days < 1:
-        hours = delta.seconds // 3600
-        return f"{hours}h ago" if hours else "Just now"
-    if delta.days < 7:
-        return f"{delta.days}d ago"
-    if delta.days < 365:
-        return dt.strftime("%b %-d")
-    return dt.strftime("%b %-d, %Y")
-
-
-def _format_search_date(raw: str | None) -> str:
-    """Convert an ISO date string or human-readable age string to a short display label."""
-    if not raw:
-        return ""
-
-    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
-        try:
-            dt = datetime.strptime(raw[:19].rstrip("Z"), fmt.rstrip("%z"))
-            dt = dt.replace(tzinfo=UTC)
-            return _format_relative_search_date(dt)
-        except ValueError:
-            continue
-    return raw
-
-
-def _build_pin_search_query(pin: Pin) -> str:
-    """Build a search query combining the pin's name with optional location keywords.
-
-    The effective name and place name are the primary search terms. Street name,
-    city, and state are appended as comma-separated optional keywords so that
-    search engines can disambiguate results without requiring an exact phrase match.
-    """
-    from urbanlens.dashboard.services.locations.naming import is_meaningful_name
-
-    name = pin.effective_name if is_meaningful_name(pin.effective_name) else None
-    place_name = getattr(pin, "place_name", None)
-    place_name = place_name if is_meaningful_name(place_name) else None
-    address_basic = pin.address_basic
-    route = pin.location.route if pin.location else None
-
-    # Primary identifier(s)
-    primary: list[str] = []
-    if name:
-        primary.append(name)
-    if place_name and place_name not in {name, address_basic}:
-        primary.append(place_name)
-    elif address_basic and address_basic != name:
-        primary.append(address_basic)
-    primary_str = " ".join(primary)
-
-    # Optional location keywords: street name, city (or county), state
-    location: list[str] = []
-    if route and route not in primary_str:
-        location.append(route)
-    if pin.city:
-        location.append(pin.city)
-    elif pin.county:
-        location.append(pin.county)
-    if pin.state:
-        location.append(pin.state)
-
-    if not primary:
-        if location:
-            return ", ".join(location)
-        if pin.effective_latitude is not None and pin.effective_longitude is not None:
-            return f"{pin.effective_latitude}, {pin.effective_longitude}"
-        return ""
-
-    return ", ".join(filter(None, [primary_str, *location]))
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):
@@ -336,7 +261,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         try:
             search_gateway = get_search_gateway()
-            query = _build_pin_search_query(pin)
+            query = build_pin_search_query(pin)
             search_results = search_gateway.search(query)
         except (OSError, ValueError, RuntimeError) as e:
             logger.exception("Unable to contact web search API: %s", e)
@@ -351,7 +276,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 r["domain"] = urlparse(r.get("link", "")).netloc.removeprefix("www.")
             except (ValueError, AttributeError):
                 r["domain"] = ""
-            r["date_display"] = _format_search_date(r.get("date"))
+            r["date_display"] = format_search_date(r.get("date"))
 
         if cache_hours > 0:
             cache.set(cache_key, search_results, cache_hours * 3600)

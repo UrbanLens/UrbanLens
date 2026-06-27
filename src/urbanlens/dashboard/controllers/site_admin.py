@@ -25,6 +25,7 @@ from urbanlens.dashboard.models.site_settings import (
     SearchProviderChoice,
     SiteSettings,
 )
+from urbanlens.dashboard.services.infrastructure_stats import _format_duration
 from urbanlens.dashboard.services.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -63,13 +64,6 @@ def _monthly_series(queryset, date_field: str, months: int = 12) -> tuple[list[s
             cursor = cursor.replace(month=cursor.month + 1)
 
     return labels, counts
-
-
-def _format_duration(seconds: float) -> str:
-    days = int(seconds // 86400)
-    hours = int((seconds % 86400) // 3600)
-    minutes = int((seconds % 3600) // 60)
-    return f"{days}d {hours}h {minutes}m"
 
 
 def _app_uptime() -> str:

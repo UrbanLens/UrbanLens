@@ -96,7 +96,9 @@ class CollectCeleryStatsTests(TestCase):
         fake_inspect.reserved.return_value = {"worker@example": []}
         fake_inspect.scheduled.return_value = {"worker@example": []}
         fake_app = mock.Mock()
-        fake_app.connection_for_read.return_value.__enter__.return_value = fake_connection
+        fake_connection_cm = mock.MagicMock()
+        fake_connection_cm.__enter__.return_value = fake_connection
+        fake_app.connection_for_read.return_value = fake_connection_cm
         fake_app.control.inspect.return_value = fake_inspect
 
         with (

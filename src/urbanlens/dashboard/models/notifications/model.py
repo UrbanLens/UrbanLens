@@ -13,7 +13,7 @@ from urbanlens.dashboard.models.notifications.meta import (
     NotificationType,
     Status,
 )
-from urbanlens.dashboard.models.notifications.queryset import Manager
+from urbanlens.dashboard.models.notifications.queryset import NotificationManager
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class NotificationLog(abstract.Model):
     message = models.CharField(max_length=50000, blank=True)
     url = models.CharField(max_length=500, blank=True)
 
-    objects = Manager()
+    objects = NotificationManager()
 
     @property
     def is_unread(self) -> bool:

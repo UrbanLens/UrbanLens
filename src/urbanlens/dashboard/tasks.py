@@ -27,13 +27,13 @@ def create_location_for_pin(self, pin_id: int) -> int | None:
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str) -> bool:
+def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None) -> bool:
     """Build a user's data export archive outside the web request."""
-    from urbanlens.dashboard.controllers.tools import _run_export
+    from urbanlens.dashboard.services.export import run_export
 
     logger.info("Starting data export for user %s", user_id)
     update_task_progress(self, current=0, total=1, message="Preparing export…")
-    success = _run_export(user_id, export_types, export_dir, base_url)
+    success = run_export(user_id, export_types, export_dir, base_url, job_id=job_id)
     if success:
         update_task_progress(self, current=1, total=1, message="Export ready")
         logger.info("Finished data export for user %s", user_id)
@@ -46,7 +46,7 @@ def run_user_data_export(self, user_id: int, export_types: list[str], export_dir
 @shared_task
 def cleanup_export_artifacts_task(export_dir: str, job_id: str | None = None) -> None:
     """Remove expired export artifacts and cache-backed status."""
-    from urbanlens.dashboard.controllers.tools import ExportJobStatus, cleanup_export_artifacts
+    from urbanlens.dashboard.services.export import ExportJobStatus, cleanup_export_artifacts
 
     cleanup_export_artifacts(export_dir, ExportJobStatus(job_id) if job_id else None)
     logger.info("Cleaned up export artifacts for job %s", job_id or export_dir)
@@ -104,8 +104,8 @@ def process_image_upload(self, image_id: int) -> bool:
     """Extract image metadata after upload and update the Image row."""
     from decimal import Decimal
 
-    from urbanlens.dashboard.controllers.image_gallery import _extract_gps_coords
     from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.services.images import extract_gps_coords
 
     update_task_progress(self, current=0, total=1, message="Processing image metadata…")
     image = Image.objects.filter(pk=image_id).first()
@@ -113,7 +113,7 @@ def process_image_upload(self, image_id: int) -> bool:
         return False
     try:
         with image.image.open("rb") as image_file:
-            coords = _extract_gps_coords(image_file)
+            coords = extract_gps_coords(image_file)
     except (OSError, ValueError) as exc:
         logger.warning("Image metadata extraction failed for image %s: %s", image_id, exc, exc_info=True)
         return False
@@ -210,22 +210,21 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
 
     from django.core.cache import cache
 
-    from urbanlens.dashboard.controllers.pin import _build_pin_search_query, _format_search_date
     from urbanlens.dashboard.models.pin import Pin
     from urbanlens.dashboard.models.site_settings import SiteSettings
-    from urbanlens.dashboard.services.search import get_search_gateway
+    from urbanlens.dashboard.services.search import build_pin_search_query, format_search_date, get_search_gateway
 
     pin = Pin.objects.filter(pk=pin_id).select_related("location").first()
     if pin is None or not pin.meaningful_name:
         return 0
     update_task_progress(self, current=0, total=1, message="Refreshing web search…")
-    results = get_search_gateway().search(_build_pin_search_query(pin))
+    results = get_search_gateway().search(build_pin_search_query(pin))
     for result in results:
         try:
             result["domain"] = urlparse(result.get("link", "")).netloc.removeprefix("www.")
         except (ValueError, AttributeError):
             result["domain"] = ""
-        result["date_display"] = _format_search_date(result.get("date"))
+        result["date_display"] = format_search_date(result.get("date"))
     cache_hours = SiteSettings.get_current().search_cache_hours
     if cache_hours > 0:
         cache.set(f"web_search_pin_{pin.pk}", results, cache_hours * 3600)

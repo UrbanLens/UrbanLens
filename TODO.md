@@ -38,6 +38,33 @@ Features planned for this release.
 * Starting map option: Remember doesn't appear to work. [UL-255]
 * Organize: Bulk edit button doesn't open dialog.
 
+## Map Search Filtering Polish
+* Clicking toggle buttons should toggle / untoggle them (e.g. Visits)
+* Combine two badges sections into just one badges section. Design UI for including / excluding a badge in just that one section. The badge chip should not show a checkbox within its visual container.
+* Within the new combined badge section: show two things: selected badges above, and filter/search list to find more below. When a badge is chosen, pop it from search list, and add to the selected badges area. Badge chips can be "include" or "exclude", which can be shown in 2 columns. If only includes are selected, or only excludes are selected, then only show 1 column. The columns should be styled to make them obvious at a glance (some part of them colored red / green, with an obvious icon)
+* In the badges section, badge chips should be colored with their badge color (if one was chosen)
+* Map search: Rating should be a slider with 2 handles. There should be some sort of explanation or visual indicator of what the user is filtering for.
+* The Map toolbar has buttons for 2 kinds of things: map layers, and tools. We want the toolbar to be simple, not jammed with a bunch of buttons, so these 2 things should be separated somehow. I considered making it 2 rows, or making 2 toolbars, and hiding all the layer buttons within a layer dropdown, which is what I'm leaning towards. There may be other solutions, too. Design a solution that is easy for users to intuitively understand without explanation, easy to navigate, and uncluttered.
+* Add keyboard shortcuts for a few important tools on the map. They only work when the map is visible on screen, and work for multiple platforms (windows, ios, linux). 
+* Cap the max zoom out on map so that the map is never so small that it doesn't fill the container. Currently, users can zoom out so far that they can see a grey background around the top and bottom of the map.
+* Change the satellite icon to be the simple satellite emoji (the half circular shape with an antenna)
+---
+* Changing badge icon / color in organize doesn't immediately trigger cache update.
+* Searching / Filtering, then changing pages and coming back, the search is cleared. (Good, but...)
+---
+* Organize: I can't search for badges in other tabs.
+* Organize: Closing filter section is annoying
+* Organize: Filter section styling
+---
+* Map toolbar: Make close button less obtrusive.
+* Throughout site: tooltips clip (overflow: hidden)
+* Map search: Latency when turning off a filter (due to bypassing local cache and hitting redis???)
+* Map: Sometimes badges aren't showing in pin tooltip (tested by filtering demolished). I bet that's because it's a status.
+* Map search: Auto expand some elements depending on screen height.
+* Map search > Visits: Have a "Custom" button to simplify ui.
+* Map search > Visits: Do something to lessen the "reset" button emphasis.
+* Consider again: Pin count while filtering
+
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
 * Searching / Filtering the map. [UL-37]

@@ -1,6 +1,0 @@
-from urbanlens.dashboard.models.abstract import Manager, QuerySet
-
-class ImageQuerySet(QuerySet): ...
-
-class ImageManager(Manager, ImageQuerySet):
-    def all(self) -> ImageQuerySet: ...
