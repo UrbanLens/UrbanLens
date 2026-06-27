@@ -786,9 +786,44 @@ document.body.addEventListener('htmx:afterSettle', function () {
 });
 
 // ── Show completed toggle (shared between map overlay and activities panel) ─
-window._tripShowCompleted = (function () {
-    try { return JSON.parse(localStorage.getItem('trip-show-completed-{{ trip.uuid }}') || 'false'); } catch (e) { return false; }
-}());
+var _tripShowCompletedKey = 'trip-show-completed-{{ trip.uuid }}';
+var _tripAllCompletedCollapsedKey = 'trip-all-completed-collapsed-{{ trip.uuid }}';
+window._tripShowCompleted = false;
+
+function _tripPanelAllCompleted() {
+    var panel = document.getElementById('trip-activities-panel');
+    return !!(panel && panel.dataset.allCompleted === 'true');
+}
+
+function _resolveShowCompletedPreference() {
+    try {
+        if (_tripPanelAllCompleted()) {
+            if (localStorage.getItem(_tripAllCompletedCollapsedKey) === 'true') {
+                return false;
+            }
+            return true;
+        }
+        var stored = localStorage.getItem(_tripShowCompletedKey);
+        if (stored !== null) {
+            return JSON.parse(stored);
+        }
+    } catch (e) {}
+    return false;
+}
+
+function _updateActivitiesEmptyState(panel, tab, showCompleted) {
+    var list = panel.querySelector('.trip-activity-list');
+    if (!list) return;
+
+    var anyVisible = Array.from(list.querySelectorAll('.trip-activity-item')).some(function (li) {
+        return li.style.display !== 'none';
+    });
+    var emptyAllDone = panel.querySelector('.trip-panel-empty--all-completed');
+    if (emptyAllDone) {
+        var allCompleted = panel.dataset.allCompleted === 'true';
+        emptyAllDone.hidden = anyVisible || !allCompleted || showCompleted || tab !== 'all';
+    }
+}
 
 function _applyShowCompletedState() {
     var on = window._tripShowCompleted;
@@ -804,9 +839,25 @@ function _applyShowCompletedState() {
     if (window.refreshTripMap) window.refreshTripMap();
 }
 
+function _initShowCompletedState() {
+    window._tripShowCompleted = _resolveShowCompletedPreference();
+    _applyShowCompletedState();
+}
+
 window.tripToggleShowCompleted = function () {
     window._tripShowCompleted = !window._tripShowCompleted;
-    try { localStorage.setItem('trip-show-completed-{{ trip.uuid }}', JSON.stringify(window._tripShowCompleted)); } catch (e) {}
+    try {
+        localStorage.setItem(_tripShowCompletedKey, JSON.stringify(window._tripShowCompleted));
+        if (_tripPanelAllCompleted()) {
+            if (window._tripShowCompleted) {
+                localStorage.removeItem(_tripAllCompletedCollapsedKey);
+            } else {
+                localStorage.setItem(_tripAllCompletedCollapsedKey, 'true');
+            }
+        } else {
+            localStorage.removeItem(_tripAllCompletedCollapsedKey);
+        }
+    } catch (e) {}
     _applyShowCompletedState();
 };
 
@@ -1001,8 +1052,8 @@ function _onAddActivitySuccess() {
         if (window._tripCurrentView && window._tripCurrentView !== 'list') {
             tripSetView(window._tripCurrentView);
         }
-        // Apply initial show-completed state on first load
-        if (window._tripShowCompleted) _applyShowCompletedState();
+        // Resolve show-completed default once the panel has loaded
+        _initShowCompletedState();
     });
 }());
 
@@ -1459,15 +1510,7 @@ window.tripSetTab = function (tab) {
         li.style.display = visible ? '' : 'none';
     });
 
-    // Update "no activities" message visibility
-    var list = panel.querySelector('.trip-activity-list');
-    if (list) {
-        var anyVisible = Array.from(list.querySelectorAll('.trip-activity-item')).some(function (li) {
-            return li.style.display !== 'none';
-        });
-        var empty = panel.querySelector('.trip-panel-empty');
-        if (empty) empty.hidden = anyVisible;
-    }
+    _updateActivitiesEmptyState(panel, tab, showCompleted);
 
     // Re-render calendar so the filtered set is reflected there too
     if (window._tripCurrentView === 'calendar') _renderTripCalendar();

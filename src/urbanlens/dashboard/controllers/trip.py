@@ -316,7 +316,7 @@ def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) ->
 
 def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Re-render the activities panel with index map, vote counts, and per-activity permissions."""
-    from urbanlens.dashboard.models.trips.model import TripActivityVote
+    from urbanlens.dashboard.models.trips.model import TripActivity, TripActivityVote
 
     activities = list(_activity_qs(trip))
     index_map = _compute_activity_index_map(activities)
@@ -368,10 +368,18 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
         }
         for act in activities
     ]
+    all_activities_completed = bool(activities) and all(
+        act.status == TripActivity.STATUS_COMPLETED for act in activities
+    )
     return render(
         request,
         "dashboard/partials/trip_activities_panel.html",
-        {"trip": trip, "activities_with_index": activities_with_index, "profile": profile},
+        {
+            "trip": trip,
+            "activities_with_index": activities_with_index,
+            "profile": profile,
+            "all_activities_completed": all_activities_completed,
+        },
     )
 
 

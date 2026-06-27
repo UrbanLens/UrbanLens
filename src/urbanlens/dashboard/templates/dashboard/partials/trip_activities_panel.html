@@ -1,6 +1,7 @@
 <div id="trip-activities-panel" class="trip-panel card"
      data-trip-start="{{ trip.start_date|date:'Y-m-d'|default:'' }}"
-     data-trip-end="{{ trip.end_date|date:'Y-m-d'|default:'' }}">
+     data-trip-end="{{ trip.end_date|date:'Y-m-d'|default:'' }}"
+     data-all-completed="{% if all_activities_completed %}true{% else %}false{% endif %}">
     <div class="card-header">
         <i class="material-icons">map</i>
         <span>Activities</span>
@@ -194,6 +195,11 @@
             {% endwith %}
             {% endfor %}
         </ul>
+        {% if all_activities_completed %}
+        <p class="trip-panel-empty trip-panel-empty--all-completed" hidden>
+            All activities for this trip have been completed.
+        </p>
+        {% endif %}
         {% else %}
         <p class="trip-panel-empty">No activities yet.</p>
         {% endif %}
