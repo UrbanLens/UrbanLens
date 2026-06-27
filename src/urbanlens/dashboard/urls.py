@@ -570,6 +570,10 @@ urlpatterns = [
                     name="trips.activity.position",
                 ),
                 path(
+                    "<uuid:trip_uuid>/activities/<int:activity_id>/position",
+                    trip.TripActivityPositionView.as_view(),
+                ),
+                path(
                     "<uuid:trip_uuid>/activities/<int:activity_id>/vote/",
                     trip.TripActivityVoteView.as_view(),
                     name="trips.activity.vote",
@@ -596,6 +600,7 @@ urlpatterns = [
                     name="trips.comment.react",
                 ),
                 path("<uuid:trip_uuid>/members/", trip.TripMembersView.as_view(), name="trips.members"),
+                path("<uuid:trip_uuid>/members", trip.TripMembersView.as_view()),
                 path(
                     "<uuid:trip_uuid>/members/<int:profile_id>/remove/",
                     trip.TripMemberRemoveView.as_view(),
@@ -607,8 +612,11 @@ urlpatterns = [
                     name="trips.member.organizer",
                 ),
                 path("<uuid:trip_uuid>/rsvp/", trip.TripMemberRSVPView.as_view(), name="trips.rsvp"),
+                path("<uuid:trip_uuid>/rsvp", trip.TripMemberRSVPView.as_view()),
                 path("<uuid:trip_uuid>/leave/", trip.TripLeaveView.as_view(), name="trips.leave"),
+                path("<uuid:trip_uuid>/leave", trip.TripLeaveView.as_view()),
                 path("<uuid:trip_uuid>/settings/", trip.TripSettingsView.as_view(), name="trips.settings"),
+                path("<uuid:trip_uuid>/settings", trip.TripSettingsView.as_view()),
                 path("<uuid:trip_uuid>/map-data/", trip.TripMapDataView.as_view(), name="trips.map_data"),
                 path("<uuid:trip_uuid>/weather/", trip.TripWeatherView.as_view(), name="trips.weather"),
             ],
