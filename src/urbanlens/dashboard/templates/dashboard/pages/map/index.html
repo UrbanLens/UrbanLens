@@ -16,7 +16,7 @@
     {# ── Map toolbar (tools only) ──────────────────────────────────────────── #}
     <div class="map-buttons" id="map-buttons">
         <button id="toggle-map-buttons" class="map-toolbar-collapse" aria-label="Toggle map controls"
-                data-tooltip="Collapse toolbar">
+                data-tooltip="Collapse toolbar" data-tooltip-float="true" data-tooltip-pos="below">
             <i class="material-icons">chevron_right</i>
         </button>
         <div class="map-buttons-content">
@@ -33,12 +33,6 @@
                     onclick="toggleFilterPanel()">
                 <i class="material-icons">manage_search</i>
             </button>
-            <button id="toggle-pins-button" class="map-btn-icon"
-                    data-tooltip="Show or hide all pin markers without changing filters (P)" data-tooltip-float="true"
-                    aria-label="Toggle pins"
-                    onclick="togglePins()">
-                <i class="material-icons">push_pin</i>
-            </button>
             <button id="import-pins-button" class="map-btn-icon"
                     data-tooltip="Import pins from Google Takeout (I)" data-tooltip-float="true"
                     data-tooltip-pos="below"
@@ -50,11 +44,14 @@
     </div>
 
     {# ── Layers panel (bottom-left, Google-Maps style) ──────────────────────── #}
-    <div class="map-layers-panel" id="map-layers-panel">
-        <button class="map-layers-toggle" id="map-layers-toggle" onclick="_toggleLayersPanel()"
-                data-tooltip="Map layers" aria-label="Toggle map layers">
+    <div class="map-layers-panel" id="map-layers-panel"
+         onmouseenter="_openLayersPanel()" onmouseleave="_scheduleCloseLayersPanel()">
+        <button class="map-layers-toggle" id="map-layers-toggle"
+                onclick="_toggleLayersPanel()"
+                aria-label="Toggle map layers"
+                aria-expanded="false">
             <i class="material-icons">layers</i>
-            <span>Layers</span>
+            <span class="map-layers-label">Layers</span>
         </button>
         <div class="map-layers-menu" id="map-layers-menu" hidden>
             <button id="topography-button" class="map-layer-btn"
@@ -72,6 +69,16 @@
                 <i class="material-icons">cloud</i>
                 <span>Weather</span>
             </button>
+            <button id="toggle-pins-button" class="map-layer-btn"
+                    onclick="togglePins();" aria-label="Show or hide pins">
+                <i class="material-icons">push_pin</i>
+                <span>Pins</span>
+            </button>
+            <button id="dark-mode-button" class="map-layer-btn"
+                    onclick="_toggleMapDarkMode();" aria-label="Toggle map dark mode">
+                <i class="material-icons">dark_mode</i>
+                <span>Dark</span>
+            </button>
         </div>
     </div>
 
@@ -79,16 +86,14 @@
     <div id="addr-search-bar">
         <i class="material-icons addr-search-icon">place</i>
         <input type="text" id="address-search-input" placeholder="Jump to a place…"
-               data-tooltip="Search by address or place name, then press Enter to fly there."
-               data-tooltip-pos="below"
                autocomplete="off" onkeydown="if(event.key==='Enter'){geocodeAddress();event.preventDefault();}">
-        <button type="button" class="addr-search-clear" id="addr-search-clear" hidden
+        <button type="button" class="addr-search-clear" id="addr-search-clear"
                 aria-label="Clear search"
                 onclick="clearAddrSearch()">
             <i class="material-icons">close</i>
         </button>
+        <div id="addr-search-suggestions" hidden></div>
     </div>
-    <div id="addr-search-suggestions" hidden></div>
 
     {# ── Filter panel ──────────────────────────────────────────────────── #}
     <div id="filter-panel">
@@ -148,22 +153,29 @@
                 </summary>
                 <div class="fp-accordion-body">
                     <input type="hidden" name="has_visits" id="fp-visits-hidden" value="">
-                    <div class="fp-chips" id="fp-visits-chips">
-                        <label class="fp-chip" id="fp-visits-chip-yes"><input type="radio" name="has_visits_ui" value="yes">Visited</label>
-                        <label class="fp-chip" id="fp-visits-chip-no"><input type="radio" name="has_visits_ui" value="no">Never visited</label>
+                    <div class="fp-visits-row">
+                        <div class="fp-chips" id="fp-visits-chips">
+                            <label class="fp-chip" id="fp-visits-chip-yes"><input type="radio" name="has_visits_ui" value="yes">Visited</label>
+                            <label class="fp-chip" id="fp-visits-chip-no"><input type="radio" name="has_visits_ui" value="no">Never visited</label>
+                        </div>
+                        <button type="button" class="fp-visits-reset" id="fp-visits-reset" style="display:none"
+                                title="Clear visit filter" onclick="_resetVisits()">
+                            <i class="material-icons">close</i>
+                        </button>
                     </div>
-                    <button type="button" class="fp-visits-reset" id="fp-visits-reset" style="display:none" onclick="_resetVisits()">
-                        <i class="material-icons">refresh</i> Reset
-                    </button>
                     <div class="fp-date-block" id="fp-visits-dates" style="display:none">
                         <div class="fp-date-row">
                             <span class="fp-date-label">After</span>
-                            <input type="date" name="visited_after" class="fp-date-input">
+                            <input type="date" name="visited_after" id="fp-visited-after" class="fp-date-input">
                         </div>
                         <div class="fp-date-row">
                             <span class="fp-date-label">Before</span>
-                            <input type="date" name="visited_before" class="fp-date-input">
+                            <input type="date" name="visited_before" id="fp-visited-before" class="fp-date-input">
                         </div>
+                        <button type="button" class="fp-date-reset" id="fp-visited-dates-reset" style="display:none"
+                                title="Clear date filters" onclick="_resetVisitDates()">
+                            <i class="material-icons">close</i>
+                        </button>
                     </div>
                 </div>
             </details>
@@ -207,12 +219,16 @@
                     <div class="fp-date-block">
                         <div class="fp-date-row">
                             <span class="fp-date-label">After</span>
-                            <input type="date" name="created_after" class="fp-date-input">
+                            <input type="date" name="created_after" id="fp-created-after" class="fp-date-input">
                         </div>
                         <div class="fp-date-row">
                             <span class="fp-date-label">Before</span>
-                            <input type="date" name="created_before" class="fp-date-input">
+                            <input type="date" name="created_before" id="fp-created-before" class="fp-date-input">
                         </div>
+                        <button type="button" class="fp-date-reset" id="fp-created-dates-reset" style="display:none"
+                                title="Clear date filters" onclick="_resetCreatedDates()">
+                            <i class="material-icons">close</i>
+                        </button>
                     </div>
                 </div>
             </details>
@@ -232,14 +248,27 @@
 
                     {# Selected badges area — two columns, shown only when something selected #}
                     <div class="fp-badge-selected" id="fp-badge-selected" style="display:none">
-                        <div class="fp-badge-col fp-badge-col--incl" id="fp-badge-col-incl">
+                        <div class="fp-badge-col fp-badge-col--incl" id="fp-badge-col-incl"
+                             ondragover="event.preventDefault(); event.currentTarget.classList.add('fp-drag-over')"
+                             ondragleave="event.currentTarget.classList.remove('fp-drag-over')"
+                             ondrop="_onBadgeColDrop(event, 'incl')">
                             <div class="fp-badge-col-label"><i class="material-icons">check_circle</i> Include</div>
                             <div class="fp-badge-chips" id="fp-badge-incl-chips"></div>
                         </div>
-                        <div class="fp-badge-col fp-badge-col--excl" id="fp-badge-col-excl">
+                        <div class="fp-badge-col fp-badge-col--excl" id="fp-badge-col-excl"
+                             ondragover="event.preventDefault(); event.currentTarget.classList.add('fp-drag-over')"
+                             ondragleave="event.currentTarget.classList.remove('fp-drag-over')"
+                             ondrop="_onBadgeColDrop(event, 'excl')">
                             <div class="fp-badge-col-label"><i class="material-icons">cancel</i> Exclude</div>
                             <div class="fp-badge-chips" id="fp-badge-excl-chips"></div>
                         </div>
+                    </div>
+                    {# Drag-to-remove zone — appears during drag #}
+                    <div class="fp-badge-drop-remove" id="fp-badge-drop-remove" style="display:none"
+                         ondragover="event.preventDefault(); event.currentTarget.classList.add('fp-drag-over')"
+                         ondragleave="event.currentTarget.classList.remove('fp-drag-over')"
+                         ondrop="_onBadgeRemoveDrop(event)">
+                        <i class="material-icons">delete</i> Drop here to remove
                     </div>
 
                     {# Search + available list #}
@@ -261,7 +290,7 @@
                         </button>
                         {% endfor %}
                     </div>
-                    <div class="fp-badge-list-hint">Click to include &nbsp;·&nbsp; Right-click to exclude</div>
+                    <div class="fp-badge-list-hint">Click to include &nbsp;·&nbsp; Right-click to exclude &nbsp;·&nbsp; Drag chips to switch or remove</div>
                 </div>
             </details>
             {% endif %}
@@ -1694,7 +1723,8 @@
             pinsLayerGroup.addTo(map);
         }
         pinsVisible = !pinsVisible;
-        document.querySelector('#toggle-pins-button').classList.toggle('active');
+        const pinBtn = document.querySelector('#toggle-pins-button');
+        if (pinBtn) pinBtn.classList.toggle('active', !pinsVisible);
         updatePinCounter();
     }
 
@@ -1760,8 +1790,41 @@
         const menu = document.getElementById('map-layers-menu');
         const toggle = document.getElementById('map-layers-toggle');
         if (menu) menu.hidden = true;
-        if (toggle) toggle.classList.remove('active');
+        if (toggle) { toggle.classList.remove('active'); toggle.setAttribute('aria-expanded', 'false'); }
     }
+    function _openLayersPanel() {
+        const menu = document.getElementById('map-layers-menu');
+        const toggle = document.getElementById('map-layers-toggle');
+        if (menu) menu.hidden = false;
+        if (toggle) { toggle.classList.add('active'); toggle.setAttribute('aria-expanded', 'true'); }
+    }
+    let _layersPanelCloseTimer = null;
+    function _scheduleCloseLayersPanel() {
+        clearTimeout(_layersPanelCloseTimer);
+        _layersPanelCloseTimer = setTimeout(_closeLayersPanel, 260);
+    }
+
+    // ── Map dark mode toggle ──────────────────────────────────────────────────
+    function _toggleMapDarkMode() {
+        const currentMode = _MAP_DARK_MODE;
+        const newMode = (currentMode === 'dark') ? 'light' : 'dark';
+        _MAP_DARK_MODE = newMode;
+        _syncBaseLayer();
+        const btn = document.getElementById('dark-mode-button');
+        if (btn) btn.classList.toggle('active', newMode === 'dark');
+        // Persist to server so the preference survives page refresh
+        const csrf = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+        fetch('{% url "settings.save_map_dark_mode" %}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `mode=${encodeURIComponent(newMode)}`,
+        }).catch(() => {});
+    }
+    // Sync initial state of dark-mode button
+    (function _initDarkModeBtn() {
+        const btn = document.getElementById('dark-mode-button');
+        if (btn) btn.classList.toggle('active', _isDarkMapActive());
+    }());
 
     // Update the Leaflet icon URLs
     var newIcon = L.icon({
@@ -1809,21 +1872,14 @@
 
     // ── Layers panel toggle ───────────────────────────────────────────────────
     function _toggleLayersPanel() {
+        clearTimeout(_layersPanelCloseTimer);
         const menu = document.getElementById('map-layers-menu');
-        const toggle = document.getElementById('map-layers-toggle');
-        const isOpen = menu.hidden;
-        menu.hidden = !isOpen;
-        toggle.classList.toggle('active', isOpen);
+        if (menu && menu.hidden) { _openLayersPanel(); } else { _closeLayersPanel(); }
     }
     // Close layers panel on outside click
     document.addEventListener('click', function (e) {
         const panel = document.getElementById('map-layers-panel');
-        if (panel && !panel.contains(e.target)) {
-            const menu = document.getElementById('map-layers-menu');
-            const toggle = document.getElementById('map-layers-toggle');
-            if (menu) menu.hidden = true;
-            if (toggle) toggle.classList.remove('active');
-        }
+        if (panel && !panel.contains(e.target)) { _closeLayersPanel(); }
     });
 
     // ── Keyboard shortcuts (only when map is visible, not in input fields) ──────
@@ -1883,6 +1939,9 @@
         });
         // Reset visit section
         if (typeof _syncVisitUI === 'function') _syncVisitUI('');
+        // Reset date reset buttons
+        if (typeof _syncVisitDateReset === 'function') _syncVisitDateReset();
+        if (typeof _syncCreatedDateReset === 'function') _syncCreatedDateReset();
         // Reset badge selected area
         if (typeof _clearAllBadgeSelections === 'function') _clearAllBadgeSelections();
         _exitFilterMode();
@@ -2043,6 +2102,46 @@
         _syncVisitUI('');
         htmx.trigger(document.getElementById('filter-form'), 'change');
     }
+
+    function _syncVisitDateReset() {
+        const after  = document.getElementById('fp-visited-after');
+        const before = document.getElementById('fp-visited-before');
+        const btn    = document.getElementById('fp-visited-dates-reset');
+        if (btn) btn.style.display = (after?.value || before?.value) ? '' : 'none';
+    }
+
+    function _resetVisitDates() {
+        const after  = document.getElementById('fp-visited-after');
+        const before = document.getElementById('fp-visited-before');
+        if (after) after.value = '';
+        if (before) before.value = '';
+        _syncVisitDateReset();
+        htmx.trigger(document.getElementById('filter-form'), 'change');
+    }
+
+    function _syncCreatedDateReset() {
+        const after  = document.getElementById('fp-created-after');
+        const before = document.getElementById('fp-created-before');
+        const btn    = document.getElementById('fp-created-dates-reset');
+        if (btn) btn.style.display = (after?.value || before?.value) ? '' : 'none';
+    }
+
+    function _resetCreatedDates() {
+        const after  = document.getElementById('fp-created-after');
+        const before = document.getElementById('fp-created-before');
+        if (after) after.value = '';
+        if (before) before.value = '';
+        _syncCreatedDateReset();
+        htmx.trigger(document.getElementById('filter-form'), 'change');
+    }
+
+    // Wire date inputs to keep reset buttons in sync
+    ['fp-visited-after', 'fp-visited-before'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', _syncVisitDateReset);
+    });
+    ['fp-created-after', 'fp-created-before'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', _syncCreatedDateReset);
+    });
     (function _initVisits() {
         ['fp-visits-chip-yes', 'fp-visits-chip-no'].forEach(id => {
             const chip = document.getElementById(id);
@@ -2084,35 +2183,82 @@
     function clearAddrSearch() {
         const input = document.getElementById('address-search-input');
         input.value = '';
-        document.getElementById('addr-search-clear').hidden = true;
+        const clearBtn = document.getElementById('addr-search-clear');
+        clearBtn.classList.remove('addr-search-clear--visible');
         document.getElementById('addr-search-suggestions').hidden = true;
         input.focus();
     }
 
+    function _addrPinSuggestions(q) {
+        // Return up to 4 pins whose name contains the query (case-insensitive)
+        const lq = q.toLowerCase();
+        const matches = [];
+        for (const pin of _pinStore.values()) {
+            if (!pin.name) continue;
+            if (pin.name.toLowerCase().includes(lq)) matches.push(pin);
+            if (matches.length >= 4) break;
+        }
+        return matches;
+    }
+
     function _fetchAddrBarSuggestions(query) {
+        const box = document.getElementById('addr-search-suggestions');
+        box.innerHTML = '';
+        const pinMatches = _addrPinSuggestions(query);
+        // Pin suggestions (from local store — instant, no network call)
+        if (pinMatches.length) {
+            const hdr = document.createElement('div');
+            hdr.className = 'addr-suggestion-group-hdr';
+            hdr.textContent = 'Your pins';
+            box.appendChild(hdr);
+            pinMatches.forEach(pin => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'addr-suggestion addr-suggestion--pin';
+                btn.innerHTML = `<i class="material-icons">push_pin</i><span>${pin.name}</span>`;
+                btn.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    document.getElementById('address-search-input').value = pin.name;
+                    map.setView([parseFloat(pin.latitude), parseFloat(pin.longitude)], 16);
+                    box.hidden = true;
+                    // Open popup if marker exists
+                    const m = _markerMap.get(pin.uuid);
+                    if (m) m.openPopup();
+                });
+                box.appendChild(btn);
+            });
+        }
+        // Address suggestions (Nominatim - async)
         fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5`, {
             headers: { 'Accept': 'application/json', 'Accept-Language': 'en' },
         })
         .then(r => r.json())
         .then(results => {
-            const box = document.getElementById('addr-search-suggestions');
-            box.innerHTML = '';
-            if (!results.length) { box.hidden = true; return; }
-            results.forEach(r => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'addr-suggestion';
-                btn.innerHTML = `<i class="material-icons">place</i><span>${r.display_name}</span>`;
-                btn.addEventListener('mousedown', () => {
-                    document.getElementById('address-search-input').value = r.display_name;
-                    map.setView([parseFloat(r.lat), parseFloat(r.lon)], 16);
-                    box.hidden = true;
+            if (!results.length && !pinMatches.length) { box.hidden = true; return; }
+            if (results.length) {
+                const hdr = document.createElement('div');
+                hdr.className = 'addr-suggestion-group-hdr';
+                hdr.textContent = 'Places';
+                box.appendChild(hdr);
+                results.forEach(r => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'addr-suggestion';
+                    btn.innerHTML = `<i class="material-icons">place</i><span>${r.display_name}</span>`;
+                    btn.addEventListener('mousedown', (e) => {
+                        e.preventDefault();
+                        document.getElementById('address-search-input').value = r.display_name;
+                        map.setView([parseFloat(r.lat), parseFloat(r.lon)], 16);
+                        box.hidden = true;
+                    });
+                    box.appendChild(btn);
                 });
-                box.appendChild(btn);
-            });
+            }
             box.hidden = false;
         })
-        .catch(() => {});
+        .catch(() => { if (pinMatches.length) box.hidden = false; });
+        // Show box immediately if we have pin results
+        if (pinMatches.length) box.hidden = false;
     }
 
     (function _initAddrBar() {
@@ -2122,10 +2268,10 @@
 
         input.addEventListener('input', function () {
             const q = this.value.trim();
-            clearBtn.hidden = !q;
+            clearBtn.classList.toggle('addr-search-clear--visible', !!q);
             clearTimeout(_addrBarTimer);
             if (!q) { suggestions.hidden = true; return; }
-            _addrBarTimer = setTimeout(() => _fetchAddrBarSuggestions(q), 380);
+            _addrBarTimer = setTimeout(() => _fetchAddrBarSuggestions(q), 280);
         });
 
         input.addEventListener('keydown', function (e) {
@@ -2134,13 +2280,19 @@
         });
 
         input.addEventListener('blur', function () {
-            setTimeout(() => { suggestions.hidden = true; }, 150);
+            setTimeout(() => { suggestions.hidden = true; }, 180);
+        });
+
+        input.addEventListener('focus', function () {
+            const q = this.value.trim();
+            if (q && suggestions.children.length) suggestions.hidden = false;
         });
     })();
 
     // ── Combined badge filter section ────────────────────────────────────────
     // State: map of badgeId → 'incl' | 'excl'
     const _badgeState = new Map();
+    let _badgeDragId = null;
 
     function _filterBadgeList(q) {
         q = (q || '').toLowerCase().trim();
@@ -2154,16 +2306,11 @@
         const border = color ? (color + '66') : (mode === 'incl' ? 'rgba(34,197,94,.4)' : 'rgba(239,68,68,.4)');
         const txtCol = mode === 'incl' ? '#86efac' : '#fca5a5';
         const iconHtml = icon ? `<span style="font-size:.85em">${icon}</span>` : '';
-        return `<span class="fp-badge-chip fp-badge-chip--${mode}" data-id="${id}"
+        // Click anywhere on chip to remove; right-click to toggle mode; draggable to switch/remove
+        return `<span class="fp-badge-chip fp-badge-chip--${mode}" data-id="${id}" draggable="true"
+                      title="Click to remove · Right-click to ${mode === 'incl' ? 'exclude' : 'include'} · Drag to move"
                       style="background:${bg};border-color:${border};color:${txtCol}">
                     ${iconHtml}<span class="fp-badge-chip-label">${label}</span>
-                    <button type="button" class="fp-badge-chip-toggle" title="Switch to ${mode === 'incl' ? 'exclude' : 'include'}"
-                            onclick="_toggleBadgeMode('${id}')">
-                        <i class="material-icons">${mode === 'incl' ? 'block' : 'check_circle'}</i>
-                    </button>
-                    <button type="button" class="fp-badge-chip-remove" title="Remove" onclick="_removeBadge('${id}')">
-                        <i class="material-icons">close</i>
-                    </button>
                 </span>`;
     }
 
@@ -2184,10 +2331,10 @@
 
         let hasIncl = false, hasExcl = false;
         _badgeState.forEach((mode, id) => {
-            const btn = document.querySelector(`#fp-badge-list [data-badge-id="${id}"]`);
-            const label = btn?.dataset.badgeLabel || id;
-            const color = btn?.dataset.badgeColor || '';
-            const icon  = btn?.dataset.badgeIcon  || '';
+            const avail = document.querySelector(`#fp-badge-list [data-badge-id="${id}"]`);
+            const label = avail?.dataset.badgeLabel || id;
+            const color = avail?.dataset.badgeColor || '';
+            const icon  = avail?.dataset.badgeIcon  || '';
             if (mode === 'incl') {
                 hasIncl = true;
                 inclEl.insertAdjacentHTML('beforeend', _badgeChipHtml(id, label, color, icon, 'incl'));
@@ -2199,9 +2346,39 @@
             }
         });
 
+        // Attach chip events after DOM insertion
+        [inclEl, exclEl].forEach(el => {
+            el.querySelectorAll('.fp-badge-chip').forEach(chip => {
+                const id = chip.dataset.id;
+                // Click to remove
+                chip.addEventListener('click', () => _removeBadge(id));
+                // Right-click to toggle mode
+                chip.addEventListener('contextmenu', (e) => { e.preventDefault(); _toggleBadgeMode(id); });
+                // Drag to switch columns or remove
+                chip.addEventListener('dragstart', (e) => {
+                    _badgeDragId = id;
+                    e.dataTransfer.effectAllowed = 'move';
+                    chip.classList.add('fp-drag-active');
+                    // Ensure both columns and remove zone are visible during drag
+                    const colI = document.getElementById('fp-badge-col-incl');
+                    const colX = document.getElementById('fp-badge-col-excl');
+                    const rmz  = document.getElementById('fp-badge-drop-remove');
+                    if (colI) colI.style.removeProperty('display');
+                    if (colX) colX.style.removeProperty('display');
+                    if (rmz) rmz.style.removeProperty('display');
+                });
+                chip.addEventListener('dragend', () => {
+                    _badgeDragId = null;
+                    chip.classList.remove('fp-drag-active');
+                    const rmz = document.getElementById('fp-badge-drop-remove');
+                    if (rmz) rmz.style.display = 'none';
+                    document.querySelectorAll('.fp-drag-over').forEach(el => el.classList.remove('fp-drag-over'));
+                });
+            });
+        });
+
         const anySelected = hasIncl || hasExcl;
         selectedEl.style.display = anySelected ? '' : 'none';
-        // Single-column if only one type active
         colIncl.style.display = hasIncl ? '' : 'none';
         colExcl.style.display = hasExcl ? '' : 'none';
         if (det) det.classList.toggle('fp-acc-active', anySelected);
@@ -2209,9 +2386,13 @@
 
     function _addBadge(btn, mode) {
         const id = btn.dataset.badgeId;
-        if (_badgeState.has(id)) return; // already selected
+        if (_badgeState.has(id)) {
+            // If already in the other column, switch it
+            if (_badgeState.get(id) !== mode) { _toggleBadgeMode(id); }
+            return;
+        }
         _badgeState.set(id, mode);
-        btn.style.display = 'none'; // remove from list
+        btn.style.display = 'none';
         _rebuildBadgeSelected();
         htmx.trigger(document.getElementById('filter-form'), 'change');
     }
@@ -2225,7 +2406,6 @@
 
     function _removeBadge(id) {
         _badgeState.delete(id);
-        // Show the badge button again in the list
         const btn = document.querySelector(`#fp-badge-list [data-badge-id="${id}"]`);
         if (btn) btn.style.display = '';
         _rebuildBadgeSelected();
@@ -2238,7 +2418,20 @@
         _rebuildBadgeSelected();
     }
 
-    // Right-click on badge in list → add as exclude
+    function _onBadgeColDrop(e, targetMode) {
+        e.currentTarget.classList.remove('fp-drag-over');
+        if (!_badgeDragId) return;
+        if (_badgeState.get(_badgeDragId) !== targetMode) {
+            _toggleBadgeMode(_badgeDragId);
+        }
+    }
+
+    function _onBadgeRemoveDrop(e) {
+        e.currentTarget.classList.remove('fp-drag-over');
+        if (_badgeDragId) _removeBadge(_badgeDragId);
+    }
+
+    // Right-click on badge in list → add as exclude; right-click on existing chip → toggle mode (handled in chip events above)
     document.getElementById('fp-badge-list')?.addEventListener('contextmenu', function (e) {
         const btn = e.target.closest('.fp-badge-avail');
         if (!btn) return;

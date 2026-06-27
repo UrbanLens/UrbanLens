@@ -65,13 +65,13 @@ services:
 
   nginx:
     container_name: urbanlens_nginx
-    image: nginx:alpine
+    image: nginxinc/nginx-unprivileged:alpine
     volumes:
       - static_volume:/app/src/urbanlens/frontend/static
       - media_volume:/app/src/urbanlens/media
       - ./src/urbanlens/config/nginx:/etc/nginx/conf.d
     ports:
-      - "${NGINX_PORT:-21080}:80"
+      - "${NGINX_PORT:-21080}:8080"
     depends_on:
       - app
     networks:
@@ -80,7 +80,7 @@ services:
           - urbanlens_nginx
 
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/nginx-health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/nginx-health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -127,7 +127,7 @@ services:
         - UL_DATABASE_PASS=${UL_DB_PASS:-postgres}
         - UL_DATABASE_HOST=${UL_DB_HOST:-urbanlens_db}
         - UL_DATABASE_PORT=${UL_DB_PORT:-5432}
-    entrypoint: ["python", "-m", "celery"]
+    entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
     command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=info", "--concurrency=2"]
     restart: on-failure
     depends_on:
@@ -180,7 +180,7 @@ services:
         - UL_DATABASE_PASS=${UL_DB_PASS:-postgres}
         - UL_DATABASE_HOST=${UL_DB_HOST:-urbanlens_db}
         - UL_DATABASE_PORT=${UL_DB_PORT:-5432}
-    entrypoint: ["python", "-m", "celery"]
+    entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
     command: ["-A", "urbanlens.UrbanLens", "beat", "--loglevel=info"]
     restart: on-failure
     depends_on:
@@ -210,6 +210,7 @@ services:
   valkey:
     container_name: urbanlens_valkey
     image: valkey/valkey:7-alpine
+    user: nobody
     restart: unless-stopped
     command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory-policy", "allkeys-lru"]
     networks:

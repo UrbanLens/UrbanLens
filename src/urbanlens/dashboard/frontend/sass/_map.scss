@@ -1267,9 +1267,10 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 /* ── Floating address search bar (mobile-first) ───────────────────── */
 #addr-search-bar {
     position: absolute;
-    top: 10px;
-    left: 38px;
-    width: min(220px, calc(100vw - 58px));
+    // On mobile, position below the Leaflet zoom controls to avoid overlap
+    top: 72px;
+    left: 10px;
+    width: calc(100vw - 22px);
     background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: 18px;
@@ -1279,12 +1280,13 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     gap: 4px;
     z-index: 1000;
     box-shadow: 0 1px 6px rgba(0, 0, 0, .16), 0 0 0 0 transparent;
-    transition: box-shadow .15s;
+    transition: box-shadow .15s, opacity .15s;
+    cursor: text;
 
     @include up($breakpoint-sm) {
         top: 12px;
         left: 54px;
-        width: min(360px, calc(100% - 68px));
+        width: min(360px, calc(100% - 230px));
         border-radius: 24px;
         padding: 0 12px;
         gap: 8px;
@@ -1334,10 +1336,14 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     cursor: pointer;
     padding: 3px;
     border-radius: 50%;
-    display: flex;
+    display: none; // Hidden by default; shown via .addr-search-clear--visible
     align-items: center;
     transition: color .15s, background .15s;
     flex-shrink: 0;
+
+    &.addr-search-clear--visible {
+        display: flex;
+    }
 
     &:hover {
         color: var(--ul-grey-8);
@@ -1349,24 +1355,33 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
+// Suggestions are now a child of #addr-search-bar
 #addr-search-suggestions {
     position: absolute;
-    top: 38px;
-    left: 38px;
-    width: min(220px, calc(100vw - 58px));
+    top: calc(100% + 4px);
+    left: -1px;
+    right: -1px;
     background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: 10px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, .16);
-    z-index: 1000;
+    z-index: 1100;
     overflow: hidden;
+    max-height: 320px;
+    overflow-y: auto;
 
-    @include up($breakpoint-sm) {
-        top: 52px;
-        left: 54px;
-        width: min(360px, calc(100% - 68px));
-        border-radius: 12px;
-    }
+    &[hidden] { display: none; }
+}
+
+.addr-suggestion-group-hdr {
+    padding: 5px 12px 3px;
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ul-grey-5);
+    background: var(--ul-grey-0);
+    border-bottom: 1px solid var(--ul-border);
 }
 
 .addr-suggestion {
@@ -1378,26 +1393,35 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     border: none;
     color: var(--ul-grey-8);
     text-align: left;
-    padding: 9px 14px;
+    padding: 7px 12px;
     font-size: 0.8rem;
     cursor: pointer;
     border-bottom: 1px solid var(--ul-border);
     transition: background .1s;
-}
 
-.addr-suggestion:last-child {
-    border-bottom: none;
-}
+    span {
+        @include truncate;
+        flex: 1;
+    }
 
-.addr-suggestion:hover {
-    background: var(--ul-hover-bg);
-    color: var(--ul-grey-8);
-}
+    &:last-child {
+        border-bottom: none;
+    }
 
-.addr-suggestion .material-icons {
-    font-size: .85rem;
-    color: var(--ul-grey-6);
-    flex-shrink: 0;
+    &:hover {
+        background: var(--ul-hover-bg);
+        color: var(--ul-grey-8);
+    }
+
+    .material-icons {
+        font-size: .85rem;
+        color: var(--ul-grey-6);
+        flex-shrink: 0;
+    }
+
+    &--pin .material-icons {
+        color: $color-blue-500;
+    }
 }
 
 /* ── Pin popup ────────────────────────────────────────────────────── */
@@ -2174,11 +2198,13 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     bottom: 28px;
     left: 10px;
     z-index: 1000;
+    cursor: pointer;
 }
 
 .map-layers-toggle {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 5px;
     padding: 6px 10px 6px 8px;
     background: var(--ul-grey-0);
@@ -2197,6 +2223,17 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     &:hover, &.active { opacity: 1; box-shadow: 0 3px 10px rgba(0, 0, 0, .18); }
 
     &.active { color: $color-blue-700; }
+
+    // On larger screens: square button, hide text label
+    @include up($breakpoint-sm) {
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border-radius: $radius-sm;
+
+        .map-layers-label { display: none; }
+        .material-icons { font-size: 1.25rem; }
+    }
 }
 
 .map-layers-menu {
@@ -2213,7 +2250,16 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     gap: 3px;
     min-width: 130px;
 
-    &[hidden] { display: none; }
+    // On larger screens: grid of squares
+    @include up($breakpoint-sm) {
+        display: grid;
+        grid-template-columns: repeat(3, 60px);
+        gap: 4px;
+        padding: 6px;
+        min-width: unset;
+    }
+
+    &[hidden] { display: none !important; }
 }
 
 .map-layer-btn {
@@ -2221,7 +2267,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     align-items: center;
     gap: 8px;
     padding: 7px 10px;
-    border: none;
+    border: 1.5px solid transparent;
     border-radius: 7px;
     background: transparent;
     cursor: pointer;
@@ -2230,18 +2276,34 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     color: var(--ul-grey-7);
     width: 100%;
     text-align: left;
-    transition: background .12s, color .12s;
+    transition: background .12s, color .12s, border-color .12s;
 
-    .material-icons { font-size: 1rem; color: var(--ul-grey-5); }
-    .map-layer-emoji { font-size: 1rem; width: 1rem; text-align: center; }
+    .material-icons { font-size: 1rem; color: var(--ul-grey-5); flex-shrink: 0; }
+    .map-layer-emoji { font-size: 1rem; width: 1rem; text-align: center; flex-shrink: 0; }
 
     &:hover { background: var(--ul-grey-1); color: var(--ul-grey-9); }
 
     &.active {
         background: rgba($color-blue-500, .1);
+        border-color: rgba($color-blue-500, .3);
         color: $color-blue-700;
 
         .material-icons { color: $color-blue-700; }
+    }
+
+    // On larger screens: square buttons with icon on top
+    @include up($breakpoint-sm) {
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 8px 4px 6px;
+        text-align: center;
+        font-size: .68rem;
+        border-radius: $radius-sm;
+
+        .material-icons { font-size: 1.3rem; }
+        .map-layer-emoji { font-size: 1.2rem; width: auto; }
     }
 }
 
@@ -2293,6 +2355,34 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     gap: 4px;
 }
 
+.fp-badge-drop-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    margin: 6px 0 4px;
+    padding: 6px;
+    border-radius: 8px;
+    border: 2px dashed rgba(239, 68, 68, .4);
+    color: rgba(252, 165, 165, .65);
+    font-size: .72rem;
+    cursor: default;
+    transition: background .12s, border-color .12s;
+
+    .material-icons { font-size: .9rem; }
+
+    &.fp-drag-over {
+        background: rgba(239, 68, 68, .1);
+        border-color: rgba(239, 68, 68, .7);
+        color: $ui-red-300;
+    }
+}
+
+.fp-badge-col.fp-drag-over {
+    outline: 2px dashed rgba(100, 180, 255, .6);
+    outline-offset: 2px;
+}
+
 .fp-badge-chip {
     display: inline-flex;
     align-items: center;
@@ -2304,6 +2394,17 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     font-weight: 500;
     white-space: nowrap;
     max-width: 100%;
+    cursor: pointer;
+    transition: opacity .12s, filter .12s;
+
+    &:hover {
+        opacity: .75;
+        filter: brightness(1.15);
+    }
+
+    &.fp-drag-active {
+        opacity: .4;
+    }
 }
 
 .fp-badge-chip-label {
@@ -2311,26 +2412,6 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 80px;
-}
-
-.fp-badge-chip-toggle,
-.fp-badge-chip-remove {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 1px;
-    border-radius: 50%;
-    opacity: .65;
-    color: inherit;
-    line-height: 1;
-    transition: opacity .12s;
-
-    .material-icons { font-size: .75rem; }
-
-    &:hover { opacity: 1; }
 }
 
 .fp-badge-list-hint {
@@ -2341,29 +2422,47 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     letter-spacing: .02em;
 }
 
-// ── Visits reset button ───────────────────────────────────────────────────────
+// ── Visits row: chips + reset button side by side ─────────────────────────────
 
-.fp-visits-reset {
+.fp-visits-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.fp-visits-row .fp-chips {
+    flex: 1;
+}
+
+// ── Icon-only reset buttons (visit filter + date filters) ─────────────────────
+
+.fp-visits-reset,
+.fp-date-reset {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    margin-top: 6px;
-    padding: 3px 8px;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    padding: 0;
     background: rgba(255, 255, 255, .06);
     border: 1px solid rgba(255, 255, 255, .1);
-    border-radius: 6px;
-    color: rgba(255, 255, 255, .4);
-    font-size: .72rem;
+    border-radius: 50%;
+    color: rgba(255, 255, 255, .35);
     cursor: pointer;
-    transition: background .15s, color .15s;
+    transition: background .15s, color .15s, border-color .15s;
 
-    .material-icons { font-size: .8rem; }
+    .material-icons { font-size: .75rem; }
 
     &:hover {
         background: rgba(255, 70, 70, .15);
-        border-color: rgba(255, 70, 70, .3);
+        border-color: rgba(255, 70, 70, .35);
         color: $ui-red-300;
     }
+}
+
+.fp-date-reset {
+    margin-top: 5px;
 }
 
 // ── Rating slider star hint ───────────────────────────────────────────────────
@@ -2381,9 +2480,71 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     transition: opacity .15s, box-shadow .15s;
 
     &:hover, &:focus-within { opacity: 1; }
+
+    // Move the bar to align with the zoom controls on desktop
+    @include up($breakpoint-sm) {
+        opacity: 0.82;
+    }
 }
 
-// Align zoom controls and address bar to same vertical line (top: 12px both)
-.leaflet-top.leaflet-left {
-    top: 12px;
+// On desktop, align zoom controls to same top as toolbar (12px)
+@include up($breakpoint-sm) {
+    .leaflet-top.leaflet-left {
+        top: 12px;
+    }
+}
+
+// ── Cursor fixes: override Leaflet's grab cursor on overlay buttons ───────────
+// Everything inside #map inherits Leaflet's drag cursor by default.
+// Override it to pointer on all interactive overlays.
+#map-buttons,
+.map-layers-panel,
+#addr-search-bar,
+#filter-panel,
+#tile-fetch-indicator {
+    cursor: default;
+}
+
+#map-buttons button,
+#map-buttons a,
+.map-layers-panel button,
+#addr-search-bar button,
+#addr-search-bar input,
+.map-btn-icon,
+.map-toolbar-collapse,
+.map-layer-btn,
+.map-layers-toggle,
+.addr-search-clear,
+.leaflet-control-zoom a,
+.leaflet-control-attribution a,
+.pin-cluster {
+    cursor: pointer;
+}
+
+#addr-search-bar input[type="text"] {
+    cursor: text;
+}
+
+// ── Extra slider outline suppression ─────────────────────────────────────────
+// Belt-and-suspenders: kill any white outline/border from ::before and ::after,
+// focus-visible, and browser-default focus rings on range inputs.
+
+.fp-slider-input {
+    &:focus-visible { outline: none !important; }
+    &::before, &::after { display: none !important; }
+    border: none !important;
+
+    &::-webkit-slider-thumb {
+        outline: none !important;
+        border: none !important;
+        &:focus { outline: none !important; }
+    }
+    &::-moz-range-thumb {
+        outline: none !important;
+        border: none !important;
+    }
+    &::-moz-focus-outer {
+        border: none !important;
+        outline: none !important;
+    }
 }

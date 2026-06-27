@@ -40,7 +40,8 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
     gh \
     iputils-ping \
     libgdal-dev \
-    wget && \
+    wget \
+    gosu && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -67,5 +68,14 @@ RUN pip install -e .
 # Install npm packages
 RUN npm install -y
 
-# Run from /app/src/bin/init.py so ROOT_DIR resolves correctly to /app
-ENTRYPOINT ["python", "/app/src/bin/init.py"]
+# Create a non-root user that will run the application processes
+RUN groupadd --gid 1001 appuser && \
+    useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser && \
+    chown -R appuser:appuser /app
+
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+# Entrypoint fixes volume-mount ownership then drops to appuser via gosu
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["python", "/app/src/bin/init.py"]

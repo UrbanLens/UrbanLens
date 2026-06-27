@@ -202,6 +202,21 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"error": "Location not found."}, status=404)
 
 
+class SaveMapDarkModeView(LoginRequiredMixin, View):
+    """POST endpoint to persist the user's map dark-mode preference.
+
+    Accepts a single ``mode`` field: 'light', 'dark', or 'system'.
+    """
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        mode = request.POST.get("mode", "").strip()
+        if mode not in {"light", "dark", "system"}:
+            return JsonResponse({"error": "mode must be light, dark, or system"}, status=400)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        Profile.objects.filter(pk=profile.pk).update(map_dark_mode=mode)
+        return JsonResponse({"ok": True, "mode": mode})
+
+
 class SaveMapPositionView(LoginRequiredMixin, View):
     """POST endpoint to save the user's last map pan/zoom for REMEMBER mode.
 
