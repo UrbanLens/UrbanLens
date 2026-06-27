@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -37,14 +37,16 @@ class BackupFilesTests(TestCase):
             old = root / "old.sql"
             new = root / "new.sql"
             (root / "nested").mkdir()
-            base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+            base = datetime(2026, 1, 1, tzinfo=UTC)
             _touch(old, base)
             _touch(new, base + timedelta(hours=1))
 
             self.assertEqual(backup_files(root), [new, old])
 
     def test_missing_directory_returns_empty_list(self) -> None:
-        self.assertEqual(backup_files(Path("/tmp/urbanlens-missing-backups-for-test")), [])
+        with TemporaryDirectory() as tmp:
+            missing = Path(tmp)
+        self.assertEqual(backup_files(missing), [])
 
 
 class ScheduledBackupDueTests(TestCase):
@@ -64,7 +66,7 @@ class ScheduledBackupDueTests(TestCase):
     )
     @hyp_settings(max_examples=50)
     def test_due_when_elapsed_hours_meets_or_exceeds_frequency(self, elapsed_hours: float, frequency_hours: int) -> None:
-        now = datetime(2026, 1, 10, tzinfo=timezone.utc)
+        now = datetime(2026, 1, 10, tzinfo=UTC)
         latest = now - timedelta(hours=elapsed_hours)
         fake_file = mock.Mock()
         fake_file.stat.return_value.st_mtime = latest.timestamp()
@@ -81,7 +83,7 @@ class CollectBackupStatsTests(TestCase):
     def test_collects_count_latest_size_and_settings(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
-            base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+            base = datetime(2026, 1, 1, tzinfo=UTC)
             _touch(root / "a.sql", base, size=1024)
             _touch(root / "b.sql", base + timedelta(hours=2), size=2048)
 

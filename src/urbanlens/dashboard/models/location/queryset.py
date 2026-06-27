@@ -36,7 +36,7 @@ class LocationQuerySet(abstract.QuerySet):
         return self.filter(longitude=longitude)
 
     def by_cid(self, cid: int):
-        return self.filter(cid=cid)
+        return self.filter(google_place__cid=cid)
 
     def by_name(self, name):
         return self.filter(name__icontains=name)

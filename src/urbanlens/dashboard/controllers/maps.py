@@ -385,21 +385,19 @@ def _create_location_with_canonical_name(lat: float, lon: float) -> Location:
     Returns:
         The newly created Location instance.
     """
-    from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
-    from urbanlens.UrbanLens.settings.app import settings as app_settings
+    from urbanlens.dashboard.services.google.place_info import GooglePlaceService
+    from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
-    canonical_name: str = "Unnamed Location"
-    try:
-        result = GoogleGeocodingGateway(api_key=app_settings.google_maps_api_key).get_place_name(lat, lon)
-        if result and result.lower() not in {"no information available", "dropped pin", "null", "none", ""}:
-            canonical_name = result.strip()
-    except (OSError, ValueError):
-        logger.warning("Could not fetch canonical place name for (%s, %s); using placeholder", lat, lon)
+    google_place = GooglePlaceService().get_or_create_for_coordinates(lat, lon)
+    canonical_name = "Unnamed Location"
+    if is_meaningful_name(google_place.cached_place_name):
+        canonical_name = (google_place.cached_place_name or canonical_name).strip()
 
     return Location.objects.create(
         name=canonical_name,
         latitude=lat,
         longitude=lon,
+        google_place=google_place,
     )
 
 

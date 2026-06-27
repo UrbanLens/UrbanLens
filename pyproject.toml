@@ -454,6 +454,7 @@ disable = [
     "missing-final-newline",
     "empty-comment",
     "too-few-public-methods",
+    "too-many-statements-in-try-clause",
     "too-many-lines",
     "broad-exception-caught",
     "invalid-name",

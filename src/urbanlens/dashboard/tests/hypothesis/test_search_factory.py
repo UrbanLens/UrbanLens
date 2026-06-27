@@ -6,12 +6,11 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from hypothesis import given, settings as hyp_settings
-from hypothesis import strategies as st
+from hypothesis import given, settings as hyp_settings, strategies as st
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.pin import _build_pin_search_query
-
+from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
 
@@ -143,8 +142,27 @@ class BuildPinSearchQueryNameTests(TestCase):
         self.assertFalse(result.startswith(","))
         self.assertFalse(result.endswith(","))
 
+    def test_meaningless_name_omitted_from_query(self):
+        result = _build_pin_search_query(_pin(effective_name="Abandoned", state="OH"))
+        self.assertNotIn("Abandoned", result)
+        self.assertIn("OH", result)
+
+    def test_coordinate_name_omitted_from_query(self):
+        result = _build_pin_search_query(_pin(effective_name="40.7, -74.0", city="Akron", state="OH"))
+        self.assertNotIn("40.7", result)
+        self.assertIn("Akron", result)
+
+    def test_meaningless_place_name_omitted_from_query(self):
+        result = _build_pin_search_query(_pin(
+            effective_name="Old Mill",
+            place_name="No Information Available",
+            state="OH",
+        ))
+        self.assertEqual(result.count("Old Mill"), 1)
+        self.assertNotIn("No Information Available", result)
+
     @given(
-        name=st.text(min_size=1, max_size=40),
+        name=st.text(min_size=1, max_size=40).filter(is_meaningful_name),
         state=st.text(min_size=1, max_size=10),
     )
     @_hyp

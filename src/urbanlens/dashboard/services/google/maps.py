@@ -18,6 +18,7 @@ from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.google.place_info import GooglePlaceService
 
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
 
@@ -417,8 +418,7 @@ class GoogleMapsGateway(Gateway):
                                 # have returned a Location that still lacks one.  Set it
                                 # now so future imports resolve via CID instead of coords.
                                 if cid is not None and location is None and pin.location_id and not pin.location.cid:
-                                    pin.location.cid = cid
-                                    pin.location.save(update_fields=["cid"])
+                                    GooglePlaceService().set_cid_for_entity(pin.location, cid)
                             else:
                                 skipped_count += 1
                         except (DatabaseError, ValueError, OSError) as exc:
@@ -653,8 +653,7 @@ class GoogleMapsGateway(Gateway):
                                     pin.badges.add(*extra)
 
                             if cid and not location and pin.location_id and not pin.location.cid:
-                                pin.location.cid = cid
-                                pin.location.save(update_fields=["cid"])
+                                GooglePlaceService().set_cid_for_entity(pin.location, cid)
                         else:
                             skipped_count += 1
 
@@ -781,9 +780,10 @@ class GoogleMapsGateway(Gateway):
                     },
                 )
 
-            logger.info("Converted %s pins from CSV file to dicts.", len(pins))
         except (csv.Error, KeyError, ValueError) as e:
             logger.exception("Failed to import pins from CSV: %s", str(e))
             raise
 
+        logger.info("Converted %s pins from CSV file to dicts.", len(pins))
+            
         return pins

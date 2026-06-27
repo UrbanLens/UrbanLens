@@ -9,14 +9,13 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
 
-import pytest
-from hypothesis import given, settings as hyp_settings
-from hypothesis import strategies as st
+from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
-
+from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
 
@@ -83,46 +82,58 @@ class DomainExtractionTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Location.has_place_name - "No Information Available" sentinel
+# Location.has_place_name - placeholder / sentinel names
 # ---------------------------------------------------------------------------
 
 class LocationHasPlaceNameTests(TestCase):
-    """has_place_name() returns False for the sentinel and True for real names."""
+    """has_place_name() returns False for placeholders and True for real names."""
 
     def _location_with_cached_name(self, name: str | None):
         from urbanlens.dashboard.models.location.model import Location
-        loc = baker.prepare(Location, cached_place_name=name)
+
+        loc = baker.prepare(Location, latitude="40.0", longitude="-74.0")
+        if name is not None:
+            google_place = type("GooglePlaceStub", (), {"cached_place_name": name, "pk": 1})()
+            loc.google_place = google_place
+            loc.google_place_id = 1
         return loc
 
     def test_none_cached_name_is_not_meaningful(self):
         from urbanlens.dashboard.models.location.model import Location
-        loc = baker.prepare(Location, cached_place_name=None)
+
+        loc = baker.prepare(Location, latitude="40.0", longitude="-74.0", google_place=None)
         with patch.object(Location, "get_place_name", return_value=None):
             self.assertFalse(loc.has_place_name())
 
     def test_sentinel_string_is_not_meaningful(self):
-        from urbanlens.dashboard.models.location.model import Location
-        loc = baker.prepare(Location, cached_place_name="No Information Available")
+        loc = self._location_with_cached_name("No Information Available")
+        self.assertFalse(loc.has_place_name())
+
+    def test_abandoned_placeholder_is_not_meaningful(self):
+        loc = self._location_with_cached_name("Abandoned Location")
+        self.assertFalse(loc.has_place_name())
+
+    def test_coordinate_string_is_not_meaningful(self):
+        loc = self._location_with_cached_name("40.7128, -74.0060")
         self.assertFalse(loc.has_place_name())
 
     def test_real_name_is_meaningful(self):
-        from urbanlens.dashboard.models.location.model import Location
-        loc = baker.prepare(Location, cached_place_name="Riverside Mill")
+        loc = self._location_with_cached_name("Riverside Mill")
         self.assertTrue(loc.has_place_name())
 
     def test_place_name_property_returns_cached_name_without_api_call(self):
         from urbanlens.dashboard.models.location.model import Location
-        loc = baker.prepare(Location, cached_place_name="Old Factory")
+
+        loc = self._location_with_cached_name("Old Factory")
         with patch.object(Location, "get_place_name") as mock_get:
             name = loc.place_name
         mock_get.assert_not_called()
         self.assertEqual(name, "Old Factory")
 
-    @given(name=st.text(min_size=1, max_size=80).filter(lambda s: s != "No Information Available"))
+    @given(name=st.text(min_size=1, max_size=80).filter(is_meaningful_name))
     @_hyp
     def test_any_real_name_is_meaningful(self, name: str):
-        from urbanlens.dashboard.models.location.model import Location
-        loc = baker.prepare(Location, cached_place_name=name)
+        loc = self._location_with_cached_name(name)
         self.assertTrue(loc.has_place_name())
 
 
@@ -146,6 +157,7 @@ class WebSearchViewTests(TestCase):
 
     def test_nonexistent_pin_slug_returns_404(self):
         from django.test import RequestFactory
+
         from urbanlens.dashboard.controllers.pin import PinController
 
         rf = RequestFactory()
@@ -157,6 +169,7 @@ class WebSearchViewTests(TestCase):
 
     def test_successful_search_returns_200(self):
         from django.test import RequestFactory
+
         from urbanlens.dashboard.controllers.pin import PinController
 
         pin = self._make_pin()
@@ -181,6 +194,7 @@ class WebSearchViewTests(TestCase):
 
     def test_domain_key_added_to_each_result(self):
         from django.test import RequestFactory
+
         from urbanlens.dashboard.controllers.pin import PinController
 
         pin = self._make_pin()
@@ -218,6 +232,7 @@ class WebSearchViewTests(TestCase):
 
     def test_gateway_exception_returns_error_template(self):
         from django.test import RequestFactory
+
         from urbanlens.dashboard.controllers.pin import PinController
 
         pin = self._make_pin()

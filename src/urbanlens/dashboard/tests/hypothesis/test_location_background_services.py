@@ -9,7 +9,8 @@ from hypothesis import given, settings as hyp_settings, strategies as st
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.locations.creation import _default_bbox
-from urbanlens.dashboard.services.locations.naming import PlaceNameResolverChain
+from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 
 
 @dataclass(slots=True)
@@ -40,7 +41,7 @@ class DefaultBoundingBoxTests(TestCase):
 class PlaceNameResolverChainTests(TestCase):
     """Resolver chains skip empty/sentinel names and stop at the first useful name."""
 
-    @given(name=st.text(min_size=1, max_size=80).filter(lambda value: value != "No Information Available"))
+    @given(name=st.text(min_size=1, max_size=80).filter(is_meaningful_name))
     @hyp_settings(max_examples=25)
     def test_returns_first_meaningful_name(self, name: str) -> None:
         chain = PlaceNameResolverChain(resolvers=(_Resolver(None), _Resolver("No Information Available"), _Resolver(name)))
@@ -50,8 +51,16 @@ class PlaceNameResolverChainTests(TestCase):
         chain = PlaceNameResolverChain(resolvers=(_Resolver(None), _Resolver("No Information Available")))
         self.assertIsNone(chain.resolve(40.0, -74.0))
 
+    def test_skips_abandoned_placeholder(self) -> None:
+        chain = PlaceNameResolverChain(resolvers=(_Resolver("Abandoned"), _Resolver("Real Mill")))
+        self.assertEqual(chain.resolve(40.0, -74.0), "Real Mill")
+
+    def test_skips_coordinate_placeholder(self) -> None:
+        chain = PlaceNameResolverChain(resolvers=(_Resolver("40.0, -74.0"), _Resolver("Steel Factory")))
+        self.assertEqual(chain.resolve(40.0, -74.0), "Steel Factory")
+
     def test_google_places_resolver_handles_gateway_errors(self) -> None:
-        from urbanlens.dashboard.services.locations.naming import GooglePlacesNameResolver
+        from urbanlens.dashboard.services.locations.google import GooglePlacesNameResolver
 
         with (
             mock.patch("urbanlens.dashboard.services.locations.naming.settings.google_places_api_key", "key"),

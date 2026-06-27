@@ -27,7 +27,7 @@
             </div>
             {% endif %}
             <div class="pin-stats">
-                {% if pin.place_name and pin.place_name != "No Information Available" %}
+                {% if pin.has_place_name %}
                 <div class="pin-stat-item pin-stat-item--place">
                     <span class="field-label">Place Name</span>
                     <span class="field-value">{{ pin.place_name }}</span>

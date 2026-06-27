@@ -133,6 +133,22 @@ class PinHasMeaningfulNameTests(TestCase):
         pin = self._pin_with_name(None, loc_name="No Information Available")
         self.assertFalse(pin.has_meaningful_name)
 
+    def test_abandoned_placeholder_is_not_meaningful(self) -> None:
+        pin = self._pin_with_name(None, loc_name="Abandoned")
+        self.assertFalse(pin.has_meaningful_name)
+
+    def test_coordinate_name_is_not_meaningful(self) -> None:
+        pin = self._pin_with_name(None, loc_name="40.7128, -74.0060")
+        self.assertFalse(pin.has_meaningful_name)
+
+    def test_none_string_is_not_meaningful(self) -> None:
+        pin = self._pin_with_name(None, loc_name="None")
+        self.assertFalse(pin.has_meaningful_name)
+
+    def test_unnamed_location_is_not_meaningful(self) -> None:
+        pin = self._pin_with_name(None, loc_name="Unnamed Location")
+        self.assertFalse(pin.has_meaningful_name)
+
     def test_empty_string_is_not_meaningful(self) -> None:
         self.assertFalse(self._pin_no_location().has_meaningful_name)
 

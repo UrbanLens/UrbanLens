@@ -59,8 +59,11 @@ def _build_pin_search_query(pin: Pin) -> str:
     city, and state are appended as comma-separated optional keywords so that
     search engines can disambiguate results without requiring an exact phrase match.
     """
-    name = pin.effective_name
+    from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+    name = pin.effective_name if is_meaningful_name(pin.effective_name) else None
     place_name = getattr(pin, "place_name", None)
+    place_name = place_name if is_meaningful_name(place_name) else None
     address_basic = pin.address_basic
     route = pin.location.route if pin.location else None
 

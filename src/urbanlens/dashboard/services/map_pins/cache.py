@@ -136,20 +136,20 @@ class MapPinCache:
 
     def enqueue_rebuild(self) -> None:
         """Queue a full cache rebuild once when the cached page is missing."""
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import rebuild_map_pin_cache
         if not self.client or not self.profile_id:
             return
         try:
-            queued = self.client.set(self.rebuild_queued_key, "1", nx=True, ex=self.LOCK_SECONDS)
-            if not queued:
+            if not (_queued := self.client.set(self.rebuild_queued_key, "1", nx=True, ex=self.LOCK_SECONDS)):
                 return
-            from urbanlens.dashboard.services.celery import safely_enqueue_task
-            from urbanlens.dashboard.tasks import rebuild_map_pin_cache
-
+            
             result = safely_enqueue_task(rebuild_map_pin_cache, self.profile_id)
             if result is None:
                 self.client.delete(self.rebuild_queued_key)
         except RedisError:
             logger.warning("Unable to enqueue map pin cache rebuild for profile %s", self.profile_id, exc_info=True)
+            self.client.delete(self.rebuild_queued_key)
 
     def get_page(self, *, cursor: int | None, limit: int | None, include_total: bool) -> MapPinPage | None:
         if not self.client or not self.client.exists(self.meta_key):

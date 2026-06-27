@@ -7,7 +7,7 @@ import logging
 from celery import shared_task
 
 from urbanlens.dashboard.services.celery import update_task_progress
-from urbanlens.dashboard.services.locations import LocationCreationService
+from urbanlens.dashboard.services.locations.creation import LocationCreationService
 
 logger = logging.getLogger(__name__)
 

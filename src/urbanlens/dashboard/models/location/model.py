@@ -104,6 +104,7 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
         # TODO: This probably needs to be abstracted a bit due to the addition of generic badges (categories and tags). It should probably also live somewhere else.
         from urbanlens.dashboard.services.ai.factory import get_gateway
+        from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
         instructions = (
             "Look at the following information about a location and determine what category it belongs in. Example categories are: "
@@ -117,10 +118,11 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
         prompt = ""
         if self.address:
             prompt += f"address: {self.address}\n"
-        if self.cached_place_name and self.has_place_name():
-            prompt += f"google maps description: {self.cached_place_name}\n"
+        if self.has_place_name():
+            prompt += f"google maps description: {self.place_name}\n"
             instructions += "\nThe google maps description may be helpful, but it also may be inaccurate. Use your best judgement.\n"
-        if self.name:
+
+        if is_meaningful_name(self.name):
             prompt += f"location title: {self.name}\n"
         if self.description:
             prompt += f"description: {self.description}\n"
@@ -211,7 +213,7 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
             Index(fields=["uuid"]),
             Index(fields=["latitude", "longitude"]),
             Index(fields=["name"]),
-            Index(fields=["cid"]),
+            Index(fields=["google_place"]),
         ]
         unique_together = [
             ["latitude", "longitude"],

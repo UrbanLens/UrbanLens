@@ -353,3 +353,10 @@ geocoded_location: Recipe[Any] = Recipe(
     place_name="Test Place",
     json_response=None,
 )
+
+google_place: Recipe[Any] = Recipe(
+    "dashboard.GooglePlace",
+    latitude=Decimal("40.000"),
+    longitude=Decimal("-74.000"),
+    cached_place_name="Test Place",
+)

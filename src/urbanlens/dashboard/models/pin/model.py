@@ -27,6 +27,7 @@ from django.utils.text import slugify
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager
+from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.badges.model import Badge
@@ -207,7 +208,7 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
     @property
     def has_meaningful_name(self) -> bool:
         """True when the pin has a real name worth using as a search query."""
-        return self.effective_name not in self._MEANINGLESS_NAMES
+        return is_meaningful_name(self.effective_name)
 
     @property
     def display_label(self) -> str:
@@ -277,7 +278,14 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         from urbanlens.dashboard.services.ai.factory import get_gateway
         from urbanlens.dashboard.services.ai.keywords import categorize_by_keywords
 
-        keyword_parts = [p for p in (self.effective_name, self.place_name if self.has_place_name() else None) if p]
+        keyword_parts = [
+            p
+            for p in (
+                self.effective_name if self.has_meaningful_name else None,
+                self.place_name if self.has_place_name() else None,
+            )
+            if p
+        ]
         if keyword_parts:
             category_name = categorize_by_keywords(" ".join(keyword_parts))
             if category_name:
@@ -301,7 +309,7 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         if self.has_place_name():
             prompt += f"google maps description: {self.place_name}\n"
             instructions += "\nThe google maps description may be helpful, but it also may be inaccurate. Use your best judgement.\n"
-        if self.effective_name:
+        if self.has_meaningful_name:
             prompt += f"location title: {self.effective_name}\n"
         if self.description:
             prompt += f"user notes: {self.description}\n"

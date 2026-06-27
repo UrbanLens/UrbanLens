@@ -10,7 +10,8 @@ from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.locations.naming import PlaceNameResolverChain
+from urbanlens.dashboard.services.google.place_info import GooglePlaceService, normalize_coordinate
+from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +44,15 @@ class LocationCreationService:
         longitude = float(longitude)
         point = Point(longitude, latitude, srid=4326)
         location = Location.objects.get_for_point(latitude, longitude)
+        service = GooglePlaceService(name_resolver=self.name_resolver)
         if location is None:
             place_name = self.name_resolver.resolve(latitude, longitude)
             name = place_name or pin.nickname or "Unnamed Location"
+            google_place = service.get_or_create_for_coordinates(
+                latitude,
+                longitude,
+                place_name=place_name,
+            )
             try:
                 with transaction.atomic():
                     location = Location.objects.create(
@@ -54,12 +61,24 @@ class LocationCreationService:
                         longitude=longitude,
                         point=point,
                         bounding_box=_default_bbox(latitude, longitude),
-                        cached_place_name=place_name,
+                        google_place=google_place,
                     )
             except IntegrityError:
                 location = Location.objects.get_for_point(latitude, longitude)
                 if location is None:
                     raise
 
-        Pin.objects.filter(pk=pin.pk, location__isnull=True).update(location=location)
+        if location.google_place_id is None:
+            service.ensure_linked(location)
+        if pin.google_place_id is None:
+            service.ensure_linked(pin)
+
+        pin_updates: dict[str, object] = {"location": location}
+        if (
+            normalize_coordinate(pin.latitude) == normalize_coordinate(location.latitude)
+            and normalize_coordinate(pin.longitude) == normalize_coordinate(location.longitude)
+            and pin.google_place_id != location.google_place_id
+        ):
+            pin_updates["google_place"] = location.google_place
+        Pin.objects.filter(pk=pin.pk, location__isnull=True).update(**pin_updates)
         return location
