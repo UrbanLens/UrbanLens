@@ -45,5 +45,3 @@ urlpatterns = [
     # 404 catch-all - must be last
     re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),
 ]
-
-handler404 = "urbanlens.dashboard.controllers.index.IndexController.page_not_found"
