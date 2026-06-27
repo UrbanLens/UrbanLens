@@ -942,10 +942,7 @@ dialog.tag-create-card.ul-dialog {
 }
 
 // ── Gallery view ──────────────────────────────────────────────────────────────
-#tag-rows.tag-view--gallery,
-#category-rows.tag-view--gallery,
-#status-rows.tag-view--gallery,
-#people-badge-rows.tag-view--gallery {
+.organize-badge-rows.tag-view--gallery {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: .75rem;
@@ -1027,10 +1024,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-#tag-rows.tag-view--tree,
-#category-rows.tag-view--tree,
-#status-rows.tag-view--tree,
-#people-badge-rows.tag-view--tree {
+.organize-badge-rows.tag-view--tree {
 
     .tag-drag-handle,
     .tag-order-badge {
@@ -1450,42 +1444,16 @@ dialog.tag-create-card.ul-dialog {
     @include spinner;
 }
 
-// ── Bulk-edit dialog ──────────────────────────────────────────────────────────
+// ── Bulk-edit helpers (dialog shell uses .tag-edit-dialog / .tag-edit-dialog-body) ─
 
-.cat-bulk-edit-dialog {
-    @include dialog-base(520px);
-    max-height: 85vh;
-}
-
-.cat-bulk-edit-body {
-    padding: 1.25rem 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-    overflow-y: auto;
-    flex: 1;
-}
-
-.cat-bulk-field {
-    display: flex;
-    flex-direction: column;
-    gap: .5rem;
-}
-
-.cat-bulk-field-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .5rem;
-}
-
-.cat-bulk-nochange-label {
+.bulk-nochange-label {
     display: inline-flex;
     align-items: center;
     gap: .35rem;
     font-size: .8rem;
     color: $text-secondary;
     cursor: pointer;
+    margin-top: .35rem;
 
     input[type="checkbox"] {
         width: 14px;
@@ -1494,32 +1462,15 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-.cat-bulk-parents-hint {
-    font-size: .78rem;
-    color: $text-muted;
-    margin: 0;
-}
-
-.cat-bulk-picker--disabled {
+.bulk-picker--disabled {
     opacity: .4;
+    pointer-events: none;
 }
 
-.cat-bulk-edit-footer {
-    display: flex;
-    gap: .75rem;
-    align-items: center;
-    padding: 1rem 1.5rem 1.25rem;
-    border-top: 1px solid var(--ul-border);
-    flex-shrink: 0;
-}
-
-// ── Category rows: hide select wrap in gallery (checkbox positioned differently) ─
-#category-rows,
-#tag-rows {
-
+// ── Badge rows: gallery checkbox positioning + Materialize checkbox suppression ─
+.organize-badge-rows {
     &.tag-view--gallery {
         .cat-select-wrap {
-            //position: absolute;
             top: .4rem;
             left: .4rem;
             z-index: 1;
@@ -1532,13 +1483,6 @@ dialog.tag-create-card.ul-dialog {
         }
     }
 
-    [type="checkbox"]+span:not(.lever)::before {
-        display: none;
-    }
-}
-
-// Status rows need the same checkbox suppression
-#status-rows {
     [type="checkbox"]+span:not(.lever)::before {
         display: none;
     }
@@ -2006,12 +1950,17 @@ dialog.tag-create-card.ul-dialog {
 .kind-toggle {
     display: flex;
     gap: .5rem;
+    flex-wrap: wrap;
     margin-top: .35rem;
 
     .kind-toggle-option {
         display: flex;
         align-items: center;
         cursor: pointer;
+        border: none;
+        background: none;
+        padding: 0;
+        font: inherit;
 
         span {
             display: inline-flex;
@@ -2026,6 +1975,7 @@ dialog.tag-create-card.ul-dialog {
             background: var(--ul-grey-1);
             transition: border-color .13s, background .13s, color .13s;
             height: 2.5em;
+            white-space: nowrap;
 
             i {
                 font-size: 1rem;
@@ -2039,12 +1989,20 @@ dialog.tag-create-card.ul-dialog {
         input[type="radio"] {
             display: none;
 
-            &:checked+span {
+            &:checked+span,
+            &:focus-visible+span {
                 border-color: $primary-color;
-                background: color-mix(in srgb, $primary-color 10%, white);
+                background: color-mix(in srgb, $primary-color 10%, var(--ul-grey-0));
                 color: $primary-color;
                 font-weight: 600;
             }
+        }
+
+        &.is-active span {
+            border-color: $primary-color;
+            background: color-mix(in srgb, $primary-color 10%, var(--ul-grey-0));
+            color: $primary-color;
+            font-weight: 600;
         }
 
         &:hover span {
@@ -2379,68 +2337,12 @@ dialog.tag-create-card.ul-dialog {
         }
     }
 
-    #tag-filter-btn,
-    #cat-filter-btn,
-    #status-filter-btn {
+    #org-header-filter-btn {
         position: relative;
     }
 
-    #tag-filter-btn.has-filter .org-filter-active-dot,
-    #cat-filter-btn.has-filter .org-filter-active-dot,
-    #status-filter-btn.has-filter .org-filter-active-dot,
-    #people-filter-btn.has-filter .org-filter-active-dot {
+    #org-header-filter-btn.has-filter .org-filter-active-dot {
         display: block;
-    }
-
-    /* ── Organize: convert-type action buttons (match kind-toggle style) ─ */
-    .org-convert-grid {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 6px;
-    }
-
-    .org-convert-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 7px 14px;
-        border-radius: $radius-sm;
-        border: 2px solid var(--ul-border, $ui-slate-200);
-        background: var(--ul-grey-1, $ui-slate-50);
-        cursor: pointer;
-        font-size: .875rem;
-        font-weight: 500;
-        color: var(--ul-grey-7, $ui-slate-600);
-        transition: border-color .13s, background .13s, color .13s, box-shadow .13s;
-        white-space: nowrap;
-        height: 2.5em;
-
-        .material-icons {
-            font-size: 1rem;
-            color: inherit;
-            opacity: .75;
-        }
-
-        &:hover {
-            border-color: var(--ul-border-strong, $ui-slate-400);
-            background: var(--ul-grey-4, $ui-slate-100);
-        }
-
-        &.active {
-            border-color: $ui-indigo-500;
-            background: color-mix(in srgb, $ui-indigo-500 10%, white);
-            color: $ui-indigo-600;
-            font-weight: 600;
-
-            .material-icons {
-                opacity: 1;
-            }
-        }
-    }
-
-    .org-convert-btn-desc {
-        display: none;
     }
 
 }
@@ -2499,43 +2401,45 @@ dialog.tag-create-card.ul-dialog {
     z-index: 900;
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 6px 8px;
-    background: var(--ul-grey-1);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    gap: 6px;
+    padding: 8px 10px 8px 12px;
+    background: color-mix(in srgb, var(--ul-grey-0) 92%, transparent);
+    backdrop-filter: blur(20px) saturate(1.15);
+    -webkit-backdrop-filter: blur(20px) saturate(1.15);
     border: 1px solid var(--ul-border);
     border-radius: 999px;
-    box-shadow: var(--ul-shadow-lg);
+    box-shadow:
+        0 10px 40px rgba(15, 23, 42, .14),
+        0 2px 8px rgba(15, 23, 42, .08),
+        inset 0 1px 0 rgba(255, 255, 255, .55);
     opacity: 0;
     pointer-events: none;
-    transition: transform .3s cubic-bezier(.34, 1.56, .64, 1), opacity .2s ease;
+    transition: transform .3s cubic-bezier(.34, 1.56, .64, 1), opacity .2s ease, box-shadow .2s ease;
     white-space: nowrap;
     max-width: calc(100vw - 40px);
-}
-
-[data-theme="dark"] .org-bulk-bar {
-    // Slightly elevated surface with a visible border so it reads against the dark page
-    background: var(--ul-grey-4);
-    border-color: var(--ul-border-strong);
 }
 
 .org-bulk-bar.visible {
     transform: translateX(-50%) translateY(0);
     opacity: 1;
     pointer-events: auto;
+    box-shadow:
+        0 14px 48px rgba(15, 23, 42, .18),
+        0 4px 12px rgba(15, 23, 42, .1),
+        inset 0 1px 0 rgba(255, 255, 255, .55);
 }
 
 .org-bulk-count {
     display: inline-flex;
     align-items: center;
-    font-size: .8rem;
+    min-height: 30px;
+    font-size: .78rem;
     font-weight: 700;
-    color: $ui-blue-500;
-    padding: 4px 12px;
-    background: rgba(59, 130, 246, .1);
+    color: $primary-color;
+    padding: 0 12px;
+    background: color-mix(in srgb, $primary-color 12%, transparent);
     border-radius: 999px;
-    border: 1.5px solid rgba(59, 130, 246, .25);
+    border: 1.5px solid color-mix(in srgb, $primary-color 28%, transparent);
     letter-spacing: -.01em;
     margin-right: 2px;
     flex-shrink: 0;
@@ -2545,14 +2449,14 @@ dialog.tag-create-card.ul-dialog {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
-    border: none;
+    border: 1px solid transparent;
     background: transparent;
     cursor: pointer;
     color: var(--ul-grey-6);
-    transition: background .12s, color .12s;
+    transition: background .12s, color .12s, border-color .12s;
     flex-shrink: 0;
 
     .material-icons {
@@ -2560,57 +2464,63 @@ dialog.tag-create-card.ul-dialog {
     }
 
     &:hover {
-        background: rgba(220, 38, 38, .12);
+        background: color-mix(in srgb, $ui-red-500 12%, transparent);
+        border-color: color-mix(in srgb, $ui-red-500 24%, transparent);
         color: $ui-red-600;
     }
 }
 
 .org-bulk-sep {
     width: 1px;
-    height: 22px;
+    height: 24px;
     align-self: center;
     background: var(--ul-border);
-    margin: 0 4px;
+    margin: 0 2px;
     flex-shrink: 0;
 }
 
 .org-bulk-btn {
     @include btn-ghost;
+    min-height: 34px;
     padding: 6px 14px;
     border-radius: 999px;
-    font-size: .8rem;
+    font-size: .82rem;
+    font-weight: 600;
+    border: 1px solid var(--ul-border);
+    background: var(--ul-grey-0a);
 
     .material-icons {
         font-size: .95rem;
     }
 
     &:disabled {
-        opacity: .35;
+        opacity: .4;
         cursor: not-allowed;
     }
 }
 
-.org-bulk-btn--edit:hover {
-    background: var(--ul-hover-bg-primary);
-    border-color: rgba(59, 130, 246, .4);
-    color: $ui-blue-500;
+.org-bulk-btn--edit:hover:not(:disabled) {
+    background: color-mix(in srgb, $primary-color 10%, var(--ul-grey-0a));
+    border-color: color-mix(in srgb, $primary-color 35%, transparent);
+    color: $primary-color;
 }
 
 .org-bulk-btn--merge {
-    background: $ui-indigo-500;
-    color: var(--ul-grey-4);
-    border-color: $ui-indigo-500;
-    box-shadow: 0 1px 4px rgba(99, 102, 241, .3);
+    background: $primary-color;
+    color: var(--ul-grey-0);
+    border-color: $primary-color;
+    box-shadow: 0 1px 4px color-mix(in srgb, $primary-color 35%, transparent);
 
     &:hover:not(:disabled) {
-        background: $ui-indigo-600;
-        border-color: $ui-indigo-600;
-        box-shadow: 0 2px 8px rgba(99, 102, 241, .4);
+        background: color-mix(in srgb, $primary-color 88%, black);
+        border-color: color-mix(in srgb, $primary-color 88%, black);
+        box-shadow: 0 2px 8px color-mix(in srgb, $primary-color 40%, transparent);
     }
 
     &:disabled {
-        background: rgba(99, 102, 241, .35);
+        background: color-mix(in srgb, $primary-color 35%, transparent);
         border-color: transparent;
+        color: color-mix(in srgb, var(--ul-grey-0) 70%, transparent);
         box-shadow: none;
         opacity: 1;
         cursor: not-allowed;
@@ -2619,10 +2529,11 @@ dialog.tag-create-card.ul-dialog {
 
 .org-bulk-btn--delete {
     color: $ui-red-500;
+    border-color: color-mix(in srgb, $ui-red-500 20%, transparent);
 
-    &:hover {
-        background: rgba(239, 68, 68, .1);
-        border-color: rgba(239, 68, 68, .3);
+    &:hover:not(:disabled) {
+        background: color-mix(in srgb, $ui-red-500 10%, var(--ul-grey-0a));
+        border-color: color-mix(in srgb, $ui-red-500 35%, transparent);
         color: $ui-red-600;
     }
 }

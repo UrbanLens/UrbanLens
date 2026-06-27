@@ -95,7 +95,7 @@
             </div>
         </div>
 
-        {% include "dashboard/partials/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority label wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent crowded or multi-labeled pins first." visual_template="dashboard/partials/explainers/_priority_visual.html" %}
+        {% include "dashboard/partials/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent crowded or multi-labeled pins first." visual_template="dashboard/partials/explainers/_priority_visual.html" %}
 
         <div id="priority-list" class="priority-list">
             {% for item in priority_items %}
@@ -1197,16 +1197,16 @@ window._orgBulkSync = function(n, opts) {
     var _tagBulkConvertTarget = null; // null | 'category' | 'status'
 
     window._setTagBulkConvert = function(target) {
-        var btns = document.querySelectorAll('#tag-bulk-edit-dialog .org-convert-btn');
+        var btns = document.querySelectorAll('#tag-bulk-edit-dialog .kind-toggle-option');
         if (_tagBulkConvertTarget === target) {
             // Toggle off
             _tagBulkConvertTarget = null;
-            btns.forEach(function(b) { b.classList.remove('active'); });
+            btns.forEach(function(b) { b.classList.remove('is-active'); });
         } else {
             _tagBulkConvertTarget = target;
-            btns.forEach(function(b) { b.classList.remove('active'); });
+            btns.forEach(function(b) { b.classList.remove('is-active'); });
             var active = document.getElementById('tag-bulk-convert-to-' + target);
-            if (active) active.classList.add('active');
+            if (active) active.classList.add('is-active');
         }
         _updateTagBulkState();
     };
@@ -1229,8 +1229,8 @@ window._orgBulkSync = function(n, opts) {
         var iw = document.getElementById('tag-bulk-icon-wrap');
         var cp = document.getElementById('tag-bulk-color-picker');
         if (!converting) {
-            if (iw) iw.classList.toggle('cat-bulk-picker--disabled', !!document.getElementById('tag-bulk-icon-nochange').checked);
-            if (cp) cp.classList.toggle('cat-bulk-picker--disabled', !!document.getElementById('tag-bulk-color-nochange').checked);
+            if (iw) iw.classList.toggle('bulk-picker--disabled', !!document.getElementById('tag-bulk-icon-nochange').checked);
+            if (cp) cp.classList.toggle('bulk-picker--disabled', !!document.getElementById('tag-bulk-color-nochange').checked);
         }
     }
     window._updateTagBulkState = _updateTagBulkState;
@@ -1270,7 +1270,7 @@ window._orgBulkSync = function(n, opts) {
         document.getElementById('tag-bulk-order-nochange').checked=true; document.getElementById('tag-bulk-order-value').value='0'; document.getElementById('tag-bulk-description-nochange').checked=true; document.getElementById('tag-bulk-description-value').value='';
         document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb').forEach(function(cb){cb.checked=false;});
         _tagBulkConvertTarget = null;
-        document.querySelectorAll('#tag-bulk-edit-dialog .org-convert-btn').forEach(function(b){b.classList.remove('active');});
+        document.querySelectorAll('#tag-bulk-edit-dialog .kind-toggle-option').forEach(function(b){b.classList.remove('is-active');});
         document.getElementById('tag-bulk-edit-title').textContent='Edit '+ids.length+' '+(ids.length===1?'Tag':'Tags');
         var cbtn=document.getElementById('tag-bulk-edit-confirm'); cbtn.disabled=false;
         cbtn.innerHTML='<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
@@ -1612,15 +1612,15 @@ window._orgBulkSync = function(n, opts) {
     var _catBulkConvertTarget = null; // null | 'tag' | 'status'
 
     window._setCatBulkConvert = function(target) {
-        var btns = document.querySelectorAll('#cat-bulk-edit-dialog .org-convert-btn');
+        var btns = document.querySelectorAll('#cat-bulk-edit-dialog .kind-toggle-option');
         if (_catBulkConvertTarget === target) {
             _catBulkConvertTarget = null;
-            btns.forEach(function(b) { b.classList.remove('active'); });
+            btns.forEach(function(b) { b.classList.remove('is-active'); });
         } else {
             _catBulkConvertTarget = target;
-            btns.forEach(function(b) { b.classList.remove('active'); });
+            btns.forEach(function(b) { b.classList.remove('is-active'); });
             var active = document.getElementById('cat-bulk-convert-to-' + target);
-            if (active) active.classList.add('active');
+            if (active) active.classList.add('is-active');
         }
         _updateCatBulkState();
     };
@@ -1643,8 +1643,8 @@ window._orgBulkSync = function(n, opts) {
         var iw=document.getElementById('cat-bulk-icon-wrap');
         var cp=document.getElementById('cat-bulk-color-picker');
         if(!converting){
-            if(iw)iw.classList.toggle('cat-bulk-picker--disabled',!!document.getElementById('cat-bulk-icon-nochange').checked);
-            if(cp)cp.classList.toggle('cat-bulk-picker--disabled',!!document.getElementById('cat-bulk-color-nochange').checked);
+            if(iw)iw.classList.toggle('bulk-picker--disabled',!!document.getElementById('cat-bulk-icon-nochange').checked);
+            if(cp)cp.classList.toggle('bulk-picker--disabled',!!document.getElementById('cat-bulk-color-nochange').checked);
         }
     }
     window._updateCatBulkState = _updateCatBulkState;
@@ -1674,7 +1674,7 @@ window._orgBulkSync = function(n, opts) {
         document.getElementById('cat-bulk-order-nochange').checked=true; document.getElementById('cat-bulk-order-value').value='0'; document.getElementById('cat-bulk-description-nochange').checked=true; document.getElementById('cat-bulk-description-value').value='';
         document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb').forEach(function(cb){cb.checked=false;});
         _catBulkConvertTarget = null;
-        document.querySelectorAll('#cat-bulk-edit-dialog .org-convert-btn').forEach(function(b){b.classList.remove('active');});
+        document.querySelectorAll('#cat-bulk-edit-dialog .kind-toggle-option').forEach(function(b){b.classList.remove('is-active');});
         document.getElementById('cat-bulk-edit-title').textContent='Edit '+ids.length+' '+(ids.length===1?'Category':'Categories');
         var cbtn=document.getElementById('cat-bulk-edit-confirm'); cbtn.disabled=false;
         cbtn.innerHTML='<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
@@ -1803,15 +1803,15 @@ window._orgBulkSync = function(n, opts) {
     var _statusBulkConvertTarget = null; // null | 'tag' | 'category'
 
     window._setStatusBulkConvert = function(target) {
-        var btns = document.querySelectorAll('#status-bulk-edit-dialog .org-convert-btn');
+        var btns = document.querySelectorAll('#status-bulk-edit-dialog .kind-toggle-option');
         if (_statusBulkConvertTarget === target) {
             _statusBulkConvertTarget = null;
-            btns.forEach(function(b) { b.classList.remove('active'); });
+            btns.forEach(function(b) { b.classList.remove('is-active'); });
         } else {
             _statusBulkConvertTarget = target;
-            btns.forEach(function(b) { b.classList.remove('active'); });
+            btns.forEach(function(b) { b.classList.remove('is-active'); });
             var active = document.getElementById('status-bulk-convert-to-' + target);
-            if (active) active.classList.add('active');
+            if (active) active.classList.add('is-active');
         }
         _updateStatusBulkState();
     };
@@ -1834,8 +1834,8 @@ window._orgBulkSync = function(n, opts) {
         var iw = document.getElementById('status-bulk-icon-wrap');
         var cp = document.getElementById('status-bulk-color-picker');
         if (!converting) {
-            if (iw) iw.classList.toggle('cat-bulk-picker--disabled', !!document.getElementById('status-bulk-icon-nochange').checked);
-            if (cp) cp.classList.toggle('cat-bulk-picker--disabled', !!document.getElementById('status-bulk-color-nochange').checked);
+            if (iw) iw.classList.toggle('bulk-picker--disabled', !!document.getElementById('status-bulk-icon-nochange').checked);
+            if (cp) cp.classList.toggle('bulk-picker--disabled', !!document.getElementById('status-bulk-color-nochange').checked);
         }
     }
     window._updateStatusBulkState = _updateStatusBulkState;
@@ -1878,7 +1878,7 @@ window._orgBulkSync = function(n, opts) {
         document.getElementById('status-bulk-description-value').value = '';
         document.querySelectorAll('#status-bulk-parent-select .status-bulk-parent-cb').forEach(function(cb) { cb.checked = false; });
         _statusBulkConvertTarget = null;
-        document.querySelectorAll('#status-bulk-edit-dialog .org-convert-btn').forEach(function(b) { b.classList.remove('active'); });
+        document.querySelectorAll('#status-bulk-edit-dialog .kind-toggle-option').forEach(function(b) { b.classList.remove('is-active'); });
         document.getElementById('status-bulk-edit-title').textContent = 'Edit ' + ids.length + ' ' + (ids.length === 1 ? 'Status' : 'Statuses');
         var cbtn = document.getElementById('status-bulk-edit-confirm'); cbtn.disabled = false;
         cbtn.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
@@ -2557,7 +2557,7 @@ window._orgBulkSync = function(n, opts) {
         createTitle: 'New Label',
         createCompact: true,
         createIconOnly: false,
-        createHtml: '<i class="material-icons">add</i> New Label',
+        createHtml: '<i class="material-icons">add</i>',
         getView: function() { return window._orgHeader.getSharedView(); },
         setView: function(v) { window._orgHeader.setSharedView(v); },
         applyView: _applyPeopleView,

@@ -1,19 +1,19 @@
 {% load dashboard_tags %}
-<dialog id="{{ ns }}-bulk-edit-dialog" class="cat-bulk-edit-dialog ul-dialog">
+<dialog id="{{ ns }}-bulk-edit-dialog" class="tag-edit-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title=title title_id=ns|add:"-bulk-edit-title" %}
-    <div class="cat-bulk-edit-body">
-        <div class="cat-bulk-field">
+    <div class="tag-edit-dialog-body organize-badge-edit-form">
+        <div class="form-field">
             <label class="form-label">Type</label>
-            <div class="org-convert-grid">
+            <div class="kind-toggle">
                 {% if ns == 'tag' %}
-                <button type="button" class="org-convert-btn" id="tag-bulk-convert-to-cat" onclick="_setTagBulkConvert('category')"><i class="material-icons">category</i><span class="org-convert-btn-label">To Categories</span><span class="org-convert-btn-desc">Personal labels for organizing by type</span></button>
-                <button type="button" class="org-convert-btn" id="tag-bulk-convert-to-status" onclick="_setTagBulkConvert('status')"><i class="material-icons">flag_circle</i><span class="org-convert-btn-label">To Statuses</span><span class="org-convert-btn-desc">Track pin state (visited, active…)</span></button>
+                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-category" onclick="_setTagBulkConvert('category')"><span><i class="material-icons">category</i> Category</span></button>
+                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-status" onclick="_setTagBulkConvert('status')"><span><i class="material-icons">flag</i> Status</span></button>
                 {% elif ns == 'cat' %}
-                <button type="button" class="org-convert-btn" id="cat-bulk-convert-to-tag" onclick="_setCatBulkConvert('tag')"><i class="material-icons">label</i><span class="org-convert-btn-label">To Tags</span><span class="org-convert-btn-desc">Personal labels on your pins</span></button>
-                <button type="button" class="org-convert-btn" id="cat-bulk-convert-to-status" onclick="_setCatBulkConvert('status')"><i class="material-icons">flag_circle</i><span class="org-convert-btn-label">To Statuses</span><span class="org-convert-btn-desc">Track pin state (visited, active…)</span></button>
+                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-tag" onclick="_setCatBulkConvert('tag')"><span><i class="material-icons">label</i> Tag</span></button>
+                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-status" onclick="_setCatBulkConvert('status')"><span><i class="material-icons">flag</i> Status</span></button>
                 {% elif ns == 'status' %}
-                <button type="button" class="org-convert-btn" id="status-bulk-convert-to-tag" onclick="_setStatusBulkConvert('tag')"><i class="material-icons">label</i><span class="org-convert-btn-label">To Tags</span><span class="org-convert-btn-desc">Personal labels on your pins</span></button>
-                <button type="button" class="org-convert-btn" id="status-bulk-convert-to-category" onclick="_setStatusBulkConvert('category')"><i class="material-icons">category</i><span class="org-convert-btn-label">To Categories</span><span class="org-convert-btn-desc">Personal labels for organizing by type</span></button>
+                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-tag" onclick="_setStatusBulkConvert('tag')"><span><i class="material-icons">label</i> Tag</span></button>
+                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-category" onclick="_setStatusBulkConvert('category')"><span><i class="material-icons">category</i> Category</span></button>
                 {% endif %}
             </div>
             <p class="form-hint" id="{{ ns }}-bulk-convert-hint" hidden></p>
@@ -23,35 +23,37 @@
                 <div class="form-field">
                     <label class="form-label" for="{{ ns }}-bulk-order-value">Order (higher = higher priority)</label>
                     <input id="{{ ns }}-bulk-order-value" type="number" class="form-input" value="0">
-                    <label class="cat-bulk-nochange-label"><input type="checkbox" id="{{ ns }}-bulk-order-nochange" checked><span>No change - leave order unchanged</span></label>
+                    <label class="bulk-nochange-label"><input type="checkbox" id="{{ ns }}-bulk-order-nochange" checked><span>No change - leave order unchanged</span></label>
                 </div>
             </div>
             <div class="form-field">
                 <label class="form-label" for="{{ ns }}-bulk-description-value">Description</label>
                 <textarea id="{{ ns }}-bulk-description-value" class="form-input" rows="2"></textarea>
-                <label class="cat-bulk-nochange-label"><input type="checkbox" id="{{ ns }}-bulk-description-nochange" checked><span>No change - leave description unchanged</span></label>
+                <label class="bulk-nochange-label"><input type="checkbox" id="{{ ns }}-bulk-description-nochange" checked><span>No change - leave description unchanged</span></label>
             </div>
-            <div class="cat-bulk-field">
-                <label class="form-label">Icon</label>
-                <div class="icon-picker-wrap" id="{{ ns }}-bulk-icon-wrap">
-                    {% with picker_id=picker_id current_icon="" field_name="bulk_icon" %}{% include 'dashboard/partials/_icon_picker.html' %}{% endwith %}
+            <div class="tag-icon-color-row">
+                <div class="form-field">
+                    <label class="form-label">Icon</label>
+                    <div class="icon-picker-wrap" id="{{ ns }}-bulk-icon-wrap">
+                        {% with picker_id=picker_id current_icon="" field_name="bulk_icon" %}{% include 'dashboard/partials/_icon_picker.html' %}{% endwith %}
+                    </div>
+                    <label class="bulk-nochange-label"><input type="checkbox" id="{{ ns }}-bulk-icon-nochange" checked><span>No change - leave icon unchanged</span></label>
                 </div>
-                <label class="cat-bulk-nochange-label"><input type="checkbox" id="{{ ns }}-bulk-icon-nochange" checked><span>No change - leave icon unchanged</span></label>
-            </div>
-            <div class="cat-bulk-field">
-                <label class="form-label">Color</label>
-                <div class="color-picker" id="{{ ns }}-bulk-color-picker">
-                    <input type="hidden" id="{{ ns }}-bulk-color-value">
-                    {% for hex, label in color_choices %}
-                    <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','{{ hex }}',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% else %}_updateStatusBulkState(){% endif %};"></button>
-                    {% endfor %}
-                    <button type="button" class="color-swatch color-clear" title="No color" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% else %}_updateStatusBulkState(){% endif %};"><i class="material-icons" style="font-size:1rem;">block</i></button>
+                <div class="form-field">
+                    <label class="form-label">Color</label>
+                    <div class="color-picker" id="{{ ns }}-bulk-color-picker">
+                        <input type="hidden" id="{{ ns }}-bulk-color-value">
+                        {% for hex, label in color_choices %}
+                        <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','{{ hex }}',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% else %}_updateStatusBulkState(){% endif %};"></button>
+                        {% endfor %}
+                        <button type="button" class="color-swatch color-clear" title="No color" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% else %}_updateStatusBulkState(){% endif %};"><i class="material-icons" style="font-size:1rem;">block</i></button>
+                    </div>
+                    <label class="bulk-nochange-label"><input type="checkbox" id="{{ ns }}-bulk-color-nochange" checked><span>No change - leave color unchanged</span></label>
                 </div>
-                <label class="cat-bulk-nochange-label"><input type="checkbox" id="{{ ns }}-bulk-color-nochange" checked><span>No change - leave color unchanged</span></label>
             </div>
-            <div class="cat-bulk-field">
+            <div class="form-field">
                 <label class="form-label">Add parent badges</label>
-                <p class="cat-bulk-parents-hint">Checked badges will be <strong>added</strong> as parents. Existing parents are not removed.</p>
+                <p class="form-hint">Checked badges will be <strong>added</strong> as parents. Existing parents are not removed.</p>
                 <input type="text" class="form-input tag-parent-search" placeholder="Search badges…" oninput="filterParentOptions(this,'{{ ns }}-bulk-parent-select')" autocomplete="off">
                 <div class="tag-parent-select" id="{{ ns }}-bulk-parent-select">
                     {% for b in priority_items %}
@@ -60,6 +62,9 @@
                 </div>
             </div>
         </div>
+        <div class="tag-form-actions">
+            <button type="button" id="{{ ns }}-bulk-edit-confirm" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
     </div>
-    <div class="cat-bulk-edit-footer"><button type="button" id="{{ ns }}-bulk-edit-confirm" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button><button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button></div>
 </dialog>
