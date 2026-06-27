@@ -69,10 +69,17 @@ RUN pip install -e .
 RUN npm install -y
 
 # Create a non-root user that will run the application processes.
-# /app stays root-owned (world-readable); runtime write paths are volume mounts
-# handled by docker-entrypoint.sh.
+# /app stays root-owned; only the frontend source dirs that npm writes into at
+# startup (and the three volume-mount targets handled by docker-entrypoint.sh)
+# need to be writable by appuser.
 RUN groupadd --gid 1001 appuser && \
-    useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser
+    useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser && \
+    mkdir -p \
+        /app/src/urbanlens/dashboard/frontend \
+        /app/src/urbanlens/core/frontend && \
+    chown -R appuser:appuser \
+        /app/src/urbanlens/dashboard/frontend \
+        /app/src/urbanlens/core/frontend
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh

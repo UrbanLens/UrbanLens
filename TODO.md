@@ -61,6 +61,7 @@ Features planned for this release.
 * Review AI-created unit tests. Eliminate useless ones to assist code coverage reports. [UL-38]
 * Provide secondary safeguards for permissions. [UL-39]
 * Prune unnecessary vars from docker-compose, .env, etc [UL-129]
+* Change the Dockerfile to use something other than the ms devcontainer. [UL-261]
 
 ## Features that need verification
 * password reset. [UL-41]
@@ -333,5 +334,4 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * User settings: Allow friend requests checkbox is missing. Should have additional option for "from users with one pin in common", "1 mutual", etc.
 * Clicking on notification should take you to the relevant page.
 * Viewing notifications in the dropdown should mark them read. Not just clicking on them.
-* Notification log makes read messages look unread. UI with this needs cleanup.
 * Hide "(schedule) Never" in pin popup for last visited. This is already implied.
