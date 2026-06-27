@@ -478,21 +478,41 @@ class SiteAdminPullLatestCodeView(LoginRequiredMixin, PermissionRequiredMixin, V
                 status=403,
             )
 
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
-        from urbanlens.dashboard.tasks import apply_admin_code_update
+        from urbanlens.core.version import (
+            apply_pending_migrations,
+            get_current_git_commit,
+            pull_latest_git_code,
+            trigger_development_app_reload,
+        )
 
-        result = safely_enqueue_task(apply_admin_code_update)
-        if result is None:
-            return JsonResponse({"ok": False, "message": "Unable to enqueue code update task."}, status=503)
+        before_commit = get_current_git_commit()
+        ok, message = pull_latest_git_code()
+        after_commit = get_current_git_commit()
+        if not ok:
+            return JsonResponse({"ok": False, "message": message}, status=500)
+
+        changed = bool(before_commit and after_commit and before_commit != after_commit)
+        migration_message = "Database migrations were not needed because the code was already up to date."
+        reload_message = "Development server reload was not needed because the code was already up to date."
+
+        if changed:
+            migration_ok, migration_message = apply_pending_migrations()
+            if not migration_ok:
+                return JsonResponse({"ok": False, "message": migration_message, "details": message}, status=500)
+            reload_ok, reload_message = trigger_development_app_reload()
+            if not reload_ok:
+                return JsonResponse({"ok": False, "message": reload_message, "details": message}, status=500)
+
         return JsonResponse(
             {
                 "ok": True,
-                "queued": True,
-                "task_id": result.id,
-                "status_url": reverse("celery_task_status", kwargs={"task_id": result.id}),
-                "message": "Code update queued.",
+                "changed": changed,
+                "message": "Code updated, migrations applied, and app reload requested." if changed else "Code is already up to date.",
+                "details": message,
+                "migration_details": migration_message,
+                "reload_details": reload_message,
             },
-            status=202,
+            status=200,
         )
 
 

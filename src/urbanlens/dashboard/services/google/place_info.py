@@ -101,7 +101,9 @@ class GooglePlaceService:
                     cid=cid,
                 )
         except IntegrityError:
-            existing = GooglePlace.objects.get(latitude=lat, longitude=lon)
+            existing = GooglePlace.objects.filter(latitude=lat, longitude=lon).first()
+            if existing is None:
+                raise
             return self._merge_into_existing(existing, place_name=place_name, cid=cid, fetch_if_missing=fetch_if_missing)
 
     def ensure_linked(self, entity: AddressableModel) -> GooglePlace | None:

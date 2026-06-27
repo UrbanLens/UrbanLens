@@ -154,7 +154,8 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         """Badge supplying the map icon, when the icon is inherited from a badge."""
         if self.custom_icon or self.icon:
             return None
-        for badge in self.badges.exclude(kind="user").order_by("-order"):
+        badges = self.__dict__.get("badges") or self.badges
+        for badge in badges.exclude(kind="user").order_by("-order"):
             if badge.custom_icon and not badge.icon_is_overridden:
                 return badge
             if badge.effective_icon:
@@ -177,7 +178,8 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
             return self.custom_icon.url
         if self.icon:
             return self.icon
-        for badge in self.badges.exclude(kind="user").order_by("-order"):
+        badges = self.__dict__.get("badges") or self.badges
+        for badge in badges.exclude(kind="user").order_by("-order"):
             if badge.custom_icon and not badge.icon_is_overridden:
                 return badge.custom_icon.url
             icon = badge.effective_icon
@@ -225,11 +227,21 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
 
     @property
     def place_name(self) -> str | None:
-        return self.location.place_name if self.location else None
+        if not self.location:
+            return None
+        return self.location.cached_place_name or self.location.name
 
     @property
     def cached_place_name(self) -> str | None:
         return self.location.cached_place_name if self.location else None
+
+    @property
+    def country(self) -> str | None:  # type: ignore[override]
+        return self.location.country if self.location else None
+
+    @country.setter
+    def country(self, value: str | None) -> None:
+        self.__dict__["country"] = value
 
     @property
     def address(self) -> str | None:

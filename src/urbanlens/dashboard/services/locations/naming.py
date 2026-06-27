@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 
+from urbanlens.dashboard.services.google.places import GooglePlacesGateway
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
