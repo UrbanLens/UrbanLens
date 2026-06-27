@@ -223,8 +223,8 @@ def collect_celery_stats() -> InfrastructureServiceStat:
         ServiceMetric("Broker", _redact_url(str(broker_url))),
     ]
     try:
-        connection_for_read = current_app.connection_for_read()
-        connection_for_read.ensure_connection(max_retries=1)
+        with current_app.connection_for_read() as connection_for_read:
+            connection_for_read.ensure_connection(max_retries=1)
         inspect = current_app.control.inspect(timeout=1)
         ping = inspect.ping() or {}
         stats = inspect.stats() or {}
@@ -339,5 +339,4 @@ def collect_infrastructure_service_stats() -> tuple[InfrastructureServiceStat, .
         collect_postgres_stats(),
         collect_valkey_stats(),
         collect_celery_stats(),
-        collect_nginx_stats(),
     )
