@@ -1026,6 +1026,11 @@ dialog.tag-create-card.ul-dialog {
 
 .organize-badge-rows.tag-view--tree {
 
+    // Source cards stay in the DOM for HTMX swaps; tree view uses clones inside .tag-tree-root.
+    >.tag-card {
+        display: none !important;
+    }
+
     .tag-drag-handle,
     .tag-order-badge {
         display: none;

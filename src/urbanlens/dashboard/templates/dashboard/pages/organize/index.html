@@ -584,6 +584,19 @@ function applyOrgFilter(ns) {
     applyAllOrgFilters(ns);
 }
 
+function _orgVisibleCards(rows, cardSel) {
+    if (!rows) return [];
+    var inTreeView = rows.classList.contains('tag-view--tree');
+    var cards = Array.from(rows.querySelectorAll(inTreeView ? ('.tag-tree-root ' + cardSel) : cardSel));
+    return cards.filter(function(c) {
+        if (inTreeView) {
+            var treeItem = c.closest('.tag-tree-item');
+            return !treeItem || treeItem.style.display !== 'none';
+        }
+        return c.style.display !== 'none';
+    });
+}
+
 function _applyOrgFilterCore(ns) {
     var rowsId = ns === 'cat' ? 'category-rows' : (ns + '-rows');
     var rows = document.getElementById(rowsId);
@@ -599,10 +612,14 @@ function _applyOrgFilterCore(ns) {
     else if (ns === 'cat') { cardSel = '.tag-card[data-category-id]'; }
     else { cardSel = '.tag-card[data-status-id]'; }
 
-    var allCards = Array.from(rows.querySelectorAll(cardSel));
+    var inTreeView = rows.classList.contains('tag-view--tree');
+    var allCards = Array.from(rows.querySelectorAll(inTreeView ? ('.tag-tree-root ' + cardSel) : cardSel));
     var hasChildrenSet = new Set();
     if (activeChips.has('has-children')) {
-        allCards.forEach(function(c) {
+        var childSourceCards = inTreeView
+            ? Array.from(rows.querySelectorAll(cardSel))
+            : allCards;
+        childSourceCards.forEach(function(c) {
             var pAttr = ns === 'cat' ? 'categoryParents' : (ns + 'Parents');
             var parents = (c.dataset[pAttr] || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
             parents.forEach(function(pid) { hasChildrenSet.add(pid); });
@@ -629,7 +646,12 @@ function _applyOrgFilterCore(ns) {
         if (activeChips.has('has-parents') && !hasParents) show = false;
         if (activeColor && color !== activeColor) show = false;
 
-        card.style.display = show ? '' : 'none';
+        if (inTreeView) {
+            var treeItem = card.closest('.tag-tree-item');
+            (treeItem || card).style.display = show ? '' : 'none';
+        } else {
+            card.style.display = show ? '' : 'none';
+        }
     });
     document.dispatchEvent(new CustomEvent('org:filter-applied', { detail: { ns: ns } }));
 }
@@ -953,8 +975,9 @@ window._orgBulkSync = function(n, opts) {
     }
 
     function _getVisibleTagIds() {
-        return Array.from(document.querySelectorAll('#tag-rows .tag-card[data-tag-id]'))
-            .filter(function(c) { return c.style.display !== 'none' && c.querySelector('.tag-select-cb'); })
+        var rows = document.getElementById('tag-rows');
+        return _orgVisibleCards(rows, '.tag-card[data-tag-id]')
+            .filter(function(c) { return c.querySelector('.tag-select-cb'); })
             .map(function(c) { return c.dataset.tagId; });
     }
 
@@ -1393,8 +1416,9 @@ window._orgBulkSync = function(n, opts) {
     }
 
     function _getVisibleCatIds() {
-        return Array.from(document.querySelectorAll('#category-rows .tag-card[data-category-id]'))
-            .filter(function(c) { return c.style.display !== 'none' && c.querySelector('.cat-select-cb'); })
+        var rows = document.getElementById('category-rows');
+        return _orgVisibleCards(rows, '.tag-card[data-category-id]')
+            .filter(function(c) { return c.querySelector('.cat-select-cb'); })
             .map(function(c) { return c.dataset.categoryId; });
     }
 
@@ -1795,7 +1819,8 @@ window._orgBulkSync = function(n, opts) {
     }
 
     function _statusCards() {
-        return Array.from(document.querySelectorAll('#status-rows .tag-card[data-status-id]'));
+        var rows = document.getElementById('status-rows');
+        return _orgVisibleCards(rows, '.tag-card[data-status-id]');
     }
 
     function _statusBulkDeselect() {
@@ -2620,22 +2645,26 @@ window._orgBulkSync = function(n, opts) {
         var q = _orgSharedFilter.search.toLowerCase().trim();
         var activeChips = _orgSharedFilter.chips;
         var activeColor = _orgSharedFilter.color;
-        var rows = _getRows();
+        var rowsEl = document.getElementById('people-badge-rows');
+        var inTreeView = rowsEl && rowsEl.classList.contains('tag-view--tree');
+        var rows = inTreeView
+            ? Array.from(document.querySelectorAll('#people-badge-rows .tag-tree-root .tag-card[data-people-id]'))
+            : _getRows();
         var hasChildrenSet = new Set();
         if (activeChips.has('has-children')) {
-            rows.forEach(function(row) {
+            _getRows().forEach(function(row) {
                 (row.dataset.peopleParents || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean).forEach(function(pid) { hasChildrenSet.add(pid); });
             });
         }
         rows.forEach(function (row) {
             var idVal = row.dataset.peopleId;
             var name = (row.dataset.peopleName || '').toLowerCase();
-            if (q && !name.includes(q)) { row.style.display = 'none'; return; }
             var hasIcon = !!(row.dataset.peopleIcon || '');
             var color = (row.dataset.peopleColor || '').toLowerCase();
             var hasColor = !!color;
             var hasParents = (row.dataset.peopleParents || '').split(',').some(function(p) { return p.trim() !== ''; });
             var show = true;
+            if (q && !name.includes(q)) show = false;
             if (activeChips.has('has-icon') && !hasIcon) show = false;
             if (activeChips.has('no-icon') && hasIcon) show = false;
             if (activeChips.has('has-color') && !hasColor) show = false;
@@ -2643,7 +2672,12 @@ window._orgBulkSync = function(n, opts) {
             if (activeChips.has('has-children') && !hasChildrenSet.has(String(idVal))) show = false;
             if (activeChips.has('has-parents') && !hasParents) show = false;
             if (activeColor && color !== activeColor) show = false;
-            row.style.display = show ? '' : 'none';
+            if (inTreeView) {
+                var treeItem = row.closest('.tag-tree-item');
+                (treeItem || row).style.display = show ? '' : 'none';
+            } else {
+                row.style.display = show ? '' : 'none';
+            }
         });
         document.dispatchEvent(new CustomEvent('org:filter-applied', { detail: { ns: 'people' } }));
     };

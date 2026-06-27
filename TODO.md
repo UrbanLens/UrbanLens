@@ -36,6 +36,7 @@ Features planned for this release.
 * On pin details page, clicking edit, the dialog doesn't scroll when overflowing page height. [UL-215]
 * Trip Details > Adding Pin: The suggestions are only geocoded, not pin searches. [UL-227]
 * Starting map option: Remember doesn't appear to work. [UL-255]
+* Organize: Bulk edit button doesn't open dialog.
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
