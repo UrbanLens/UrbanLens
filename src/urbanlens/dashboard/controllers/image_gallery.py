@@ -103,19 +103,17 @@ class PinGalleryView(LoginRequiredMixin, View):
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
 
-        coords = _extract_gps_coords(image_file)
-        lat = coords[0] if coords else None
-        lng = coords[1] if coords else None
-
         img = Image.objects.create(
             image=image_file,
             pin=pin,
             location=pin.location,
             profile=profile,
             caption=request.POST.get("caption", "").strip() or None,
-            latitude=Decimal(str(lat)) if lat is not None else None,
-            longitude=Decimal(str(lng)) if lng is not None else None,
         )
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import process_image_upload
+
+        safely_enqueue_task(process_image_upload, img.pk)
         return JsonResponse(_image_to_json(img, request, profile), status=201)
 
 
@@ -184,18 +182,16 @@ class WikiGalleryView(LoginRequiredMixin, View):
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
 
-        coords = _extract_gps_coords(image_file)
-        lat = coords[0] if coords else None
-        lng = coords[1] if coords else None
-
         img = Image.objects.create(
             image=image_file,
             location=location,
             profile=profile,
             caption=request.POST.get("caption", "").strip() or None,
-            latitude=Decimal(str(lat)) if lat is not None else None,
-            longitude=Decimal(str(lng)) if lng is not None else None,
         )
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import process_image_upload
+
+        safely_enqueue_task(process_image_upload, img.pk)
         return JsonResponse(_image_to_json(img, request, profile), status=201)
 
 

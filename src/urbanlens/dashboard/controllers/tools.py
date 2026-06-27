@@ -10,18 +10,18 @@ import logging
 import os
 import pathlib
 import shutil
-import threading
 from typing import Any
 import uuid
 import zipfile
 
 from django.conf import settings
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.cache import cache
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import DatabaseError
 from django.http import FileResponse, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views import View
 
 logger = logging.getLogger(__name__)
@@ -82,15 +82,26 @@ def _export_error_partial(request: HttpRequest, job_id: str, message: str) -> Ht
     )
 
 
-def _schedule_cleanup(export_dir: str, job_status: ExportJobStatus | None = None) -> None:
-    def cleanup_export() -> None:
-        shutil.rmtree(export_dir, ignore_errors=True)
-        if job_status is not None:
-            job_status.delete()
+def cleanup_export_artifacts(export_dir: str, job_status: ExportJobStatus | None = None) -> None:
+    """Remove an export directory and optional cache-backed job status."""
+    shutil.rmtree(export_dir, ignore_errors=True)
+    if job_status is not None:
+        job_status.delete()
 
-    timer = threading.Timer(_EXPORT_TTL_SECONDS, cleanup_export)
-    timer.daemon = True
-    timer.start()
+
+def schedule_export_cleanup(export_dir: str, job_status: ExportJobStatus | None = None) -> None:
+    """Schedule export cleanup through Celery, falling back to immediate logging on enqueue failure."""
+    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import cleanup_export_artifacts_task
+
+    result = safely_enqueue_task(
+        cleanup_export_artifacts_task,
+        export_dir,
+        job_status.job_id if job_status is not None else None,
+        countdown=_EXPORT_TTL_SECONDS,
+    )
+    if result is None:
+        logger.warning("Unable to schedule cleanup for export directory %s", export_dir)
 
 
 # ── Per-type export helpers (run inside thread) ────────────────────────────────
@@ -250,11 +261,11 @@ def _export_trips(profile: Any, temp_dir: str) -> None:
         json.dump(rows, fh, indent=2, ensure_ascii=False)
 
 
-# ── Background export runner ────────────────────────────────────────────────────
+# ── Celery export runner ────────────────────────────────────────────────────
 
 
-def _run_export(user_id: int, export_types: list[str], export_dir: str, base_url: str) -> None:
-    """Run the export in a background thread."""
+def _run_export(user_id: int, export_types: list[str], export_dir: str, base_url: str) -> bool:
+    """Run the export from a Celery worker."""
     from django.contrib.auth import get_user_model
 
     User = get_user_model()
@@ -265,8 +276,8 @@ def _run_export(user_id: int, export_types: list[str], export_dir: str, base_url
     except (ObjectDoesNotExist, AttributeError):
         logger.exception("Export: could not load user %s", user_id)
         ExportJobStatus(os.path.basename(export_dir)).write("error", 0, "Failed to load user data.")
-        _schedule_cleanup(export_dir, ExportJobStatus(os.path.basename(export_dir)))
-        return
+        schedule_export_cleanup(export_dir, ExportJobStatus(os.path.basename(export_dir)))
+        return False
 
     temp_dir = os.path.join(export_dir, "data")
     os.makedirs(temp_dir, exist_ok=True)
@@ -284,11 +295,13 @@ def _run_export(user_id: int, export_types: list[str], export_dir: str, base_url
 
     try:
         _run_export_steps(profile, export_types, exporters, step, total_steps, export_dir=export_dir, temp_dir=temp_dir, base_url=base_url, user_id=user_id)
+        return True
     except (OSError, DatabaseError, ValueError):
         logger.exception("Export failed for user %s", user_id)
         ExportJobStatus(os.path.basename(export_dir)).write("error", 0, "Export failed. Please try again.")
+        return False
     finally:
-        _schedule_cleanup(export_dir, ExportJobStatus(os.path.basename(export_dir)))
+        schedule_export_cleanup(export_dir, ExportJobStatus(os.path.basename(export_dir)))
 
 
 def _run_export_steps(
@@ -349,14 +362,14 @@ class ToolsIndexView(LoginRequiredMixin, View):
         Returns:
             Rendered tools page.
         """
-        return render(request, "dashboard/pages/tools/index.html")
+        return render(request, "dashboard/pages/tools/index.html", {"show_backup_tools": request.user.has_perm("dashboard.view_site_admin")})
 
 
 class ExportStartView(LoginRequiredMixin, View):
-    """Start a data export job in a background thread."""
+    """Start a data export job in Celery."""
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        """Accept export parameters, spawn background thread, return progress fragment.
+        """Accept export parameters, enqueue a Celery task, return progress fragment.
 
         Args:
             request: POST with ``export_types`` list (profile|pins|comments|photos|trips).
@@ -380,14 +393,20 @@ class ExportStartView(LoginRequiredMixin, View):
         ExportJobStatus(job_id).write("pending", 0, "Preparing export…", user_id=request.user.pk)
 
         base_url = request.build_absolute_uri("/")
-        thread = threading.Thread(
-            target=_run_export,
-            args=(request.user.pk, export_types, exp_dir, base_url),
-            daemon=True,
-        )
-        thread.start()
-        
-        logger.info("Export started for user %s", request.user.pk)
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import run_user_data_export
+
+        result = safely_enqueue_task(run_user_data_export, request.user.pk, export_types, exp_dir, base_url)
+        if result is None:
+            ExportJobStatus(job_id).write("error", 0, "Export queue is unavailable. Please try again later.", user_id=request.user.pk)
+            return render(
+                request,
+                "dashboard/partials/export_progress.html",
+                {"job_id": job_id, "status": "error", "progress": 0, "message": "Export queue is unavailable. Please try again later."},
+                status=503,
+            )
+
+        logger.info("Export task %s started for user %s", result.id, request.user.pk)
 
         return render(
             request,
@@ -476,3 +495,27 @@ class ExportDownloadView(LoginRequiredMixin, View):
         response = FileResponse(fh, content_type="application/zip")
         response["Content-Disposition"] = f'attachment; filename="urbanlens_export_{today}.zip"'
         return response
+
+
+class BackupStartView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Queue a manual database backup from the admin tools page."""
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+
+    def post(self, request: HttpRequest) -> JsonResponse:
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import run_database_backup
+
+        result = safely_enqueue_task(run_database_backup)
+        if result is None:
+            return JsonResponse({"ok": False, "message": "Unable to enqueue backup task."}, status=503)
+        return JsonResponse(
+            {
+                "ok": True,
+                "task_id": result.id,
+                "status_url": reverse("celery_task_status", kwargs={"task_id": result.id}),
+                "message": "Database backup queued.",
+            },
+            status=202,
+        )

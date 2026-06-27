@@ -8,7 +8,10 @@ import os
 import time
 from typing import Any, Literal
 
+from django.conf import settings as django_settings
 from django.db import connection
+from celery import current_app
+from kombu.exceptions import KombuError
 import redis
 from redis.exceptions import RedisError
 import requests
@@ -203,6 +206,79 @@ def collect_valkey_stats() -> InfrastructureServiceStat:
         )
 
 
+def collect_celery_stats() -> InfrastructureServiceStat:
+    """Collect Celery broker and worker statistics for the admin stats page."""
+    broker_url = getattr(django_settings, "CELERY_BROKER_URL", "")
+    if not broker_url:
+        return InfrastructureServiceStat(
+            key="celery",
+            name="Celery",
+            icon="task_alt",
+            status="disabled",
+            status_label="Not configured",
+            metrics=(ServiceMetric("Status", "CELERY_BROKER_URL is not set"),),
+        )
+
+    metrics: list[ServiceMetric] = [
+        ServiceMetric("Broker", _redact_url(str(broker_url))),
+    ]
+    try:
+        with current_app.connection_for_read() as connection_for_read:
+            connection_for_read.ensure_connection(max_retries=1)
+        inspect = current_app.control.inspect(timeout=1)
+        ping = inspect.ping() or {}
+        stats = inspect.stats() or {}
+        active = inspect.active() or {}
+        reserved = inspect.reserved() or {}
+        scheduled = inspect.scheduled() or {}
+
+        worker_count = len(ping)
+        active_count = sum(len(tasks) for tasks in active.values())
+        reserved_count = sum(len(tasks) for tasks in reserved.values())
+        scheduled_count = sum(len(tasks) for tasks in scheduled.values())
+        metrics.extend(
+            [
+                ServiceMetric("Workers", str(worker_count)),
+                ServiceMetric("Active Tasks", str(active_count)),
+                ServiceMetric("Reserved Tasks", str(reserved_count)),
+                ServiceMetric("Scheduled Tasks", str(scheduled_count)),
+            ],
+        )
+        celery_versions = sorted(
+            {str(worker_stats.get("software", {}).get("celery")) for worker_stats in stats.values() if worker_stats.get("software", {}).get("celery")}
+        )
+        if celery_versions:
+            metrics.append(ServiceMetric("Version", ", ".join(celery_versions)))
+        status = "healthy" if worker_count else "unavailable"
+        return InfrastructureServiceStat(
+            key="celery",
+            name="Celery",
+            icon="task_alt",
+            status=status,
+            status_label="Workers online" if worker_count else "No workers responding",
+            metrics=tuple(metrics),
+        )
+    except (KombuError, OSError, RuntimeError):
+        logger.exception("Failed to collect Celery infrastructure stats")
+        return InfrastructureServiceStat(
+            key="celery",
+            name="Celery",
+            icon="task_alt",
+            status="unhealthy",
+            status_label="Connection error",
+            metrics=tuple(metrics),
+        )
+
+
+def _redact_url(url: str) -> str:
+    """Hide credentials in service URLs displayed to admins."""
+    if "@" not in url or "://" not in url:
+        return url
+    scheme, rest = url.split("://", 1)
+    _credentials, host = rest.split("@", 1)
+    return f"{scheme}://***@{host}"
+
+
 def collect_nginx_stats() -> InfrastructureServiceStat:
     """Collect nginx reverse-proxy health statistics.
 
@@ -239,7 +315,7 @@ def collect_nginx_stats() -> InfrastructureServiceStat:
                 ServiceMetric("Response", str(response.status_code)),
             ),
         )
-    except requests.RequestException:
+    except (requests.RequestException, OSError):
         logger.debug("nginx health check unavailable at %s", health_url, exc_info=True)
         return InfrastructureServiceStat(
             key="nginx",
@@ -257,10 +333,11 @@ def collect_infrastructure_service_stats() -> tuple[InfrastructureServiceStat, .
     """Collect health statistics for all UrbanLens infrastructure services.
 
     Returns:
-        Tuple of service stats in display order: PostgreSQL, Valkey, nginx.
+        Tuple of service stats in display order: PostgreSQL, Valkey, Celery, nginx.
     """
     return (
         collect_postgres_stats(),
         collect_valkey_stats(),
+        collect_celery_stats(),
         collect_nginx_stats(),
     )

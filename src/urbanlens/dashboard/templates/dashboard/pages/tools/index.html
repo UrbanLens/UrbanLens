@@ -102,6 +102,27 @@
             </div>
         </div>
 
+
+        {% if show_backup_tools %}
+        <div class="ul-card tools-card" id="backup-card">
+            <div class="ul-card-header">
+                <i class="material-icons">backup</i>
+                <h3>Database Backup</h3>
+            </div>
+
+            <div class="ul-card-body">
+                <p class="tools-card-desc">Queue a manual database backup. You can monitor the task from the response in your browser developer tools or the Celery worker logs.</p>
+                <div class="tools-card-actions">
+                    <button type="button" class="btn btn--primary" id="manual-backup-btn" data-url="{% url 'tools.backup.start' %}">
+                        <i class="material-icons">backup</i>
+                        <span>Run Backup</span>
+                    </button>
+                </div>
+                <div id="manual-backup-result" class="tools-card-desc" style="margin-top:1rem"></div>
+            </div>
+        </div>
+        {% endif %}
+
         {# ── Invite friend card ──────────────────────────────────────────────── #}
         <div class="ul-card tools-card" id="invite-friend-card">
             <div class="ul-card-header">
@@ -474,6 +495,27 @@
         const elt = evt.detail.elt;
         if (!elt || elt.id !== 'export-status-poll') return;
         showExportError('Network error while checking export status. Please check your connection and try again.');
+    });
+})();
+</script>
+
+<script>
+(function () {
+    var btn = document.getElementById('manual-backup-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        var result = document.getElementById('manual-backup-result');
+        result.textContent = 'Queueing backup…';
+        fetch(btn.dataset.url, {
+            method: 'POST',
+            headers: {'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''}
+        }).then(function (response) {
+            return response.json().then(function (data) { return {status: response.status, data: data}; });
+        }).then(function (payload) {
+            result.textContent = payload.data.message || (payload.status === 202 ? 'Backup queued.' : 'Backup request failed.');
+        }).catch(function () {
+            result.textContent = 'Backup request failed.';
+        });
     });
 })();
 </script>
