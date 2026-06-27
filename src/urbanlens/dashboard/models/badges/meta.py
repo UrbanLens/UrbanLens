@@ -1576,4 +1576,6 @@ COLOR_CHOICES = [
     ("#795548", "Brown"),
     ("#607D8B", "Blue Grey"),
     ("#9E9E9E", "Grey"),
+    ("#FFFFFF", "White"),
+    ("#000000", "Black"),
 ]

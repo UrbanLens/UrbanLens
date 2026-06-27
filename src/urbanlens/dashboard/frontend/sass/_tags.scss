@@ -503,6 +503,11 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
+.color-swatch[data-color="#FFFFFF"],
+.color-swatch[data-color="#ffffff"] {
+    border-color: rgba(0, 0, 0, .18);
+}
+
 .color-clear {
     background: var(--ul-grey-0) !important;
     color: $text-muted;
