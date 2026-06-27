@@ -364,7 +364,7 @@ def _safe_int(value: object, default: int = 0) -> int:
     """Parse an integer from JSON or form data."""
     if isinstance(value, int):
         return value
-    if isinstance(value, (str, float, bytes, bytearray)):
+    if isinstance(value, str | float | bytes | bytearray):
         try:
             return int(value)
         except (TypeError, ValueError):

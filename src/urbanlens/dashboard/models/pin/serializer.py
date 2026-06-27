@@ -53,7 +53,6 @@ class PinSerializer(serializers.ModelSerializer):
         pin.save()
         try:
             pin.suggest_category(append_suggestion=True)
-        except Exception:
-            # TODO: Handle specific exception type.
+        except (RuntimeError, OSError, ValueError):
             logger.warning("suggest_category failed for pin %s", pin.pk, exc_info=True)
         return pin

@@ -8,6 +8,7 @@ import math
 import re
 from typing import TYPE_CHECKING, Any
 
+from django.db import DatabaseError
 from fastkml import kml
 import requests
 from tqdm import tqdm
@@ -352,7 +353,7 @@ class GoogleMapsGateway(Gateway):
                     file_total = max(0, len(text.splitlines()) - 1)
                     parsed.append((filename, fmt, text, file_total))
                     grand_total += file_total
-            except Exception as exc:
+            except (UnicodeDecodeError, ValueError, KeyError, AttributeError) as exc:
                 logger.warning("Failed to parse '%s', skipping: %s", filename, exc)
 
         if not parsed:
@@ -420,7 +421,7 @@ class GoogleMapsGateway(Gateway):
                                     pin.location.save(update_fields=["cid"])
                             else:
                                 skipped_count += 1
-                        except Exception as exc:
+                        except (DatabaseError, ValueError, OSError) as exc:
                             logger.warning("Failed to create pin '%s': %s", pin_name, exc)
                             skipped_count += 1
 
@@ -449,8 +450,7 @@ class GoogleMapsGateway(Gateway):
                     ).first() or Badge.objects.create(profile=user_profile, name=tag_name)
                     for pin in file_pins:
                         pin.badges.add(file_tag)
-        except Exception as exc:
-            # TODO: specify exception type
+        except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
             logger.exception("Unexpected error during streaming import: %s", exc)
             yield sse({"type": "error", "message": f"Import failed unexpectedly: {exc}"})
             return
@@ -507,8 +507,7 @@ class GoogleMapsGateway(Gateway):
                     raw_pins = list[dict[str, Any]](self._csv_row_iter(text, user_profile))
                 else:
                     continue
-            except Exception as exc:
-                # TODO: specify exception type
+            except (UnicodeDecodeError, ValueError, KeyError, AttributeError) as exc:
                 logger.warning("Failed to parse '%s' for preview: %s", filename, exc)
                 continue
 
@@ -639,8 +638,7 @@ class GoogleMapsGateway(Gateway):
                                 if auto_tag:
                                     try:
                                         pin.suggest_category(append_suggestion=True)
-                                    except Exception:
-                                        # TODO: Handle specific exception type.
+                                    except (RuntimeError, OSError, ValueError):
                                         logger.warning("suggest_category failed for pin %s", pin.pk, exc_info=True)
                             else:
                                 exists_count += 1
@@ -660,8 +658,7 @@ class GoogleMapsGateway(Gateway):
                         else:
                             skipped_count += 1
 
-                    except Exception as exc:
-                        # TODO: Handle specific exception type.
+                    except (DatabaseError, ValueError, OSError) as exc:
                         logger.warning("Failed to import pin '%s': %s", pin_name, exc)
                         skipped_count += 1
 
@@ -679,7 +676,7 @@ class GoogleMapsGateway(Gateway):
                         },
                     )
 
-        except Exception as exc:
+        except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
             logger.exception("Unexpected error during preview import: %s", exc)
             yield sse({"type": "error", "message": f"Import failed unexpectedly: {exc}"})
             return
@@ -715,7 +712,7 @@ class GoogleMapsGateway(Gateway):
                     )
 
             logger.debug("Converted %s pins from KML file to dicts.", len(pins))
-        except Exception as e:
+        except (ValueError, AttributeError, UnicodeDecodeError) as e:
             logger.exception("Failed to import pins from KML: %s", str(e))
             raise
 
@@ -753,7 +750,7 @@ class GoogleMapsGateway(Gateway):
 
             logger.info("Converted %s pins from JSON file to dicts.", len(pins))
 
-        except Exception as e:
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.exception("Failed to import pins from JSON: %s", str(e))
             raise
 
@@ -785,7 +782,7 @@ class GoogleMapsGateway(Gateway):
                 )
 
             logger.info("Converted %s pins from CSV file to dicts.", len(pins))
-        except Exception as e:
+        except (csv.Error, KeyError, ValueError) as e:
             logger.exception("Failed to import pins from CSV: %s", str(e))
             raise
 

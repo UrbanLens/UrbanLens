@@ -237,6 +237,14 @@ class SiteAdminStatsViewContextTests(TestCase):
         self.assertIn("django_version", ctx)
         self.assertIn("server_time", ctx)
 
+    def test_context_has_infrastructure_services(self) -> None:
+        ctx = self._get_context()
+        self.assertIn("infrastructure_services", ctx)
+        services = ctx["infrastructure_services"]
+        self.assertEqual(len(services), 3)
+        self.assertEqual([service.key for service in services], ["postgres", "valkey", "nginx"])
+        self.assertEqual(services[0].status, "healthy")
+
     def test_context_has_app_software_info(self) -> None:
         ctx = self._get_context()
         self.assertIn("app_version", ctx)

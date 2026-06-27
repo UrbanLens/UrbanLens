@@ -283,7 +283,7 @@ class Db:
 
             return process.pid
 
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError, ValueError) as e:
             logger.exception("Error backing up database: %s", e)
 
         return -1

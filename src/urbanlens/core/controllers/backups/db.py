@@ -117,7 +117,7 @@ class DatabaseBackup:
             try:
                 self.create_backup_dir()
                 result = self.run()
-            except Exception as e:
+            except (OSError, subprocess.SubprocessError) as e:
                 logger.exception("Error occurred while scheduling database backup: %s", e)
                 return False
 

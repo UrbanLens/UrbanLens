@@ -8,7 +8,8 @@ from importlib.metadata import PackageNotFoundError, version as pkg_version
 import logging
 import os
 from pathlib import Path
-import subprocess
+import shutil
+import subprocess  # nosec B404
 import sys
 import tomllib
 
@@ -21,6 +22,7 @@ PYPROJECT_PATH = DEFAULT_ROOT.parent / "pyproject.toml"
 _GIT_CWD = DEFAULT_ROOT.parent
 MANAGE_PY = DEFAULT_ROOT / "urbanlens" / "manage.py"
 _DJANGO_CWD = DEFAULT_ROOT.parent
+_GIT_EXECUTABLE: str = shutil.which("git") or "git"
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,8 +78,8 @@ def _git_rev_parse(revision: str) -> str | None:
         Full commit hash, or ``None`` when git is unavailable.
     """
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", revision],
+        result = subprocess.run(  # nosec B603
+            [_GIT_EXECUTABLE, "rev-parse", revision],
             capture_output=True,
             text=True,
             check=True,
@@ -120,8 +122,8 @@ def get_current_git_branch() -> str | None:
         Branch name such as ``main``, or ``None`` when git is unavailable.
     """
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        result = subprocess.run(  # nosec B603
+            [_GIT_EXECUTABLE, "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True,
             text=True,
             check=True,
@@ -142,8 +144,8 @@ def _git_fetch() -> bool:
         ``True`` when ``git fetch`` completed successfully.
     """
     try:
-        subprocess.run(
-            ["git", "fetch", "--quiet", "--prune"],
+        subprocess.run(  # nosec B603
+            [_GIT_EXECUTABLE, "fetch", "--quiet", "--prune"],
             capture_output=True,
             text=True,
             check=True,
@@ -181,8 +183,8 @@ def _count_commits_ahead(base_commit: str, head_commit: str) -> int | None:
         return 0
 
     try:
-        result = subprocess.run(
-            ["git", "rev-list", "--count", f"{base_commit}..{head_commit}"],
+        result = subprocess.run(  # nosec B603
+            [_GIT_EXECUTABLE, "rev-list", "--count", f"{base_commit}..{head_commit}"],
             capture_output=True,
             text=True,
             check=True,
@@ -205,7 +207,7 @@ def apply_pending_migrations() -> tuple[bool, str]:
         ``(True, message)`` when migrations completed; otherwise ``(False, message)``.
     """
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603
             [sys.executable, str(MANAGE_PY), "migrate", "--noinput"],
             capture_output=True,
             text=True,
@@ -253,8 +255,8 @@ def pull_latest_git_code() -> tuple[bool, str]:
         ``(False, message)`` with a safe, user-facing failure reason.
     """
     try:
-        result = subprocess.run(
-            ["git", "pull", "--ff-only"],
+        result = subprocess.run(  # nosec B603
+            [_GIT_EXECUTABLE, "pull", "--ff-only"],
             capture_output=True,
             text=True,
             check=False,

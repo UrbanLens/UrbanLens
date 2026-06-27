@@ -5,6 +5,7 @@ import re
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
+from django.db import DatabaseError
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -27,7 +28,7 @@ def add_site_settings(request: HttpRequest) -> dict[str, str]:
         from urbanlens.dashboard.models.site_settings import SiteSettings
         site = SiteSettings.get_current()
         site_title = site.app_title
-    except Exception:
+    except (ImportError, DatabaseError):
         site_title = "UrbanLens"
 
     return {
@@ -51,8 +52,7 @@ def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
         from urbanlens.dashboard.models.site_settings import SiteSettings
 
         show = SiteSettings.get_current().show_dev_admin_features(request.user)
-    except Exception:
-        # TODO: Is this exception expected? If not, remove this. If yes, catch the specific exception type.
+    except (ImportError, DatabaseError):
         logger.exception("Error adding dev toolbar")
 
     theme_mode = ""
@@ -61,8 +61,7 @@ def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
         try:
             theme_mode = request.user.profile.theme_mode
             map_dark_mode = request.user.profile.map_dark_mode
-        except Exception:
-            # TODO: Is this exception expected? If not, remove this. If yes, catch the specific exception type.
+        except AttributeError:
             theme_mode = ""
             map_dark_mode = ""
 
@@ -89,5 +88,5 @@ def add_feature_access(request: HttpRequest) -> dict[str, bool]:
         from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 
         return {"can_use_ai_features": user_has_feature(request.user, SiteFeature.AI)}
-    except Exception:
+    except (ImportError, DatabaseError):
         return {"can_use_ai_features": False}

@@ -40,7 +40,7 @@ def _extract_gps_coords(image_file: IO[bytes]) -> tuple[float, float] | None:
     """Return (latitude, longitude) from EXIF GPS tags, or None if not present."""
     try:
         gps_ifd = _get_gps_ifd(image_file)
-    except Exception as exc:
+    except (OSError, ValueError, AttributeError) as exc:
         logger.debug("EXIF GPS extraction failed: %s", exc)
         return None
     finally:

@@ -18,6 +18,8 @@ import zipfile
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
+from django.core.exceptions import ObjectDoesNotExist
+from django.db import DatabaseError
 from django.http import FileResponse, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views import View
@@ -260,7 +262,7 @@ def _run_export(user_id: int, export_types: list[str], export_dir: str, base_url
     try:
         user = User.objects.select_related("profile").get(pk=user_id)
         profile = user.profile
-    except Exception:
+    except (ObjectDoesNotExist, AttributeError):
         logger.exception("Export: could not load user %s", user_id)
         ExportJobStatus(os.path.basename(export_dir)).write("error", 0, "Failed to load user data.")
         _schedule_cleanup(export_dir, ExportJobStatus(os.path.basename(export_dir)))
@@ -282,7 +284,7 @@ def _run_export(user_id: int, export_types: list[str], export_dir: str, base_url
 
     try:
         _run_export_steps(profile, export_types, exporters, step, total_steps, export_dir=export_dir, temp_dir=temp_dir, base_url=base_url, user_id=user_id)
-    except Exception:
+    except (OSError, DatabaseError, ValueError):
         logger.exception("Export failed for user %s", user_id)
         ExportJobStatus(os.path.basename(export_dir)).write("error", 0, "Export failed. Please try again.")
     finally:

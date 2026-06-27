@@ -36,12 +36,12 @@ def _refresh_cached_pin(pin_id: int, profile_id: int) -> None:
         except (Profile.DoesNotExist, Pin.DoesNotExist):
             try:
                 MapPinCache(Profile(pk=profile_id)).delete_pin(pin_id)
-            except Exception:
+            except (ConnectionError, OSError, RuntimeError):
                 logger.debug("Unable to delete missing pin %s from map cache", pin_id, exc_info=True)
             return
         try:
             MapPinCache(profile).upsert_pin(pin)
-        except Exception:
+        except (ConnectionError, OSError, RuntimeError):
             logger.warning("Unable to refresh cached map pin %s", pin_id, exc_info=True)
 
     transaction.on_commit(_run)
@@ -54,7 +54,7 @@ def _delete_cached_pin(pin_id: int, profile_id: int) -> None:
 
         try:
             MapPinCache(Profile(pk=profile_id)).delete_pin(pin_id)
-        except Exception:
+        except (ConnectionError, OSError, RuntimeError):
             logger.warning("Unable to delete cached map pin %s", pin_id, exc_info=True)
 
     transaction.on_commit(_run)

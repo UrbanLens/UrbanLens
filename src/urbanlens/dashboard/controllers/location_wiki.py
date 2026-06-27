@@ -6,6 +6,7 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.gis.geos import GEOSException
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -199,7 +200,7 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
             from django.contrib.gis.geos import GEOSGeometry
 
             geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
-        except Exception as exc:
+        except (GEOSException, ValueError) as exc:
             logger.exception("Invalid polygon GeoJSON: %s", exc)
             return JsonResponse({"error": "Invalid polygon geometry"}, status=400)
 
@@ -210,7 +211,7 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
         max_km2 = SiteSettings.get_current().max_bbox_area_km2
         try:
             area_km2 = geom.transform(6933, clone=True).area / 1_000_000
-        except Exception:
+        except GEOSException:
             area_km2 = 0.0
         if area_km2 > max_km2:
             return JsonResponse(

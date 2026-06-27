@@ -125,8 +125,7 @@ class AddressableModel(Model):
                 self.latitude,
                 self.longitude,
             )
-        except Exception as exc:
-            # TODO: Catch specific exception type
+        except (OSError, ValueError) as exc:
             logger.debug("Google place-name lookup failed for location %s: %s", self.pk, exc)
             result = None
         if not result:

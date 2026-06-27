@@ -4,67 +4,78 @@
 .dev-toolbar {
     // Hidden on phones/tablets; dev tooling is desktop-only.
     display: none;
-    position: fixed;
-    bottom: 3rem;
-    left: 1rem;
-    z-index: 10050;
-    min-width: 10rem;
-    max-width: 16rem;
-    border-radius: 10px;
-    border: 1px solid var(--ul-border);
-    background: var(--ul-grey-9);
-    box-shadow: var(--ul-shadow-lg);
-    font-size: 0.8125rem;
-    color: var(--ul-text);
-    overflow: hidden;
-    transition:
-        left 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-        top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-        opacity 0.25s ease;
 
-    &.dev-toolbar--no-transition,
-    &.dev-toolbar--dragging {
-        transition: none;
-    }
+}
 
-    &.dev-toolbar--position-animating {
-        pointer-events: none;
-    }
-
-    &[data-collapsed='true'] {
-        bottom: 1rem;
-        left: 8rem;
-        min-width: 0;
-        opacity: 0.5;
-
-        .dev-toolbar__chevron {
-            transform: rotate(-90deg);
+@include up($breakpoint-sm) {
+    .dev-toolbar {
+        position: fixed;
+        bottom: 3rem;
+        left: 1rem;
+        z-index: 10050;
+        min-width: 10rem;
+        max-width: 16rem;
+        border-radius: 10px;
+        border: 1px solid var(--ul-border);
+        background: var(--ul-grey-9);
+        box-shadow: var(--ul-shadow-lg);
+        font-size: 0.8125rem;
+        color: var(--ul-text);
+        overflow: hidden;
+        opacity: 0.95;
+        transition:
+            left 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+            top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+            opacity 0.25s ease;
+    
+        &.dev-toolbar--no-transition,
+        &.dev-toolbar--dragging {
+            transition: none;
         }
-
-        .dev-toolbar__header {
-            border-bottom: 0;
-        }
-
-        .dev-toolbar__reset-position {
-            display: none;
-        }
-
-        .dev-toolbar__body {
-            max-height: 0;
-            opacity: 0;
-            padding-top: 0;
-            padding-bottom: 0;
+    
+        &.dev-toolbar--position-animating {
             pointer-events: none;
         }
-    }
+    
+        &[data-collapsed='true'] {
+            bottom: 1rem;
+            left: 8rem;
+            min-width: 0;
+            opacity: 0.5;
+    
+            .dev-toolbar__chevron {
+                transform: rotate(-90deg);
+            }
+    
+            .dev-toolbar__header {
+                border-bottom: 0;
+            }
+    
+            .dev-toolbar__reset-position {
+                display: none;
+            }
+    
+            .dev-toolbar__body {
+                max-height: 0;
+                opacity: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+                pointer-events: none;
+            }
+        }
+    
+        &.dev-toolbar--dragging {
+            user-select: none;
+            cursor: grabbing;
+        }
+    
+        @include up($breakpoint-sm) {
+            display: block;
+        }
 
-    &.dev-toolbar--dragging {
-        user-select: none;
-        cursor: grabbing;
-    }
-
-    @include up($breakpoint-sm) {
-        display: block;
+        &:hover {
+            opacity: 1;
+        }
     }
 }
 

@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
+from django.db import DatabaseError
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
@@ -208,7 +209,7 @@ def import_location_history_streaming(
                         pin.last_visited = visit["visited_at"]
                         pin.save(update_fields=["last_visited"])
                     matched += 1
-                except Exception as exc:
+                except DatabaseError as exc:
                     logger.warning("Failed to save visit for pin %s: %s", pin.id, exc)
                     skipped += 1
             else:

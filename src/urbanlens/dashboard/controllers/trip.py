@@ -1024,7 +1024,7 @@ class TripLocationSearchView(LoginRequiredMixin, View):
                             "type": "geocoded",
                         },
                     )
-        except Exception as exc:
+        except (ImportError, OSError, ValueError) as exc:
             logger.debug("Nominatim geocoding failed for %r: %s", q, exc)
 
         return JsonResponse({"results": coordinate_results + pin_results + db_results + geocoded_results})

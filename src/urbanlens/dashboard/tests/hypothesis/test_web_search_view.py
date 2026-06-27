@@ -29,7 +29,7 @@ def _extract_domain(url: str) -> str:
     """Mirror the domain-extraction logic in PinController.web_search."""
     try:
         return urlparse(url).netloc.removeprefix("www.")
-    except Exception:
+    except (ValueError, AttributeError):
         return ""
 
 

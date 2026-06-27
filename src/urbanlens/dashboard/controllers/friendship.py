@@ -97,7 +97,7 @@ def notify_friend_request(from_profile: Profile, to_profile: Profile) -> None:
     """
     try:
         pref = to_profile.notification_preferences.friend_request
-    except Exception:
+    except AttributeError:
         pref = DeliveryPreference.SITE
 
     if pref == DeliveryPreference.NONE:

@@ -425,7 +425,7 @@ class LLMGateway[Response](ABC):
             if match := re.search(r"[<\[]ANSWER:?[>\]](.*?)[<\[]([/\\]|END\s*)ANSWER[>\]]", message_content, re.DOTALL):
                 return match.group(1).strip()
             logger.error('No ANSWER in response from AI model "%s": Response: %s', self.model, message_content)
-        except Exception as e:
+        except (re.error, AttributeError) as e:
             logger.exception(
                 "Error parsing answer from response for model '%s'. Respoonse: %s\nError: %s",
                 self.model,

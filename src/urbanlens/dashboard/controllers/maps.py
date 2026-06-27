@@ -5,6 +5,7 @@ from typing import Any
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import DatabaseError
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -150,8 +151,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if user_has_feature(request.user, SiteFeature.AI):
                 try:
                     pin.suggest_category(append_suggestion=True)
-                except Exception:
-                    # TODO: Handle specific exception type.
+                except (RuntimeError, OSError, ValueError):
                     logger.warning("suggest_category failed for pin %s", pin.pk, exc_info=True)
 
             response = {"ok": True, "pin_slug": pin.slug or str(pin.uuid)}
@@ -173,7 +173,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             from django.http import JsonResponse
 
             return JsonResponse(response)
-        except Exception as e:
+        except (ValueError, KeyError, DatabaseError) as e:
             logger.exception("Failed to create pin: %s", e)
             return HttpResponse(f"Error: {e!s}", status=400)
 
@@ -238,8 +238,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     bbox_poly = Polygon.from_bbox((west, south, east, north))
                     bbox_poly.srid = 4326
                     query = query.filter(point__within=bbox_poly)
-            except Exception as e:
-                # TODO: Handle specific exception type.
+            except (ValueError, TypeError) as e:
                 logger.warning("Invalid bbox parameter: %s -> %s", bbox_str, e)
 
         cursor = _safe_positive_int(request.GET.get("cursor"))
@@ -394,7 +393,7 @@ def _create_location_with_canonical_name(lat: float, lon: float) -> Location:
         result = GoogleGeocodingGateway(api_key=app_settings.google_maps_api_key).get_place_name(lat, lon)
         if result and result.lower() not in {"no information available", "dropped pin", "null", "none", ""}:
             canonical_name = result.strip()
-    except Exception:
+    except (OSError, ValueError):
         logger.warning("Could not fetch canonical place name for (%s, %s); using placeholder", lat, lon)
 
     return Location.objects.create(

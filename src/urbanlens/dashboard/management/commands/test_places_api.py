@@ -204,7 +204,7 @@ class Command(BaseCommand):
         else:
             try:
                 gateway = GoogleGeocodingGateway(api_key=gateway_key)
-            except Exception as exc:
+            except (TypeError, ValueError) as exc:
                 print(f"  [FAIL] Could not instantiate GoogleGeocodingGateway: {exc}\n")
                 gateway = None
 
@@ -217,7 +217,7 @@ class Command(BaseCommand):
                         print(f"  [PASS] Resolved to ({lat}, {lon})")
                     else:
                         print("  [FAIL] Returned (None, None) - CID not in Places database or key rejected")
-                except Exception as exc:
+                except (OSError, ValueError) as exc:
                     print(f"  [FAIL] Exception: {exc}")
                 print()
 
@@ -230,7 +230,7 @@ class Command(BaseCommand):
                         print(f"  [PASS] Resolved to ({lat}, {lon})")
                     else:
                         print("  [FAIL] Returned (None, None) - both CID lookup and name geocoding failed")
-                except Exception as exc:
+                except (OSError, ValueError) as exc:
                     print(f"  [FAIL] Exception: {exc}")
                 print()
 

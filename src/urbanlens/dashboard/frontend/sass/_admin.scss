@@ -450,6 +450,54 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     color: var(--ul-grey-6);
 }
 
+.stats-services-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.stats-service-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    flex-wrap: wrap;
+}
+
+.stats-service-card__title {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+}
+
+.stats-service-status {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: .78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+
+    .material-icons {
+        font-size: 1rem !important;
+    }
+
+    &--healthy {
+        color: $ui-green-600;
+    }
+
+    &--unhealthy {
+        color: $ui-red-500;
+    }
+
+    &--unavailable,
+    &--disabled {
+        color: var(--ul-grey-6);
+    }
+}
+
 .stats-timestamp {
     font-size: .8rem;
     color: var(--ul-grey-6);

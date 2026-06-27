@@ -9,6 +9,7 @@ from uuid import uuid4
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import DatabaseError
 from django.db.models import (
     CASCADE,
     SET_NULL,
@@ -330,8 +331,7 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
                 if save:
                     self.save()
                 return category
-        except Exception as e:
-            # TODO: Catch specific exception type
+        except DatabaseError as e:
             logger.exception("failed to add category %s to pin -> %s", category_name, e)
         return None
 

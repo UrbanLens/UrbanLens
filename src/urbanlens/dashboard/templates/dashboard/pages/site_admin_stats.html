@@ -306,6 +306,44 @@
         </div>
     </div>
 
+    {# ── Infrastructure services ──────────────────────────────────────────── #}
+    <div class="stats-services-grid">
+        {% for service in infrastructure_services %}
+        <div class="site-admin-card ul-section card stats-service-card">
+            <div class="card-header stats-service-card__header">
+                <div class="stats-service-card__title">
+                    <i class="material-icons">{{ service.icon }}</i>
+                    <span>{{ service.name }}</span>
+                </div>
+                <span class="stats-service-status stats-service-status--{{ service.status }}">
+                    {% if service.status == "healthy" %}
+                    <i class="material-icons">check_circle</i>
+                    {% elif service.status == "unhealthy" %}
+                    <i class="material-icons">error</i>
+                    {% elif service.status == "disabled" %}
+                    <i class="material-icons">remove_circle_outline</i>
+                    {% else %}
+                    <i class="material-icons">help_outline</i>
+                    {% endif %}
+                    {{ service.status_label }}
+                </span>
+            </div>
+            {% if service.metrics %}
+            <div class="stats-health-grid">
+                {% for metric in service.metrics %}
+                <div class="stats-health-item">
+                    <div>
+                        <div class="stats-health-value">{{ metric.value }}</div>
+                        <div class="stats-health-label">{{ metric.label }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
     {# ── Server health ─────────────────────────────────────────────────────── #}
     <div class="site-admin-card ul-section card">
         <div class="card-header">

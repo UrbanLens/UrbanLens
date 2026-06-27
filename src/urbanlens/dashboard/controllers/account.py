@@ -15,6 +15,7 @@ from django.contrib.auth.views import LoginView
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
+from django.db import DatabaseError
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
@@ -474,7 +475,7 @@ def _process_pending_invitations(user: User, invite_token: str | None = None) ->
         profile, _ = Profile.objects.get_or_create(user=user)
         for invitation in _collect_pending_invitations(user, invite_token):
             _apply_pending_invitation(invitation, profile)
-    except Exception:
+    except (AttributeError, DatabaseError):
         logger.exception("Error processing pending invitations for %s", user.email)
 
 

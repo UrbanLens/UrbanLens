@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
+from django.db import DatabaseError
+
 
 @runtime_checkable
 class SearchGateway(Protocol):
@@ -25,7 +27,7 @@ def get_search_gateway() -> SearchGateway:
 
     try:
         provider = SiteSettings.get_current().search_provider
-    except Exception:
+    except (ImportError, DatabaseError):
         provider = SearchProviderChoice.BRAVE
 
     if provider == SearchProviderChoice.GOOGLE:

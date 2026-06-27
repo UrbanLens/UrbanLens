@@ -182,7 +182,7 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
                 loc = results[0]["geometry"]["location"]
                 return JsonResponse({"lat": loc["lat"], "lng": loc["lng"]})
             logger.warning("Google geocoding returned no results for %r (status: %s)", address, result.get("status"))
-    except Exception:
+    except (ImportError, OSError, ValueError):
         logger.warning("Google geocoding unavailable for %r", address, exc_info=True)
 
     # Fall back to Nominatim (OpenStreetMap) - no API key required.
@@ -193,7 +193,7 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
         location = geolocator.geocode(address, timeout=5)
         if location:
             return JsonResponse({"lat": location.latitude, "lng": location.longitude})
-    except Exception:
+    except (ImportError, OSError, ValueError):
         logger.warning("Nominatim geocoding failed for %r", address, exc_info=True)
 
     return JsonResponse({"error": "Location not found."}, status=404)

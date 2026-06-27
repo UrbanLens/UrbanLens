@@ -112,7 +112,7 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
             body = response.choices[0].message.content
             self.receive_tokens(body)
             logger.debug("AI Response: %s", body)
-        except Exception as e:
+        except (IndexError, AttributeError) as e:
             logger.exception("Error retrieving response: %s", e)
             return None
 

@@ -326,14 +326,14 @@ class GoogleGeocodingGateway(Gateway):
                     lat, lon = self._decode_s2_cell(s2_hex)
                     if lat is not None and lon is not None:
                         return lat, lon
-                except Exception as exc:
+                except (ValueError, OSError) as exc:
                     logger.warning("S2 cell decode failed for %s: %s", url, exc)
 
                 try:
                     lat, lon = self.get_coordinates_by_cid(cid)
                     if lat is not None and lon is not None:
                         return lat, lon
-                except Exception as exc:
+                except (ValueError, OSError) as exc:
                     logger.warning("CID lookup failed for %s: %s", url, exc)
 
             # Fall back to geocoding by place name.

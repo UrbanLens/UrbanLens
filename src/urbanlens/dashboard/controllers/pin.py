@@ -332,7 +332,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             search_gateway = get_search_gateway()
             query = _build_pin_search_query(pin)
             search_results = search_gateway.search(query)
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.exception("Unable to contact web search API: %s", e)
             return render(
                 request,
@@ -343,7 +343,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         for r in search_results:
             try:
                 r["domain"] = urlparse(r.get("link", "")).netloc.removeprefix("www.")
-            except Exception:
+            except (ValueError, AttributeError):
                 r["domain"] = ""
             r["date_display"] = _format_search_date(r.get("date"))
 
@@ -405,7 +405,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             google_maps_gateway = GoogleMapsGateway(api_key=settings.google_street_view_api_key or "")
             image_bytes, capture_date = google_maps_gateway.get_street_view(lat, lng)
             image_b64 = base64.b64encode(image_bytes).decode("ascii")
-        except Exception as exc:
+        except (OSError, ValueError, RuntimeError) as exc:
             logger.warning("Street view unavailable for pin %s: %s", kwargs.get("pin_slug"), exc)
             return render(request, "dashboard/pages/location/street_view.html", {"error": "Street view unavailable."})
 
@@ -461,7 +461,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         for uploaded_file in uploaded_files:
             try:
                 data = uploaded_file.read()
-            except Exception as exc:
+            except OSError as exc:
                 return JsonResponse(
                     {"error": f"Failed to read {uploaded_file.name}: {exc}"},
                     status=400,
@@ -530,7 +530,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         for uploaded_file in uploaded_files:
             try:
                 data = uploaded_file.read()
-            except Exception as exc:
+            except OSError as exc:
                 return JsonResponse({"error": f"Failed to read {uploaded_file.name}: {exc}"}, status=400)
 
             if is_archive(data):

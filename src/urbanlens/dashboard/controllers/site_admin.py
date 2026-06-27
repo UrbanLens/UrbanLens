@@ -13,6 +13,7 @@ import time
 import django
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.views import redirect_to_login
+from django.db import DatabaseError
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -365,14 +366,14 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         try:
             from urbanlens.dashboard.models.reviews.model import Review
             total_reviews = Review.objects.count()
-        except Exception:
+        except (ImportError, DatabaseError):
             total_reviews = None
 
         try:
             from urbanlens.dashboard.models.trips.model import Trip
             total_trips = Trip.objects.count()
             new_trips_30d = Trip.objects.filter(created__gte=thirty_days_ago).count()
-        except Exception:
+        except (ImportError, DatabaseError):
             total_trips = None
             new_trips_30d = None
 
@@ -400,6 +401,7 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             get_git_commit_at_start,
             get_git_update_status,
         )
+        from urbanlens.dashboard.services.infrastructure_stats import collect_infrastructure_service_stats
 
         python_version = sys.version.split()[0]
         django_version = django.__version__
@@ -447,6 +449,7 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 SiteSettings.get_current().show_dev_admin_features(request.user)
                 and git_update.has_newer_commits
             ),
+            "infrastructure_services": collect_infrastructure_service_stats(),
             "server_time": now,
         }
         return render(request, "dashboard/pages/site_admin_stats.html", context)

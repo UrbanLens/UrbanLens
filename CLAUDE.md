@@ -22,7 +22,7 @@ the full path to the venv executable:
 
 ```powershell
 .venv_windows\Scripts\python.exe  # Python interpreter
-.venv_windows\Scripts\ruff.exe    # Linter (works on Windows)
+.venv_windows\Scripts\ruff.exe --fix # Linter (works on Windows)
 .venv_windows\Scripts\mypy.exe    # Type checker (crashes on Windows - use Docker)
 .venv_windows\Scripts\pytest.exe  # Tests (crashes on Windows - use Docker)
 ```
@@ -56,6 +56,8 @@ bun run build   # TypeScript/JSX → src/urbanlens/dashboard/frontend/static/das
 ```
 Note: `migrations/`, `settings/`, `tests/`, and `__init__.py` are excluded from ruff by the
 config in `pyproject.toml`.
+
+Always run it with --fix, so you don't waste time looking at minor issues that ruff can address on its own.
 
 **Syntax checking a single file - works on Windows:**
 ```powershell

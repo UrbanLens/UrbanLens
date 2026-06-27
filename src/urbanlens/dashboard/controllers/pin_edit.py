@@ -6,6 +6,7 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import DatabaseError
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -119,7 +120,7 @@ def _ensure_location_address(location) -> None:
 
         if update_fields:
             location.save(update_fields=update_fields)
-    except Exception:
+    except (ImportError, OSError, ValueError, DatabaseError):
         logger.exception("Reverse geocoding failed for location pk=%s", getattr(location, "pk", None))
 
 

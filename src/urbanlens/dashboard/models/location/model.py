@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from django.contrib.gis.db.models import PointField, PolygonField
 from django.contrib.gis.geos import Point, Polygon
+from django.db import DatabaseError
 from django.db.models import Index, ManyToManyField, UUIDField
 from django.db.models.fields import CharField, DateField, DecimalField, SlugField, TextField
 from django.utils.text import slugify
@@ -149,7 +150,7 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
                 if save:
                     self.save()
                 return category
-        except Exception as e:
+        except DatabaseError as e:
             logger.exception("failed to add category %s to location -> %s", category_name, e)
         return None
 

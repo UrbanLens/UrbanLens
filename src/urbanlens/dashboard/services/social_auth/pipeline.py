@@ -126,7 +126,7 @@ def fetch_and_save_avatar(
 
     try:
         profile = user.profile
-    except Exception:
+    except AttributeError:
         logger.warning("No profile found for user %s; skipping avatar fetch", user.pk)
         return
 
@@ -171,7 +171,7 @@ def mark_new_user_onboarding(
         profile.profile_setup_complete = False
         profile.save(update_fields=["profile_setup_complete"])
         logger.debug("Marked onboarding incomplete for new SSO user %s", user.username)
-    except Exception:
+    except AttributeError:
         logger.warning("Could not mark onboarding for new SSO user pk=%s", getattr(user, "pk", "?"))
 
 
@@ -202,7 +202,7 @@ def save_discord_social_link(
 
     try:
         profile = user.profile
-    except Exception:
+    except AttributeError:
         logger.warning("No profile found for user %s; skipping Discord social link", user.pk)
         return
 
