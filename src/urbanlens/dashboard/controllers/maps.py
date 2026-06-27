@@ -149,10 +149,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 
             if user_has_feature(request.user, SiteFeature.AI):
-                try:
-                    pin.suggest_category(append_suggestion=True)
-                except (RuntimeError, OSError, ValueError):
-                    logger.warning("suggest_category failed for pin %s", pin.pk, exc_info=True)
+                from urbanlens.dashboard.services.celery import safely_enqueue_task
+                from urbanlens.dashboard.tasks import suggest_pin_category
+
+                safely_enqueue_task(suggest_pin_category, pin.pk)
 
             response = {"ok": True, "pin_slug": pin.slug or str(pin.uuid)}
             # When a coordinate falls inside multiple bounding boxes, tell the

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from uuid import uuid4
+import os
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import SET_NULL, CheckConstraint, FloatField, ForeignKey, IntegerField, Q, UUIDField
@@ -143,6 +144,27 @@ class SiteSettings(abstract.Model):
         validators=[MinValueValidator(1), MaxValueValidator(1440)],
     )
 
+
+    # --- Database backups ---
+
+    backup_enabled = BooleanField(
+        default=os.getenv("UL_BACKUP_ENABLED", "True").lower() in ("true", "1", "yes"),
+        help_text="Whether scheduled database backups are enabled.",
+        verbose_name="Backups enabled",
+    )
+    backup_frequency_hours = IntegerField(
+        default=int(os.getenv("UL_BACKUP_FREQUENCY_HOURS", "24")),
+        help_text="Minimum number of hours between scheduled database backups.",
+        verbose_name="Backup frequency (hours)",
+        validators=[MinValueValidator(1), MaxValueValidator(24 * 30)],
+    )
+    backup_retention = IntegerField(
+        default=int(os.getenv("UL_BACKUP_RETENTION", "30")),
+        help_text="Number of backup files to retain.",
+        verbose_name="Backup retention",
+        validators=[MinValueValidator(1), MaxValueValidator(1000)],
+    )
+
     # --- Bootstrap admin ---
 
     bootstrap_admin_user = ForeignKey(
@@ -228,4 +250,6 @@ class SiteSettings(abstract.Model):
             CheckConstraint(condition=Q(max_trip_members__lte=100), name="max_trip_members_lte_100"),
             CheckConstraint(condition=Q(login_max_attempts__gte=0), name="login_max_attempts_gte_0"),
             CheckConstraint(condition=Q(login_lockout_minutes__gte=1), name="login_lockout_minutes_gte_1"),
+            CheckConstraint(condition=Q(backup_frequency_hours__gte=1), name="backup_frequency_hours_gte_1"),
+            CheckConstraint(condition=Q(backup_retention__gte=1), name="backup_retention_gte_1"),
         ]

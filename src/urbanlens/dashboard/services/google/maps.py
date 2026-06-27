@@ -636,10 +636,10 @@ class GoogleMapsGateway(Gateway):
                             if created:
                                 created_count += 1
                                 if auto_tag:
-                                    try:
-                                        pin.suggest_category(append_suggestion=True)
-                                    except (RuntimeError, OSError, ValueError):
-                                        logger.warning("suggest_category failed for pin %s", pin.pk, exc_info=True)
+                                    from urbanlens.dashboard.services.celery import safely_enqueue_task
+                                    from urbanlens.dashboard.tasks import suggest_pin_category
+
+                                    safely_enqueue_task(suggest_pin_category, pin.pk)
                             else:
                                 exists_count += 1
 

@@ -150,6 +150,40 @@
         </form>
     </div>
 
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-icons">backup</i>
+            <span>Database Backups</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="backup-enabled">Scheduled backups</label>
+                <p class="form-help">Enable or disable automatic database backups. Defaults come from <code>UL_BACKUP_ENABLED</code>.</p>
+                <select name="backup_enabled" id="backup-enabled">
+                    <option value="1"{% if settings.backup_enabled %} selected{% endif %}>Enabled</option>
+                    <option value="0"{% if not settings.backup_enabled %} selected{% endif %}>Disabled</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="backup-frequency-hours">Backup frequency (hours)</label>
+                <p class="form-help">Minimum hours between scheduled backups. Defaults to <code>UL_BACKUP_FREQUENCY_HOURS</code>.</p>
+                <input type="number" name="backup_frequency_hours" id="backup-frequency-hours"
+                       value="{{ settings.backup_frequency_hours }}" min="1" max="720" step="1">
+            </div>
+            <div class="form-row">
+                <label for="backup-retention">Backups to retain</label>
+                <p class="form-help">Number of backup files to keep before pruning older files. Defaults to <code>UL_BACKUP_RETENTION</code>.</p>
+                <input type="number" name="backup_retention" id="backup-retention"
+                       value="{{ settings.backup_retention }}" min="1" max="1000" step="1">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
     <div class="site-admin-card ul-section card">
         <div class="card-header">
             <i class="material-icons">lock_clock</i>

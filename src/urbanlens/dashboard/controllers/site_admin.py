@@ -154,6 +154,17 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         except (ValueError, TypeError):
             pass
 
+        if "backup_enabled" in request.POST or "backup_frequency_hours" in request.POST or "backup_retention" in request.POST:
+            settings.backup_enabled = request.POST.get("backup_enabled") in {"1", "true", "on", "True"}
+            try:
+                settings.backup_frequency_hours = max(1, int(request.POST.get("backup_frequency_hours", settings.backup_frequency_hours)))
+            except (ValueError, TypeError):
+                pass
+            try:
+                settings.backup_retention = max(1, int(request.POST.get("backup_retention", settings.backup_retention)))
+            except (ValueError, TypeError):
+                pass
+
         try:
             max_attempts = int(request.POST.get("login_max_attempts", settings.login_max_attempts))
             settings.login_max_attempts = max(0, max_attempts)
@@ -401,6 +412,7 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             get_git_commit_at_start,
             get_git_update_status,
         )
+        from urbanlens.dashboard.services.backups import collect_backup_stats
         from urbanlens.dashboard.services.infrastructure_stats import collect_infrastructure_service_stats
 
         python_version = sys.version.split()[0]
@@ -450,13 +462,14 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 and git_update.has_newer_commits
             ),
             "infrastructure_services": collect_infrastructure_service_stats(),
+            "backup_stats": collect_backup_stats(),
             "server_time": now,
         }
         return render(request, "dashboard/pages/site_admin_stats.html", context)
 
 
 class SiteAdminPullLatestCodeView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Development-only endpoint to pull latest code for local/dev deployments."""
+    """Development-only endpoint to enqueue code updates for local/dev deployments."""
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
@@ -469,48 +482,21 @@ class SiteAdminPullLatestCodeView(LoginRequiredMixin, PermissionRequiredMixin, V
                 status=403,
             )
 
-        from urbanlens.core.version import (
-            apply_pending_migrations,
-            get_current_git_commit,
-            pull_latest_git_code,
-            trigger_development_app_reload,
-        )
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import apply_admin_code_update
 
-        before_commit = get_current_git_commit()
-        ok, message = pull_latest_git_code()
-        after_commit = get_current_git_commit()
-
-        if not ok:
-            return JsonResponse({"ok": False, "message": message}, status=500)
-
-        changed = bool(before_commit and after_commit and before_commit != after_commit)
-        migration_ok = True
-        migration_message = "Database migrations were not needed because the code was already up to date."
-        reload_ok = True
-        reload_message = "Development server reload was not needed because the code was already up to date."
-
-        if changed:
-            migration_ok, migration_message = apply_pending_migrations()
-            if not migration_ok:
-                return JsonResponse({"ok": False, "message": migration_message, "details": message}, status=500)
-
-            reload_ok, reload_message = trigger_development_app_reload()
-            if not reload_ok:
-                return JsonResponse({"ok": False, "message": reload_message, "details": message}, status=500)
-
+        result = safely_enqueue_task(apply_admin_code_update)
+        if result is None:
+            return JsonResponse({"ok": False, "message": "Unable to enqueue code update task."}, status=503)
         return JsonResponse(
             {
                 "ok": True,
-                "changed": changed,
-                "message": (
-                    "Code updated, migrations applied, and app reload requested."
-                    if changed
-                    else "Code is already up to date."
-                ),
-                "details": message,
-                "migration_details": migration_message,
-                "reload_details": reload_message,
+                "queued": True,
+                "task_id": result.id,
+                "status_url": reverse("celery_task_status", kwargs={"task_id": result.id}),
+                "message": "Code update queued.",
             },
+            status=202,
         )
 
 
@@ -575,3 +561,29 @@ def _parse_duration_months(raw: str | None) -> int | None:
         return max(1, int(raw))
     except (TypeError, ValueError):
         return None
+
+
+class CeleryTaskStatusView(LoginRequiredMixin, View):
+    """Return normalized Celery task progress for polling progress bars."""
+
+    def get(self, request, task_id: str):
+        from urbanlens.dashboard.services.celery import get_task_progress
+
+        try:
+            return JsonResponse(get_task_progress(task_id).as_dict())
+        except Exception:
+            logger.exception("Failed to read Celery task progress for task %s", task_id)
+            return JsonResponse(
+                {
+                    "task_id": task_id,
+                    "state": "UNKNOWN",
+                    "current": 0,
+                    "total": 1,
+                    "percent": 0,
+                    "message": "Unable to read task status.",
+                    "result": None,
+                    "error": "Unable to read task status.",
+                    "ready": True,
+                },
+                status=503,
+            )

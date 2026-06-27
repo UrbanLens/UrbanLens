@@ -16,16 +16,17 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseBackup:
-    def __init__(self):
+    def __init__(self, *, auto_schedule: bool = True):
         self.backup_dir = settings.backups_dir
         self.backup_retention = settings.backup_retention
         self.lock = Lock()
 
-        # Call the schedule_backup() function on application startup
-        self.schedule_backup()
+        if auto_schedule:
+            # Call the schedule_backup() function on application startup
+            self.schedule_backup()
 
-        # Connect the trigger_backup() function to the request_finished signal
-        request_finished.connect(self.trigger_backup)
+            # Connect the trigger_backup() function to the request_finished signal
+            request_finished.connect(self.trigger_backup)
 
     def create_backup_dir(self) -> bool:
         if os.path.exists(self.backup_dir):
@@ -104,24 +105,13 @@ class DatabaseBackup:
         return True
 
     def schedule_backup(self) -> bool:
-        # TODO: Temporarily disable
-        last_backup_date = datetime.now(tz=settings.TIME_ZONE).date()
+        from urbanlens.dashboard.services.backups import scheduled_backup_due
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import run_scheduled_database_backup
 
-        # Check if backup was already performed today
-        current_date = datetime.now(tz=settings.TIME_ZONE).date()
-        if last_backup_date >= current_date:
+        if not scheduled_backup_due():
             return False
-
-        # Acquire the lock to perform the backup
-        with self.lock:
-            try:
-                self.create_backup_dir()
-                result = self.run()
-            except (OSError, subprocess.SubprocessError) as e:
-                logger.exception("Error occurred while scheduling database backup: %s", e)
-                return False
-
-        return result
+        return safely_enqueue_task(run_scheduled_database_backup) is not None
 
     def trigger_backup(self, _, **kwargs):
         self.schedule_backup()

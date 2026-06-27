@@ -65,7 +65,9 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     email_password : str | None = Field(default = None, description = "SMTP password or app password")
     email_tls : bool = Field(default = True, description = "Use STARTTLS (port 587)")
     email_use_ssl : bool = Field(default = False, description = "Use SSL instead of STARTTLS (port 465)")
-    backup_retention : int = Field(default = 30, description = "The number of days to retain backups")
+    backup_enabled : bool = Field(default = True, description = "Whether scheduled database backups are enabled")
+    backup_frequency_hours : int = Field(default = 24, description = "How often scheduled database backups should run, in hours")
+    backup_retention : int = Field(default = 30, description = "The number of backup files to retain")
 
     # Classes
     default_auto_field : str = Field(default = 'django.db.models.BigAutoField', description = "The default auto field")
