@@ -6,6 +6,7 @@ readme = "README.md"
 authors = [{ name = "Jess Mann", email = "jess@urbanlens.com" }]
 requires-python = ">=3.12"
 dependencies = [
+    "celery>=5.4.0",
     "channels>=4.2.0",
     "dateparser>=1.2.1",
     "django>=5.1.6",
@@ -819,6 +820,7 @@ convention = "google"
 
 [dependency-groups]
 dev = [
+    "celery>=5.4.0",
     "channels>=4.2.0",
     "coverage>=7.6.12",
     "daphne>=4.1.2",
@@ -886,6 +888,7 @@ dev = [
     "faker>=40.23.0",
 ]
 prod = [
+    "celery>=5.4.0",
     "channels>=4.2.0",
     "daphne>=4.1.2",
     "dateparser>=1.2.1",

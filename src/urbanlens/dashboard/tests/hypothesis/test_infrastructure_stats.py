@@ -9,6 +9,7 @@ from urbanlens.dashboard.services.infrastructure_stats import (
     InfrastructureServiceStat,
     _format_duration,
     _postgres_version_label,
+    collect_celery_stats,
     collect_infrastructure_service_stats,
     collect_nginx_stats,
     collect_postgres_stats,
@@ -77,6 +78,37 @@ class CollectValkeyStatsTests(TestCase):
         self.assertEqual(stat.metrics[-1].value, "5")
 
 
+class CollectCeleryStatsTests(TestCase):
+    """collect_celery_stats reports broker and worker availability."""
+
+    def test_returns_disabled_when_broker_missing(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.infrastructure_stats.django_settings.CELERY_BROKER_URL", "", create=True):
+            stat = collect_celery_stats()
+        self.assertEqual(stat.key, "celery")
+        self.assertEqual(stat.status, "disabled")
+
+    def test_returns_healthy_when_worker_responds(self) -> None:
+        fake_connection = mock.MagicMock()
+        fake_inspect = mock.Mock()
+        fake_inspect.ping.return_value = {"worker@example": {"ok": "pong"}}
+        fake_inspect.stats.return_value = {"worker@example": {"software": {"celery": "5.6.3"}}}
+        fake_inspect.active.return_value = {"worker@example": [object()]}
+        fake_inspect.reserved.return_value = {"worker@example": []}
+        fake_inspect.scheduled.return_value = {"worker@example": []}
+        fake_app = mock.Mock()
+        fake_app.connection_for_read.return_value.__enter__.return_value = fake_connection
+        fake_app.control.inspect.return_value = fake_inspect
+
+        with (
+            mock.patch("urbanlens.dashboard.services.infrastructure_stats.django_settings.CELERY_BROKER_URL", "redis://example:6379/0", create=True),
+            mock.patch("urbanlens.dashboard.services.infrastructure_stats.current_app", fake_app),
+        ):
+            stat = collect_celery_stats()
+
+        self.assertEqual(stat.status, "healthy")
+        self.assertIn("Workers", {metric.label for metric in stat.metrics})
+
+
 class CollectNginxStatsTests(TestCase):
     """collect_nginx_stats probes the nginx health endpoint."""
 
@@ -100,9 +132,9 @@ class CollectNginxStatsTests(TestCase):
 class CollectInfrastructureServiceStatsTests(TestCase):
     """collect_infrastructure_service_stats returns all expected services."""
 
-    def test_returns_postgres_valkey_and_nginx(self) -> None:
+    def test_returns_postgres_valkey_celery_and_nginx(self) -> None:
         stats = collect_infrastructure_service_stats()
-        self.assertEqual(len(stats), 3)
-        self.assertEqual([stat.key for stat in stats], ["postgres", "valkey", "nginx"])
+        self.assertEqual(len(stats), 4)
+        self.assertEqual([stat.key for stat in stats], ["postgres", "valkey", "celery", "nginx"])
         for stat in stats:
             self.assertIsInstance(stat, InfrastructureServiceStat)

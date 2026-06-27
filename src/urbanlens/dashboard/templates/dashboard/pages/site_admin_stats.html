@@ -369,6 +369,38 @@
                 </div>
             </div>
             {% endif %}
+
+            {% if backup_stats %}
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#2563eb">backup</i>
+                <div>
+                    <div class="stats-health-value">{{ backup_stats.count }} file{{ backup_stats.count|pluralize }}</div>
+                    <div class="stats-health-label">Database Backups</div>
+                </div>
+            </div>
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#7c3aed">schedule</i>
+                <div>
+                    <div class="stats-health-value">Every {{ backup_stats.frequency_hours }}h</div>
+                    <div class="stats-health-label">Backup Frequency ({% if backup_stats.enabled %}enabled{% else %}disabled{% endif %})</div>
+                </div>
+            </div>
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#0891b2">inventory_2</i>
+                <div>
+                    <div class="stats-health-value">Keep {{ backup_stats.retention }}</div>
+                    <div class="stats-health-label">Backup Retention</div>
+                </div>
+            </div>
+            <div class="stats-health-item">
+                <i class="material-icons stats-health-icon" style="color:#d97706">folder</i>
+                <div>
+                    <div class="stats-health-value">{{ backup_stats.total_size_mb }} MB</div>
+                    <div class="stats-health-label">Backup Storage</div>
+                </div>
+            </div>
+            {% endif %}
+
             <div class="stats-health-item">
                 <i class="material-icons stats-health-icon" style="color:#7c3aed">code</i>
                 <div>

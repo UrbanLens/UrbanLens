@@ -109,6 +109,34 @@ if VALKEY_URL:
 
 DATABASE_ROUTERS = ['urbanlens.dashboard.dbrouters.DBRouter']
 
+# Celery - background job processing. Defaults to the configured Valkey/Redis
+# endpoint when available, otherwise local Redis for development.
+CELERY_BROKER_URL = os.getenv("UL_CELERY_BROKER_URL") or VALKEY_URL or "redis://localhost:6379/0"
+CELERY_RESULT_BACKEND = os.getenv("UL_CELERY_RESULT_BACKEND") or CELERY_BROKER_URL
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = os.getenv("UL_CELERY_TIMEZONE", "UTC")
+CELERY_TASK_ALWAYS_EAGER = os.getenv("UL_CELERY_TASK_ALWAYS_EAGER", "False").lower() in ("true", "1", "yes")
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_SEND_SENT_EVENT = True
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("UL_CELERY_TASK_SOFT_TIME_LIMIT", "2700"))
+CELERY_TASK_TIME_LIMIT = int(os.getenv("UL_CELERY_TASK_TIME_LIMIT", "3600"))
+# Backup defaults. Site admins can override these values in the database-backed settings UI.
+UL_BACKUP_ENABLED = os.getenv("UL_BACKUP_ENABLED", "True").lower() in ("true", "1", "yes")
+UL_BACKUP_FREQUENCY_HOURS = int(os.getenv("UL_BACKUP_FREQUENCY_HOURS", "24"))
+UL_BACKUP_RETENTION = int(os.getenv("UL_BACKUP_RETENTION", "30"))
+
+CELERY_BEAT_SCHEDULE = {
+    "scheduled-database-backup-check": {
+        "task": "urbanlens.dashboard.tasks.run_scheduled_database_backup",
+        "schedule": 60 * 60,
+    },
+}
+
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators

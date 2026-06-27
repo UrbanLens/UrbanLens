@@ -117,6 +117,10 @@ class MapPinCache:
     def lock_key(self) -> str:
         return f"{self._prefix}:lock"
 
+    @property
+    def rebuild_queued_key(self) -> str:
+        return f"{self._prefix}:rebuild-queued"
+
     def get_or_build_page(self, query: QuerySet[Pin], *, cursor: int | None, limit: int | None, include_total: bool) -> CachedMapPinPage:
         if not self.client:
             return CachedMapPinPage(self.payload.page(query, cursor=cursor, limit=limit, include_total=include_total), hit=False)
@@ -125,13 +129,27 @@ class MapPinCache:
                 page = self.get_page(cursor=cursor, limit=limit, include_total=include_total)
                 if page is not None:
                     return CachedMapPinPage(page, hit=True)
-            self.rebuild(query)
-            page = self.get_page(cursor=cursor, limit=limit, include_total=include_total)
-            if page is not None:
-                return CachedMapPinPage(page, hit=False)
+            self.enqueue_rebuild()
         except RedisError:
             logger.warning("Map pin cache unavailable for profile %s", self.profile_id, exc_info=True)
         return CachedMapPinPage(self.payload.page(query, cursor=cursor, limit=limit, include_total=include_total), hit=False)
+
+    def enqueue_rebuild(self) -> None:
+        """Queue a full cache rebuild once when the cached page is missing."""
+        if not self.client or not self.profile_id:
+            return
+        try:
+            queued = self.client.set(self.rebuild_queued_key, "1", nx=True, ex=self.LOCK_SECONDS)
+            if not queued:
+                return
+            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.tasks import rebuild_map_pin_cache
+
+            result = safely_enqueue_task(rebuild_map_pin_cache, self.profile_id)
+            if result is None:
+                self.client.delete(self.rebuild_queued_key)
+        except RedisError:
+            logger.warning("Unable to enqueue map pin cache rebuild for profile %s", self.profile_id, exc_info=True)
 
     def get_page(self, *, cursor: int | None, limit: int | None, include_total: bool) -> MapPinPage | None:
         if not self.client or not self.client.exists(self.meta_key):
@@ -153,7 +171,7 @@ class MapPinCache:
             return
         lock_token = str(time.time())
         got_lock = self.client.set(self.lock_key, lock_token, nx=True, ex=self.LOCK_SECONDS)
-        if not got_lock and self.client.exists(self.meta_key):
+        if not got_lock:
             return
         tmp_pins = f"{self.pins_key}:tmp:{lock_token}"
         tmp_order = f"{self.order_key}:tmp:{lock_token}"
@@ -183,6 +201,7 @@ class MapPinCache:
                 pipe.delete(tmp_pins)
                 pipe.delete(tmp_order)
                 pipe.delete(self.lock_key)
+                pipe.delete(self.rebuild_queued_key)
                 pipe.execute()
 
     def upsert_pin(self, pin: Pin) -> None:
@@ -212,7 +231,7 @@ class MapPinCache:
 
     def clear(self) -> None:
         if self.client:
-            self.client.delete(self.meta_key, self.pins_key, self.order_key, self.lock_key)
+            self.client.delete(self.meta_key, self.pins_key, self.order_key, self.lock_key, self.rebuild_queued_key)
 
     def _touch(self) -> None:
         if not self.client:
