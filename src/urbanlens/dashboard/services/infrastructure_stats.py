@@ -8,9 +8,9 @@ import os
 import time
 from typing import Any, Literal
 
+from celery import current_app
 from django.conf import settings as django_settings
 from django.db import connection
-from celery import current_app
 from kombu.exceptions import KombuError
 import redis
 from redis.exceptions import RedisError
@@ -245,7 +245,7 @@ def collect_celery_stats() -> InfrastructureServiceStat:
             ],
         )
         celery_versions = sorted(
-            {str(worker_stats.get("software", {}).get("celery")) for worker_stats in stats.values() if worker_stats.get("software", {}).get("celery")}
+            {str(worker_stats.get("software", {}).get("celery")) for worker_stats in stats.values() if worker_stats.get("software", {}).get("celery")},
         )
         if celery_versions:
             metrics.append(ServiceMetric("Version", ", ".join(celery_versions)))

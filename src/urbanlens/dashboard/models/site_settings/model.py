@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from uuid import uuid4
 import os
+from uuid import uuid4
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import SET_NULL, CheckConstraint, FloatField, ForeignKey, IntegerField, Q, UUIDField
@@ -144,11 +144,10 @@ class SiteSettings(abstract.Model):
         validators=[MinValueValidator(1), MaxValueValidator(1440)],
     )
 
-
     # --- Database backups ---
 
     backup_enabled = BooleanField(
-        default=os.getenv("UL_BACKUP_ENABLED", "True").lower() in ("true", "1", "yes"),
+        default=os.getenv("UL_BACKUP_ENABLED", "True").lower() in {"true", "1", "yes"},
         help_text="Whether scheduled database backups are enabled.",
         verbose_name="Backups enabled",
     )

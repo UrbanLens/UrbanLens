@@ -156,14 +156,10 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         if "backup_enabled" in request.POST or "backup_frequency_hours" in request.POST or "backup_retention" in request.POST:
             settings.backup_enabled = request.POST.get("backup_enabled") in {"1", "true", "on", "True"}
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 settings.backup_frequency_hours = max(1, int(request.POST.get("backup_frequency_hours", settings.backup_frequency_hours)))
-            except (ValueError, TypeError):
-                pass
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 settings.backup_retention = max(1, int(request.POST.get("backup_retention", settings.backup_retention)))
-            except (ValueError, TypeError):
-                pass
 
         try:
             max_attempts = int(request.POST.get("login_max_attempts", settings.login_max_attempts))

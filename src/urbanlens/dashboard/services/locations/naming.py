@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+from typing import Protocol
 
 import requests
-from typing import Protocol
 
 from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.google.places import GooglePlacesGateway

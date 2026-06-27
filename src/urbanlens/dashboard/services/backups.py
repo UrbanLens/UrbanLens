@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -35,7 +35,7 @@ def collect_backup_stats(site_settings=None) -> BackupStats:
     files = backup_files()
     latest = None
     if files:
-        latest = datetime.fromtimestamp(files[0].stat().st_mtime, tz=timezone.utc)
+        latest = datetime.fromtimestamp(files[0].stat().st_mtime, tz=UTC)
     total_size = sum(p.stat().st_size for p in files if p.exists())
     return BackupStats(
         enabled=site_settings.backup_enabled,
@@ -58,7 +58,7 @@ def scheduled_backup_due(site_settings=None, *, now: datetime | None = None) -> 
     files = backup_files()
     if not files:
         return True
-    current = now or datetime.now(timezone.utc)
-    latest = datetime.fromtimestamp(files[0].stat().st_mtime, tz=timezone.utc)
+    current = now or datetime.now(UTC)
+    latest = datetime.fromtimestamp(files[0].stat().st_mtime, tz=UTC)
     elapsed_hours = (current - latest).total_seconds() / 3600
     return elapsed_hours >= site_settings.backup_frequency_hours

@@ -127,7 +127,6 @@ def process_image_upload(self, image_id: int) -> bool:
 def _run_database_backup(task=None) -> bool:
     """Run database backup and retention cleanup using current site settings."""
     from urbanlens.core.controllers.backups.db import DatabaseBackup
-
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
     site_settings = SiteSettings.get_current()
@@ -207,8 +206,9 @@ def apply_admin_code_update(self) -> dict:
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def refresh_pin_web_search(self, pin_id: int) -> int:
     """Refresh cached web-search results for a pin detail page."""
-    from django.core.cache import cache
     from urllib.parse import urlparse
+
+    from django.core.cache import cache
 
     from urbanlens.dashboard.controllers.pin import _build_pin_search_query, _format_search_date
     from urbanlens.dashboard.models.pin import Pin
