@@ -13,7 +13,6 @@ Features planned for this release.
 * UI: Edit category dialog [UL-146]
 * UI: Bulk edit category dialog (buttons are awful) [UL-147]
 * Add descriptions to badges that are pre-populated. [UL-245]
-* Cleanup Github readme roadmap. [UL-246]
 * Remove work account from github project. [UL-247]
 * Switch to gunicorn (or similar) instead of runserver in init.py, except for environment=development. [UL-258]
 
@@ -39,15 +38,9 @@ Features planned for this release.
 * Organize: Bulk edit button doesn't open dialog.
 
 ## Map Search Filtering Polish
-* Clicking toggle buttons should toggle / untoggle them (e.g. Visits)
-* Combine two badges sections into just one badges section. Design UI for including / excluding a badge in just that one section. The badge chip should not show a checkbox within its visual container.
-* Within the new combined badge section: show two things: selected badges above, and filter/search list to find more below. When a badge is chosen, pop it from search list, and add to the selected badges area. Badge chips can be "include" or "exclude", which can be shown in 2 columns. If only includes are selected, or only excludes are selected, then only show 1 column. The columns should be styled to make them obvious at a glance (some part of them colored red / green, with an obvious icon)
-* In the badges section, badge chips should be colored with their badge color (if one was chosen)
-* Map search: Rating should be a slider with 2 handles. There should be some sort of explanation or visual indicator of what the user is filtering for.
-* The Map toolbar has buttons for 2 kinds of things: map layers, and tools. We want the toolbar to be simple, not jammed with a bunch of buttons, so these 2 things should be separated somehow. I considered making it 2 rows, or making 2 toolbars, and hiding all the layer buttons within a layer dropdown, which is what I'm leaning towards. There may be other solutions, too. Design a solution that is easy for users to intuitively understand without explanation, easy to navigate, and uncluttered.
-* Add keyboard shortcuts for a few important tools on the map. They only work when the map is visible on screen, and work for multiple platforms (windows, ios, linux). 
-* Cap the max zoom out on map so that the map is never so small that it doesn't fill the container. Currently, users can zoom out so far that they can see a grey background around the top and bottom of the map.
-* Change the satellite icon to be the simple satellite emoji (the half circular shape with an antenna)
+* The view options in the toolbar need a new button for "street details". 
+* Add a "Dark Mode" layer button, which will update the user settings for the map style.
+* When filters are applied, change the site url. This allows refreshing the page to have the same filters, and allows clicking on a pin, then clicking on the back button to return to the filtered map.
 ---
 * Changing badge icon / color in organize doesn't immediately trigger cache update.
 * Searching / Filtering, then changing pages and coming back, the search is cleared. (Good, but...)
@@ -56,13 +49,7 @@ Features planned for this release.
 * Organize: Closing filter section is annoying
 * Organize: Filter section styling
 ---
-* Map toolbar: Make close button less obtrusive.
 * Throughout site: tooltips clip (overflow: hidden)
-* Map search: Latency when turning off a filter (due to bypassing local cache and hitting redis???)
-* Map: Sometimes badges aren't showing in pin tooltip (tested by filtering demolished). I bet that's because it's a status.
-* Map search: Auto expand some elements depending on screen height.
-* Map search > Visits: Have a "Custom" button to simplify ui.
-* Map search > Visits: Do something to lessen the "reset" button emphasis.
 * Consider again: Pin count while filtering
 
 ## Optimizations / Latency
@@ -226,8 +213,7 @@ Features planned for future releases.
 * Get pin / location bounding box from external service (i.e. property boundaries), or attempt ML building boundaries detection. [UL-249]
 * Organize Page > Priority Tab: Provide mechanism for shifting an item to a specific position (e.g. "go to position 20"), and allow multi-select before dragging to drag as a group. [UL-250]
 * Consider feature: on main map, the icon and the circle could be pulled from different places, allowing 2 pieces of information to be displayed about each pin. [UL-251]
-* On admin statistics, show information about app version, and check if most recent in git. [UL-252]
-* Show app version number to users. [UL-253]
+* "Organize a meetup", which would encourage a larger audience, encourage invitees to invite friends, etc. To prevent abuse, possibly: meetup pin would only be shown to those who already had it, and invitees could vote on whether it was too vulnerable to share? Idk.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
@@ -287,3 +273,75 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 Behavior that isn't consistent enough to diagnose or fix without looking at it more deeply.
 
 * Sometimes... In the import dialog ui, hovering over the drop files here or browse button has a css hover effect that makes it look clickable, but clicking on it doesn't do anything. The user has to click on the browse link. Clicking anywhere on the button should work just as if the user clicked on the browse link. [UL-141]
+
+## From README Roadmap (migrated)
+Items previously listed in README.md that are not already tracked elsewhere in this file. Some of these may already be implemented, so this list should be looked over and pruned before being relied on.
+
+### Data
+* Collect pin information during import.
+* Remove (or better integrate) pin status (visited vs "visited" tag vs visit history).
+
+### Community
+* Ability to @ friends in comments, etc.
+* User list (with privacy settings).
+* Ability to view other user profiles by clicking on comments, etc.
+
+### UI — General
+* Allow user to reorder pin details sections.
+* Change default pin details sections order.
+
+### UI — Pin Detail Page
+* Map sometimes double scrolls (latency?).
+* Fix satellite view (street view may also be broken?).
+* Fix web results (web results filtering through AI?).
+* Fix boundary markup.
+* Fix security indicators.
+* Sections need stronger borders or colors.
+* When adding tags: the search bar needs padding.
+
+### UI — Trip Details Page
+* Pin icons (1, 2, ...) should better communicate the idea, rather than looking like grouping blobs from other maps. Also should still use custom icons.
+* Delete should probably not delete for everyone?
+* Main trip page: use the whitespace. Calendar? etc?
+* Allow archiving old events.
+* Notify other users when changes.
+* Trip variations (map markup, variation 1/2/3, etc).
+* RSVP per activity.
+* Leaving a trip should take you back to the trip list.
+* Users can click on the map to add a pin.
+* Ability to drag and drop some pins on the map (especially ones that were added via coordinates or right clicking).
+* Ability to add pins based on coordinate, not just geolookup addresses.
+* Ability to add pins based on places lookup, maybe?
+* Order activity list by date.
+* Multiple organizers.
+* Map bug (grey tile on right side).
+* Activity end dates.
+* Trip settings: fix checkbox bug. Also, each option should have 3 states (no one, organizers, everyone).
+* In activity edit dialog, add delete button.
+* Add some additional descriptor for activities (an icon, or a category? For instance: Camping, Food).
+* Never say "0 minutes ago".
+* When comment has image, must be indication that image will be uploaded after it's selected from user's computer.
+* Reply button beneath replies.
+* Bug: Comment count does not count replies.
+* Bug: After deleting comment, the comment section duplicates itself.
+
+### Development
+* Code coverage report.
+
+### Optimizations
+* Local storage in browser for faster loading and offline use.
+* Organize page takes a long time to load.
+
+### APIs
+* Use aliases with Smithsonian, etc.
+* Sunrise / sunset for weather.
+* Address often incorrect Smithsonian results (AI filtering? Only names >= certain length?).
+
+### Misc
+* User settings: Allow friend requests checkbox is missing. Should have additional option for "from users with one pin in common", "1 mutual", etc.
+* Privacy setting for who can find you by search, or by your email, or by using your handle directly.
+* Clicking on notification should take you to the relevant page.
+* Viewing notifications in the dropdown should mark them read. Not just clicking on them.
+* Notification log makes read messages look unread. UI with this needs cleanup.
+* Hide "(schedule) Never" in pin popup for last visited. This is already implied.
+* When selecting tags to edit, enable shift+click.

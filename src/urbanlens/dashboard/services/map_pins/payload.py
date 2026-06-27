@@ -63,8 +63,10 @@ class MapPinPayloadService:
     def serialize(self, pin: Pin) -> dict[str, Any]:
         badges = list(pin.badges.all())
         statuses = [b for b in badges if b.kind == "status"]
-        tags = [b for b in badges if b.kind == "tag"]
         categories = [b.name for b in badges if b.kind == "category"]
+        # Include all display-relevant badge kinds as chips so every badge shows in the popup.
+        # Status and category badges were previously omitted, causing them to be invisible.
+        display_badges = [b for b in badges if b.kind in {"tag", "category", "status"}]
         return {
             "id": pin.pk,
             "uuid": str(pin.uuid),
@@ -83,7 +85,7 @@ class MapPinPayloadService:
             "color": self._effective_color(pin, badges),
             "tags": [
                 {"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon}
-                for t in tags
+                for t in display_badges
             ],
         }
 

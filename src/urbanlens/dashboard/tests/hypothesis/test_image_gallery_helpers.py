@@ -2,7 +2,7 @@
 
 Covers:
 - _dms_to_decimal() - DMS→decimal conversion with N/S/E/W refs
-- _extract_gps_coords() - EXIF GPS extraction with mock PIL
+- extract_gps_coords() - EXIF GPS extraction with mock PIL
 - _image_to_json() - dict serialisation of Image instances
 """
 from __future__ import annotations
@@ -15,11 +15,8 @@ from hypothesis import given, settings as hyp_settings
 from hypothesis import strategies as st
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.controllers.image_gallery import (
-    _dms_to_decimal,
-    _extract_gps_coords,
-    _image_to_json,
-)
+from urbanlens.dashboard.controllers.image_gallery import _image_to_json
+from urbanlens.dashboard.services.images import _dms_to_decimal, extract_gps_coords
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
 
@@ -89,11 +86,11 @@ class DmsToDecimalTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _extract_gps_coords - via mocked PIL
+# extract_gps_coords - via mocked PIL
 # ---------------------------------------------------------------------------
 
 class ExtractGpsCoordsMockTests(TestCase):
-    """_extract_gps_coords extracts GPS from EXIF via mocked PIL objects."""
+    """extract_gps_coords extracts GPS from EXIF via mocked PIL objects."""
 
     def _make_file_with_gps(self, lat_dms, lat_ref, lng_dms, lng_ref):
         """Return a mock file object with a PIL image that yields GPS EXIF data."""
@@ -141,8 +138,8 @@ class ExtractGpsCoordsMockTests(TestCase):
             (40, 26, 46), "N",
             (74, 0, 21), "W",
         )
-        with patch("urbanlens.dashboard.controllers.image_gallery.PILImage.open", return_value=mock_img):
-            result = _extract_gps_coords(mock_file)
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_coords(mock_file)
         self.assertIsNotNone(result)
         lat, lng = result
         self.assertGreater(lat, 0)   # N
@@ -152,8 +149,8 @@ class ExtractGpsCoordsMockTests(TestCase):
         mock_img = MagicMock()
         mock_img.getexif.return_value = None
         mock_file = io.BytesIO(b"fake")
-        with patch("urbanlens.dashboard.controllers.image_gallery.PILImage.open", return_value=mock_img):
-            result = _extract_gps_coords(mock_file)
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_coords(mock_file)
         self.assertIsNone(result)
 
     def test_returns_none_when_no_gps_ifd(self):
@@ -163,17 +160,17 @@ class ExtractGpsCoordsMockTests(TestCase):
         mock_img = MagicMock()
         mock_img.getexif.return_value = mock_exif
         mock_file = io.BytesIO(b"fake")
-        with patch("urbanlens.dashboard.controllers.image_gallery.PILImage.open", return_value=mock_img):
-            result = _extract_gps_coords(mock_file)
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_coords(mock_file)
         self.assertIsNone(result)
 
     def test_returns_none_on_exception(self):
         mock_file = io.BytesIO(b"not a real image")
         with patch(
-            "urbanlens.dashboard.controllers.image_gallery.PILImage.open",
+            "urbanlens.dashboard.services.images.PILImage.open",
             side_effect=Exception("cannot identify image file"),
         ):
-            result = _extract_gps_coords(mock_file)
+            result = extract_gps_coords(mock_file)
         self.assertIsNone(result)
 
     def test_file_seeked_back_after_extraction(self):
@@ -182,8 +179,8 @@ class ExtractGpsCoordsMockTests(TestCase):
         mock_img.getexif.return_value = None
         mock_file = MagicMock()
         mock_file.seek.return_value = None
-        with patch("urbanlens.dashboard.controllers.image_gallery.PILImage.open", return_value=mock_img):
-            _extract_gps_coords(mock_file)
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            extract_gps_coords(mock_file)
         # seek(0) called in the finally block
         mock_file.seek.assert_called_with(0)
 

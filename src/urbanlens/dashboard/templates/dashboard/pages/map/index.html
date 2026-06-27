@@ -13,56 +13,64 @@
 
 {% block content %}
 <div id="map" hx-boost="true">
+    {# ── Map toolbar (tools only) ──────────────────────────────────────────── #}
     <div class="map-buttons" id="map-buttons">
-        <button id="toggle-map-buttons" class="map-btn-icon"
-                data-tooltip="Show or hide map toolbar"
-                aria-label="Toggle map controls">
-            <i class="material-icons">menu</i>
+        <button id="toggle-map-buttons" class="map-toolbar-collapse" aria-label="Toggle map controls"
+                data-tooltip="Collapse toolbar">
+            <i class="material-icons">chevron_right</i>
         </button>
         <div class="map-buttons-content">
             <button id="add-pin-button" class="map-btn-icon"
-                    data-tooltip="Drop a new pin on the map." data-tooltip-float="true"
+                    data-tooltip="Drop a new pin on the map (A)" data-tooltip-float="true"
                     aria-label="Add pin"
                     onclick="openAddPinDialog()">
                 <i class="material-icons">add_location</i>
             </button>
             <button id="search-pins-button" class="map-btn-icon"
-                    data-tooltip="Filter pins by name, rating, visit status, badges, and more." data-tooltip-float="true"
+                    data-tooltip="Filter pins by name, rating, visits, badges, and more (F)" data-tooltip-float="true"
                     data-tooltip-pos="below"
                     aria-label="Filter and search pins"
                     onclick="toggleFilterPanel()">
-                <i class="material-icons">search</i>
-            </button>
-            <button id="topography-button" class="map-btn-icon"
-                    data-tooltip="Switch to topographic terrain view with elevation contours." data-tooltip-float="true"
-                    aria-label="Topography view"
-                    onclick="toggleTopographyView()">
-                <i class="material-icons">terrain</i>
-            </button>
-            <button id="satellite-button" class="map-btn-icon"
-                    data-tooltip="Switch to satellite imagery." data-tooltip-float="true"
-                    aria-label="Satellite view"
-                    onclick="toggleSatelliteView()">
-                <i class="material-icons">satellite_alt</i>
+                <i class="material-icons">manage_search</i>
             </button>
             <button id="toggle-pins-button" class="map-btn-icon"
-                    data-tooltip="Show or hide all pin markers without changing filters." data-tooltip-float="true"
+                    data-tooltip="Show or hide all pin markers without changing filters (P)" data-tooltip-float="true"
                     aria-label="Toggle pins"
                     onclick="togglePins()">
                 <i class="material-icons">push_pin</i>
             </button>
-            <button id="weather-button" class="map-btn-icon"
-                    data-tooltip="Overlay current weather conditions on the map." data-tooltip-float="true"
-                    aria-label="Weather view"
-                    onclick="toggleWeatherView()">
-                <i class="material-icons">cloud</i>
-            </button>
             <button id="import-pins-button" class="map-btn-icon"
-                    data-tooltip="Import pins from Google Takeout." data-tooltip-float="true"
+                    data-tooltip="Import pins from Google Takeout (I)" data-tooltip-float="true"
                     data-tooltip-pos="below"
                     aria-label="Import pins"
                     hx-get="{% url 'pin.import.form' %}" hx-target="#importPinsModal" hx-swap="innerHTML">
                 <i class="material-icons">upload</i>
+            </button>
+        </div>
+    </div>
+
+    {# ── Layers panel (bottom-left, Google-Maps style) ──────────────────────── #}
+    <div class="map-layers-panel" id="map-layers-panel">
+        <button class="map-layers-toggle" id="map-layers-toggle" onclick="_toggleLayersPanel()"
+                data-tooltip="Map layers" aria-label="Toggle map layers">
+            <i class="material-icons">layers</i>
+            <span>Layers</span>
+        </button>
+        <div class="map-layers-menu" id="map-layers-menu" hidden>
+            <button id="topography-button" class="map-layer-btn"
+                    onclick="toggleTopographyView(); _closeLayersPanel();" aria-label="Topographic view">
+                <i class="material-icons">terrain</i>
+                <span>Terrain</span>
+            </button>
+            <button id="satellite-button" class="map-layer-btn"
+                    onclick="toggleSatelliteView(); _closeLayersPanel();" aria-label="Satellite view">
+                <span class="map-layer-emoji">🛰</span>
+                <span>Satellite</span>
+            </button>
+            <button id="weather-button" class="map-layer-btn"
+                    onclick="toggleWeatherView();" aria-label="Weather overlay">
+                <i class="material-icons">cloud</i>
+                <span>Weather</span>
             </button>
         </div>
     </div>
@@ -102,29 +110,32 @@
                 <input type="text" name="name" id="fp-search" class="fp-search" placeholder="Name or alias..." autocomplete="off">
             </div>
 
-            {# Rating ── collapsible ── #}
+            {# Rating ── dual-handle slider (1–5 stars) ── #}
             <details class="fp-accordion-item" id="fp-acc-rating">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Rating</span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
-                    <div class="fp-range-row">
-                        <div class="fp-range-col">
-                            <span class="fp-range-hint">Min</span>
-                            <div class="fp-chips">
-                                <label class="fp-chip"><input type="radio" name="min_rating" value="" checked>Any</label>
-                                {% for n in "12345"|make_list %}<label class="fp-chip"><input type="radio" name="min_rating" value="{{ n }}">{{ n }}★+</label>{% endfor %}
-                            </div>
+                    <input type="hidden" name="min_rating" id="fp-rating-min-val">
+                    <input type="hidden" name="max_rating" id="fp-rating-max-val">
+                    <div class="fp-dual-slider">
+                        <div class="fp-dual-slider-track">
+                            <div class="fp-dual-slider-fill" id="fp-rating-fill" style="left:0%;width:100%"></div>
                         </div>
-                        <div class="fp-range-divider">-</div>
-                        <div class="fp-range-col">
-                            <span class="fp-range-hint">Max</span>
-                            <div class="fp-chips">
-                                <label class="fp-chip"><input type="radio" name="max_rating" value="" checked>Any</label>
-                                {% for n in "12345"|make_list %}<label class="fp-chip"><input type="radio" name="max_rating" value="{{ n }}">≤{{ n }}★</label>{% endfor %}
-                            </div>
-                        </div>
+                        <input type="range" id="fp-rating-min" min="1" max="5" value="1"
+                               class="fp-slider-input"
+                               oninput="syncDualSlider('rating')"
+                               onchange="htmx.trigger(document.getElementById('filter-form'),'change')">
+                        <input type="range" id="fp-rating-max" min="1" max="5" value="5"
+                               class="fp-slider-input"
+                               oninput="syncDualSlider('rating')"
+                               onchange="htmx.trigger(document.getElementById('filter-form'),'change')">
+                    </div>
+                    <div class="fp-dual-slider-labels">
+                        <span id="fp-rating-min-label">Any</span>
+                        <span class="fp-rating-stars-hint">★ ★ ★ ★ ★</span>
+                        <span id="fp-rating-max-label">Any</span>
                     </div>
                 </div>
             </details>
@@ -136,12 +147,15 @@
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
-                    <div class="fp-chips">
-                        <label class="fp-chip"><input type="radio" name="has_visits" value="yes">Visited</label>
-                        <label class="fp-chip"><input type="radio" name="has_visits" value="no">Never visited</label>
-                        <label class="fp-chip"><input type="radio" name="has_visits" value="" checked><i class="material-icons">refresh</i></label>
+                    <input type="hidden" name="has_visits" id="fp-visits-hidden" value="">
+                    <div class="fp-chips" id="fp-visits-chips">
+                        <label class="fp-chip" id="fp-visits-chip-yes"><input type="radio" name="has_visits_ui" value="yes">Visited</label>
+                        <label class="fp-chip" id="fp-visits-chip-no"><input type="radio" name="has_visits_ui" value="no">Never visited</label>
                     </div>
-                    <div class="fp-date-block">
+                    <button type="button" class="fp-visits-reset" id="fp-visits-reset" style="display:none" onclick="_resetVisits()">
+                        <i class="material-icons">refresh</i> Reset
+                    </button>
+                    <div class="fp-date-block" id="fp-visits-dates" style="display:none">
                         <div class="fp-date-row">
                             <span class="fp-date-label">After</span>
                             <input type="date" name="visited_after" class="fp-date-input">
@@ -204,47 +218,50 @@
             </details>
 
             {% if filter_badges %}
-            {# Include badges ── collapsible ── #}
-            <details class="fp-accordion-item" id="fp-acc-incl-tags">
+            {# Combined badges ── collapsible ── #}
+            <details class="fp-accordion-item" id="fp-acc-badges">
                 <summary class="fp-accordion-summary">
-                    <span class="fp-accordion-label">Include Badges</span>
-                    {% include "dashboard/partials/_tooltip_help.html" with text="Show only pins that have at least one of the selected badges." pos="below" %}
+                    <span class="fp-accordion-label">Badges</span>
+                    {% include "dashboard/partials/_tooltip_help.html" with text="Include (green ✓) shows only pins with that badge. Exclude (red ✕) hides pins with that badge." pos="below" %}
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
-                    <input type="text" class="fp-tag-search" placeholder="Search…" autocomplete="off"
-                           oninput="filterFpTags('incl', this.value)">
-                    <div class="fp-tag-list" id="fp-incl-tag-list">
-                        {% for badge in filter_badges %}
-                        <label class="fp-chip" data-tag-name="{{ badge.name|lower }}">
-                            <input type="checkbox" name="tags" value="{{ badge.id }}">
-                            {% if badge.icon %}<span style="font-size:.9em">{{ badge.icon }}</span>{% endif %}
-                            {{ badge.name }}
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
-            </details>
+                    {# Hidden real inputs submitted to the server #}
+                    <div id="fp-badge-hidden-incl"></div>
+                    <div id="fp-badge-hidden-excl"></div>
 
-            {# Exclude badges ── collapsible ── #}
-            <details class="fp-accordion-item" id="fp-acc-excl-tags">
-                <summary class="fp-accordion-summary">
-                    <span class="fp-accordion-label">Exclude Badges</span>
-                    {% include "dashboard/partials/_tooltip_help.html" with text="Hide pins that have any of the selected badges." pos="below" %}
-                    <i class="material-icons fp-acc-arrow">expand_more</i>
-                </summary>
-                <div class="fp-accordion-body">
-                    <input type="text" class="fp-tag-search" placeholder="Search…" autocomplete="off"
-                           oninput="filterFpTags('excl', this.value)">
-                    <div class="fp-tag-list" id="fp-excl-tag-list">
+                    {# Selected badges area — two columns, shown only when something selected #}
+                    <div class="fp-badge-selected" id="fp-badge-selected" style="display:none">
+                        <div class="fp-badge-col fp-badge-col--incl" id="fp-badge-col-incl">
+                            <div class="fp-badge-col-label"><i class="material-icons">check_circle</i> Include</div>
+                            <div class="fp-badge-chips" id="fp-badge-incl-chips"></div>
+                        </div>
+                        <div class="fp-badge-col fp-badge-col--excl" id="fp-badge-col-excl">
+                            <div class="fp-badge-col-label"><i class="material-icons">cancel</i> Exclude</div>
+                            <div class="fp-badge-chips" id="fp-badge-excl-chips"></div>
+                        </div>
+                    </div>
+
+                    {# Search + available list #}
+                    <input type="text" class="fp-tag-search" id="fp-badge-search" placeholder="Search badges…" autocomplete="off"
+                           oninput="_filterBadgeList(this.value)">
+                    <div class="fp-tag-list" id="fp-badge-list">
                         {% for badge in filter_badges %}
-                        <label class="fp-chip" data-tag-name="{{ badge.name|lower }}">
-                            <input type="checkbox" name="exclude_tags" value="{{ badge.id }}">
+                        <button type="button"
+                                class="fp-chip fp-badge-avail"
+                                data-badge-id="{{ badge.id }}"
+                                data-badge-name="{{ badge.name|lower }}"
+                                data-badge-label="{{ badge.name|escapejs }}"
+                                data-badge-color="{{ badge.color|default:'' }}"
+                                data-badge-icon="{{ badge.icon|default:'' }}"
+                                {% if badge.color %}style="border-color:{{ badge.color }}55;background:{{ badge.color }}18;color:{{ badge.color }}cc"{% endif %}
+                                onclick="_addBadge(this, 'incl')">
                             {% if badge.icon %}<span style="font-size:.9em">{{ badge.icon }}</span>{% endif %}
                             {{ badge.name }}
-                        </label>
+                        </button>
                         {% endfor %}
                     </div>
+                    <div class="fp-badge-list-hint">Click to include &nbsp;·&nbsp; Right-click to exclude</div>
                 </div>
             </details>
             {% endif %}
@@ -434,7 +451,8 @@
         ? [_SERVER_CENTER_LAT, _SERVER_CENTER_LNG]
         : (_GPS_FALLBACK_LAT !== null ? [_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG] : [40.7128, -74.0060]);
 
-    const map = L.map('map', { maxZoom: 19 }).setView(_serverCenter, _defaultZoom);
+    // minZoom: prevent zooming out past the point where the world-tile fills the container
+    const map = L.map('map', { maxZoom: 19, minZoom: 2 }).setView(_serverCenter, _defaultZoom);
     // Dedicated pane for topo tiles so the invert filter never touches satellite or street.
     map.createPane('topoPane');
     map.getPane('topoPane').style.zIndex = 401;
@@ -856,7 +874,6 @@
                 <div class="popup-title">${pin.name || ''}</div>
                 ${pin.description ? `<div class="popup-desc">${pin.description}</div>` : ''}
                 <div class="popup-meta">
-                    <span class="popup-status popup-status--${(pin.status||'').replace(/\s+/g,'-').toLowerCase()}">${pin.status || ''}</span>
                     <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${pin.last_visited || 'Not Visited'}</span>
                 </div>
                 <div class="popup-stars" data-pin-id="${pin.id || ''}" data-pin-uuid="${pin.uuid}">
@@ -1739,6 +1756,13 @@
         _saveLayerState();
     }
 
+    function _closeLayersPanel() {
+        const menu = document.getElementById('map-layers-menu');
+        const toggle = document.getElementById('map-layers-toggle');
+        if (menu) menu.hidden = true;
+        if (toggle) toggle.classList.remove('active');
+    }
+
     // Update the Leaflet icon URLs
     var newIcon = L.icon({
         iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
@@ -1779,7 +1803,59 @@
     document.getElementById('toggle-map-buttons').addEventListener('click', function() {
         const panel = document.getElementById('map-buttons');
         const collapsed = panel.classList.toggle('collapsed');
-        this.dataset.tooltip = collapsed ? 'Expand map controls' : 'Collapse map controls';
+        this.querySelector('i').textContent = collapsed ? 'chevron_left' : 'chevron_right';
+        this.dataset.tooltip = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
+    });
+
+    // ── Layers panel toggle ───────────────────────────────────────────────────
+    function _toggleLayersPanel() {
+        const menu = document.getElementById('map-layers-menu');
+        const toggle = document.getElementById('map-layers-toggle');
+        const isOpen = menu.hidden;
+        menu.hidden = !isOpen;
+        toggle.classList.toggle('active', isOpen);
+    }
+    // Close layers panel on outside click
+    document.addEventListener('click', function (e) {
+        const panel = document.getElementById('map-layers-panel');
+        if (panel && !panel.contains(e.target)) {
+            const menu = document.getElementById('map-layers-menu');
+            const toggle = document.getElementById('map-layers-toggle');
+            if (menu) menu.hidden = true;
+            if (toggle) toggle.classList.remove('active');
+        }
+    });
+
+    // ── Keyboard shortcuts (only when map is visible, not in input fields) ──────
+    document.addEventListener('keydown', function (e) {
+        // Skip if focus is inside a text/date input or textarea
+        const tag = (document.activeElement?.tagName || '').toLowerCase();
+        if (['input', 'textarea', 'select'].includes(tag)) return;
+        // Skip if a dialog is open
+        if (document.querySelector('dialog[open]')) return;
+        // Skip if map container isn't in viewport
+        const mapEl = document.getElementById('map');
+        if (!mapEl) return;
+        const rect = mapEl.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        const key = e.key.toLowerCase();
+        // Cmd/Ctrl combos reserved for browser — don't intercept
+        if (e.metaKey || e.ctrlKey) return;
+
+        switch (key) {
+            case 'a': openAddPinDialog(); break;                     // A — Add pin
+            case 'f': toggleFilterPanel(); break;                    // F — Filter
+            case 'p': togglePins(); break;                           // P — Toggle pins
+            case 'l': _toggleLayersPanel(); break;                   // L — Layers
+            case 'escape':
+                if (document.getElementById('filter-panel')?.classList.contains('open')) {
+                    toggleFilterPanel();
+                } else if (document.getElementById('map-layers-menu') && !document.getElementById('map-layers-menu').hidden) {
+                    _toggleLayersPanel();
+                }
+                break;
+        }
     });
 
     // ── Filter panel ──────────────────────────────────────────────────────
@@ -1796,14 +1872,19 @@
         const form = document.getElementById('filter-form');
         form.querySelectorAll('input[type=text], input[type=date]').forEach(el => { el.value = ''; });
         form.querySelectorAll('input[type=checkbox]').forEach(el => { el.checked = false; });
-        form.querySelectorAll('input[type=radio][value=""]').forEach(el => { el.checked = true; });
+        form.querySelectorAll('input[type=radio]').forEach(el => { el.checked = false; });
         // Reset dual sliders
-        ['priority'].forEach(name => {
+        ['priority', 'rating'].forEach(name => {
             const minEl = document.getElementById('fp-' + name + '-min');
             const maxEl = document.getElementById('fp-' + name + '-max');
-            if (minEl) { minEl.value = minEl.min; syncDualSlider(name); }
-            if (maxEl) { maxEl.value = maxEl.max; syncDualSlider(name); }
+            if (minEl) { minEl.value = minEl.min; }
+            if (maxEl) { maxEl.value = maxEl.max; }
+            syncDualSlider(name);
         });
+        // Reset visit section
+        if (typeof _syncVisitUI === 'function') _syncVisitUI('');
+        // Reset badge selected area
+        if (typeof _clearAllBadgeSelections === 'function') _clearAllBadgeSelections();
         _exitFilterMode();
         document.getElementById('search-pins-button').classList.remove('has-filters');
     }
@@ -1812,7 +1893,6 @@
         const form = document.getElementById('filter-form');
         if (!form) return false;
         if ((form.querySelector('input[name=name]')?.value || '').trim()) return true;
-        if (form.querySelector('input[type=radio]:not([value=""]):checked')) return true;
         if (form.querySelector('input[type=checkbox]:checked')) return true;
         for (const el of form.querySelectorAll('input[type=date]')) {
             if ((el.value || '').trim()) return true;
@@ -1831,6 +1911,54 @@
     document.getElementById('filter-form').addEventListener('input', function () {
         document.getElementById('search-pins-button').classList.toggle('has-filters', _hasActiveFilters());
     });
+
+    // ── Toggle-radio: clicking a selected radio deselects it (resets to "Any") ──
+    // Capture checked state on mousedown (before browser toggles it)
+    document.getElementById('filter-form').addEventListener('mousedown', function (e) {
+        const radio = e.target.closest('input[type=radio]');
+        if (radio && radio.value !== '') {
+            radio.dataset.wasChecked = radio.checked ? 'true' : 'false';
+        }
+    }, true);
+    document.getElementById('filter-form').addEventListener('click', function (e) {
+        const radio = e.target.closest('input[type=radio]');
+        if (!radio || radio.value === '') return;
+        if (radio.dataset.wasChecked === 'true') {
+            // Was already selected — reset to the blank (Any) option
+            const anyRadio = document.querySelector(`#filter-form input[type=radio][name="${radio.name}"][value=""]`);
+            if (anyRadio) {
+                anyRadio.checked = true;
+                htmx.trigger(document.getElementById('filter-form'), 'change');
+            }
+        }
+        radio.dataset.wasChecked = 'false';
+    }, true);
+
+    // ── Skip server round-trip when no filters are active ────────────────────
+    document.getElementById('filter-form').addEventListener('htmx:beforeRequest', function (e) {
+        if (!_hasActiveFilters()) {
+            e.preventDefault();
+            _exitFilterMode();
+            document.getElementById('search-pins-button').classList.remove('has-filters');
+        }
+    });
+
+    // ── Auto-expand filter accordion sections based on screen height ─────────
+    // Expand all sections on tall screens, fewer on short screens
+    (function _autoExpandSections() {
+        const h = window.innerHeight;
+        // Order to open: most-used first
+        const sections = ['fp-acc-rating', 'fp-acc-visits', 'fp-acc-badges', 'fp-acc-priority', 'fp-acc-date'];
+        let toOpen;
+        if (h >= 800) { toOpen = sections.length; }       // all
+        else if (h >= 650) { toOpen = 3; }                // top 3
+        else if (h >= 500) { toOpen = 1; }                // just rating
+        else { toOpen = 0; }                              // all collapsed
+        sections.slice(0, toOpen).forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.open = true;
+        });
+    })();
 
     // ── Prevent filter panel pointer events from reaching the Leaflet map ──
     document.getElementById('filter-panel').addEventListener('wheel', function (e) {
@@ -1868,8 +1996,15 @@
         fill.style.left  = leftPct + '%';
         fill.style.width = widthPct + '%';
 
-        minLabel.textContent = (lo === MIN) ? 'Any' : lo;
-        maxLabel.textContent = (hi === MAX) ? 'Any' : hi;
+        const isAttrRating = (name === 'rating');
+        if (isAttrRating) {
+            const stars = n => '★'.repeat(n) + '☆'.repeat(MAX - n);
+            minLabel.textContent = (lo === MIN && hi === MAX) ? 'Any' : stars(lo);
+            maxLabel.textContent = (lo === MIN && hi === MAX) ? '' : stars(hi);
+        } else {
+            minLabel.textContent = (lo === MIN) ? 'Any' : lo;
+            maxLabel.textContent = (hi === MAX) ? 'Any' : hi;
+        }
 
         // Only submit the hidden field when not at the extreme (avoids pointless filters)
         minHidden.value = (lo === MIN) ? '' : lo;
@@ -1880,7 +2015,51 @@
         if (details) details.classList.toggle('fp-acc-active', lo !== MIN || hi !== MAX);
     }
     // Initialise slider display on page load
-    ['priority'].forEach(name => syncDualSlider(name));
+    ['priority', 'rating'].forEach(name => syncDualSlider(name));
+
+    // ── Visit filter UI ──────────────────────────────────────────────────────
+    function _syncVisitUI(val) {
+        const hiddenEl = document.getElementById('fp-visits-hidden');
+        const resetBtn = document.getElementById('fp-visits-reset');
+        const datesEl  = document.getElementById('fp-visits-dates');
+        const chipYes  = document.getElementById('fp-visits-chip-yes');
+        const chipNo   = document.getElementById('fp-visits-chip-no');
+        if (hiddenEl) hiddenEl.value = val;
+        if (resetBtn) resetBtn.style.display = (val !== '') ? '' : 'none';
+        if (datesEl)  datesEl.style.display  = (val === 'yes') ? '' : 'none';
+        if (datesEl && val !== 'yes') {
+            datesEl.querySelectorAll('input[type=date]').forEach(el => { el.value = ''; });
+        }
+        // Reflect active chip styling
+        [chipYes, chipNo].forEach(c => {
+            if (!c) return;
+            const r = c.querySelector('input[type=radio]');
+            if (r) r.checked = (r.value === val);
+        });
+        const det = document.getElementById('fp-acc-visits');
+        if (det) det.classList.toggle('fp-acc-active', val !== '');
+    }
+    function _resetVisits() {
+        _syncVisitUI('');
+        htmx.trigger(document.getElementById('filter-form'), 'change');
+    }
+    (function _initVisits() {
+        ['fp-visits-chip-yes', 'fp-visits-chip-no'].forEach(id => {
+            const chip = document.getElementById(id);
+            if (!chip) return;
+            const radio = chip.querySelector('input[type=radio]');
+            if (!radio) return;
+            chip.addEventListener('mousedown', () => { chip.dataset.wasChecked = String(radio.checked); });
+            chip.addEventListener('click', () => {
+                if (chip.dataset.wasChecked === 'true') {
+                    _resetVisits();
+                } else {
+                    _syncVisitUI(radio.value);
+                    htmx.trigger(document.getElementById('filter-form'), 'change');
+                }
+            });
+        });
+    })();
 
     // ── Floating address search bar ────────────────────────────────────────
     let _addrBarTimer = null;
@@ -1959,14 +2138,113 @@
         });
     })();
 
-    // ── Tag search within accordion sections ─────────────────────────────
-    function filterFpTags(kind, q) {
-        const listId = kind === 'incl' ? 'fp-incl-tag-list' : 'fp-excl-tag-list';
+    // ── Combined badge filter section ────────────────────────────────────────
+    // State: map of badgeId → 'incl' | 'excl'
+    const _badgeState = new Map();
+
+    function _filterBadgeList(q) {
         q = (q || '').toLowerCase().trim();
-        document.querySelectorAll('#' + listId + ' .fp-chip').forEach(chip => {
-            chip.style.display = (!q || (chip.dataset.tagName || '').includes(q)) ? '' : 'none';
+        document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(btn => {
+            btn.style.display = (!q || (btn.dataset.badgeName || '').includes(q)) ? '' : 'none';
         });
     }
+
+    function _badgeChipHtml(id, label, color, icon, mode) {
+        const bg     = color ? (color + '33') : (mode === 'incl' ? 'rgba(34,197,94,.18)' : 'rgba(239,68,68,.18)');
+        const border = color ? (color + '66') : (mode === 'incl' ? 'rgba(34,197,94,.4)' : 'rgba(239,68,68,.4)');
+        const txtCol = mode === 'incl' ? '#86efac' : '#fca5a5';
+        const iconHtml = icon ? `<span style="font-size:.85em">${icon}</span>` : '';
+        return `<span class="fp-badge-chip fp-badge-chip--${mode}" data-id="${id}"
+                      style="background:${bg};border-color:${border};color:${txtCol}">
+                    ${iconHtml}<span class="fp-badge-chip-label">${label}</span>
+                    <button type="button" class="fp-badge-chip-toggle" title="Switch to ${mode === 'incl' ? 'exclude' : 'include'}"
+                            onclick="_toggleBadgeMode('${id}')">
+                        <i class="material-icons">${mode === 'incl' ? 'block' : 'check_circle'}</i>
+                    </button>
+                    <button type="button" class="fp-badge-chip-remove" title="Remove" onclick="_removeBadge('${id}')">
+                        <i class="material-icons">close</i>
+                    </button>
+                </span>`;
+    }
+
+    function _rebuildBadgeSelected() {
+        const inclEl    = document.getElementById('fp-badge-incl-chips');
+        const exclEl    = document.getElementById('fp-badge-excl-chips');
+        const colIncl   = document.getElementById('fp-badge-col-incl');
+        const colExcl   = document.getElementById('fp-badge-col-excl');
+        const selectedEl = document.getElementById('fp-badge-selected');
+        const hidIncl   = document.getElementById('fp-badge-hidden-incl');
+        const hidExcl   = document.getElementById('fp-badge-hidden-excl');
+        const det       = document.getElementById('fp-acc-badges');
+
+        inclEl.innerHTML = '';
+        exclEl.innerHTML = '';
+        hidIncl.innerHTML = '';
+        hidExcl.innerHTML = '';
+
+        let hasIncl = false, hasExcl = false;
+        _badgeState.forEach((mode, id) => {
+            const btn = document.querySelector(`#fp-badge-list [data-badge-id="${id}"]`);
+            const label = btn?.dataset.badgeLabel || id;
+            const color = btn?.dataset.badgeColor || '';
+            const icon  = btn?.dataset.badgeIcon  || '';
+            if (mode === 'incl') {
+                hasIncl = true;
+                inclEl.insertAdjacentHTML('beforeend', _badgeChipHtml(id, label, color, icon, 'incl'));
+                hidIncl.insertAdjacentHTML('beforeend', `<input type="checkbox" name="tags" value="${id}" checked style="display:none">`);
+            } else {
+                hasExcl = true;
+                exclEl.insertAdjacentHTML('beforeend', _badgeChipHtml(id, label, color, icon, 'excl'));
+                hidExcl.insertAdjacentHTML('beforeend', `<input type="checkbox" name="exclude_tags" value="${id}" checked style="display:none">`);
+            }
+        });
+
+        const anySelected = hasIncl || hasExcl;
+        selectedEl.style.display = anySelected ? '' : 'none';
+        // Single-column if only one type active
+        colIncl.style.display = hasIncl ? '' : 'none';
+        colExcl.style.display = hasExcl ? '' : 'none';
+        if (det) det.classList.toggle('fp-acc-active', anySelected);
+    }
+
+    function _addBadge(btn, mode) {
+        const id = btn.dataset.badgeId;
+        if (_badgeState.has(id)) return; // already selected
+        _badgeState.set(id, mode);
+        btn.style.display = 'none'; // remove from list
+        _rebuildBadgeSelected();
+        htmx.trigger(document.getElementById('filter-form'), 'change');
+    }
+
+    function _toggleBadgeMode(id) {
+        if (!_badgeState.has(id)) return;
+        _badgeState.set(id, _badgeState.get(id) === 'incl' ? 'excl' : 'incl');
+        _rebuildBadgeSelected();
+        htmx.trigger(document.getElementById('filter-form'), 'change');
+    }
+
+    function _removeBadge(id) {
+        _badgeState.delete(id);
+        // Show the badge button again in the list
+        const btn = document.querySelector(`#fp-badge-list [data-badge-id="${id}"]`);
+        if (btn) btn.style.display = '';
+        _rebuildBadgeSelected();
+        htmx.trigger(document.getElementById('filter-form'), 'change');
+    }
+
+    function _clearAllBadgeSelections() {
+        _badgeState.clear();
+        document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(btn => { btn.style.display = ''; });
+        _rebuildBadgeSelected();
+    }
+
+    // Right-click on badge in list → add as exclude
+    document.getElementById('fp-badge-list')?.addEventListener('contextmenu', function (e) {
+        const btn = e.target.closest('.fp-badge-avail');
+        if (!btn) return;
+        e.preventDefault();
+        _addBadge(btn, 'excl');
+    });
 
     // ── Add-Pin dialog ────────────────────────────────────────────────────
     let _addPinClickMode = false;

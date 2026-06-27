@@ -235,50 +235,27 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 6px;
-    padding: 8px;
+    gap: 4px;
+    padding: 6px 6px 6px 4px;
     background: var(--ul-grey-0);
-    opacity: 0.9;
+    opacity: 0.8;
     border-radius: $radius-md;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, .07);
-    transition: opacity 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .09);
+    transition: opacity 0.2s ease, box-shadow 0.2s ease;
 
     &:hover {
         opacity: 1;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, .14), 0 0 0 1px rgba(0, 0, 0, .06);
-    }
-
-    #toggle-map-buttons {
-        background: transparent;
-        border: 1.5px solid transparent;
-        border-radius: $radius-sm;
-        width: 2.5rem;
-        height: 2.5rem;
-        font-size: 1.1rem;
-        line-height: 1;
-        color: var(--ul-grey-8);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background-color 0.15s ease, border-color 0.15s ease;
-        flex-shrink: 0;
-
-        &:hover,
-        &:focus {
-            background-color: rgba($color-blue-500, .08);
-            border-color: rgba($color-blue-500, .25);
-        }
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .14), 0 0 0 1px rgba(0, 0, 0, .05);
     }
 
     .map-buttons-content {
         display: flex;
         flex-direction: row;
         align-items: center;
-        gap: 6px;
+        gap: 4px;
         overflow: hidden;
         max-width: 500px;
-        transition: max-width 0.2s ease, opacity 0.2s ease, gap 0.2s ease;
+        transition: max-width 0.22s ease, opacity 0.2s ease, gap 0.2s ease;
         opacity: 1;
     }
 
@@ -289,7 +266,7 @@
         &:hover {
             opacity: 1;
         }
-        
+
         .map-buttons-content {
             max-width: 0;
             opacity: 0;
@@ -301,19 +278,19 @@
         background: transparent;
         border: 1.5px solid transparent;
         border-radius: $radius-sm;
-        width: 2.6rem;
-        height: 2.6rem;
+        width: 2.5rem;
+        height: 2.5rem;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
         color: var(--ul-grey-7);
-        opacity: 0.7;
+        opacity: 0.8;
         transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         flex-shrink: 0;
 
         .material-icons {
-            font-size: 1.3rem;
+            font-size: 1.25rem;
             pointer-events: none;
         }
 
@@ -423,10 +400,9 @@
 
 @include down($breakpoint-sm) {
     .map-buttons {
-        padding: 6px;
-        gap: 4px;
+        padding: 5px 5px 5px 3px;
+        gap: 3px;
 
-        #toggle-map-buttons,
         .map-btn-icon {
             width: 2.75rem;
             height: 2.75rem;
