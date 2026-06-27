@@ -121,17 +121,17 @@ def verify_external_network_blocked(
             return
         raise ExternalNetworkGuardVerificationError(
             "Network guard verification failed: unexpected RuntimeError while probing "
-            f"{host!r}: {exc}"
+            f"{host!r}: {exc}",
         ) from exc
     except OSError as exc:
         raise ExternalNetworkGuardVerificationError(
             "Network guard verification failed: connection to external host "
             f"{host!r} reached the OS network stack instead of being blocked by "
-            f"LocalhostOnlyNetwork ({exc})."
+            f"LocalhostOnlyNetwork ({exc}).",
         ) from exc
     else:
         connection.close()
         raise ExternalNetworkGuardVerificationError(
             "Network guard verification failed: connection to external host "
-            f"{host!r} succeeded while tests require blocked external access."
+            f"{host!r} succeeded while tests require blocked external access.",
         )

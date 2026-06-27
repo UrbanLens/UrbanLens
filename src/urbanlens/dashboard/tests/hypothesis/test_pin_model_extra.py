@@ -1,8 +1,7 @@
 """Additional Pin model tests covering methods not in test_pin_properties.py.
 
-Covers:
+An LLM Believes this file covers the following (this assessment may be correct, or incorrect):
 - effective_color  (mock-based, badges M2M filtered by kind=tag)
-- has_meaningful_name  (pure)
 - rating  (DB, requires Review)
 - add_category / change_category  (DB)
 - to_json / to_detail_json  (DB)
@@ -105,11 +104,8 @@ class PinEffectiveColorTests(TestCase):
         pin.icon = "star"
         self.assertIsNone(pin.effective_color)
 
-
-# ── has_meaningful_name ────────────────────────────────────────────────────────
-
 class PinHasMeaningfulNameTests(TestCase):
-    """has_meaningful_name is False for Google placeholder names."""
+    """meaningful_name is None for Google placeholder names."""
 
     def _pin_with_name(self, nickname: str | None, loc_name: str = "") -> Pin:
         pin = Pin()
@@ -127,38 +123,38 @@ class PinHasMeaningfulNameTests(TestCase):
 
     def test_dropped_pin_is_not_meaningful(self) -> None:
         pin = self._pin_with_name(None, loc_name="Dropped pin")
-        self.assertFalse(pin.has_meaningful_name)
+        self.assertIsNone(pin.meaningful_name)
 
     def test_no_information_available_is_not_meaningful(self) -> None:
         pin = self._pin_with_name(None, loc_name="No Information Available")
-        self.assertFalse(pin.has_meaningful_name)
+        self.assertIsNone(pin.meaningful_name)
 
     def test_abandoned_placeholder_is_not_meaningful(self) -> None:
         pin = self._pin_with_name(None, loc_name="Abandoned")
-        self.assertFalse(pin.has_meaningful_name)
+        self.assertIsNone(pin.meaningful_name)
 
     def test_coordinate_name_is_not_meaningful(self) -> None:
         pin = self._pin_with_name(None, loc_name="40.7128, -74.0060")
-        self.assertFalse(pin.has_meaningful_name)
+        self.assertIsNone(pin.meaningful_name)
 
     def test_none_string_is_not_meaningful(self) -> None:
         pin = self._pin_with_name(None, loc_name="None")
-        self.assertFalse(pin.has_meaningful_name)
+        self.assertIsNone(pin.meaningful_name)
 
     def test_unnamed_location_is_not_meaningful(self) -> None:
         pin = self._pin_with_name(None, loc_name="Unnamed Location")
-        self.assertFalse(pin.has_meaningful_name)
+        self.assertIsNone(pin.meaningful_name)
 
     def test_empty_string_is_not_meaningful(self) -> None:
-        self.assertFalse(self._pin_no_location().has_meaningful_name)
+        self.assertIsNone(self._pin_no_location().meaningful_name)
 
     def test_real_name_is_meaningful(self) -> None:
         pin = self._pin_with_name("Old Warehouse")
-        self.assertTrue(pin.has_meaningful_name)
+        self.assertIsNotNone(pin.meaningful_name)
 
     def test_nickname_meaningful_regardless_of_location(self) -> None:
         pin = self._pin_with_name("My Spot", loc_name="Dropped pin")
-        self.assertTrue(pin.has_meaningful_name)
+        self.assertIsNotNone(pin.meaningful_name)
 
 
 # ── rating ────────────────────────────────────────────────────────────────────

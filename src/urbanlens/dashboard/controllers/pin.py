@@ -322,7 +322,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        if not pin.has_meaningful_name:
+        if not pin.meaningful_name:
             return HttpResponse("", status=204)
 
         cache_key = f"web_search_pin_{pin.pk}"

@@ -150,12 +150,11 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
     # Effective values - resolve overrides against the linked Location
     # ------------------------------------------------------------------
 
-    def _winning_display_badge(self) -> Badge | None:
+    def display_badge(self) -> Badge | None:
         """Badge supplying the map icon, when the icon is inherited from a badge."""
         if self.custom_icon or self.icon:
             return None
-        badges = self.__dict__.get("badges") or self.badges
-        for badge in badges.exclude(kind="user").order_by("-order"):
+        for badge in self.badges.exclude(kind="user").order_by("-order"):
             if badge.custom_icon and not badge.icon_is_overridden:
                 return badge
             if badge.effective_icon:
@@ -163,28 +162,27 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         return None
 
     @property
+    def display_label(self) -> str:
+        """Human-readable label: pin name when meaningful, otherwise street address."""
+        if label := self.meaningful_name:
+            return label
+        if self.address:
+            return self.address
+        if self.location and self.location.address:
+            return self.location.address
+        return f"{self.effective_latitude}, {self.effective_longitude}"
+    
+    @property
     def effective_icon(self) -> str | None:
-        """Icon to display for this pin following the priority chain.
-
-        Priority:
-        1. custom_icon uploaded directly for this pin (returns URL)
-        2. standard icon key selected for this pin
-        3. highest-order tag/category/status that has any icon (custom_icon beats icon)
-        4. None - caller should fall back to the default marker
-
-        Prefetch badges when calling in bulk (e.g. get_map_data).
-        """
+        """Icon to display for this pin following the priority chain."""
         if self.custom_icon:
             return self.custom_icon.url
         if self.icon:
             return self.icon
-        badges = self.__dict__.get("badges") or self.badges
-        for badge in badges.exclude(kind="user").order_by("-order"):
+        if badge := self.display_badge():
             if badge.custom_icon and not badge.icon_is_overridden:
                 return badge.custom_icon.url
-            icon = badge.effective_icon
-            if icon:
-                return icon
+            return badge.effective_icon
         return None
 
     @property
@@ -201,7 +199,7 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
             return self.color
         if self.custom_icon or self.icon:
             return None
-        winning = self._winning_display_badge()
+        winning = self.display_badge()
         if winning:
             return winning.effective_color
         return None
@@ -210,65 +208,11 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
     def effective_name(self) -> str:
         """User's custom name, or the location's canonical name."""
         return self.nickname or (self.location.name if self.location else "")
-
+    
     @property
-    def has_meaningful_name(self) -> bool:
-        """True when the pin has a real name worth using as a search query."""
-        return is_meaningful_name(self.effective_name)
-
-    @property
-    def display_label(self) -> str:
-        """Human-readable label: pin name when meaningful, otherwise street address."""
-        if self.has_meaningful_name:
-            return self.effective_name
-        if self.location and self.location.address:
-            return self.location.address
-        return self.address or self.effective_name or ""
-
-    @property
-    def place_name(self) -> str | None:
-        if not self.location:
-            return None
-        return self.location.cached_place_name or self.location.name
-
-    @property
-    def cached_place_name(self) -> str | None:
-        return self.location.cached_place_name if self.location else None
-
-    @property
-    def country(self) -> str | None:  # type: ignore[override]
-        return self.location.country if self.location else None
-
-    @country.setter
-    def country(self, value: str | None) -> None:
-        self.__dict__["country"] = value
-
-    @property
-    def address(self) -> str | None:
-        return self.location.address if self.location else None
-
-    @property
-    def address_basic(self) -> str | None:
-        return self.location.address_basic if self.location else None
-
-    @property
-    def address_extended(self) -> str | None:
-        return self.location.address_extended if self.location else None
-
-    @property
-    def state(self) -> str | None:
-        return self.location.state if self.location else None
-
-    @property
-    def county(self) -> str | None:
-        return self.location.county if self.location else None
-
-    @property
-    def city(self) -> str | None:
-        return self.location.city if self.location else None
-
-    def has_place_name(self) -> bool:
-        return bool(self.location and self.location.has_place_name())
+    def meaningful_name(self) -> str | None:
+        """The pin's name, or the location's canonical name if the pin has no name."""
+        return self.effective_name if is_meaningful_name(self.effective_name) else None
 
     @property
     def effective_latitude(self) -> float | None:
@@ -294,10 +238,6 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         if self.date_abandoned is not None:
             return self.date_abandoned - timedelta(days=1)
         return None
-
-    # ------------------------------------------------------------------
-    # Rating
-    # ------------------------------------------------------------------
 
     @property
     def rating(self) -> int:
@@ -332,7 +272,7 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         keyword_parts = [
             p
             for p in (
-                self.effective_name if self.has_meaningful_name else None,
+                self.meaningful_name,
                 self.place_name if self.has_place_name() else None,
             )
             if p
@@ -360,8 +300,8 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         if self.has_place_name():
             prompt += f"google maps description: {self.place_name}\n"
             instructions += "\nThe google maps description may be helpful, but it also may be inaccurate. Use your best judgement.\n"
-        if self.has_meaningful_name:
-            prompt += f"location title: {self.effective_name}\n"
+        if title := self.meaningful_name:
+            prompt += f"location title: {title}\n"
         if self.description:
             prompt += f"user notes: {self.description}\n"
 

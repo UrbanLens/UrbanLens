@@ -216,7 +216,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
     from urbanlens.dashboard.services.search import get_search_gateway
 
     pin = Pin.objects.filter(pk=pin_id).select_related("location").first()
-    if pin is None or not pin.has_meaningful_name:
+    if pin is None or not pin.meaningful_name:
         return 0
     update_task_progress(self, current=0, total=1, message="Refreshing web search…")
     results = get_search_gateway().search(_build_pin_search_query(pin))
@@ -241,7 +241,7 @@ def refresh_smithsonian_images(self, pin_id: int) -> int:
     from urbanlens.UrbanLens.settings.app import settings
 
     pin = Pin.objects.filter(pk=pin_id).select_related("location").first()
-    if pin is None or not pin.has_meaningful_name:
+    if pin is None or not pin.meaningful_name:
         return 0
     update_task_progress(self, current=0, total=1, message="Refreshing Smithsonian images…")
     images = [img for img in SmithsonianGateway(api_key=settings.smithsonian_api_key or "").get_data(pin.effective_name) if img.get("url")]

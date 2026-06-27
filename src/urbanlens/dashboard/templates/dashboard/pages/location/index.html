@@ -329,7 +329,7 @@
             </div>
         </div>
 
-        {% if pin.has_meaningful_name %}
+        {% if pin.meaningful_name %}
         <div id="web-search-section" class="web-search card"
              hx-get="{% url 'pin.web_search' pin.slug %}"
              hx-trigger="load"
