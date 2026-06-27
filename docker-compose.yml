@@ -181,7 +181,7 @@ services:
         - UL_DATABASE_HOST=${UL_DB_HOST:-urbanlens_db}
         - UL_DATABASE_PORT=${UL_DB_PORT:-5432}
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
-    command: ["-A", "urbanlens.UrbanLens", "beat", "--loglevel=info"]
+    command: ["-A", "urbanlens.UrbanLens", "beat", "--loglevel=info", "--schedule=/var/log/urbanlens/celerybeat-schedule"]
     restart: on-failure
     depends_on:
       db:

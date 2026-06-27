@@ -68,10 +68,11 @@ RUN pip install -e .
 # Install npm packages
 RUN npm install -y
 
-# Create a non-root user that will run the application processes
+# Create a non-root user that will run the application processes.
+# /app stays root-owned (world-readable); runtime write paths are volume mounts
+# handled by docker-entrypoint.sh.
 RUN groupadd --gid 1001 appuser && \
-    useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser && \
-    chown -R appuser:appuser /app
+    useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
