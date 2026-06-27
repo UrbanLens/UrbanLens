@@ -11,6 +11,9 @@
                 {% elif ns == 'cat' %}
                 <button type="button" class="org-convert-btn" id="cat-bulk-convert-to-tag" onclick="_setCatBulkConvert('tag')"><i class="material-icons">label</i><span class="org-convert-btn-label">To Tags</span><span class="org-convert-btn-desc">Personal labels on your pins</span></button>
                 <button type="button" class="org-convert-btn" id="cat-bulk-convert-to-status" onclick="_setCatBulkConvert('status')"><i class="material-icons">flag_circle</i><span class="org-convert-btn-label">To Statuses</span><span class="org-convert-btn-desc">Track pin state (visited, active…)</span></button>
+                {% elif ns == 'status' %}
+                <button type="button" class="org-convert-btn" id="status-bulk-convert-to-tag" onclick="_setStatusBulkConvert('tag')"><i class="material-icons">label</i><span class="org-convert-btn-label">To Tags</span><span class="org-convert-btn-desc">Personal labels on your pins</span></button>
+                <button type="button" class="org-convert-btn" id="status-bulk-convert-to-category" onclick="_setStatusBulkConvert('category')"><i class="material-icons">category</i><span class="org-convert-btn-label">To Categories</span><span class="org-convert-btn-desc">Personal labels for organizing by type</span></button>
                 {% endif %}
             </div>
             <p class="form-hint" id="{{ ns }}-bulk-convert-hint" hidden></p>
@@ -40,9 +43,9 @@
                 <div class="color-picker" id="{{ ns }}-bulk-color-picker">
                     <input type="hidden" id="{{ ns }}-bulk-color-value">
                     {% for hex, label in color_choices %}
-                    <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','{{ hex }}',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% else %}_updateCatBulkState(){% endif %};"></button>
+                    <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','{{ hex }}',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% else %}_updateStatusBulkState(){% endif %};"></button>
                     {% endfor %}
-                    <button type="button" class="color-swatch color-clear" title="No color" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% else %}_updateCatBulkState(){% endif %};"><i class="material-icons" style="font-size:1rem;">block</i></button>
+                    <button type="button" class="color-swatch color-clear" title="No color" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% else %}_updateStatusBulkState(){% endif %};"><i class="material-icons" style="font-size:1rem;">block</i></button>
                 </div>
                 <label class="cat-bulk-nochange-label"><input type="checkbox" id="{{ ns }}-bulk-color-nochange" checked><span>No change - leave color unchanged</span></label>
             </div>

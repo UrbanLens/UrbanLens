@@ -1729,8 +1729,8 @@ dialog.tag-create-card.ul-dialog {
     flex: 1;
     min-width: 0;
     display: flex;
-    flex-direction: row;
-    gap: .1rem;
+    flex-direction: column;
+    gap: .2rem;
 }
 
 .priority-item-name {
@@ -1937,6 +1937,33 @@ dialog.tag-create-card.ul-dialog {
 
 .priority-item--order-saved {
     animation: priority-order-row-saved .6s ease-out;
+}
+
+.priority-edit-btn {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    color: var(--ul-grey-6);
+    transition: background .13s, border-color .13s, color .13s;
+
+    &:hover {
+        background: var(--ul-grey-0a);
+        border-color: $ui-indigo-300;
+        color: $ui-indigo-600;
+    }
+
+    .material-icons {
+        font-size: 1.05rem;
+        pointer-events: none;
+    }
 }
 
 @keyframes priority-order-row-saved {
@@ -2414,41 +2441,6 @@ dialog.tag-create-card.ul-dialog {
 
     .org-convert-btn-desc {
         display: none;
-    }
-
-    /* ── Priority tab: edit button ───────────────────────────────────── */
-    .priority-edit-btn {
-        margin-left: auto;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        border-radius: 7px;
-        border: 1px solid transparent;
-        background: transparent;
-        cursor: pointer;
-        color: var(--ul-grey-6);
-        transition: background .13s, border-color .13s, color .13s;
-        opacity: 0;
-        pointer-events: none;
-    }
-
-    .priority-item:hover .priority-edit-btn {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    .priority-edit-btn:hover {
-        background: var(--ul-grey-0a);
-        border-color: $ui-indigo-300;
-        color: $ui-indigo-600;
-    }
-
-    .priority-edit-btn .material-icons {
-        font-size: 1.05rem;
-        pointer-events: none;
     }
 
 }

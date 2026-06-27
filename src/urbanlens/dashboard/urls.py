@@ -12,8 +12,8 @@ from rest_framework import routers
 
 from urbanlens.dashboard.controllers import (
     aliases,
+    badges,
     campus,
-    categories,
     comments,
     detail_pins,
     friendship,
@@ -23,22 +23,18 @@ from urbanlens.dashboard.controllers import (
     markup,
     notifications,
     organize,
-    people_badges,
     pin,
     pin_edit,
     settings,
     setup,
     site_admin,
-    statuses,
-    tags,
     tools,
     trip,
     userprofile,
     visits,
 )
 from urbanlens.dashboard.controllers.index import IndexController
-
-# from urbanlens.dashboard.models.categories import CategoryViewSet
+from urbanlens.dashboard.models.badges.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
 from urbanlens.dashboard.models.pin import PinViewSet
 from urbanlens.dashboard.models.profile import ProfileViewSet
 
@@ -346,26 +342,47 @@ urlpatterns = [
     path("settings/", settings.SettingsView.as_view(), name="settings.view"),
     path("settings/geocode/", settings.geocode_address, name="settings.geocode"),
     path("settings/map-position/", settings.SaveMapPositionView.as_view(), name="settings.save_map_position"),
-    path(
-        "tags/",
-        include(
-            [
-                path("", tags.TagIndexView.as_view(), name="tag.index"),
-                path("create/", tags.TagCreateView.as_view(), name="tag.create"),
-                path("<int:tag_id>/edit/", tags.TagEditView.as_view(), name="tag.edit"),
-                path("<int:tag_id>/delete/", tags.TagDeleteView.as_view(), name="tag.delete"),
-                path("<int:tag_id>/merge/", tags.TagMergeView.as_view(), name="tag.merge"),
-                path("rows/", tags.TagRowsView.as_view(), name="tag.rows"),
-                path("reorder/", tags.TagReorderView.as_view(), name="tag.reorder"),
-                path("bulk-delete/", tags.TagBulkDeleteView.as_view(), name="tag.bulk_delete"),
-                path("bulk-edit/", tags.TagBulkEditView.as_view(), name="tag.bulk_edit"),
-                path("bulk-convert/", tags.TagBulkConvertView.as_view(), name="tag.bulk_convert"),
-                path("bulk-convert-status/", tags.TagBulkConvertToStatusView.as_view(), name="tag.bulk_convert_status"),
-                path("multi-merge/", tags.TagMultiMergeView.as_view(), name="tag.multi_merge"),
-                path("<int:tag_id>/customize/", tags.TagCustomizeView.as_view(), name="tag.customize"),
-                path("pin/<slug:pin_slug>/", tags.TagMembershipView.as_view(), name="tag.membership"),
-            ],
-        ),
+    re_path(
+        r"^(?P<badge_kind>tags?|categor(y|ies)|status(es)?|people)/",
+        include([
+            path("", badges.BadgeKindIndexView.as_view(), name="badge.index"),
+            path("create/", badges.BadgeCreateView.as_view(), name="badge.create"),
+            path("rows/", badges.BadgeRowsView.as_view(), name="badge.rows"),
+            path("<int:badge_id>/edit/", badges.BadgeEditView.as_view(), name="badge.edit"),
+            path("<int:badge_id>/delete/", badges.BadgeDeleteView.as_view(), name="badge.delete"),
+            path("<int:badge_id>/merge/", badges.BadgeMergeView.as_view(), name="badge.merge"),
+            path("<int:badge_id>/customize/", badges.BadgeCustomizeView.as_view(), name="badge.customize"),
+            path("reorder/", badges.BadgeReorderView.as_view(), name="badge.reorder"),
+            path("bulk-delete/", badges.BadgeBulkDeleteView.as_view(), name="badge.bulk_delete"),
+            path("bulk-edit/", badges.BadgeBulkEditView.as_view(), name="badge.bulk_edit"),
+            path(
+                "bulk-convert/",
+                badges.BadgeBulkConvertView.as_view(),
+                name="badge.bulk_convert",
+            ),
+            path(
+                "bulk-convert-status/",
+                badges.BadgeBulkConvertView.as_view(target_kind=KIND_STATUS),
+                name="badge.bulk_convert_status",
+            ),
+            path(
+                "bulk-convert-tag/",
+                badges.BadgeBulkConvertView.as_view(target_kind=KIND_TAG),
+                name="badge.bulk_convert_tag",
+            ),
+            path(
+                "bulk-convert-category/",
+                badges.BadgeBulkConvertView.as_view(target_kind=KIND_CATEGORY),
+                name="badge.bulk_convert_category",
+            ),
+            path("multi-merge/", badges.BadgeMultiMergeView.as_view(), name="badge.multi_merge"),
+            path("pin/<slug:pin_slug>/", badges.BadgePinMembershipView.as_view(), name="badge.pin"),
+            path(
+                "location/<slug:location_slug>/",
+                badges.BadgeLocationMembershipView.as_view(),
+                name="badge.location",
+            ),
+        ]),
     ),
     path(
         "friendship/",
@@ -598,67 +615,11 @@ urlpatterns = [
         ),
     ),
     path(
-        "categories/",
-        include(
-            [
-                path("", categories.CategoryIndexView.as_view(), name="category.index"),
-                path("create/", categories.CategoryCreateView.as_view(), name="category.create"),
-                path("<int:cat_id>/edit/", categories.CategoryEditView.as_view(), name="category.edit"),
-                path("<int:cat_id>/delete/", categories.CategoryDeleteView.as_view(), name="category.delete"),
-                path("<int:cat_id>/merge/", categories.CategoryMergeView.as_view(), name="category.merge"),
-                path("merge/", categories.CategoryMultiMergeView.as_view(), name="category.multi_merge"),
-                path("bulk-delete/", categories.CategoryBulkDeleteView.as_view(), name="category.bulk_delete"),
-                path("bulk-edit/", categories.CategoryBulkEditView.as_view(), name="category.bulk_edit"),
-                path("bulk-convert/", categories.CategoryBulkConvertView.as_view(), name="category.bulk_convert"),
-                path(
-                    "bulk-convert-status/",
-                    categories.CategoryBulkConvertToStatusView.as_view(),
-                    name="category.bulk_convert_status",
-                ),
-                path("rows/", categories.CategoryRowsView.as_view(), name="category.rows"),
-                path("<int:cat_id>/customize/", categories.CategoryCustomizeView.as_view(), name="category.customize"),
-                path("reorder/", categories.CategoryReorderView.as_view(), name="category.reorder"),
-                path("pin/<slug:pin_slug>/", categories.CategoryPinMembershipView.as_view(), name="category.pin"),
-                path(
-                    "location/<slug:location_slug>/",
-                    categories.CategoryLocationMembershipView.as_view(),
-                    name="category.location",
-                ),
-            ],
-        ),
-    ),
-    path(
         "organize/",
         include(
             [
                 path("", organize.OrganizeIndexView.as_view(), name="organize.index"),
                 path("priority/save/", organize.OrganizePrioritySaveView.as_view(), name="organize.priority.save"),
-            ],
-        ),
-    ),
-    path(
-        "statuses/",
-        include(
-            [
-                path("rows/", statuses.StatusRowsView.as_view(), name="status.rows"),
-                path("create/", statuses.StatusCreateView.as_view(), name="status.create"),
-                path("<int:status_id>/edit/", statuses.StatusEditView.as_view(), name="status.edit"),
-                path("<int:status_id>/delete/", statuses.StatusDeleteView.as_view(), name="status.delete"),
-                path("bulk-delete/", statuses.StatusBulkDeleteView.as_view(), name="status.bulk_delete"),
-                path("multi-merge/", statuses.StatusMultiMergeView.as_view(), name="status.multi_merge"),
-                path("pin/<slug:pin_slug>/", statuses.StatusMembershipView.as_view(), name="status.membership"),
-            ],
-        ),
-    ),
-    path(
-        "people/",
-        include(
-            [
-                path("rows/", people_badges.PeopleBadgeRowsView.as_view(), name="people.rows"),
-                path("create/", people_badges.PeopleBadgeCreateView.as_view(), name="people.create"),
-                path("<int:badge_id>/edit/", people_badges.PeopleBadgeEditView.as_view(), name="people.edit"),
-                path("<int:badge_id>/delete/", people_badges.PeopleBadgeDeleteView.as_view(), name="people.delete"),
-                path("multi-merge/", people_badges.PeopleBadgeMultiMergeView.as_view(), name="people.multi_merge"),
             ],
         ),
     ),

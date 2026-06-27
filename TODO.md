@@ -20,6 +20,7 @@ Features planned for this release.
 * Require HTTPS [UL-254]
 * Password reset should go to application page, not django password reset page. [UL-256]
 * Password reset should work elegantly with SSO users. [UL-257]
+* Switch to gunicorn (or similar) instead of runserver in init.py, except for environment=development. [UL-258]
 
 ## Medium Features
 

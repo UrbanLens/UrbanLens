@@ -1,0 +1,131 @@
+{% load dashboard_tags %}
+{# Shared edit form for tag, category, and status badges (loaded into #badge-edit-dialog-body). #}
+<form hx-post="{% url 'badge.edit' badge_kind=badge_url_kind badge_id=badge.id %}"
+      hx-target="{{ rows_target }}"
+      hx-swap="innerHTML"
+      enctype="multipart/form-data"
+      class="tag-inline-edit organize-badge-edit-form{% if is_global %} tag-global-edit-form{% endif %}"
+      hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); var kc=event.detail.xhr&&event.detail.xhr.getResponseHeader('X-Kind-Changed'); toastr.success(kc?'Converted to '+kc+'.':'{{ singular_title }} saved.'); }">
+    {% csrf_token %}
+
+    {% if show_kind_toggle != False %}
+    <div class="form-field" style="margin-bottom:1rem;">
+        <label class="form-label">Type</label>
+        <div class="kind-toggle">
+            <label class="kind-toggle-option">
+                <input type="radio" name="kind" value="tag" {% if badge.kind == 'tag' %}checked{% endif %}{% if badge.is_protected %} disabled{% endif %}>
+                <span><i class="material-icons">label</i> Tag</span>
+            </label>
+            <label class="kind-toggle-option">
+                <input type="radio" name="kind" value="category" {% if badge.kind == 'category' %}checked{% endif %}{% if badge.is_protected %} disabled{% endif %}>
+                <span><i class="material-icons">category</i> Category</span>
+            </label>
+            <label class="kind-toggle-option">
+                <input type="radio" name="kind" value="status" {% if badge.kind == 'status' %}checked{% endif %}{% if badge.is_protected %} disabled{% endif %}>
+                <span><i class="material-icons">flag</i> Status</span>
+            </label>
+        </div>
+        <p class="form-hint">Changing the type will convert this item and migrate its memberships.</p>
+    </div>
+    {% endif %}
+
+    <div class="tag-form-grid">
+        <div class="form-field">
+            <label class="form-label">{{ singular_title }} name</label>
+            {% if badge.is_protected %}
+            <input type="text" class="form-input" value="{{ badge.name }}" disabled title="This status name cannot be changed">
+            {% else %}
+            <input name="name" type="text" class="form-input" value="{{ badge.name }}" required>
+            {% endif %}
+        </div>
+    </div>
+    <input type="hidden" name="order" value="{{ badge.order }}">
+
+    <div class="form-field">
+        <label class="form-label">Description (optional)</label>
+        <textarea name="description" class="form-input" rows="2">{{ badge.description|default:'' }}</textarea>
+    </div>
+
+    <div class="tag-icon-color-row">
+        <div class="form-field">
+            <label class="form-label">Icon</label>
+
+            <div class="icon-custom-upload-area" style="margin-top:4px;">
+                <img {% if badge.custom_icon %}src="{{ badge.custom_icon.url }}"{% else %}style="display:none"{% endif %}
+                     class="icon-custom-preview-thumb" id="edit-custom-preview-{{ badge.id }}" alt="Custom icon">
+                {% if badge.custom_icon %}
+                <button type="button" class="icon-custom-clear-btn" id="edit-clear-btn-{{ badge.id }}" title="Remove custom icon"
+                        onclick="clearBadgeEditCustomIcon('{{ badge.id }}')">
+                    <i class="material-icons">close</i>
+                </button>
+                {% endif %}
+                <input type="hidden" name="clear_custom_icon" id="edit-clear-custom-{{ badge.id }}" value="">
+                <label class="icon-custom-upload-btn" id="edit-upload-btn-{{ badge.id }}" {% if badge.custom_icon %}style="display:none"{% endif %} title="Upload a custom image icon">
+                    <i class="material-icons">upload</i>
+                    Upload custom
+                    <input type="file" name="custom_icon" id="edit-custom-input-{{ badge.id }}"
+                           accept="image/*" style="display:none"
+                           onchange="showBadgeEditCustomPreview('{{ badge.id }}', this)">
+                </label>
+            </div>
+
+            <div class="icon-picker-wrap" id="edit-icon-picker-wrap-{{ badge.id }}" {% if badge.custom_icon %}style="display:none"{% endif %}>
+                {% with picker_id=badge.id|stringformat:"d" current_icon=badge.icon|default:"" field_name="icon" %}
+                {% include 'dashboard/partials/_icon_picker.html' %}
+                {% endwith %}
+            </div>
+        </div>
+
+        <div class="form-field">
+            <label class="form-label">Color</label>
+            <div class="color-picker" id="edit-color-picker-{{ badge.id }}">
+                <input type="hidden" name="color" id="edit-color-value-{{ badge.id }}" value="{{ badge.color|default:'' }}">
+                {% for hex, label in color_choices %}
+                <button type="button"
+                        class="color-swatch {% if badge.color == hex %}selected{% endif %}"
+                        data-color="{{ hex }}" title="{{ label }}"
+                        style="background:{{ hex }};"
+                        onclick="pickColor('edit-color-picker-{{ badge.id }}','edit-color-value-{{ badge.id }}','{{ hex }}',this)">
+                </button>
+                {% endfor %}
+                <button type="button"
+                        class="color-swatch color-clear {% if not badge.color %}selected{% endif %}"
+                        title="No color"
+                        onclick="pickColor('edit-color-picker-{{ badge.id }}','edit-color-value-{{ badge.id }}','',this)">
+                    <i class="material-icons" style="font-size:1rem;">block</i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label class="form-label">Parent badges (optional)</label>
+        <input type="text" class="form-input tag-parent-search"
+               placeholder="Search badges…"
+               oninput="filterParentOptions(this, 'parent-select-edit-{{ badge.id }}')"
+               autocomplete="off">
+        <div class="tag-parent-select" id="parent-select-edit-{{ badge.id }}">
+            {% for b in available_parents %}
+            <label class="tag-parent-option">
+                <input type="checkbox" name="parent_ids" value="{{ b.id }}"
+                       {% if b.id|in_list:parent_ids %}checked{% endif %}>
+                {% if b.custom_icon %}<img src="{{ b.custom_icon.url }}" class="tag-parent-icon-img" alt="">
+                {% elif b.icon %}
+                    {% if b.icon|is_material_icon %}
+                    <i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>
+                    {% else %}
+                    <span>{{ b.icon }}</span>
+                    {% endif %}
+                {% endif %}
+                {{ b.name }}
+                <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span>
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="tag-form-actions">
+        <button type="submit" class="btn btn--primary">Save</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</form>

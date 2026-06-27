@@ -1,19 +1,19 @@
 {% load dashboard_tags %}
 <div class="tag-chips-row">
-    {% for cat in all_categories %}
-    {% if cat.id in member_ids %}
-    <span class="tag-chip tag-chip--{{ cat.kind }}" {% if cat.color %}style="--tag-color:{{ cat.color }}"{% endif %}>
-        {% if cat.icon %}
+    {% for badge in all_badges %}
+    {% if badge.id in member_ids %}
+    <span class="tag-chip tag-chip--{{ badge.kind }}" {% if badge.color %}style="--tag-color:{{ badge.color }}"{% endif %}>
+        {% if badge.icon %}
         <span class="tag-chip-icon">
-            {% if cat.icon|is_material_icon %}
-            <i class="material-icons" style="font-size:13px{% if cat.color %};color:{{ cat.color }}{% endif %}">{{ cat.icon }}</i>
-            {% else %}{{ cat.icon }}{% endif %}
+            {% if badge.icon|is_material_icon %}
+            <i class="material-icons" style="font-size:13px{% if badge.color %};color:{{ badge.color }}{% endif %}">{{ badge.icon }}</i>
+            {% else %}{{ badge.icon }}{% endif %}
         </span>
         {% endif %}
-        <span class="tag-chip-name">{{ cat.name }}</span>
-        <form hx-post="{% url post_url_name obj_uuid %}" hx-target="#{{ panel_id }}" hx-swap="outerHTML" style="display:inline">
+        <span class="tag-chip-name">{{ badge.name }}</span>
+        <form hx-post="{% if membership_route == 'location' %}{% url 'badge.location' badge_kind=badge_url_kind location_slug=obj_uuid %}{% else %}{% url 'badge.pin' badge_kind=badge_url_kind pin_slug=obj_uuid %}{% endif %}" hx-target="#{{ panel_id }}" hx-swap="outerHTML" style="display:inline">
             {% csrf_token %}
-            <input type="hidden" name="category_id" value="{{ cat.id }}">
+            <input type="hidden" name="badge_id" value="{{ badge.id }}">
             <input type="hidden" name="action" value="remove">
             <button type="submit" class="tag-chip-remove" title="Remove">×</button>
         </form>

@@ -254,7 +254,7 @@
             <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
         </div>
 
-        <div hx-get="{% url 'category.pin' pin.slug %}"
+        <div hx-get="{% url 'badge.pin' badge_kind='category' pin_slug=pin.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML"
              class="tag-panel">

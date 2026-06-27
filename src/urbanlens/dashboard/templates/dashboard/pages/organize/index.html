@@ -6,9 +6,16 @@
     <div id="organize-onboarding" class="page-onboarding" aria-live="polite"></div>
 
     <div class="organize-page-header">
-        <h1 class="organize-page-title">Organize
-            {% include "dashboard/partials/_tooltip_help.html" with text="Tags label pins, categories group them by type, statuses track visit progress, and priority controls which icon wins when a pin has several." wide=True %}
-        </h1>
+        <div>
+            <h1 class="organize-page-title">{% if standalone_mode %}{{ standalone_title }}{% else %}Organize{% endif %}
+                {% if not standalone_mode %}
+                {% include "dashboard/partials/_tooltip_help.html" with text="Tags label pins, categories group them by type, statuses track visit progress, and priority controls which icon wins when a pin has several." wide=True %}
+                {% endif %}
+            </h1>
+            {% if standalone_mode and standalone_subtitle %}
+            <p class="tag-subtitle organize-page-subtitle">{{ standalone_subtitle }}</p>
+            {% endif %}
+        </div>
         <div class="organize-page-header-actions">
             <div class="badge-header-right" id="org-header-actions">
                 <div class="tag-view-toggle" id="org-header-view-toggle" role="group" aria-label="View mode">
@@ -38,7 +45,8 @@
         </div>
     </div>
 
-    {# ── Tab bar ──────────────────────────────────────────────────────────────── #}
+    {# ── Tab bar (full Organize page only) ────────────────────────────────────── #}
+    {% if not standalone_mode %}
     <div class="organize-tab-bar" role="tablist">
         <button type="button" class="organize-tab{% if active_tab == 'tags' %} active{% endif %}"
                 role="tab" data-tab="tags" aria-controls="panel-tags">
@@ -61,19 +69,21 @@
             <i class="material-icons">low_priority</i> Priority
         </button>
     </div>
+    {% endif %}
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
     {# BADGE PANELS: tags, categories, and statuses share one Badge template.     #}
     {# ══════════════════════════════════════════════════════════════════════════ #}
-    {% include 'dashboard/partials/organize_badge_panel.html' with tab='categories' ns='cat' form_id='new-category-form' filter_ns='cat' kind='category' singular_title='Category' plural_lower='categories' badges=categories rows_id='category-rows' rows_target='#category-rows' create_url_name='category.create' edit_url_name='category.edit' merge_url_name='category.merge' delete_url_name='category.delete' select_class='cat-select-cb' select_data_name='cat' edit_target='#category-edit-dialog-body' empty_icon='category' name_placeholder='e.g. Hospital' desc_placeholder='What type of place is this?' empty_message='No categories yet. Create one to start organizing your pins and locations.' parent_items=priority_items selectable=True editable=True deletable=True %}
+    {% include 'dashboard/partials/organize_badge_panel.html' with tab='categories' ns='cat' form_id='new-category-form' filter_ns='cat' badge_url_kind='category' kind='category' singular_title='Category' plural_lower='categories' badges=categories rows_id='category-rows' rows_target='#category-rows' select_class='cat-select-cb' select_data_name='cat' empty_icon='category' name_placeholder='e.g. Hospital' desc_placeholder='What type of place is this?' empty_message='No categories yet. Create one to start organizing your pins and locations.' parent_items=priority_items selectable=True editable=True deletable=True %}
 
-    {% include 'dashboard/partials/organize_badge_panel.html' with tab='tags' ns='tag' form_id='new-tag-form' filter_ns='tag' kind='tag' singular_title='Tag' plural_lower='tags' badges=tags rows_id='tag-rows' rows_target='#tag-rows' create_url_name='tag.create' edit_url_name='tag.edit' merge_url_name='tag.merge' delete_url_name='tag.delete' select_class='tag-select-cb' select_data_name='tag' edit_target='#tag-edit-dialog-body' empty_icon='label' name_placeholder='e.g. Road trip' desc_placeholder='What is this tag for?' empty_message='No tags yet. Create one to start organizing your pins.' allow_custom_icon=True parent_items=priority_items selectable=True editable=True deletable=True %}
+    {% include 'dashboard/partials/organize_badge_panel.html' with tab='tags' ns='tag' form_id='new-tag-form' filter_ns='tag' badge_url_kind='tag' kind='tag' singular_title='Tag' plural_lower='tags' badges=tags rows_id='tag-rows' rows_target='#tag-rows' select_class='tag-select-cb' select_data_name='tag' empty_icon='label' name_placeholder='e.g. Road trip' desc_placeholder='What is this tag for?' empty_message='No tags yet. Create one to start organizing your pins.' parent_items=priority_items selectable=True editable=True deletable=True %}
 
-    {% include 'dashboard/partials/organize_badge_panel.html' with tab='status' ns='status' form_id='new-status-form' filter_ns='status' kind='status' singular_title='Status' plural_lower='statuses' badges=statuses rows_id='status-rows' rows_target='#status-rows' create_url_name='status.create' edit_url_name='status.edit' merge_url_name='status.merge' delete_url_name='status.delete' select_class='status-select-cb' select_data_name='status' edit_target='#status-edit-dialog-body' empty_icon='flag' name_placeholder='e.g. Under renovation' desc_placeholder='What does this status mean?' empty_message='No status labels yet. Create one to get started.' parent_items=priority_items selectable=True editable=True deletable=True %}
+    {% include 'dashboard/partials/organize_badge_panel.html' with tab='status' ns='status' form_id='new-status-form' filter_ns='status' badge_url_kind='status' kind='status' singular_title='Status' plural_lower='statuses' badges=statuses rows_id='status-rows' rows_target='#status-rows' select_class='status-select-cb' select_data_name='status' empty_icon='flag' name_placeholder='e.g. Under renovation' desc_placeholder='What does this status mean?' empty_message='No status labels yet. Create one to get started.' parent_items=priority_items selectable=True editable=True deletable=True %}
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# PRIORITY PANEL                                                            #}
+    {# PRIORITY PANEL (full Organize page only)                                  #}
     {# ══════════════════════════════════════════════════════════════════════════ #}
+    {% if not standalone_mode %}
     <div class="organize-panel tag-page" id="panel-priority" role="tabpanel"
          {% if active_tab != 'priority' %}hidden{% endif %}>
 
@@ -108,26 +118,19 @@
                 </div>
                 <div class="priority-item-info">
                     <span class="priority-item-name">{{ item.name }}</span>
-                    <span class="priority-kind-badge priority-kind-badge--{{ item.kind }}">{{ item.kind }}</span>
-                    {% if not item.profile %}<span class="tag-global-badge">global</span>{% endif %}
+                    <div class="priority-item-badges">
+                        <span class="priority-kind-badge priority-kind-badge--{{ item.kind }}">{{ item.kind }}</span>
+                        {% if not item.profile %}<span class="tag-global-badge">global</span>{% endif %}
+                    </div>
                 </div>
                 <div class="priority-jump-actions">
                     <button type="button" class="priority-jump-btn jump-top" data-priority-jump="top" title="Send to top"><i class="material-icons">vertical_align_top</i></button>
                     <button type="button" class="priority-jump-btn jump-bottom" data-priority-jump="bottom" title="Send to bottom"><i class="material-icons">vertical_align_bottom</i></button>
                 </div>
-                {% if item.kind == 'tag' %}
-                <button type="button" class="priority-edit-btn" title="Edit tag"
-                        hx-get="{% url 'tag.edit' item.id %}" hx-target="#tag-edit-dialog-body" hx-swap="innerHTML">
-                    <i class="material-icons">edit</i>
-                </button>
-                {% elif item.kind == 'category' %}
-                <button type="button" class="priority-edit-btn" title="Edit category"
-                        hx-get="{% url 'category.edit' item.id %}" hx-target="#category-edit-dialog-body" hx-swap="innerHTML">
-                    <i class="material-icons">edit</i>
-                </button>
-                {% elif item.kind == 'status' and item.profile %}
-                <button type="button" class="priority-edit-btn" title="Edit status"
-                        hx-get="{% url 'status.edit' item.id %}" hx-target="#status-edit-dialog-body" hx-swap="innerHTML">
+                {% if item.kind == 'tag' or item.kind == 'category' or item.kind == 'status' and item.profile %}
+                <button type="button" class="priority-edit-btn" title="Edit {{ item.kind }}"
+                        hx-get="{% url 'badge.edit' badge_kind=item.kind badge_id=item.id %}"
+                        hx-target="#badge-edit-dialog-body" hx-swap="innerHTML">
                     <i class="material-icons">edit</i>
                 </button>
                 {% endif %}
@@ -144,16 +147,17 @@
             {% empty %}
             <div class="tag-empty">
                 <i class="material-icons">label_off</i>
-                <p>No tags or categories yet.</p>
+                <p>No tags, categories, or statuses yet.</p>
             </div>
             {% endfor %}
         </div>
     </div>{# end #panel-priority #}
+    {% endif %}
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
     {# PEOPLE PANEL: people labels are Badge(kind='people') too.                 #}
     {# ══════════════════════════════════════════════════════════════════════════ #}
-    {% include 'dashboard/partials/organize_badge_panel.html' with tab='people' ns='people' form_id='new-people-form' filter_ns='people' kind='people' singular_title='Label' plural_lower='labels' badges=user_badges parent_items=user_badges rows_id='people-badge-rows' rows_target='#people-badge-rows' create_url_name='people.create' edit_url_name='people.edit' delete_url_name='people.delete' select_class='people-sel-cb' select_data_name='people' edit_target='#people-badge-edit-dialog-body' empty_icon='person' name_placeholder='e.g. Friend, Frequent Explorer' desc_placeholder='Who should this label apply to?' empty_message='No people labels yet. Create one to start organizing people.' selectable=True editable=True deletable=True %}
+    {% include 'dashboard/partials/organize_badge_panel.html' with tab='people' ns='people' form_id='new-people-form' filter_ns='people' badge_url_kind='people' kind='people' singular_title='Label' plural_lower='labels' badges=user_badges parent_items=user_badges rows_id='people-badge-rows' rows_target='#people-badge-rows' select_class='people-sel-cb' select_data_name='people' edit_target='#people-badge-edit-dialog-body' empty_icon='person' name_placeholder='e.g. Friend, Frequent Explorer' desc_placeholder='Who should this label apply to?' empty_message='No people labels yet. Create one to start organizing people.' selectable=True editable=True deletable=True %}
 
 </div>{# end .organize-page #}
 
@@ -179,10 +183,8 @@
     </button>
 </div>
 
-{# ── Badge edit dialogs (shared template for tag/category/status) ───────────── #}
-{% include 'dashboard/partials/organize_badge_edit_dialog.html' with dialog_id='tag-edit-dialog' title='Edit Tag' title_id='tag-edit-dialog-title' body_id='tag-edit-dialog-body' %}
-{% include 'dashboard/partials/organize_badge_edit_dialog.html' with dialog_id='category-edit-dialog' title='Edit Category' title_id='category-edit-dialog-title' body_id='category-edit-dialog-body' %}
-{% include 'dashboard/partials/organize_badge_edit_dialog.html' with dialog_id='status-edit-dialog' title='Edit Status' title_id='status-edit-dialog-title' body_id='status-edit-dialog-body' %}
+{# ── Shared badge edit dialog (tags, categories, statuses) ────────────────── #}
+{% include 'dashboard/partials/organize_badge_edit_dialog.html' with dialog_id='badge-edit-dialog' title='Edit' title_id='badge-edit-dialog-title' body_id='badge-edit-dialog-body' %}
 {% include 'dashboard/partials/organize_badge_edit_dialog.html' with dialog_id='people-badge-edit-dialog' title='Edit Label' title_id='people-badge-edit-dialog-title' body_id='people-badge-edit-dialog-body' %}
 
 {# ── Badge merge dialogs (shared template for tag/category/status) ──────────── #}
@@ -196,8 +198,11 @@
 
 {% include 'dashboard/partials/organize_badge_bulk_edit_dialog.html' with ns='cat' title='Edit Categories' picker_id='cat-bulk-edit' %}
 
+{% include 'dashboard/partials/organize_badge_bulk_edit_dialog.html' with ns='status' title='Edit Statuses' picker_id='status-bulk-edit' %}
+
 <script>
 (function initOrganizeOnboarding() {
+    {% if standalone_mode %}return;{% endif %}
     {% if not request.user.profile.show_onboarding_tips %}return;{% endif %}
     const prefix = 'ul_onboarding_v1_organize';
     const sessionKey = prefix + '_later';
@@ -429,9 +434,9 @@ function updateMergeIconPreview(ns) {
 }
 
 var _mergeEditUrlTpl = {
-    tag: '{% url "tag.edit" 99999 %}',
-    cat: '{% url "category.edit" 99999 %}',
-    status: '{% url "status.edit" 99999 %}'
+    tag: '{% url "badge.edit" badge_kind="tag" badge_id=99999 %}',
+    cat: '{% url "badge.edit" badge_kind="category" badge_id=99999 %}',
+    status: '{% url "badge.edit" badge_kind="status" badge_id=99999 %}'
 };
 function _mergeEditUrl(ns, id) { return _mergeEditUrlTpl[ns].replace('99999', id); }
 
@@ -442,6 +447,35 @@ function showBadgeCustomPreview(input, previewId) {
     var reader = new FileReader();
     reader.onload = function(e) { preview.src = e.target.result; preview.style.display = 'block'; };
     reader.readAsDataURL(input.files[0]);
+}
+
+function showBadgeEditCustomPreview(badgeId, input) {
+    if (!input.files || !input.files[0]) return;
+    var preview = document.getElementById('edit-custom-preview-' + badgeId);
+    if (!preview) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        preview.src = e.target.result;
+        preview.style.removeProperty('display');
+        var pickerWrap = document.getElementById('edit-icon-picker-wrap-' + badgeId);
+        if (pickerWrap) pickerWrap.style.display = 'none';
+        var uploadBtn = document.getElementById('edit-upload-btn-' + badgeId);
+        if (uploadBtn) uploadBtn.style.display = 'none';
+    };
+    reader.readAsDataURL(input.files[0]);
+}
+
+function clearBadgeEditCustomIcon(badgeId) {
+    var clearInput = document.getElementById('edit-clear-custom-' + badgeId);
+    if (clearInput) clearInput.value = '1';
+    var preview = document.getElementById('edit-custom-preview-' + badgeId);
+    if (preview) preview.style.display = 'none';
+    var clearBtn = document.getElementById('edit-clear-btn-' + badgeId);
+    if (clearBtn) clearBtn.style.display = 'none';
+    var uploadBtn = document.getElementById('edit-upload-btn-' + badgeId);
+    if (uploadBtn) uploadBtn.style.removeProperty('display');
+    var pickerWrap = document.getElementById('edit-icon-picker-wrap-' + badgeId);
+    if (pickerWrap) pickerWrap.style.removeProperty('display');
 }
 
 function showTagCustomPreview(input) {
@@ -635,32 +669,30 @@ function clearOrgFilter(ns) {
     applyAllOrgFilters();
 }
 
-// ── Consolidated HTMX dialog opener (tag, category, status, priority) ────────
+// ── Consolidated HTMX dialog opener (tags, categories, statuses, people) ────
 document.body.addEventListener('htmx:afterSwap', function(e) {
     var id = e.detail.target && e.detail.target.id;
     if (!id) return;
-    if (id === 'tag-edit-dialog-body') {
-        var titleEl = document.getElementById('tag-edit-dialog-title');
+    if (id === 'badge-edit-dialog-body') {
+        var titleEl = document.getElementById('badge-edit-dialog-title');
+        var body = e.detail.target;
         if (titleEl) {
-            var body = e.detail.target;
-            if (body.querySelector('.tag-merge-form')) titleEl.textContent = 'Merge Tag';
-            else if (body.querySelector('.tag-customize-form')) titleEl.textContent = 'Customize Display';
-            else if (body.querySelector('.tag-global-edit-form')) titleEl.textContent = 'Edit Global Tag';
-            else titleEl.textContent = 'Edit Tag';
+            if (body.querySelector('.organize-badge-merge-form')) {
+                var mergeName = body.querySelector('.tag-merge-source-name');
+                titleEl.textContent = mergeName ? 'Merge ' + mergeName.textContent.trim() : 'Merge';
+            } else if (body.querySelector('.organize-badge-customize-form')) {
+                titleEl.textContent = 'Customize Display';
+            } else if (body.querySelector('.tag-global-edit-form')) {
+                titleEl.textContent = 'Edit Global Tag';
+            } else {
+                var kindInput = body.querySelector('input[name="kind"]:checked');
+                var kind = kindInput ? kindInput.value : '';
+                var titles = { tag: 'Tag', category: 'Category', status: 'Status' };
+                titleEl.textContent = 'Edit ' + (titles[kind] || 'Badge');
+            }
         }
-        var dlg = document.getElementById('tag-edit-dialog'); if (dlg && !dlg.open) dlg.showModal();
-    } else if (id === 'category-edit-dialog-body') {
-        var catTitleEl = document.getElementById('category-edit-dialog-title');
-        if (catTitleEl) {
-            var catBody = e.detail.target;
-            if (catBody.querySelector('.category-merge-form')) catTitleEl.textContent = 'Merge Category';
-            else if (catBody.querySelector('.category-customize-form')) catTitleEl.textContent = 'Customize Display';
-            else if (catBody.querySelector('.category-global-edit-form')) catTitleEl.textContent = 'Edit Global Category';
-            else catTitleEl.textContent = 'Edit Category';
-        }
-        var cdlg = document.getElementById('category-edit-dialog'); if (cdlg && !cdlg.open) cdlg.showModal();
-    } else if (id === 'status-edit-dialog-body') {
-        var sdlg = document.getElementById('status-edit-dialog'); if (sdlg && !sdlg.open) sdlg.showModal();
+        var dlg = document.getElementById('badge-edit-dialog');
+        if (dlg && !dlg.open) dlg.showModal();
     } else if (id === 'people-badge-edit-dialog-body') {
         var pdlg = document.getElementById('people-badge-edit-dialog'); if (pdlg && !pdlg.open) pdlg.showModal();
     }
@@ -669,9 +701,9 @@ document.body.addEventListener('htmx:afterSwap', function(e) {
 // ── Kind-changed: refresh destination rows + switch tab after conversion ────
 (function () {
     var _rowUrls = {
-        'tag': '{% url "tag.rows" %}',
-        'category': '{% url "category.rows" %}',
-        'status': '{% url "status.rows" %}'
+        'tag': '{% url "badge.rows" badge_kind="tag" %}',
+        'category': '{% url "badge.rows" badge_kind="category" %}',
+        'status': '{% url "badge.rows" badge_kind="status" %}'
     };
     var _rowTargets = { 'tag': '#tag-rows', 'category': '#category-rows', 'status': '#status-rows' };
     var _tabKeys = { 'tag': 'tags', 'category': 'categories', 'status': 'status' };
@@ -1128,7 +1160,7 @@ window._orgBulkSync = function(n, opts) {
         var capturedId = _tagMergeTargetId;
         if (!editName) editName = origData.name;
         var hasEdits = editName !== origData.name || editIcon !== origData.icon || editColor !== origData.color;
-        fetch('{% url "tag.multi_merge" %}', {
+        fetch('{% url "badge.multi_merge" badge_kind="tag" %}', {
             method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
             body:JSON.stringify({target_id:parseInt(capturedId,10),source_ids:src.map(function(id){return parseInt(id,10);})}),
         }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
@@ -1151,7 +1183,7 @@ window._orgBulkSync = function(n, opts) {
         var n = _tagSelected.size; if (!n) return;
         if (!await confirmDialog({title:'Delete Tags',message:(n===1?'Delete 1 tag?':'Delete '+n+' tags?')+'\nPins will NOT be deleted.',confirmLabel:'Delete'})) return;
         var ids = Array.from(_tagSelected).map(function(id){return parseInt(id,10);});
-        fetch('{% url "tag.bulk_delete" %}', {
+        fetch('{% url "badge.bulk_delete" badge_kind="tag" %}', {
             method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
             body:JSON.stringify({ids:ids}),
         }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
@@ -1276,7 +1308,7 @@ window._orgBulkSync = function(n, opts) {
         body.add_parent_ids=[];
         document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb:checked').forEach(function(cb){body.add_parent_ids.push(parseInt(cb.value,10));});
         if (converting) {
-            var convertUrl = _tagBulkConvertTarget === 'status' ? '{% url "tag.bulk_convert_status" %}' : '{% url "tag.bulk_convert" %}';
+            var convertUrl = _tagBulkConvertTarget === 'status' ? '{% url "badge.bulk_convert_status" badge_kind="tag" %}' : '{% url "badge.bulk_convert" badge_kind="tag" %}';
             fetch(convertUrl, {
                 method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
                 body:JSON.stringify(body),
@@ -1289,7 +1321,7 @@ window._orgBulkSync = function(n, opts) {
                 toastr.success(ids.length===1?'1 tag converted.':ids.length+' tags converted.');
             }).catch(function(err){toastr.error('Convert failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
         } else {
-            fetch('{% url "tag.bulk_edit" %}', {
+            fetch('{% url "badge.bulk_edit" badge_kind="tag" %}', {
                 method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
                 body:JSON.stringify(body),
             }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
@@ -1456,6 +1488,8 @@ window._orgBulkSync = function(n, opts) {
         if(ig){ig.querySelectorAll('.icon-picker-item').forEach(function(b){b.classList.remove('selected');}); var nb=ig.querySelector('.icon-picker-none'); if(nb) nb.classList.add('selected');}
         var cp=document.getElementById('new-cat-color-picker'); if(cp)cp.querySelectorAll('.color-swatch').forEach(function(b){b.classList.remove('selected');});
         var cv=document.getElementById('new-cat-color-value'); if(cv)cv.value='';
+        var prev=document.getElementById('new-cat-custom-preview');
+        if(prev){prev.src='';prev.style.display='none';}
     }
 
     // ── Selection ─────────────────────────────────────────────────────────────
@@ -1541,7 +1575,7 @@ window._orgBulkSync = function(n, opts) {
         var capturedId=_catMergeTargetId;
         if(!editName)editName=origData.name;
         var hasEdits=editName!==origData.name||editIcon!==origData.icon||editColor!==origData.color;
-        fetch('{% url "category.multi_merge" %}', {
+        fetch('{% url "badge.multi_merge" badge_kind="category" %}', {
             method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
             body:JSON.stringify({target_id:parseInt(capturedId,10),source_ids:src.map(function(id){return parseInt(id,10);})}),
         }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
@@ -1564,7 +1598,7 @@ window._orgBulkSync = function(n, opts) {
         var n=_catSelected.size; if(!n)return;
         if(!await confirmDialog({title:'Delete Categories',message:(n===1?'Delete 1 category?':'Delete '+n+' categories?')+'\nPins and locations will NOT be deleted.',confirmLabel:'Delete'}))return;
         var ids=Array.from(_catSelected).map(function(id){return parseInt(id,10);});
-        fetch('{% url "category.bulk_delete" %}', {
+        fetch('{% url "badge.bulk_delete" badge_kind="category" %}', {
             method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
             body:JSON.stringify({ids:ids}),
         }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
@@ -1671,7 +1705,7 @@ window._orgBulkSync = function(n, opts) {
         body.add_parent_ids=[];
         document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb:checked').forEach(function(cb){body.add_parent_ids.push(parseInt(cb.value,10));});
         if(converting){
-            var convertUrl = _catBulkConvertTarget === 'status' ? '{% url "category.bulk_convert_status" %}' : '{% url "category.bulk_convert" %}';
+            var convertUrl = _catBulkConvertTarget === 'status' ? '{% url "badge.bulk_convert_status" badge_kind="category" %}' : '{% url "badge.bulk_convert" badge_kind="category" %}';
             fetch(convertUrl, {
                 method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
                 body:JSON.stringify(body),
@@ -1684,7 +1718,7 @@ window._orgBulkSync = function(n, opts) {
                 toastr.success(ids.length===1?'1 category converted.':ids.length+' categories converted.');
             }).catch(function(err){toastr.error('Convert failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
         } else {
-            fetch('{% url "category.bulk_edit" %}', {
+            fetch('{% url "badge.bulk_edit" badge_kind="category" %}', {
                 method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken},
                 body:JSON.stringify(body),
             }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||r.statusText);}); return r.text();})
@@ -1753,7 +1787,7 @@ window._orgBulkSync = function(n, opts) {
         var ids = Array.from(_statusSelected);
         if (!ids.length) return;
         if (!await confirmDialog({title:'Delete Statuses',message:'Delete '+ids.length+' status'+(ids.length===1?'':'es')+'?',confirmLabel:'Delete'})) return;
-        fetch('{% url "status.bulk_delete" %}', {
+        fetch('{% url "badge.bulk_delete" badge_kind="status" %}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
             body: JSON.stringify({ ids: ids }),
@@ -1764,6 +1798,165 @@ window._orgBulkSync = function(n, opts) {
             applyOrgFilter('status');
         });
     }
+
+    // ── Bulk edit dialog ──────────────────────────────────────────────────────
+    var _statusBulkConvertTarget = null; // null | 'tag' | 'category'
+
+    window._setStatusBulkConvert = function(target) {
+        var btns = document.querySelectorAll('#status-bulk-edit-dialog .org-convert-btn');
+        if (_statusBulkConvertTarget === target) {
+            _statusBulkConvertTarget = null;
+            btns.forEach(function(b) { b.classList.remove('active'); });
+        } else {
+            _statusBulkConvertTarget = target;
+            btns.forEach(function(b) { b.classList.remove('active'); });
+            var active = document.getElementById('status-bulk-convert-to-' + target);
+            if (active) active.classList.add('active');
+        }
+        _updateStatusBulkState();
+    };
+
+    function _updateStatusBulkState() {
+        var converting = !!_statusBulkConvertTarget;
+        var hint = document.getElementById('status-bulk-convert-hint');
+        if (hint) {
+            hint.hidden = !converting;
+            if (converting) hint.textContent = _statusBulkConvertTarget === 'tag'
+                ? 'All pin memberships will be migrated. Selected parent links will be added after conversion. You will be redirected to the tags tab.'
+                : 'All pin memberships will be migrated. Selected parent links will be added after conversion. You will be redirected to the categories tab.';
+        }
+        var mainFields = document.getElementById('status-bulk-main-fields');
+        if (mainFields) { mainFields.style.opacity = ''; mainFields.style.pointerEvents = ''; }
+        var btn = document.getElementById('status-bulk-edit-confirm');
+        if (btn && !btn.disabled) btn.innerHTML = converting
+            ? '<i class="material-icons" style="font-size:1rem;vertical-align:middle">swap_horiz</i> Convert to ' + (_statusBulkConvertTarget === 'tag' ? 'Tags' : 'Categories')
+            : '<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
+        var iw = document.getElementById('status-bulk-icon-wrap');
+        var cp = document.getElementById('status-bulk-color-picker');
+        if (!converting) {
+            if (iw) iw.classList.toggle('cat-bulk-picker--disabled', !!document.getElementById('status-bulk-icon-nochange').checked);
+            if (cp) cp.classList.toggle('cat-bulk-picker--disabled', !!document.getElementById('status-bulk-color-nochange').checked);
+        }
+    }
+    window._updateStatusBulkState = _updateStatusBulkState;
+
+    function _openStatusBulkEditDialog() {
+        var ids = Array.from(_statusSelected);
+        var iSet = new Set(), cSet = new Set();
+        ids.forEach(function(id) {
+            var c = document.querySelector('[data-status-id="' + id + '"]'); if (!c) return;
+            iSet.add(c.dataset.statusIcon || ''); cSet.add(c.dataset.statusColor || '');
+        });
+        var si = iSet.size === 1 ? Array.from(iSet)[0] : null;
+        var sc = cSet.size === 1 ? Array.from(cSet)[0] : null;
+        var inn = document.getElementById('status-bulk-icon-nochange');
+        var iv = document.getElementById('icon-value-status-bulk-edit');
+        var ic = document.getElementById('icon-current-status-bulk-edit');
+        var ig = document.getElementById('icon-grid-status-bulk-edit');
+        if (ig) ig.querySelectorAll('.icon-picker-item').forEach(function(b) { b.classList.remove('selected'); });
+        if (si !== null) {
+            inn.checked = false; if (iv) iv.value = si;
+            if (si) {
+                if (ic) ic.innerHTML = /^[a-z_]+$/.test(si) ? '<i class="material-icons icon-picker-current-mi">' + si + '</i>' : '<span class="icon-picker-current-glyph">' + si + '</span>';
+                if (ig) { var m = ig.querySelector('[data-icon="' + si + '"]'); if (m) m.classList.add('selected'); }
+            } else {
+                if (ic) ic.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+                var nb = ig && ig.querySelector('.icon-picker-none'); if (nb) nb.classList.add('selected');
+            }
+        } else { inn.checked = true; if (iv) iv.value = ''; if (ic) ic.innerHTML = '<span class="icon-picker-none-label">No icon</span>'; }
+        var cnn = document.getElementById('status-bulk-color-nochange');
+        var cp2 = document.getElementById('status-bulk-color-picker');
+        var cv = document.getElementById('status-bulk-color-value');
+        if (cp2) cp2.querySelectorAll('.color-swatch').forEach(function(b) { b.classList.remove('selected'); });
+        if (sc !== null) {
+            cnn.checked = false; if (cv) cv.value = sc;
+            if (sc && cp2) { var sw = cp2.querySelector('[data-color="' + sc + '"]'); if (sw) sw.classList.add('selected'); }
+        } else { cnn.checked = true; if (cv) cv.value = ''; }
+        document.getElementById('status-bulk-order-nochange').checked = true;
+        document.getElementById('status-bulk-order-value').value = '0';
+        document.getElementById('status-bulk-description-nochange').checked = true;
+        document.getElementById('status-bulk-description-value').value = '';
+        document.querySelectorAll('#status-bulk-parent-select .status-bulk-parent-cb').forEach(function(cb) { cb.checked = false; });
+        _statusBulkConvertTarget = null;
+        document.querySelectorAll('#status-bulk-edit-dialog .org-convert-btn').forEach(function(b) { b.classList.remove('active'); });
+        document.getElementById('status-bulk-edit-title').textContent = 'Edit ' + ids.length + ' ' + (ids.length === 1 ? 'Status' : 'Statuses');
+        var cbtn = document.getElementById('status-bulk-edit-confirm'); cbtn.disabled = false;
+        cbtn.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
+        _updateStatusBulkState();
+        document.getElementById('status-bulk-edit-dialog').showModal();
+    }
+
+    document.getElementById('status-bulk-icon-nochange').addEventListener('change', function() {
+        if (this.checked) {
+            var iv = document.getElementById('icon-value-status-bulk-edit');
+            var ic = document.getElementById('icon-current-status-bulk-edit');
+            var ig = document.getElementById('icon-grid-status-bulk-edit');
+            if (iv) iv.value = '';
+            if (ic) ic.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+            if (ig) { ig.querySelectorAll('.icon-picker-item').forEach(function(b) { b.classList.remove('selected'); }); var nb = ig.querySelector('.icon-picker-none'); if (nb) nb.classList.add('selected'); }
+        }
+        _updateStatusBulkState();
+    });
+    document.getElementById('status-bulk-color-nochange').addEventListener('change', function() {
+        if (this.checked) {
+            var cp = document.getElementById('status-bulk-color-picker');
+            var cv = document.getElementById('status-bulk-color-value');
+            if (cp) cp.querySelectorAll('.color-swatch').forEach(function(b) { b.classList.remove('selected'); });
+            if (cv) cv.value = '';
+        }
+        _updateStatusBulkState();
+    });
+    document.getElementById('icon-grid-status-bulk-edit').addEventListener('click', function(e) {
+        if (e.target.closest('.icon-picker-item')) { document.getElementById('status-bulk-icon-nochange').checked = false; _updateStatusBulkState(); }
+    });
+    ['status-bulk-order-value', 'status-bulk-description-value'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', function() { document.getElementById(id.replace('-value', '-nochange')).checked = false; });
+    });
+    document.getElementById('status-bulk-edit-confirm').addEventListener('click', function() {
+        var ids = Array.from(_statusSelected).map(function(id) { return parseInt(id, 10); });
+        var converting = !!_statusBulkConvertTarget;
+        var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> ' + (converting ? 'Converting…' : 'Saving…');
+        var body = { ids: ids };
+        if (!document.getElementById('status-bulk-order-nochange').checked) { var ov = document.getElementById('status-bulk-order-value'); body.order = ov ? ov.value : ''; }
+        if (!document.getElementById('status-bulk-description-nochange').checked) { var dv = document.getElementById('status-bulk-description-value'); body.description = dv ? dv.value : ''; }
+        if (!document.getElementById('status-bulk-icon-nochange').checked) { var iv = document.getElementById('icon-value-status-bulk-edit'); body.icon = iv ? iv.value : ''; }
+        if (!document.getElementById('status-bulk-color-nochange').checked) { var cv = document.getElementById('status-bulk-color-value'); body.color = cv ? cv.value : ''; }
+        body.add_parent_ids = [];
+        document.querySelectorAll('#status-bulk-parent-select .status-bulk-parent-cb:checked').forEach(function(cb) { body.add_parent_ids.push(parseInt(cb.value, 10)); });
+        if (converting) {
+            var convertUrl = _statusBulkConvertTarget === 'tag'
+                ? '{% url "badge.bulk_convert_tag" badge_kind="status" %}'
+                : '{% url "badge.bulk_convert_category" badge_kind="status" %}';
+            fetch(convertUrl, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                body: JSON.stringify(body),
+            }).then(function(r) {
+                if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); });
+                return r.text();
+            }).then(function(html) {
+                document.getElementById('status-bulk-edit-dialog').close();
+                var statusRowsEl = document.getElementById('status-rows');
+                statusRowsEl.innerHTML = html; if (window.htmx) htmx.process(statusRowsEl);
+                _statusSelected.clear(); _lastStatusClickIdx = -1; _syncStatusSelBar();
+                applyOrgFilter('status');
+                toastr.success(ids.length === 1 ? '1 status converted.' : ids.length + ' statuses converted.');
+            }).catch(function(err) { toastr.error('Convert failed: ' + err.message); btn.disabled = false; btn.innerHTML = saved; });
+        } else {
+            fetch('{% url "badge.bulk_edit" badge_kind="status" %}', {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                body: JSON.stringify(body),
+            }).then(function(r) { if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); }); return r.text(); })
+            .then(function(html) {
+                document.getElementById('status-bulk-edit-dialog').close();
+                var statusRowsEl = document.getElementById('status-rows');
+                statusRowsEl.innerHTML = html; if (window.htmx) htmx.process(statusRowsEl);
+                _statusSelected.clear(); _lastStatusClickIdx = -1; _syncStatusSelBar();
+                applyOrgFilter('status');
+                toastr.success('Statuses updated.');
+            }).catch(function(err) { toastr.error('Edit failed: ' + err.message); btn.disabled = false; btn.innerHTML = saved; });
+        }
+    });
 
     function _getVisibleStatusIds() {
         return _statusCards()
@@ -1784,18 +1977,10 @@ window._orgBulkSync = function(n, opts) {
         btn.innerHTML = allSel ? '<i class="material-icons">remove_done</i>' : '<i class="material-icons">checklist</i>';
     }
 
-    window.organizeSelectForMerge = function(ns, id) {
-        if (ns !== 'status') return;
-        _statusSelected.clear();
-        _statusSelected.add(parseInt(id, 10));
-        _syncStatusSelBar();
-        toastr.info('Status ready to merge. Select another status and click Merge.');
-    };
-
     function _syncStatusSelBar() {
         var n = _statusSelected.size;
         window._orgBulk.deselect = _statusBulkDeselect;
-        window._orgBulk.edit = null;
+        window._orgBulk.edit = function() { if (_statusSelected.size) _openStatusBulkEditDialog(); };
         window._orgBulk.merge = function() {
             if (_statusSelected.size < 2) return;
             _statusMergeTargetId = Array.from(_statusSelected)[0];
@@ -1803,7 +1988,7 @@ window._orgBulkSync = function(n, opts) {
             document.getElementById('status-merge-dialog').showModal();
         };
         window._orgBulk.del = _statusBulkDelete;
-        _orgBulkSync(n, { hasEdit: false, hasMerge: true, hasDel: true });
+        _orgBulkSync(n, { hasEdit: true, hasMerge: true, hasDel: true });
         _statusCards().forEach(function(card) {
             var id = parseInt(card.dataset.statusId, 10);
             card.classList.toggle('tag-card--selected', _statusSelected.has(id));
@@ -1899,7 +2084,7 @@ window._orgBulkSync = function(n, opts) {
         var capturedId = _statusMergeTargetId;
         if (!editName) editName = origData.name;
         var hasEdits = editName !== origData.name || editIcon !== origData.icon || editColor !== origData.color;
-        fetch('{% url "status.multi_merge" %}', {
+        fetch('{% url "badge.multi_merge" badge_kind="status" %}', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
             body: JSON.stringify({ target_id: parseInt(capturedId, 10), source_ids: src.map(function(id) { return parseInt(id, 10); }) }),
         }).then(function(r) { if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); }); return r.text(); })
@@ -1965,6 +2150,21 @@ window._orgBulkSync = function(n, opts) {
     });
 
     // ── Init ──────────────────────────────────────────────────────────────────
+    function resetNewStatusForm() {
+        var c = document.getElementById('new-status-form'); if (!c) return;
+        c.querySelector('form').reset();
+        var iv = document.getElementById('icon-value-new-status'); if (iv) iv.value = '';
+        var ic = document.getElementById('icon-current-new-status');
+        if (ic) ic.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+        var ig = document.getElementById('icon-grid-new-status');
+        if (ig) { ig.querySelectorAll('.icon-picker-item').forEach(function(b){b.classList.remove('selected');}); var nb = ig.querySelector('.icon-picker-none'); if (nb) nb.classList.add('selected'); }
+        var prev = document.getElementById('new-status-custom-preview');
+        if (prev) { prev.src = ''; prev.style.display = 'none'; }
+        var cp = document.getElementById('new-status-color-picker');
+        if (cp) cp.querySelectorAll('.color-swatch').forEach(function(b){b.classList.remove('selected');});
+        var cv = document.getElementById('new-status-color-value'); if (cv) cv.value = '';
+    }
+
     window._orgHeader.register('status', {
         filterTitle: 'Filter statuses',
         viewAriaLabel: 'Status view mode',
@@ -1985,7 +2185,7 @@ window._orgBulkSync = function(n, opts) {
         updateSelAllBtn: _updateStatusSelAllBtn,
         onCreate: function() {
             var f = document.getElementById('new-status-form');
-            if (f && !f.open) f.showModal();
+            resetNewStatusForm(); if (f && !f.open) f.showModal();
         },
     });
     _applyStatusView();
@@ -2194,7 +2394,7 @@ window._orgBulkSync = function(n, opts) {
 (function () {
     var _peopleSelected = new Set();
     var _peopleMergeTargetId = null;
-    var _mergeUrl = '{% url "people.multi_merge" %}';
+    var _mergeUrl = '{% url "badge.multi_merge" badge_kind="people" %}';
 
     function _getCsrf() { var m = document.cookie.match(/csrftoken=([^;]+)/); return m ? m[1] : ''; }
 
@@ -2337,7 +2537,7 @@ window._orgBulkSync = function(n, opts) {
     function _bulkDeletePeople() {
         var ids = Array.from(_peopleSelected);
         var csrfVal = _getCsrf();
-        var baseUrl = '{% url "people.delete" 99999 %}';
+        var baseUrl = '{% url "badge.delete" badge_kind="people" badge_id=99999 %}';
         Promise.all(ids.map(function (id) {
             return fetch(baseUrl.replace('99999', id), { method: 'POST', headers: { 'X-CSRFToken': csrfVal } });
         })).then(function () {

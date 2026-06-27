@@ -1,12 +1,14 @@
 {% for badge in badges %}
-    {% url edit_url_name badge.id as edit_url %}
-    {% url delete_url_name badge.id as delete_url %}
-    {% if merge_url_name %}{% url merge_url_name badge.id as merge_url %}{% else %}{% with merge_url='' %}{% endwith %}{% endif %}
+    {% url 'badge.edit' badge_kind=badge_url_kind badge_id=badge.id as edit_url %}
+    {% url 'badge.delete' badge_kind=badge_url_kind badge_id=badge.id as delete_url %}
     {% if badge.is_protected %}
-        {% include 'dashboard/partials/_organize_badge_card.html' with kind=kind display_name=badge.effective_name|default:badge.name display_icon=badge.effective_icon|default:badge.icon display_color=badge.effective_color|default:badge.color empty_icon=empty_icon selectable=True select_class=select_class select_data_name=select_data_name editable=True deletable=False edit_url=edit_url merge_url=merge_url edit_target=edit_target delete_url=delete_url rows_target=rows_target can_edit_global=can_edit_global %}
+        {% include 'dashboard/partials/_organize_badge_card.html' with kind=kind display_name=badge.effective_name|default:badge.name display_icon=badge.effective_icon|default:badge.icon display_color=badge.effective_color|default:badge.color empty_icon=empty_icon selectable=True select_class=select_class select_data_name=select_data_name editable=True deletable=False edit_url=edit_url merge_url='' edit_target=edit_target delete_url=delete_url rows_target=rows_target can_edit_global=can_edit_global %}
     {% elif kind == 'people' and not badge.profile %}
-        {% include 'dashboard/partials/_organize_badge_card.html' with kind=kind display_name=badge.effective_name|default:badge.name display_icon=badge.effective_icon|default:badge.icon display_color=badge.effective_color|default:badge.color empty_icon=empty_icon selectable=selectable select_class=select_class select_data_name=select_data_name editable=False deletable=False edit_url=edit_url merge_url=merge_url edit_target=edit_target delete_url=delete_url rows_target=rows_target can_edit_global=can_edit_global %}
+        {% include 'dashboard/partials/_organize_badge_card.html' with kind=kind display_name=badge.effective_name|default:badge.name display_icon=badge.effective_icon|default:badge.icon display_color=badge.effective_color|default:badge.color empty_icon=empty_icon selectable=selectable select_class=select_class select_data_name=select_data_name editable=False deletable=False edit_url=edit_url merge_url='' edit_target=edit_target delete_url=delete_url rows_target=rows_target can_edit_global=can_edit_global %}
+    {% elif kind == 'people' %}
+        {% include 'dashboard/partials/_organize_badge_card.html' with kind=kind display_name=badge.effective_name|default:badge.name display_icon=badge.effective_icon|default:badge.icon display_color=badge.effective_color|default:badge.color empty_icon=empty_icon selectable=selectable select_class=select_class select_data_name=select_data_name editable=editable deletable=deletable edit_url=edit_url merge_url='' edit_target=edit_target delete_url=delete_url rows_target=rows_target can_edit_global=can_edit_global %}
     {% else %}
+        {% url 'badge.merge' badge_kind=badge_url_kind badge_id=badge.id as merge_url %}
         {% include 'dashboard/partials/_organize_badge_card.html' with kind=kind display_name=badge.effective_name|default:badge.name display_icon=badge.effective_icon|default:badge.icon display_color=badge.effective_color|default:badge.color empty_icon=empty_icon selectable=selectable select_class=select_class select_data_name=select_data_name editable=editable deletable=deletable edit_url=edit_url merge_url=merge_url edit_target=edit_target delete_url=delete_url rows_target=rows_target can_edit_global=can_edit_global %}
     {% endif %}
 {% empty %}
