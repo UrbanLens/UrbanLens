@@ -149,6 +149,31 @@ class LocationHasPlaceNameTests(TestCase):
             self.assertTrue(loc.has_place_name())
 
 
+# ── slug generation ───────────────────────────────────────────────────────────
+
+class LocationSlugTests(TestCase):
+    """Locations auto-generate a unique URL slug on save."""
+
+    def test_save_assigns_slug_from_name(self) -> None:
+        loc: Location = baker.make(Location, name="Unnamed Location", latitude="40.0", longitude="-74.0", slug=None)
+        self.assertEqual(loc.slug, "unnamed-location")
+
+    def test_duplicate_names_get_numeric_suffix(self) -> None:
+        first: Location = baker.make(Location, name="Unnamed Location", latitude="40.0", longitude="-74.0")
+        second: Location = baker.make(Location, name="Unnamed Location", latitude="41.0", longitude="-73.0")
+        self.assertEqual(first.slug, "unnamed-location")
+        self.assertEqual(second.slug, "unnamed-location-2")
+
+    def test_ensure_slug_backfills_legacy_row(self) -> None:
+        loc: Location = baker.make(Location, name="Old Factory", latitude="40.0", longitude="-74.0")
+        Location.objects.filter(pk=loc.pk).update(slug=None)
+        loc.refresh_from_db()
+        self.assertIsNone(loc.slug)
+        self.assertEqual(loc.ensure_slug(), "old-factory")
+        loc.refresh_from_db()
+        self.assertEqual(loc.slug, "old-factory")
+
+
 # ── LocationQuerySet ──────────────────────────────────────────────────────────
 
 class LocationQuerySetTests(TestCase):

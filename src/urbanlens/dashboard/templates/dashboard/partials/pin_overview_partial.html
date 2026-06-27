@@ -160,13 +160,13 @@
             <i class="material-icons" style="color:var(--text-muted,#888)">lock</i>
             <span>Private pin &mdash; no community wiki entry.</span>
         </div>
-        {% elif pin.location %}
+        {% elif pin.location and pin.location.slug %}
         <div class="pin-location-panel">
             <div class="pin-location-panel-main">
                 <i class="material-icons pin-location-icon">public</i>
                 <div class="pin-location-info">
                     <span class="pin-location-label">Community Wiki</span>
-                    <a href="{% url 'location.wiki' pin.location.slug %}" class="pin-location-name">
+                    <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="pin-location-name">
                         {{ pin.location.name }}
                         <i class="material-icons pin-location-name-icon">open_in_new</i>
                     </a>

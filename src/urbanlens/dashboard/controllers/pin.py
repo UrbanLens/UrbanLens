@@ -130,6 +130,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 location = _create_location_with_canonical_name(lat, lon)
             pin.location = location
             pin.save(update_fields=["location"])
+        elif pin.location and not pin.location.slug:
+            pin.location.ensure_slug()
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 

@@ -50,6 +50,9 @@ def _overview_context(pin: Pin) -> dict:
         else 0
     )
 
+    if pin.location and not pin.location.slug:
+        pin.location.ensure_slug()
+
     return {
         "pin": pin,
         "pin_type_choices": PinType.choices,

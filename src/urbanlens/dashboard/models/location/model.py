@@ -187,6 +187,23 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
             n += 1
         return candidate
 
+    def ensure_slug(self) -> str:
+        """Ensure this location has a URL slug, generating one if needed.
+
+        Returns:
+            The location's slug (never empty).
+        """
+        if not self.slug:
+            self.slug = self._generate_slug()
+            self.save(update_fields=["slug", "updated"])
+        return self.slug
+
+    def save(self, *args, **kwargs) -> None:
+        """Auto-generate a unique slug from the canonical name if not already set."""
+        if not self.slug:
+            self.slug = self._generate_slug()
+        super().save(*args, **kwargs)
+
     class Meta(abstract.AddressableModel.Meta):
         db_table = "dashboard_locations"
         get_latest_by = "updated"
