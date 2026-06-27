@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
 from django.core.management.utils import get_random_secret_key

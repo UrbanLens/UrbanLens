@@ -27,7 +27,7 @@ def get_search_gateway() -> SearchGateway:
 
     try:
         provider = SiteSettings.get_current().search_provider
-    except (ImportError, DatabaseError):
+    except (ImportError, DatabaseError, Exception):
         provider = SearchProviderChoice.BRAVE
 
     if provider == SearchProviderChoice.GOOGLE:

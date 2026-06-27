@@ -1,7 +1,7 @@
 # Sphinx configuration file
 
 project = "UrbanLens"
-copyright = "2023, Jess Mann"
+copyright = "2023, Jess Mann"  # noqa: A001
 author = "Jess Mann"
 
 extensions = [

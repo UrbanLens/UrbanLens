@@ -60,6 +60,10 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
 
     # Public-facing identifier. Non-sequential so users cannot enumerate other pins.
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
+    # Optional per-user marker override. When unset, coordinates fall back to the
+    # linked Location's canonical latitude/longitude.
+    latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     # URL slug - unique per (profile, slug). Auto-generated from the effective name on first save.
     slug = SlugField(max_length=255, null=True, blank=True)
 
@@ -150,7 +154,7 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         """Badge supplying the map icon, when the icon is inherited from a badge."""
         if self.custom_icon or self.icon:
             return None
-        for badge in self.badges.location_badges().order_by("-order"):
+        for badge in self.badges.exclude(kind="user").order_by("-order"):
             if badge.custom_icon and not badge.icon_is_overridden:
                 return badge
             if badge.effective_icon:
@@ -173,7 +177,7 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
             return self.custom_icon.url
         if self.icon:
             return self.icon
-        for badge in self.badges.location_badges().order_by("-order"):
+        for badge in self.badges.exclude(kind="user").order_by("-order"):
             if badge.custom_icon and not badge.icon_is_overridden:
                 return badge.custom_icon.url
             icon = badge.effective_icon
@@ -218,6 +222,41 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         if self.location and self.location.address:
             return self.location.address
         return self.address or self.effective_name or ""
+
+    @property
+    def place_name(self) -> str | None:
+        return self.location.place_name if self.location else None
+
+    @property
+    def cached_place_name(self) -> str | None:
+        return self.location.cached_place_name if self.location else None
+
+    @property
+    def address(self) -> str | None:
+        return self.location.address if self.location else None
+
+    @property
+    def address_basic(self) -> str | None:
+        return self.location.address_basic if self.location else None
+
+    @property
+    def address_extended(self) -> str | None:
+        return self.location.address_extended if self.location else None
+
+    @property
+    def state(self) -> str | None:
+        return self.location.state if self.location else None
+
+    @property
+    def county(self) -> str | None:
+        return self.location.county if self.location else None
+
+    @property
+    def city(self) -> str | None:
+        return self.location.city if self.location else None
+
+    def has_place_name(self) -> bool:
+        return bool(self.location and self.location.has_place_name())
 
     @property
     def effective_latitude(self) -> float | None:
@@ -438,4 +477,3 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
                 name="dashboard_pin_unique_slug_per_profile",
             ),
         ]
-

@@ -739,11 +739,13 @@ ignore = [
     "PLR0913", # too-many-arguments
     "PLR0914", # too-many-locals
     "PLR0915", # too-many-statements
+    "PLW0717", # too-many-statements-in-try-clause
     "PLR1702", # too many nested blocks
     "D2",      # One-line docstring..., 1 blank line, etc
     "D400",    # first line should...
     "D401",    # first line should...
     "D415",    # first line should...
+    "D420",    # Incorrect doc section order
     "CPY001",  # Missing copyright notice at top of file
     "DOC502",  # This discourages reporting raises from ancestors
     "SIM108",  # Use ternary operator insead of if-else

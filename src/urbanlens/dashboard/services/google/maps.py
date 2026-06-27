@@ -712,7 +712,7 @@ class GoogleMapsGateway(Gateway):
 
             logger.debug("Converted %s pins from KML file to dicts.", len(pins))
         except (ValueError, AttributeError, UnicodeDecodeError) as e:
-            logger.exception("Failed to import pins from KML: %s", str(e))
+            logger.exception("Failed to import pins from KML: %s", e)
             raise
 
         return pins
@@ -750,7 +750,7 @@ class GoogleMapsGateway(Gateway):
             logger.info("Converted %s pins from JSON file to dicts.", len(pins))
 
         except (json.JSONDecodeError, KeyError, ValueError) as e:
-            logger.exception("Failed to import pins from JSON: %s", str(e))
+            logger.exception("Failed to import pins from JSON: %s", e)
             raise
 
         return pins
@@ -781,7 +781,7 @@ class GoogleMapsGateway(Gateway):
                 )
 
         except (csv.Error, KeyError, ValueError) as e:
-            logger.exception("Failed to import pins from CSV: %s", str(e))
+            logger.exception("Failed to import pins from CSV: %s", e)
             raise
 
         logger.info("Converted %s pins from CSV file to dicts.", len(pins))

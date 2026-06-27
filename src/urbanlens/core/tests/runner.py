@@ -48,7 +48,12 @@ from model_bakery import baker, seq
 from model_bakery.generators import default_mapping
 
 from urbanlens.core.tests.result import MessageResult
-from urbanlens.core.testing_network import LocalhostOnlyNetwork
+from urbanlens.core.testing_network import (
+    ExternalNetworkGuardVerificationError,
+    LocalhostOnlyNetwork,
+    verify_external_network_blocked,
+)
+
 
 class BufferingLogHandler(logging.Handler):
     """
@@ -125,9 +130,14 @@ class TestRunner(DiscoverRunner):
         )
         self._ai_patcher.start()
 
-
         if os.getenv("UL_ALLOW_TEST_INTERNET", "False").lower() not in {"true", "1", "yes"}:
             self._network_guard = LocalhostOnlyNetwork().start()
+            try:
+                verify_external_network_blocked()
+            except ExternalNetworkGuardVerificationError as exc:
+                self._network_guard.stop()
+                self._network_guard = None
+                raise SystemExit(str(exc)) from exc
 
     def teardown_test_environment(self, **kwargs: Any) -> None:
         network_guard = getattr(self, "_network_guard", None)
