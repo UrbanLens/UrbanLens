@@ -75,12 +75,6 @@ def _build_pin_search_query(pin: Pin) -> str:
         primary.append(place_name)
     elif address_basic and address_basic != name:
         primary.append(address_basic)
-
-    if not primary:
-        if pin.effective_latitude is not None and pin.effective_longitude is not None:
-            return f"{pin.effective_latitude}, {pin.effective_longitude}"
-        return ""
-
     primary_str = " ".join(primary)
 
     # Optional location keywords: street name, city (or county), state
@@ -93,6 +87,13 @@ def _build_pin_search_query(pin: Pin) -> str:
         location.append(pin.county)
     if pin.state:
         location.append(pin.state)
+
+    if not primary:
+        if location:
+            return ", ".join(location)
+        if pin.effective_latitude is not None and pin.effective_longitude is not None:
+            return f"{pin.effective_latitude}, {pin.effective_longitude}"
+        return ""
 
     return ", ".join(filter(None, [primary_str, *location]))
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import re
 
+from urbanlens.UrbanLens.settings.app import settings
+
 logger = logging.getLogger(__name__)
 
 # Names that carry no search value when sent to external APIs (Google, Brave, AI, etc.).
@@ -60,7 +62,11 @@ _MEANINGLESS_NAME_PHRASES: frozenset[str] = frozenset(
     },
 )
 
-_COORDINATE_NAME_PATTERN = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$")
+_COORDINATE_NAME_PATTERN = re.compile(
+    r"^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?\s*(?:,|\s)\s*"
+    r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?\s*$",
+    re.IGNORECASE,
+)
 
 
 def is_meaningful_name(name: str | None) -> bool:

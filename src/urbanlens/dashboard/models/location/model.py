@@ -201,9 +201,22 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
         return self.slug
 
     def save(self, *args, **kwargs) -> None:
-        """Auto-generate a unique slug from the canonical name if not already set."""
+        """Auto-generate derived geographic fields before saving."""
         if not self.slug:
             self.slug = self._generate_slug()
+        if self.latitude is not None and self.longitude is not None:
+            lon = float(self.longitude)
+            lat = float(self.latitude)
+            self.point = Point(lon, lat, srid=4326)
+            if self.bounding_box is None:
+                self.bounding_box = Polygon.from_bbox(
+                    (
+                        lon - _DEFAULT_BBOX_DEGREES,
+                        lat - _DEFAULT_BBOX_DEGREES,
+                        lon + _DEFAULT_BBOX_DEGREES,
+                        lat + _DEFAULT_BBOX_DEGREES,
+                    ),
+                )
         super().save(*args, **kwargs)
 
     class Meta(abstract.AddressableModel.Meta):

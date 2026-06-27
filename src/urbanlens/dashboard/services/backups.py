@@ -44,7 +44,7 @@ def collect_backup_stats(site_settings=None) -> BackupStats:
         backup_dir=Path(app_settings.backups_dir),
         count=len(files),
         latest_backup=latest,
-        total_size_mb=round(total_size / 1_048_576, 1),
+        total_size_mb=total_size / 1_048_576,
     )
 
 
