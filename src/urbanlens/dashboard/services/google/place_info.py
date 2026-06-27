@@ -35,7 +35,7 @@ def normalize_coordinate(value: float | Decimal) -> Decimal:
     return Decimal(str(value)).quantize(_COORD_QUANT, rounding=ROUND_HALF_UP)
 
 
-@dataclass(slots=True)
+@dataclass
 class GooglePlaceService:
     """Resolve, cache, and link Google Place data for coordinates."""
 

@@ -223,8 +223,8 @@ def collect_celery_stats() -> InfrastructureServiceStat:
         ServiceMetric("Broker", _redact_url(str(broker_url))),
     ]
     try:
-        with current_app.connection_for_read() as connection_for_read:
-            connection_for_read.ensure_connection(max_retries=1)
+        connection_for_read = current_app.connection_for_read()
+        connection_for_read.ensure_connection(max_retries=1)
         inspect = current_app.control.inspect(timeout=1)
         ping = inspect.ping() or {}
         stats = inspect.stats() or {}

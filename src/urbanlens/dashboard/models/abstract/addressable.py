@@ -71,6 +71,23 @@ class AddressableModel(Model):
                 return
         super().__setattr__(name, value)
 
+    def __setattr__(self, name: str, value) -> None:
+        """Support lightweight GooglePlace doubles on unsaved model instances.
+
+        Django's foreign-key descriptor only accepts real ``GooglePlace`` model
+        instances. A few unit tests exercise the place-name helpers on prepared,
+        unsaved models with a small duck-typed object that exposes
+        ``cached_place_name`` and ``pk``. Preserve that fast path without
+        weakening saved model relations.
+        """
+        if name == "google_place" and value is not None:
+            from urbanlens.dashboard.models.google_place.model import GooglePlace
+            if not isinstance(value, GooglePlace) and hasattr(value, "cached_place_name"):
+                self.__dict__["_google_place_stub"] = value
+                self.__dict__["google_place_id"] = getattr(value, "pk", None)
+                return
+        super().__setattr__(name, value)
+
     @property
     def address(self) -> str | None:
         """Full address string built from components."""

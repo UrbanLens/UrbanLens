@@ -179,8 +179,11 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
         if result:
             results = result.get("results", [])
             if results:
-                loc = results[0]["geometry"]["location"]
-                return JsonResponse({"lat": loc["lat"], "lng": loc["lng"]})
+                try:
+                    loc = results[0]["geometry"]["location"]
+                    return JsonResponse({"lat": loc["lat"], "lng": loc["lng"]})
+                except (KeyError, TypeError):
+                    logger.warning("Google geocoding returned malformed result for %r", address, exc_info=True)
             logger.warning("Google geocoding returned no results for %r (status: %s)", address, result.get("status"))
     except (ImportError, OSError, ValueError):
         logger.warning("Google geocoding unavailable for %r", address, exc_info=True)
