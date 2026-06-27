@@ -82,7 +82,7 @@ class LLMGateway[Response](ABC):
     @property
     def sent_tokens(self) -> int:
         """
-        Returns the number of tokens for sentences in the LLMGateway instance.
+        Number of tokens for sentences in the LLMGateway instance.
 
         Returns:
             int:
@@ -94,7 +94,7 @@ class LLMGateway[Response](ABC):
     @property
     def received_tokens(self) -> int:
         """
-        Returns the number of received tokens.
+        Number of received tokens.
 
         Returns:
             int:
@@ -106,7 +106,7 @@ class LLMGateway[Response](ABC):
     @property
     def tokens(self) -> int:
         """
-        Returns the total number of tokens, calculated as the sum of tokens sent and tokens received.
+        Total number of tokens, calculated as the sum of tokens sent and tokens received.
 
         Returns:
             int:
