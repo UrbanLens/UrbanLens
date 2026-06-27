@@ -49,7 +49,8 @@ class GooglePlaceServiceTests(TestCase):
 
     def test_set_cid_for_entity_links_and_stores_cid(self) -> None:
         location = baker.make(Location, latitude="40.000000", longitude="-74.000000", google_place=None)
-        google_place = GooglePlaceService().set_cid_for_entity(location, 9876543210)
+        with mock.patch.object(GooglePlaceService, "_resolve_name", return_value="Linked Place"):
+            google_place = GooglePlaceService().set_cid_for_entity(location, 9876543210)
         location.refresh_from_db()
         self.assertEqual(location.google_place_id, google_place.pk)
         self.assertEqual(location.cid, Decimal(9876543210))

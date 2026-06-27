@@ -31,7 +31,7 @@ def _host_is_localhost(host: Any) -> bool:
         return True
 
     if isinstance(host, bytes):
-        host = host.decode("idna", errors="ignore")
+        host = host.decode("utf-8", errors="replace")
 
     host = str(host).strip().lower().rstrip(".")
     if host in _LOCALHOST_NAMES:
