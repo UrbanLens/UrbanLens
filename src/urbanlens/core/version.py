@@ -144,6 +144,7 @@ def _git_fetch() -> bool:
     Returns:
         ``True`` when ``git fetch`` completed successfully.
     """
+    logger.info("git fetch --quiet --prune")
     try:
         subprocess.run(  # nosec B603
             [_GIT_EXECUTABLE, "fetch", "--quiet", "--prune"],
@@ -207,6 +208,7 @@ def apply_pending_migrations() -> tuple[bool, str]:
     Returns:
         ``(True, message)`` when migrations completed; otherwise ``(False, message)``.
     """
+    logger.info("Applying pending migrations")
     try:
         result = subprocess.run(  # nosec B603
             [sys.executable, str(MANAGE_PY), "migrate", "--noinput"],
@@ -258,6 +260,7 @@ def trigger_development_app_reload() -> tuple[bool, str]:
     module's file instead: the reloader tracks imported modules, not
     ``manage.py`` itself.
     """
+    logger.info("Attempting to reload the server...")
     parent_cmd = _parent_process_command()
     if "gunicorn" in parent_cmd:
         try:
