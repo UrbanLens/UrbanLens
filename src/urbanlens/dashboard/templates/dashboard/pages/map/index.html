@@ -816,10 +816,17 @@
             marker.setIcon(L.divIcon({ className: 'map-pin-icon-wrap', html: iconHtml, iconSize, iconAnchor }));
         }
 
-        // Build tag chips: prefer full tag objects (color/icon), fall back to CSV names
+        // Build tag chips: prefer tags_data (template path), then tag objects from API/cache, then CSV
         let tagChipsData = pin.tags_data;
         if (!tagChipsData || !tagChipsData.length) {
-            tagChipsData = (pin.tags || '').split(',').map(s => s.trim()).filter(Boolean).map(n => ({ name: n }));
+            const rawTags = pin.tags;
+            if (Array.isArray(rawTags)) {
+                tagChipsData = rawTags.map(t =>
+                    (typeof t === 'object' && t !== null) ? t : { name: String(t) }
+                );
+            } else {
+                tagChipsData = (rawTags || '').split(',').map(s => s.trim()).filter(Boolean).map(n => ({ name: n }));
+            }
         }
         const tagChips = tagChipsData.map(t => {
             const bg = t.color ? `${t.color}22` : 'rgba(100,120,160,0.18)';
