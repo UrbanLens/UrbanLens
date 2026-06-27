@@ -127,7 +127,8 @@ services:
         - UL_DATABASE_PASS=${UL_DB_PASS:-postgres}
         - UL_DATABASE_HOST=${UL_DB_HOST:-urbanlens_db}
         - UL_DATABASE_PORT=${UL_DB_PORT:-5432}
-    command: ["python", "-m", "celery", "-A", "urbanlens.UrbanLens", "worker", "--loglevel=info", "--concurrency=2"]
+    entrypoint: ["python", "-m", "celery"]
+    command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=info", "--concurrency=2"]
     restart: on-failure
     depends_on:
       db:
@@ -179,7 +180,8 @@ services:
         - UL_DATABASE_PASS=${UL_DB_PASS:-postgres}
         - UL_DATABASE_HOST=${UL_DB_HOST:-urbanlens_db}
         - UL_DATABASE_PORT=${UL_DB_PORT:-5432}
-    command: ["python", "-m", "celery", "-A", "urbanlens.UrbanLens", "beat", "--loglevel=info"]
+    entrypoint: ["python", "-m", "celery"]
+    command: ["-A", "urbanlens.UrbanLens", "beat", "--loglevel=info"]
     restart: on-failure
     depends_on:
       db:

@@ -314,7 +314,6 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * Ability to add pins based on places lookup, maybe?
 * Order activity list by date.
 * Multiple organizers.
-* Map bug (grey tile on right side).
 * Activity end dates.
 * Trip settings: fix checkbox bug. Also, each option should have 3 states (no one, organizers, everyone).
 * In activity edit dialog, add delete button.
@@ -325,13 +324,6 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * Bug: Comment count does not count replies.
 * Bug: After deleting comment, the comment section duplicates itself.
 
-### Development
-* Code coverage report.
-
-### Optimizations
-* Local storage in browser for faster loading and offline use.
-* Organize page takes a long time to load.
-
 ### APIs
 * Use aliases with Smithsonian, etc.
 * Sunrise / sunset for weather.
@@ -339,9 +331,7 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 
 ### Misc
 * User settings: Allow friend requests checkbox is missing. Should have additional option for "from users with one pin in common", "1 mutual", etc.
-* Privacy setting for who can find you by search, or by your email, or by using your handle directly.
 * Clicking on notification should take you to the relevant page.
 * Viewing notifications in the dropdown should mark them read. Not just clicking on them.
 * Notification log makes read messages look unread. UI with this needs cleanup.
 * Hide "(schedule) Never" in pin popup for last visited. This is already implied.
-* When selecting tags to edit, enable shift+click.
