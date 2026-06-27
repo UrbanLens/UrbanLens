@@ -2,6 +2,7 @@
 <dialog id="{{ ns }}-bulk-edit-dialog" class="tag-edit-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title=title title_id=ns|add:"-bulk-edit-title" %}
     <div class="tag-edit-dialog-body organize-badge-edit-form">
+        {% if ns != 'people' %}
         <div class="form-field">
             <label class="form-label">Type</label>
             <div class="kind-toggle">
@@ -18,14 +19,8 @@
             </div>
             <p class="form-hint" id="{{ ns }}-bulk-convert-hint" hidden></p>
         </div>
+        {% endif %}
         <div id="{{ ns }}-bulk-main-fields">
-            <div class="tag-form-grid">
-                <div class="form-field">
-                    <label class="form-label" for="{{ ns }}-bulk-order-value">Order (higher = higher priority)</label>
-                    <input id="{{ ns }}-bulk-order-value" type="number" class="form-input" value="0">
-                    <label class="bulk-nochange-label"><input type="checkbox" id="{{ ns }}-bulk-order-nochange" checked><span>No change - leave order unchanged</span></label>
-                </div>
-            </div>
             <div class="form-field">
                 <label class="form-label" for="{{ ns }}-bulk-description-value">Description</label>
                 <textarea id="{{ ns }}-bulk-description-value" class="form-input" rows="2"></textarea>
@@ -44,9 +39,9 @@
                     <div class="color-picker" id="{{ ns }}-bulk-color-picker">
                         <input type="hidden" id="{{ ns }}-bulk-color-value">
                         {% for hex, label in color_choices %}
-                        <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','{{ hex }}',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% else %}_updateStatusBulkState(){% endif %};"></button>
+                        <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','{{ hex }}',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% elif ns == 'status' %}_updateStatusBulkState(){% elif ns == 'people' %}_updatePeopleBulkState(){% endif %};"></button>
                         {% endfor %}
-                        <button type="button" class="color-swatch color-clear" title="No color" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% else %}_updateStatusBulkState(){% endif %};"><i class="material-icons" style="font-size:1rem;">block</i></button>
+                        <button type="button" class="color-swatch color-clear" title="No color" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% elif ns == 'status' %}_updateStatusBulkState(){% elif ns == 'people' %}_updatePeopleBulkState(){% endif %};"><i class="material-icons" style="font-size:1rem;">block</i></button>
                     </div>
                     <label class="bulk-nochange-label"><input type="checkbox" id="{{ ns }}-bulk-color-nochange" checked><span>No change - leave color unchanged</span></label>
                 </div>
@@ -56,7 +51,7 @@
                 <p class="form-hint">Checked badges will be <strong>added</strong> as parents. Existing parents are not removed.</p>
                 <input type="text" class="form-input tag-parent-search" placeholder="Search badges…" oninput="filterParentOptions(this,'{{ ns }}-bulk-parent-select')" autocomplete="off">
                 <div class="tag-parent-select" id="{{ ns }}-bulk-parent-select">
-                    {% for b in priority_items %}
+                    {% for b in parent_items|default:priority_items %}
                     <label class="tag-parent-option"><input type="checkbox" class="{{ ns }}-bulk-parent-cb" value="{{ b.id }}">{% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %} {{ b.name }} <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span></label>
                     {% endfor %}
                 </div>

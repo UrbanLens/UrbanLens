@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.models import User as AuthUser
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import render
 from django.views import View
@@ -38,6 +39,8 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
     Returns:
         Context dict for dashboard/pages/organize/index.html.
     """
+    if not isinstance(request.user, AuthUser):
+        raise TypeError("Expected an authenticated user")
     profile: Profile = request.user.profile
     tags = (
         Badge.objects.tags()

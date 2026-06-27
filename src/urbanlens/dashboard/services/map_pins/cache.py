@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, Self
 
 import redis
 from redis.exceptions import RedisError
@@ -21,6 +21,42 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+
+class _SyncPipeline(Protocol):
+    """Protocol for the subset of Pipeline methods used by MapPinCache."""
+
+    def hset(self, name: str, key: str | None = ..., value: str | None = ..., mapping: dict[str, Any] | None = ...) -> int: ...
+    def zadd(self, name: str, mapping: dict[str, Any]) -> int: ...
+    def delete(self, *names: str) -> int: ...
+    def execute(self) -> list[Any]: ...
+    def __enter__(self) -> Self: ...
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None: ...
+
+
+class _SyncRedis(Protocol):
+    """Protocol for the subset of redis.Redis methods used by MapPinCache.
+
+    redis-py stubs return ``Awaitable[T] | T`` for many methods because the same
+    stubs cover both the sync and async clients.  This protocol declares the
+    concrete sync return types so that callers in this module are properly typed
+    without scattering ``type: ignore`` comments throughout.  The single boundary
+    cast lives in ``_make_client``.
+    """
+
+    def exists(self, *names: str) -> int: ...
+    def zrangebyscore(self, name: str, min_score: str | int, max_score: str | int, start: int = ..., num: int = ...) -> list[str]: ...
+    def hmget(self, name: str, keys: list[str]) -> list[str | None]: ...
+    def zcard(self, name: str) -> int: ...
+    def set(self, name: str, value: str, *, nx: bool = ..., ex: int = ...) -> bool | None: ...
+    def pipeline(self, transaction: bool = ...) -> _SyncPipeline: ...
+    def hset(self, name: str, key: str | None = ..., value: str | None = ..., mapping: dict[str, Any] | None = ...) -> int: ...
+    def zadd(self, name: str, mapping: dict[str, Any]) -> int: ...
+    def rename(self, src: str, dst: str) -> bool: ...
+    def delete(self, *names: str) -> int: ...
+    def hdel(self, name: str, *keys: str) -> int: ...
+    def zrem(self, name: str, *values: str) -> int: ...
+    def expire(self, name: str, time: int) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -41,10 +77,10 @@ class MapPinCache:
     TTL_SECONDS = 2 * 60 * 60
     LOCK_SECONDS = 30
 
-    def __init__(self, profile: Profile, client: redis.Redis | None = None):
+    def __init__(self, profile: Profile, client: _SyncRedis | None = None):
         self.profile = profile
         self.profile_id = profile.pk
-        self.client = client if client is not None else self._make_client()
+        self.client: _SyncRedis | None = client if client is not None else self._make_client()
         self.payload = MapPinPayloadService(profile)
 
     @classmethod
@@ -52,11 +88,14 @@ class MapPinCache:
         return bool(os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL"))
 
     @classmethod
-    def _make_client(cls) -> redis.Redis | None:
+    def _make_client(cls) -> _SyncRedis | None:
         url = os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
         if not url:
             return None
-        return redis.Redis.from_url(url, decode_responses=True, socket_connect_timeout=1, socket_timeout=2)
+        # redis-py stubs don't distinguish sync vs async return types, so redis.Redis
+        # doesn't structurally satisfy _SyncRedis at the type level even though it does
+        # at runtime.  This is the single boundary where we assert that fact.
+        return redis.Redis.from_url(url, decode_responses=True, socket_connect_timeout=1, socket_timeout=2)  # type: ignore[return-value]
 
     @property
     def _prefix(self) -> str:

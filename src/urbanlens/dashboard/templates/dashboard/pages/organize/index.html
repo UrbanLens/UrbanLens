@@ -200,6 +200,8 @@
 
 {% include 'dashboard/partials/organize_badge_bulk_edit_dialog.html' with ns='status' title='Edit Statuses' picker_id='status-bulk-edit' %}
 
+{% include 'dashboard/partials/organize_badge_bulk_edit_dialog.html' with ns='people' title='Edit Labels' picker_id='people-bulk-edit' parent_items=user_badges %}
+
 <script>
 (function initOrganizeOnboarding() {
     {% if standalone_mode %}return;{% endif %}
@@ -731,7 +733,7 @@ window._orgHeader = (function() {
     var tabs = {};
     var activeTab = '{{ active_tab|escapejs }}';
     var tabFilterNs = { categories: 'cat', tags: 'tag', status: 'status', people: 'people' };
-    var actionsEl, filterBtn, selAllBtn, createBtn, viewToggle, wired = false;
+    var actionsEl, headerActionsEl, filterBtn, selAllBtn, createBtn, viewToggle, wired = false;
 
     function _loadSharedView() {
         var v = localStorage.getItem('organize_view');
@@ -776,22 +778,19 @@ window._orgHeader = (function() {
 
     function syncCreateButton(cfg) {
         if (!createBtn || !cfg) return;
-        createBtn.className = 'btn btn--primary' + (cfg.createCompact ? ' btn--sm' : '');
-        if (cfg.createIconOnly) {
-            createBtn.style.padding = '.4rem .55rem';
-            createBtn.style.minWidth = '0';
-        } else {
-            createBtn.style.padding = '';
-            createBtn.style.minWidth = '';
-        }
+        createBtn.className = 'btn btn--primary';
+        createBtn.style.padding = '.4rem .55rem';
+        createBtn.style.minWidth = '0';
         createBtn.title = cfg.createTitle || '';
         createBtn.innerHTML = cfg.createHtml || '';
     }
 
     function setTab(tabKey) {
         activeTab = tabKey;
+        if (!headerActionsEl) headerActionsEl = document.querySelector('.organize-page-header-actions');
         if (!actionsEl) actionsEl = document.getElementById('org-header-actions');
         var cfg = tabs[tabKey];
+        if (headerActionsEl) headerActionsEl.hidden = tabKey === 'priority';
         if (actionsEl) actionsEl.hidden = !cfg;
         if (!cfg) return;
         if (viewToggle) viewToggle.setAttribute('aria-label', cfg.viewAriaLabel || 'View mode');
@@ -880,8 +879,8 @@ window._orgHeader = (function() {
                 if (window._initPrioritySortable) _initPrioritySortable();
             }
             document.dispatchEvent(new CustomEvent('org:tab-changed', { detail: { tab: target } }));
-            // Clear selection and close all filter bars when switching tabs
-            if (window._orgBulkClear) window._orgBulkClear();
+            // Clear every tab's selection state when switching tabs
+            if (window._orgClearAllSelections) window._orgClearAllSelections();
             document.querySelectorAll('.org-filter-bar.open').forEach(function(bar) { bar.classList.remove('open'); });
         });
     });
@@ -905,6 +904,16 @@ window._orgHeader = (function() {
 {# ── Shared bulk-action toolbar JS ────────────────────────────────────────── #}
 <script>
 window._orgBulk = { deselect: null, edit: null, merge: null, del: null };
+window._orgSelectionClearers = window._orgSelectionClearers || [];
+
+window._orgRegisterSelectionClearer = function(fn) {
+    window._orgSelectionClearers.push(fn);
+};
+
+window._orgClearAllSelections = function() {
+    window._orgSelectionClearers.forEach(function(fn) { fn(); });
+    window._orgBulkClear();
+};
 
 window._orgBulkClear = function() {
     var bar = document.getElementById('org-bulk-bar');
@@ -1345,7 +1354,6 @@ window._orgBulkSync = function(n, opts) {
         filterTitle: 'Filter tags',
         viewAriaLabel: 'Tag view mode',
         createTitle: 'New Tag',
-        createIconOnly: true,
         createHtml: '<i class="material-icons" style="font-size:1.2rem;">add</i>',
         getView: function() { return window._orgHeader.getSharedView(); },
         setView: function(v) { window._orgHeader.setSharedView(v); },
@@ -1362,6 +1370,12 @@ window._orgBulkSync = function(n, opts) {
             var f = document.getElementById('new-tag-form');
             resetNewTagForm(); if (f && !f.open) f.showModal();
         },
+    });
+    window._orgRegisterSelectionClearer(function() {
+        _tagSelected.clear();
+        _lastTagClickIdx = -1;
+        _syncTagCheckboxes();
+        _updateTagBar();
     });
     applyTagView();
 })();
@@ -1742,7 +1756,6 @@ window._orgBulkSync = function(n, opts) {
         filterTitle: 'Filter categories',
         viewAriaLabel: 'Category view mode',
         createTitle: 'New Category',
-        createIconOnly: true,
         createHtml: '<i class="material-icons" style="font-size:1.2rem;">add</i>',
         getView: function() { return window._orgHeader.getSharedView(); },
         setView: function(v) { window._orgHeader.setSharedView(v); },
@@ -1759,6 +1772,12 @@ window._orgBulkSync = function(n, opts) {
             var f = document.getElementById('new-category-form');
             resetNewCatForm(); if (f && !f.open) f.showModal();
         },
+    });
+    window._orgRegisterSelectionClearer(function() {
+        _catSelected.clear();
+        _lastCatClickIdx = -1;
+        _syncCatCheckboxes();
+        _updateCatBar();
     });
     applyCatView();
 })();
@@ -2169,7 +2188,6 @@ window._orgBulkSync = function(n, opts) {
         filterTitle: 'Filter statuses',
         viewAriaLabel: 'Status view mode',
         createTitle: 'New Status',
-        createIconOnly: true,
         createHtml: '<i class="material-icons" style="font-size:1.2rem;">add</i>',
         getView: function() { return window._orgHeader.getSharedView(); },
         setView: function(v) { window._orgHeader.setSharedView(v); },
@@ -2187,6 +2205,11 @@ window._orgBulkSync = function(n, opts) {
             var f = document.getElementById('new-status-form');
             resetNewStatusForm(); if (f && !f.open) f.showModal();
         },
+    });
+    window._orgRegisterSelectionClearer(function() {
+        _statusSelected.clear();
+        _lastStatusClickIdx = -1;
+        _syncStatusSelBar();
     });
     _applyStatusView();
 })();
@@ -2402,31 +2425,173 @@ window._orgBulkSync = function(n, opts) {
         return Array.from(document.querySelectorAll('#people-badge-rows .tag-card[data-people-id]'));
     }
 
+    function _peopleBulkDeselect() {
+        _peopleSelected.clear();
+        _syncPeopleSelBar();
+        _applyPeopleCheck();
+    }
+
     function _syncPeopleSelBar() {
         var n = _peopleSelected.size;
-        // Reuse the shared bulk bar
-        var bar = document.getElementById('org-bulk-bar');
-        var cnt = document.getElementById('org-bulk-count');
-        if (!bar) return;
-        if (n === 0) { window._orgBulkClear(); return; }
-        bar.classList.add('visible');
-        bar.dataset.scope = 'people';
-        cnt.textContent = n + ' label' + (n === 1 ? '' : 's') + ' selected';
-        window._orgBulk = {
-            deselect: function () { _peopleSelected.clear(); _syncPeopleSelBar(); _applyPeopleCheck(); },
-            edit: function () { if (_peopleSelected.size === 1) { var id = Array.from(_peopleSelected)[0]; document.querySelector('[data-people-id="' + id + '"] .tag-card-actions .btn--icon').click(); } },
-            merge: function () { _openPeopleMergeDialog(); },
-            del: function () { if (confirm('Delete ' + _peopleSelected.size + ' label(s)?')) _bulkDeletePeople(); },
-        };
-        _orgBulkSync(n, { hasEdit: n === 1, hasMerge: true, hasDel: true });
+        window._orgBulk.deselect = _peopleBulkDeselect;
+        window._orgBulk.edit = function () { if (_peopleSelected.size) _openPeopleBulkEditDialog(); };
+        window._orgBulk.merge = function () { _openPeopleMergeDialog(); };
+        window._orgBulk.del = function () { if (confirm('Delete ' + _peopleSelected.size + ' label(s)?')) _bulkDeletePeople(); };
+        _orgBulkSync(n, { hasEdit: true, hasMerge: true, hasDel: true });
+        _applyPeopleCheck();
     }
 
     function _applyPeopleCheck() {
         _getRows().forEach(function (row) {
+            var id = parseInt(row.dataset.peopleId, 10);
             var cb = row.querySelector('.people-sel-cb');
-            if (cb) cb.checked = _peopleSelected.has(parseInt(row.dataset.peopleId, 10));
+            if (cb) cb.checked = _peopleSelected.has(id);
+            row.classList.toggle('tag-card--selected', _peopleSelected.has(id));
         });
     }
+
+    function _updatePeopleBulkState() {
+        var iw = document.getElementById('people-bulk-icon-wrap');
+        var cp = document.getElementById('people-bulk-color-picker');
+        if (iw) iw.classList.toggle('bulk-picker--disabled', !!document.getElementById('people-bulk-icon-nochange').checked);
+        if (cp) cp.classList.toggle('bulk-picker--disabled', !!document.getElementById('people-bulk-color-nochange').checked);
+    }
+    window._updatePeopleBulkState = _updatePeopleBulkState;
+
+    function _openPeopleBulkEditDialog() {
+        var ids = Array.from(_peopleSelected);
+        var iSet = new Set(), cSet = new Set();
+        ids.forEach(function(id) {
+            var c = document.querySelector('[data-people-id="' + id + '"]');
+            if (!c) return;
+            iSet.add(c.dataset.peopleIcon || '');
+            cSet.add(c.dataset.peopleColor || '');
+        });
+        var si = iSet.size === 1 ? Array.from(iSet)[0] : null;
+        var sc = cSet.size === 1 ? Array.from(cSet)[0] : null;
+        var inn = document.getElementById('people-bulk-icon-nochange');
+        var iv = document.getElementById('icon-value-people-bulk-edit');
+        var ic = document.getElementById('icon-current-people-bulk-edit');
+        var ig = document.getElementById('icon-grid-people-bulk-edit');
+        if (ig) ig.querySelectorAll('.icon-picker-item').forEach(function(b) { b.classList.remove('selected'); });
+        if (si !== null) {
+            inn.checked = false;
+            if (iv) iv.value = si;
+            if (si) {
+                if (ic) ic.innerHTML = /^[a-z_]+$/.test(si) ? '<i class="material-icons icon-picker-current-mi">' + si + '</i>' : '<span class="icon-picker-current-glyph">' + si + '</span>';
+                if (ig) { var m = ig.querySelector('[data-icon="' + si + '"]'); if (m) m.classList.add('selected'); }
+            } else {
+                if (ic) ic.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+                var nb = ig && ig.querySelector('.icon-picker-none'); if (nb) nb.classList.add('selected');
+            }
+        } else {
+            inn.checked = true;
+            if (iv) iv.value = '';
+            if (ic) ic.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+        }
+        var cnn = document.getElementById('people-bulk-color-nochange');
+        var cp2 = document.getElementById('people-bulk-color-picker');
+        var cv = document.getElementById('people-bulk-color-value');
+        if (cp2) cp2.querySelectorAll('.color-swatch').forEach(function(b) { b.classList.remove('selected'); });
+        if (sc !== null) {
+            cnn.checked = false;
+            if (cv) cv.value = sc;
+            if (sc && cp2) { var sw = cp2.querySelector('[data-color="' + sc + '"]'); if (sw) sw.classList.add('selected'); }
+        } else {
+            cnn.checked = true;
+            if (cv) cv.value = '';
+        }
+        document.getElementById('people-bulk-description-nochange').checked = true;
+        document.getElementById('people-bulk-description-value').value = '';
+        document.querySelectorAll('#people-bulk-parent-select .people-bulk-parent-cb').forEach(function(cb) { cb.checked = false; });
+        document.getElementById('people-bulk-edit-title').textContent = 'Edit ' + ids.length + ' ' + (ids.length === 1 ? 'Label' : 'Labels');
+        var cbtn = document.getElementById('people-bulk-edit-confirm');
+        cbtn.disabled = false;
+        cbtn.innerHTML = '<i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes';
+        _updatePeopleBulkState();
+        document.getElementById('people-bulk-edit-dialog').showModal();
+    }
+
+    var peopleBulkIconNochange = document.getElementById('people-bulk-icon-nochange');
+    if (peopleBulkIconNochange) peopleBulkIconNochange.addEventListener('change', function() {
+        if (this.checked) {
+            var iv = document.getElementById('icon-value-people-bulk-edit');
+            var ic = document.getElementById('icon-current-people-bulk-edit');
+            var ig = document.getElementById('icon-grid-people-bulk-edit');
+            if (iv) iv.value = '';
+            if (ic) ic.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+            if (ig) { ig.querySelectorAll('.icon-picker-item').forEach(function(b) { b.classList.remove('selected'); }); var nb = ig.querySelector('.icon-picker-none'); if (nb) nb.classList.add('selected'); }
+        }
+        _updatePeopleBulkState();
+    });
+    var peopleBulkColorNochange = document.getElementById('people-bulk-color-nochange');
+    if (peopleBulkColorNochange) peopleBulkColorNochange.addEventListener('change', function() {
+        if (this.checked) {
+            var cp = document.getElementById('people-bulk-color-picker');
+            var cv = document.getElementById('people-bulk-color-value');
+            if (cp) cp.querySelectorAll('.color-swatch').forEach(function(b) { b.classList.remove('selected'); });
+            if (cv) cv.value = '';
+        }
+        _updatePeopleBulkState();
+    });
+    var peopleBulkIconGrid = document.getElementById('icon-grid-people-bulk-edit');
+    if (peopleBulkIconGrid) peopleBulkIconGrid.addEventListener('click', function(e) {
+        if (e.target.closest('.icon-picker-item')) {
+            document.getElementById('people-bulk-icon-nochange').checked = false;
+            _updatePeopleBulkState();
+        }
+    });
+    var peopleBulkDescValue = document.getElementById('people-bulk-description-value');
+    if (peopleBulkDescValue) peopleBulkDescValue.addEventListener('input', function() {
+        document.getElementById('people-bulk-description-nochange').checked = false;
+    });
+    var peopleBulkEditConfirm = document.getElementById('people-bulk-edit-confirm');
+    if (peopleBulkEditConfirm) peopleBulkEditConfirm.addEventListener('click', function() {
+        var ids = Array.from(_peopleSelected).map(function(id) { return parseInt(id, 10); });
+        var btn = this;
+        var saved = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="cat-merge-spinner"></span> Saving…';
+        var body = { ids: ids };
+        if (!document.getElementById('people-bulk-description-nochange').checked) {
+            var dv = document.getElementById('people-bulk-description-value');
+            body.description = dv ? dv.value : '';
+        }
+        if (!document.getElementById('people-bulk-icon-nochange').checked) {
+            var iv = document.getElementById('icon-value-people-bulk-edit');
+            body.icon = iv ? iv.value : '';
+        }
+        if (!document.getElementById('people-bulk-color-nochange').checked) {
+            var cv = document.getElementById('people-bulk-color-value');
+            body.color = cv ? cv.value : '';
+        }
+        body.add_parent_ids = [];
+        document.querySelectorAll('#people-bulk-parent-select .people-bulk-parent-cb:checked').forEach(function(cb) {
+            body.add_parent_ids.push(parseInt(cb.value, 10));
+        });
+        fetch('{% url "badge.bulk_edit" badge_kind="people" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf() },
+            body: JSON.stringify(body),
+        }).then(function(r) {
+            if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); });
+            return r.text();
+        }).then(function(html) {
+            document.getElementById('people-bulk-edit-dialog').close();
+            var peopleRowsEl = document.getElementById('people-badge-rows');
+            peopleRowsEl.innerHTML = html;
+            if (window.htmx) htmx.process(peopleRowsEl);
+            _peopleSelected.clear();
+            _syncPeopleSelBar();
+            _applyPeopleView();
+            applyOrgFilter('people');
+            toastr.success('Labels updated.');
+        }).catch(function(err) {
+            toastr.error('Update failed: ' + err.message);
+            btn.disabled = false;
+            btn.innerHTML = saved;
+        });
+    });
 
     function _applyPeopleView() {
         var rows = document.getElementById('people-badge-rows'); if (!rows) return;
@@ -2555,8 +2720,6 @@ window._orgBulkSync = function(n, opts) {
         filterTitle: 'Filter labels',
         viewAriaLabel: 'People view mode',
         createTitle: 'New Label',
-        createCompact: true,
-        createIconOnly: false,
         createHtml: '<i class="material-icons">add</i>',
         getView: function() { return window._orgHeader.getSharedView(); },
         setView: function(v) { window._orgHeader.setSharedView(v); },
@@ -2585,6 +2748,7 @@ window._orgBulkSync = function(n, opts) {
             f.showModal();
         },
     });
+    window._orgRegisterSelectionClearer(_peopleBulkDeselect);
     _applyPeopleView();
     window._orgHeader.init();
 }());

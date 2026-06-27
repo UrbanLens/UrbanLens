@@ -127,7 +127,7 @@ class AddressableModel(Model):
             )
         except Exception as exc:
             # TODO: Catch specific exception type
-            logger.debug("Google place-name lookup failed for location %s: %s", self.pk or self.name, exc)
+            logger.debug("Google place-name lookup failed for location %s: %s", self.pk, exc)
             result = None
         if not result:
             result = "No Information Available"

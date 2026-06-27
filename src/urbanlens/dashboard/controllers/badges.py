@@ -14,6 +14,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.models import User as AuthUser
 from django.db.models import Case, IntegerField, QuerySet, Value, When
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -38,6 +39,14 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+
+def _request_profile(request: HttpRequest) -> Profile:
+    """Return the authenticated user's Profile; raises if user is anonymous."""
+    if not isinstance(request.user, AuthUser):
+        raise TypeError("Expected an authenticated user")
+    return request.user.profile
+
 
 _PERM = "dashboard.edit_global_badge"
 _ICON_MAX_PX = 256
@@ -353,10 +362,14 @@ def _parse_ids_json(request: HttpRequest) -> tuple[list[int] | None, HttpRespons
 
 def _safe_int(value: object, default: int = 0) -> int:
     """Parse an integer from JSON or form data."""
-    try:
-        return int(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, (str, float, bytes, bytearray)):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+    return default
 
 
 def _parse_bulk_payload(data: dict) -> dict:
@@ -430,7 +443,7 @@ class _BadgeKindMixin:
             self.kind = model_kind
         elif not self.kind:
             return HttpResponse(status=404)
-        return super().dispatch(request, *args, **kwargs)  # type: ignore[misc]
+        return super().dispatch(request, *args, **kwargs)
 
     def _cfg(self) -> _KindConfig:
         return _config(self.kind)
@@ -466,7 +479,7 @@ class BadgeCreateView(_BadgeKindMixin, LoginRequiredMixin, View):
     """Create a new badge of the configured kind (HTMX)."""
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
-        profile = request.user.profile
+        profile = _request_profile(request)
         cfg = self._cfg()
         name = request.POST.get("name", "").strip()
         if not name:
@@ -510,7 +523,7 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
         if isinstance(badge, HttpResponseForbidden):
             return badge
 
-        profile = request.user.profile
+        profile = _request_profile(request)
         parent_ids = set(badge.parents.values_list("id", flat=True))
         available_parents = _selected_parents_first(
             _parent_candidates(profile, self.kind, badge_id),
@@ -538,7 +551,7 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
         if isinstance(badge, HttpResponseForbidden):
             return badge
 
-        profile = request.user.profile
+        profile = _request_profile(request)
         new_kind = request.POST.get("kind", self.kind)
         if new_kind not in _ORGANIZE_KINDS:
             new_kind = self.kind
@@ -589,14 +602,14 @@ class BadgeDeleteView(_BadgeKindMixin, LoginRequiredMixin, View):
             return HttpResponse(f"'{badge.name}' is a protected status and cannot be deleted.", status=403)
 
         badge.delete()
-        return _render_rows(request, self.kind, request.user.profile)
+        return _render_rows(request, self.kind, _request_profile(request))
 
 
 class BadgeRowsView(_BadgeKindMixin, LoginRequiredMixin, View):
     """Return the rows partial for a badge kind."""
 
     def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
-        return _render_rows(request, self.kind, request.user.profile)
+        return _render_rows(request, self.kind, _request_profile(request))
 
 
 class BadgeReorderView(_BadgeKindMixin, LoginRequiredMixin, View):
@@ -616,7 +629,7 @@ class BadgeReorderView(_BadgeKindMixin, LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError, AttributeError):
             return JsonResponse({"error": "Invalid data"}, status=400)
 
-        profile = request.user.profile
+        profile = _request_profile(request)
         total = len(badge_ids)
         for i, badge_id in enumerate(badge_ids):
             Badge.objects.filter(id=badge_id, profile=profile, kind=self.kind).update(order=total - i)
@@ -631,7 +644,7 @@ class BadgeMergeView(_BadgeKindMixin, LoginRequiredMixin, View):
         if not cfg.enable_single_merge:
             return HttpResponse(status=404)
         badge_id = _badge_id_from_kwargs(kwargs)
-        profile = request.user.profile
+        profile = _request_profile(request)
         badge = get_object_or_404(_queryset_for_kind(self.kind, profile), id=badge_id)
         if badge.profile is None or badge.profile.user != request.user:
             return HttpResponseForbidden()
@@ -650,7 +663,7 @@ class BadgeMergeView(_BadgeKindMixin, LoginRequiredMixin, View):
         if not cfg.enable_single_merge:
             return HttpResponse(status=404)
         badge_id = _badge_id_from_kwargs(kwargs)
-        profile = request.user.profile
+        profile = _request_profile(request)
         source = get_object_or_404(Badge, id=badge_id, kind=self.kind)
         if source.profile is None or source.profile.user != request.user:
             return HttpResponseForbidden()
@@ -689,7 +702,7 @@ class BadgeMultiMergeView(_BadgeKindMixin, LoginRequiredMixin, View):
         if not source_ids:
             return HttpResponse("At least one source_id is required.", status=400)
 
-        profile = request.user.profile
+        profile = _request_profile(request)
         if self.kind == KIND_TAG:
             target = get_object_or_404(Badge.objects.tags().visible_to(profile), id=target_id)
             sources = Badge.objects.filter(id__in=source_ids, profile=profile, kind=KIND_TAG).exclude(id=target_id)
@@ -740,7 +753,7 @@ class BadgeBulkDeleteView(_BadgeKindMixin, LoginRequiredMixin, View):
         if err:
             return err
 
-        profile = request.user.profile
+        profile = _request_profile(request)
         qs = Badge.objects.filter(id__in=ids, profile=profile, kind=self.kind)
         if self.kind == KIND_STATUS:
             qs = qs.filter(is_protected=False)
@@ -761,7 +774,7 @@ class BadgeBulkEditView(_BadgeKindMixin, LoginRequiredMixin, View):
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid data"}, status=400)
 
-        profile = request.user.profile
+        profile = _request_profile(request)
         payload = _parse_bulk_payload(data)
         badges = list(Badge.objects.filter(id__in=ids, profile=profile, kind=self.kind))
         if self.kind == KIND_STATUS:
@@ -813,7 +826,7 @@ class BadgeBulkConvertView(_BadgeKindMixin, LoginRequiredMixin, View):
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid data"}, status=400)
 
-        profile = request.user.profile
+        profile = _request_profile(request)
         payload = _parse_bulk_payload(data)
         badges = list(Badge.objects.filter(id__in=ids, profile=profile, kind=self.kind))
         if self.kind == KIND_STATUS:
@@ -863,7 +876,7 @@ class BadgeCustomizeView(_BadgeKindMixin, LoginRequiredMixin, View):
             edit_view = BadgeEditView()
             edit_view.kind = self.kind
             return edit_view.get(request, badge_id=badge_id, badge_kind=kwargs.get("badge_kind"))
-        return render(request, self._CUSTOMIZE_FORM, self._customize_ctx(badge, request.user.profile))
+        return render(request, self._CUSTOMIZE_FORM, self._customize_ctx(badge, _request_profile(request)))
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         if self.kind == KIND_USER:
@@ -875,7 +888,7 @@ class BadgeCustomizeView(_BadgeKindMixin, LoginRequiredMixin, View):
             edit_view.kind = self.kind
             return edit_view.post(request, badge_id=badge_id, badge_kind=kwargs.get("badge_kind"))
 
-        profile = request.user.profile
+        profile = _request_profile(request)
         from urbanlens.dashboard.models.badges.customization import BadgeCustomization
 
         if request.POST.get("action") == "clear":
@@ -960,7 +973,7 @@ class BadgePinMembershipView(LoginRequiredMixin, View):
         if _membership_kind_blocked(kwargs):
             return HttpResponse(status=404)
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        profile = request.user.profile
+        profile = _request_profile(request)
         return render(
             request,
             _MEMBERSHIP_PANEL,
@@ -969,9 +982,9 @@ class BadgePinMembershipView(LoginRequiredMixin, View):
                 _pin_member_ids(pin),
                 panel_id="category-panel",
                 dialog_id_prefix="category-add-dialog-",
-                dialog_id_suffix=pin.slug,
+                dialog_id_suffix=pin_slug,
                 membership_route="pin",
-                obj_uuid=pin.slug,
+                obj_uuid=pin_slug,
             ),
         )
 
@@ -979,7 +992,7 @@ class BadgePinMembershipView(LoginRequiredMixin, View):
         if _membership_kind_blocked(kwargs):
             return HttpResponse(status=404)
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        profile = request.user.profile
+        profile = _request_profile(request)
         badge_id = _membership_badge_id(request)
         action = request.POST.get("action")
         badge = get_object_or_404(Badge, id=badge_id, kind__in=_ORGANIZE_KINDS)
@@ -995,9 +1008,9 @@ class BadgePinMembershipView(LoginRequiredMixin, View):
                 _pin_member_ids(pin),
                 panel_id="category-panel",
                 dialog_id_prefix="category-add-dialog-",
-                dialog_id_suffix=pin.slug,
+                dialog_id_suffix=pin_slug,
                 membership_route="pin",
-                obj_uuid=pin.slug,
+                obj_uuid=pin_slug,
             ),
         )
 
@@ -1009,7 +1022,7 @@ class BadgeLocationMembershipView(LoginRequiredMixin, View):
         if _membership_kind_blocked(kwargs):
             return HttpResponse(status=404)
         location = get_object_or_404(Location, slug=location_slug)
-        profile = request.user.profile
+        profile = _request_profile(request)
         return render(
             request,
             _MEMBERSHIP_PANEL,
@@ -1018,9 +1031,9 @@ class BadgeLocationMembershipView(LoginRequiredMixin, View):
                 _location_member_ids(location),
                 panel_id="category-location-panel",
                 dialog_id_prefix="category-loc-dialog-",
-                dialog_id_suffix=location.slug,
+                dialog_id_suffix=location_slug,
                 membership_route="location",
-                obj_uuid=location.slug,
+                obj_uuid=location_slug,
                 empty_text="No badges. Click + to add one.",
             ),
         )
@@ -1029,7 +1042,7 @@ class BadgeLocationMembershipView(LoginRequiredMixin, View):
         if _membership_kind_blocked(kwargs):
             return HttpResponse(status=404)
         location = get_object_or_404(Location, slug=location_slug)
-        profile = request.user.profile
+        profile = _request_profile(request)
         badge_id = _membership_badge_id(request)
         action = request.POST.get("action")
         badge = get_object_or_404(Badge, id=badge_id, kind__in=_ORGANIZE_KINDS)
@@ -1045,9 +1058,9 @@ class BadgeLocationMembershipView(LoginRequiredMixin, View):
                 _location_member_ids(location),
                 panel_id="category-location-panel",
                 dialog_id_prefix="category-loc-dialog-",
-                dialog_id_suffix=location.slug,
+                dialog_id_suffix=location_slug,
                 membership_route="location",
-                obj_uuid=location.slug,
+                obj_uuid=location_slug,
                 empty_text="No badges. Click + to add one.",
             ),
         )
