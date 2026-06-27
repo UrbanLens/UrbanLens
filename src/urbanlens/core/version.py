@@ -9,6 +9,7 @@ import logging
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess  # nosec B404
 import sys
 import tomllib
@@ -231,17 +232,46 @@ def apply_pending_migrations() -> tuple[bool, str]:
     return False, output or "Database migrations failed."
 
 
-def trigger_development_app_reload() -> tuple[bool, str]:
-    """Force Django's development autoreloader to restart the app process.
+def _parent_process_command() -> str:
+    """Return the parent process command line when readable.
 
-    The admin pull endpoint is development-only. Touching ``manage.py`` updates
-    a watched Python file's mtime without changing its contents, causing
-    ``runserver``'s autoreloader to restart and import the newly pulled code.
+    Returns:
+        Parent ``cmdline`` on Linux, or an empty string when unavailable.
     """
     try:
-        os.utime(MANAGE_PY, None)
+        raw = Path(f"/proc/{os.getppid()}/cmdline").read_bytes()
     except OSError:
-        logger.warning("could not touch manage.py to trigger development reload", exc_info=True)
+        return ""
+
+    return raw.replace(b"\x00", b" ").decode(errors="replace").strip()
+
+
+def trigger_development_app_reload() -> tuple[bool, str]:
+    """Reload the running application server after a development code update.
+
+    Docker and ``init.py`` start **gunicorn**, not ``runserver``. Gunicorn does
+    not watch Python files, so touching ``manage.py`` has no effect there.
+    Instead, send ``SIGHUP`` to the gunicorn master so workers restart and
+    import newly pulled code.
+
+    When the parent process is Django's ``runserver`` autoreloader, touch this
+    module's file instead: the reloader tracks imported modules, not
+    ``manage.py`` itself.
+    """
+    parent_cmd = _parent_process_command()
+    if "gunicorn" in parent_cmd:
+        try:
+            os.kill(os.getppid(), signal.SIGHUP)
+        except OSError:
+            logger.warning("could not signal gunicorn master to reload", exc_info=True)
+            return False, "Could not signal the application server to reload."
+        return True, "Application server reload requested."
+
+    reload_trigger = Path(__file__)
+    try:
+        os.utime(reload_trigger, None)
+    except OSError:
+        logger.warning("could not touch %s to trigger development reload", reload_trigger, exc_info=True)
         return False, "Could not signal the development server to reload."
 
     return True, "Development server reload requested."

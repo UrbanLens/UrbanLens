@@ -10,6 +10,7 @@ from urbanlens.core.version import (
     get_current_git_branch,
     get_git_update_status,
     pull_latest_git_code,
+    trigger_development_app_reload,
 )
 
 
@@ -109,6 +110,42 @@ class GitUpdateStatusTests(TestCase):
         self.assertTrue(status.has_newer_commits)
         self.assertEqual(status.commits_ahead, 2)
         self.assertEqual(status.upstream_commit, upstream)
+
+
+class TriggerDevelopmentAppReloadTests(TestCase):
+    """trigger_development_app_reload signals gunicorn or runserver appropriately."""
+
+    def test_gunicorn_parent_receives_sighup(self) -> None:
+        with (
+            mock.patch("urbanlens.core.version._parent_process_command", return_value="gunicorn: master"),
+            mock.patch("urbanlens.core.version.os.kill") as kill,
+        ):
+            ok, message = trigger_development_app_reload()
+
+        self.assertTrue(ok)
+        self.assertIn("reload", message.lower())
+        kill.assert_called_once()
+
+    def test_runserver_fallback_touches_imported_module(self) -> None:
+        with (
+            mock.patch("urbanlens.core.version._parent_process_command", return_value="python manage.py runserver"),
+            mock.patch("urbanlens.core.version.os.utime") as utime,
+        ):
+            ok, message = trigger_development_app_reload()
+
+        self.assertTrue(ok)
+        self.assertIn("reload", message.lower())
+        utime.assert_called_once()
+
+    def test_reload_failure_returns_false(self) -> None:
+        with (
+            mock.patch("urbanlens.core.version._parent_process_command", return_value="gunicorn: master"),
+            mock.patch("urbanlens.core.version.os.kill", side_effect=OSError("permission denied")),
+        ):
+            ok, message = trigger_development_app_reload()
+
+        self.assertFalse(ok)
+        self.assertIn("reload", message.lower())
 
 
 class PullLatestGitCodeTests(TestCase):
