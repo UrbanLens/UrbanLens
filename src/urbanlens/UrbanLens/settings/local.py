@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
 from django.core.management.utils import get_random_secret_key
+import sys
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -184,9 +185,16 @@ MEDIA_ROOT = os.path.join(PROJECT_ROOT, "media")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Test clients issue HTTP requests. Django's DiscoverRunner disables HTTPS
+# redirects in setup_test_environment(), but pytest-django imports settings
+# directly and does not run that project test runner hook.
+TESTING = os.getenv("DJANGO_TESTING", "False").lower() in ("true", "1", "yes") or any(
+    arg.endswith("pytest") or "pytest" in arg for arg in sys.argv
+)
+
 # Reject plain HTTP unless UL_UNSAFE_ALLOW_HTTP is enabled (local dev only).
 UNSAFE_ALLOW_HTTP = os.getenv("UL_UNSAFE_ALLOW_HTTP", "False").lower() in ("true", "1", "yes")
-SECURE_SSL_REDIRECT = not UNSAFE_ALLOW_HTTP
+SECURE_SSL_REDIRECT = not UNSAFE_ALLOW_HTTP and not TESTING
 # Internal container health checks hit /health over HTTP on the app port.
 SECURE_REDIRECT_EXEMPT = [r"^health"]
 

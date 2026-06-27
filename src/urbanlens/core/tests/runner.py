@@ -48,7 +48,7 @@ from model_bakery import baker, seq
 from model_bakery.generators import default_mapping
 
 from urbanlens.core.tests.result import MessageResult
-
+from urbanlens.core.testing_network import LocalhostOnlyNetwork
 
 class BufferingLogHandler(logging.Handler):
     """
@@ -125,7 +125,14 @@ class TestRunner(DiscoverRunner):
         )
         self._ai_patcher.start()
 
+
+        if os.getenv("UL_ALLOW_TEST_INTERNET", "False").lower() not in {"true", "1", "yes"}:
+            self._network_guard = LocalhostOnlyNetwork().start()
+
     def teardown_test_environment(self, **kwargs: Any) -> None:
+        network_guard = getattr(self, "_network_guard", None)
+        if network_guard:
+            network_guard.stop()
         patcher = getattr(self, "_ai_patcher", None)
         if patcher:
             patcher.stop()
