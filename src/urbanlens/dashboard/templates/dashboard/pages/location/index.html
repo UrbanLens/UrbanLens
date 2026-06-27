@@ -388,9 +388,9 @@
         {% csrf_token %}
 
         <div class="form-row">
-            <label for="pe-nickname">Name <span class="form-optional">(leave blank to use location name)</span></label>
-            <input type="text" name="nickname" id="pe-nickname"
-                   value="{{ pin.nickname|default:'' }}" maxlength="255"
+            <label for="pe-name">Name <span class="form-optional">(leave blank to use location name)</span></label>
+            <input type="text" name="name" id="pe-name"
+                   value="{{ pin.name|default:'' }}" maxlength="255"
                    placeholder="{{ pin.effective_name }}">
         </div>
 
@@ -1994,7 +1994,7 @@
             {
                 id: 'aliases', icon: 'label_important', target: '#pin-aliases-panel',
                 eyebrow: 'Your naming system', title: 'Save private alternate names for this pin',
-                body: 'Aliases help you find places by nicknames, historic names, or project labels without changing the community wiki.',
+                body: 'Aliases help you find places by names, historic names, or project labels without changing the community wiki.',
                 button: 'Show aliases', action: function () { document.getElementById('pin-aliases-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
                 ready: function () { return !!document.getElementById('pin-aliases-panel'); },
             },

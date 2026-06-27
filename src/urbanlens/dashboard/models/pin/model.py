@@ -69,14 +69,13 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
 
     # When True this pin is entirely personal: it will not be linked to a shared
     # Location and will never contribute to the community wiki.  User-specific
-    # data (nickname, description, coordinates) must not be surfaced to others
+    # data (name, description, coordinates) must not be surfaced to others
     # regardless of this flag, but is_private=True is the explicit opt-out from
     # having any community presence at these coordinates.
     is_private = BooleanField(default=False)
 
     # User's custom label. None = show location.name instead (see effective_name).
-    # Do NOT store canonical place names here - those belong on Location.
-    nickname = CharField(max_length=255, null=True, blank=True)
+    name = CharField(max_length=255, null=True, blank=True)
     icon = CharField(max_length=255, null=True, blank=True)
     # User's personal notes. Unrelated to Location.description (place-level info).
     description = TextField(null=True, blank=True)
@@ -207,7 +206,7 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
     @property
     def effective_name(self) -> str:
         """User's custom name, or the location's canonical name."""
-        return self.nickname or (self.location.name if self.location else "")
+        return self.name or (self.location.name if self.location else "")
     
     @property
     def meaningful_name(self) -> str | None:

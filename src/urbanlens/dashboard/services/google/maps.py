@@ -204,10 +204,6 @@ class GoogleMapsGateway(Gateway):
         skipped = 0
         with tqdm(total=total, desc="Importing pins") as pbar:
             for pin_data in data:
-                # If pin_data contains "name", convert to "nickname"
-                if "name" in pin_data:
-                    pin_data["nickname"] = pin_data.pop("name")
-
                 try:
                     pin, created = Pin.objects.get_nearby_or_create(
                         latitude=pin_data["latitude"],
@@ -390,14 +386,11 @@ class GoogleMapsGateway(Gateway):
                             pin_data.pop("longitude", None)
 
                         pin_name = (
-                            pin_data.get("name") or pin_data.get("nickname") or (location.name if location else "")
+                            pin_data.get("name") or (location.name if location else "")
                         )
                         lookup_lat = pin_data.get("latitude") or (location.latitude if location else None)
                         lookup_lon = pin_data.get("longitude") or (location.longitude if location else None)
                         try:
-                            # If pin_data contains "name", convert to "nickname"
-                            if "name" in pin_data:
-                                pin_data["nickname"] = pin_data.pop("name")
                             pin, created = Pin.objects.get_nearby_or_create(
                                 latitude=lookup_lat,
                                 longitude=lookup_lon,
@@ -521,7 +514,7 @@ class GoogleMapsGateway(Gateway):
                     continue
                 pins.append(
                     {
-                        "name": (p.get("name") or p.get("nickname") or "")[:255],
+                        "name": (p.get("name") or p.get("name") or "")[:255],
                         "lat": float(lat),
                         "lng": float(lng),
                         "description": (p.get("description") or "")[:500],
@@ -610,7 +603,7 @@ class GoogleMapsGateway(Gateway):
 
                         pin_defaults: dict[str, Any] = {
                             "profile": user_profile,
-                            "nickname": pin_name,
+                            "name": pin_name,
                             "description": description,
                             "is_private": is_private,
                         }

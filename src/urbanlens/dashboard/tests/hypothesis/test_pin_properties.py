@@ -36,7 +36,7 @@ def _make_pin(**kwargs: Any) -> Pin:
     pure-Python properties can be exercised in isolation.
     """
     defaults: dict[str, Any] = {
-        "nickname": None,
+        "name": None,
         "location": None,
         "latitude": None,
         "longitude": None,
@@ -72,38 +72,38 @@ class PinEffectiveNameTests(TestCase):
 
     @given(nonempty_name)
     @settings(max_examples=300)
-    def test_nickname_takes_priority_over_location_name(self, nickname: str) -> None:
-        """When a nickname is set it must always win, regardless of the location."""
+    def test_name_takes_priority_over_location_name(self, name: str) -> None:
+        """When a custom pin name is set it must always win, regardless of the location."""
         loc = _make_location(name="Canonical Location")
-        pin = _make_pin(nickname=nickname, location=loc)
-        self.assertEqual(pin.effective_name, nickname)
+        pin = _make_pin(name=name, location=loc)
+        self.assertEqual(pin.effective_name, name)
 
     @given(nonempty_name)
     @settings(max_examples=300)
-    def test_falls_back_to_location_name_when_nickname_is_none(self, location_name: str) -> None:
+    def test_falls_back_to_location_name_when_name_is_none(self, location_name: str) -> None:
         loc = _make_location(name=location_name)
-        pin = _make_pin(nickname=None, location=loc)
+        pin = _make_pin(name=None, location=loc)
         self.assertEqual(pin.effective_name, location_name)
 
-    def test_empty_string_when_no_nickname_and_no_location(self) -> None:
-        pin = _make_pin(nickname=None, location=None)
+    def test_empty_string_when_no_name_and_no_location(self) -> None:
+        pin = _make_pin(name=None, location=None)
         self.assertEqual(pin.effective_name, "")
 
     @given(nonempty_name, nonempty_name)
     @settings(max_examples=200)
-    def test_nickname_is_always_returned_verbatim(self, nickname: str, location_name: str) -> None:
+    def test_name_is_always_returned_verbatim(self, name: str, location_name: str) -> None:
         """The returned name must be exactly what was stored - no transformation."""
         loc = _make_location(name=location_name)
-        pin = _make_pin(nickname=nickname, location=loc)
+        pin = _make_pin(name=name, location=loc)
         self.assertIs(type(pin.effective_name), str)
-        self.assertEqual(pin.effective_name, nickname)
+        self.assertEqual(pin.effective_name, name)
 
     @given(st.one_of(st.just(""), st.just(None)))
     @settings(max_examples=50)
-    def test_falsy_nickname_falls_through_to_location(self, nickname: str | None) -> None:
+    def test_falsy_name_falls_through_to_location(self, name: str | None) -> None:
         """Empty string and None both trigger the location fallback."""
         loc = _make_location(name="Fallback Name")
-        pin = _make_pin(nickname=nickname, location=loc)
+        pin = _make_pin(name=name, location=loc)
         self.assertEqual(pin.effective_name, "Fallback Name")
 
 
@@ -286,37 +286,3 @@ class PinEffectiveIconTests(TestCase):
         mock_cf.url = url
         object.__setattr__(pin, "custom_icon", mock_cf)
         self.assertEqual(pin.effective_icon, url)
-
-
-# ── location proxy properties ──────────────────────────────────────────────────
-
-class PinLocationProxyTests(TestCase):
-    """The address proxy properties simply delegate to the linked Location."""
-
-    _PROXY_ATTRS = ("place_name", "address", "address_basic", "address_extended",
-                    "state", "county", "city", "country", "cached_place_name")
-
-    @given(st.sampled_from(_PROXY_ATTRS))
-    @settings(max_examples=200)
-    def test_proxy_returns_none_when_location_is_none(self, attr: str) -> None:
-        pin = _make_pin(location=None)
-        self.assertIsNone(getattr(pin, attr))
-
-    @given(st.sampled_from(_PROXY_ATTRS), st.text(min_size=0, max_size=255))
-    @settings(max_examples=200)
-    def test_proxy_delegates_to_location_attribute(self, attr: str, value: str) -> None:
-        loc = MagicMock()
-        setattr(loc, attr, value)
-        pin = _make_pin(location=loc)
-        self.assertEqual(getattr(pin, attr), value)
-
-    def test_has_place_name_false_when_no_location(self) -> None:
-        pin = _make_pin(location=None)
-        self.assertFalse(pin.has_place_name())
-
-    def test_has_place_name_delegates_to_location(self) -> None:
-        loc = MagicMock()
-        loc.has_place_name.return_value = True
-        pin = _make_pin(location=loc)
-        self.assertTrue(pin.has_place_name())
-        loc.has_place_name.assert_called_once()

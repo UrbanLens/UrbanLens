@@ -21,7 +21,7 @@ class PinFilter(django_filters.FilterSet):
     class Meta:
         model = Pin
         fields = [
-            "nickname",
+            "name",
             "icon",
             "categories",
             "priority",

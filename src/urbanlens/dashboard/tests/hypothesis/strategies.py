@@ -25,7 +25,7 @@ short_text = st.text(alphabet=_printable_alphabet, min_size=1, max_size=255)
 short_text_or_none = st.one_of(st.none(), short_text)
 long_text = st.text(alphabet=_printable_alphabet, min_size=0, max_size=2000)
 
-# Non-empty text that is also non-whitespace (suitable for pin nicknames / names).
+# Non-empty text that is also non-whitespace (suitable for pin names).
 nonempty_name = st.text(alphabet=_printable_alphabet, min_size=1, max_size=255).filter(str.strip)
 
 # ── Geographic coordinates ─────────────────────────────────────────────────────

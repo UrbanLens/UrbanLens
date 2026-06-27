@@ -24,7 +24,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
     def get(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         detail_pins = (
-            pin.detail_pins.select_related("location").order_by("pin_type", "nickname")
+            pin.detail_pins.select_related("location").order_by("pin_type", "name")
         )
         return render(
             request,
@@ -50,7 +50,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
 
         detail_pin = Pin.objects.create(
-            nickname=body.get("name") or None,
+            name=body.get("name") or None,
             description=body.get("description") or None,
             latitude=float(lat),
             longitude=float(lon),
@@ -83,7 +83,7 @@ class DetailPinEditView(LoginRequiredMixin, View):
             body = request.POST
 
         for field, value in {
-            "nickname": body.get("name") or None,
+            "name": body.get("name") or None,
             "description": body.get("description") or None,
             "pin_type": body.get("pin_type") or None,
             "icon": body.get("icon") or None,
@@ -116,7 +116,7 @@ class DetailPinJsonView(LoginRequiredMixin, View):
     def get(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         detail_pins = (
-            pin.detail_pins.order_by("pin_type", "nickname")
+            pin.detail_pins.order_by("pin_type", "name")
         )
         return JsonResponse({"detail_pins": [dp.to_detail_json() for dp in detail_pins]})
 
@@ -129,7 +129,7 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
         detail_pins = (
             Pin.objects.filter(parent_location=location, parent_pin__isnull=True)
             .select_related("profile__user")
-            .order_by("pin_type", "nickname")
+            .order_by("pin_type", "name")
         )
         data = []
         for dp in detail_pins:
@@ -150,7 +150,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         detail_pins = (
             Pin.objects.filter(parent_location=location, parent_pin__isnull=True)
             .select_related("profile__user")
-            .order_by("pin_type", "nickname")
+            .order_by("pin_type", "name")
         )
         return render(
             request,
@@ -182,7 +182,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
 
         pin_name = body.get("name") or None
         detail_pin = Pin.objects.create(
-            nickname=pin_name,
+            name=pin_name,
             description=body.get("description") or None,
             latitude=float(lat),
             longitude=float(lon),
@@ -261,7 +261,7 @@ class LocationWikiDetailPinDeleteView(LoginRequiredMixin, View):
         detail_pins = (
             Pin.objects.filter(parent_location=location, parent_pin__isnull=True)
             .select_related("profile__user")
-            .order_by("pin_type", "nickname")
+            .order_by("pin_type", "name")
         )
         return render(
             request,

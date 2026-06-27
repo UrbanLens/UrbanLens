@@ -201,15 +201,15 @@ class FilterByCriteriaRatingTests(TestCase):
 
 
 class FilterByCriteriaNameTests(TestCase):
-    """name criterion: case-insensitive substring match against nickname."""
+    """name criterion: case-insensitive substring match against name."""
 
     profile: Profile
 
     def setUp(self) -> None:
         super().setUp()
         self.profile = baker.make(User).profile
-        self.target = baker.make(Pin, profile=self.profile, nickname="Urbex Hospital")
-        self.decoy = baker.make(Pin, profile=self.profile, nickname="Mountain Trail")
+        self.target = baker.make(Pin, profile=self.profile, name="Urbex Hospital")
+        self.decoy = baker.make(Pin, profile=self.profile, name="Mountain Trail")
 
     def _base_qs(self):
         return Pin.objects.filter(profile=self.profile)

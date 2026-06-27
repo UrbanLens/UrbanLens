@@ -90,7 +90,7 @@ class InvalidateMapCenterOnUpdateTests(TestCase):
         _set_cached_centroid(self.profile)
 
     def test_saving_existing_pin_does_not_clear_cache(self) -> None:
-        self.pin.nickname = "Updated nickname"
+        self.pin.name = "Updated name"
         self.pin.save()
         self.profile.refresh_from_db()
         self.assertIsNotNone(self.profile.map_center_latitude)
@@ -98,7 +98,7 @@ class InvalidateMapCenterOnUpdateTests(TestCase):
 
     def test_multiple_updates_do_not_clear_cache(self) -> None:
         for i in range(3):
-            self.pin.nickname = f"Update {i}"
+            self.pin.name = f"Update {i}"
             self.pin.save()
         self.profile.refresh_from_db()
         self.assertIsNotNone(self.profile.map_center_latitude)

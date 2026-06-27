@@ -43,7 +43,7 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
     and any other data that is the same regardless of who is looking.
 
     What does NOT belong here:
-    - Custom labels or notes a user gave the place → Pin.nickname / Pin.description
+    - Custom labels or notes a user gave the place → Pin.name / Pin.description
     - Visit history or visit status → Pin.last_visited / Pin.status
     - Per-user coordinate overrides → Pin.latitude / Pin.longitude
     - Priority rankings → Pin.priority
@@ -60,7 +60,7 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
     # URL slug - globally unique. Auto-generated from name on first save.
     slug = SlugField(max_length=255, null=True, blank=True, unique=True)
 
-    # Canonical name of the place - NOT a user's personal label (that's Pin.nickname).
+    # Canonical name of the place - NOT a user's personal label (that's Pin.name).
     name = CharField(max_length=255)
     description = TextField(null=True, blank=True)
 

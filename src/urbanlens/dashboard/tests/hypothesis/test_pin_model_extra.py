@@ -23,7 +23,7 @@ class PinEffectiveColorTests(TestCase):
 
     def _make_pin(self) -> Pin:
         pin = Pin()
-        pin.nickname = None
+        pin.name = None
         pin.icon = None
         pin.custom_icon = None
         pin.color = None
@@ -107,17 +107,17 @@ class PinEffectiveColorTests(TestCase):
 class PinHasMeaningfulNameTests(TestCase):
     """meaningful_name is None for Google placeholder names."""
 
-    def _pin_with_name(self, nickname: str | None, loc_name: str = "") -> Pin:
+    def _pin_with_name(self, name: str | None, loc_name: str = "") -> Pin:
         pin = Pin()
-        pin.nickname = nickname
+        pin.name = name
         loc_mock = MagicMock()
         loc_mock.name = loc_name
         pin._state.fields_cache["location"] = loc_mock
         return pin
 
-    def _pin_no_location(self, nickname: str | None = None) -> Pin:
+    def _pin_no_location(self, name: str | None = None) -> Pin:
         pin = Pin()
-        pin.nickname = nickname
+        pin.name = name
         pin._state.fields_cache["location"] = None
         return pin
 
@@ -152,7 +152,7 @@ class PinHasMeaningfulNameTests(TestCase):
         pin = self._pin_with_name("Old Warehouse")
         self.assertIsNotNone(pin.meaningful_name)
 
-    def test_nickname_meaningful_regardless_of_location(self) -> None:
+    def test_name_meaningful_regardless_of_location(self) -> None:
         pin = self._pin_with_name("My Spot", loc_name="Dropped pin")
         self.assertIsNotNone(pin.meaningful_name)
 
@@ -247,7 +247,7 @@ class PinToJsonTests(TestCase):
         )
         self.pin = baker.make(
             Pin, profile=self.user.profile, location=self.location,
-            nickname="My Steel Mill", priority=5,
+            name="My Steel Mill", priority=5,
         )
 
     def test_returns_dict(self) -> None:
@@ -256,7 +256,7 @@ class PinToJsonTests(TestCase):
     def test_contains_name(self) -> None:
         self.assertIn("name", self.pin.to_json())
 
-    def test_name_is_nickname_when_set(self) -> None:
+    def test_name_is_name_when_set(self) -> None:
         self.assertEqual(self.pin.to_json()["name"], "My Steel Mill")
 
     def test_contains_uuid(self) -> None:

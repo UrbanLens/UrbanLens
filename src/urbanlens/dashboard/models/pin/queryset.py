@@ -60,7 +60,7 @@ class PinQuerySet(abstract.QuerySet):
         return self.filter(longitude=longitude)
 
     def by_name(self, name):
-        return self.filter(nickname__icontains=name)
+        return self.filter(name__icontains=name)
 
     def by_profile(self, profile):
         return self.filter(profile=profile)
@@ -111,7 +111,7 @@ class PinQuerySet(abstract.QuerySet):
         qs = self
         if name := (criteria.get("name") or "").strip():
             qs = qs.filter(
-                Q(nickname__icontains=name) | Q(location__name__icontains=name) | Q(aliases__name__icontains=name),
+                Q(name__icontains=name) | Q(location__name__icontains=name) | Q(aliases__name__icontains=name),
             )
         if badge_statuses := criteria.get("status"):
             qs = qs.filter(badges__id__in=[s.id if hasattr(s, "id") else s for s in badge_statuses])

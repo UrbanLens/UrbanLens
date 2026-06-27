@@ -247,7 +247,7 @@ class TripActivitiesViewTests(TestCase):
         pin = Pin.objects.create(
             profile=self.creator,
             location=location,
-            nickname="Abandoned Factory",
+            name="Abandoned Factory",
             latitude=51.5,
             longitude=-0.12,
         )
@@ -314,7 +314,7 @@ class TripActivityEffectiveTitleTests(TestCase):
         self.pin = Pin.objects.create(
             profile=self.profile,
             location=self.location,
-            nickname="Old Mill",
+            name="Old Mill",
             latitude=40.0,
             longitude=-74.0,
         )
@@ -323,13 +323,13 @@ class TripActivityEffectiveTitleTests(TestCase):
         activity = TripActivity.objects.create(trip=self.trip, title="Custom Label", pin=self.pin)
         self.assertEqual(activity.effective_title, "Custom Label")
 
-    def test_pin_nickname_used_when_no_title(self):
+    def test_pin_name_used_when_no_title(self):
         activity = TripActivity.objects.create(trip=self.trip, pin=self.pin, location=self.location)
         self.assertEqual(activity.effective_title, "Old Mill")
 
     def test_pin_address_used_when_no_meaningful_name(self):
-        self.pin.nickname = None
-        self.pin.save(update_fields=["nickname"])
+        self.pin.name = None
+        self.pin.save(update_fields=["name"])
         activity = TripActivity.objects.create(trip=self.trip, pin=self.pin, location=self.location)
         self.assertIn("Main St", activity.effective_title)
 

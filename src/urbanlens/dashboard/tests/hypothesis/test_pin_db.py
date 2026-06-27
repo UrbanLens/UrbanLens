@@ -239,7 +239,7 @@ class PinQuerySetVisitFiltersTests(TestCase):
 # ── PinQuerySet name filter ───────────────────────────────────────────────────
 
 class PinQuerySetByNameTests(TestCase):
-    """by_name() performs a case-insensitive substring search on nickname."""
+    """by_name() performs a case-insensitive substring search on name."""
 
     profile: Profile
 
@@ -249,25 +249,25 @@ class PinQuerySetByNameTests(TestCase):
 
     @given(nonempty_name)
     @_db_settings
-    def test_pin_is_found_by_exact_nickname(self, name: str) -> None:
+    def test_pin_is_found_by_exact_name(self, name: str) -> None:
         assume(len(name.strip()) >= 1)
-        pin = baker.make(Pin, profile=self.profile, nickname=name)
+        pin = baker.make(Pin, profile=self.profile, name=name)
         qs = Pin.objects.filter(profile=self.profile).by_name(name)
         self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 
     @given(nonempty_name)
     @_db_settings
-    def test_pin_is_found_by_lowercase_nickname(self, name: str) -> None:
+    def test_pin_is_found_by_lowercase_name(self, name: str) -> None:
         assume(len(name.strip()) >= 1)
-        pin = baker.make(Pin, profile=self.profile, nickname=name)
+        pin = baker.make(Pin, profile=self.profile, name=name)
         qs = Pin.objects.filter(profile=self.profile).by_name(name.lower())
         self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 
     @given(nonempty_name)
     @_db_settings
-    def test_pin_is_found_by_uppercase_nickname(self, name: str) -> None:
+    def test_pin_is_found_by_uppercase_name(self, name: str) -> None:
         assume(len(name.strip()) >= 1)
-        pin = baker.make(Pin, profile=self.profile, nickname=name)
+        pin = baker.make(Pin, profile=self.profile, name=name)
         qs = Pin.objects.filter(profile=self.profile).by_name(name.upper())
         self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 

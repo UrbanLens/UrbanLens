@@ -164,7 +164,7 @@ class PinEditView(LoginRequiredMixin, View):
         from datetime import date, datetime
 
         # Scalar fields
-        nickname = (body.get("nickname") or "").strip() or None
+        name = (body.get("name") or "").strip() or None
         description = (body.get("description") or "").strip() or None
         pin_type = body.get("pin_type") or pin.pin_type
         priority_raw = body.get("priority")
@@ -245,7 +245,7 @@ class PinEditView(LoginRequiredMixin, View):
         if pin_type not in valid_types:
             pin_type = pin.pin_type
 
-        pin.nickname = nickname
+        pin.name = name
         pin.description = description
         pin.pin_type = pin_type
         pin.priority = priority
@@ -257,7 +257,7 @@ class PinEditView(LoginRequiredMixin, View):
         pin.date_abandoned = date_abandoned
         pin.date_last_active = date_last_active
         pin.save(update_fields=[
-            "nickname", "description", "pin_type", "priority", "vulnerability", "last_visited",
+            "name", "description", "pin_type", "priority", "vulnerability", "last_visited",
             "fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked",
             "date_abandoned", "date_last_active", "updated",
         ])
@@ -410,7 +410,7 @@ class PinRelinkView(LoginRequiredMixin, View):
             # Detach: create a new bare Location at this pin's coordinates so
             # the pin retains its own independent community wiki page.
             # Use the existing location's canonical name if available; otherwise
-            # fetch the Google place name.  Never fall back to pin.nickname -
+            # fetch the Google place name.  Never fall back to pin.name -
             # that is personal data and must not become a community wiki title.
             lat = float(pin.effective_latitude or 0)
             lng = float(pin.effective_longitude or 0)

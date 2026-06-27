@@ -983,7 +983,7 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_rows = list(
             Pin.objects.filter(profile=profile)
-            .filter(Q(nickname__icontains=q) | Q(location__name__icontains=q) | Q(description__icontains=q))
+            .filter(Q(name__icontains=q) | Q(location__name__icontains=q) | Q(description__icontains=q))
             .select_related("location")[:5],
         )
         pin_results = [

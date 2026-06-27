@@ -70,7 +70,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def edit_pin(self, request, pin_slug, *args, **kwargs):
         pin: Pin = Pin.objects.get(slug=pin_slug)
         # Update the pin based on the form data
-        pin.nickname = request.POST.get("name")
+        pin.name = request.POST.get("name")
         pin.description = request.POST.get("description")
         pin.latitude = request.POST.get("latitude")
         pin.longitude = request.POST.get("longitude")
@@ -122,7 +122,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 # Link to an existing Location whose bounding box contains this point,
                 # or create a new one. This keeps all pins for the same place connected.
                 # The Location name must be the canonical place name - never the user's
-                # custom label, which stays on Pin.nickname only.
+                # custom label, which stays on Pin.name only.
                 all_locations = list(Location.objects.get_all_for_point(lat_f, lon_f))
                 if all_locations:
                     location = all_locations[0]
@@ -130,7 +130,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     location = _create_location_with_canonical_name(lat_f, lon_f)
 
             pin = Pin.objects.create(
-                nickname=name,
+                name=name,
                 location=location,
                 latitude=None,
                 longitude=None,
@@ -373,7 +373,7 @@ def _safe_positive_int(value: str | None) -> int | None:
 def _create_location_with_canonical_name(lat: float, lon: float) -> Location:
     """Create a new Location using its canonical Google place name.
 
-    The user's custom nickname must never be used as a Location name because
+    The user's custom pin name must never be used as a Location name because
     Location.name is shared across all users and visible on the community wiki.
     We ask Google for the real place name and fall back to "Unnamed Location"
     when geocoding is unavailable or returns nothing useful.

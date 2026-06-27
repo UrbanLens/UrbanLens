@@ -28,7 +28,7 @@ class PinSerializer(serializers.ModelSerializer):
         model = Pin
         fields = [
             "id",
-            "nickname",
+            "name",
             "effective_name",
             "icon",
             "effective_icon",

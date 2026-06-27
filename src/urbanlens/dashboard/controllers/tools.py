@@ -139,7 +139,7 @@ def _export_pins(profile: Any, temp_dir: str, base_url: str) -> None:
     writer.writerow(["Title", "Note", "URL", "Tags", "Comment"])
 
     for pin in pins:
-        name = pin.nickname or (pin.location.name if pin.location else "")
+        name = pin.name or (pin.location.name if pin.location else "")
         note = pin.description or ""
         url = f"{base_url.rstrip('/')}/dashboard/map/pin/{pin.slug}/" if pin.slug else ""
         tags = ", ".join(b.name for b in pin.badges.all() if hasattr(b, "name"))
@@ -160,7 +160,7 @@ def _export_comments(profile: Any, temp_dir: str) -> None:
     rows = []
     for comment in comments:
         if comment.pin:
-            target = comment.pin.nickname or (comment.pin.location.name if comment.pin.location else "")
+            target = comment.pin.name or (comment.pin.location.name if comment.pin.location else "")
             target_type = "pin"
         elif comment.location:
             target = comment.location.name
@@ -194,7 +194,7 @@ def _export_photos(profile: Any, temp_dir: str) -> None:
     metadata = []
     for image in images:
         if image.pin:
-            target = image.pin.nickname or (image.pin.location.name if image.pin.location else "")
+            target = image.pin.name or (image.pin.location.name if image.pin.location else "")
             target_type = "pin"
         elif image.location:
             target = image.location.name

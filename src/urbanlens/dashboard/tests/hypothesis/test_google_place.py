@@ -10,7 +10,6 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.google_place.model import GooglePlace
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.google.place_info import GooglePlaceService
 
 
@@ -26,8 +25,8 @@ class GooglePlaceServiceTests(TestCase):
 
     def test_different_coordinates_create_separate_rows(self) -> None:
         service = GooglePlaceService()
-        first = service.get_or_create_for_coordinates("40.0", "-74.0", place_name="Mill A", fetch_if_missing=False)
-        second = service.get_or_create_for_coordinates("41.0", "-73.0", place_name="Mill B", fetch_if_missing=False)
+        first = service.get_or_create_for_coordinates(40.0, -74.0, place_name="Mill A", fetch_if_missing=False)
+        second = service.get_or_create_for_coordinates(41.0, -73.0, place_name="Mill B", fetch_if_missing=False)
         self.assertNotEqual(first.pk, second.pk)
         self.assertEqual(GooglePlace.objects.count(), 2)
 
@@ -38,7 +37,13 @@ class GooglePlaceServiceTests(TestCase):
             cached_place_name="Shared Place",
         )
         location = baker.make(Location, latitude="40.000000", longitude="-74.000000", google_place=google_place)
-        pin = baker.make(Pin, latitude="40.000000", longitude="-74.000000", google_place=google_place, location=location)
+        pin = baker.make_recipe(
+            "dashboard.pin",
+            latitude="40.000000",
+            longitude="-74.000000",
+            google_place=google_place,
+            location=location,
+        )
         self.assertEqual(location.google_place_id, pin.google_place_id)
         self.assertEqual(location.place_name, pin.place_name)
 
