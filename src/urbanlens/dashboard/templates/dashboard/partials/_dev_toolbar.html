@@ -63,6 +63,25 @@
             <i class="material-icons dev-toolbar__tool-icon" aria-hidden="true">cached</i>
             <span class="dev-toolbar__tool-label">Refresh pin cache</span>
         </button>
+        <button type="button"
+                class="dev-toolbar__tool dev-toolbar__tool--danger"
+                id="dev-toolbar-reset-onboarding"
+                title="Show onboarding tips and hints again"
+                aria-label="Reset onboarding"
+                hx-post="{% url 'dev_toolbar.reset_onboarding' %}"
+                hx-swap="none"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+            <i class="material-icons dev-toolbar__tool-icon" aria-hidden="true">school</i>
+            <span class="dev-toolbar__tool-label">Reset onboarding</span>
+        </button>
+        <button type="button"
+                class="dev-toolbar__tool dev-toolbar__tool--danger"
+                id="dev-toolbar-clear-session"
+                title="Clear browser session storage and log out"
+                aria-label="Clear session">
+            <i class="material-icons dev-toolbar__tool-icon" aria-hidden="true">logout</i>
+            <span class="dev-toolbar__tool-label">Clear session</span>
+        </button>
     </div>
 </div>
 <script>
@@ -415,6 +434,43 @@
         }
     });
 
+    function clearOnboardingStorage() {
+        var keysToRemove = [];
+        var i;
+        var key;
+        try {
+            for (i = 0; i < localStorage.length; i++) {
+                key = localStorage.key(i);
+                if (key && (key.indexOf('ul_onboarding_v1_') === 0 || key.indexOf('ul_explainer_collapsed_') === 0)) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(function (k) { localStorage.removeItem(k); });
+        } catch (_) {}
+        keysToRemove = [];
+        try {
+            for (i = 0; i < sessionStorage.length; i++) {
+                key = sessionStorage.key(i);
+                if (key && key.indexOf('ul_onboarding_v1_') === 0) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(function (k) { sessionStorage.removeItem(k); });
+        } catch (_) {}
+    }
+
+    document.body.addEventListener('devOnboardingReset', function () {
+        clearOnboardingStorage();
+        if (window.toastr) toastr.success('Onboarding reset. Reloading…');
+        window.setTimeout(function () { window.location.reload(); }, 350);
+    });
+
+    document.body.addEventListener('devSessionCleared', function () {
+        try { sessionStorage.clear(); } catch (_) {}
+        if (window.toastr) toastr.info('Session cleared. Reloading…');
+        window.setTimeout(function () { window.location.reload(); }, 350);
+    });
+
     var pinCacheBtn = document.getElementById('dev-toolbar-refresh-pin-cache');
     if (pinCacheBtn) {
         pinCacheBtn.addEventListener('click', function () {
@@ -439,6 +495,44 @@
                 .finally(function () {
                     pinCacheBtn.disabled = false;
                     pinCacheBtn.classList.remove('is-busy');
+                });
+        });
+    }
+
+    var clearSessionBtn = document.getElementById('dev-toolbar-clear-session');
+    if (clearSessionBtn) {
+        clearSessionBtn.addEventListener('click', function () {
+            if (clearSessionBtn.disabled) return;
+            if (!window.confirm('Clear your session and log out? Tab session storage will be wiped.')) return;
+            clearSessionBtn.disabled = true;
+            clearSessionBtn.classList.add('is-busy');
+            fetch('{% url "dev_toolbar.clear_session" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'HX-Request': 'true',
+                },
+                credentials: 'same-origin',
+            })
+                .then(function (resp) {
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    var trigger = resp.headers.get('HX-Trigger');
+                    if (trigger) {
+                        try {
+                            var events = JSON.parse(trigger);
+                            Object.keys(events).forEach(function (name) {
+                                document.body.dispatchEvent(new CustomEvent(name, { detail: events[name] }));
+                            });
+                        } catch (_) {}
+                    } else {
+                        document.body.dispatchEvent(new CustomEvent('devSessionCleared'));
+                    }
+                })
+                .catch(function (err) {
+                    console.warn('[Dev toolbar] Clear session failed:', err);
+                    if (window.toastr) toastr.error('Could not clear session.');
+                    clearSessionBtn.disabled = false;
+                    clearSessionBtn.classList.remove('is-busy');
                 });
         });
     }

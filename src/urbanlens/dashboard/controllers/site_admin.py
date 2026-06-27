@@ -264,6 +264,58 @@ class DevToolbarToggleMapDarkModeView(LoginRequiredMixin, PermissionRequiredMixi
         return response
 
 
+class DevToolbarClearSessionView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Flush the Django session (dev toolbar).
+
+    Clears server-side session state and signals the client to wipe ``sessionStorage``
+    before reloading. The user will be logged out.
+
+    POST /site-admin/dev/clear-session/
+    """
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+
+    def post(self, request):
+        settings = SiteSettings.get_current()
+        if not settings.is_development_environment():
+            return HttpResponse(status=403)
+
+        request.session.flush()
+
+        response = HttpResponse(status=204)
+        response["HX-Trigger"] = json.dumps({"devSessionCleared": True})
+        return response
+
+
+class DevToolbarResetOnboardingView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Restore onboarding tips and hints for the current user (dev toolbar).
+
+    Resets profile guidance to show walkthrough cards again and signals the client
+    to clear dismissed onboarding keys from browser storage before reloading.
+
+    POST /site-admin/dev/reset-onboarding/
+    """
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+
+    def post(self, request):
+        from urbanlens.dashboard.models.profile.model import GuidanceLevel, Profile
+
+        settings = SiteSettings.get_current()
+        if not settings.is_development_environment():
+            return HttpResponse(status=403)
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        profile.guidance_level = GuidanceLevel.ALL
+        profile.save(update_fields=["guidance_level"])
+
+        response = HttpResponse(status=204)
+        response["HX-Trigger"] = json.dumps({"devOnboardingReset": True})
+        return response
+
+
 class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """Site usage statistics dashboard.
 
