@@ -12,39 +12,15 @@ from django.db.models import (
     Index,
     IntegerField,
     JSONField,
-    TextChoices,
     TextField,
     UUIDField,
 )
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.markup.meta import MarkupType, SecurityIndicatorType
 from urbanlens.dashboard.models.markup.queryset import PinMarkupManager
 
 logger = logging.getLogger(__name__)
-
-
-class MarkupType(TextChoices):
-    """The visual kind of map annotation."""
-
-    LINE = "line", "Line"
-    ARROW = "arrow", "Arrow"
-    TEXT = "text", "Text"
-    SQUARE = "square", "Square"
-    CIRCLE = "circle", "Circle"
-    POLYGON = "polygon", "Polygon"
-
-
-class SecurityIndicatorType(TextChoices):
-    """Optional security feature represented by this markup item."""
-
-    FENCE = "fence", "Fence"
-    CAMERA = "camera", "Camera"
-    ALARM = "alarm", "Alarm"
-    SECURITY = "security", "Security Guard"
-    SIGN = "sign", "Sign"
-    PLYWOOD = "plywood", "Plywood"
-    LOCKED = "locked", "Locked"
-    VPS = "vps", "VPS"
 
 
 class PinMarkup(abstract.Model):
