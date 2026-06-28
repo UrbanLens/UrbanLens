@@ -719,7 +719,7 @@
     border-radius: $radius-sm;
     background: var(--ul-grey-0);
     font-size: .88rem;
-    color: $text-primary;
+    color: var(--ul-grey-9);
 
     &__content {
         display: flex;
@@ -851,8 +851,13 @@
     box-shadow: $shadow-dialog;
     max-height: 260px;
     overflow-y: auto;
+    color: var(--ul-grey-9);
 
     &[hidden] { display: none; }
+
+    button {
+        color: var(--ul-grey-9);
+    }
 }
 
 .apdlg-badge-sugg-item {
@@ -866,7 +871,7 @@
     text-align: left;
     cursor: pointer;
     font-size: .875rem;
-    color: $text-color;
+    color: var(--ul-grey-9);
     transition: background .1s;
 
     &:hover,
@@ -936,7 +941,7 @@
     list-style: none;
     font-size: .875rem;
     font-weight: 500;
-    color: $text-secondary;
+    color: var(--ul-grey-9);
     user-select: none;
     transition: color .15s;
 
@@ -945,7 +950,7 @@
     }
 
     &:hover {
-        color: $text-primary;
+        color: var(--ul-grey-9a);
     }
 
     .material-icons:first-child {
@@ -1574,29 +1579,93 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     border-bottom: 1px solid var(--ul-border);
     transition: background .1s;
 
-    span {
-        @include truncate;
-        flex: 1;
-    }
-
     &:last-child {
         border-bottom: none;
     }
 
-    &:hover {
+    &:hover,
+    &--active {
         background: var(--ul-hover-bg);
         color: var(--ul-grey-8);
     }
 
-    .material-icons {
+    &--active {
+        outline: none;
+    }
+
+    .addr-suggestion-icon {
         font-size: .85rem;
         color: var(--ul-grey-6);
         flex-shrink: 0;
+        margin-top: 1px;
     }
 
-    &--pin .material-icons {
-        color: $color-blue-500;
-    }
+    &--pin .addr-suggestion-icon    { color: $color-blue-500; }
+    &--location .addr-suggestion-icon { color: $color-green-500; }
+    &--coordinates .addr-suggestion-icon { color: $color-purple-500; }
+    &--place .addr-suggestion-icon  { color: var(--ul-primary); }
+}
+
+// Two-line suggestion layout: bold title + muted subtitle
+.addr-suggestion-content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.addr-suggestion-title {
+    @include truncate;
+    font-weight: 500;
+    color: var(--ul-grey-8);
+    line-height: 1.25;
+}
+
+.addr-suggestion-sub {
+    @include truncate;
+    font-size: .72rem;
+    color: var(--ul-grey-5);
+    line-height: 1.3;
+    margin-top: 1px;
+}
+
+// Loading row shown while a source is fetching
+.addr-source-loading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: .72rem;
+    color: var(--ul-grey-5);
+    border-bottom: 1px solid var(--ul-border);
+}
+
+.addr-source-loading-label {
+    @include truncate;
+}
+
+// CSS-only spinner used inside addr-source-loading
+.addr-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--ul-grey-3);
+    border-top-color: var(--ul-grey-6);
+    border-radius: 50%;
+    flex-shrink: 0;
+    animation: addr-spin .6s linear infinite;
+}
+
+@keyframes addr-spin {
+    to { transform: rotate(360deg); }
+}
+
+// "No results" row
+.addr-no-results {
+    padding: 10px 14px;
+    font-size: .8rem;
+    color: var(--ul-grey-5);
+    text-align: center;
 }
 
 .leaflet-bar {

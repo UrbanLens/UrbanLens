@@ -202,6 +202,65 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             logger.exception("Failed to create pin: %s", e)
             return HttpResponse(f"Error: {e!s}", status=400)
 
+    def autocomplete_local(self, request, *args, **kwargs):
+        """Fast autocomplete from local DB: pins, locations, aliases, badges, wiki.
+
+        Returns JSON with pin/location suggestions ranked by relevance.  This is
+        always the first source shown to the user because it requires no external
+        API calls and typically responds within 50-100 ms.
+        """
+        from urbanlens.dashboard.services.map_pins.autocomplete import search_local
+
+        q = (request.GET.get("q") or "").strip()
+        if len(q) < 2:
+            return JsonResponse({"results": [], "source": "local"})
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        results = search_local(q, profile)
+        return JsonResponse({"results": [r.to_dict() for r in results], "source": "local"})
+
+    def autocomplete_places(self, request, *args, **kwargs):
+        """Proxy Google Places Autocomplete so the API key stays server-side.
+
+        Returns an empty list with ``disabled: true`` when no API key is
+        configured so the client can suppress the source gracefully.
+        """
+        from urbanlens.dashboard.services.map_pins.autocomplete import search_google_places
+
+        q = (request.GET.get("q") or "").strip()
+        if len(q) < 2:
+            return JsonResponse({"results": [], "source": "places"})
+
+        api_key = settings.google_maps_api_key or settings.google_places_api_key
+        if not api_key:
+            return JsonResponse({"results": [], "source": "places", "disabled": True})
+
+        results = search_google_places(q, api_key)
+        return JsonResponse({"results": [r.to_dict() for r in results], "source": "places"})
+
+    def resolve_place(self, request, *args, **kwargs):
+        """Resolve a Google place_id to latitude/longitude coordinates.
+
+        Called when the user selects a Google Places suggestion.  Coordinates
+        are intentionally omitted from the autocomplete response to avoid a
+        Places Details API call for every suggestion shown.
+        """
+        from urbanlens.dashboard.services.map_pins.autocomplete import resolve_google_place
+
+        place_id = (request.GET.get("place_id") or "").strip()
+        if not place_id:
+            return JsonResponse({"error": "missing place_id"}, status=400)
+
+        api_key = settings.google_maps_api_key or settings.google_places_api_key
+        if not api_key:
+            return JsonResponse({"error": "no_api_key"}, status=503)
+
+        lat, lng, name = resolve_google_place(place_id, api_key)
+        if lat is None or lng is None:
+            return JsonResponse({"error": "not_found"}, status=404)
+
+        return JsonResponse({"lat": lat, "lng": lng, "name": name or ""})
+
     def search_map(self, request, *args, **kwargs):
         search_form = SearchForm()
         return render(request, "dashboard/pages/map/search.html", {"form": search_form})

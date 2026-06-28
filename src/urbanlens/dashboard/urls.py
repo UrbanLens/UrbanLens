@@ -110,6 +110,21 @@ urlpatterns = [
                     name="map.search",
                 ),
                 path(
+                    "search/autocomplete/local/",
+                    maps.MapController.as_view({"get": "autocomplete_local"}),
+                    name="map.autocomplete.local",
+                ),
+                path(
+                    "search/autocomplete/places/",
+                    maps.MapController.as_view({"get": "autocomplete_places"}),
+                    name="map.autocomplete.places",
+                ),
+                path(
+                    "search/resolve/",
+                    maps.MapController.as_view({"get": "resolve_place"}),
+                    name="map.resolve_place",
+                ),
+                path(
                     "upload_image/<slug:pin_slug>/",
                     maps.MapController.as_view({"post": "upload_image"}),
                     name="pin.upload_image",
