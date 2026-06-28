@@ -622,12 +622,13 @@
     padding: .85rem 1.25rem;
     border-bottom: 1px solid var(--ul-border);
     flex-shrink: 0;
+    background-color: var(--ul-grey-1);
 
     h2 {
         margin: 0;
         font-size: 1rem;
         font-weight: 600;
-        color: $text-primary;
+        color: var(--ul-grey-9);
     }
 }
 
@@ -641,6 +642,7 @@
     display: flex;
     flex-direction: column;
     gap: .85rem;
+    background-color: var(--ul-grey-0b);
 }
 
 .apdlg-addr-wrap {

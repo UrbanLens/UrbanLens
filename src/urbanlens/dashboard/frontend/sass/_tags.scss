@@ -485,7 +485,7 @@ dialog.tag-create-card.ul-dialog {
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    border: 2px solid transparent;
+    border: 1px solid var(--ul-grey-2);
     cursor: pointer;
     transition: transform 0.1s, border-color 0.1s;
     display: flex;
