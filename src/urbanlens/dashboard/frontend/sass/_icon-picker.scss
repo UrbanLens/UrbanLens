@@ -90,6 +90,40 @@
     background: transparent;
 }
 
+.icon-picker-upload-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 9px;
+    border-radius: $radius-sm;
+    background: var(--ul-grey-0a);
+    border: 1px solid var(--ul-border);
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: $text-secondary;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: border-color 0.12s, color 0.12s;
+
+    .material-icons {
+        font-size: 0.95rem !important;
+    }
+
+    &:hover {
+        border-color: $primary-color;
+        color: $primary-color;
+    }
+}
+
+.icon-picker-custom-preview {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    border-radius: 3px;
+    vertical-align: middle;
+}
+
 .icon-picker-tabs {
     display: flex;
     border-bottom: 1px solid var(--ul-border);

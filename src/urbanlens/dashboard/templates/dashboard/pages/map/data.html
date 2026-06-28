@@ -4,6 +4,18 @@
     _filterMode = true;
     clusterGroup.clearLayers();
     _markerMap.clear();
+    // Push filter state into URL so Back button and refresh preserve filters
+    (function() {
+        const form = document.getElementById('filter-form');
+        if (form) {
+            const params = new URLSearchParams(new FormData(form));
+            // Remove empty values
+            const clean = new URLSearchParams();
+            for (const [k, v] of params.entries()) { if (v !== '') clean.append(k, v); }
+            const qs = clean.toString();
+            history.replaceState({ filter: qs }, '', qs ? '?' + qs : location.pathname);
+        }
+    })();
 
     const batch = [];
     {% for pin in map_data %}

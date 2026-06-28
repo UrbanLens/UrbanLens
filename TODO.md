@@ -39,22 +39,14 @@ Features planned for this release.
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". 
-* Add a "Dark Mode" layer button, which will update the user settings for the map style.
-* When filters are applied, change the site url. This allows refreshing the page to have the same filters, and allows clicking on a pin, then clicking on the back button to return to the filtered map.
 ---
 * Changing badge icon / color in organize doesn't immediately trigger cache update.
-* Searching / Filtering, then changing pages and coming back, the search is cleared. (Good, but...)
----
-* Organize: I can't search for badges in other tabs.
-* Organize: Closing filter section is annoying
-* Organize: Filter section styling
 ---
 * Throughout site: tooltips clip (overflow: hidden)
 * Consider again: Pin count while filtering
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
-* Searching / Filtering the map. [UL-37]
 * Cache API results, like Street View and Satellite View images. [UL-113]
 
 ## Project Health

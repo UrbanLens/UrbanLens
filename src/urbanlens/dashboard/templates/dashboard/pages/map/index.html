@@ -302,8 +302,8 @@
 
     <div id="loading-pins-message" aria-hidden="true" style="display:none"></div>
 
-    {% if show_pin_count %}
-    <div id="pin-counter">
+    {% if show_pin_count or show_filtered_pin_count %}
+    <div id="pin-counter" {% if not show_pin_count %}style="display:none"{% endif %}>
         <span id="pin-counter-value">0</span>
         <span id="pin-counter-label">pins</span>
     </div>
@@ -322,103 +322,120 @@
 
         {# Name #}
         <div class="form-field">
-            <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Name</label>
-            <input type="text" id="apdlg-name" class="form-input" placeholder="Location name">
+            <label class="form-label">Name</label>
+            <input type="text" id="apdlg-name" class="form-input" placeholder="Location name" autocomplete="off">
         </div>
-        
-        {# Address / coordinates search #}
+
+        {# Location — combined address/coordinates smart input #}
         <div class="form-field">
-            <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Address or coordinates</label>
+            <label class="form-label">Location</label>
             <div class="apdlg-addr-wrap" id="apdlg-addr-wrap">
                 <input type="text" id="apdlg-addr" class="form-input" autocomplete="off"
-                       placeholder="e.g. 123 Main St, Albany NY  or  42.65, -73.75">
+                       placeholder="Address or coordinates (42.65, −73.75)…">
                 <div id="apdlg-addr-suggestions" class="apdlg-addr-suggestions" hidden></div>
             </div>
+            <div class="apdlg-coords-hint" id="apdlg-coords-hint" hidden>
+                <i class="material-icons">place</i>
+                <span id="apdlg-coords-text"></span>
+            </div>
+            <input type="hidden" id="apdlg-lat">
+            <input type="hidden" id="apdlg-lng">
         </div>
 
-        {# Lat / Lng read-only display + click-map hint #}
-        <div class="apdlg-latlon-row">
-            <div class="form-field">
-                <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Latitude</label>
-                <input type="text" id="apdlg-lat" class="form-input" readonly placeholder="-">
-            </div>
-            <div class="form-field">
-                <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Longitude</label>
-                <input type="text" id="apdlg-lng" class="form-input" readonly placeholder="-">
-            </div>
-        </div>
-
-        {# Icon grid #}
+        {# Icon — shared icon picker partial, same UI as organize page #}
         <div class="form-field">
-            <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Icon</label>
-            <div id="apdlg-icon-grid" class="icon-grid apdlg-icon-grid">
-                <i class="pin bank" data-value="bank" title="Bank"></i>
-                <i class="pin car" data-value="car" title="Car"></i>
-                <i class="pin church" data-value="church" title="Church"></i>
-                <i class="pin firehouse" data-value="firehouse" title="Firehouse"></i>
-                <i class="pin hospital" data-value="hospital" title="Hospital"></i>
-                <i class="pin military" data-value="military" title="Military"></i>
-                <i class="pin plane" data-value="plane" title="Airport/Plane"></i>
-                <i class="pin school" data-value="school" title="School"></i>
-                <i class="pin tunnel" data-value="tunnel" title="Tunnel"></i>
-                <i class="pin boat" data-value="boat" title="Boat/Dock"></i>
-                <i class="pin castle" data-value="castle" title="Castle"></i>
-                <i class="pin dam" data-value="dam" title="Dam"></i>
-                <i class="pin graffiti" data-value="graffiti" title="Graffiti"></i>
-                <i class="pin house" data-value="house" title="House"></i>
-                <i class="pin museum" data-value="museum" title="Museum"></i>
-                <i class="pin powerplant" data-value="powerplant" title="Power Plant"></i>
-                <i class="pin statue" data-value="statue" title="Statue"></i>
-                <i class="pin bridge" data-value="bridge" title="Bridge"></i>
-                <i class="pin cave" data-value="cave" title="Cave"></i>
-                <i class="pin factory" data-value="factory" title="Factory"></i>
-                <i class="pin graveyard" data-value="graveyard" title="Graveyard"></i>
-                <i class="pin library" data-value="library" title="Library"></i>
-                <i class="pin park" data-value="park" title="Park"></i>
-                <i class="pin prison" data-value="prison" title="Prison"></i>
-                <i class="pin train" data-value="train" title="Train Station"></i>
-            </div>
-            <input type="hidden" id="apdlg-icon">
+            <label class="form-label">Icon</label>
+            {% with picker_id='add-pin' current_icon='' field_name='_apdlg_icon_unused' show_upload=True %}
+            {% include 'dashboard/partials/_icon_picker.html' %}
+            {% endwith %}
         </div>
 
-        {# Tags #}
-        {% if tags %}
+        {# Color — same swatches as badges #}
         <div class="form-field">
-            <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Tags</label>
-            <div class="apdlg-chips">
-                {% for tag in tags %}
-                <label class="apdlg-chip">
-                    <input type="checkbox" name="tag_id" value="{{ tag.id }}">
-                    {% if tag.icon %}{% if tag.icon|is_material_icon %}<i class="material-icons" {% if tag.color %}style="color:{{ tag.color }}"{% endif %}>{{ tag.icon }}</i>{% else %}<span {% if tag.color %}style="color:{{ tag.color }}"{% endif %}>{{ tag.icon }}</span>{% endif %}{% endif %}
-                    <span>{{ tag.name }}</span>
-                </label>
+            <label class="form-label">Color</label>
+            <div class="color-picker" id="apdlg-color-picker">
+                <input type="hidden" id="apdlg-color-value">
+                {% for hex, label in color_choices %}
+                <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}"
+                        style="background:{{ hex }};"
+                        onclick="pickColor('apdlg-color-picker','apdlg-color-value','{{ hex }}',this)"></button>
                 {% endfor %}
+                <button type="button" class="color-swatch color-clear" title="No color"
+                        onclick="pickColor('apdlg-color-picker','apdlg-color-value','',this)">
+                    <i class="material-icons" style="font-size:1rem;">block</i>
+                </button>
             </div>
         </div>
+
+        {# Badges — unified search across tags, categories, and statuses #}
+        {% if filter_badges %}
+        <div class="form-field">
+            <label class="form-label">Badges</label>
+            <div class="apdlg-badge-field" id="apdlg-badge-field">
+                <div class="apdlg-badge-chips" id="apdlg-badge-chips"></div>
+                <div class="apdlg-badge-input-wrap">
+                    <input type="text" id="apdlg-badge-search" class="form-input apdlg-badge-input"
+                           placeholder="Search or add badges…" autocomplete="off" autocorrect="off">
+                    <div id="apdlg-badge-suggestions" class="apdlg-badge-suggestions" hidden></div>
+                </div>
+            </div>
+        </div>
+        <script id="apdlg-badge-data" type="application/json">{{ filter_badges_json|safe }}</script>
         {% endif %}
 
-        {# Categories #}
-        {% if categories %}
-        <div class="form-field">
-            <label class="form-label" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#64748b;">Categories</label>
-            <div class="apdlg-chips">
-                {% for cat in categories %}
-                <label class="apdlg-chip">
-                    <input type="checkbox" name="category_id" value="{{ cat.id }}">
-                    {% if cat.icon %}{% if cat.icon|is_material_icon %}<i class="material-icons" {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</i>{% else %}<span {% if cat.color %}style="color:{{ cat.color }}"{% endif %}>{{ cat.icon }}</span>{% endif %}{% endif %}
-                    <span>{{ cat.name }}</span>
-                </label>
-                {% endfor %}
-            </div>
+        {# Privacy toggle #}
+        <div class="apdlg-privacy-row">
+            <label class="toggle-switch" title="Private pins are never shared or linked to the community wiki.">
+                <input type="checkbox" id="apdlg-private" value="1">
+                <span class="toggle-slider"></span>
+            </label>
+            <span class="apdlg-privacy-label">
+                <i class="material-icons">lock</i>
+                Private pin
+                {% include "dashboard/partials/_tooltip_help.html" with text="Private pins are stored only on your account. They are never linked to a community wiki page and your pin's name, notes, and coordinates remain invisible to others." wide=True %}
+            </span>
         </div>
-        {% endif %}
 
     </div>
     <div class="apdlg-footer">
+        <span class="apdlg-click-hint" id="apdlg-click-hint">Click map to set location</span>
         <button type="button" class="btn btn--ghost" onclick="closeAddPinDialog()">Cancel</button>
         <button type="button" class="btn btn--primary" id="apdlg-submit">Add Pin</button>
     </div>
 </dialog>
+
+{# Mini dialog: "Create a badge" from the add-pin badge selector #}
+<dialog id="apdlg-create-badge-dialog" class="ul-dialog tag-create-card">
+    {% include "dashboard/partials/_dialog_header.html" with title="Create a badge" %}
+    <div class="ul-dialog-body">
+        <div class="form-field">
+            <label class="form-label" for="apdlg-cbname">Name</label>
+            <input type="text" id="apdlg-cbname" class="form-input" placeholder="Badge name" required>
+        </div>
+        <div class="form-field">
+            <label class="form-label">Type</label>
+            <div class="kind-toggle">
+                <label class="kind-toggle-option">
+                    <input type="radio" name="apdlg-cb-kind" value="tag" checked>
+                    <span><i class="material-icons">label</i> Tag</span>
+                </label>
+                <label class="kind-toggle-option">
+                    <input type="radio" name="apdlg-cb-kind" value="category">
+                    <span><i class="material-icons">category</i> Category</span>
+                </label>
+                <label class="kind-toggle-option">
+                    <input type="radio" name="apdlg-cb-kind" value="status">
+                    <span><i class="material-icons">flag</i> Status</span>
+                </label>
+            </div>
+        </div>
+    </div>
+    <div class="tag-form-actions">
+        <button type="button" class="btn btn--primary" id="apdlg-cb-submit">Create &amp; Select</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>
+
 <div id="importPinsModal"></div>
 {% endblock %}
 
@@ -429,6 +446,8 @@
     const _PROFILE_ID   = {{ profile_id|default:0 }};
     const _PROFILE_UUID = '{{ profile_uuid|default:"" }}';
     const _APP_UUID     = '{{ app_uuid|default:"" }}';   // server instance UUID - changes on DB wipe
+    const _SHOW_FILTERED_PIN_COUNT = {{ show_filtered_pin_count|yesno:'true,false' }};
+    const _SHOW_PIN_COUNT = {{ show_pin_count|yesno:'true,false' }};
     const _USE_CACHE      = {{ use_pin_cache|yesno:"true,false" }};
     // v5: uses profile UUID (not PK) in key, and embeds app_uuid for DB-wipe detection.
     const _CACHE_KEY      = `ul_pins_v5_${_PROFILE_UUID}`;
@@ -548,13 +567,21 @@
     function updatePinCounter() {
         const counter = document.getElementById('pin-counter');
         if (!counter) return;
-        // Show the total pin count for the user, not just what's visible in the current viewport.
-        // _totalPins comes from the server at page load and is updated after a full refresh.
-        // Once _pinStore has been fully populated (after _refreshAllPins or a '*' tile fetch),
-        // _pinStore.size is authoritative.
-        const count = _fetchedTiles.has('*') ? _pinStore.size : _totalPins;
-        document.getElementById('pin-counter-value').textContent = count;
-        document.getElementById('pin-counter-label').textContent = count === 1 ? 'pin' : 'pins';
+        if (_filterMode && _SHOW_FILTERED_PIN_COUNT) {
+            // VIP users see the count of currently visible filtered pins
+            const n = clusterGroup.getLayers().length;
+            counter.style.display = '';
+            document.getElementById('pin-counter-value').textContent = n;
+            document.getElementById('pin-counter-label').textContent = n === 1 ? 'pin shown' : 'pins shown';
+        } else if (_SHOW_PIN_COUNT) {
+            // Admin users see the total pin count always
+            counter.style.display = '';
+            const count = _fetchedTiles.has('*') ? _pinStore.size : _totalPins;
+            document.getElementById('pin-counter-value').textContent = count;
+            document.getElementById('pin-counter-label').textContent = count === 1 ? 'pin' : 'pins';
+        } else {
+            counter.style.display = 'none';
+        }
     }
     window.updatePinCounter = updatePinCounter;
 
@@ -1226,6 +1253,8 @@
     function _exitFilterMode() {
         if (!_filterMode) return;
         _filterMode = false;
+        // Clear filter params from URL
+        history.replaceState({}, '', location.pathname);
         clusterGroup.clearLayers();
         _markerMap.clear();
         const layers = [];
@@ -1949,6 +1978,38 @@
     document.getElementById('filter-form').addEventListener('input', function () {
         document.getElementById('search-pins-button').classList.toggle('has-filters', _hasActiveFilters());
     });
+
+    // Restore filter state from URL params (supports Back button + page refresh)
+    function _restoreFiltersFromUrl() {
+        if (!location.search) return;
+        const params = new URLSearchParams(location.search);
+        if (!params.size) return;
+        const form = document.getElementById('filter-form');
+        if (!form) return;
+        let anySet = false;
+        for (const [key, value] of params.entries()) {
+            const el = form.querySelector(`[name="${CSS.escape(key)}"]`);
+            if (!el) continue;
+            if (el.type === 'checkbox' || el.type === 'radio') {
+                // Find the matching option
+                const match = form.querySelector(`[name="${CSS.escape(key)}"][value="${CSS.escape(value)}"]`);
+                if (match) { match.checked = true; anySet = true; }
+            } else {
+                el.value = value;
+                anySet = true;
+            }
+        }
+        if (anySet) {
+            document.getElementById('search-pins-button').classList.add('has-filters');
+            // Open filter panel so user can see restored filters
+            const mapEl = document.getElementById('map');
+            if (mapEl && !mapEl.classList.contains('filter-open')) toggleFilterPanel();
+            // Trigger HTMX to apply the restored filters
+            setTimeout(() => htmx.trigger(form, 'change'), 200);
+        }
+    }
+    // Delay until after initial pin load
+    setTimeout(_restoreFiltersFromUrl, 100);
 
     // ── Toggle-radio: clicking a selected radio deselects it (resets to "Any") ──
     // Capture checked state on mousedown (before browser toggles it)
@@ -2809,9 +2870,133 @@
         });
     }());
 
+    // ── Shared UI helpers (also used in organize page) ────────────────────
+    function _escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function pickColor(pickerId, valueId, colorHex, btn) {
+        var picker = document.getElementById(pickerId);
+        if (picker) picker.querySelectorAll('.color-swatch').forEach(function(b) { b.classList.remove('selected'); });
+        if (btn) btn.classList.add('selected');
+        var input = document.getElementById(valueId);
+        if (input) input.value = colorHex;
+    }
+
+    var IconPicker = {
+        toggle: function(id) {
+            var panel = document.getElementById('icon-panel-' + id);
+            if (!panel) return;
+            var isHidden = panel.hasAttribute('hidden');
+            document.querySelectorAll('.icon-picker-panel').forEach(function(p) { p.setAttribute('hidden', ''); });
+            if (isHidden) {
+                panel.removeAttribute('hidden');
+                var search = panel.querySelector('.icon-picker-search-input');
+                if (search) { search.value = ''; search.focus(); IconPicker.search(id, ''); }
+                IconPicker.setTabSilent(id, '');
+            }
+        },
+        setTabSilent: function(id, cat) {
+            var panel = document.getElementById('icon-panel-' + id);
+            if (!panel) return;
+            panel.querySelectorAll('.icon-tab').forEach(function(b) { b.classList.toggle('active', b.dataset.cat === cat); });
+            var grid = document.getElementById('icon-grid-' + id);
+            if (!grid) return;
+            grid.querySelectorAll('.icon-picker-item').forEach(function(item) {
+                item.style.display = (!cat || item.dataset.cat === cat || !item.dataset.cat) ? '' : 'none';
+            });
+        },
+        setTab: function(id, cat, btn) {
+            var panel = document.getElementById('icon-panel-' + id);
+            if (!panel) return;
+            panel.querySelectorAll('.icon-tab').forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            var search = panel.querySelector('.icon-picker-search-input');
+            if (search) search.value = '';
+            var grid = document.getElementById('icon-grid-' + id);
+            if (!grid) return;
+            grid.querySelectorAll('.icon-picker-item').forEach(function(item) {
+                item.style.display = (!cat || item.dataset.cat === cat || !item.dataset.cat) ? '' : 'none';
+            });
+        },
+        search: function(id, query) {
+            var q = query.toLowerCase().trim();
+            var panel = document.getElementById('icon-panel-' + id);
+            if (!panel) return;
+            panel.querySelectorAll('.icon-tab').forEach(function(b) { b.classList.toggle('active', b.dataset.cat === ''); });
+            var grid = document.getElementById('icon-grid-' + id);
+            if (!grid) return;
+            grid.querySelectorAll('.icon-picker-item').forEach(function(item) {
+                if (!q) { item.style.display = ''; }
+                else {
+                    var label = item.dataset.label || '', icon = item.dataset.icon || '', keywords = item.dataset.keywords || '';
+                    item.style.display = (label.includes(q) || icon === q || keywords.includes(q)) ? '' : 'none';
+                }
+            });
+        },
+        pick: function(id, icon, btn) {
+            var input = document.getElementById('icon-value-' + id);
+            if (input) input.value = icon;
+            var current = document.getElementById('icon-current-' + id);
+            if (current) {
+                if (icon) {
+                    current.innerHTML = /^[a-z_]+$/.test(icon)
+                        ? '<i class="material-icons icon-picker-current-mi">' + icon + '</i>'
+                        : '<span class="icon-picker-current-glyph">' + icon + '</span>';
+                } else {
+                    current.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+                    // Picking "none": clear any uploaded custom icon
+                    var uploadInput = document.getElementById('icon-upload-input-' + id);
+                    if (uploadInput) uploadInput.value = '';
+                    if (id === 'add-pin') { window._addPinCustomIconFile = null; }
+                    // Badge edit context: mark existing custom icon for clearing
+                    var clearFlag = document.getElementById('edit-clear-custom-' + id);
+                    if (clearFlag) clearFlag.value = '1';
+                }
+            }
+            var grid = document.getElementById('icon-grid-' + id);
+            if (grid) { grid.querySelectorAll('.icon-picker-item').forEach(function(b) { b.classList.remove('selected'); }); if (btn) btn.classList.add('selected'); }
+            var panel = document.getElementById('icon-panel-' + id);
+            if (panel) panel.setAttribute('hidden', '');
+        },
+        _handleUpload: function(id, input) {
+            if (!input.files || !input.files[0]) return;
+            var file = input.files[0];
+            if (id === 'add-pin') { window._addPinCustomIconFile = file; }
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var current = document.getElementById('icon-current-' + id);
+                if (current) {
+                    current.innerHTML = '<img src="' + e.target.result + '" class="icon-picker-custom-preview" alt="">';
+                }
+                // Clear any text icon value
+                var textInput = document.getElementById('icon-value-' + id);
+                if (textInput) textInput.value = '';
+                // Badge edit context: clear the "delete" flag (we're replacing, not removing)
+                var clearFlag = document.getElementById('edit-clear-custom-' + id);
+                if (clearFlag) clearFlag.value = '';
+                // Deselect any grid icon
+                var grid = document.getElementById('icon-grid-' + id);
+                if (grid) grid.querySelectorAll('.icon-picker-item.selected').forEach(function(b) { b.classList.remove('selected'); });
+                // Close panel
+                var panel = document.getElementById('icon-panel-' + id);
+                if (panel) panel.setAttribute('hidden', '');
+            };
+            reader.readAsDataURL(file);
+        },
+    };
+
+    // Close icon picker on outside click
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.icon-picker-dropdown')) {
+            document.querySelectorAll('.icon-picker-panel').forEach(function(p) { p.setAttribute('hidden', ''); });
+        }
+    });
+
     // ── Add-Pin dialog ────────────────────────────────────────────────────
     let _addPinClickMode = false;
     let _addPinMarker = null;
+    window._addPinCustomIconFile = null;
 
     function openAddPinDialog(lat = null, lng = null) {
         // Reset all fields
@@ -2819,23 +3004,49 @@
         document.getElementById('apdlg-lat').value = '';
         document.getElementById('apdlg-lng').value = '';
         document.getElementById('apdlg-name').value = '';
-        document.getElementById('apdlg-icon').value = '';
-        document.querySelectorAll('#apdlg-icon-grid i').forEach(i => i.classList.remove('selected'));
-        document.querySelectorAll('#add-pin-dialog input[name="tag_id"]').forEach(cb => cb.checked = false);
-        document.querySelectorAll('#add-pin-dialog input[name="category_id"]').forEach(cb => cb.checked = false);
         document.getElementById('apdlg-addr-suggestions').hidden = true;
+        const coordsHint = document.getElementById('apdlg-coords-hint');
+        if (coordsHint) coordsHint.hidden = true;
+        const clickHint = document.getElementById('apdlg-click-hint');
+        if (clickHint) clickHint.classList.remove('apdlg-click-hint--located');
+
+        // Reset icon picker
+        const iconCurrent = document.getElementById('icon-current-add-pin');
+        if (iconCurrent) iconCurrent.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
+        const iconValue = document.getElementById('icon-value-add-pin');
+        if (iconValue) iconValue.value = '';
+        const uploadInput = document.getElementById('icon-upload-input-add-pin');
+        if (uploadInput) uploadInput.value = '';
+        window._addPinCustomIconFile = null;
+        document.querySelectorAll('#icon-grid-add-pin .icon-picker-item').forEach(i => i.classList.remove('selected'));
+
+        // Reset color picker
+        pickColor('apdlg-color-picker', 'apdlg-color-value', '', null);
+
+        // Reset badge selector
+        _apdlgSelectedBadges = [];
+        _apdlgRenderSelectedChips();
+        const badgeSearch = document.getElementById('apdlg-badge-search');
+        if (badgeSearch) badgeSearch.value = '';
+        const badgeSugg = document.getElementById('apdlg-badge-suggestions');
+        if (badgeSugg) badgeSugg.hidden = true;
+
+        // Reset privacy
+        const privCb = document.getElementById('apdlg-private');
+        if (privCb) privCb.checked = false;
+
         const btn = document.getElementById('apdlg-submit');
         btn.disabled = false;
         btn.textContent = 'Add Pin';
+
         // Remove any previous preview marker
         if (_addPinMarker) { map.removeLayer(_addPinMarker); _addPinMarker = null; }
         _addPinClickMode = false;
+
         // Pre-fill coordinates when called from right-click context menu
         if (lat !== null && lng !== null) {
             _setAddPinLocation(lat, lng);
         } else {
-            // Delay enabling click mode so the button's own click event doesn't
-            // immediately register as a map coordinate
             setTimeout(() => { _addPinClickMode = true; }, 0);
         }
         document.getElementById('add-pin-dialog').showModal();
@@ -2930,6 +3141,14 @@
     function _setAddPinLocation(lat, lng) {
         document.getElementById('apdlg-lat').value = lat.toFixed(6);
         document.getElementById('apdlg-lng').value = lng.toFixed(6);
+        const coordsHint = document.getElementById('apdlg-coords-hint');
+        const coordsText = document.getElementById('apdlg-coords-text');
+        if (coordsHint && coordsText) {
+            coordsText.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            coordsHint.hidden = false;
+        }
+        const clickHint = document.getElementById('apdlg-click-hint');
+        if (clickHint) clickHint.classList.add('apdlg-click-hint--located');
         const latlng = L.latLng(lat, lng);
         map.setView(latlng, Math.max(map.getZoom(), 15));
         if (_addPinMarker) {
@@ -2939,27 +3158,183 @@
         }
     }
 
-    // Hide suggestions when input loses focus
+    // Hide address suggestions when input loses focus
     document.getElementById('apdlg-addr').addEventListener('blur', function() {
         setTimeout(() => { document.getElementById('apdlg-addr-suggestions').hidden = true; }, 150);
     });
 
-    // Icon grid selection
-    document.getElementById('apdlg-icon-grid').addEventListener('click', function(e) {
-        if (e.target.tagName !== 'I') return;
-        document.querySelectorAll('#apdlg-icon-grid i').forEach(i => i.classList.remove('selected'));
-        e.target.classList.add('selected');
-        const iconVal = e.target.dataset.value;
-        document.getElementById('apdlg-icon').value = iconVal;
-        if (_addPinMarker) {
-            _addPinMarker.setIcon(L.divIcon({
-                className: iconVal,
-                html: `<i class="pin ${iconVal}"></i>`,
-                iconSize: [30, 42],
-                iconAnchor: [15, 42],
-            }));
+    // ── Badge selector ────────────────────────────────────────────────────
+    let _apdlgSelectedBadges = [];
+    let _apdlgAllBadges = [];
+    (function() {
+        const dataEl = document.getElementById('apdlg-badge-data');
+        if (dataEl) {
+            try { _apdlgAllBadges = JSON.parse(dataEl.textContent); } catch(e) {}
         }
-    });
+    })();
+
+    function _apdlgRenderSelectedChips() {
+        const chips = document.getElementById('apdlg-badge-chips');
+        if (!chips) return;
+        chips.innerHTML = '';
+        _apdlgSelectedBadges.forEach(b => {
+            const chip = document.createElement('span');
+            chip.className = 'apdlg-badge-chip-item';
+            chip.dataset.id = b.id;
+            const iconHtml = b.icon ? `<span class="apdlg-chip-icon">${b.icon}</span>` : '';
+            chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_escHtml(b.name)}</span><button class="apdlg-chip-remove" type="button" aria-label="Remove">×</button>`;
+            chip.querySelector('.apdlg-chip-remove').addEventListener('click', () => {
+                _apdlgSelectedBadges = _apdlgSelectedBadges.filter(x => x.id !== b.id);
+                _apdlgRenderSelectedChips();
+            });
+            chips.appendChild(chip);
+        });
+    }
+
+    function _apdlgShowSuggestions(query) {
+        const box = document.getElementById('apdlg-badge-suggestions');
+        if (!box) return;
+        const q = query.toLowerCase().trim();
+        const selectedIds = new Set(_apdlgSelectedBadges.map(b => b.id));
+        let matches = _apdlgAllBadges.filter(b => !selectedIds.has(b.id) && (!q || b.name.toLowerCase().includes(q)));
+        matches = matches.slice(0, 12);
+        box.innerHTML = '';
+        matches.forEach(b => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'apdlg-badge-sugg-item';
+            const iconHtml = b.icon ? `<span class="apdlg-sugg-icon">${b.icon}</span>` : '';
+            const kindBadge = `<span class="apdlg-sugg-kind apdlg-sugg-kind--${b.kind}">${b.kind}</span>`;
+            item.innerHTML = `${iconHtml}<span class="apdlg-sugg-name">${_escHtml(b.name)}</span>${kindBadge}`;
+            item.addEventListener('mousedown', e => { e.preventDefault(); _apdlgSelectBadge(b); });
+            box.appendChild(item);
+        });
+        // "Create a badge" option at bottom
+        const createBtn = document.createElement('button');
+        createBtn.type = 'button';
+        createBtn.className = 'apdlg-badge-sugg-item apdlg-badge-sugg-create';
+        createBtn.innerHTML = '<i class="material-icons">add_circle_outline</i><span>Create a badge' + (q ? ` "${_escHtml(query.trim())}"` : '') + '</span>';
+        createBtn.addEventListener('mousedown', e => { e.preventDefault(); _apdlgPromptCreateBadge(query.trim()); });
+        box.appendChild(createBtn);
+        box.hidden = false;
+    }
+
+    function _apdlgSelectBadge(badge) {
+        if (_apdlgSelectedBadges.find(b => b.id === badge.id)) return;
+        _apdlgSelectedBadges.push(badge);
+        _apdlgRenderSelectedChips();
+        const input = document.getElementById('apdlg-badge-search');
+        if (input) { input.value = ''; input.focus(); }
+        document.getElementById('apdlg-badge-suggestions').hidden = true;
+    }
+
+    function _apdlgPromptCreateBadge(prefilledName) {
+        document.getElementById('apdlg-badge-suggestions').hidden = true;
+        // Show kind-picker mini dialog
+        const kindDlg = document.getElementById('apdlg-create-badge-dialog');
+        if (!kindDlg) return;
+        const nameEl = document.getElementById('apdlg-cbname');
+        if (nameEl) nameEl.value = prefilledName;
+        kindDlg.showModal();
+    }
+
+    const badgeInput = document.getElementById('apdlg-badge-search');
+    if (badgeInput) {
+        badgeInput.addEventListener('input', function() {
+            _apdlgShowSuggestions(this.value);
+        });
+        badgeInput.addEventListener('focus', function() {
+            _apdlgShowSuggestions(this.value);
+        });
+        badgeInput.addEventListener('blur', function() {
+            setTimeout(() => {
+                const box = document.getElementById('apdlg-badge-suggestions');
+                if (box) box.hidden = true;
+            }, 150);
+        });
+        badgeInput.addEventListener('keydown', function(e) {
+            const box = document.getElementById('apdlg-badge-suggestions');
+            if (!box || box.hidden) return;
+            const items = [...box.querySelectorAll('.apdlg-badge-sugg-item:not(.apdlg-badge-sugg-create)')];
+            // Tab: select top real suggestion
+            if (e.key === 'Tab' && items.length) {
+                e.preventDefault();
+                const q = this.value.trim();
+                const topMatch = _apdlgAllBadges.find(b =>
+                    !_apdlgSelectedBadges.find(s => s.id === b.id) && b.name.toLowerCase().includes(q.toLowerCase())
+                );
+                if (topMatch) _apdlgSelectBadge(topMatch);
+                return;
+            }
+            // Comma or space: select top suggestion only if it's an exact/prefix match dead-end
+            if ((e.key === ',' || e.key === ' ') && items.length) {
+                const q = this.value.trim().toLowerCase();
+                // Find if continuing to type would still match: any badge that starts with q but isn't q
+                const wouldContinue = _apdlgAllBadges.some(b =>
+                    !_apdlgSelectedBadges.find(s => s.id === b.id) &&
+                    b.name.toLowerCase().startsWith(q) &&
+                    b.name.toLowerCase() !== q
+                );
+                if (!wouldContinue && items.length === 1) {
+                    e.preventDefault();
+                    const topMatch = _apdlgAllBadges.find(b =>
+                        !_apdlgSelectedBadges.find(s => s.id === b.id) && b.name.toLowerCase().includes(q)
+                    );
+                    if (topMatch) { _apdlgSelectBadge(topMatch); return; }
+                }
+            }
+            // Arrow key navigation
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const allItems = [...box.querySelectorAll('.apdlg-badge-sugg-item')];
+                const focused = box.querySelector('.apdlg-badge-sugg-item:focus');
+                let idx = focused ? allItems.indexOf(focused) : -1;
+                idx = e.key === 'ArrowDown' ? Math.min(idx + 1, allItems.length - 1) : Math.max(idx - 1, 0);
+                allItems[idx] && allItems[idx].focus();
+            }
+            if (e.key === 'Escape') { box.hidden = true; }
+            if (e.key === 'Enter') {
+                const focused = box.querySelector('.apdlg-badge-sugg-item:focus');
+                if (focused) { e.preventDefault(); focused.dispatchEvent(new MouseEvent('mousedown')); }
+            }
+        });
+    }
+
+    // Create-a-badge submit (from the mini dialog)
+    (function () {
+        const submitBtn = document.getElementById('apdlg-cb-submit');
+        if (!submitBtn) return;
+        submitBtn.addEventListener('click', function() {
+            const name = (document.getElementById('apdlg-cbname').value || '').trim();
+            const kind = document.querySelector('input[name="apdlg-cb-kind"]:checked');
+            if (!name || !kind) { toastr.warning('Enter a name and choose a type.'); return; }
+            submitBtn.disabled = true;
+            const fd = new FormData();
+            fd.append('name', name);
+            const badgeCreateUrls = {
+                tag: "{% url 'badge.create' badge_kind='tag' %}",
+                category: "{% url 'badge.create' badge_kind='category' %}",
+                status: "{% url 'badge.create' badge_kind='status' %}",
+            };
+            const createUrl = badgeCreateUrls[kind.value];
+            if (!createUrl) { toastr.warning('Unknown badge type.'); submitBtn.disabled = false; return; }
+            fetch(createUrl, {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Accept': 'application/json' },
+            })
+            .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
+            .then(data => {
+                const newBadge = { id: data.id, name: data.name, kind: data.kind, icon: data.icon || '', color: data.color || '' };
+                _apdlgAllBadges.push(newBadge);
+                _apdlgSelectBadge(newBadge);
+                document.getElementById('apdlg-create-badge-dialog').close();
+                toastr.success(`Badge "${data.name}" created.`);
+            })
+            .catch(err => { toastr.error('Failed to create badge: ' + err); })
+            .finally(() => { submitBtn.disabled = false; });
+        });
+    })();
 
     // Form submit
     document.getElementById('apdlg-submit').addEventListener('click', function() {
@@ -2973,10 +3348,22 @@
         formData.append('name', document.getElementById('apdlg-name').value.trim() || 'Unnamed Location');
         formData.append('latitude', lat);
         formData.append('longitude', lng);
-        const icon = document.getElementById('apdlg-icon').value;
-        if (icon) formData.append('icon', icon);
-        document.querySelectorAll('#add-pin-dialog input[name="tag_id"]:checked').forEach(cb => formData.append('tag_ids', cb.value));
-        document.querySelectorAll('#add-pin-dialog input[name="category_id"]:checked').forEach(cb => formData.append('category_ids', cb.value));
+
+        // Icon
+        const iconVal = document.getElementById('icon-value-add-pin');
+        if (iconVal && iconVal.value) formData.append('icon', iconVal.value);
+        if (window._addPinCustomIconFile) formData.append('custom_icon', window._addPinCustomIconFile);
+
+        // Color
+        const colorVal = document.getElementById('apdlg-color-value');
+        if (colorVal && colorVal.value) formData.append('color', colorVal.value);
+
+        // Badges (unified tags/categories/statuses)
+        _apdlgSelectedBadges.forEach(b => formData.append('badge_ids', b.id));
+
+        // Privacy
+        const privCb = document.getElementById('apdlg-private');
+        if (privCb && privCb.checked) formData.append('is_private', '1');
 
         this.disabled = true;
         this.textContent = 'Saving…';

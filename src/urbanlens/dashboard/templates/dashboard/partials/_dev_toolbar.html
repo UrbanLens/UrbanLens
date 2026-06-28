@@ -41,21 +41,6 @@
             <span class="dev-toolbar__theme-label">{% if dev_toolbar_theme_mode == 'dark' %}Dark{% elif dev_toolbar_theme_mode == 'light' %}Light{% else %}Theme{% endif %}</span>
         </button>
         <button type="button"
-                class="dev-toolbar__tool dev-toolbar__theme-toggle dev-toolbar__map-dark-toggle"
-                id="dev-toolbar-map-dark-toggle"
-                title="Toggle map dark mode"
-                aria-label="Toggle map dark mode"
-                data-map-dark-mode="{{ dev_toolbar_map_dark_mode|default:'' }}"
-                hx-post="{% url 'dev_toolbar.toggle_map_dark_mode' %}"
-                hx-swap="none"
-                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-            <span class="dev-toolbar__theme-icons" aria-hidden="true">
-                <i class="material-icons dev-toolbar__theme-icon dev-toolbar__theme-icon--light{% if dev_toolbar_map_dark_mode == 'light' %} is-active{% endif %}">light_mode</i>
-                <i class="material-icons dev-toolbar__theme-icon dev-toolbar__theme-icon--dark{% if dev_toolbar_map_dark_mode == 'dark' %} is-active{% endif %}">dark_mode</i>
-            </span>
-            <span class="dev-toolbar__theme-label">{% if dev_toolbar_map_dark_mode == 'dark' %}Map dark{% elif dev_toolbar_map_dark_mode == 'light' %}Map light{% else %}Map{% endif %}</span>
-        </button>
-        <button type="button"
                 class="dev-toolbar__tool"
                 id="dev-toolbar-refresh-pin-cache"
                 title="Clear local pin cache and reload from server"

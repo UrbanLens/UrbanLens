@@ -49,28 +49,9 @@
     <div class="tag-icon-color-row">
         <div class="form-field">
             <label class="form-label">Icon</label>
-
-            <div class="icon-custom-upload-area" style="margin-top:4px;">
-                <img {% if badge.custom_icon %}src="{{ badge.custom_icon.url }}"{% else %}style="display:none"{% endif %}
-                     class="icon-custom-preview-thumb" id="edit-custom-preview-{{ badge.id }}" alt="Custom icon">
-                {% if badge.custom_icon %}
-                <button type="button" class="icon-custom-clear-btn" id="edit-clear-btn-{{ badge.id }}" title="Remove custom icon"
-                        onclick="clearBadgeEditCustomIcon('{{ badge.id }}')">
-                    <i class="material-icons">close</i>
-                </button>
-                {% endif %}
-                <input type="hidden" name="clear_custom_icon" id="edit-clear-custom-{{ badge.id }}" value="">
-                <label class="icon-custom-upload-btn" id="edit-upload-btn-{{ badge.id }}" {% if badge.custom_icon %}style="display:none"{% endif %} title="Upload a custom image icon">
-                    <i class="material-icons">upload</i>
-                    Upload custom
-                    <input type="file" name="custom_icon" id="edit-custom-input-{{ badge.id }}"
-                           accept="image/*" style="display:none"
-                           onchange="showBadgeEditCustomPreview('{{ badge.id }}', this)">
-                </label>
-            </div>
-
-            <div class="icon-picker-wrap" id="edit-icon-picker-wrap-{{ badge.id }}" {% if badge.custom_icon %}style="display:none"{% endif %}>
-                {% with picker_id=badge.id|stringformat:"d" current_icon=badge.icon|default:"" field_name="icon" %}
+            <input type="hidden" name="clear_custom_icon" id="edit-clear-custom-{{ badge.id }}" value="">
+            <div class="icon-picker-wrap">
+                {% with picker_id=badge.id|stringformat:"d" current_icon=badge.icon|default:"" field_name="icon" show_upload=True current_custom_icon_url=badge.custom_icon.url|default:"" %}
                 {% include 'dashboard/partials/_icon_picker.html' %}
                 {% endwith %}
             </div>

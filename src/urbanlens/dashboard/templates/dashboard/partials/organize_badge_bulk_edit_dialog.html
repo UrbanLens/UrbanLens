@@ -35,7 +35,7 @@
                 <div class="form-field">
                     <label class="form-label">Icon</label>
                     <div class="icon-picker-wrap" id="{{ ns }}-bulk-icon-wrap">
-                        {% with picker_id=picker_id current_icon="" field_name="bulk_icon" %}{% include 'dashboard/partials/_icon_picker.html' %}{% endwith %}
+                        {% with picker_id=picker_id current_icon="" field_name="bulk_icon" show_upload=True %}{% include 'dashboard/partials/_icon_picker.html' %}{% endwith %}
                     </div>
                     <label class="bulk-nochange-label"><input type="checkbox" id="{{ ns }}-bulk-icon-nochange" checked><span>No change - leave icon unchanged</span></label>
                 </div>

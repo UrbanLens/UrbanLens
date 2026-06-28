@@ -15,7 +15,7 @@ from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.advanced_search import AdvancedSearchForm
 from urbanlens.dashboard.forms.search import SearchForm
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, Badge
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
@@ -29,18 +29,29 @@ logger = logging.getLogger(__name__)
 
 class MapController(LoginRequiredMixin, GenericViewSet):
     def view_map(self, request, *args, **kwargs):
+        import json as _json
+
         from urbanlens.dashboard.models.profile.model import MapCenterMode
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        tags = Badge.objects.tags().visible_to(profile).ordered()
-        categories = Badge.objects.categories().ordered()
         from urbanlens.dashboard.models.badges.model import KIND_USER
 
+        tags = Badge.objects.tags().visible_to(profile).ordered()
+        categories = Badge.objects.categories().ordered()
         filter_badges = Badge.objects.exclude(kind=KIND_USER).visible_to(profile).ordered()
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
 
+        filter_badges_list = list(filter_badges)
+        filter_badges_json = _json.dumps([
+            {"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""}
+            for b in filter_badges_list
+        ])
+
         site = SiteSettings.get_current()
         show_pin_count = site.show_dev_admin_features(request.user)
+        show_filtered_pin_count = user_has_feature(request.user, SiteFeature.AI)
+
         return render(
             request,
             "dashboard/pages/map/index.html",
@@ -48,13 +59,18 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "openweathermap_api_key": settings.openweathermap_api_key,
                 "tags": tags,
                 "categories": categories,
-                "filter_badges": filter_badges,
+                "filter_badges": filter_badges_list,
+                "filter_badges_json": filter_badges_json,
+                "icon_categories": ICON_CATEGORIES,
+                "color_choices": COLOR_CHOICES,
                 "profile_id": profile.id,
+                "profile_uuid": profile.uuid,
                 "profile_slug": profile.slug or str(profile.uuid),
                 "app_uuid": str(site.instance_uuid),
                 "cluster_radius": profile.cluster_radius,
                 "pin_count": pin_count,
                 "show_pin_count": show_pin_count,
+                "show_filtered_pin_count": show_filtered_pin_count,
                 "use_pin_cache": profile.use_pin_cache,
                 **profile.get_map_center_template_context(),
                 "map_default_zoom": (
@@ -100,7 +116,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             latitude = request.POST.get("latitude")
             longitude = request.POST.get("longitude")
             address = request.POST.get("address", None)
-            icon = request.POST.get("icon", None)
+            icon = request.POST.get("icon") or None
+            color = request.POST.get("color") or None
+            custom_icon = request.FILES.get("custom_icon") or None
+            badge_ids = request.POST.getlist("badge_ids")
             tag_ids = request.POST.getlist("tag_ids")
             category_ids = request.POST.getlist("category_ids")
             is_private = request.POST.get("is_private") in {"1", "true", "on", "True"}
@@ -135,15 +154,21 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 latitude=None,
                 longitude=None,
                 icon=icon,
+                custom_icon=custom_icon,
+                color=color,
                 is_private=is_private,
                 profile=request.user.profile,
             )
-            if tag_ids:
-                pin.badges.remove(*pin.badges.filter(kind="tag"))
-                pin.badges.add(*Badge.objects.tags().filter(id__in=tag_ids))
-            if category_ids:
-                pin.badges.remove(*pin.badges.filter(kind="category"))
-                pin.badges.add(*Badge.objects.categories().filter(id__in=category_ids))
+            from urbanlens.dashboard.models.badges.model import KIND_USER as _KIND_USER
+            if badge_ids:
+                pin.badges.set(Badge.objects.exclude(kind=_KIND_USER).filter(id__in=badge_ids))
+            else:
+                if tag_ids:
+                    pin.badges.remove(*pin.badges.filter(kind="tag"))
+                    pin.badges.add(*Badge.objects.tags().filter(id__in=tag_ids))
+                if category_ids:
+                    pin.badges.remove(*pin.badges.filter(kind="category"))
+                    pin.badges.add(*Badge.objects.categories().filter(id__in=category_ids))
             pin.save()
 
             from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature

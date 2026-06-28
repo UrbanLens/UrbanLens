@@ -18,13 +18,7 @@
             <div class="form-field">
                 <label class="form-label">Icon</label>
                 <div class="icon-picker-wrap">
-                    {% with picker_id='new-'|add:ns current_icon='' field_name='icon' %}{% include 'dashboard/partials/_icon_picker.html' %}{% endwith %}
-                </div>
-                <div class="icon-custom-upload-area" style="margin-top:8px;">
-                    <img id="new-{{ ns }}-custom-preview" class="icon-custom-preview-thumb" style="display:none" alt="">
-                    <label class="icon-custom-upload-btn" title="Upload a custom image icon"><i class="material-icons">upload</i> Upload custom
-                        <input type="file" name="custom_icon" id="new-{{ ns }}-custom-input" accept="image/*" style="display:none" onchange="showBadgeCustomPreview(this,'new-{{ ns }}-custom-preview')">
-                    </label>
+                    {% with picker_id='new-'|add:ns current_icon='' field_name='icon' show_upload=True %}{% include 'dashboard/partials/_icon_picker.html' %}{% endwith %}
                 </div>
             </div>
             <div class="form-field">

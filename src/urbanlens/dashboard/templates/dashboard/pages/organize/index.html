@@ -49,20 +49,24 @@
     {% if not standalone_mode %}
     <div class="organize-tab-bar" role="tablist">
         <button type="button" class="organize-tab{% if active_tab == 'tags' %} active{% endif %}"
-                role="tab" data-tab="tags" aria-controls="panel-tags">
+                role="tab" data-tab="tags" aria-controls="panel-tags" data-filter-ns="tag">
             <i class="material-icons">label</i> Tags
+            <span class="org-tab-count" id="org-tab-count-tag" hidden></span>
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'categories' %} active{% endif %}"
-                role="tab" data-tab="categories" aria-controls="panel-categories">
+                role="tab" data-tab="categories" aria-controls="panel-categories" data-filter-ns="cat">
             <i class="material-icons">category</i> Categories
+            <span class="org-tab-count" id="org-tab-count-cat" hidden></span>
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'status' %} active{% endif %}"
-                role="tab" data-tab="status" aria-controls="panel-status">
+                role="tab" data-tab="status" aria-controls="panel-status" data-filter-ns="status">
             <i class="material-icons">flag_circle</i> Statuses
+            <span class="org-tab-count" id="org-tab-count-status" hidden></span>
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'people' %} active{% endif %}"
-                role="tab" data-tab="people" aria-controls="panel-people">
+                role="tab" data-tab="people" aria-controls="panel-people" data-filter-ns="people">
             <i class="material-icons">people</i> People
+            <span class="org-tab-count" id="org-tab-count-people" hidden></span>
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
                 role="tab" data-tab="priority" aria-controls="panel-priority">
@@ -386,6 +390,12 @@ var IconPicker = {
         if (grid) { grid.querySelectorAll('.icon-picker-item').forEach(function(b) { b.classList.remove('selected'); }); btn.classList.add('selected'); }
         var panel = document.getElementById('icon-panel-' + id);
         if (panel) panel.setAttribute('hidden', '');
+        // When "None" is picked: mark the custom icon for clearing on save
+        var clearFlag = document.getElementById('edit-clear-custom-' + id);
+        if (!icon && clearFlag) { clearFlag.value = '1'; }
+        // When a real icon is picked: clear any pending upload file
+        var uploadInput = document.getElementById('icon-upload-input-' + id);
+        if (icon && uploadInput) { uploadInput.value = ''; }
         if (id.endsWith('-bulk-edit')) {
             var ns = id.slice(0, -'-bulk-edit'.length);
             var nc = document.getElementById(ns + '-bulk-icon-nochange');
@@ -394,6 +404,28 @@ var IconPicker = {
             var bulkUpdate = window[bulkUpdaters[ns]];
             if (bulkUpdate) bulkUpdate();
         }
+    },
+    _handleUpload: function(id, input) {
+        if (!input.files || !input.files[0]) return;
+        var file = input.files[0];
+        // Clear any "delete custom icon" flag since we're replacing it
+        var clearFlag = document.getElementById('edit-clear-custom-' + id);
+        if (clearFlag) clearFlag.value = '';
+        // Clear any selected emoji/material icon
+        var iconVal = document.getElementById('icon-value-' + id);
+        if (iconVal) iconVal.value = '';
+        var grid = document.getElementById('icon-grid-' + id);
+        if (grid) grid.querySelectorAll('.icon-picker-item').forEach(function(b) { b.classList.remove('selected'); });
+        // Show thumbnail in trigger button
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var current = document.getElementById('icon-current-' + id);
+            if (current) current.innerHTML = '<img src="' + e.target.result + '" class="icon-picker-custom-preview" alt="Custom icon">';
+        };
+        reader.readAsDataURL(file);
+        // Close the picker panel
+        var panel = document.getElementById('icon-panel-' + id);
+        if (panel) panel.setAttribute('hidden', '');
     },
 };
 
@@ -459,34 +491,6 @@ function showBadgeCustomPreview(input, previewId) {
     reader.readAsDataURL(input.files[0]);
 }
 
-function showBadgeEditCustomPreview(badgeId, input) {
-    if (!input.files || !input.files[0]) return;
-    var preview = document.getElementById('edit-custom-preview-' + badgeId);
-    if (!preview) return;
-    var reader = new FileReader();
-    reader.onload = function(e) {
-        preview.src = e.target.result;
-        preview.style.removeProperty('display');
-        var pickerWrap = document.getElementById('edit-icon-picker-wrap-' + badgeId);
-        if (pickerWrap) pickerWrap.style.display = 'none';
-        var uploadBtn = document.getElementById('edit-upload-btn-' + badgeId);
-        if (uploadBtn) uploadBtn.style.display = 'none';
-    };
-    reader.readAsDataURL(input.files[0]);
-}
-
-function clearBadgeEditCustomIcon(badgeId) {
-    var clearInput = document.getElementById('edit-clear-custom-' + badgeId);
-    if (clearInput) clearInput.value = '1';
-    var preview = document.getElementById('edit-custom-preview-' + badgeId);
-    if (preview) preview.style.display = 'none';
-    var clearBtn = document.getElementById('edit-clear-btn-' + badgeId);
-    if (clearBtn) clearBtn.style.display = 'none';
-    var uploadBtn = document.getElementById('edit-upload-btn-' + badgeId);
-    if (uploadBtn) uploadBtn.style.removeProperty('display');
-    var pickerWrap = document.getElementById('edit-icon-picker-wrap-' + badgeId);
-    if (pickerWrap) pickerWrap.style.removeProperty('display');
-}
 
 function showTagCustomPreview(input) {
     if (!input.files || !input.files[0]) return;
@@ -665,6 +669,124 @@ function _applyOrgFilterCore(ns) {
 }
 
 window._applyOrgFilterImpl = _applyOrgFilterCore;
+
+// ── Cross-tab counts ──────────────────────────────────────────────────────
+// After every filter pass, update tab count badges and the cross-tab footer row.
+
+var _ORG_NS_LABELS = { tag: 'tags', cat: 'categories', status: 'statuses', people: 'people' };
+
+function _countVisibleCards(ns) {
+    var rowsId = ns === 'cat' ? 'category-rows' : (ns + '-rows');
+    var rows = document.getElementById(rowsId);
+    if (!rows) return 0;
+    var cardSel;
+    if (ns === 'tag') { cardSel = '.tag-card[data-tag-id]'; }
+    else if (ns === 'cat') { cardSel = '.tag-card[data-category-id]'; }
+    else if (ns === 'status') { cardSel = '.tag-card[data-status-id]'; }
+    else { cardSel = '.tag-card'; }
+    var inTreeView = rows.classList.contains('tag-view--tree');
+    var scope = inTreeView ? '.tag-tree-root ' + cardSel : cardSel;
+    return Array.from(rows.querySelectorAll(scope)).filter(function(c) { return c.style.display !== 'none'; }).length;
+}
+
+function _hasAnyOrgFilter() {
+    var s = _orgSharedFilter && _orgSharedFilter.search;
+    var c = _orgSharedFilter && _orgSharedFilter.chips && _orgSharedFilter.chips.size > 0;
+    var col = _orgSharedFilter && _orgSharedFilter.color;
+    return !!(s || c || col);
+}
+
+function _updateCrossTabCounts() {
+    if (!_hasAnyOrgFilter()) {
+        // Clear all counts when no filter is active
+        ORG_FILTER_NAMESPACES.forEach(function(ns) {
+            var countEl = document.getElementById('org-tab-count-' + ns);
+            if (countEl) countEl.hidden = true;
+            var footer = document.getElementById('org-cross-tab-' + ns);
+            if (footer) footer.hidden = true;
+        });
+        return;
+    }
+
+    var counts = {};
+    ORG_FILTER_NAMESPACES.forEach(function(ns) { counts[ns] = _countVisibleCards(ns); });
+
+    // Determine active tab's ns
+    var activeTabEl = document.querySelector('.organize-tab.active[data-filter-ns]');
+    var activeNs = activeTabEl ? activeTabEl.dataset.filterNs : null;
+
+    // Update tab count badges (only on inactive tabs)
+    ORG_FILTER_NAMESPACES.forEach(function(ns) {
+        var countEl = document.getElementById('org-tab-count-' + ns);
+        if (!countEl) return;
+        var isActive = ns === activeNs;
+        if (isActive) {
+            countEl.hidden = true;
+        } else {
+            countEl.textContent = counts[ns];
+            countEl.hidden = false;
+        }
+    });
+
+    // Update footer row for active tab
+    ORG_FILTER_NAMESPACES.forEach(function(ns) {
+        var footer = document.getElementById('org-cross-tab-' + ns);
+        if (!footer) return;
+        if (ns !== activeNs) { footer.hidden = true; return; }
+
+        // Describe matches in other tabs
+        var otherParts = [];
+        ORG_FILTER_NAMESPACES.forEach(function(otherNs) {
+            if (otherNs === ns) return;
+            var n = counts[otherNs];
+            if (n === 0) return;
+            var label = _ORG_NS_LABELS[otherNs] || otherNs;
+            otherParts.push({ ns: otherNs, n: n, label: label });
+        });
+
+        if (otherParts.length === 0) { footer.hidden = true; return; }
+
+        var selfCount = counts[ns];
+        var prefix = selfCount === 0 ? ('No ' + (_ORG_NS_LABELS[ns] || ns) + ' match, but ') : '';
+        var parts = otherParts.map(function(p) {
+            var tabKey = p.ns === 'cat' ? 'categories' : (p.ns === 'tag' ? 'tags' : p.ns);
+            var tabBtn = document.querySelector('.organize-tab[data-tab="' + tabKey + '"]');
+            var link = '';
+            if (tabBtn) {
+                link = '<button class="org-cross-tab-link" type="button" onclick="' +
+                    'document.querySelector(\'[data-tab=' + JSON.stringify(tabKey) + ']\').click()' +
+                    '">' + p.n + ' ' + p.label + '</button>';
+            } else {
+                link = p.n + ' ' + p.label;
+            }
+            return link;
+        });
+
+        // Join with oxford-style commas
+        var partsHtml;
+        if (parts.length === 1) {
+            partsHtml = parts[0];
+        } else if (parts.length === 2) {
+            partsHtml = parts[0] + ' and ' + parts[1];
+        } else {
+            partsHtml = parts.slice(0, -1).join(', ') + ', and ' + parts[parts.length - 1];
+        }
+
+        footer.innerHTML = '<i class="material-icons">info_outline</i><span>' + prefix + partsHtml + ' also match this search.</span>';
+        footer.hidden = false;
+    });
+}
+
+// Listen for filter-applied events (fired after each ns's filter pass)
+var _crossTabPendingTid = null;
+document.addEventListener('org:filter-applied', function() {
+    clearTimeout(_crossTabPendingTid);
+    _crossTabPendingTid = setTimeout(_updateCrossTabCounts, 0);
+});
+// Re-run after tab switch so the active footer updates immediately
+document.addEventListener('org:tab-changed', function() {
+    if (_hasAnyOrgFilter()) _updateCrossTabCounts();
+});
 
 function toggleOrgFilter(ns) {
     var bar = document.getElementById(ns + '-filter-bar');

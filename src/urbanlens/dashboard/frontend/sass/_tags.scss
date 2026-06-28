@@ -1610,6 +1610,60 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
+.org-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.3rem;
+    height: 1.3rem;
+    padding: 0 .35rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 700;
+    line-height: 1;
+    background: color-mix(in srgb, $primary-color 14%, transparent);
+    color: $primary-color;
+    border: 1px solid color-mix(in srgb, $primary-color 30%, transparent);
+
+    &[hidden] { display: none; }
+}
+
+.org-cross-tab-footer {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-top: 1.25rem;
+    padding: .75rem 1rem;
+    border-radius: $radius-sm;
+    border: 1px solid var(--ul-border);
+    background: var(--ul-grey-0);
+    font-size: .85rem;
+    color: $text-secondary;
+
+    .material-icons {
+        font-size: 1rem !important;
+        color: $text-muted;
+        flex-shrink: 0;
+    }
+
+    &[hidden] { display: none; }
+}
+
+.org-cross-tab-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-size: .85rem;
+    color: $primary-color;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: opacity .1s;
+
+    &:hover { opacity: .8; }
+}
+
 // ── Priority list ─────────────────────────────────────────────────────────────
 
 .priority-list {
@@ -1981,7 +2035,7 @@ dialog.tag-create-card.ul-dialog {
             border-radius: $radius-sm;
             font-size: .875rem;
             font-weight: 500;
-            color: $text-secondary;
+            color: var(--ul-grey-7);
             background: var(--ul-grey-1);
             transition: border-color .13s, background .13s, color .13s;
             height: 2.5em;
@@ -1994,6 +2048,10 @@ dialog.tag-create-card.ul-dialog {
             &::before {
                 display: none;
             }
+
+            &::after {
+                display: none;
+            }
         }
 
         input[type="radio"] {
@@ -2003,7 +2061,7 @@ dialog.tag-create-card.ul-dialog {
             &:focus-visible+span {
                 border-color: $primary-color;
                 background: color-mix(in srgb, $primary-color 10%, var(--ul-grey-0));
-                color: $primary-color;
+                color: var(--ul-grey-9);
                 font-weight: 600;
             }
         }
@@ -2199,6 +2257,7 @@ dialog.tag-create-card.ul-dialog {
         border-radius: 0 0 12px 12px;
         margin-bottom: 1rem;
         flex-wrap: wrap;
+        margin-top: -1.75em; // remove bottom margin of header section
     }
 
     .org-filter-bar.open {

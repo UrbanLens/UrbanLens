@@ -510,6 +510,14 @@ class BadgeCreateView(_BadgeKindMixin, LoginRequiredMixin, View):
             badge.parents.set(valid_parents)
 
         extra = {cfg.new_id_key: badge.id} if cfg.new_id_key else None
+        if request.headers.get("Accept") == "application/json":
+            return JsonResponse({
+                "id": badge.id,
+                "name": badge.name,
+                "kind": badge.kind,
+                "icon": badge.icon or "",
+                "color": badge.color or "",
+            })
         return _render_rows(request, self.kind, profile, extra)
 
 

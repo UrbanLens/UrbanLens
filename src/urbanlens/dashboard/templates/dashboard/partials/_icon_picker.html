@@ -5,7 +5,9 @@
     <button type="button" class="icon-picker-trigger" id="icon-trigger-{{ picker_id }}"
             onclick="IconPicker.toggle('{{ picker_id }}')">
         <span class="icon-picker-current" id="icon-current-{{ picker_id }}">
-            {% if current_icon %}
+            {% if current_custom_icon_url %}
+                <img src="{{ current_custom_icon_url }}" class="icon-picker-custom-preview" alt="">
+            {% elif current_icon %}
                 {% if current_icon|is_material_icon %}
                     <i class="material-icons icon-picker-current-mi">{{ current_icon }}</i>
                 {% else %}
@@ -25,6 +27,19 @@
                    placeholder="Search icons…"
                    oninput="IconPicker.search('{{ picker_id }}', this.value)"
                    autocomplete="off">
+            {% if show_upload %}
+            <label class="icon-picker-upload-btn" title="Upload a custom image icon"
+                   for="icon-upload-input-{{ picker_id }}">
+                <i class="material-icons">upload</i>
+                Upload
+            </label>
+            <input type="file"
+                   id="icon-upload-input-{{ picker_id }}"
+                   name="custom_icon"
+                   accept="image/*"
+                   style="display:none"
+                   onchange="IconPicker._handleUpload('{{ picker_id }}', this)">
+            {% endif %}
         </div>
 
         <div class="icon-picker-tabs">
@@ -38,7 +53,7 @@
 
         <div class="icon-picker-grid" id="icon-grid-{{ picker_id }}">
             <button type="button"
-                    class="icon-picker-item icon-picker-none {% if not current_icon %}selected{% endif %}"
+                    class="icon-picker-item icon-picker-none {% if not current_icon and not current_custom_icon_url %}selected{% endif %}"
                     data-icon="" data-cat="" data-label="none no icon clear"
                     title="No icon"
                     onclick="IconPicker.pick('{{ picker_id }}', '', this)">

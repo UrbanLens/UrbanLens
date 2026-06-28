@@ -4,4 +4,5 @@
     <div id="{{ rows_id }}" class="organize-badge-rows">
         {% include 'dashboard/partials/organize_badge_rows.html' with badges=badges badge_url_kind=badge_url_kind kind=kind empty_icon=empty_icon empty_message=empty_message select_class=select_class select_data_name=select_data_name selectable=selectable editable=editable deletable=deletable edit_target=edit_target|default:'#badge-edit-dialog-body' rows_target=rows_target %}
     </div>
+    <div id="org-cross-tab-{{ ns }}" class="org-cross-tab-footer" hidden></div>
 </div>
