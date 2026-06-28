@@ -33,17 +33,28 @@ class SubscriptionRole(abstract.Model):
     class Meta(abstract.Model.Meta):
         ordering = ["name"]
 
+    # Canonical features every VIP role must include.  Add new SiteFeature values here
+    # when they should be automatically granted to VIPs; ensure_defaults will merge them
+    # into existing rows without removing any admin-configured extras.
+    _VIP_CANONICAL_FEATURES: frozenset[str] = frozenset({SiteFeature.AI, SiteFeature.PLACES})
+
     @classmethod
     def ensure_defaults(cls) -> None:
-        """Create built-in roles without overwriting future custom roles."""
-        cls.objects.get_or_create(
+        """Create or update built-in roles, merging in any newly-added canonical features."""
+        role, created = cls.objects.get_or_create(
             slug="vip",
             defaults={
                 "name": "VIP",
-                "description": "Grants access to AI-assisted features.",
-                "features": SiteFeature.AI,
+                "description": "Grants access to VIP-only features.",
+                "features": ",".join(sorted(cls._VIP_CANONICAL_FEATURES)),
             },
         )
+        if not created:
+            existing = role.feature_set
+            missing = cls._VIP_CANONICAL_FEATURES - existing
+            if missing:
+                merged = ",".join(sorted(existing | missing))
+                cls.objects.filter(pk=role.pk).update(features=merged)
 
     @property
     def feature_set(self) -> set[str]:
