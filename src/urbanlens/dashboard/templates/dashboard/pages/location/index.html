@@ -2375,5 +2375,40 @@
         const sz = on ? 64 : 48;
         entry.marker.setIcon(L.divIcon({ html: _photoMarkerHtml(entry.img, sz), className: '', iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }));
     };
+
+    // ── External-data panels: handle 204 (no data) and request errors ────────
+    (function () {
+        var _extSections = new Set([
+            'wikipedia-section', 'nominatim-section', 'nps-section',
+            'wikimedia-section', 'loopnet-section',
+        ]);
+
+        // HTMX does not perform a swap for 204 No Content responses, so the
+        // "Loading…" placeholder stays visible forever.  Remove it explicitly.
+        document.body.addEventListener('htmx:afterOnLoad', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (el && _extSections.has(el.id) && evt.detail.xhr.status === 204) {
+                el.remove();
+            }
+        });
+
+        // For genuine server errors, show a quiet inline fallback instead of
+        // the global error toast (capture phase runs before the base handler).
+        document.body.addEventListener('htmx:responseError', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (!el || !_extSections.has(el.id)) return;
+            evt.stopImmediatePropagation();
+            el.innerHTML = '<div class="card"><div class="card-body"><span class="view-muted">External data temporarily unavailable.</span></div></div>';
+        }, true);
+
+        // Network failure: just remove the placeholder.
+        document.body.addEventListener('htmx:sendError', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (el && _extSections.has(el.id)) {
+                evt.stopImmediatePropagation();
+                el.remove();
+            }
+        }, true);
+    }());
 </script>
 {% endblock %}

@@ -500,9 +500,33 @@
     let _MAP_DARK_MODE       = '{{ map_dark_mode|default:"light" }}';
     // Per-profile key for remembering active layers across sessions.
     const _LAYER_CACHE_KEY   = `ul_layers_v1_${_PROFILE_UUID}`;
-    const _serverCenter      = (_SERVER_CENTER_LAT !== null && _SERVER_CENTER_LNG !== null)
+
+    // ── Browser-side user location cache (never sent to server) ──────────────
+    const _USER_LOC_KEY     = 'ul_user_location_v1';
+    const _USER_LOC_MAX_AGE = 5 * 60 * 1000;  // 5 min: used for initial map centre
+
+    function _getCachedUserLocation() {
+        try {
+            const raw = localStorage.getItem(_USER_LOC_KEY);
+            if (!raw) return null;
+            const { lat, lng, ts } = JSON.parse(raw);
+            if (lat != null && lng != null && (Date.now() - ts) < _USER_LOC_MAX_AGE) return { lat, lng };
+        } catch (_) {}
+        return null;
+    }
+
+    function _cacheUserLocation(lat, lng) {
+        try { localStorage.setItem(_USER_LOC_KEY, JSON.stringify({ lat, lng, ts: Date.now() })); } catch (_) {}
+    }
+
+    // For GPS mode, prefer a recently cached user position over the generic fallback
+    // so the map opens at the right place without waiting for the geolocation API.
+    const _cachedUserLoc = (_MAP_CENTER_MODE === 'gps') ? _getCachedUserLocation() : null;
+    const _serverCenter  = (_SERVER_CENTER_LAT !== null && _SERVER_CENTER_LNG !== null)
         ? [_SERVER_CENTER_LAT, _SERVER_CENTER_LNG]
-        : (_GPS_FALLBACK_LAT !== null ? [_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG] : [40.7128, -74.0060]);
+        : _cachedUserLoc
+            ? [_cachedUserLoc.lat, _cachedUserLoc.lng]
+            : (_GPS_FALLBACK_LAT !== null ? [_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG] : [40.7128, -74.0060]);
 
     // minZoom: prevent zooming out past the point where the world-tile fills the container
     const map = L.map('map', { maxZoom: 19, minZoom: 2 }).setView(_serverCenter, _defaultZoom);
@@ -512,13 +536,18 @@
     window.map = map;
     window.pin = null;
 
-    // GPS mode: re-center to the user's actual location on load.
-    // If the permission request is denied, fall back to the pin-cluster centroid.
+    // GPS mode: refine the initial centre with a live geolocation read.
+    // If we already used a cached position, the map won't visibly jump; we just
+    // silently refresh the cache so the next load is accurate.
     if (_MAP_CENTER_MODE === 'gps' && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
-            (pos) => { map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom); },
+            (pos) => {
+                _cacheUserLocation(pos.coords.latitude, pos.coords.longitude);
+                map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom);
+            },
             () => {
-                if (_GPS_FALLBACK_LAT !== null && _GPS_FALLBACK_LNG !== null) {
+                // Only apply the pin-centroid fallback when we had nothing better to show.
+                if (!_cachedUserLoc && _GPS_FALLBACK_LAT !== null && _GPS_FALLBACK_LNG !== null) {
                     map.setView([_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG], _defaultZoom);
                 }
             },
@@ -2246,10 +2275,19 @@
             return;
         }
         document.getElementById('addr-search-suggestions').hidden = true;
+        // Jump to cached position immediately so the button feels instant.
+        const cached = _getCachedUserLocation();
+        if (cached) map.setView([cached.lat, cached.lng], _defaultZoom);
+        // Fetch a fresh reading in the background; update the map and cache when it arrives.
         navigator.geolocation.getCurrentPosition(
-            (pos) => { map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom); },
-            () => { toastr.warning('Could not get your location. Check permissions.'); },
-            { timeout: 8000, maximumAge: 60000 },
+            (pos) => {
+                _cacheUserLocation(pos.coords.latitude, pos.coords.longitude);
+                map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom);
+            },
+            () => {
+                if (!cached) toastr.warning('Could not get your location. Check permissions.');
+            },
+            { timeout: 8000, maximumAge: 0 },
         );
     }
 

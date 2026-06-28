@@ -514,8 +514,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         HTMX partial: Wikipedia article summary for the pin's location.
 
-        Returns an empty 204 when no matching article is found, which causes
-        HTMX to remove the loading placeholder from the page.
+        Returns an empty 204 when no matching article is found; the client-side
+        htmx:afterOnLoad handler removes the loading placeholder on 204.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.wikipedia import WikipediaGateway
@@ -527,11 +527,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         location = pin.location
         if not location:
+            logger.debug("wikipedia_info: pin %s has no location, skipping", pin_slug)
             return HttpResponse(status=204)
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
         if not lat and not lng:
+            logger.debug("wikipedia_info: pin %s has no coordinates, skipping", pin_slug)
             return HttpResponse(status=204)
 
         cached = LocationCache.get_fresh(location, "wikipedia")
@@ -553,6 +555,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             data = cached.data or None
 
         if not data:
+            logger.debug("wikipedia_info: no article found for pin %s at (%s, %s)", pin_slug, lat, lng)
             return HttpResponse(status=204)
 
         return render(request, "dashboard/partials/pin_wikipedia.html", {"article": data})
@@ -572,10 +575,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(status=404)
 
         if not pin.meaningful_name:
+            logger.debug("wikimedia_assets: pin %s has no meaningful name, skipping", pin_slug)
             return HttpResponse(status=204)
 
         location = pin.location
         if not location:
+            logger.debug("wikimedia_assets: pin %s has no location, skipping", pin_slug)
             return HttpResponse(status=204)
 
         query = pin.effective_name or ""
@@ -592,6 +597,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             data = (cached.data or {}).get("images", [])
 
         if not data:
+            logger.debug("wikimedia_assets: no images found for pin %s (query=%r)", pin_slug, query)
             return HttpResponse(status=204)
 
         return render(request, "dashboard/partials/pin_wikimedia.html", {"images": data, "query": query})
@@ -613,6 +619,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         location = pin.location
         if not location:
+            logger.debug("loopnet_info: pin %s has no location, skipping", pin_slug)
             return HttpResponse(status=204)
 
         # Build the address string; skip if we don't have at least street + city
@@ -623,6 +630,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         ]
         address = ", ".join(p for p in parts if p).strip(", ")
         if not address or not location.route:
+            logger.debug("loopnet_info: pin %s has insufficient address data (route=%r), skipping", pin_slug, location.route)
             return HttpResponse(status=204)
 
         cached = LocationCache.get_fresh(location, "loopnet")
@@ -638,6 +646,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             data = cached.data or None
 
         if not data or not data.get("listings"):
+            logger.debug("loopnet_info: no listings found for pin %s (address=%r)", pin_slug, address)
             return HttpResponse(status=204)
 
         return render(request, "dashboard/partials/pin_loopnet.html", {"result": data, "address": address})
@@ -653,6 +662,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.services.nps.parks import NPSGateway
 
         if not settings.nps_api_key:
+            logger.debug("nps_info: NPS API key not configured, skipping pin %s", pin_slug)
             return HttpResponse(status=204)
 
         try:
@@ -662,12 +672,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         location = pin.location
         if not location:
+            logger.debug("nps_info: pin %s has no location, skipping", pin_slug)
             return HttpResponse(status=204)
 
         lat = pin.effective_latitude
         lng = pin.effective_longitude
         state_code = location.administrative_area_level_1 or ""
         if not lat or not lng or not state_code:
+            logger.debug("nps_info: pin %s missing lat/lng or state_code, skipping", pin_slug)
             return HttpResponse(status=204)
 
         cached = LocationCache.get_fresh(location, "nps")
@@ -688,6 +700,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             data = cached.data or None
 
         if not data:
+            logger.debug("nps_info: no park found near pin %s (state=%r)", pin_slug, state_code)
             return HttpResponse(status=204)
 
         return render(request, "dashboard/partials/pin_nps.html", {"park": data})
@@ -710,11 +723,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         location = pin.location
         if not location:
+            logger.debug("nominatim_info: pin %s has no location, skipping", pin_slug)
             return HttpResponse(status=204)
 
         lat = pin.effective_latitude
         lng = pin.effective_longitude
         if not lat or not lng:
+            logger.debug("nominatim_info: pin %s has no coordinates, skipping", pin_slug)
             return HttpResponse(status=204)
 
         cached = LocationCache.get_fresh(location, "nominatim")
@@ -731,6 +746,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         useful_fields = ("website", "phone", "opening_hours", "operator", "wikipedia")
         if not data or not any(data.get(k) for k in useful_fields):
+            logger.debug("nominatim_info: no enrichment data for pin %s at (%s, %s)", pin_slug, lat, lng)
             return HttpResponse(status=204)
 
         return render(request, "dashboard/partials/pin_nominatim.html", {"place": data})
