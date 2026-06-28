@@ -294,16 +294,24 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
             "of similar urbex locations. Do not answer with the name of the pin; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
         )
 
+        from urbanlens.dashboard.services.ai.scanner import wrap_user_data
+
         prompt = ""
         if self.address:
             prompt += f"address: {self.address}\n"
         if self.has_place_name():
             prompt += f"google maps description: {self.place_name}\n"
             instructions += "\nThe google maps description may be helpful, but it also may be inaccurate. Use your best judgement.\n"
+
+        # User-supplied fields are wrapped in USER_DATA delimiters so the model
+        # treats them as inert data rather than executable instructions.
+        user_fields = ""
         if title := self.meaningful_name:
-            prompt += f"location title: {title}\n"
+            user_fields += f"location title: {title}\n"
         if self.description:
-            prompt += f"user notes: {self.description}\n"
+            user_fields += f"user notes: {self.description}\n"
+        if user_fields:
+            prompt += wrap_user_data(user_fields) + "\n"
 
         if not prompt:
             return None

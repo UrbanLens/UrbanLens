@@ -54,8 +54,6 @@ Features planned for this release.
 ## Project Health
 * Review AI-created unit tests. Eliminate useless ones to assist code coverage reports. [UL-38]
 * Provide secondary safeguards for permissions. [UL-39]
-* Prune unnecessary vars from docker-compose, .env, etc [UL-129]
-* Change the Dockerfile to use something other than the ms devcontainer. [UL-261]
 
 ## Features that need verification
 * password reset. [UL-41]

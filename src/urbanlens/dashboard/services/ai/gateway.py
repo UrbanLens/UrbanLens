@@ -351,6 +351,10 @@ class LLMGateway[Response](ABC):
         """
         Send a prompt to the AI model and return the answer within its response.
 
+        The prompt is scanned for injection patterns before being sent. If a
+        high-confidence injection is detected (risk score >= 0.3) the sanitized
+        version is used instead and a warning is logged.
+
         Args:
             prompt (str): The prompt to send to the AI model.
             kwargs: Additional keyword arguments that may be used for specific implementations.
@@ -359,6 +363,17 @@ class LLMGateway[Response](ABC):
             str | None: The answer from the AI model.
 
         """
+        from urbanlens.dashboard.services.ai.scanner import scan as _scan_injection
+
+        scan_result = _scan_injection(prompt, source="user")
+        if scan_result.risk_score >= 0.3:
+            logger.warning(
+                "Prompt injection risk=%.2f for model '%s'; sending sanitized prompt",
+                scan_result.risk_score,
+                self.model,
+            )
+            prompt = scan_result.sanitized
+
         try:
             queue = self.construct_messages(prompt)
         except ValueError:

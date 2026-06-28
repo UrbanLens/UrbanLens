@@ -274,7 +274,7 @@ class DjangoProjectInitializer:
             logger.error(".env was updated but still does not exist.")
             raise UnrecoverableError(".env was updated but still does not exist.")
 
-    def npm_init(self):
+    def bun_init(self):
         """
         Runs npm init.
 
@@ -285,7 +285,7 @@ class DjangoProjectInitializer:
             UnrecoverableError: if npm init fails
 
         """
-        self.run_command(["npm", "install", "-y"], "during npm init")
+        self.run_command(["bun", "install", "-y"], "during npm init")
 
     def build_frontend(self):
         """
@@ -321,11 +321,11 @@ class DjangoProjectInitializer:
 
         match self.environment:
             case "development":
-                sass_command = ["npm", "run", "sass:dev"]
-                command = ["npm", "run", "build"]
+                sass_command = ["bun", "run", "sass:dev"]
+                command = ["bun", "run", "build"]
             case _:
-                sass_command = ["npm", "run", "sass"]
-                command = ["npm", "run", "deploy"]
+                sass_command = ["bun", "run", "sass"]
+                command = ["bun", "run", "deploy"]
 
         self.run_command(sass_command, "compiling sass", raise_error=False)
 
@@ -398,7 +398,7 @@ class DjangoProjectInitializer:
             UnrecoverableError: if the server fails to run
 
         """
-        self.run_command(["npm", "run", "start"], "running production server")
+        self.run_command(["bun", "run", "start"], "running production server")
 
     def check_network(self) -> bool:
         """

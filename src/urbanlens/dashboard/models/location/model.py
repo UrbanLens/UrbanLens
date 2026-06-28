@@ -115,6 +115,8 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
             "of similar urbex locations. Do not answer with the name of the location; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
         )
 
+        from urbanlens.dashboard.services.ai.scanner import wrap_user_data
+
         prompt = ""
         if self.address:
             prompt += f"address: {self.address}\n"
@@ -122,10 +124,15 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
             prompt += f"google maps description: {self.place_name}\n"
             instructions += "\nThe google maps description may be helpful, but it also may be inaccurate. Use your best judgement.\n"
 
+        # User-supplied fields are wrapped in USER_DATA delimiters so the model
+        # treats them as inert data rather than executable instructions.
+        user_fields = ""
         if is_meaningful_name(self.name):
-            prompt += f"location title: {self.name}\n"
+            user_fields += f"location title: {self.name}\n"
         if self.description:
-            prompt += f"description: {self.description}\n"
+            user_fields += f"description: {self.description}\n"
+        if user_fields:
+            prompt += wrap_user_data(user_fields) + "\n"
 
         if not prompt:
             return None
