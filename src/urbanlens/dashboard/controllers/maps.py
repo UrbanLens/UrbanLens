@@ -53,6 +53,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         site = SiteSettings.get_current()
         show_pin_count = site.show_dev_admin_features(request.user)
         show_filtered_pin_count = user_has_feature(request.user, SiteFeature.AI)
+        show_places_layer = user_has_feature(request.user, SiteFeature.PLACES)
 
         return render(
             request,
@@ -73,6 +74,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "pin_count": pin_count,
                 "show_pin_count": show_pin_count,
                 "show_filtered_pin_count": show_filtered_pin_count,
+                "show_places_layer": show_places_layer,
                 "use_pin_cache": profile.use_pin_cache,
                 **profile.get_map_center_template_context(),
                 "map_default_zoom": (
@@ -125,6 +127,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             tag_ids = request.POST.getlist("tag_ids")
             category_ids = request.POST.getlist("category_ids")
             is_private = request.POST.get("is_private") in {"1", "true", "on", "True"}
+            google_place_id = request.POST.get("google_place_id") or None
 
             if not latitude or not longitude:
                 if not address:
@@ -172,6 +175,20 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     pin.badges.remove(*pin.badges.filter(kind="category"))
                     pin.badges.add(*Badge.objects.categories().filter(id__in=category_ids))
             pin.save()
+
+            # When adding from a Places layer marker, pre-populate the GooglePlace
+            # link on both the pin and its location so subsequent views avoid an
+            # extra Places Details API call.
+            if google_place_id and not is_private:
+                try:
+                    from urbanlens.dashboard.services.google.place_info import GooglePlaceService
+
+                    gp_service = GooglePlaceService()
+                    gp_service.ensure_linked_by_place_id(pin, google_place_id)
+                    if location:
+                        gp_service.ensure_linked_by_place_id(location, google_place_id)
+                except Exception as gp_exc:
+                    logger.warning("Failed to link Google Place %s: %s", google_place_id, gp_exc)
 
             from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 
@@ -500,6 +517,153 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             pin.badges.clear()
 
         return JsonResponse({"ok": True, "pin_slug": pin.slug or str(pin.uuid)})
+
+    def nearby_places(self, request, *args, **kwargs):
+        """Return Google Places results for historical landmarks near a given coordinate.
+
+        VIP-only endpoint.  Results are cached per coordinate tile + type for
+        ``SiteSettings.google_places_cache_days`` days to minimise API spending.
+
+        Query params:
+            lat: Centre latitude (float).
+            lng: Centre longitude (float).
+            type: Google Places type (default ``historical_landmark``).
+            radius: Search radius in metres (default 2000, max 5000).
+
+        Returns:
+            JsonResponse: ``{"places": [...], "cached": bool}``
+        """
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+
+        if not user_has_feature(request.user, SiteFeature.PLACES):
+            return JsonResponse({"error": "forbidden"}, status=403)
+
+        try:
+            lat = float(request.GET.get("lat", ""))
+            lng = float(request.GET.get("lng", ""))
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "invalid coordinates"}, status=400)
+
+        place_type = request.GET.get("type", "historical_landmark")
+        try:
+            radius = min(int(request.GET.get("radius", 2000)), 5000)
+        except (TypeError, ValueError):
+            radius = 2000
+
+        api_key = settings.google_maps_api_key or settings.google_places_api_key
+        if not api_key:
+            return JsonResponse({"places": [], "disabled": True})
+
+        site = SiteSettings.get_current()
+        cache_days = site.google_places_cache_days
+
+        # Use a coarse grid key (0.02° ≈ 2 km) so nearby moves reuse the same cached bucket.
+        lat_key = round(lat / 0.02) * 0.02
+        lng_key = round(lng / 0.02) * 0.02
+        cache_key = f"places_nearby:{lat_key:.2f}:{lng_key:.2f}:{place_type}:{radius}"
+
+        # Use a pseudo-location keyed to the grid tile for caching (no real location needed).
+        # We store results in a global cache table row keyed by a generated cache_key.
+        # Since LocationCache requires a Location FK, we cache under a sentinel location or
+        # use a direct DB cache approach via a simple dict stored in JSON.
+        # Simpler: use the django cache framework with a long TTL.
+        from django.core.cache import cache as django_cache
+
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.location.model import Location
+
+        django_cache_key = f"ul_nearby_{cache_key}"
+        cached = django_cache.get(django_cache_key)
+        if cached is not None:
+            return JsonResponse({"places": cached, "cached": True})
+
+        try:
+            from urbanlens.dashboard.services.google.places import GooglePlacesGateway
+
+            gateway = GooglePlacesGateway(api_key=api_key)
+            raw_results = gateway.get_data(lat, lng, radius=radius, place_type=place_type)
+        except Exception as exc:
+            logger.warning("Google Places nearby search failed: %s", exc)
+            return JsonResponse({"places": [], "error": "upstream_error"})
+
+        places = []
+        for r in raw_results:
+            geo = r.get("geometry", {}).get("location", {})
+            place_lat = geo.get("lat")
+            place_lng = geo.get("lng")
+            if place_lat is None or place_lng is None:
+                continue
+            places.append({
+                "place_id": r.get("place_id", ""),
+                "name": r.get("name", ""),
+                "lat": place_lat,
+                "lng": place_lng,
+                "rating": r.get("rating"),
+                "user_ratings_total": r.get("user_ratings_total"),
+                "vicinity": r.get("vicinity", ""),
+                "types": r.get("types", []),
+                "icon": r.get("icon", ""),
+            })
+
+        cache_seconds = cache_days * 86400
+        django_cache.set(django_cache_key, places, cache_seconds)
+        return JsonResponse({"places": places, "cached": False})
+
+    def place_details(self, request, *args, **kwargs):
+        """Return Google Place details for a single place_id.
+
+        VIP-only endpoint.  Fetches editorial summary, formatted address, and
+        opening hours.  Results are cached for the same duration as nearby results.
+
+        Query params:
+            place_id: Google Place ID.
+
+        Returns:
+            JsonResponse: ``{"place": {...}}``
+        """
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+
+        if not user_has_feature(request.user, SiteFeature.PLACES):
+            return JsonResponse({"error": "forbidden"}, status=403)
+
+        place_id = (request.GET.get("place_id") or "").strip()
+        if not place_id:
+            return JsonResponse({"error": "missing place_id"}, status=400)
+
+        api_key = settings.google_maps_api_key or settings.google_places_api_key
+        if not api_key:
+            return JsonResponse({"error": "no_api_key"}, status=503)
+
+        from django.core.cache import cache as django_cache
+
+        django_cache_key = f"ul_place_details_{place_id}"
+        cached = django_cache.get(django_cache_key)
+        if cached is not None:
+            return JsonResponse({"place": cached, "cached": True})
+
+        try:
+            from urbanlens.dashboard.services.google.places import GooglePlacesGateway
+
+            gateway = GooglePlacesGateway(api_key=api_key)
+            detail = gateway.get_place_details(
+                place_id,
+                fields=[
+                    "name", "formatted_address", "rating", "editorial_summary",
+                    "opening_hours", "website", "url", "photos",
+                ],
+            )
+        except Exception as exc:
+            logger.warning("Google Place details fetch failed: %s", exc)
+            return JsonResponse({"error": "upstream_error"}, status=502)
+
+        site = SiteSettings.get_current()
+        cache_seconds = site.google_places_cache_days * 86400
+        django_cache.set(django_cache_key, detail, cache_seconds)
+        return JsonResponse({"place": detail, "cached": False})
 
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data(request)

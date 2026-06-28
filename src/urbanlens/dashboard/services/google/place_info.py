@@ -146,6 +146,35 @@ class GooglePlaceService:
             google_place.cid = cid
         return google_place
 
+    def ensure_linked_by_place_id(self, entity: AddressableModel, place_id: str) -> GooglePlace | None:
+        """Attach entity.google_place using a Google Place ID string.
+
+        Stores the ``place_id`` on the shared GooglePlace row and links the entity,
+        so future views can skip an additional Places API call.
+
+        Args:
+            entity: A Location or Pin with latitude and longitude set.
+            place_id: Google Places API ``place_id`` string.
+
+        Returns:
+            The linked GooglePlace, or None when coordinates are missing.
+        """
+        if entity.latitude is None or entity.longitude is None:
+            return None
+        google_place = self.get_or_create_for_coordinates(
+            entity.latitude,
+            entity.longitude,
+            fetch_if_missing=False,
+        )
+        if place_id and not google_place.place_id:
+            GooglePlace.objects.filter(pk=google_place.pk).update(place_id=place_id)
+            google_place.place_id = place_id
+        if entity.google_place_id != google_place.pk:
+            entity.__class__.objects.filter(pk=entity.pk).update(google_place_id=google_place.pk)
+            entity.google_place_id = google_place.pk
+            entity.google_place = google_place
+        return google_place
+
     def resolve_place_name(self, google_place: GooglePlace) -> str:
         """Return a cached or freshly fetched place name for a GooglePlace row.
 

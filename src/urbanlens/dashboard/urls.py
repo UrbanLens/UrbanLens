@@ -140,6 +140,16 @@ urlpatterns = [
                     name="map.streetview_check",
                 ),
                 path(
+                    "places/nearby/",
+                    maps.MapController.as_view({"get": "nearby_places"}),
+                    name="map.places.nearby",
+                ),
+                path(
+                    "places/details/",
+                    maps.MapController.as_view({"get": "place_details"}),
+                    name="map.places.details",
+                ),
+                path(
                     "upload_image/<slug:pin_slug>/",
                     maps.MapController.as_view({"post": "upload_image"}),
                     name="pin.upload_image",

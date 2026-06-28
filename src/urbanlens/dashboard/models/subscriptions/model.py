@@ -19,6 +19,7 @@ class SiteFeature(TextChoices):
     """Feature flags that can be unlocked by subscription roles."""
 
     AI = "ai", "AI features"
+    PLACES = "places", "Places layer (Google Places landmarks)"
 
 
 class SubscriptionRole(abstract.Model):

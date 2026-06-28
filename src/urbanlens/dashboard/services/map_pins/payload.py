@@ -87,6 +87,7 @@ class MapPinPayloadService:
                 {"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon}
                 for t in display_badges
             ],
+            "address": pin.location.address if pin.location else None,
         }
 
     @staticmethod

@@ -2101,6 +2101,92 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     opacity: 1;
 }
 
+.popup-address {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: .72rem;
+    color: rgba(255, 255, 255, .38);
+    margin-bottom: 5px;
+
+    .material-icons { font-size: .85rem; flex-shrink: 0; }
+}
+
+/* ── Places layer ─────────────────────────────────────────────────── */
+.search-result-marker-icon--places {
+    font-size: 26px;
+    color: $ui-amber-400;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .55));
+}
+
+.map-layer-thumb--icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, .07);
+    border-radius: 4px;
+
+    .material-icons { font-size: 1.1rem; }
+}
+
+#place-info-panel {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(380px, 90vw);
+    background: rgba(18, 22, 30, .96);
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: 12px;
+    box-shadow: 0 6px 28px rgba(0, 0, 0, .55);
+    z-index: 1200;
+    overflow: hidden;
+
+    &[hidden] { display: none; }
+}
+
+.place-info-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
+    gap: 8px;
+}
+
+.place-info-title {
+    flex: 1;
+    font-size: .9rem;
+    font-weight: 600;
+    color: var(--ul-grey-4);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.place-info-close {
+    @include icon-btn(28px);
+    color: rgba(255, 255, 255, .4);
+    flex-shrink: 0;
+}
+
+.place-info-body {
+    padding: 12px 14px;
+    font-size: .82rem;
+    color: rgba(255, 255, 255, .65);
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.place-info-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: rgba(255, 255, 255, .35);
+    font-size: .8rem;
+    gap: 8px;
+}
+
 /* ── Marker clusters ──────────────────────────────────────────────── */
 .pin-cluster {
     display: flex;
@@ -2916,9 +3002,9 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 
 .fp-formula-display-text {
     flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: break-word;
 }
 
 .fp-formula-display-clear {

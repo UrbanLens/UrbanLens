@@ -96,8 +96,35 @@
                 </span>
                 <span>Dark</span>
             </button>
+            <button id="boundaries-button" class="map-layer-btn"
+                    onclick="toggleBoundariesLayer();" aria-label="Toggle geopolitical boundaries">
+                <span class="map-layer-thumb map-layer-thumb--icon">
+                    <i class="material-icons">public</i>
+                </span>
+                <span>Borders</span>
+            </button>
+            {% if show_places_layer %}
+            <button id="places-button" class="map-layer-btn"
+                    onclick="togglePlacesLayer();" aria-label="Toggle Places layer">
+                <span class="map-layer-thumb map-layer-thumb--icon">
+                    <i class="material-icons">place</i>
+                </span>
+                <span>Places</span>
+            </button>
+            {% endif %}
         </div>
     </div>
+
+    {# ── Place info panel (shown when user clicks "More information" on a Places marker) #}
+    {% if show_places_layer %}
+    <div id="place-info-panel" class="place-info-panel" hidden>
+        <div class="place-info-header">
+            <span class="place-info-title"></span>
+            <button class="place-info-close" onclick="document.getElementById('place-info-panel').classList.remove('is-open');document.getElementById('place-info-panel').setAttribute('hidden','')" aria-label="Close">✕</button>
+        </div>
+        <div class="place-info-body"></div>
+    </div>
+    {% endif %}
 
     {# ── Floating address search bar ───────────────────────────────────── #}
     <div id="addr-search-bar">
@@ -802,7 +829,7 @@
         'uuid', 'id', 'name', 'icon', 'color',
         'latitude', 'longitude',
         'description', 'status', 'last_visited', 'rating',
-        'tags', 'tags_data', 'viewLocationUrl',
+        'tags', 'tags_data', 'viewLocationUrl', 'address',
     ]);
     function _slimPin(pin) {
         const slim = {};
@@ -1069,7 +1096,7 @@
             const addPinItem = document.createElement('button');
             addPinItem.className = 'map-context-menu__item';
             addPinItem.innerHTML = '<i class="material-icons">add_location</i>Create pin';
-            addPinItem.addEventListener('click', () => { menu.remove(); _clearSearchMarker(); openAddPinDialog(lat, lng); });
+            addPinItem.addEventListener('click', () => { menu.remove(); _clearSearchMarker(); openAddPinDialog(lat, lng, { defaultName: title || '' }); });
             menu.appendChild(addPinItem);
 
             const dismissItem = document.createElement('button');
@@ -1201,6 +1228,7 @@
         const popupContent = `
             <div class="pin-popup" data-uuid="${pin.uuid}" data-id="${pin.id || ''}">
                 <div class="popup-title">${pin.name || ''}</div>
+                ${pin.address ? `<div class="popup-address"><i class="material-icons" style="font-size:.7rem;vertical-align:middle;opacity:.6;">location_on</i> ${pin.address}</div>` : ''}
                 ${pin.description ? `<div class="popup-desc">${pin.description}</div>` : ''}
                 <div class="popup-meta">
                     <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${pin.last_visited || 'Not Visited'}</span>
@@ -1640,6 +1668,21 @@
         attribution: 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
         layer: 'clouds_new',
     });
+    // Geopolitical boundaries (OpenStreetMap-based, off by default)
+    const boundariesLayer = L.tileLayer(
+        'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+        {
+            attribution: 'Boundaries &copy; Esri',
+            maxZoom: 19,
+            opacity: 0.6,
+            pane: 'overlayPane',
+        }
+    );
+    // Places layer group (VIP only — historical landmarks from Google Places)
+    const _placesLayerGroup = L.layerGroup();
+    const _placesMarkerMap = new Map();  // place_id → L.Marker
+    let _placesLayerActive = false;
+    const _PLACES_MIN_ZOOM = 13;  // only fetch when zoom >= this level
 
     // ── Dark map mode helpers ─────────────────────────────────────────────────
     function _isDarkMapActive() {
@@ -2165,6 +2208,164 @@
         _saveLayerState();
     }
 
+    function toggleBoundariesLayer() {
+        if (map.hasLayer(boundariesLayer)) {
+            map.removeLayer(boundariesLayer);
+        } else {
+            boundariesLayer.addTo(map);
+        }
+        document.querySelector('#boundaries-button')?.classList.toggle('active', map.hasLayer(boundariesLayer));
+    }
+
+    // ── Places layer (VIP only) ───────────────────────────────────────────────
+    const _SHOW_PLACES_LAYER = {{ show_places_layer|yesno:"true,false" }};
+    let _placesFetchTid = null;
+
+    function _buildPlacesMarker(place) {
+        const lat = place.lat, lng = place.lng;
+        const marker = L.marker([lat, lng], {
+            icon: L.divIcon({
+                className: 'search-result-marker-wrap',
+                html: `<i class="material-icons search-result-marker-icon search-result-marker-icon--places">star</i>`,
+                iconSize: [28, 28],
+                iconAnchor: [14, 28],
+            }),
+            zIndexOffset: 1000,
+            title: place.name,
+        });
+        marker.on('click', function () {
+            map.closePopup();
+            document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
+            const latFmt = lat.toFixed(6), lngFmt = lng.toFixed(6);
+            const menu = document.createElement('div');
+            menu.className = 'map-context-menu';
+            const pt = map.latLngToContainerPoint([lat, lng]);
+            menu.style.top = `${pt.y}px`;
+            menu.style.left = `${pt.x}px`;
+
+            // Header: place name
+            const nameRow = document.createElement('div');
+            nameRow.className = 'map-context-menu__header';
+            nameRow.textContent = place.name;
+            menu.appendChild(nameRow);
+            const sep0 = document.createElement('div'); sep0.className = 'map-context-menu__sep'; menu.appendChild(sep0);
+
+            // Copy coordinates
+            const coordItem = document.createElement('button');
+            coordItem.className = 'map-context-menu__item map-context-menu__coords';
+            coordItem.title = 'Click to copy coordinates';
+            coordItem.innerHTML = `<i class="material-icons">gps_fixed</i><span>${latFmt}, ${lngFmt}</span>`;
+            coordItem.addEventListener('click', () => {
+                navigator.clipboard.writeText(`${latFmt}, ${lngFmt}`)
+                    .then(() => toastr.success('Coordinates copied'), () => toastr.error('Could not copy'));
+                menu.remove();
+            });
+            menu.appendChild(coordItem);
+            const sep1 = document.createElement('div'); sep1.className = 'map-context-menu__sep'; menu.appendChild(sep1);
+
+            // Add to my map
+            const addItem = document.createElement('button');
+            addItem.className = 'map-context-menu__item';
+            addItem.innerHTML = '<i class="material-icons">add_location</i>Add to my map';
+            addItem.addEventListener('click', () => {
+                menu.remove();
+                openAddPinDialog(lat, lng, { defaultName: place.name, placeId: place.place_id });
+            });
+            menu.appendChild(addItem);
+
+            // More information
+            const infoItem = document.createElement('button');
+            infoItem.className = 'map-context-menu__item';
+            infoItem.innerHTML = '<i class="material-icons">info</i>More information';
+            infoItem.addEventListener('click', () => {
+                menu.remove();
+                _showPlaceInfoPanel(place);
+            });
+            menu.appendChild(infoItem);
+
+            document.body.appendChild(menu);
+            const dismiss = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); } };
+            setTimeout(() => document.addEventListener('click', dismiss), 0);
+        });
+        return marker;
+    }
+
+    async function _fetchAndShowPlaces() {
+        if (!_placesLayerActive) return;
+        const zoom = map.getZoom();
+        if (zoom < _PLACES_MIN_ZOOM) return;
+        const center = map.getCenter();
+        const url = `{% url "map.places.nearby" %}?lat=${center.lat.toFixed(5)}&lng=${center.lng.toFixed(5)}&type=historical_landmark`;
+        try {
+            const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const userLatLngs = new Set([..._pinStore.values()].map(p => `${parseFloat(p.latitude).toFixed(4)},${parseFloat(p.longitude).toFixed(4)}`));
+            (data.places || []).forEach(place => {
+                if (_placesMarkerMap.has(place.place_id)) return;
+                // Skip if user already has a pin at this location (within ~11m)
+                const pKey = `${place.lat.toFixed(4)},${place.lng.toFixed(4)}`;
+                if (userLatLngs.has(pKey)) return;
+                const marker = _buildPlacesMarker(place);
+                _placesLayerGroup.addLayer(marker);
+                _placesMarkerMap.set(place.place_id, marker);
+            });
+        } catch (_) {}
+    }
+
+    function _schedulePlacesFetch() {
+        if (_placesFetchTid) clearTimeout(_placesFetchTid);
+        _placesFetchTid = setTimeout(_fetchAndShowPlaces, 600);
+    }
+
+    async function _showPlaceInfoPanel(place) {
+        const panel = document.getElementById('place-info-panel');
+        if (!panel) return;
+        const titleEl = panel.querySelector('.place-info-title');
+        const bodyEl = panel.querySelector('.place-info-body');
+        if (titleEl) titleEl.textContent = place.name;
+        if (bodyEl) bodyEl.innerHTML = '<span class="place-info-loading">Loading…</span>';
+        panel.removeAttribute('hidden');
+        panel.classList.add('is-open');
+        try {
+            const resp = await fetch(`{% url "map.places.details" %}?place_id=${encodeURIComponent(place.place_id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!resp.ok) throw new Error();
+            const data = await resp.json();
+            const d = data.place || {};
+            const parts = [];
+            if (d.formatted_address) parts.push(`<div class="place-info-address"><i class="material-icons">location_on</i> ${d.formatted_address}</div>`);
+            if (d.rating) parts.push(`<div class="place-info-rating">Rating: ${d.rating} ★</div>`);
+            if (d.editorial_summary?.overview) parts.push(`<div class="place-info-summary">${d.editorial_summary.overview}</div>`);
+            if (d.website) parts.push(`<div class="place-info-link"><a href="${d.website}" target="_blank" rel="noopener">Website</a></div>`);
+            if (bodyEl) bodyEl.innerHTML = parts.join('') || '<em>No details available.</em>';
+        } catch (_) {
+            if (bodyEl) bodyEl.innerHTML = '<em>Could not load details.</em>';
+        }
+    }
+
+    function togglePlacesLayer() {
+        if (!_SHOW_PLACES_LAYER) return;
+        _placesLayerActive = !_placesLayerActive;
+        const btn = document.querySelector('#places-button');
+        if (_placesLayerActive) {
+            _placesLayerGroup.addTo(map);
+            btn?.classList.add('active');
+            if (map.getZoom() < _PLACES_MIN_ZOOM) {
+                toastr.info(`Zoom in to level ${_PLACES_MIN_ZOOM}+ to see historical landmarks.`);
+            } else {
+                _fetchAndShowPlaces();
+            }
+        } else {
+            map.removeLayer(_placesLayerGroup);
+            btn?.classList.remove('active');
+        }
+    }
+
+    // Refresh places when map moves (debounced)
+    map.on('moveend zoomend', function () {
+        if (_placesLayerActive) _schedulePlacesFetch();
+    });
+
     const _LAYERS_PANEL_MS = 220;
     let _layersPanelCloseTimer = null;
 
@@ -2489,6 +2690,9 @@
     document.getElementById('filter-panel').addEventListener('touchstart', function (e) {
         e.stopPropagation();
     });
+    document.getElementById('filter-panel').addEventListener('contextmenu', function (e) {
+        e.stopPropagation();
+    });
 
     // ── Visit filter UI ──────────────────────────────────────────────────────
     function _syncVisitUI(val) {
@@ -2756,11 +2960,57 @@
                             searchData = await searchResp.json();
                         }
                         if (searchData && searchData.length) {
-                            const first = searchData[0];
-                            const fLat = parseFloat(first.lat), fLon = parseFloat(first.lon);
+                            // Show a marker for every result and fit the map to them all.
+                            _clearSearchMarker();
+                            const latLngs = [];
+                            searchData.forEach((result, idx) => {
+                                const rLat = parseFloat(result.lat), rLon = parseFloat(result.lon);
+                                latLngs.push([rLat, rLon]);
+                                const marker = _createTempPlaceMarker(rLat, rLon, result.display_name || searchTerm, true);
+                                marker.on('click', (function(mlat, mlng, mname) {
+                                    return function() {
+                                        map.closePopup();
+                                        document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
+                                        const menu = document.createElement('div');
+                                        menu.className = 'map-context-menu';
+                                        const pt = map.latLngToContainerPoint([mlat, mlng]);
+                                        menu.style.top = `${pt.y}px`;
+                                        menu.style.left = `${pt.x}px`;
+                                        const coordItem = document.createElement('button');
+                                        coordItem.className = 'map-context-menu__item map-context-menu__coords';
+                                        coordItem.title = 'Click to copy coordinates';
+                                        coordItem.innerHTML = `<i class="material-icons">gps_fixed</i><span>${mlat.toFixed(6)}, ${mlng.toFixed(6)}</span>`;
+                                        coordItem.addEventListener('click', () => {
+                                            navigator.clipboard.writeText(`${mlat.toFixed(6)}, ${mlng.toFixed(6)}`)
+                                                .then(() => toastr.success('Coordinates copied to clipboard'), () => toastr.error('Could not copy coordinates'));
+                                            menu.remove();
+                                        });
+                                        menu.appendChild(coordItem);
+                                        const sep = document.createElement('div'); sep.className = 'map-context-menu__sep'; menu.appendChild(sep);
+                                        const addPinItem = document.createElement('button');
+                                        addPinItem.className = 'map-context-menu__item';
+                                        addPinItem.innerHTML = '<i class="material-icons">add_location</i>Create pin';
+                                        addPinItem.addEventListener('click', () => { menu.remove(); openAddPinDialog(mlat, mlng, { defaultName: mname }); });
+                                        menu.appendChild(addPinItem);
+                                        const dismissItem = document.createElement('button');
+                                        dismissItem.className = 'map-context-menu__item';
+                                        dismissItem.innerHTML = '<i class="material-icons">close</i>Dismiss marker';
+                                        dismissItem.addEventListener('click', () => { menu.remove(); marker.remove(); });
+                                        menu.appendChild(dismissItem);
+                                        document.body.appendChild(menu);
+                                        const dismiss = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); } };
+                                        setTimeout(() => document.addEventListener('click', dismiss), 0);
+                                    };
+                                })(rLat, rLon, result.display_name || searchTerm));
+                                marker.addTo(map);
+                                if (idx === 0) _searchMarker = marker;
+                            });
                             _programmaticMove = true;
-                            map.setView([fLat, fLon], 14);
-                            _showSearchMarker(fLat, fLon, first.display_name || searchTerm);
+                            if (latLngs.length === 1) {
+                                map.setView(latLngs[0], 14);
+                            } else {
+                                map.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40], maxZoom: 14 });
+                            }
                             if (searchData.length > 1) toastr.info(`Found ${searchData.length} results for "${searchTerm}"`);
                         } else if (anchorLat != null) {
                             // No hits — still center on the anchor so the user sees where they searched
@@ -3362,6 +3612,7 @@
     let _inclMode = 'and';
     let _badgeDragId = null;
     let _badgeDropHandled = false;  // set by drop handlers so dragend knows not to auto-remove
+    let _badgeChipJustDragged = false;  // suppresses the click that browsers fire after dragend
     let _formulaGroups = null;      // non-null in formula mode: parsed groups are the canonical state
 
     // ── Helpers ─────────────────────────────────────────────────────────────
@@ -3538,11 +3789,12 @@
         [inclEl, exclEl].forEach(container => {
             container.querySelectorAll('.fp-badge-chip').forEach(chip => {
                 const id = chip.dataset.id;
-                chip.addEventListener('click', () => _removeBadge(id));
+                chip.addEventListener('click', () => { if (!_badgeChipJustDragged) _removeBadge(id); });
                 chip.addEventListener('contextmenu', (e) => { e.preventDefault(); _toggleBadgeMode(id); });
                 chip.addEventListener('dragstart', (e) => {
                     _badgeDragId = id;
                     _badgeDropHandled = false;
+                    _badgeChipJustDragged = true;
                     e.dataTransfer.effectAllowed = 'move';
                     chip.classList.add('fp-drag-active');
                     // Ensure both columns are visible so the user can drag between them
@@ -3557,6 +3809,8 @@
                     // If no drop handler claimed this drag, the chip was dropped outside → remove
                     if (draggedId && !_badgeDropHandled) _removeBadge(draggedId);
                     _badgeDropHandled = false;
+                    // Clear the drag flag after the click event that browsers fire post-drag has fired
+                    setTimeout(() => { _badgeChipJustDragged = false; }, 0);
                 });
             });
         });
@@ -4069,10 +4323,12 @@
     let _addPinClickMode = false;
     let _addPinMarker = null;
     let _editPinUuid = null;   // null = add mode; uuid string = edit mode
+    let _addPinGooglePlaceId = null;   // set when adding a pin from a Places marker
     window._addPinCustomIconFile = null;
 
     function _resetAddPinDialog() {
         _editPinUuid = null;
+        _addPinGooglePlaceId = null;
         document.getElementById('apdlg-addr').value = '';
         document.getElementById('apdlg-lat').value = '';
         document.getElementById('apdlg-lng').value = '';
@@ -4122,6 +4378,8 @@
 
     function openAddPinDialog(lat = null, lng = null, opts = {}) {
         const keepMarker = opts.keepMarker === true;
+        const defaultName = (opts.defaultName || '').trim();
+        const placeId = opts.placeId || null;
         _resetAddPinDialog();
 
         // Remove any previous preview marker unless transferring the context-menu pin
@@ -4134,6 +4392,16 @@
         } else {
             setTimeout(() => { _addPinClickMode = true; }, 0);
         }
+
+        // Pre-fill name from Google place name or fallback search query
+        if (defaultName) {
+            const nameEl = document.getElementById('apdlg-name');
+            if (nameEl) nameEl.value = defaultName;
+        }
+
+        // Store Google Place ID so it can be sent with the add-pin request
+        if (placeId) _addPinGooglePlaceId = placeId;
+
         document.getElementById('add-pin-dialog').showModal();
     }
 
@@ -4592,6 +4860,9 @@
             // Privacy
             const privCb = document.getElementById('apdlg-private');
             if (privCb && privCb.checked) formData.append('is_private', '1');
+
+            // Pass Google Place ID when adding from a Places marker
+            if (_addPinGooglePlaceId) formData.append('google_place_id', _addPinGooglePlaceId);
 
             this.disabled = true;
             this.textContent = 'Saving…';

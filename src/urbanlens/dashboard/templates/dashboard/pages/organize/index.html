@@ -70,7 +70,7 @@
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
                 role="tab" data-tab="priority" aria-controls="panel-priority">
-            <i class="material-icons">low_priority</i> Priority
+            <i class="material-icons">low_priority</i> Display Order
         </button>
     </div>
     {% endif %}
@@ -93,7 +93,7 @@
 
         <div class="badge-header">
             <div>
-                <h2 class="badge-title">Priority Order
+                <h2 class="badge-title">Display Order
                     {% include "dashboard/partials/_page_explainer_anchor.html" with explainer_id="priority-explainer" %}
                 </h2>
             </div>
@@ -215,16 +215,16 @@
     const cards = [
         {
             id: 'priority-order', icon: 'low_priority', target: '#priority-explainer',
-            eyebrow: 'Map display', title: 'Priority order decides which label wins on the map',
+            eyebrow: 'Map display', title: 'Display order decides which label wins on the map',
             body: 'If a pin has multiple tags, categories, or statuses, the highest item in this list provides the most important icon/color signal first.',
-            button: 'Show Priority', action: function () { document.querySelector('[data-tab="priority"]')?.click(); document.getElementById('priority-explainer')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+            button: 'Display Order', action: function () { document.querySelector('[data-tab="priority"]')?.click(); document.getElementById('priority-explainer')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
             ready: function () { return !!document.getElementById('priority-explainer'); },
         },
         {
             id: 'drag-priority', icon: 'drag_indicator', target: '#priority-list .priority-drag-handle, #priority-list',
             eyebrow: 'Reorder visually', title: 'Drag important labels upward',
             body: 'Put more specific labels near the top, and less specific labels near the bottom, so the map stays readable at a glance.',
-            button: 'Open Priority', action: function () { document.querySelector('[data-tab="priority"]')?.click(); document.getElementById('priority-list')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+            button: 'Open Display Order', action: function () { document.querySelector('[data-tab="priority"]')?.click(); document.getElementById('priority-list')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
             ready: function () { return !!document.getElementById('priority-list'); },
         },
         {
@@ -2484,7 +2484,7 @@ window._orgBulkSync = function(n, opts) {
         }).then(function(r) {
             if (!r.ok) return r.text().then(function(t) { throw new Error(t || r.statusText); });
             if (flashItem) _flashPriorityOrderSaved(flashItem);
-            toastr.success('Priority order saved.');
+            toastr.success('Display order saved.');
         }).catch(function(err) { toastr.error('Save failed: ' + err.message); });
     }
 

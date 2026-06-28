@@ -144,6 +144,15 @@ class SiteSettings(abstract.Model):
         validators=[MinValueValidator(1), MaxValueValidator(1440)],
     )
 
+    # --- Google Places layer ---
+
+    google_places_cache_days = IntegerField(
+        default=90,
+        help_text="How many days to cache Google Places nearby-search results before re-fetching. Historical landmarks rarely change.",
+        verbose_name="Places layer cache (days)",
+        validators=[MinValueValidator(1), MaxValueValidator(365)],
+    )
+
     # --- Database backups ---
 
     backup_enabled = BooleanField(
@@ -251,4 +260,5 @@ class SiteSettings(abstract.Model):
             CheckConstraint(condition=Q(login_lockout_minutes__gte=1), name="login_lockout_minutes_gte_1"),
             CheckConstraint(condition=Q(backup_frequency_hours__gte=1), name="backup_frequency_hours_gte_1"),
             CheckConstraint(condition=Q(backup_retention__gte=1), name="backup_retention_gte_1"),
+            CheckConstraint(condition=Q(google_places_cache_days__gte=1), name="google_places_cache_days_gte_1"),
         ]
