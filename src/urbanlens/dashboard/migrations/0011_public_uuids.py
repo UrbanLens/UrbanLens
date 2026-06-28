@@ -8,11 +8,19 @@ from django.db import migrations, models
 
 
 def backfill_public_uuids(apps, schema_editor):
+    """Assign a distinct UUID to every row before the unique constraint is added.
+
+    AddField must not use a Python default: PostgreSQL applies one computed
+    default to all existing rows, which would violate the later unique index.
+    """
     for model_name in ("Badge", "Comment", "Image", "PinVisit"):
         model = apps.get_model("dashboard", model_name)
-        for obj in model.objects.filter(uuid__isnull=True).only("pk"):
-            obj.uuid = uuid.uuid4()
-            obj.save(update_fields=["uuid"])
+        seen: set[uuid.UUID] = set()
+        for obj in model.objects.all().only("pk", "uuid"):
+            if obj.uuid is None or obj.uuid in seen:
+                obj.uuid = uuid.uuid4()
+                obj.save(update_fields=["uuid"])
+            seen.add(obj.uuid)
 
 
 class Migration(migrations.Migration):
@@ -24,22 +32,22 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="badge",
             name="uuid",
-            field=models.UUIDField(default=uuid.uuid4, editable=False, null=True),
+            field=models.UUIDField(editable=False, null=True),
         ),
         migrations.AddField(
             model_name="comment",
             name="uuid",
-            field=models.UUIDField(default=uuid.uuid4, editable=False, null=True),
+            field=models.UUIDField(editable=False, null=True),
         ),
         migrations.AddField(
             model_name="image",
             name="uuid",
-            field=models.UUIDField(default=uuid.uuid4, editable=False, null=True),
+            field=models.UUIDField(editable=False, null=True),
         ),
         migrations.AddField(
             model_name="pinvisit",
             name="uuid",
-            field=models.UUIDField(default=uuid.uuid4, editable=False, null=True),
+            field=models.UUIDField(editable=False, null=True),
         ),
         migrations.RunPython(backfill_public_uuids, migrations.RunPython.noop),
         migrations.AlterField(
