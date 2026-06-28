@@ -1543,10 +1543,9 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 /* ── Floating address search bar (mobile-first) ───────────────────── */
 #addr-search-bar {
     position: absolute;
-    // On mobile, position below the Leaflet zoom controls to avoid overlap
-    top: 72px;
+    top: 10px;
     left: 10px;
-    width: calc(100vw - 22px);
+    width: calc(100% - 20px);
     background: var(--ul-grey-0);
     border: 1px solid var(--ul-grey-3);
     border-radius: 18px;
@@ -2251,7 +2250,9 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 }
 
 #map.filter-open .map-buttons {
-    right: calc(272px + 12px);
+    @include up($breakpoint-sm) {
+        right: calc(272px + 12px);
+    }
 }
 
 // ── Mobile-responsive map overrides ──────────────────────────────────────────
@@ -2272,11 +2273,6 @@ details.fp-accordion-item[open] .fp-acc-arrow {
         &.open {
             transform: translateY(0);
         }
-    }
-
-    // Don't shift map-buttons sideways when filter panel opens (it's bottom now)
-    #map.filter-open .map-buttons {
-        right: 12px;
     }
 }
 
@@ -3253,6 +3249,15 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     // Move the bar to align with the zoom controls on desktop
     @include up($breakpoint-sm) {
         opacity: 0.82;
+    }
+}
+
+// Pinch-to-zoom on phones; show +/- controls from tablet/desktop up
+#map .leaflet-control-zoom {
+    display: none;
+
+    @include up($breakpoint-sm) {
+        display: block;
     }
 }
 

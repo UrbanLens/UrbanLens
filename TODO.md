@@ -20,6 +20,7 @@ Features planned for this release.
 * On map filtering sidebar, better indicators when filters are active vs inactive, especially when sidebar is closed.
 * Consider: map filtering sidebar, date pinned starts closed. (Abstract this a bit into "less important panels" to close appropriate ones based on screen height.)
 * Consider: handle temporary markers when a user pin exists on that exact point.
+* Ensure proper attribution in the smaller maps we're showing around the site (main map should be correct already. Others may or may not need work, though.)
 
 ## Medium Features
 
