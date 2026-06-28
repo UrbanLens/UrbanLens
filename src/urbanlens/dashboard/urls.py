@@ -253,6 +253,26 @@ urlpatterns = [
                                 name="pin.comment.delete",
                             ),
                             path(
+                                "<slug:pin_slug>/wikipedia/",
+                                pin.PinController.as_view({"get": "wikipedia_info"}),
+                                name="pin.wikipedia",
+                            ),
+                            path(
+                                "<slug:pin_slug>/wikimedia/",
+                                pin.PinController.as_view({"get": "wikimedia_assets"}),
+                                name="pin.wikimedia",
+                            ),
+                            path(
+                                "<slug:pin_slug>/loopnet/",
+                                pin.PinController.as_view({"get": "loopnet_info"}),
+                                name="pin.loopnet",
+                            ),
+                            path(
+                                "<slug:pin_slug>/nps/",
+                                pin.PinController.as_view({"get": "nps_info"}),
+                                name="pin.nps",
+                            ),
+                            path(
                                 "<slug:pin_slug>/gallery/",
                                 image_gallery.PinGalleryView.as_view(),
                                 name="pin.gallery",

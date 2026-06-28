@@ -1,0 +1,55 @@
+<div class="loopnet-info card" id="loopnet-section">
+    <div class="card-header">
+        <i class="material-icons">business_center</i>
+        <h3>LoopNet Listings</h3>
+        <a href="{{ result.search_url }}" target="_blank" rel="noopener noreferrer"
+           class="card-header-link" title="View on LoopNet">
+            <i class="material-icons">open_in_new</i>
+        </a>
+    </div>
+
+    <div class="loopnet-address-row">
+        <i class="material-icons">location_on</i>
+        <span>{{ address }}</span>
+    </div>
+
+    <ul class="loopnet-listing-list">
+        {% for listing in result.listings %}
+        <li class="loopnet-listing">
+            <div class="loopnet-listing-body">
+                {% if listing.title %}
+                <div class="loopnet-listing-title">
+                    {% if listing.url %}
+                    <a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer">
+                        {{ listing.title }}
+                        <i class="material-icons loopnet-ext-icon">open_in_new</i>
+                    </a>
+                    {% else %}
+                    {{ listing.title }}
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if listing.price %}
+                <div class="loopnet-listing-price">
+                    <i class="material-icons">attach_money</i>
+                    {{ listing.price }}
+                </div>
+                {% endif %}
+
+                {% if listing.snippet %}
+                <p class="loopnet-listing-snippet">{{ listing.snippet }}</p>
+                {% endif %}
+
+                {% if not listing.title and listing.url %}
+                <a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer"
+                   class="loopnet-listing-url">
+                    View listing
+                    <i class="material-icons">open_in_new</i>
+                </a>
+                {% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</div>

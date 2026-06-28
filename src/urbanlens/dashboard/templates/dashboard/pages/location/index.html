@@ -347,6 +347,70 @@
 
     </div>{# end .pin-media-row (smithsonian / web) #}
 
+    {# ── Knowledge row: Wikipedia | NPS ──────────────────────────────────────── #}
+    <div class="pin-media-row">
+
+        <div id="wikipedia-section"
+             hx-get="{% url 'pin.wikipedia' pin.slug %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-icons">menu_book</i>
+                    <h3>Wikipedia</h3>
+                </div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            </div>
+        </div>
+
+        <div id="nps-section"
+             hx-get="{% url 'pin.nps' pin.slug %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-icons">park</i>
+                    <h3>National Park Service</h3>
+                </div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            </div>
+        </div>
+
+    </div>{# end .pin-media-row (wikipedia / nps) #}
+
+    {# ── Commons / LoopNet row ─────────────────────────────────────────────── #}
+    <div class="pin-media-row">
+
+        {% if pin.meaningful_name %}
+        <div id="wikimedia-section"
+             hx-get="{% url 'pin.wikimedia' pin.slug %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-icons">collections</i>
+                    <h3>Wikimedia Commons</h3>
+                </div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div id="loopnet-section"
+             hx-get="{% url 'pin.loopnet' pin.slug %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-icons">business_center</i>
+                    <h3>LoopNet Listings</h3>
+                </div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            </div>
+        </div>
+
+    </div>{# end .pin-media-row (wikimedia / loopnet) #}
+
     {# ── Photo gallery (full width) ────────────────────────────────────── #}
     <div id="pin-gallery-panel"
          hx-get="{% url 'pin.gallery' pin.slug %}"

@@ -507,6 +507,190 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
+    # ── External-data HTMX endpoints ───────────────────────────────────────────
+
+    def wikipedia_info(self, request: HttpRequest, pin_slug: str):
+        """
+        HTMX partial: Wikipedia article summary for the pin's location.
+
+        Returns an empty 204 when no matching article is found, which causes
+        HTMX to remove the loading placeholder from the page.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.wikipedia import WikipediaGateway
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+
+        location = pin.location
+        if not location:
+            return HttpResponse(status=204)
+
+        lat = float(pin.effective_latitude or 0)
+        lng = float(pin.effective_longitude or 0)
+        if not lat and not lng:
+            return HttpResponse(status=204)
+
+        cached = LocationCache.get_fresh(location, "wikipedia")
+        if cached is None:
+            address_components = {
+                "locality": location.locality or "",
+                "route": location.route or "",
+                "street_number": location.street_number or "",
+                "administrative_area_level_1": location.administrative_area_level_1 or "",
+            }
+            try:
+                article = WikipediaGateway().get_article_for_location(lat, lng, address_components)
+            except Exception:
+                logger.exception("Wikipedia lookup failed for pin %s", pin_slug)
+                article = None
+            LocationCache.set(location, "wikipedia", article or {}, query_key=location.name or "")
+            data = article
+        else:
+            data = cached.data or None
+
+        if not data:
+            return HttpResponse(status=204)
+
+        return render(request, "dashboard/partials/pin_wikipedia.html", {"article": data})
+
+    def wikimedia_assets(self, request: HttpRequest, pin_slug: str):
+        """
+        HTMX partial: Wikimedia Commons images for the pin's location name.
+
+        Skipped entirely when the pin has no meaningful name.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.wikimedia import WikimediaGateway
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+
+        if not pin.meaningful_name:
+            return HttpResponse(status=204)
+
+        location = pin.location
+        if not location:
+            return HttpResponse(status=204)
+
+        query = pin.effective_name or ""
+        cached = LocationCache.get_fresh(location, "wikimedia")
+        if cached is None:
+            try:
+                images = WikimediaGateway().search_images(query)
+            except Exception:
+                logger.exception("Wikimedia search failed for pin %s", pin_slug)
+                images = []
+            LocationCache.set(location, "wikimedia", {"images": images}, query_key=query)
+            data = images
+        else:
+            data = (cached.data or {}).get("images", [])
+
+        if not data:
+            return HttpResponse(status=204)
+
+        return render(request, "dashboard/partials/pin_wikimedia.html", {"images": data, "query": query})
+
+    def loopnet_info(self, request: HttpRequest, pin_slug: str):
+        """
+        HTMX partial: LoopNet commercial real-estate data for the pin's address.
+
+        Requires a full street address; returns 204 when none is available or
+        when the search/scrape produces no results.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.loopnet import LoopNetGateway
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+
+        location = pin.location
+        if not location:
+            return HttpResponse(status=204)
+
+        # Build the address string; skip if we don't have at least street + city
+        parts = [
+            " ".join(filter(None, [location.street_number, location.route])),
+            location.locality or "",
+            location.administrative_area_level_1 or "",
+        ]
+        address = ", ".join(p for p in parts if p).strip(", ")
+        if not address or not location.route:
+            return HttpResponse(status=204)
+
+        cached = LocationCache.get_fresh(location, "loopnet")
+        if cached is None:
+            try:
+                result = LoopNetGateway().search(address)
+            except Exception:
+                logger.exception("LoopNet search failed for pin %s", pin_slug)
+                result = None
+            LocationCache.set(location, "loopnet", result or {}, query_key=address)
+            data = result
+        else:
+            data = cached.data or None
+
+        if not data or not data.get("listings"):
+            return HttpResponse(status=204)
+
+        return render(request, "dashboard/partials/pin_loopnet.html", {"result": data, "address": address})
+
+    def nps_info(self, request: HttpRequest, pin_slug: str):
+        """
+        HTMX partial: National Park Service information for the pin's location.
+
+        Looks for a national park whose centre is within 50 km of the pin and
+        whose data was retrieved from the NPS API.  Requires an NPS API key.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.nps.parks import NPSGateway
+
+        if not settings.nps_api_key:
+            return HttpResponse(status=204)
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+
+        location = pin.location
+        if not location:
+            return HttpResponse(status=204)
+
+        lat = pin.effective_latitude
+        lng = pin.effective_longitude
+        state_code = location.administrative_area_level_1 or ""
+        if not lat or not lng or not state_code:
+            return HttpResponse(status=204)
+
+        cached = LocationCache.get_fresh(location, "nps")
+        if cached is None:
+            try:
+                park = NPSGateway().find_park_near_location(
+                    float(lat),
+                    float(lng),
+                    state_code=state_code,
+                    location_name=pin.effective_name or "",
+                )
+            except Exception:
+                logger.exception("NPS lookup failed for pin %s", pin_slug)
+                park = None
+            LocationCache.set(location, "nps", park or {}, query_key=state_code)
+            data = park
+        else:
+            data = cached.data or None
+
+        if not data:
+            return HttpResponse(status=204)
+
+        return render(request, "dashboard/partials/pin_nps.html", {"park": data})
+
     @action(detail=False, methods=["post"])
     def import_confirmed(self, request: Request):
         """Stream SSE import progress for user-confirmed pin selections from the preview step."""
