@@ -1,10 +1,11 @@
 from __future__ import annotations
+
 import os
-import sys
 from pathlib import Path
-from dotenv import load_dotenv, find_dotenv
-from django.core.management.utils import get_random_secret_key
 import sys
+
+from django.core.management.utils import get_random_secret_key
+from dotenv import find_dotenv, load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -24,7 +25,7 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or get_random_secret_key()
 DEBUG = True
 
 # TODO: Change default
-ALLOWED_HOSTS = ['urbanlens.org', 'localhost', 'localhost:21080']
+ALLOWED_HOSTS = ["urbanlens.org", "localhost", "localhost:21080"]
 
 # Application definition
 INSTALLED_APPS = [
@@ -36,7 +37,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.postgres",
     "corsheaders",
-    'urbanlens.dashboard.apps.DashboardConfig',
+    "urbanlens.dashboard.apps.DashboardConfig",
     "social_django",
 ]
 
@@ -48,14 +49,14 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    'whitenoise.middleware.WhiteNoiseMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
 ]
 
 AUTHENTICATION_BACKENDS = [
-    'social_core.backends.google.GoogleOAuth2',
-    'social_core.backends.discord.DiscordOAuth2',
-    'django.contrib.auth.backends.ModelBackend',
+    "social_core.backends.google.GoogleOAuth2",
+    "social_core.backends.discord.DiscordOAuth2",
+    "django.contrib.auth.backends.ModelBackend",
 ]
 
 ROOT_URLCONF = "urbanlens.UrbanLens.urls"
@@ -71,10 +72,10 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-                'urbanlens.dashboard.context_processors.add_page_name',
-                'urbanlens.dashboard.context_processors.add_site_settings',
-                'urbanlens.dashboard.context_processors.add_dev_toolbar',
-                'urbanlens.dashboard.context_processors.add_feature_access',
+                "urbanlens.dashboard.context_processors.add_page_name",
+                "urbanlens.dashboard.context_processors.add_site_settings",
+                "urbanlens.dashboard.context_processors.add_dev_toolbar",
+                "urbanlens.dashboard.context_processors.add_feature_access",
             ],
         },
     },
@@ -89,11 +90,11 @@ WSGI_APPLICATION = "urbanlens.UrbanLens.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": os.getenv("UL_DB_ENGINE", "django.contrib.gis.db.backends.postgis"),
-        'NAME': os.getenv("UL_DB_NAME", 'urbanlens'),
-        'USER': os.getenv("UL_DB_USER", 'urbanlens'),
-        'PASSWORD': os.getenv("UL_DB_PASS"),
-        'HOST': os.getenv("UL_DB_HOST", 'localhost'),
-        'PORT': os.getenv("UL_DB_PORT", '5432'),
+        "NAME": os.getenv("UL_DB_NAME", "urbanlens"),
+        "USER": os.getenv("UL_DB_USER", "urbanlens"),
+        "PASSWORD": os.getenv("UL_DB_PASS"),
+        "HOST": os.getenv("UL_DB_HOST", "localhost"),
+        "PORT": os.getenv("UL_DB_PORT", "5432"),
     },
 }
 # Valkey/Redis cache. Used for per-profile map pin payloads and Django's
@@ -105,11 +106,34 @@ if VALKEY_URL:
             "BACKEND": "django.core.cache.backends.redis.RedisCache",
             "LOCATION": VALKEY_URL,
             "KEY_PREFIX": "urbanlens",
+            "VERSION": 1,
             "TIMEOUT": 300,
+            "OPTIONS": {
+                "max_connections": 50,
+                "socket_connect_timeout": 1,
+                "socket_timeout": 2,
+                "retry_on_timeout": True,
+            },
+        },
+    }
+    # Cache-backed sessions avoid per-request DB reads on every page load.
+    # cached_db writes through to the database so sessions survive a cache flush.
+    SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
+    SESSION_CACHE_ALIAS = "default"
+
+    # Django Channels layer backed by Valkey for cross-process group messaging.
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [VALKEY_URL],
+                "capacity": 1500,
+                "expiry": 60,
+            },
         },
     }
 
-DATABASE_ROUTERS = ['urbanlens.dashboard.dbrouters.DBRouter']
+DATABASE_ROUTERS = ["urbanlens.dashboard.dbrouters.DBRouter"]
 
 # Celery - background job processing. Defaults to the configured Valkey/Redis
 # endpoint when available, otherwise local Redis for development.
@@ -119,7 +143,7 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = os.getenv("UL_CELERY_TIMEZONE", "UTC")
-CELERY_TASK_ALWAYS_EAGER = os.getenv("UL_CELERY_TASK_ALWAYS_EAGER", "False").lower() in ("true", "1", "yes")
+CELERY_TASK_ALWAYS_EAGER = os.getenv("UL_CELERY_TASK_ALWAYS_EAGER", "False").lower() in {"true", "1", "yes"}
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_SEND_SENT_EVENT = True
 CELERY_TASK_ACKS_LATE = True
@@ -128,7 +152,7 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("UL_CELERY_TASK_SOFT_TIME_LIMIT", "2700"))
 CELERY_TASK_TIME_LIMIT = int(os.getenv("UL_CELERY_TASK_TIME_LIMIT", "3600"))
 # Backup defaults. Site admins can override these values in the database-backed settings UI.
-UL_BACKUP_ENABLED = os.getenv("UL_BACKUP_ENABLED", "True").lower() in ("true", "1", "yes")
+UL_BACKUP_ENABLED = os.getenv("UL_BACKUP_ENABLED", "True").lower() in {"true", "1", "yes"}
 UL_BACKUP_FREQUENCY_HOURS = int(os.getenv("UL_BACKUP_FREQUENCY_HOURS", "24"))
 UL_BACKUP_RETENTION = int(os.getenv("UL_BACKUP_RETENTION", "30"))
 
@@ -176,7 +200,7 @@ STATIC_ROOT = os.path.join(PROJECT_ROOT, "frontend", "static")
 STATICFILES_DIRS = [
     os.path.join(PROJECT_ROOT, "dashboard/frontend/static"),
 ]
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(PROJECT_ROOT, "media")
@@ -189,33 +213,33 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Test clients issue HTTP requests. Django's DiscoverRunner disables HTTPS
 # redirects in setup_test_environment(), but pytest-django imports settings
 # directly and does not run that project test runner hook.
-TESTING = os.getenv("DJANGO_TESTING", "False").lower() in ("true", "1", "yes") or any(
+TESTING = os.getenv("DJANGO_TESTING", "False").lower() in {"true", "1", "yes"} or any(
     arg.endswith("pytest") or "pytest" in arg for arg in sys.argv
 )
 
 # Reject plain HTTP unless UL_UNSAFE_ALLOW_HTTP is enabled (local dev only).
-UNSAFE_ALLOW_HTTP = os.getenv("UL_UNSAFE_ALLOW_HTTP", "False").lower() in ("true", "1", "yes")
+UNSAFE_ALLOW_HTTP = os.getenv("UL_UNSAFE_ALLOW_HTTP", "False").lower() in {"true", "1", "yes"}
 SECURE_SSL_REDIRECT = not UNSAFE_ALLOW_HTTP and not TESTING
 # Internal container health checks hit /health over HTTP on the app port.
 SECURE_REDIRECT_EXEMPT = [r"^health"]
 
 # TODO: Change domains default
-protocols = ['https://']
-domains = ['urbanlens.org', 'localhost', 'localhost:21080']
-subdomains = ['www.', '']
+protocols = ["https://"]
+domains = ["urbanlens.org", "localhost", "localhost:21080"]
+subdomains = ["www.", ""]
 if UNSAFE_ALLOW_HTTP:
-    protocols.append('http://')
+    protocols.append("http://")
 
 # Trust the X-Forwarded-Proto header set by Nginx so Django builds https:// URLs
 # when sitting behind a reverse proxy that terminates SSL.
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 
 
 CORS_ALLOWED_ORIGINS = [
-    f'{protocol}{subdomain}{domain}'
-    for protocol in protocols 
-    for subdomain in subdomains 
+    f"{protocol}{subdomain}{domain}"
+    for protocol in protocols
+    for subdomain in subdomains
     for domain in domains
 ]
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
@@ -278,4 +302,18 @@ GOOGLE_SEARCH_TENANT = os.getenv("UL_GOOGLE_SEARCH_CX") or os.getenv("UL_GOOGLE_
 OPEN_WEATHER_API_KEY = os.getenv("UL_OPENWEATHERMAP_API_KEY", "")
 NPS_API_KEY = os.getenv("UL_NPS_API_KEY", "")
 
-TEST_RUNNER = 'urbanlens.core.tests.runner.TestRunner'
+TEST_RUNNER = "urbanlens.core.tests.runner.TestRunner"
+
+# DRF global throttle limits — authenticated users get generous burst/day limits;
+# anonymous requests (e.g. public API endpoints) are tightly constrained.
+# Requires Valkey cache to be configured — no-ops gracefully when cache is absent.
+REST_FRAMEWORK = {
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "60/minute",
+        "user": "600/minute",
+    },
+}

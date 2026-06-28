@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 import json
 import logging
@@ -142,15 +143,16 @@ class MapPinCache:
         if not self.client or not self.profile_id:
             return
         try:
-            if not (_queued := self.client.set(self.rebuild_queued_key, "1", nx=True, ex=self.LOCK_SECONDS)):
+            if not self.client.set(self.rebuild_queued_key, "1", nx=True, ex=self.LOCK_SECONDS):
                 return
-            
             result = safely_enqueue_task(rebuild_map_pin_cache, self.profile_id)
             if result is None:
-                self.client.delete(self.rebuild_queued_key)
+                with contextlib.suppress(RedisError):
+                    self.client.delete(self.rebuild_queued_key)
         except RedisError:
             logger.warning("Unable to enqueue map pin cache rebuild for profile %s", self.profile_id, exc_info=True)
-            self.client.delete(self.rebuild_queued_key)
+            with contextlib.suppress(RedisError):
+                self.client.delete(self.rebuild_queued_key)
 
     def get_page(self, *, cursor: int | None, limit: int | None, include_total: bool) -> MapPinPage | None:
         if not self.client or not self.client.exists(self.meta_key):
@@ -217,18 +219,34 @@ class MapPinCache:
             self.delete_pin(pin.pk)
             return
         payload = json.dumps(pins[0], separators=(",", ":"))
-        self.client.hset(self.pins_key, str(pin.pk), payload)
-        self.client.zadd(self.order_key, {str(pin.pk): int(pin.pk)})
-        self.client.hset(self.meta_key, mapping={"cached_at": int(time.time()), "total": self.client.zcard(self.order_key)})
-        self._touch()
+        pin_id_str = str(pin.pk)
+        with self.client.pipeline(transaction=False) as pipe:
+            pipe.hset(self.pins_key, pin_id_str, payload)
+            pipe.zadd(self.order_key, {pin_id_str: int(pin.pk)})
+            pipe.execute()
+        total = self.client.zcard(self.order_key)
+        with self.client.pipeline(transaction=False) as pipe:
+            pipe.hset(self.meta_key, mapping={"cached_at": int(time.time()), "total": total})
+            pipe.expire(self.meta_key, self.TTL_SECONDS)
+            pipe.expire(self.pins_key, self.TTL_SECONDS)
+            pipe.expire(self.order_key, self.TTL_SECONDS)
+            pipe.execute()
 
     def delete_pin(self, pin_id: int) -> None:
         if not self.client or not self.client.exists(self.meta_key):
             return
-        self.client.hdel(self.pins_key, str(pin_id))
-        self.client.zrem(self.order_key, str(pin_id))
-        self.client.hset(self.meta_key, mapping={"cached_at": int(time.time()), "total": self.client.zcard(self.order_key)})
-        self._touch()
+        pin_id_str = str(pin_id)
+        with self.client.pipeline(transaction=False) as pipe:
+            pipe.hdel(self.pins_key, pin_id_str)
+            pipe.zrem(self.order_key, pin_id_str)
+            pipe.execute()
+        total = self.client.zcard(self.order_key)
+        with self.client.pipeline(transaction=False) as pipe:
+            pipe.hset(self.meta_key, mapping={"cached_at": int(time.time()), "total": total})
+            pipe.expire(self.meta_key, self.TTL_SECONDS)
+            pipe.expire(self.pins_key, self.TTL_SECONDS)
+            pipe.expire(self.order_key, self.TTL_SECONDS)
+            pipe.execute()
 
     def clear(self) -> None:
         if self.client:

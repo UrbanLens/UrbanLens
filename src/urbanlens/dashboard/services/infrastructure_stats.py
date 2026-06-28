@@ -150,14 +150,32 @@ def _valkey_metrics(client: redis.Redis) -> tuple[ServiceMetric, ...]:
     """Build labeled Valkey metrics from a connected client."""
     info = client.info()
     uptime_seconds = int(info.get("uptime_in_seconds", 0))
-    server_version = str(info.get("redis_version") or info.get("valkey_version") or "Unknown")
-    return (
+    # Valkey reports its version under "valkey_version"; Redis uses "redis_version".
+    server_version = str(info.get("valkey_version") or info.get("redis_version") or "Unknown")
+
+    hits = int(info.get("keyspace_hits", 0))
+    misses = int(info.get("keyspace_misses", 0))
+    total_ops = hits + misses
+    hit_rate = f"{hits / total_ops * 100:.1f}%" if total_ops else "n/a"
+
+    evictions = int(info.get("evicted_keys", 0))
+
+    maxmemory_bytes = int(info.get("maxmemory", 0))
+    maxmemory_label = info.get("maxmemory_human") or ("unlimited" if maxmemory_bytes == 0 else str(maxmemory_bytes))
+
+    metrics: list[ServiceMetric] = [
         ServiceMetric("Version", server_version),
         ServiceMetric("Uptime", _format_duration(uptime_seconds)),
-        ServiceMetric("Memory", str(info.get("used_memory_human", "Unknown"))),
+        ServiceMetric("Memory Used", str(info.get("used_memory_human", "Unknown"))),
+        ServiceMetric("Memory Peak", str(info.get("used_memory_peak_human", "Unknown"))),
+        ServiceMetric("Memory Limit", maxmemory_label),
         ServiceMetric("Clients", str(info.get("connected_clients", "Unknown"))),
         ServiceMetric("Keys", str(client.dbsize())),
-    )
+        ServiceMetric("Hit Rate", hit_rate),
+    ]
+    if evictions:
+        metrics.append(ServiceMetric("Evictions", str(evictions)))
+    return tuple(metrics)
 
 
 def collect_valkey_stats() -> InfrastructureServiceStat:
@@ -180,6 +198,7 @@ def collect_valkey_stats() -> InfrastructureServiceStat:
             ),
         )
 
+    client: redis.Redis | None = None
     try:
         client = redis.Redis.from_url(
             url,
@@ -206,6 +225,10 @@ def collect_valkey_stats() -> InfrastructureServiceStat:
             status_label="Connection error",
             metrics=(),
         )
+    finally:
+        if client is not None:
+            with contextlib.suppress(Exception):
+                client.close()
 
 
 _CELERY_STATS_CACHE_KEY = "dashboard:infra:celery_stats"

@@ -24,6 +24,7 @@ whitenoise
 sqlalchemy
 redis
 channels
+channels_redis
 rich
 psycopg2-binary
 django-picklefield

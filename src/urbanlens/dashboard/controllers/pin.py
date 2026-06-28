@@ -11,6 +11,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 from rest_framework.viewsets import GenericViewSet
 
+from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
@@ -250,7 +251,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not pin.meaningful_name:
             return HttpResponse("", status=204)
 
-        cache_key = f"web_search_pin_{pin.pk}"
+        cache_key = make_cache_key("web_search_pin", str(pin.pk))
         site_settings = SiteSettings.get_current()
         cache_hours = site_settings.search_cache_hours
 
@@ -322,7 +323,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return render(request, "dashboard/pages/location/street_view.html", {"error": "No coordinates available."})
 
         thirty_days = 30 * 24 * 3600
-        cache_key = f"street_view_{float(lat):.6f}_{float(lng):.6f}"
+        cache_key = make_cache_key("street_view", f"{float(lat):.6f}", f"{float(lng):.6f}")
         cached = cache.get(cache_key)
         if cached is not None:
             image_b64, capture_date = cached

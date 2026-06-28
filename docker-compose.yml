@@ -215,7 +215,7 @@ services:
     image: valkey/valkey:7-alpine
     user: nobody
     restart: unless-stopped
-    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory-policy", "allkeys-lru"]
+    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
     networks:
       app_network:
         aliases:

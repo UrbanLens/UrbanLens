@@ -236,6 +236,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
 
     from django.core.cache import cache
 
+    from urbanlens.core.cache_keys import make_cache_key
     from urbanlens.dashboard.models.pin import Pin
     from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.services.search import build_pin_search_query, format_search_date, get_search_gateway
@@ -253,7 +254,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
         result["date_display"] = format_search_date(result.get("date"))
     cache_hours = SiteSettings.get_current().search_cache_hours
     if cache_hours > 0:
-        cache.set(f"web_search_pin_{pin.pk}", results, cache_hours * 3600)
+        cache.set(make_cache_key("web_search_pin", str(pin.pk)), results, cache_hours * 3600)
     update_task_progress(self, current=1, total=1, message="Web search refreshed")
     return len(results)
 
