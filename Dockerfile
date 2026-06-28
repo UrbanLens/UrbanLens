@@ -29,19 +29,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     NODE_ENV=${ENVIRONMENT} \
     PYTHONPATH=/app/src
 
-# Dependencies for building packages
+# Dependencies for building packages (PGDG client matches postgis/postgis server versions)
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
+    apt-get install -y --no-install-recommends ca-certificates curl gcc pkg-config gnupg && \
+    install -d /usr/share/postgresql-common/pgdg && \
+    curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc && \
+    . /etc/os-release && \
+    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
-    curl gcc vim pkg-config \
     build-essential \
     unzip \
-    postgresql-client \
+    postgresql-client-17 \
     git \
     gh \
     iputils-ping \
     libgdal-dev \
     wget \
     gosu && \
+    pg_dump --version && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

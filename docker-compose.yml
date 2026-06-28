@@ -24,6 +24,7 @@ services:
       - logs:/var/log
       - static_volume:/app/src/urbanlens/frontend/static
       - media_volume:/app/src/urbanlens/media
+      - backups:/app/src/backups
 
     ports:
       - "${URBANLENS_PORT:-21800}:8000"
@@ -139,6 +140,7 @@ services:
     volumes:
       - logs:/var/log
       - media_volume:/app/src/urbanlens/media
+      - backups:/app/src/backups
     networks:
       - app_network
     environment:
@@ -234,6 +236,7 @@ volumes:
   logs:
   static_volume:
   media_volume:
+  backups:
 
 networks:
   app_network:

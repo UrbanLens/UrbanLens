@@ -242,6 +242,7 @@
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .09);
     transition: opacity 0.2s ease, box-shadow 0.2s ease;
+    border: 1px solid var(--ul-grey-3);
 
     &:hover {
         opacity: 1;

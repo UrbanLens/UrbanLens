@@ -66,13 +66,15 @@ class DatabaseBackup:
         db_host = db.get("HOST") or "localhost"
         db_port = str(db.get("PORT") or 5432)
         db_name = db.get("NAME")
+        db_password = db.get("PASSWORD")
 
         if not db_user or not db_name:
             raise RuntimeError("Database USER and NAME must be configured for backups.")
 
-        pg_dump = which("pg_dump")
+        pg_dump_name = os.environ.get("UL_PG_DUMP_BIN", "pg_dump")
+        pg_dump = which(pg_dump_name)
         if pg_dump is None:
-            raise FileNotFoundError("pg_dump executable not found on PATH")
+            raise FileNotFoundError(f"{pg_dump_name} executable not found on PATH")
 
         pg_dump_command = [
             str(Path(pg_dump).resolve()),
@@ -82,13 +84,18 @@ class DatabaseBackup:
             db_host,
             "-p",
             db_port,
+            "-w",
             db_name,
             "-f",
             os.path.join(self.backup_dir, backup_filename),
         ]
 
+        env = os.environ.copy()
+        if db_password:
+            env["PGPASSWORD"] = str(db_password)
+
         try:
-            subprocess.run(pg_dump_command, check=True)  # nosec B603
+            subprocess.run(pg_dump_command, check=True, env=env)  # nosec B603
             logger.info("Backup completed successfully: %s", backup_filename)
             self.purge_old_backups()
         except subprocess.CalledProcessError as e:
