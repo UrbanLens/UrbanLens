@@ -9,10 +9,6 @@ RUN mkdir -p /var/log/urbanlens
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    LANG=en_US.UTF-8 \
-    LANGUAGE=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8 \
-    LC_CTYPE=en_US.UTF-8 \
     PYTHONPATH=/app/src
 
 # Install system dependencies and PostgreSQL 17 client from PGDG.
@@ -41,6 +37,12 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
     pg_dump --version && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Now safe to set globally, since the locale exists on disk
+ENV LANG=en_US.UTF-8 \
+LANGUAGE=en_US.UTF-8 \
+LC_ALL=en_US.UTF-8 \
+LC_CTYPE=en_US.UTF-8
 
 # Install Bun (JS runtime + package manager) via the official Docker image.
 # This avoids the curl-to-bash NVM install and gives a reproducible binary.
