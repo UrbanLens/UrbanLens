@@ -20,7 +20,6 @@ Features planned for this release.
 * On map filtering sidebar, better indicators when filters are active vs inactive, especially when sidebar is closed.
 * Consider: map filtering sidebar, date pinned starts closed. (Abstract this a bit into "less important panels" to close appropriate ones based on screen height.)
 * Consider: handle temporary markers when a user pin exists on that exact point.
-* Organize page: rename "Priority" to "Display" or "Order". Priority is too close to the pin priority property, which could cause confusion. 
 
 ## Medium Features
 
@@ -50,39 +49,8 @@ Features planned for this release.
 * When clearing a formula, it doesn't trigger a pin refresh.
 * Quickly switching between map layers sometimes is weird. Foggy sat view, etc. (Foggy may have just been loading indicator??)
 * After going to a suggested jump to point, clicking the temporary marker to create a pin, and submitting, the new pin doesn't show up on the map without a refresh. (maybe this was due to latency, which is a separate TODO item?)
-* BUG: On pin detail popup on the main map, edit and delete buttons overlap
 * Pin details page: Plus buttons don't look good again.
 * On main map, we need confirmation before allowing deleting a pin.
-* Organize page: When clicking edit on a status, I get: htmx.org@1.9.11:1  GET https://urbanlens.org/dashboard/status/2/edit/ 500 (Internal Server Error)
-he @ htmx.org@1.9.11:1
-(anonymous) @ htmx.org@1.9.11:1
-i @ htmx.org@1.9.11:1
-htmx.org@1.9.11:1 Response Status Error Code 500 from /dashboard/status/2/edit/
-Logs: urbanlens_app            |     return self.nodelist.render(context)
-urbanlens_app            |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urbanlens_app            |   File "/usr/local/lib/python3.12/site-packages/django/template/base.py", line 1018, in render
-urbanlens_app            |     return SafeString("".join([node.render_annotated(context) for node in self]))
-urbanlens_app            |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urbanlens_app            |   File "/usr/local/lib/python3.12/site-packages/django/template/base.py", line 979, in render_annotated
-urbanlens_app            |     return self.render(context)
-urbanlens_app            |            ^^^^^^^^^^^^^^^^^^^^
-urbanlens_app            |   File "/usr/local/lib/python3.12/site-packages/django/template/defaulttags.py", line 548, in render
-urbanlens_app            |     values = {key: val.resolve(context) for key, val in self.extra_context.items()}
-urbanlens_app            |                    ^^^^^^^^^^^^^^^^^^^^
-urbanlens_app            |   File "/usr/local/lib/python3.12/site-packages/django/template/base.py", line 723, in resolve
-urbanlens_app            |     obj = self.var.resolve(context)
-urbanlens_app            |           ^^^^^^^^^^^^^^^^^^^^^^^^^
-urbanlens_app            |   File "/usr/local/lib/python3.12/site-packages/django/template/base.py", line 856, in resolve
-urbanlens_app            |     value = self._resolve_lookup(context)
-urbanlens_app            |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urbanlens_app            |   File "/usr/local/lib/python3.12/site-packages/django/template/base.py", line 903, in _resolve_lookup
-urbanlens_app            |     current = getattr(current, bit)
-urbanlens_app            |               ^^^^^^^^^^^^^^^^^^^^^
-urbanlens_app            |   File "/usr/local/lib/python3.12/site-packages/django/db/models/fields/files.py", line 69, in url
-urbanlens_app            |     self._require_file()
-urbanlens_app            |   File "/usr/local/lib/python3.12/site-packages/django/db/models/fields/files.py", line 44, in _require_file
-urbanlens_app            |     raise ValueError(
-urbanlens_app            | ValueError: The 'custom_icon' attribute has no file associated with it.
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". 

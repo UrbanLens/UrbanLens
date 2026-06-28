@@ -2457,9 +2457,15 @@
     });
     L.Marker.prototype.options.icon = newIcon;
 
-    function deletePin(button) {
+    async function deletePin(button) {
         const popup = button.closest('.pin-popup');
         const pinUuid = popup.dataset.uuid;
+        const pinName = popup.querySelector('.popup-title')?.textContent?.trim() || 'this pin';
+        if (!await confirmDialog({
+            title: 'Delete Pin',
+            message: `Delete "${pinName}"?\n\nThis cannot be undone.`,
+            confirmLabel: 'Delete',
+        })) return;
         fetch(`/dashboard/rest/pins/${pinUuid}/`, {
             method: 'DELETE',
             headers: { 'X-CSRFToken': '{{ csrf_token }}' },
