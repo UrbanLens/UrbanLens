@@ -20,7 +20,7 @@
 }
 
 .ul-card-header {
-	@include panel-header($bg: var(--ul-grey-1));
+	@include panel-header($bg: var(--ul-surface-header-bg));
 	color: var(--ul-grey-8);
 
 	.material-icons {
@@ -43,7 +43,7 @@
 .ul-card-footer {
 	padding: $bar-padding-y $bar-padding-x;
 	border-top: 1px solid var(--ul-border);
-	background: var(--ul-grey-1);
+	background: var(--ul-surface-header-bg);
 }
 
 // ── Global dialog utility classes ─────────────────────────────────────────────
@@ -113,7 +113,7 @@
 
 	// Tinted header background is specific to the .ul-dialog shell.
 	.dialog-header {
-		background-color: var(--ul-grey-2);
+		background-color: var(--ul-surface-header-bg);
 	}
 }
 
@@ -147,7 +147,7 @@
 }
 
 .ul-panel-header {
-	@include panel-header($font-size: .9rem, $bg: var(--ul-grey-1));
+	@include panel-header($font-size: .9rem, $bg: var(--ul-surface-header-bg));
 	color: var(--ul-grey-8);
 
 	i,
@@ -180,7 +180,7 @@
 	gap: $space-sm;
 	padding: .6rem $space-md;
 	border-top: 1px solid var(--ul-border);
-	background: var(--ul-grey-1);
+	background: var(--ul-surface-header-bg);
 	font-size: .82rem;
 	color: var(--ul-grey-7);
 	text-decoration: none;
@@ -425,7 +425,7 @@
 		transition: background .12s, border-color .12s;
 
 		&:hover {
-			background: var(--ul-grey-1);
+			background: var(--ul-surface-header-bg);
 			border-color: var(--ul-border-strong);
 		}
 	}

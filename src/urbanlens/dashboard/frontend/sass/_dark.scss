@@ -1547,3 +1547,53 @@
         background: color-mix(in srgb, $ui-red-500 14%, var(--ul-grey-1));
     }
 }
+// Theme-level refinements for shared surfaces and controls. These catch legacy
+// pages that still use raw element selectors while newer components consume the
+// semantic tokens directly.
+[data-theme="dark"] {
+    input[type=text],
+    input[type=password],
+    input[type=number],
+    input[type=email],
+    input[type=url],
+    input[type=time],
+    input[type=date],
+    input[type=datetime],
+    input[type=datetime-local],
+    input[type=tel],
+    input[type=search],
+    textarea,
+    select {
+        background-color: var(--ul-control-bg);
+        border-color: var(--ul-control-border);
+        color: var(--ul-grey-8);
+    }
+
+    .ul-section,
+    .ul-card,
+    .ul-panel,
+    .ul-surface,
+    .dialog,
+    .ul-dialog,
+    .confirm-dialog {
+        background-color: var(--ul-surface-bg);
+        border-color: var(--ul-border);
+    }
+
+    .dialog-header,
+    .ul-card-header,
+    .ul-card-footer,
+    .ul-panel-header,
+    .ul-panel-footer,
+    .ul-dialog-footer,
+    .dialog-footer {
+        background-color: var(--ul-surface-header-bg);
+        border-color: var(--ul-border);
+    }
+
+    .btn--ghost,
+    .btn--link,
+    .ul-radio-button {
+        border-color: var(--ul-border);
+    }
+}
