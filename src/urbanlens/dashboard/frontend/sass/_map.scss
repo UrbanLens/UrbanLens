@@ -605,7 +605,7 @@
 // ── Add-Pin dialog ─────────────────────────────────────────────────────────
 
 .add-pin-dialog {
-    @include dialog-base(520px);
+    @include dialog-base(46em);
     // Full-viewport-aware height: keeps the dialog clear of mobile browser chrome
     max-height: calc(100dvh - 4rem);
     // Lighter backdrop - the map behind it should remain partially visible
@@ -1386,6 +1386,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
+.addr-search-home,
 .addr-search-clear {
     background: none;
     border: none;
@@ -1393,14 +1394,11 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     cursor: pointer;
     padding: 3px;
     border-radius: 50%;
-    display: none; // Hidden by default; shown via .addr-search-clear--visible
+    display: flex;
     align-items: center;
+    justify-content: center;
     transition: color .15s, background .15s;
     flex-shrink: 0;
-
-    &.addr-search-clear--visible {
-        display: flex;
-    }
 
     &:hover {
         color: var(--ul-grey-8);
@@ -1409,6 +1407,22 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 
     .material-icons {
         font-size: .9rem;
+    }
+}
+
+.addr-search-home {
+    padding: 2px;
+
+    .material-icons {
+        font-size: .82rem;
+    }
+}
+
+.addr-search-clear {
+    display: none; // Hidden by default; shown via .addr-search-clear--visible
+
+    &.addr-search-clear--visible {
+        display: flex;
     }
 }
 
@@ -1770,6 +1784,32 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 
 #pin-load-overlay.hidden {
     display: none !important;
+}
+
+/* ── Filter refresh overlay (sidebar open + HTMX pin refresh) ─────── */
+#filter-refresh-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 800;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.1);
+    transition: opacity 0.2s ease;
+
+    &[hidden] {
+        display: none !important;
+    }
+}
+
+#map.filter-open #filter-refresh-overlay {
+    right: 272px;
+
+    @include down($breakpoint-sm) {
+        right: 0;
+        bottom: 80dvh;
+    }
 }
 
 .plo-card {
@@ -2727,6 +2767,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 .map-toolbar-collapse,
 .map-layer-btn,
 .map-layers-toggle,
+.addr-search-home,
 .addr-search-clear,
 .leaflet-control-zoom a,
 .leaflet-control-attribution a,

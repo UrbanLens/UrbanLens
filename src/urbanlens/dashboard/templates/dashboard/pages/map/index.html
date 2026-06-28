@@ -21,24 +21,24 @@
         </button>
         <div class="map-buttons-content">
             <button id="add-pin-button" class="map-btn-icon"
-                    data-tooltip="Drop a new pin on the map (A)" data-tooltip-float="true"
+                    data-tooltip="Drop a new pin on the map" data-tooltip-float="true"
                     aria-label="Add pin"
                     onclick="openAddPinDialog()">
                 <i class="material-icons">add_location</i>
+            </button>
+            <button id="import-pins-button" class="map-btn-icon"
+                    data-tooltip="Import pins from Google Takeout" data-tooltip-float="true"
+                    data-tooltip-pos="below"
+                    aria-label="Import pins"
+                    hx-get="{% url 'pin.import.form' %}" hx-target="#importPinsModal" hx-swap="innerHTML">
+                <i class="material-icons">upload</i>
             </button>
             <button id="search-pins-button" class="map-btn-icon"
                     data-tooltip="Filter pins by name, rating, visits, badges, and more (F)" data-tooltip-float="true"
                     data-tooltip-pos="below"
                     aria-label="Filter and search pins"
                     onclick="toggleFilterPanel()">
-                <i class="material-icons">manage_search</i>
-            </button>
-            <button id="import-pins-button" class="map-btn-icon"
-                    data-tooltip="Import pins from Google Takeout (I)" data-tooltip-float="true"
-                    data-tooltip-pos="below"
-                    aria-label="Import pins"
-                    hx-get="{% url 'pin.import.form' %}" hx-target="#importPinsModal" hx-swap="innerHTML">
-                <i class="material-icons">upload</i>
+                <i class="material-icons">search</i>
             </button>
         </div>
     </div>
@@ -54,6 +54,13 @@
         </button>
         {# Menu flies out to the right. Tile thumbnails from Swiss Alps at z12 (good visual variety). #}
         <div class="map-layers-menu" id="map-layers-menu" hidden>
+            <button id="street-button" class="map-layer-btn"
+                    onclick="toggleStreetView(); _closeLayersPanel();" aria-label="Street view">
+                <span class="map-layer-thumb">
+                    <img src="{% static 'dashboard/images/map_layer_street.png' %}" alt="" loading="lazy">
+                </span>
+                <span>Street</span>
+            </button>
             <button id="topography-button" class="map-layer-btn"
                     onclick="toggleTopographyView(); _closeLayersPanel();" aria-label="Topographic view">
                 <span class="map-layer-thumb">
@@ -97,6 +104,11 @@
         <i class="material-icons addr-search-icon">place</i>
         <input type="text" id="address-search-input" placeholder="Jump to a place…"
                autocomplete="off" onkeydown="if(event.key==='Enter'){geocodeAddress();event.preventDefault();}">
+        <button type="button" class="addr-search-home" id="addr-search-home"
+                aria-label="Go to my location"
+                onclick="recenterToUserLocation()">
+            <i class="material-icons">home</i>
+        </button>
         <button type="button" class="addr-search-clear" id="addr-search-clear"
                 aria-label="Clear search"
                 onclick="clearAddrSearch()">
@@ -297,6 +309,14 @@
         </div>
     </div>
 
+    {# Map-area overlay while filter sidebar is open and pins are refreshing. #}
+    <div id="filter-refresh-overlay" aria-hidden="true" hidden>
+        <div class="plo-card">
+            <div class="plo-spinner"></div>
+            <span class="plo-text">Updating map…</span>
+        </div>
+    </div>
+
     <div id="loading-pins-message" aria-hidden="true" style="display:none"></div>
 
     {% if show_pin_count or show_filtered_pin_count %}
@@ -395,7 +415,6 @@
 
     </div>
     <div class="apdlg-footer">
-        <span class="apdlg-click-hint" id="apdlg-click-hint">Click map to set location</span>
         <button type="button" class="btn btn--ghost" onclick="closeAddPinDialog()">Cancel</button>
         <button type="button" class="btn btn--primary" id="apdlg-submit">Add Pin</button>
     </div>
@@ -1028,7 +1047,7 @@
         },
         {
             id: 'search-filters',
-            icon: 'manage_search',
+            icon: 'search',
             eyebrow: 'Find things faster',
             title: 'Filter by rating, visits, badges, and more',
             body: 'Search & Filter keeps your map tidy as your collection grows.',
@@ -1408,10 +1427,8 @@
 
         if (baseView === 'satellite') {
             satelliteLayer.addTo(map);
-            document.querySelector('#satellite-button')?.classList.add('active');
         } else if (baseView === 'topographic') {
             topographyLayer.addTo(map);
-            document.querySelector('#topography-button')?.classList.add('active');
         }
 
         if (weatherOn) {
@@ -1419,6 +1436,8 @@
             cloudLayer.addTo(map);
             document.querySelector('#weather-button')?.classList.add('active');
         }
+
+        _syncBaseViewButtons();
     }());
 
     // ── Tile loading visual feedback ──────────────────────────────────────────
@@ -1764,14 +1783,27 @@
         } catch (_) {}
     }
 
+    function _syncBaseViewButtons() {
+        const streetActive = !map.hasLayer(satelliteLayer) && !map.hasLayer(topographyLayer);
+        document.querySelector('#street-button')?.classList.toggle('active', streetActive);
+        document.querySelector('#topography-button')?.classList.toggle('active', map.hasLayer(topographyLayer));
+        document.querySelector('#satellite-button')?.classList.toggle('active', map.hasLayer(satelliteLayer));
+    }
+
+    function toggleStreetView() {
+        if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
+        if (map.hasLayer(topographyLayer)) map.removeLayer(topographyLayer);
+        _syncBaseViewButtons();
+        _saveLayerState();
+    }
+
     function toggleTopographyView() {
         // Satellite and topography are mutually exclusive
         if (map.hasLayer(satelliteLayer)) {
             map.removeLayer(satelliteLayer);
-            document.querySelector('#satellite-button').classList.remove('active');
         }
         toggleMapView(topographyLayer);
-        document.querySelector('#topography-button').classList.toggle('active', map.hasLayer(topographyLayer));
+        _syncBaseViewButtons();
         _saveLayerState();
     }
 
@@ -1779,10 +1811,9 @@
         // Satellite and topography are mutually exclusive
         if (map.hasLayer(topographyLayer)) {
             map.removeLayer(topographyLayer);
-            document.querySelector('#topography-button').classList.remove('active');
         }
         toggleMapView(satelliteLayer);
-        document.querySelector('#satellite-button').classList.toggle('active', map.hasLayer(satelliteLayer));
+        _syncBaseViewButtons();
         _saveLayerState();
     }
 
@@ -1910,10 +1941,13 @@
         if (e.metaKey || e.ctrlKey) return;
 
         switch (key) {
-            case 'a': openAddPinDialog(); break;                     // A — Add pin
             case 'f': toggleFilterPanel(); break;                    // F — Filter
             case 'p': togglePins(); break;                           // P — Toggle pins
             case 'l': _toggleLayersPanel(); break;                   // L — Layers
+            case 's': toggleSatelliteView(); break;                  // S — Satellite view
+            case 't': toggleTopographyView(); break;                 // T — Topography view
+            case 'w': toggleWeatherView(); break;                    // W — Weather view
+            case 'd': toggleDarkMode(); break;                       // D — Dark mode
             case 'escape':
                 if (document.getElementById('filter-panel')?.classList.contains('open')) {
                     toggleFilterPanel();
@@ -2030,14 +2064,34 @@
         radio.dataset.wasChecked = 'false';
     }, true);
 
+    // ── Filter refresh loading overlay (sidebar open only) ───────────────────
+    let _filterRefreshPending = false;
+    function _showFilterRefreshOverlay() {
+        const panel = document.getElementById('filter-panel');
+        const overlay = document.getElementById('filter-refresh-overlay');
+        if (!panel?.classList.contains('open') || !overlay) return;
+        overlay.hidden = false;
+        _filterRefreshPending = true;
+    }
+    function _hideFilterRefreshOverlay() {
+        if (!_filterRefreshPending) return;
+        const overlay = document.getElementById('filter-refresh-overlay');
+        if (overlay) overlay.hidden = true;
+        _filterRefreshPending = false;
+    }
+
     // ── Skip server round-trip when no filters are active ────────────────────
     document.getElementById('filter-form').addEventListener('htmx:beforeRequest', function (e) {
         if (!_hasActiveFilters()) {
             e.preventDefault();
             _exitFilterMode();
             document.getElementById('search-pins-button').classList.remove('has-filters');
+            return;
         }
+        _showFilterRefreshOverlay();
     });
+    document.getElementById('filter-form').addEventListener('htmx:afterRequest', _hideFilterRefreshOverlay);
+    document.getElementById('filter-form').addEventListener('htmx:responseError', _hideFilterRefreshOverlay);
 
     // ── Auto-expand filter accordion sections based on screen height ─────────
     // Expand all sections on tall screens, fewer on short screens
@@ -2153,6 +2207,19 @@
 
     // ── Floating address search bar ────────────────────────────────────────
     let _addrBarTimer = null;
+
+    function recenterToUserLocation() {
+        if (!navigator.geolocation) {
+            toastr.warning('Geolocation is not supported by your browser.');
+            return;
+        }
+        document.getElementById('addr-search-suggestions').hidden = true;
+        navigator.geolocation.getCurrentPosition(
+            (pos) => { map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom); },
+            () => { toastr.warning('Could not get your location. Check permissions.'); },
+            { timeout: 8000, maximumAge: 60000 },
+        );
+    }
 
     function geocodeAddress() {
         const input = document.getElementById('address-search-input');

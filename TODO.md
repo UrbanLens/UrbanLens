@@ -82,6 +82,7 @@ Features planned for this release.
 * Password reset should go to application page, not django password reset page. [UL-256]
 * Password reset should work elegantly with SSO users. [UL-257]
 * Celery / async tasks: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure [UL-119]
+* In tools page, do only admins have access to the db backup tool? I guess we should probably move that to an admin-only page to be certain. (also, page width is wrong).
 
 # Future Features
 Features planned for future releases.
