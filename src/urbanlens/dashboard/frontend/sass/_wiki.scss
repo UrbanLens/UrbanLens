@@ -17,7 +17,7 @@
         background: linear-gradient(135deg, $ui-cyan-700 0%, $ui-cyan-600 50%, $ui-cyan-500 100%);
         border-radius: 16px;
         padding: 1.75rem 2rem;
-        color: var(--ul-grey-5);
+        color: var(--ul-grey-9);
         margin-bottom: 1.5rem;
         flex-wrap: wrap;
     }
@@ -66,6 +66,7 @@
         align-items: flex-start;
         gap: .5rem;
         background: rgba(255, 255, 255, .15);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 10px;
         padding: .65rem 1rem;
         font-size: .83rem;
@@ -92,26 +93,8 @@
     }
 
     .wiki-back-link {
-        display: inline-flex;
-        align-items: center;
-        gap: .35rem;
-        background: rgba(255, 255, 255, .2);
-        border: 1px solid rgba(255, 255, 255, .4);
-        border-radius: 8px;
-        padding: .45rem .9rem;
-        font-size: .85rem;
-        font-weight: 500;
-        color: var(--ul-grey-5);
-        text-decoration: none;
-        transition: background .15s;
-
-        .material-icons {
-            font-size: 1rem;
-        }
-
-        &:hover {
-            background: rgba(255, 255, 255, .3);
-        }
+        border-color: transparent;
+        color: var(--ul-grey-9);
     }
 
     .wiki-meta {
@@ -216,30 +199,6 @@
             font-weight: 600;
             flex: 1;
             color: $ui-slate-900;
-        }
-    }
-
-    .wiki-edit-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: .35rem;
-        padding: .45rem .9rem;
-        border: 1px solid rgba(255, 255, 255, .5);
-        border-radius: 8px;
-        background: rgba(255, 255, 255, .15);
-        color: var(--ul-grey-4);
-        font-size: .85rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background .15s, border-color .15s;
-
-        .material-icons {
-            font-size: 1rem;
-        }
-
-        &:hover {
-            background: rgba(255, 255, 255, .28);
-            border-color: rgba(255, 255, 255, .7);
         }
     }
 
@@ -600,6 +559,15 @@
             display: flex;
             gap: .5rem;
             padding-top: .25rem;
+        }
+    }
+}
+
+[data-theme="dark"] {
+    .wiki-page {
+        .wiki-notice {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(0, 0, 0, 0.1);
         }
     }
 }

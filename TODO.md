@@ -16,6 +16,10 @@ Features planned for this release.
 * Remove work account from github project. [UL-247]
 * Switch to gunicorn (or similar) instead of runserver in init.py, except for environment=development. [UL-258]
 * Pull additional google place info from some supported google takeout files (Reviews.json, and others?)
+* Clicking the "F" shortcut on map should place cursor on name search.
+* On map filtering sidebar, better indicators when filters are active vs inactive, especially when sidebar is closed.
+* Consider: map filtering sidebar, date pinned starts closed. (Abstract this a bit into "less important panels" to close appropriate ones based on screen height.)
+* Consider: handle temporary markers when a user pin exists on that exact point.
 
 ## Medium Features
 
@@ -37,6 +41,16 @@ Features planned for this release.
 * Trip Details > Adding Pin: The suggestions are only geocoded, not pin searches. [UL-227]
 * Starting map option: Remember doesn't appear to work. [UL-255]
 * Organize: Bulk edit button doesn't open dialog.
+* When filtering the map by rating, I saw a single pin without a rating.
+* I somehow got myself into a filter being active that I couldn't identify?
+* When right clicking on the search sidebar, the context menu for the map opens.
+* From badge filtering, you can't drag from "exclude"
+* When the filter formula is too long, you can't see the whole formula.
+* When clearing a formula, it doesn't trigger a pin refresh.
+* Quickly switching between map layers sometimes is weird. Foggy sat view, etc. (Foggy may have just been loading indicator??)
+* After going to a suggested jump to point, clicking the temporary marker to create a pin, and submitting, the new pin doesn't show up on the map without a refresh. (maybe this was due to latency, which is a separate TODO item?)
+* BUG: On pin detail popup on the main map, edit and delete buttons overlap
+* Pin details page: Plus buttons don't look good again.
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". 
@@ -207,6 +221,9 @@ Features planned for future releases.
 * Organize Page > Priority Tab: Provide mechanism for shifting an item to a specific position (e.g. "go to position 20"), and allow multi-select before dragging to drag as a group. [UL-250]
 * Consider feature: on main map, the icon and the circle could be pulled from different places, allowing 2 pieces of information to be displayed about each pin. [UL-251]
 * "Organize a meetup", which would encourage a larger audience, encourage invitees to invite friends, etc. To prevent abuse, possibly: meetup pin would only be shown to those who already had it, and invitees could vote on whether it was too vulnerable to share? Idk.
+* Only check US-centric APIs (like loopnet, NPS, etc) when the location is in the USA.
+* Map Filtering, allow filtering by more sliders, and put them in one section, or neighbors.
+* Max zoom out on the map still isn't quite right. Try clamping?
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

@@ -32,13 +32,13 @@
                 <span>Everything on this page is <strong>shared with all users</strong> who have this location pinned.</span>
             </div>
             <div class="wiki-banner-actions">
-                <button type="button" class="wiki-edit-btn"
+                <button type="button" class="wiki-edit-btn btn btn--primary"
                         onclick="document.getElementById('wiki-edit-dialog').showModal()">
                     <i class="material-icons">edit_note</i>
                     Suggest edits
                 </button>
                 {% if user_pin %}
-                <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link">
+                <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link btn btn--ghost">
                     <i class="material-icons">arrow_back</i> Back to my pin
                 </a>
                 {% endif %}
