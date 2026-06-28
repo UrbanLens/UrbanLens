@@ -86,8 +86,9 @@
             </button>
             <button id="dark-mode-button" class="map-layer-btn"
                     onclick="_toggleMapDarkMode();" aria-label="Toggle map dark mode">
-                <span class="map-layer-thumb">
+                <span class="map-layer-thumb map-layer-thumb--overlay">
                     <img src="https://a.basemaps.cartocdn.com/dark_all/12/2140/1447.png" alt="" loading="lazy">
+                    <i class="material-icons">dark_mode</i>
                 </span>
                 <span>Dark</span>
             </button>
@@ -238,6 +239,14 @@
                             <div class="fp-badge-col-label"><i class="material-icons">cancel</i> Exclude</div>
                             <div class="fp-badge-chips" id="fp-badge-excl-chips"></div>
                         </div>
+                    </div>
+
+                    {# Complex formula display — shown instead of 2-column chips for mixed AND/OR expressions #}
+                    <div class="fp-formula-display" id="fp-formula-display" style="display:none">
+                        <span class="fp-formula-display-text" id="fp-formula-display-text"></span>
+                        <button type="button" class="fp-formula-display-clear" onclick="_clearAllBadgeSelections()" title="Clear filter">
+                            <i class="material-icons">close</i>
+                        </button>
                     </div>
 
                     {# Formula bar — replaces old search input. Supports plain search + formula operators. #}
@@ -2311,20 +2320,72 @@
         }
     }
 
+    // Returns true when _formulaGroups can be represented by the simple 2-column UI:
+    // all include groups use the same op (all-AND or a single OR), plus optional NOT groups.
+    function _isSimpleGroups(groups) {
+        if (!groups) return true;
+        const inclGroups = groups.filter(g => g.op !== 'not');
+        if (inclGroups.length === 0) return true;
+        const hasOr  = inclGroups.some(g => g.op === 'or');
+        const hasAnd = inclGroups.some(g => g.op === 'and');
+        if (hasOr && hasAnd) return false;   // mixed → complex
+        if (hasOr && inclGroups.length > 1) return false; // multiple OR groups → complex
+        return true;
+    }
+
     // ── Rebuild selected chips UI ────────────────────────────────────────────
     function _rebuildBadgeSelected() {
-        const inclEl    = document.getElementById('fp-badge-incl-chips');
-        const exclEl    = document.getElementById('fp-badge-excl-chips');
-        const colIncl   = document.getElementById('fp-badge-col-incl');
-        const colExcl   = document.getElementById('fp-badge-col-excl');
-        const selectedEl = document.getElementById('fp-badge-selected');
-        const modeBtn   = document.getElementById('fp-incl-mode-btn');
-        const det       = document.getElementById('fp-acc-badges');
+        const inclEl         = document.getElementById('fp-badge-incl-chips');
+        const exclEl         = document.getElementById('fp-badge-excl-chips');
+        const colIncl        = document.getElementById('fp-badge-col-incl');
+        const colExcl        = document.getElementById('fp-badge-col-excl');
+        const selectedEl     = document.getElementById('fp-badge-selected');
+        const formulaDisplay = document.getElementById('fp-formula-display');
+        const formulaText    = document.getElementById('fp-formula-display-text');
+        const modeBtn        = document.getElementById('fp-incl-mode-btn');
+        const det            = document.getElementById('fp-acc-badges');
+
+        // Detect whether the active formula is too complex for the 2-column UI
+        const isComplex = _formulaGroups !== null && !_isSimpleGroups(_formulaGroups);
+
+        if (isComplex) {
+            // Show the formula text display; hide the 2-column chips area
+            if (selectedEl)     selectedEl.style.display     = 'none';
+            if (formulaDisplay) formulaDisplay.style.display = '';
+            if (formulaText) {
+                // Reconstruct formula text from _formulaGroups
+                const byName = _badgeByNameMap();
+                const byId   = new Map([...byName.values()].map(v => [v.id, v]));
+                const parts  = [];
+                for (const g of _formulaGroups) {
+                    const names = g.ids.map(id => {
+                        const entry = byId.get(String(id));
+                        return entry ? _quoteBadgeName(entry.label) : String(id);
+                    });
+                    if (g.op === 'not') {
+                        names.forEach(n => parts.push(`-${n}`));
+                    } else if (g.op === 'or') {
+                        parts.push(names.length > 1 ? `(${names.join(' / ')})` : (names[0] || ''));
+                    } else {
+                        parts.push(...names);
+                    }
+                }
+                formulaText.textContent = parts.join(' + ');
+            }
+            if (det) det.classList.add('fp-acc-active');
+            _serializeBadgeGroups();
+            _updateFormulaFromState();
+            return;
+        }
+
+        // Simple mode: show 2-column chips; hide formula display
+        if (formulaDisplay) formulaDisplay.style.display = 'none';
 
         inclEl.innerHTML = '';
         exclEl.innerHTML = '';
 
         let hasIncl = false, hasExcl = false;
+        let inclCount = 0;
         _badgeState.forEach((mode, id) => {
             const avail = document.querySelector(`#fp-badge-list [data-badge-id="${id}"]`);
             const label = avail?.dataset.badgeLabel || id;
@@ -2332,6 +2393,7 @@
             const icon  = avail?.dataset.badgeIcon  || '';
             if (mode === 'incl') {
                 hasIncl = true;
+                inclCount++;
                 inclEl.insertAdjacentHTML('beforeend', _badgeChipHtml(id, label, color, icon, 'incl'));
             } else {
                 hasExcl = true;
@@ -2366,10 +2428,11 @@
             });
         });
 
-        // Update AND/OR mode toggle button label
+        // AND/OR mode toggle: only meaningful (and visible) when 2+ badges included
         if (modeBtn) {
             modeBtn.textContent = _inclMode === 'or' ? 'OR' : 'AND';
             modeBtn.classList.toggle('fp-badge-mode-btn--or', _inclMode === 'or');
+            modeBtn.style.display = inclCount > 1 ? '' : 'none';
         }
 
         const anySelected = hasIncl || hasExcl;
@@ -2513,7 +2576,10 @@
         }
 
         // Parse tokens → {groups:[{op,ids}], errors:[text]}
-        // LPAREN...RPAREN → {op:'or', ids:[...]}  |  bare BADGE → {op:'and'|'not', ids:[id]}
+        // (A / B) C  → [{op:'or',ids:[A,B]}, {op:'and',ids:[C]}]
+        // A / B / C  → [{op:'or',ids:[A,B,C]}]  (bare / at top level = OR group)
+        // A B        → [{op:'and',ids:[A]}, {op:'and',ids:[B]}]  (adjacency = AND)
+        // -A         → [{op:'not',ids:[A]}]
         function _parseTokens(tokens) {
             const groups = [];
             const errors = [];
@@ -2539,9 +2605,30 @@
                     continue;
                 }
                 if (tok.type === 'BADGE') {
-                    groups.push({op: negate ? 'not' : 'and', ids: [Number(tok.id)]});
+                    if (negate) {
+                        // NOT applies to the single badge only, no lookahead for OR
+                        groups.push({op: 'not', ids: [Number(tok.id)]});
+                        negate = false;
+                        i++;
+                        continue;
+                    }
+                    // Collect consecutive OR-connected badges at top level: A / B / C → OR group
+                    const orIds = [tok.id];
+                    let j = i + 1;
+                    while (j < tokens.length && tokens[j].type === 'OR') {
+                        j++; // skip OR token
+                        if (j < tokens.length && tokens[j].type === 'BADGE') {
+                            orIds.push(tokens[j].id);
+                            j++;
+                        }
+                    }
+                    if (orIds.length > 1) {
+                        groups.push({op: 'or', ids: orIds.map(Number)});
+                    } else {
+                        groups.push({op: 'and', ids: [Number(tok.id)]});
+                    }
                     negate = false;
-                    i++;
+                    i = j;
                     continue;
                 }
                 if (tok.type === 'UNKNOWN') {
