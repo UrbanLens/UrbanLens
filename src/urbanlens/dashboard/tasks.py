@@ -53,6 +53,32 @@ def cleanup_export_artifacts_task(export_dir: str, job_id: str | None = None) ->
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def run_user_data_import(self, user_id: int, zip_path: str, job_id: str) -> bool:
+    """Parse a UrbanLens export ZIP and import data for the user."""
+    from urbanlens.dashboard.services.import_data import run_import
+
+    logger.info("Starting data import for user %s, job %s", user_id, job_id)
+    update_task_progress(self, current=0, total=1, message="Preparing import…")
+    success = run_import(user_id, zip_path, job_id)
+    if success:
+        update_task_progress(self, current=1, total=1, message="Import complete")
+        logger.info("Finished data import for user %s, job %s", user_id, job_id)
+        return True
+    update_task_progress(self, current=1, total=1, message="Import failed")
+    logger.warning("Data import failed for user %s, job %s", user_id, job_id)
+    return False
+
+
+@shared_task
+def cleanup_import_artifacts_task(import_dir_path: str, job_id: str | None = None) -> None:
+    """Remove expired import artifacts and cache-backed status."""
+    from urbanlens.dashboard.services.import_data import ImportJobStatus, cleanup_import_artifacts
+
+    cleanup_import_artifacts(import_dir_path, ImportJobStatus(job_id) if job_id else None)
+    logger.info("Cleaned up import artifacts for job %s", job_id or import_dir_path)
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def rebuild_map_pin_cache(self, profile_id: int) -> int:
     """Rebuild the full root-pin map cache for a profile."""
     from urbanlens.dashboard.models.pin import Pin

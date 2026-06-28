@@ -11,7 +11,7 @@
     <div class="tools-grid">
 
         {# ── Export card ─────────────────────────────────────────────────────── #}
-        <div class="ul-card tools-card" id="export-card">
+        <div class="ul-card tools-card tools-card--wide" id="export-card">
             <div class="ul-card-header">
                 <i class="material-icons">download</i>
                 <h3>Export Data</h3>
@@ -20,10 +20,9 @@
             <div class="ul-card-body">
                 <p class="tools-card-desc">
                     Download a copy of your UrbanLens data as a ZIP archive.
-                    Pins are exported in Google Takeout&ndash;compatible CSV format.
+                    The archive uses an open JSON format you can re-import later.
                 </p>
 
-                {# Form - hidden once export starts #}
                 <div id="export-form-wrap">
                     <form
                         hx-post="{% url 'tools.export.start' %}"
@@ -36,6 +35,8 @@
                         {% csrf_token %}
 
                         <div class="export-options">
+
+                            {# ── Select all ── #}
                             <label class="export-select-all">
                                 <span class="cat-select-wrap">
                                     <input type="checkbox" id="export-select-all" checked>
@@ -44,7 +45,8 @@
                                 <span class="export-select-all-label">Select all</span>
                             </label>
 
-                            <div class="export-checkboxes">
+                            {# ── Data checkboxes ── #}
+                            <div class="export-checkboxes" id="export-data-checkboxes">
                                 <label class="export-checkbox-item">
                                     <span class="cat-select-wrap">
                                         <input type="checkbox" name="export_types" value="profile" class="export-type-cb" checked>
@@ -60,6 +62,30 @@
                                     </span>
                                     <i class="material-icons">place</i>
                                     <span>Pins</span>
+                                </label>
+                                <label class="export-checkbox-item">
+                                    <span class="cat-select-wrap">
+                                        <input type="checkbox" name="export_types" value="badges" class="export-type-cb" checked>
+                                        <span class="cat-select-check"></span>
+                                    </span>
+                                    <i class="material-icons">label</i>
+                                    <span>Badges</span>
+                                </label>
+                                <label class="export-checkbox-item">
+                                    <span class="cat-select-wrap">
+                                        <input type="checkbox" name="export_types" value="visit_history" class="export-type-cb" checked>
+                                        <span class="cat-select-check"></span>
+                                    </span>
+                                    <i class="material-icons">history</i>
+                                    <span>Visit History</span>
+                                </label>
+                                <label class="export-checkbox-item">
+                                    <span class="cat-select-wrap">
+                                        <input type="checkbox" name="export_types" value="connections" class="export-type-cb" checked>
+                                        <span class="cat-select-check"></span>
+                                    </span>
+                                    <i class="material-icons">people</i>
+                                    <span>Connections</span>
                                 </label>
                                 <label class="export-checkbox-item">
                                     <span class="cat-select-wrap">
@@ -85,6 +111,29 @@
                                     <i class="material-icons">directions_car</i>
                                     <span>Trips</span>
                                 </label>
+                                <label class="export-checkbox-item">
+                                    <span class="cat-select-wrap">
+                                        <input type="checkbox" name="export_types" value="settings" class="export-type-cb" checked>
+                                        <span class="cat-select-check"></span>
+                                    </span>
+                                    <i class="material-icons">settings</i>
+                                    <span>Settings</span>
+                                </label>
+                            </div>
+
+                            {# ── Format options ── #}
+                            <div class="export-format-section">
+                                <p class="export-format-label">Format options</p>
+                                <label class="export-checkbox-item export-format-item">
+                                    <span class="cat-select-wrap">
+                                        <input type="checkbox" name="export_types" value="google_takeout" id="export-google-takeout">
+                                        <span class="cat-select-check"></span>
+                                    </span>
+                                    <i class="material-icons">cloud_download</i>
+                                    <span>Google Takeout format
+                                        <span class="export-format-hint">Also export pins as a Google Takeout–compatible CSV</span>
+                                    </span>
+                                </label>
                             </div>
                         </div>
 
@@ -97,8 +146,65 @@
                     </form>
                 </div>
 
-                {# Status area - HTMX swaps the progress partial in here #}
                 <div id="export-status-area"></div>
+            </div>
+        </div>
+
+        {# ── Import card ─────────────────────────────────────────────────────── #}
+        <div class="ul-card tools-card tools-card--wide" id="import-card">
+            <div class="ul-card-header">
+                <i class="material-icons">upload</i>
+                <h3>Import Data</h3>
+            </div>
+
+            <div class="ul-card-body">
+                <p class="tools-card-desc">
+                    Restore a previous export or migrate data from another account.
+                    Upload a UrbanLens export ZIP — existing records are detected and skipped automatically.
+                </p>
+
+                <div id="import-form-wrap">
+                    <form
+                        hx-post="{% url 'tools.import.start' %}"
+                        hx-target="#import-status-area"
+                        hx-swap="innerHTML"
+                        hx-indicator="#import-submit-btn"
+                        hx-disabled-elt="#import-submit-btn"
+                        hx-encoding="multipart/form-data"
+                        id="import-form"
+                    >
+                        {% csrf_token %}
+
+                        <div class="import-upload-area" id="import-drop-zone">
+                            <input
+                                type="file"
+                                name="import_file"
+                                id="import-file-input"
+                                accept=".zip"
+                                class="import-file-input"
+                            >
+                            <label for="import-file-input" class="import-drop-label">
+                                <i class="material-icons import-drop-icon">folder_zip</i>
+                                <span class="import-drop-text">Drop your export ZIP here, or <span class="import-drop-link">browse</span></span>
+                                <span class="import-drop-hint">Max 500 MB &middot; .zip only</span>
+                            </label>
+                            <div class="import-file-chosen" id="import-file-chosen" style="display:none">
+                                <i class="material-icons" style="color:var(--ul-primary,#1976D2)">check_circle</i>
+                                <span id="import-file-name"></span>
+                                <button type="button" class="import-file-clear" id="import-file-clear" title="Remove file">&times;</button>
+                            </div>
+                        </div>
+
+                        <div class="export-actions">
+                            <button type="submit" class="btn btn--primary export-submit-btn" id="import-submit-btn" disabled>
+                                <i class="material-icons">upload</i>
+                                <span>Import</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="import-status-area"></div>
             </div>
         </div>
 
@@ -149,7 +255,7 @@
 
 <style>
 .tools-page {
-    max-width: 900px;
+    max-width: 1000px;
     margin: 0 auto;
     padding: 2rem 1.5rem;
 }
@@ -173,15 +279,18 @@
 
 .tools-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
     gap: 1.5rem;
 }
 
 .tools-card {
     border-radius: 10px;
     width: 100%;
-    max-width: 480px;
     justify-self: center;
+}
+
+.tools-card--wide {
+    max-width: 520px;
 }
 
 .tools-card-desc {
@@ -191,7 +300,47 @@
     line-height: 1.5;
 }
 
-/* Export options */
+/* ── Checkbox checkmark override for export/import cards ─────────────────── */
+
+#export-card .cat-select-check::after,
+#import-card .cat-select-check::after {
+    content: 'check';
+    font-family: 'Material Icons';
+    font-size: 14px;
+    line-height: 1;
+    color: #fff;
+    opacity: 0;
+    transition: opacity .1s;
+    /* Clear the default CSS border-trick dimensions */
+    width: auto;
+    height: auto;
+    border: none;
+    transform: none;
+    display: block;
+}
+
+#export-card input[type="checkbox"]:checked ~ .cat-select-check::after,
+#import-card input[type="checkbox"]:checked ~ .cat-select-check::after {
+    opacity: 1;
+}
+
+/* Indeterminate — show a dash via Material Icons */
+#export-card input[type="checkbox"]:indeterminate ~ .cat-select-check {
+    background: var(--ul-primary, #1976D2);
+    border-color: var(--ul-primary, #1976D2);
+}
+
+#export-card input[type="checkbox"]:indeterminate ~ .cat-select-check::after {
+    content: 'remove';
+    opacity: 1;
+    width: auto;
+    height: auto;
+    border: none;
+    transform: none;
+}
+
+/* ── Export options layout ───────────────────────────────────────────────── */
+
 .export-options {
     margin-bottom: 1.25rem;
 }
@@ -213,22 +362,6 @@
     height: 26px;
 }
 
-.export-select-all input:indeterminate ~ .cat-select-check {
-    background: var(--ul-primary, #1976D2);
-    border-color: var(--ul-primary, #1976D2);
-}
-
-.export-select-all input:indeterminate ~ .cat-select-check::after {
-    opacity: 1;
-    width: 10px;
-    height: 0;
-    border-left: 0;
-    border-right: 0;
-    border-top: 0;
-    border-bottom: 2px solid #fff;
-    transform: none;
-}
-
 .export-select-all-label {
     text-transform: uppercase;
     letter-spacing: .04em;
@@ -237,9 +370,15 @@
 }
 
 .export-checkboxes {
-    display: flex;
-    flex-direction: column;
-    gap: .4rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .3rem;
+}
+
+@media (max-width: 480px) {
+    .export-checkboxes {
+        grid-template-columns: 1fr;
+    }
 }
 
 .export-checkbox-item {
@@ -247,11 +386,11 @@
     align-items: center;
     gap: .6rem;
     cursor: pointer;
-    padding: .5rem .65rem;
+    padding: .45rem .6rem;
     border-radius: 6px;
     border: 1px solid transparent;
     transition: background .15s, border-color .15s;
-    font-size: .9rem;
+    font-size: .875rem;
     color: var(--ul-grey-8);
     user-select: none;
 }
@@ -262,43 +401,74 @@
 }
 
 .export-checkbox-item .cat-select-wrap {
-    width: 26px;
-    height: 26px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
 }
 
-
-.export-select-all [type=checkbox]+span:not(.lever):before, 
+.export-select-all [type=checkbox]+span:not(.lever):before,
 .export-select-all [type=checkbox]:not(.filled-in)+span:not(.lever):after,
-.export-checkbox-item [type=checkbox]+span:not(.lever):before, 
+.export-checkbox-item [type=checkbox]+span:not(.lever):before,
 .export-checkbox-item [type=checkbox]:not(.filled-in)+span:not(.lever):after {
     display: none;
 }
 
 .export-checkbox-item .material-icons {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     color: var(--ul-grey-5);
 }
+
+/* ── Format section ──────────────────────────────────────────────────────── */
+
+.export-format-section {
+    margin-top: 1rem;
+    padding-top: .75rem;
+    border-top: 1px solid var(--ul-border);
+}
+
+.export-format-label {
+    font-size: .7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ul-grey-5);
+    margin: 0 0 .4rem .65rem;
+}
+
+.export-format-item {
+    align-items: flex-start;
+}
+
+.export-format-item .cat-select-wrap {
+    margin-top: 2px;
+}
+
+.export-format-hint {
+    display: block;
+    font-size: .78rem;
+    color: var(--ul-grey-5);
+    font-weight: 400;
+    margin-top: 1px;
+}
+
+/* ── Actions ─────────────────────────────────────────────────────────────── */
 
 .export-actions,
 .tools-card-actions {
     padding-top: .75rem;
     border-top: 1px solid var(--ul-border);
+    margin-top: .5rem;
 }
 
-.tools-invite-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: .4rem;
-}
-
+.tools-invite-btn,
 .export-submit-btn {
     display: inline-flex;
     align-items: center;
     gap: .4rem;
 }
 
-/* Progress area */
+/* ── Progress area ───────────────────────────────────────────────────────── */
+
 .export-progress-wrap {
     margin-top: 1rem;
 }
@@ -369,25 +539,176 @@
     font-size: .875rem;
     margin-top: .75rem;
 }
+
+/* ── Import upload area ──────────────────────────────────────────────────── */
+
+.import-upload-area {
+    position: relative;
+    border: 2px dashed var(--ul-border);
+    border-radius: 10px;
+    padding: 1.75rem 1.25rem;
+    text-align: center;
+    transition: border-color .15s, background .15s;
+    margin-bottom: .75rem;
+    cursor: pointer;
+}
+
+.import-upload-area:hover,
+.import-upload-area.drag-over {
+    border-color: var(--ul-primary, #1976D2);
+    background: rgba(25, 118, 210, .04);
+}
+
+.import-file-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 1;
+}
+
+.import-drop-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .4rem;
+    cursor: pointer;
+    pointer-events: none;
+}
+
+.import-drop-icon {
+    font-size: 2.25rem;
+    color: var(--ul-grey-4);
+}
+
+.import-drop-text {
+    font-size: .9rem;
+    color: var(--ul-grey-7);
+}
+
+.import-drop-link {
+    color: var(--ul-primary, #1976D2);
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+.import-drop-hint {
+    font-size: .78rem;
+    color: var(--ul-grey-5);
+}
+
+.import-file-chosen {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    justify-content: center;
+    font-size: .9rem;
+    color: var(--ul-grey-8);
+    pointer-events: auto;
+    position: relative;
+    z-index: 2;
+}
+
+.import-file-clear {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+    color: var(--ul-grey-5);
+    line-height: 1;
+    padding: 0 .2rem;
+}
+
+.import-file-clear:hover {
+    color: #D32F2F;
+}
+
+/* Import result summary shown after successful import */
+.import-result-summary {
+    margin-top: .75rem;
+    font-size: .875rem;
+}
+
+.import-result-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .25rem 0;
+    color: var(--ul-grey-7);
+}
+
+.import-result-row .material-icons {
+    font-size: 1rem;
+    color: #388E3C;
+    flex-shrink: 0;
+}
+
+.import-result-row--skipped .material-icons {
+    color: var(--ul-grey-5);
+}
+
+.import-result-row--warn .material-icons {
+    color: #F57C00;
+}
+
+.import-warnings {
+    margin-top: .5rem;
+    padding: .5rem .75rem;
+    background: rgba(245, 124, 0, .07);
+    border-radius: 6px;
+    border-left: 3px solid #F57C00;
+}
+
+.import-warnings-title {
+    font-size: .78rem;
+    font-weight: 600;
+    color: #F57C00;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: .3rem;
+}
+
+.import-warning-item {
+    font-size: .82rem;
+    color: var(--ul-grey-7);
+    padding: .1rem 0;
+}
 </style>
 
 <script>
 (function () {
+    /* ── Export: select-all ↔ individual checkbox sync ── */
     const selectAll = document.getElementById('export-select-all');
-    const checkboxes = document.querySelectorAll('.export-type-cb');
+    const dataCheckboxes = document.querySelectorAll('#export-data-checkboxes .export-type-cb');
     const EXPORT_LEAVE_MSG = 'An export is still in progress. Leaving now will stop the export and you may lose your download.';
 
+    function syncSelectAll() {
+        const all = Array.from(dataCheckboxes);
+        const checked = all.filter(c => c.checked);
+        if (checked.length === all.length) {
+            selectAll.checked = true;
+            selectAll.indeterminate = false;
+        } else if (checked.length === 0) {
+            selectAll.checked = false;
+            selectAll.indeterminate = false;
+        } else {
+            selectAll.checked = false;
+            selectAll.indeterminate = true;
+        }
+    }
+
     selectAll.addEventListener('change', function () {
-        checkboxes.forEach(cb => { cb.checked = selectAll.checked; });
+        dataCheckboxes.forEach(cb => { cb.checked = selectAll.checked; });
+        if (selectAll.indeterminate) selectAll.indeterminate = false;
     });
 
-    checkboxes.forEach(cb => {
-        cb.addEventListener('change', function () {
-            selectAll.checked = Array.from(checkboxes).every(c => c.checked);
-            selectAll.indeterminate = !selectAll.checked && Array.from(checkboxes).some(c => c.checked);
-        });
+    dataCheckboxes.forEach(cb => {
+        cb.addEventListener('change', syncSelectAll);
     });
 
+    /* ── Export: navigation guard ── */
     function isExportInProgress() {
         const poll = document.getElementById('export-status-poll');
         return !!(poll && poll.hasAttribute('hx-get'));
@@ -405,44 +726,30 @@
     function showExportError(message) {
         const poll = document.getElementById('export-status-poll');
         if (!poll) return;
-
         poll.removeAttribute('hx-get');
         poll.removeAttribute('hx-trigger');
         poll.removeAttribute('hx-target');
         poll.removeAttribute('hx-swap');
-
         const text = message || 'Export failed. Please try again.';
         poll.innerHTML =
-            '<div class="export-progress-track">' +
-                '<div class="export-progress-bar export-progress-bar--error" style="width: 100%;"></div>' +
-            '</div>' +
-            '<div class="export-error-msg">' +
-                '<i class="material-icons">error</i>' +
-                '<span></span>' +
-            '</div>' +
-            '<div class="export-done-actions" style="margin-top: .75rem;">' +
-                '<button type="button" class="btn btn-secondary" onclick="location.reload()">' +
-                    '<i class="material-icons">refresh</i>' +
-                    'Try again' +
-                '</button>' +
-            '</div>';
+            '<div class="export-progress-track"><div class="export-progress-bar export-progress-bar--error" style="width:100%;"></div></div>' +
+            '<div class="export-error-msg"><i class="material-icons">error</i><span></span></div>' +
+            '<div class="export-done-actions" style="margin-top:.75rem;">' +
+            '<button type="button" class="btn btn-secondary" onclick="location.reload()"><i class="material-icons">refresh</i> Try again</button></div>';
         poll.querySelector('.export-error-msg span').textContent = text;
         notifyExportError(text);
     }
 
     function responseMessage(xhr) {
         if (!xhr || !xhr.responseText) return '';
-        const text = xhr.responseText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-        return text;
+        return xhr.responseText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
-    function beforeUnloadHandler(e) {
+    window.addEventListener('beforeunload', function (e) {
         if (!isExportInProgress()) return;
         e.preventDefault();
         e.returnValue = '';
-    }
-
-    window.addEventListener('beforeunload', beforeUnloadHandler);
+    });
 
     document.addEventListener('click', function (e) {
         if (!isExportInProgress()) return;
@@ -452,19 +759,11 @@
         if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0 || a.target === '_blank') return;
         e.preventDefault();
         const proceed = window.confirmDialog
-            ? window.confirmDialog({
-                title: 'Leave page?',
-                message: EXPORT_LEAVE_MSG,
-                confirmLabel: 'Leave anyway',
-                danger: true,
-            })
+            ? window.confirmDialog({ title: 'Leave page?', message: EXPORT_LEAVE_MSG, confirmLabel: 'Leave anyway', danger: true })
             : Promise.resolve(window.confirm(EXPORT_LEAVE_MSG));
-        proceed.then(function (ok) {
-            if (ok) window.location.href = a.href;
-        });
+        proceed.then(function (ok) { if (ok) window.location.href = a.href; });
     }, true);
 
-    // Hide the form once HTMX swaps in the progress panel; toast server-rendered errors
     document.body.addEventListener('htmx:afterSwap', function (evt) {
         const targetId = evt.detail.target.id;
         if (targetId === 'export-status-area' || targetId === 'export-status-poll') {
@@ -472,30 +771,91 @@
                 const form = document.getElementById('export-form-wrap');
                 if (form) form.style.display = 'none';
             }
-
             const errSpan = document.querySelector('#export-status-poll .export-error-msg span');
             if (errSpan) notifyExportError(errSpan.textContent);
+        }
+        if (targetId === 'import-status-area' || targetId === 'import-status-poll') {
+            if (targetId === 'import-status-area') {
+                const form = document.getElementById('import-form-wrap');
+                if (form) form.style.display = 'none';
+            }
         }
     });
 
     document.body.addEventListener('htmx:responseError', function (evt) {
         const elt = evt.detail.elt;
-        if (!elt || elt.id !== 'export-status-poll') return;
-        const xhr = evt.detail.xhr;
-        let message = responseMessage(xhr) || 'Export status could not be checked. Please try again.';
-        if (xhr && xhr.status === 403) {
-            message = 'Could not verify export ownership. Please start a new export.';
-        } else if (xhr && xhr.status === 404) {
-            message = 'Export job not found or expired. Please start a new export.';
+        if (!elt) return;
+        if (elt.id === 'export-status-poll') {
+            const xhr = evt.detail.xhr;
+            let message = responseMessage(xhr) || 'Export status could not be checked. Please try again.';
+            if (xhr && xhr.status === 403) message = 'Could not verify export ownership. Please start a new export.';
+            else if (xhr && xhr.status === 404) message = 'Export job not found or expired. Please start a new export.';
+            showExportError(message);
         }
-        showExportError(message);
     });
 
     document.body.addEventListener('htmx:sendError', function (evt) {
         const elt = evt.detail.elt;
-        if (!elt || elt.id !== 'export-status-poll') return;
-        showExportError('Network error while checking export status. Please check your connection and try again.');
+        if (!elt) return;
+        if (elt.id === 'export-status-poll') {
+            showExportError('Network error while checking export status. Please check your connection and try again.');
+        }
     });
+
+    /* ── Import: file picker UX ── */
+    const fileInput = document.getElementById('import-file-input');
+    const fileChosen = document.getElementById('import-file-chosen');
+    const fileName = document.getElementById('import-file-name');
+    const fileClear = document.getElementById('import-file-clear');
+    const importBtn = document.getElementById('import-submit-btn');
+    const dropLabel = document.querySelector('.import-drop-label');
+    const dropZone = document.getElementById('import-drop-zone');
+
+    function setFile(file) {
+        if (!file) return;
+        fileName.textContent = file.name;
+        fileChosen.style.display = 'flex';
+        if (dropLabel) dropLabel.style.display = 'none';
+        importBtn.disabled = false;
+    }
+
+    function clearFile() {
+        fileInput.value = '';
+        fileChosen.style.display = 'none';
+        if (dropLabel) dropLabel.style.display = '';
+        importBtn.disabled = true;
+    }
+
+    if (fileInput) {
+        fileInput.addEventListener('change', function () {
+            if (this.files && this.files[0]) setFile(this.files[0]);
+            else clearFile();
+        });
+    }
+
+    if (fileClear) {
+        fileClear.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            clearFile();
+        });
+    }
+
+    if (dropZone) {
+        dropZone.addEventListener('dragover', function (e) { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', function () { dropZone.classList.remove('drag-over'); });
+        dropZone.addEventListener('drop', function (e) {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            const file = e.dataTransfer && e.dataTransfer.files[0];
+            if (file) {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                fileInput.files = dt.files;
+                setFile(file);
+            }
+        });
+    }
 })();
 </script>
 
