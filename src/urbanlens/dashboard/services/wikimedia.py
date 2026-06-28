@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 _API_URL = "https://commons.wikimedia.org/w/api.php"
 _THUMB_WIDTH = 400
 _MAX_RESULTS = 12
+_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -25,6 +26,9 @@ class WikimediaGateway(Gateway):
     """
 
     base_url: str = _API_URL
+
+    def __post_init__(self) -> None:
+        self.session.headers.update({"User-Agent": _USER_AGENT})
 
     def search_images(self, query: str) -> list[dict[str, Any]]:
         """

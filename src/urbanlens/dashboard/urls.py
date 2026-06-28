@@ -273,6 +273,11 @@ urlpatterns = [
                                 name="pin.nps",
                             ),
                             path(
+                                "<slug:pin_slug>/nominatim/",
+                                pin.PinController.as_view({"get": "nominatim_info"}),
+                                name="pin.nominatim",
+                            ),
+                            path(
                                 "<slug:pin_slug>/gallery/",
                                 image_gallery.PinGalleryView.as_view(),
                                 name="pin.gallery",

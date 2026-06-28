@@ -692,6 +692,49 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         return render(request, "dashboard/partials/pin_nps.html", {"park": data})
 
+    def nominatim_info(self, request: HttpRequest, pin_slug: str):
+        """
+        HTMX partial: OpenStreetMap Nominatim place metadata for the pin's location.
+
+        Only renders when at least one useful metadata field is present (website,
+        phone, opening hours, operator, or a Wikipedia cross-link).  Returns 204
+        for coordinate-only results with no enrichment.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.nominatim import NominatimGateway
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+
+        location = pin.location
+        if not location:
+            return HttpResponse(status=204)
+
+        lat = pin.effective_latitude
+        lng = pin.effective_longitude
+        if not lat or not lng:
+            return HttpResponse(status=204)
+
+        cached = LocationCache.get_fresh(location, "nominatim")
+        if cached is None:
+            try:
+                place = NominatimGateway().reverse_geocode(float(lat), float(lng))
+            except Exception:
+                logger.exception("Nominatim lookup failed for pin %s", pin_slug)
+                place = None
+            LocationCache.set(location, "nominatim", place or {}, query_key=f"{lat},{lng}")
+            data = place
+        else:
+            data = cached.data or None
+
+        useful_fields = ("website", "phone", "opening_hours", "operator", "wikipedia")
+        if not data or not any(data.get(k) for k in useful_fields):
+            return HttpResponse(status=204)
+
+        return render(request, "dashboard/partials/pin_nominatim.html", {"place": data})
+
     @action(detail=False, methods=["post"])
     def import_confirmed(self, request: Request):
         """Stream SSE import progress for user-confirmed pin selections from the preview step."""

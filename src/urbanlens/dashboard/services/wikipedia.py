@@ -14,6 +14,7 @@ _GEO_SEARCH_URL = "https://en.wikipedia.org/w/api.php"
 _SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
 _RADIUS_METERS = 500
 _MAX_CANDIDATES = 5
+_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -26,6 +27,9 @@ class WikipediaGateway(Gateway):
     """
 
     base_url: str = _GEO_SEARCH_URL
+
+    def __post_init__(self) -> None:
+        self.session.headers.update({"User-Agent": _USER_AGENT})
 
     def get_article_for_location(
         self,

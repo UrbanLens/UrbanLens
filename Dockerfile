@@ -28,6 +28,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
+    locales \
     unzip \
     postgresql-client-17 \
     git \
@@ -35,6 +36,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
     libgdal-dev \
     wget \
     gosu && \
+    locale-gen en_US.UTF-8 && \
     pg_dump --version && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
