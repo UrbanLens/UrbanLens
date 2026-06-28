@@ -30,7 +30,7 @@
     &[hidden] { display: none; }
 }
 
-// ── Temporary search-result marker (placed when user jumps to an address) ──
+// ── Temporary place marker (search jump + right-click context menu) ────────
 .search-result-marker-wrap {
     background: none !important;
     border: none !important;
@@ -93,12 +93,27 @@
     z-index: 0;
 }
 
+.map-pin-icon-layer {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .map-pin-with-circle .map-pin-icon,
 .map-pin-with-circle .map-pin-custom-img,
 .map-pin-with-circle .map-pin-emoji {
     position: relative;
     z-index: 1;
     color: #ffffff;
+}
+
+.map-pin-with-circle:has(.map-pin-color-circle--ffffff) {
+    .map-pin-icon,
+    .map-pin-emoji {
+        color: #000000;
+    }
 }
 
 // ── Map bottom-left overlay controls ──────────────────────────────────────

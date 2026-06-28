@@ -513,6 +513,8 @@
     let   _totalPins         = {{ pin_count|default:0 }};
     let   _isOffline         = false;   // true when the meta poll returns an error/network failure
     let   _searchMarker      = null;    // temporary Leaflet marker placed on search-result jump
+    let   _contextMenuMarker = null;    // temporary marker while the map right-click menu is open
+    let   _contextMenuDismiss = null;   // document click handler for the active context menu
 
     // ── Map ───────────────────────────────────────────────────────────────────
     const _MAP_CENTER_MODE   = '{{ map_center_mode|default:"gps" }}';
@@ -987,7 +989,43 @@
         else console.log('[UL] Server connectivity restored');
     }
 
-    // ── Temporary search-result marker ────────────────────────────────────────
+    // ── Temporary place markers (search jump + right-click context menu) ─────
+    function _createTempPlaceMarker(lat, lng, title = '') {
+        return L.marker([lat, lng], {
+            icon: L.divIcon({
+                className: 'search-result-marker-wrap',
+                html: '<i class="material-icons search-result-marker-icon">place</i>',
+                iconSize: [32, 40],
+                iconAnchor: [16, 40],
+            }),
+            zIndexOffset: 2000,
+            title,
+        });
+    }
+
+    function _clearContextMenuMarker() {
+        if (!_contextMenuMarker) return;
+        map.removeLayer(_contextMenuMarker);
+        _contextMenuMarker = null;
+    }
+
+    function _showContextMenuMarker(lat, lng) {
+        _clearContextMenuMarker();
+        _clearSearchMarker();
+        _contextMenuMarker = _createTempPlaceMarker(lat, lng);
+        _contextMenuMarker.addTo(map);
+    }
+
+    function _closeMapContextMenu(menu, opts = {}) {
+        const { keepMarker = false } = opts;
+        if (_contextMenuDismiss) {
+            document.removeEventListener('click', _contextMenuDismiss);
+            _contextMenuDismiss = null;
+        }
+        menu.remove();
+        if (!keepMarker) _clearContextMenuMarker();
+    }
+
     function _clearSearchMarker() {
         if (!_searchMarker) return;
         map.removeLayer(_searchMarker);
@@ -996,16 +1034,8 @@
 
     function _showSearchMarker(lat, lng, title) {
         _clearSearchMarker();
-        _searchMarker = L.marker([lat, lng], {
-            icon: L.divIcon({
-                className: 'search-result-marker-wrap',
-                html: '<i class="material-icons search-result-marker-icon">place</i>',
-                iconSize: [32, 40],
-                iconAnchor: [16, 40],
-            }),
-            zIndexOffset: 2000,
-            title: title || '',
-        });
+        _clearContextMenuMarker();
+        _searchMarker = _createTempPlaceMarker(lat, lng, title || '');
         _searchMarker.on('click', function() {
             map.closePopup();
             document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
@@ -1081,9 +1111,14 @@
     }
 
     // ── Marker builder ────────────────────────────────────────────────────────
-    function _hexToRgba(hex, alpha) {
-        let h = String(hex).replace('#', '');
+    function _normalizeHexColor(hex) {
+        let h = String(hex).replace('#', '').toLowerCase();
         if (h.length === 3) h = h.split('').map(c => c + c).join('');
+        return h;
+    }
+
+    function _hexToRgba(hex, alpha) {
+        const h = _normalizeHexColor(hex);
         const r = parseInt(h.slice(0, 2), 16);
         const g = parseInt(h.slice(2, 4), 16);
         const b = parseInt(h.slice(4, 6), 16);
@@ -1107,14 +1142,16 @@
             const color = hasColor ? resolvedColor : '#555555';
             let iconHtml;
             if (/^[a-z_]+$/.test(pin.icon)) {
-                iconHtml = `<i class="material-icons map-pin-icon" style="color:${color};">${pin.icon}</i>`;
+                const iconColorStyle = hasColor ? '' : ` style="color:${color};"`;
+                iconHtml = `<i class="material-icons map-pin-icon"${iconColorStyle}>${pin.icon}</i>`;
             } else if (/^(https?:\/\/|\/)/.test(pin.icon)) {
                 iconHtml = `<img src="${pin.icon}" class="map-pin-custom-img" alt="">`;
             } else {
                 iconHtml = `<span class="map-pin-emoji">${pin.icon}</span>`;
             }
             if (hasColor) {
-                iconHtml = `<span class="map-pin-with-circle" style="position:relative;display:flex;align-items:center;justify-content:center;width:36px;height:36px;"><span class="map-pin-color-circle" style="position:absolute;width:32px;height:32px;border-radius:50%;z-index:0;background:${_hexToRgba(color, 0.8)};"></span><span style="position:relative;z-index:1;display:flex;align-items:center;justify-content:center;">${iconHtml}</span></span>`;
+                const circleColorClass = `map-pin-color-circle--${_normalizeHexColor(color)}`;
+                iconHtml = `<span class="map-pin-with-circle"><span class="map-pin-color-circle ${circleColorClass}" style="background:${_hexToRgba(color, 0.8)};"></span><span class="map-pin-icon-layer">${iconHtml}</span></span>`;
             }
             const iconSize = hasColor ? [36, 36] : [28, 28];
             const iconAnchor = hasColor ? [18, 18] : [14, 14];
@@ -1941,9 +1978,14 @@
 
     map.on('contextmenu', function(e) {
         map.closePopup();
+        if (_contextMenuDismiss) {
+            document.removeEventListener('click', _contextMenuDismiss);
+            _contextMenuDismiss = null;
+        }
         document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
+        _showContextMenuMarker(lat, lng);
 
         const menu = document.createElement('div');
         menu.className = 'map-context-menu';
@@ -1963,7 +2005,7 @@
             }).catch(function() {
                 toastr.error('Could not copy coordinates');
             });
-            menu.remove();
+            _closeMapContextMenu(menu);
         });
         menu.appendChild(coordItem);
 
@@ -2006,17 +2048,20 @@
         addPinItem.className = 'map-context-menu__item';
         addPinItem.innerHTML = '<i class="material-icons">add_location</i>Add Pin Here';
         addPinItem.addEventListener('click', function() {
-            menu.remove();
-            openAddPinDialog(lat, lng);
+            const transferred = _contextMenuMarker;
+            _contextMenuMarker = null;
+            _closeMapContextMenu(menu, { keepMarker: true });
+            if (transferred) _addPinMarker = transferred;
+            openAddPinDialog(lat, lng, { keepMarker: !!transferred });
         });
         menu.appendChild(addPinItem);
 
         document.body.appendChild(menu);
 
-        const dismiss = (ev) => {
-            if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); }
+        _contextMenuDismiss = (ev) => {
+            if (!menu.contains(ev.target)) _closeMapContextMenu(menu);
         };
-        setTimeout(() => document.addEventListener('click', dismiss), 0);
+        setTimeout(() => document.addEventListener('click', _contextMenuDismiss), 0);
     });
     map.invalidateSize();
 
@@ -3938,11 +3983,12 @@
         btn.textContent = 'Add Pin';
     }
 
-    function openAddPinDialog(lat = null, lng = null) {
+    function openAddPinDialog(lat = null, lng = null, opts = {}) {
+        const keepMarker = opts.keepMarker === true;
         _resetAddPinDialog();
 
-        // Remove any previous preview marker
-        if (_addPinMarker) { map.removeLayer(_addPinMarker); _addPinMarker = null; }
+        // Remove any previous preview marker unless transferring the context-menu pin
+        if (!keepMarker && _addPinMarker) { map.removeLayer(_addPinMarker); _addPinMarker = null; }
         _addPinClickMode = false;
 
         // Pre-fill coordinates when called from right-click context menu
