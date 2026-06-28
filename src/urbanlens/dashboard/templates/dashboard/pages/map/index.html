@@ -1,5 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
-{% load dashboard_tags %}
+{% load dashboard_tags static %}
 
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -70,25 +70,22 @@
             </button>
             <button id="weather-button" class="map-layer-btn"
                     onclick="toggleWeatherView();" aria-label="Weather overlay">
-                <span class="map-layer-thumb map-layer-thumb--overlay">
-                    <img src="https://a.basemaps.cartocdn.com/rastertiles/voyager/12/2140/1447.png" alt="" loading="lazy">
-                    <i class="material-icons">cloud</i>
+                <span class="map-layer-thumb">
+                    <img src="{% static 'dashboard/images/map_layer_weather.png' %}" alt="" loading="lazy">
                 </span>
                 <span>Weather</span>
             </button>
             <button id="toggle-pins-button" class="map-layer-btn"
                     onclick="togglePins();" aria-label="Show or hide pins">
-                <span class="map-layer-thumb map-layer-thumb--overlay">
-                    <img src="https://a.basemaps.cartocdn.com/rastertiles/voyager/12/2140/1447.png" alt="" loading="lazy">
-                    <i class="material-icons">push_pin</i>
+                <span class="map-layer-thumb">
+                    <img src="{% static 'dashboard/images/map_layer_pins.png' %}" alt="" loading="lazy">
                 </span>
                 <span>Pins</span>
             </button>
             <button id="dark-mode-button" class="map-layer-btn"
                     onclick="_toggleMapDarkMode();" aria-label="Toggle map dark mode">
-                <span class="map-layer-thumb map-layer-thumb--overlay">
-                    <img src="https://a.basemaps.cartocdn.com/dark_all/12/2140/1447.png" alt="" loading="lazy">
-                    <i class="material-icons">dark_mode</i>
+                <span class="map-layer-thumb">
+                    <img src="{% static 'dashboard/images/map_layer_dark.png' %}" alt="" loading="lazy">
                 </span>
                 <span>Dark</span>
             </button>
