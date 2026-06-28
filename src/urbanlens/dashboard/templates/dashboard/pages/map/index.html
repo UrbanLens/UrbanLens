@@ -243,7 +243,7 @@
                     {# Formula bar — replaces old search input. Supports plain search + formula operators. #}
                     <div class="fp-formula-wrap" id="fp-formula-wrap">
                         <input type="text" class="fp-formula-bar" id="fp-badge-formula"
-                               placeholder="Search or type: Visited / (Want To Go) -Demolished"
+                               placeholder="(Visited / Want To Go) - Demolished"
                                autocomplete="off" autocorrect="off" autocapitalize="off"
                                spellcheck="false">
                         <div class="fp-formula-suggestions" id="fp-formula-suggestions" hidden></div>
@@ -1848,7 +1848,6 @@
 
     // ── Layers panel toggle ───────────────────────────────────────────────────
     function _toggleLayersPanel() {
-        clearTimeout(_layersPanelCloseTimer);
         const menu = document.getElementById('map-layers-menu');
         if (menu && menu.hidden) { _openLayersPanel(); } else { _closeLayersPanel(); }
     }
@@ -2221,6 +2220,7 @@
     let _inclMode = 'and';
     let _badgeDragId = null;
     let _badgeDropHandled = false;  // set by drop handlers so dragend knows not to auto-remove
+    let _formulaGroups = null;      // non-null in formula mode: parsed groups are the canonical state
 
     // ── Helpers ─────────────────────────────────────────────────────────────
     function _badgeLabelForId(id) {
@@ -2258,13 +2258,20 @@
                 </span>`;
     }
 
-    // ── Serialise state → badge_groups JSON + update formula bar ─────────────
+    // ── Serialise state → badge_groups JSON ──────────────────────────────────
+    // When _formulaGroups is set (formula mode), use it directly so group structure
+    // (mixed AND/OR) is preserved. Otherwise derive from _badgeState + _inclMode.
     function _serializeBadgeGroups() {
-        const inclIds = [..._badgeState.entries()].filter(([,m]) => m === 'incl').map(([id]) => Number(id));
-        const exclIds = [..._badgeState.entries()].filter(([,m]) => m === 'excl').map(([id]) => Number(id));
-        const groups = [];
-        if (inclIds.length > 0) groups.push({op: _inclMode, ids: inclIds});
-        if (exclIds.length > 0) groups.push({op: 'not', ids: exclIds});
+        let groups;
+        if (_formulaGroups !== null) {
+            groups = _formulaGroups;
+        } else {
+            const inclIds = [..._badgeState.entries()].filter(([,m]) => m === 'incl').map(([id]) => Number(id));
+            const exclIds = [..._badgeState.entries()].filter(([,m]) => m === 'excl').map(([id]) => Number(id));
+            groups = [];
+            if (inclIds.length > 0) groups.push({op: _inclMode, ids: inclIds});
+            if (exclIds.length > 0) groups.push({op: 'not', ids: exclIds});
+        }
         const el = document.getElementById('fp-badge-groups');
         if (el) el.value = groups.length ? JSON.stringify(groups) : '';
     }
@@ -2272,15 +2279,36 @@
     function _updateFormulaFromState() {
         const bar = document.getElementById('fp-badge-formula');
         if (!bar || document.activeElement === bar) return;
-        const inclIds = [..._badgeState.entries()].filter(([,m]) => m === 'incl').map(([id]) => id);
-        const exclIds = [..._badgeState.entries()].filter(([,m]) => m === 'excl').map(([id]) => id);
-        const parts = [];
-        if (inclIds.length > 0) {
-            const names = inclIds.map(id => _quoteBadgeName(_badgeLabelForId(id)));
-            parts.push(_inclMode === 'or' && names.length > 1 ? `(${names.join(' / ')})` : names.join(' '));
+        if (_formulaGroups !== null) {
+            // Reconstruct formula text from stored groups, preserving parentheses for OR groups
+            const byName = _badgeByNameMap();
+            const byId = new Map([...byName.values()].map(v => [v.id, v]));
+            const parts = [];
+            for (const g of _formulaGroups) {
+                const names = g.ids.map(id => {
+                    const entry = byId.get(String(id));
+                    return entry ? _quoteBadgeName(entry.label) : String(id);
+                });
+                if (g.op === 'not') {
+                    names.forEach(n => parts.push(`-${n}`));
+                } else if (g.op === 'or') {
+                    parts.push(names.length > 1 ? `(${names.join(' / ')})` : (names[0] || ''));
+                } else {
+                    parts.push(...names);
+                }
+            }
+            bar.value = parts.join(' ');
+        } else {
+            const inclIds = [..._badgeState.entries()].filter(([,m]) => m === 'incl').map(([id]) => id);
+            const exclIds = [..._badgeState.entries()].filter(([,m]) => m === 'excl').map(([id]) => id);
+            const parts = [];
+            if (inclIds.length > 0) {
+                const names = inclIds.map(id => _quoteBadgeName(_badgeLabelForId(id)));
+                parts.push(_inclMode === 'or' && names.length > 1 ? `(${names.join(' / ')})` : names.join(' '));
+            }
+            exclIds.forEach(id => parts.push(`-${_quoteBadgeName(_badgeLabelForId(id))}`));
+            bar.value = parts.join(' ');
         }
-        exclIds.forEach(id => parts.push(`-${_quoteBadgeName(_badgeLabelForId(id))}`));
-        bar.value = parts.join(' ');
     }
 
     // ── Rebuild selected chips UI ────────────────────────────────────────────
@@ -2356,6 +2384,7 @@
 
     // ── Badge state mutations ────────────────────────────────────────────────
     function _addBadge(btn, mode) {
+        _formulaGroups = null;  // chip interactions exit formula mode
         const id = btn.dataset.badgeId;
         if (_badgeState.has(id)) {
             if (_badgeState.get(id) !== mode) _toggleBadgeMode(id);
@@ -2368,6 +2397,7 @@
     }
 
     function _toggleBadgeMode(id) {
+        _formulaGroups = null;
         if (!_badgeState.has(id)) return;
         _badgeState.set(id, _badgeState.get(id) === 'incl' ? 'excl' : 'incl');
         _rebuildBadgeSelected();
@@ -2375,6 +2405,7 @@
     }
 
     function _removeBadge(id) {
+        _formulaGroups = null;
         _badgeState.delete(id);
         const btn = document.querySelector(`#fp-badge-list [data-badge-id="${id}"]`);
         if (btn) btn.style.display = '';
@@ -2384,12 +2415,14 @@
 
     function _clearAllBadgeSelections() {
         _badgeState.clear();
+        _formulaGroups = null;
         document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(btn => { btn.style.display = ''; });
         _inclMode = 'and';
         _rebuildBadgeSelected();
     }
 
     function _toggleInclMode() {
+        _formulaGroups = null;
         _inclMode = _inclMode === 'and' ? 'or' : 'and';
         _rebuildBadgeSelected();
         htmx.trigger(document.getElementById('filter-form'), 'change');
@@ -2418,42 +2451,47 @@
         const errs = document.getElementById('fp-formula-errors');
         if (!bar) return;
 
-        let _formulaDebounce = null;
         let _activeSuggIdx = -1;
 
-        // Tokenize formula: returns array of {type, text, id?, start, end}
+        // Returns true if no badge name starts with `partial` — typing more cannot fix it
+        function _isDeadEnd(partial) {
+            if (!partial) return false;
+            const lo = partial.toLowerCase();
+            const byName = _badgeByNameMap();
+            for (const name of byName.keys()) {
+                if (name.startsWith(lo)) return false;
+            }
+            return true;
+        }
+
+        // Tokenize formula → [{type, text, id?, start, end}]
         // Types: BADGE, NOT, OR, LPAREN, RPAREN, UNKNOWN
         function _tokenize(text) {
             const byName = _badgeByNameMap();
-            // Sort badge names longest-first so greedy match works
             const sorted = [...byName.keys()].sort((a, b) => b.length - a.length);
             const tokens = [];
             let i = 0;
             while (i < text.length) {
-                if (text[i] === ' ' || text[i] === '+') { i++; continue; } // AND is implicit / explicit
+                if (text[i] === ' ' || text[i] === '+') { i++; continue; }
                 if (text[i] === '-') { tokens.push({type:'NOT', text:'-', start:i, end:i+1}); i++; continue; }
                 if (text[i] === '/') { tokens.push({type:'OR', text:'/', start:i, end:i+1}); i++; continue; }
                 if (text[i] === '(') { tokens.push({type:'LPAREN', text:'(', start:i, end:i+1}); i++; continue; }
                 if (text[i] === ')') { tokens.push({type:'RPAREN', text:')', start:i, end:i+1}); i++; continue; }
                 if (text[i] === '"') {
-                    // Quoted name
                     let j = i + 1;
                     while (j < text.length && text[j] !== '"') j++;
                     const raw = text.slice(i + 1, j);
-                    const lo = raw.toLowerCase();
-                    const match = byName.get(lo);
+                    const match = byName.get(raw.toLowerCase());
                     tokens.push(match
                         ? {type:'BADGE', text:raw, id:match.id, start:i, end:j+1}
                         : {type:'UNKNOWN', text:raw, start:i, end:j+1});
                     i = j + 1;
                     continue;
                 }
-                // Try greedy unquoted badge name
                 let matched = false;
                 for (const name of sorted) {
                     if (text.slice(i).toLowerCase().startsWith(name)) {
                         const end = i + name.length;
-                        // Must be followed by end, space, or operator (not a longer word)
                         const next = text[end];
                         if (!next || ' /+-()"'.includes(next)) {
                             const entry = byName.get(name);
@@ -2465,7 +2503,6 @@
                     }
                 }
                 if (!matched) {
-                    // Read until separator
                     let j = i;
                     while (j < text.length && !' /+-()"\t'.includes(text[j])) j++;
                     tokens.push({type:'UNKNOWN', text:text.slice(i, j), start:i, end:j});
@@ -2475,7 +2512,8 @@
             return tokens;
         }
 
-        // Parse tokens into groups [{op:'and'|'or'|'not', ids:[...]}]
+        // Parse tokens → {groups:[{op,ids}], errors:[text]}
+        // LPAREN...RPAREN → {op:'or', ids:[...]}  |  bare BADGE → {op:'and'|'not', ids:[id]}
         function _parseTokens(tokens) {
             const groups = [];
             const errors = [];
@@ -2485,10 +2523,9 @@
             while (i < tokens.length) {
                 const tok = tokens[i];
                 if (tok.type === 'NOT') { negate = true; i++; continue; }
-                if (tok.type === 'OR' || tok.type === 'AND') { i++; continue; }
+                if (tok.type === 'OR')  { i++; continue; }
 
                 if (tok.type === 'LPAREN') {
-                    // Collect OR group
                     const orIds = [];
                     i++;
                     while (i < tokens.length && tokens[i].type !== 'RPAREN') {
@@ -2497,20 +2534,16 @@
                         i++;
                     }
                     if (i < tokens.length) i++; // consume RPAREN
-                    if (orIds.length) {
-                        groups.push({op: negate ? 'not' : 'or', ids: orIds.map(Number)});
-                    }
+                    if (orIds.length) groups.push({op: negate ? 'not' : 'or', ids: orIds.map(Number)});
                     negate = false;
                     continue;
                 }
-
                 if (tok.type === 'BADGE') {
                     groups.push({op: negate ? 'not' : 'and', ids: [Number(tok.id)]});
                     negate = false;
                     i++;
                     continue;
                 }
-
                 if (tok.type === 'UNKNOWN') {
                     errors.push(tok.text);
                     negate = false;
@@ -2522,25 +2555,20 @@
             return {groups, errors};
         }
 
-        // Apply parsed groups to _badgeState
+        // Apply parsed groups: update _badgeState for chip display.
+        // Caller must set _formulaGroups before calling so serialization is correct.
         function _applyGroups(groups) {
-            // Restore all hidden available badges
             document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(b => { b.style.display = ''; });
             _badgeState.clear();
+            _inclMode = 'and';
             groups.forEach(g => {
                 if (g.op === 'not') {
                     g.ids.forEach(id => { _badgeState.set(String(id), 'excl'); });
                 } else {
-                    // 'and' or 'or' — included
                     g.ids.forEach(id => { _badgeState.set(String(id), 'incl'); });
                     if (g.op === 'or') _inclMode = 'or';
                 }
             });
-            // Determine inclMode from groups
-            const inclGroups = groups.filter(g => g.op !== 'not');
-            if (inclGroups.length === 1 && inclGroups[0].op === 'or') _inclMode = 'or';
-            else if (inclGroups.every(g => g.op === 'and')) _inclMode = 'and';
-            // Hide selected badges from the available list
             _badgeState.forEach((mode, id) => {
                 const btn = document.querySelector(`#fp-badge-list [data-badge-id="${id}"]`);
                 if (btn) btn.style.display = 'none';
@@ -2549,14 +2577,12 @@
             htmx.trigger(document.getElementById('filter-form'), 'change');
         }
 
-        // Get current token at cursor (for autocomplete)
         function _currentToken(text, cursor) {
             let start = cursor;
             while (start > 0 && !' /+-()"\t'.includes(text[start - 1])) start--;
             return {text: text.slice(start, cursor), start, end: cursor};
         }
 
-        // Show autocomplete suggestions
         function _showSuggestions(q) {
             if (!sugg) return;
             q = q.toLowerCase().trim();
@@ -2572,7 +2598,6 @@
                 </div>`
             ).join('');
             sugg.hidden = false;
-            // Click to insert
             sugg.querySelectorAll('.fp-formula-sugg').forEach(el => {
                 el.addEventListener('mousedown', (e) => {
                     e.preventDefault();
@@ -2602,34 +2627,26 @@
             _onFormulaChange();
         }
 
+        // On each keystroke: update suggestions, filter badge list, show dead-end errors only.
+        // Groups are NOT applied until Enter — prevents premature chip updates mid-formula.
         function _onFormulaChange() {
             const text = bar.value;
-            // Live-filter the badge list
             const cursor = bar.selectionStart ?? text.length;
             const tok = _currentToken(text, cursor);
             _showSuggestions(tok.text);
-            // Always filter badge list to match current token
             document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(btn => {
                 const q = tok.text.toLowerCase();
                 btn.style.display = (!q || (btn.dataset.badgeName || '').includes(q)) ? '' : 'none';
             });
-            // Debounce full parse (only parse if formula has operators, else it's just a search)
-            clearTimeout(_formulaDebounce);
-            const hasOps = /[-\/\+\(\)]/.test(text);
-            if (!hasOps) return;
-            _formulaDebounce = setTimeout(() => {
-                const tokens = _tokenize(text);
-                const {groups, errors} = _parseTokens(tokens);
-                if (errs) {
-                    if (errors.length) {
-                        errs.textContent = `Unknown: ${errors.join(', ')}`;
-                        errs.hidden = false;
-                    } else {
-                        errs.hidden = true;
-                    }
+            // Only show an error when the current cursor token is a provable dead end
+            if (errs) {
+                if (tok.text && _isDeadEnd(tok.text)) {
+                    errs.textContent = `No badge matches "${tok.text}"`;
+                    errs.hidden = false;
+                } else {
+                    errs.hidden = true;
                 }
-                if (groups.length || errors.length === 0) _applyGroups(groups);
-            }, 350);
+            }
         }
 
         bar.addEventListener('input', _onFormulaChange);
@@ -2643,7 +2660,6 @@
                     const activeEl = sugg.querySelector('.fp-formula-sugg.active');
                     if (activeEl && e.key === 'Tab') _insertSuggestion(activeEl.dataset.label);
                 } else if (e.key === 'Tab') {
-                    // Tab with no suggestions: insert first match from badge list
                     const cursor = bar.selectionStart;
                     const tok = _currentToken(bar.value, cursor);
                     if (tok.text) {
@@ -2655,25 +2671,47 @@
                 if (!sugg.hidden) { e.preventDefault(); _selectSuggestion(-1); }
             } else if (e.key === 'Enter') {
                 e.preventDefault();
+                // Insert highlighted suggestion
                 if (!sugg.hidden && _activeSuggIdx >= 0) {
                     const activeEl = sugg.querySelector('.fp-formula-sugg.active');
                     if (activeEl) { _insertSuggestion(activeEl.dataset.label); return; }
                 }
-                // Enter with no selection: add first visible badge as include (backward compat)
-                const firstVisible = document.querySelector('#fp-badge-list .fp-badge-avail:not([style*="display: none"])');
-                if (firstVisible) {
-                    _addBadge(firstVisible, 'incl');
-                    bar.value = '';
-                    sugg.hidden = true;
-                    document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(b => { b.style.display = ''; });
+                const text = bar.value.trim();
+                const hasOps = /[-\/\+\(\)]/.test(text);
+                if (hasOps) {
+                    // Formula mode: parse the full expression and apply it
+                    const tokens = _tokenize(text);
+                    const {groups, errors} = _parseTokens(tokens);
+                    if (errs) {
+                        if (errors.length) {
+                            errs.textContent = `Unknown: ${errors.join(', ')}`;
+                            errs.hidden = false;
+                        } else {
+                            errs.hidden = true;
+                        }
+                    }
+                    if (groups.length) {
+                        _formulaGroups = groups;  // set before _applyGroups so serialization is correct
+                        _applyGroups(groups);
+                        bar.value = '';
+                        sugg.hidden = true;
+                        document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(b => { b.style.display = ''; });
+                        if (errs && !errors.length) errs.hidden = true;
+                    }
                 } else {
-                    // Try parsing whatever is in the bar as a formula
-                    const tokens = _tokenize(bar.value);
-                    const {groups} = _parseTokens(tokens);
-                    if (groups.length) { _applyGroups(groups); bar.value = ''; sugg.hidden = true; }
+                    // Simple mode: add first visible badge as include (plain search + Enter)
+                    const firstVisible = document.querySelector('#fp-badge-list .fp-badge-avail:not([style*="display: none"])');
+                    if (firstVisible) {
+                        _addBadge(firstVisible, 'incl');
+                        bar.value = '';
+                        sugg.hidden = true;
+                        document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(b => { b.style.display = ''; });
+                        if (errs) errs.hidden = true;
+                    }
                 }
             } else if (e.key === 'Escape') {
                 sugg.hidden = true;
+                if (errs) errs.hidden = true;
             }
         });
 
