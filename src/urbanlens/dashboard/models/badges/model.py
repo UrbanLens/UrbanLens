@@ -56,8 +56,10 @@ class Badge(abstract.Model):
     order = IntegerField(default=0)
     # Protected badges (e.g. the built-in "Visited" status) cannot be deleted or renamed.
     is_protected = BooleanField(default=False)
-    # When False, AI auto-tagging will never attach this badge to a pin.
-    allow_ai = BooleanField(default=True)
+    # When False, auto-tagging (keyword or AI) will never attach this badge to a pin.
+    allow_auto_tag = BooleanField(default=True)
+    # Comma-separated keywords/phrases used by the keyword auto-tagger in addition to the badge name.
+    keywords = TextField(null=True, blank=True)
     # NULL = global tag visible to all users; non-null = owned by one user.
     profile = ForeignKey(
         "dashboard.Profile",

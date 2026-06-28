@@ -52,7 +52,9 @@ class PinSerializer(serializers.ModelSerializer):
         pin.user = user
         pin.save()
         try:
-            pin.suggest_category(append_suggestion=True)
+            from urbanlens.dashboard.services.auto_tag import AutoTagService
+
+            AutoTagService().suggest_for_pin(pin, apply=True)
         except (RuntimeError, OSError, ValueError):
-            logger.warning("suggest_category failed for pin %s", pin.pk, exc_info=True)
+            logger.warning("Auto-tagging failed for pin %s", pin.pk, exc_info=True)
         return pin

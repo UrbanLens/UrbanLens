@@ -581,12 +581,12 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
         badge.color = request.POST.get("color") or None
         badge.order = int(request.POST.get("order", badge.order))
 
-        # allow_ai can only be changed when the user has AI features; and never
+        # allow_auto_tag can only be changed when the user has AI features; and never
         # on the protected "Visited" badge.
         if not badge.is_protected:
-
             if user_has_feature(request.user, SiteFeature.AI):
-                badge.allow_ai = "allow_ai" in request.POST
+                badge.allow_auto_tag = "allow_auto_tag" in request.POST
+            badge.keywords = request.POST.get("keywords", "").strip() or None
 
         _apply_custom_icon_from_post(badge, request)
 

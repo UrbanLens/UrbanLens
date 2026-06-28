@@ -424,28 +424,85 @@ class LLMGateway[Response](ABC):
         raise NotImplementedError
 
     def _parse_answer(self, message_content: str) -> str | None:
+        """Parse the first <ANSWER> tag from the response body.
+
+        Args:
+            message_content: The content of the message to parse.
+
+        Returns:
+            The first extracted answer, or None.
         """
-        Parse the <ANSWER> tag from the response body.
+        answers = self._parse_answers(message_content)
+        if answers:
+            return answers[0]
+        logger.error('No ANSWER in response from AI model "%s": Response: %s', self.model, message_content)
+        return None
 
-            Args:
-                message_content (str):
-                    The content of the message to parse.
+    def _parse_answers(self, message_content: str) -> list[str]:
+        """Parse all <ANSWER>...</ANSWER> tags from the response body.
 
-            Returns:
-                str | None:
-                    The parsed answer from the response.
+        Args:
+            message_content: The content of the message to parse.
 
+        Returns:
+            List of extracted answer strings (stripped), may be empty.
         """
         try:
-            if match := re.search(r"[<\[]ANSWER:?[>\]](.*?)[<\[]([/\\]|END\s*)ANSWER[>\]]", message_content, re.DOTALL):
-                return match.group(1).strip()
-            logger.error('No ANSWER in response from AI model "%s": Response: %s', self.model, message_content)
-        except (re.error, AttributeError) as e:
+            return [
+                m.strip()
+                for m in re.findall(
+                    r"[<\[]ANSWER:?[>\]](.*?)[<\[](?:[/\\]|END\s*)ANSWER[>\]]",
+                    message_content,
+                    re.DOTALL,
+                )
+                if m.strip()
+            ]
+        except (re.error, AttributeError) as exc:
             logger.exception(
-                "Error parsing answer from response for model '%s'. Respoonse: %s\nError: %s",
+                "Error parsing answers from response for model '%s': %s",
                 self.model,
-                message_content,
-                e,
+                exc,
             )
+            return []
 
-        return None
+    def send_prompt_list(self, prompt: str, *, max_results: int | None = None, **kwargs) -> list[str]:
+        """Like send_prompt but returns every ANSWER tag as a list.
+
+        Useful when the AI is instructed to select multiple items and wraps
+        each one in its own ANSWER tag.
+
+        Args:
+            prompt: The user prompt to send.
+            max_results: Optional cap on the number of answers returned.
+
+        Returns:
+            List of answer strings (may be empty).
+        """
+        from urbanlens.dashboard.services.ai.scanner import scan as _scan_injection
+
+        scan_result = _scan_injection(prompt, source="user")
+        if scan_result.risk_score >= 0.3:
+            logger.warning(
+                "Prompt injection risk=%.2f for model '%s'; sending sanitized prompt",
+                scan_result.risk_score,
+                self.model,
+            )
+            prompt = scan_result.sanitized
+
+        try:
+            queue = self.construct_messages(prompt)
+        except ValueError:
+            logger.warning("Prompt exceeds token limit for model '%s'; skipping AI call", self.model)
+            return []
+
+        self.send_tokens(queue)
+
+        if response := self._get_response(queue):
+            if message := self._parse_response(response):
+                self.receive_tokens(message)
+                answers = self._parse_answers(message)
+                if max_results is not None:
+                    answers = answers[:max_results]
+                return answers
+
+        return []

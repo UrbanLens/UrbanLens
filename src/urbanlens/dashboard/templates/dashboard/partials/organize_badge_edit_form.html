@@ -109,14 +109,24 @@
         </div>
     </div>
 
+    {% if badge.kind != 'people' %}
+    <div class="form-field">
+        <label class="form-label">Keywords (optional)</label>
+        <textarea name="keywords" class="form-input" rows="2"
+                  placeholder="e.g. power station, electrical substation"
+        >{{ badge.keywords|default:'' }}</textarea>
+        <span class="form-hint">Comma-separated words or phrases. When any keyword appears in a pin's name, the badge is auto-assigned without an AI call.</span>
+    </div>
+    {% endif %}
+
     {% if can_use_ai_features and badge.kind != 'people' %}
-    <div class="form-field" style="margin-top:0.5rem;">
-        <label class="settings-toggle-row" title="When unchecked, AI will never automatically assign this badge to a pin">
-            <input type="checkbox" name="allow_ai" class="settings-toggle-input"
-                   {% if badge.allow_ai %}checked{% endif %}>
+    <div class="form-field">
+        <label class="settings-toggle-row" title="When unchecked, auto-tagging will never assign this badge">
+            <input type="checkbox" name="allow_auto_tag" class="settings-toggle-input"
+                   {% if badge.allow_auto_tag %}checked{% endif %}>
             <span class="settings-toggle-label">
-                <strong>Allow AI to assign this badge</strong>
-                <span class="form-hint">When enabled, AI can automatically add this badge to pins when they are created.</span>
+                <strong>Allow auto-tagging</strong>
+                <span class="form-hint">When enabled, keyword matching and AI can automatically add this badge to pins when they are created.</span>
             </span>
         </label>
     </div>

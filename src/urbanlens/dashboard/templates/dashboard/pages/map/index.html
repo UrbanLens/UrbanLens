@@ -55,59 +55,59 @@
         {# Menu flies out to the right. Tile thumbnails from Swiss Alps at z12 (good visual variety). #}
         <div class="map-layers-menu" id="map-layers-menu" hidden aria-hidden="true">
             <button id="street-button" class="map-layer-btn"
-                    onclick="toggleStreetView();" aria-label="Street view">
+                    onclick="toggleStreetView();" aria-label="Street Map">
                 <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_street.jpg' %}" alt="Street View" loading="lazy">
+                    <img src="{% static 'dashboard/images/map_layer_street.jpg' %}" alt="Street Layer" loading="lazy">
                 </span>
                 <span>Street</span>
             </button>
             <button id="topography-button" class="map-layer-btn"
-                    onclick="toggleTopographyView();" aria-label="Topographic view">
+                    onclick="toggleTopographyView();" aria-label="Topography Map">
                 <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_topography.jpg' %}" alt="" loading="lazy">
+                    <img src="{% static 'dashboard/images/map_layer_topography.jpg' %}" alt="Terrain Layer" loading="lazy">
                 </span>
                 <span>Terrain</span>
             </button>
             <button id="satellite-button" class="map-layer-btn"
-                    onclick="toggleSatelliteView();" aria-label="Satellite view">
+                    onclick="toggleSatelliteView();" aria-label="Satellite Map">
                 <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_satellite.jpg' %}" alt="Satellite View" loading="lazy">
+                    <img src="{% static 'dashboard/images/map_layer_satellite.jpg' %}" alt="Satellite Imagery Layer" loading="lazy">
                 </span>
                 <span>Satellite</span>
             </button>
             <button id="weather-button" class="map-layer-btn"
                     onclick="toggleWeatherView();" aria-label="Weather overlay">
                 <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_weather.jpg' %}" alt="Weather View" loading="lazy">
+                    <img src="{% static 'dashboard/images/map_layer_weather.jpg' %}" alt="Weather Layer" loading="lazy">
                 </span>
                 <span>Weather</span>
             </button>
             <button id="toggle-pins-button" class="map-layer-btn"
                     onclick="togglePins();" aria-label="Show or hide pins">
                 <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_pins.jpg' %}" alt="Pins View" loading="lazy">
+                    <img src="{% static 'dashboard/images/map_layer_pins.jpg' %}" alt="Pins Layer" loading="lazy">
                 </span>
                 <span>Pins</span>
             </button>
             <button id="dark-mode-button" class="map-layer-btn"
-                    onclick="_toggleMapDarkMode();" aria-label="Toggle map dark mode">
+                    onclick="_toggleMapDarkMode();" aria-label="Toggle Dark Mode">
                 <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_dark.jpg' %}" alt="Dark Mode View" loading="lazy">
+                    <img src="{% static 'dashboard/images/map_layer_dark.jpg' %}" alt="Dark Mode" loading="lazy">
                 </span>
                 <span>Dark</span>
             </button>
             <button id="boundaries-button" class="map-layer-btn"
-                    onclick="toggleBoundariesLayer();" aria-label="Toggle geopolitical boundaries">
-                <span class="map-layer-thumb map-layer-thumb--icon">
-                    <i class="material-icons">public</i>
+                    onclick="toggleBoundariesLayer();" aria-label="Toggle Geopolitical boundaries">
+                <span class="map-layer-thumb">
+                    <img src="{% static 'dashboard/images/map_layer_borders.jpg' %}" alt="Borders Layer" loading="lazy">
                 </span>
                 <span>Borders</span>
             </button>
             {% if show_places_layer %}
             <button id="places-button" class="map-layer-btn"
                     onclick="togglePlacesLayer();" aria-label="Toggle Places layer">
-                <span class="map-layer-thumb map-layer-thumb--icon">
-                    <i class="material-icons">place</i>
+                <span class="map-layer-thumb">
+                    <img src="{% static 'dashboard/images/map_layer_places.jpg' %}" alt="Places Layer" loading="lazy">
                 </span>
                 <span>Places</span>
             </button>

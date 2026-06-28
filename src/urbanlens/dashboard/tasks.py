@@ -96,33 +96,35 @@ def rebuild_map_pin_cache(self, profile_id: int) -> int:
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def suggest_location_category(self, location_id: int) -> str | None:
-    """Suggest and attach a category for a Location outside model signals."""
+def suggest_location_category(self, location_id: int) -> list[str]:
+    """Suggest and attach badges for a Location outside model signals."""
     from urbanlens.dashboard.models.location import Location
+    from urbanlens.dashboard.services.auto_tag import AutoTagService
 
     update_task_progress(self, current=0, total=1, message="Suggesting location category…")
     location = Location.objects.filter(pk=location_id).first()
     if location is None:
-        logger.info("Location %s no longer exists; skipping category suggestion", location_id)
-        return None
-    category = location.suggest_category(append_suggestion=True)
-    update_task_progress(self, current=1, total=1, message="Location category suggestion complete")
-    return category
+        logger.info("Location %s no longer exists; skipping auto-tagging", location_id)
+        return []
+    badges = AutoTagService().suggest_for_location(location, apply=True)
+    update_task_progress(self, current=1, total=1, message="Location auto-tagging complete")
+    return [b.name for b in badges]
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def suggest_pin_category(self, pin_id: int) -> str | None:
-    """Suggest and attach a category for a Pin outside request/import loops."""
+def suggest_pin_category(self, pin_id: int) -> list[str]:
+    """Suggest and attach badges for a Pin outside request/import loops."""
     from urbanlens.dashboard.models.pin import Pin
+    from urbanlens.dashboard.services.auto_tag import AutoTagService
 
     update_task_progress(self, current=0, total=1, message="Suggesting pin category…")
-    pin = Pin.objects.filter(pk=pin_id).first()
+    pin = Pin.objects.filter(pk=pin_id).select_related("profile").first()
     if pin is None:
-        logger.info("Pin %s no longer exists; skipping category suggestion", pin_id)
-        return None
-    category = pin.suggest_category(append_suggestion=True)
-    update_task_progress(self, current=1, total=1, message="Pin category suggestion complete")
-    return category
+        logger.info("Pin %s no longer exists; skipping auto-tagging", pin_id)
+        return []
+    badges = AutoTagService().suggest_for_pin(pin, apply=True)
+    update_task_progress(self, current=1, total=1, message="Pin auto-tagging complete")
+    return [b.name for b in badges]
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
