@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from django.db.models import (
     CASCADE,
@@ -15,6 +16,7 @@ from django.db.models import (
     ManyToManyField,
     Min,
     TextField,
+    UUIDField,
 )
 
 from urbanlens.dashboard.models import abstract
@@ -41,6 +43,7 @@ class Badge(abstract.Model):
     of the former PinList model: they carry an icon, custom icon, color, description,
     and ordering weight that feeds into Pin.effective_icon's priority chain.
     """
+    uuid = UUIDField(default=uuid4, unique=True, editable=False)
     name = CharField(max_length=255)
     description = TextField(null=True, blank=True)
     # Hex color string chosen from COLOR_CHOICES (e.g. "#2196F3").
@@ -178,6 +181,7 @@ class Badge(abstract.Model):
         get_latest_by = "updated"
         permissions = [("edit_global_badge", "Can edit global badges")]
         indexes = [
+            Index(fields=["uuid"], name="dashboard_badge_uuid_idx"),
             Index(fields=["profile"]),
             Index(fields=["profile", "order"]),
         ]
