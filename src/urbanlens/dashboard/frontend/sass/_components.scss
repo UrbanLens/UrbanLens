@@ -480,9 +480,12 @@
 // One track with overlapped min/max <input type="range"> thumbs.
 
 .ul-dual-range-slider {
-    position: relative;
-    height: 22px;
     margin: 4px 0 2px;
+
+	&__track-area {
+		position: relative;
+		height: 22px;
+	}
 
 	&__track {
 		position: absolute;
@@ -536,7 +539,6 @@
 			box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.5);
 			transition: transform .12s, box-shadow .12s;
 			outline: none !important;
-			z-index: 999999 !important;
 
 			&:hover,
 			&:active {
@@ -567,21 +569,15 @@
 		}
 	}
 
-	&__labels {
-		display: flex;
-		justify-content: space-between;
-		font-size: 0.8rem;
-		color: rgba(255, 255, 255, 0.4);
-		margin-top: 4px;
-
-		> span {
-			margin-top: -1em;
-		}
-	}
-
-	&__center-hint {
-		color: rgba(255, 200, 60, .35);
-		letter-spacing: .1em;
+	&__value-label {
+		display: block;
+		text-align: center;
+		font-size: 0.78rem;
+		color: rgba(255, 255, 255, 0.45);
+		margin-top: 5px;
+		user-select: none;
+		pointer-events: none;
+		letter-spacing: .04em;
 	}
 }
 

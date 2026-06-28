@@ -514,30 +514,36 @@ function _orgRowsId(ns) {
 }
 
 function _loadOrgSharedFilter() {
-    try {
-        var raw = localStorage.getItem('organize_filter');
-        if (raw) {
-            var o = JSON.parse(raw);
-            return {
-                search: o.search || '',
-                chips: new Set(o.chips || []),
-                color: (o.color || '').toLowerCase(),
-            };
-        }
-    } catch (_) {}
-    return { search: '', chips: new Set(), color: '' };
+    var params = new URLSearchParams(window.location.search);
+    return {
+        search: params.get('filter_search') || '',
+        chips: new Set((params.get('filter_chips') || '').split(',').filter(Boolean)),
+        color: (params.get('filter_color') || '').toLowerCase(),
+    };
 }
 
 var _orgSharedFilter = _loadOrgSharedFilter();
 
 function _saveOrgSharedFilter() {
-    try {
-        localStorage.setItem('organize_filter', JSON.stringify({
-            search: _orgSharedFilter.search,
-            chips: Array.from(_orgSharedFilter.chips),
-            color: _orgSharedFilter.color,
-        }));
-    } catch (_) {}
+    var params = new URLSearchParams(window.location.search);
+    if (_orgSharedFilter.search) {
+        params.set('filter_search', _orgSharedFilter.search);
+    } else {
+        params.delete('filter_search');
+    }
+    var chips = Array.from(_orgSharedFilter.chips);
+    if (chips.length > 0) {
+        params.set('filter_chips', chips.join(','));
+    } else {
+        params.delete('filter_chips');
+    }
+    if (_orgSharedFilter.color) {
+        params.set('filter_color', _orgSharedFilter.color);
+    } else {
+        params.delete('filter_color');
+    }
+    var newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+    window.history.replaceState({}, '', newUrl);
 }
 
 function _captureOrgFilterFromBar(ns) {
@@ -824,6 +830,7 @@ function toggleOrgFilter(ns) {
         _orgFilterBarOpen = true;
     } else {
         _orgFilterBarOpen = false;
+        clearOrgFilter(ns);
     }
 }
 
@@ -1075,13 +1082,16 @@ window._orgHeader = (function() {
         });
     });
 
-    // ESC closes filter bars and deselects all
+    // ESC clears and closes filter bars, then deselects all
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
         var anyOpen = document.querySelector('.org-filter-bar.open');
         if (anyOpen) {
             _orgFilterBarOpen = false;
             document.querySelectorAll('.org-filter-bar.open').forEach(function(bar) { bar.classList.remove('open'); });
+            var activeTabEl = document.querySelector('.organize-tab.active[data-filter-ns]');
+            var activeNs = activeTabEl ? activeTabEl.dataset.filterNs : (ORG_FILTER_NAMESPACES[0] || 'tag');
+            clearOrgFilter(activeNs);
             return;
         }
         // Deselect first (tab-specific handler clears its own Set + updates buttons),

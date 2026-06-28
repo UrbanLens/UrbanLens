@@ -2264,6 +2264,30 @@ dialog.tag-create-card.ul-dialog {
         display: flex;
     }
 
+    .org-filter-close {
+        flex: 0 0 auto;
+        align-self: flex-start;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        color: var(--ul-text-muted, $ui-slate-400);
+        cursor: pointer;
+        padding: 0;
+        transition: background .15s, color .15s;
+
+        .material-icons { font-size: 18px; }
+
+        &:hover {
+            background: var(--ul-border, $ui-slate-200);
+            color: var(--ul-text, $ui-slate-700);
+        }
+    }
+
     .org-filter-search {
         flex: 1 1 220px;
         min-width: 180px;

@@ -23,8 +23,6 @@
         const minSlider = root.querySelector('[data-role="min"]');
         const maxSlider = root.querySelector('[data-role="max"]');
         const fill = root.querySelector('[data-role="fill"]');
-        const minLabel = root.querySelector('[data-role="min-label"]');
-        const maxLabel = root.querySelector('[data-role="max-label"]');
         const minHidden = root.querySelector('[data-role="min-hidden"]');
         const maxHidden = root.querySelector('[data-role="max-hidden"]');
         if (!minSlider || !maxSlider || !fill) return;
@@ -50,9 +48,27 @@
         fill.style.left = (((lo - MIN) / span) * 100) + '%';
         fill.style.width = (((hi - lo) / span) * 100) + '%';
 
+        // Boost min slider z-index when at minimum so it remains clickable
+        minSlider.style.zIndex = (lo === MIN) ? '5' : '3';
+        maxSlider.style.zIndex = (lo === MIN) ? '3' : '5';
+
         const fullRange = lo === MIN && hi === MAX;
-        if (minLabel) minLabel.textContent = formatLabel(format, lo, MAX, fullRange, true);
-        if (maxLabel) maxLabel.textContent = formatLabel(format, hi, MAX, fullRange, false);
+        const valueLabel = root.querySelector('[data-role="value-label"]');
+        if (valueLabel) {
+            if (fullRange) {
+                valueLabel.textContent = 'Any';
+            } else {
+                const loText = formatLabel(format, lo, MAX, false, true);
+                const hiText = formatLabel(format, hi, MAX, false, false);
+                if (lo === MIN) {
+                    valueLabel.textContent = 'up to ' + hiText;
+                } else if (hi === MAX) {
+                    valueLabel.textContent = loText + ' or higher';
+                } else {
+                    valueLabel.textContent = loText + ' – ' + hiText;
+                }
+            }
+        }
 
         if (minHidden) minHidden.value = lo === MIN ? '' : String(lo);
         if (maxHidden) maxHidden.value = hi === MAX ? '' : String(hi);

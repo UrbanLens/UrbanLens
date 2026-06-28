@@ -2123,8 +2123,7 @@
         }
         _showFilterFetchIndicator();
     });
-    document.getElementById('filter-form').addEventListener('htmx:afterSwap', _hideFilterFetchIndicator);
-    document.getElementById('filter-form').addEventListener('htmx:responseError', _hideFilterFetchIndicator);
+    document.getElementById('filter-form').addEventListener('htmx:afterRequest', _hideFilterFetchIndicator);
 
     // ── Auto-expand filter accordion sections based on screen height ─────────
     // Expand all sections on tall screens, fewer on short screens

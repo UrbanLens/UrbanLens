@@ -16,7 +16,6 @@ Features planned for this release.
 * Remove work account from github project. [UL-247]
 * Switch to gunicorn (or similar) instead of runserver in init.py, except for environment=development. [UL-258]
 * Pull additional google place info from some supported google takeout files (Reviews.json, and others?)
-* Organize page: When filter section is closed, clear it. Also don't persist filter between other page loads (is this stored in session?), but do change url on filtering changes, so back button works, etc. Add close button, and ESC clears filter.
 
 ## Medium Features
 
