@@ -125,6 +125,11 @@ urlpatterns = [
                     name="map.resolve_place",
                 ),
                 path(
+                    "streetview-check/",
+                    maps.MapController.as_view({"get": "streetview_check"}),
+                    name="map.streetview_check",
+                ),
+                path(
                     "upload_image/<slug:pin_slug>/",
                     maps.MapController.as_view({"post": "upload_image"}),
                     name="pin.upload_image",

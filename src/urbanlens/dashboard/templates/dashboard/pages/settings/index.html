@@ -440,6 +440,75 @@
         </form>
     </section>
 
+    {# ── AI Features ───────────────────────────────────────────────────────── #}
+    {% if can_use_ai_features %}
+    <section class="settings-section ul-section" id="ai-settings-section">
+        <div class="settings-section-header">
+            <i class="material-icons">auto_awesome</i>
+            <div>
+                <h2 class="settings-section-title">AI Features</h2>
+                <p class="settings-section-desc">Control how AI is used when organizing your pins.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="ai-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="ai">
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ ai_form.ai_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ ai_form.ai_enabled.label }}</strong>
+                        <span class="settings-help">{{ ai_form.ai_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if ai_form.ai_enabled.errors %}
+                <p class="settings-error">{{ ai_form.ai_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-ai-sub-options" id="ai-sub-options">
+                <p class="settings-help" style="margin-bottom:0.75rem;">When a pin is created, AI can automatically add these badge types:</p>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ ai_form.ai_badge_categories }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ ai_form.ai_badge_categories.label }}</strong>
+                            <span class="settings-help">{{ ai_form.ai_badge_categories.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ ai_form.ai_badge_tags }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ ai_form.ai_badge_tags.label }}</strong>
+                            <span class="settings-help">{{ ai_form.ai_badge_tags.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ ai_form.ai_badge_statuses }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ ai_form.ai_badge_statuses.label }}</strong>
+                            <span class="settings-help">{{ ai_form.ai_badge_statuses.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+    {% endif %}
+
     {# ── Notifications ─────────────────────────────────────────────────────── #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
@@ -928,6 +997,23 @@ window.updateClusterRadius = function (value) {
         var form = document.getElementById('markup-defaults-form');
         if (form) schedule(form, 600);
     };
+}());
+
+// ── AI settings: toggle sub-options when master switch is flipped ─────────────
+(function () {
+    var masterToggle = document.getElementById('{{ ai_form.ai_enabled.id_for_label }}');
+    var subOptions   = document.getElementById('ai-sub-options');
+    if (!masterToggle || !subOptions) return;
+
+    function syncSubOptions() {
+        subOptions.style.opacity = masterToggle.checked ? '' : '0.4';
+        subOptions.querySelectorAll('input').forEach(function (inp) {
+            inp.disabled = !masterToggle.checked;
+        });
+    }
+
+    masterToggle.addEventListener('change', syncSubOptions);
+    syncSubOptions();
 }());
 </script>
 {% endblock %}

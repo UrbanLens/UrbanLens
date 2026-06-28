@@ -264,11 +264,26 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         self.save()
 
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
-        """Suggest a category using the pin's personal context and location metadata."""
-        # TODO: This probably needs to be abstracted a bit due to the addition of generic badges (categories and tags). It should probably also live somewhere else.
+        """Suggest a category using the pin's personal context and location metadata.
+
+        Respects the user's AI preferences: if the profile has AI disabled or
+        category auto-tagging disabled, this is a no-op.  Only badges with
+        ``allow_ai=True`` (and that are not the protected "Visited" badge) are
+        eligible as suggestions.
+        """
+        from urbanlens.dashboard.models.badges.model import Badge
         from urbanlens.dashboard.services.ai.factory import get_gateway
         from urbanlens.dashboard.services.ai.keywords import categorize_by_keywords
 
+        # Respect user AI preferences when a profile is attached.
+        profile = getattr(self, "profile", None)
+        if profile is not None:
+            if not getattr(profile, "ai_enabled", True):
+                return None
+            if not getattr(profile, "ai_badge_categories", True):
+                return None
+
+        # Try keyword matching first — no AI call needed.
         keyword_parts = [
             p
             for p in (
@@ -280,19 +295,51 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         if keyword_parts:
             category_name = categorize_by_keywords(" ".join(keyword_parts))
             if category_name:
+                # Honour badge-level allow_ai even for keyword matches.
+                allowed = Badge.objects.filter(
+                    name__iexact=category_name,
+                    kind="category",
+                    allow_ai=True,
+                ).exclude(name__iexact="visited").exists()
+                if not allowed:
+                    logger.debug("Keyword category '%s' excluded by allow_ai=False", category_name)
+                    return None
                 logger.debug("Keyword-matched category '%s' for pin %s", category_name, self.pk)
                 if append_suggestion:
                     self.add_category(category_name, save=False)
                 return category_name
 
-        instructions = (
-            "Look at the following information about a location and determine what category it belongs in. Example categories are: "
-            "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, "
-            "Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, Library, Lighthouse, Mall, Mansion, Military Base, "
-            "Monument, Police Station, Power Plant, Prison, Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel. "
-            "If the pin does not fit into any of these categories, provide a new category that is broad enough to include a variety "
-            "of similar urbex locations. Do not answer with the name of the pin; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
-        )
+        # Build the list of categories the AI is allowed to assign.
+        ai_allowed_qs = Badge.objects.filter(kind="category", allow_ai=True).exclude(name__iexact="visited")
+        if profile is not None:
+            ai_allowed_qs = ai_allowed_qs.filter(
+                Q(profile__isnull=True) | Q(profile=profile),
+            )
+        user_categories = list(ai_allowed_qs.values_list("name", flat=True).order_by("name"))
+
+        if user_categories:
+            category_list_str = ", ".join(user_categories)
+            instructions = (
+                f"Look at the following information about a location and determine what category it belongs in.\n\n"
+                f"You MUST choose from the user's existing categories. "
+                f"The available categories are: {category_list_str}.\n\n"
+                "Pick the single best match. If the location does not clearly fit any of these categories, "
+                "choose the closest one. Do not invent a new category name that is not in the list. "
+                "Do not answer with the name of the location; always answer with a category name exactly "
+                "as it appears in the list above, like this: <ANSWER>Factory</ANSWER>."
+            )
+        else:
+            # No user categories yet — fall back to generic urbex taxonomy.
+            instructions = (
+                "Look at the following information about a location and determine what category it belongs in. "
+                "Example categories include: Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, "
+                "Church, Factory, Firehouse, Fire Tower, Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, "
+                "Library, Lighthouse, Mall, Mansion, Military Base, Monument, Police Station, Power Plant, Prison, "
+                "Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel. "
+                "If the pin does not fit into any of these categories, provide a new category that is broad enough "
+                "to include a variety of similar urbex locations. "
+                "Do not answer with the name of the pin; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
+            )
 
         from urbanlens.dashboard.services.ai.scanner import wrap_user_data
 
@@ -300,8 +347,27 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         if self.address:
             prompt += f"address: {self.address}\n"
         if self.has_place_name():
-            prompt += f"google maps description: {self.place_name}\n"
-            instructions += "\nThe google maps description may be helpful, but it also may be inaccurate. Use your best judgement.\n"
+            prompt += f"google maps place name: {self.place_name}\n"
+            instructions += "\nThe google maps place name may be helpful, but it can also be inaccurate. Use your best judgement.\n"
+
+        # Include cached Google Places / Nominatim data if available.
+        location = getattr(self, "location", None)
+        if location is not None:
+            try:
+                from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+                for source in ("google_places", "nominatim"):
+                    cached = LocationCache.get_fresh(location, source)
+                    if cached and cached.data:
+                        data = cached.data
+                        place_types = data.get("types") or data.get("category") or []
+                        if isinstance(place_types, list) and place_types:
+                            prompt += f"place types ({source}): {', '.join(str(t) for t in place_types[:8])}\n"
+                        place_desc = data.get("description") or data.get("display_name") or ""
+                        if place_desc:
+                            prompt += f"place description ({source}): {place_desc[:300]}\n"
+            except Exception:
+                logger.debug("Could not load LocationCache data for pin %s", self.pk, exc_info=True)
 
         # User-supplied fields are wrapped in USER_DATA delimiters so the model
         # treats them as inert data rather than executable instructions.
@@ -322,6 +388,23 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
         category_name = gateway.send_prompt(prompt)
         if not category_name or len(category_name) < 3:
             return None
+
+        # Final guard: never add "Visited" via AI.
+        if category_name.lower() == "visited":
+            return None
+
+        # If we had a fixed list, only accept names that are in that list.
+        if user_categories and category_name.lower() not in {c.lower() for c in user_categories}:
+            # AI returned something not in the list; try a case-insensitive lookup anyway.
+            match = next((c for c in user_categories if c.lower() == category_name.lower()), None)
+            if not match:
+                logger.debug(
+                    "AI returned '%s' which is not in the allowed category list for pin %s; discarding",
+                    category_name,
+                    self.pk,
+                )
+                return None
+            category_name = match
 
         if append_suggestion:
             self.add_category(category_name, save=False)

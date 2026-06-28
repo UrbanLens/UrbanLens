@@ -17,9 +17,9 @@ PROJECT_DESCRIPTION = (
 FORMATTING = (
     "Place the relevant part of your answer inside <ANSWER> tags. The text inside the tag will "
     "be extracted and parsed by a script, so it needs to be formatted correctly and not contain any extra content. "
-    "For example, if the task is to interpret a date from a string, and the string is 'Employee was paid on January 1, 2023', your reply should include "
+    "For example, if the task is to interpret a date from a string, and the string is 'Employee was paid on January 1, 2023', your reply should be "
     "<ANSWER>2023-01-01</ANSWER>, so that it can be easily parsed into a date object. "
-    "If the task is to choose a category for a location, and the location is a church, your reply should include <ANSWER>church</ANSWER>. "
+    "If the task is to choose a category for a location, and the location is a church, your reply should be <ANSWER>church</ANSWER>. "
     "No other text should be included inside the answer tag."
 )
 

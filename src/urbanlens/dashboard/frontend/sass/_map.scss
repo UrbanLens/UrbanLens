@@ -1071,6 +1071,31 @@
     }
 }
 
+.map-context-menu__item--link {
+    text-decoration: none;
+}
+
+.map-context-menu__coords {
+    font-family: monospace;
+    font-size: .78rem;
+    letter-spacing: .03em;
+    color: $ui-gray-600;
+
+    span {
+        font-family: monospace;
+    }
+
+    &:hover {
+        color: $ui-indigo-700;
+    }
+}
+
+.map-context-menu__sep {
+    height: 1px;
+    background: var(--ul-border);
+    margin: .25rem 0;
+}
+
 /* ── Filter panel ─────────────────────────────────────────────────── */
 #filter-panel {
     position: absolute;

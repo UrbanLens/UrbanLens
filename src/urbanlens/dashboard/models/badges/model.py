@@ -56,6 +56,8 @@ class Badge(abstract.Model):
     order = IntegerField(default=0)
     # Protected badges (e.g. the built-in "Visited" status) cannot be deleted or renamed.
     is_protected = BooleanField(default=False)
+    # When False, AI auto-tagging will never attach this badge to a pin.
+    allow_ai = BooleanField(default=True)
     # NULL = global tag visible to all users; non-null = owned by one user.
     profile = ForeignKey(
         "dashboard.Profile",

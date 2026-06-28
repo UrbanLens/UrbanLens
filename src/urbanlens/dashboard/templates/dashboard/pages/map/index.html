@@ -1865,6 +1865,58 @@
         menu.style.top = `${e.originalEvent.clientY}px`;
         menu.style.left = `${e.originalEvent.clientX}px`;
 
+        // ── Coordinates row ─────────────────────────────────────────────────
+        const latFmt = lat.toFixed(6);
+        const lngFmt = lng.toFixed(6);
+        const coordItem = document.createElement('button');
+        coordItem.className = 'map-context-menu__item map-context-menu__coords';
+        coordItem.title = 'Click to copy coordinates';
+        coordItem.innerHTML = `<i class="material-icons">gps_fixed</i><span>${latFmt}, ${lngFmt}</span>`;
+        coordItem.addEventListener('click', function() {
+            navigator.clipboard.writeText(`${latFmt}, ${lngFmt}`).then(function() {
+                toastr.success('Coordinates copied to clipboard');
+            }).catch(function() {
+                toastr.error('Could not copy coordinates');
+            });
+            menu.remove();
+        });
+        menu.appendChild(coordItem);
+
+        // ── Separator ────────────────────────────────────────────────────────
+        const sep1 = document.createElement('div');
+        sep1.className = 'map-context-menu__sep';
+        menu.appendChild(sep1);
+
+        // ── Street View (async check) ────────────────────────────────────────
+        const svItem = document.createElement('a');
+        svItem.className = 'map-context-menu__item map-context-menu__item--link map-context-menu__streetview';
+        svItem.target = '_blank';
+        svItem.rel = 'noopener noreferrer';
+        svItem.href = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
+        svItem.innerHTML = '<i class="material-icons">streetview</i>Street View';
+        svItem.style.display = 'none';
+        menu.appendChild(svItem);
+
+        fetch(`{% url 'map.streetview_check' %}?lat=${lat}&lng=${lng}`)
+            .then(r => r.json())
+            .then(data => { if (data.available) svItem.style.display = ''; })
+            .catch(() => {});
+
+        // ── Directions ───────────────────────────────────────────────────────
+        const dirItem = document.createElement('a');
+        dirItem.className = 'map-context-menu__item map-context-menu__item--link';
+        dirItem.target = '_blank';
+        dirItem.rel = 'noopener noreferrer';
+        dirItem.href = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+        dirItem.innerHTML = '<i class="material-icons">directions</i>Directions here';
+        menu.appendChild(dirItem);
+
+        // ── Separator ────────────────────────────────────────────────────────
+        const sep2 = document.createElement('div');
+        sep2.className = 'map-context-menu__sep';
+        menu.appendChild(sep2);
+
+        // ── Add Pin ──────────────────────────────────────────────────────────
         const addPinItem = document.createElement('button');
         addPinItem.className = 'map-context-menu__item';
         addPinItem.innerHTML = '<i class="material-icons">add_location</i>Add Pin Here';
@@ -1872,8 +1924,8 @@
             menu.remove();
             openAddPinDialog(lat, lng);
         });
-
         menu.appendChild(addPinItem);
+
         document.body.appendChild(menu);
 
         const dismiss = (ev) => {

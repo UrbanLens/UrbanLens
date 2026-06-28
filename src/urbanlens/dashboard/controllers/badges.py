@@ -32,6 +32,7 @@ from urbanlens.dashboard.models.badges.model import (
 )
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -537,6 +538,7 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
             _parent_candidates(profile, self.kind, badge_id),
             parent_ids,
         )
+
         return render(
             request,
             "dashboard/partials/organize_badge_edit_form.html",
@@ -550,6 +552,7 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
                 "parent_ids": parent_ids,
                 "is_global": badge.kind == KIND_TAG and badge.profile is None,
                 "show_kind_toggle": cfg.show_kind_toggle,
+                "can_use_ai_features": user_has_feature(request.user, SiteFeature.AI),
             },
         )
 
@@ -577,6 +580,14 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
         badge.icon = request.POST.get("icon") or None
         badge.color = request.POST.get("color") or None
         badge.order = int(request.POST.get("order", badge.order))
+
+        # allow_ai can only be changed when the user has AI features; and never
+        # on the protected "Visited" badge.
+        if not badge.is_protected:
+
+            if user_has_feature(request.user, SiteFeature.AI):
+                badge.allow_ai = "allow_ai" in request.POST
+
         _apply_custom_icon_from_post(badge, request)
 
         kind_changed = _apply_kind_conversion(badge, new_kind, profile)

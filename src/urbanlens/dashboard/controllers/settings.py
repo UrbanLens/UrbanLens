@@ -12,6 +12,7 @@ from django.shortcuts import redirect, render
 from django.views import View
 
 from urbanlens.dashboard.forms.settings_form import (
+    AISettingsForm,
     ContactSettingsForm,
     MapCenterForm,
     MapDisplayForm,
@@ -20,6 +21,7 @@ from urbanlens.dashboard.forms.settings_form import (
     StyleSettingsForm,
 )
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -77,6 +79,7 @@ class SettingsView(LoginRequiredMixin, View):
             "map_display_form": MapDisplayForm(instance=profile),
             "map_center_form": MapCenterForm(instance=profile),
             "markup_defaults_form": MarkupDefaultsForm(instance=profile),
+            "ai_form": AISettingsForm(instance=profile),
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),
         }
@@ -94,8 +97,18 @@ class SettingsView(LoginRequiredMixin, View):
         map_display_form = MapDisplayForm(instance=profile)
         map_center_form = MapCenterForm(instance=profile)
         markup_defaults_form = MarkupDefaultsForm(instance=profile)
+        ai_form = AISettingsForm(instance=profile)
 
-        if section == "markup_defaults":
+        if section == "ai":
+
+            if user_has_feature(request.user, SiteFeature.AI):
+                ai_form = AISettingsForm(request.POST, instance=profile)
+                if ai_form.is_valid():
+                    ai_form.save()
+                    messages.success(request, "AI settings saved.")
+                    return redirect("settings.view")
+
+        elif section == "markup_defaults":
             markup_defaults_form = MarkupDefaultsForm(request.POST, instance=profile)
             if markup_defaults_form.is_valid():
                 markup_defaults_form.save()
@@ -140,6 +153,7 @@ class SettingsView(LoginRequiredMixin, View):
             "map_display_form": map_display_form,
             "map_center_form": map_center_form,
             "markup_defaults_form": markup_defaults_form,
+            "ai_form": ai_form,
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),
         }

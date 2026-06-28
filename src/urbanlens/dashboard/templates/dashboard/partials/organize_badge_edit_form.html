@@ -105,6 +105,19 @@
         </div>
     </div>
 
+    {% if can_use_ai_features and badge.kind != 'people' %}
+    <div class="form-field" style="margin-top:0.5rem;">
+        <label class="settings-toggle-row" title="When unchecked, AI will never automatically assign this badge to a pin">
+            <input type="checkbox" name="allow_ai" class="settings-toggle-input"
+                   {% if badge.allow_ai %}checked{% endif %}>
+            <span class="settings-toggle-label">
+                <strong>Allow AI to assign this badge</strong>
+                <span class="form-hint">When enabled, AI can automatically add this badge to pins when they are created.</span>
+            </span>
+        </label>
+    </div>
+    {% endif %}
+
     <div class="tag-form-actions">
         <button type="submit" class="btn btn--primary">Save</button>
         <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>

@@ -293,3 +293,36 @@ class MapCenterForm(forms.ModelForm):
         if commit:
             instance.save()
         return instance
+
+
+class AISettingsForm(forms.ModelForm):
+    """AI feature preferences - which badge kinds can be auto-assigned on pin creation."""
+
+    ai_enabled = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Enable AI Features",
+        help_text="Turn all AI-assisted features on or off for your account.",
+    )
+    ai_badge_categories = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Auto-categorize pins",
+        help_text="AI automatically suggests and adds a category badge when you create a pin.",
+    )
+    ai_badge_tags = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Auto-tag pins",
+        help_text="AI automatically suggests and adds tags when you create a pin.",
+    )
+    ai_badge_statuses = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Auto-status pins",
+        help_text="AI automatically suggests and adds a status badge when you create a pin.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["ai_enabled", "ai_badge_categories", "ai_badge_tags", "ai_badge_statuses"]

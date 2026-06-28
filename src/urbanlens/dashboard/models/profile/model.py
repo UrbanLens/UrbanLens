@@ -199,6 +199,12 @@ class Profile(abstract.Model):
     markup_border_color = CharField(max_length=20, blank=True, default="")
     markup_border_opacity = IntegerField(default=100)
 
+    # AI feature preferences (only relevant when the user has an AI subscription).
+    ai_enabled = BooleanField(default=True, help_text="Allow AI features on your account.")
+    ai_badge_tags = BooleanField(default=True, help_text="AI can automatically suggest and add tags when a pin is created.")
+    ai_badge_categories = BooleanField(default=True, help_text="AI can automatically suggest and add categories when a pin is created.")
+    ai_badge_statuses = BooleanField(default=True, help_text="AI can automatically suggest and add statuses when a pin is created.")
+
     user = OneToOneField(
         User,
         on_delete=CASCADE,

@@ -2,6 +2,8 @@ from datetime import datetime
 import json
 import logging
 from typing import Any
+import urllib.parse
+import urllib.request
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -260,6 +262,37 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "not_found"}, status=404)
 
         return JsonResponse({"lat": lat, "lng": lng, "name": name or ""})
+
+    def streetview_check(self, request, *args, **kwargs):
+        """Check whether Google Street View imagery exists at a given lat/lng.
+
+        Uses the Street View Static API metadata endpoint — a lightweight call
+        that returns JSON without downloading any imagery.
+
+        Returns JSON {"available": true/false}.  Falls back to {"available": false}
+        on any configuration or network error so the client can degrade gracefully.
+        """
+        try:
+            lat = float(request.GET.get("lat", ""))
+            lng = float(request.GET.get("lng", ""))
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "invalid coordinates"}, status=400)
+
+        api_key = settings.google_street_view_api_key or settings.google_maps_api_key or settings.google_places_api_key
+        if not api_key:
+            return JsonResponse({"available": False, "reason": "no_key"})
+
+        params = urllib.parse.urlencode({"location": f"{lat},{lng}", "key": api_key, "source": "outdoor"})
+        url = f"https://maps.googleapis.com/maps/api/streetview/metadata?{params}"
+        try:
+            with urllib.request.urlopen(url, timeout=4) as resp:  # nosec B310
+                import json as _json
+                data = _json.loads(resp.read())
+            available = data.get("status") == "OK"
+        except Exception:
+            available = False
+
+        return JsonResponse({"available": available})
 
     def search_map(self, request, *args, **kwargs):
         search_form = SearchForm()
