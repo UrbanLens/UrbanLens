@@ -2695,9 +2695,40 @@
     }
 
     (function _initAddrBar() {
+        const bar = document.getElementById('addr-search-bar');
         const input = document.getElementById('address-search-input');
         const clearBtn = document.getElementById('addr-search-clear');
         const suggestions = document.getElementById('addr-search-suggestions');
+        let _addrBlurTimer = null;
+
+        function _showAddrSuggestionsIfReady() {
+            const q = input.value.trim();
+            if (q && suggestions.children.length) suggestions.hidden = false;
+        }
+
+        function _hideAddrSuggestionsSoon() {
+            clearTimeout(_addrBlurTimer);
+            _addrBlurTimer = setTimeout(() => {
+                if (!bar.contains(document.activeElement)) {
+                    suggestions.hidden = true;
+                    _addrActiveIdx = -1;
+                }
+            }, 200);
+        }
+
+        // Keep focus on the input when clicking bar chrome (icon, padding) — not action buttons.
+        bar.addEventListener('mousedown', function (e) {
+            if (e.target.closest('.addr-search-home, .addr-search-clear, .addr-suggestion')) return;
+            if (e.target !== input) {
+                e.preventDefault();
+                input.focus();
+            }
+        });
+
+        // Prevent mousedown on the dropdown from blurring the input (group headers, spinners, etc.).
+        suggestions.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+        });
 
         input.addEventListener('input', function () {
             const q = this.value.trim();
@@ -2732,13 +2763,11 @@
             }
         });
 
-        input.addEventListener('blur', function () {
-            setTimeout(() => { suggestions.hidden = true; _addrActiveIdx = -1; }, 200);
-        });
+        input.addEventListener('blur', _hideAddrSuggestionsSoon);
 
         input.addEventListener('focus', function () {
-            const q = this.value.trim();
-            if (q && suggestions.children.length) suggestions.hidden = false;
+            clearTimeout(_addrBlurTimer);
+            _showAddrSuggestionsIfReady();
         });
     })();
 
