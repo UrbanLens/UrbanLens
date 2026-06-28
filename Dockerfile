@@ -1,35 +1,24 @@
-# Allow future upgrades
+# Allow future upgrades by pinning the base image version here
 ARG PYTHON_BASE_IMAGE_VERSION=3.12-bookworm
-ARG UL_DATABASE_NAME
-ARG UL_DATABASE_USER
-ARG UL_DATABASE_PASS
-ARG UL_DATABASE_HOST
-ARG UL_DATABASE_PORT
-ARG ENVIRONMENT
 
-# AppServer image
-FROM mcr.microsoft.com/devcontainers/python:${PYTHON_BASE_IMAGE_VERSION} AS base
+FROM python:${PYTHON_BASE_IMAGE_VERSION} AS base
 
 # Ensure logging dir exists at /var/log/urbanlens
 RUN mkdir -p /var/log/urbanlens
 
 # Environment variables
-# TODO: multi-stage build to hide env vars
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
     LC_CTYPE=en_US.UTF-8 \
-    UL_DATABASE_HOST=${UL_DATABASE_HOST} \
-    UL_DATABASE_PORT=${UL_DATABASE_PORT} \
-    UL_DATABASE_NAME=${UL_DATABASE_NAME} \
-    UL_DATABASE_USER=${UL_DATABASE_USER} \
-    UL_DATABASE_PASS=${UL_DATABASE_PASS} \
-    NODE_ENV=${ENVIRONMENT} \
     PYTHONPATH=/app/src
 
-# Dependencies for building packages (PGDG client matches postgis/postgis server versions)
+# Install system dependencies and PostgreSQL 17 client from PGDG.
+# The versioned binary at /usr/lib/postgresql/17/bin/pg_dump is used directly
+# (via UL_PG_DUMP_BIN) to avoid the pg_wrapper dispatcher requiring a running
+# local cluster.
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
     apt-get install -y --no-install-recommends ca-certificates curl gcc pkg-config gnupg && \
     install -d /usr/share/postgresql-common/pgdg && \
@@ -42,7 +31,6 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
     unzip \
     postgresql-client-17 \
     git \
-    gh \
     iputils-ping \
     libgdal-dev \
     wget \
@@ -51,12 +39,9 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install npm
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash && \
-    export NVM_DIR="/usr/local/share/nvm" && \
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && \
-    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion" && \
-    nvm install node
+# Install Bun (JS runtime + package manager) via the official Docker image.
+# This avoids the curl-to-bash NVM install and gives a reproducible binary.
+COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
 
 # Handle Python requirements
 COPY requirements /tmp/pip-tmp/requirements/
@@ -69,10 +54,10 @@ COPY . /app
 WORKDIR /app
 
 # Install the package in editable mode
-RUN pip install -e .
+RUN pip --no-cache-dir install -e .
 
-# Install npm packages
-RUN npm install -y
+# Install JS/TS dependencies (sass, typescript, etc.)
+RUN bun install
 
 # Create a non-root user. Pre-create every directory written to at runtime so
 # appuser never needs write access to root-owned parent dirs.
@@ -81,7 +66,7 @@ RUN npm install -y
 #   - AppSettings.ensure_paths() dirs: /app/src/urbanlens/ (capital-U, legacy
 #     runtime-data tree distinct from the lowercase source), /app/src/logs/,
 #     /app/src/backups/
-#   - npm build output: dashboard/frontend and core/frontend inside the source tree
+#   - bun build output: dashboard/frontend and core/frontend inside the source tree
 RUN groupadd --gid 1001 appuser && \
     useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser && \
     mkdir -p \

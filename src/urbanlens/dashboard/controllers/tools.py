@@ -93,7 +93,7 @@ class ToolsIndexView(LoginRequiredMixin, View):
         Returns:
             Rendered tools page.
         """
-        return render(request, "dashboard/pages/tools/index.html", {"show_backup_tools": request.user.has_perm("dashboard.view_site_admin")})
+        return render(request, "dashboard/pages/tools/index.html")
 
 
 class ExportStartView(LoginRequiredMixin, View):
@@ -321,6 +321,24 @@ class ImportStatusView(LoginRequiredMixin, View):
             return _import_error_partial(request, job_id, "Could not verify import ownership. Please try again.")
 
         return render(request, "dashboard/partials/import_progress.html", {"job_id": job_id, **data})
+
+
+class AdminToolsView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Admin-only tools landing page (database backups, future admin utilities)."""
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render tools/admin.html.
+
+        Args:
+            request: The authenticated admin HTTP request.
+
+        Returns:
+            Rendered admin tools page.
+        """
+        return render(request, "dashboard/pages/tools/admin.html")
 
 
 class BackupStartView(LoginRequiredMixin, PermissionRequiredMixin, View):

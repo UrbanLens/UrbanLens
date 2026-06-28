@@ -1,18 +1,56 @@
+# Shared build configuration — all three app containers use the same image.
+x-app-build: &app-build
+  context: .
+  dockerfile: Dockerfile
+  args:
+    - ENVIRONMENT=${ENVIRONMENT:-production}
+
+# Full environment for the app server and celery workers (need all API keys).
+# UL_PG_DUMP_BIN bypasses the pg_wrapper dispatcher and calls the versioned
+# binary directly, which avoids the "install postgresql-client-<ver>" error
+# when the wrapper can't find a local cluster matching the remote server.
+x-app-env: &app-env
+  UL_DB_USER: ${UL_DB_USER:-postgres}
+  UL_DB_NAME: ${UL_DB_NAME:-postgres}
+  UL_DB_PASS: ${UL_DB_PASS:-postgres}
+  UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
+  UL_DB_PORT: ${UL_DB_PORT:-5432}
+  ENVIRONMENT: ${ENVIRONMENT:-production}
+  UL_GOOGLE_CLIENT_ID: ${UL_GOOGLE_CLIENT_ID}
+  UL_GOOGLE_CLIENT_SECRET: ${UL_GOOGLE_CLIENT_SECRET}
+  UL_DISCORD_CLIENT_ID: ${UL_DISCORD_CLIENT_ID}
+  UL_DISCORD_CLIENT_SECRET: ${UL_DISCORD_CLIENT_SECRET}
+  UL_GOOGLE_PLACES_API_KEY: ${UL_GOOGLE_PLACES_API_KEY}
+  UL_GOOGLE_MAPS_API_KEY: ${UL_GOOGLE_MAPS_API_KEY}
+  UL_GOOGLE_SEARCH_API_KEY: ${UL_GOOGLE_SEARCH_API_KEY}
+  UL_GOOGLE_SEARCH_TENANT: ${UL_GOOGLE_SEARCH_TENANT}
+  UL_GOOGLE_SEARCH_CX: ${UL_GOOGLE_SEARCH_CX:-${UL_GOOGLE_SEARCH_TENANT}}
+  UL_OPENWEATHERMAP_API_KEY: ${UL_OPENWEATHERMAP_API_KEY}
+  UL_NPS_API_KEY: ${UL_NPS_API_KEY}
+  UL_OPENAI_API_KEY: ${UL_OPENAI_API_KEY}
+  UL_SMITHSONIAN_API_KEY: ${UL_SMITHSONIAN_API_KEY}
+  UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+  UL_PG_DUMP_BIN: /usr/lib/postgresql/17/bin/pg_dump
+
+# Minimal environment for celery-beat — only needs DB + broker to schedule tasks.
+x-beat-env: &beat-env
+  UL_DB_USER: ${UL_DB_USER:-postgres}
+  UL_DB_NAME: ${UL_DB_NAME:-postgres}
+  UL_DB_PASS: ${UL_DB_PASS:-postgres}
+  UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
+  UL_DB_PORT: ${UL_DB_PORT:-5432}
+  ENVIRONMENT: ${ENVIRONMENT:-production}
+  UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+
 services:
   app:
     container_name: urbanlens_app
     build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - ENVIRONMENT=${ENVIRONMENT:-production}
-        - UL_DATABASE_USER=${UL_DB_USER:-postgres}
-        - UL_DATABASE_NAME=${UL_DB_NAME:-postgres}
-        - UL_DATABASE_PASS=${UL_DB_PASS:-postgres}
-        - UL_DATABASE_HOST=${UL_DB_HOST:-urbanlens_db}
-        - UL_DATABASE_PORT=${UL_DB_PORT:-5432}
+      <<: *app-build
 
-    restart: on-failure
+    restart: unless-stopped
 
     depends_on:
       db:
@@ -35,27 +73,7 @@ services:
           - urbanlens_app
 
     environment:
-      - UL_DB_USER=${UL_DB_USER:-postgres}
-      - UL_DB_NAME=${UL_DB_NAME:-postgres}
-      - UL_DB_PASS=${UL_DB_PASS:-postgres}
-      - UL_DB_HOST=${UL_DB_HOST:-urbanlens_db}
-      - UL_DB_PORT=${UL_DB_PORT:-5432}
-      - ENVIRONMENT=${ENVIRONMENT:-production}
-      - UL_GOOGLE_CLIENT_ID=${UL_GOOGLE_CLIENT_ID}
-      - UL_GOOGLE_CLIENT_SECRET=${UL_GOOGLE_CLIENT_SECRET}
-      - UL_DISCORD_CLIENT_ID=${UL_DISCORD_CLIENT_ID}
-      - UL_DISCORD_CLIENT_SECRET=${UL_DISCORD_CLIENT_SECRET}
-      - UL_GOOGLE_PLACES_API_KEY=${UL_GOOGLE_PLACES_API_KEY}
-      - UL_GOOGLE_MAPS_API_KEY=${UL_GOOGLE_MAPS_API_KEY}
-      - UL_GOOGLE_SEARCH_API_KEY=${UL_GOOGLE_SEARCH_API_KEY}
-      - UL_GOOGLE_SEARCH_TENANT=${UL_GOOGLE_SEARCH_TENANT}
-      - UL_GOOGLE_SEARCH_CX=${UL_GOOGLE_SEARCH_CX:-${UL_GOOGLE_SEARCH_TENANT}}
-      - UL_OPENWEATHERMAP_API_KEY=${UL_OPENWEATHERMAP_API_KEY}
-      - UL_NPS_API_KEY=${UL_NPS_API_KEY}
-      - UL_OPENAI_API_KEY=${UL_OPENAI_API_KEY}
-      - UL_SMITHSONIAN_API_KEY=${UL_SMITHSONIAN_API_KEY}
-      - UL_VALKEY_URL=${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      <<: *app-env
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -90,7 +108,9 @@ services:
 
   db:
     container_name: urbanlens_db
-    image: postgis/postgis:latest
+    # Pin to the same major version as postgresql-client-17 in the Dockerfile so
+    # the pg_dump binary and server protocol stay in sync.
+    image: postgis/postgis:17-3.5
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -120,15 +140,7 @@ services:
   celery-worker:
     container_name: urbanlens_celery_worker
     build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - ENVIRONMENT=${ENVIRONMENT:-production}
-        - UL_DATABASE_USER=${UL_DB_USER:-postgres}
-        - UL_DATABASE_NAME=${UL_DB_NAME:-postgres}
-        - UL_DATABASE_PASS=${UL_DB_PASS:-postgres}
-        - UL_DATABASE_HOST=${UL_DB_HOST:-urbanlens_db}
-        - UL_DATABASE_PORT=${UL_DB_PORT:-5432}
+      <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
     command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=info", "--concurrency=2"]
     restart: on-failure
@@ -144,27 +156,7 @@ services:
     networks:
       - app_network
     environment:
-      - UL_DB_USER=${UL_DB_USER:-postgres}
-      - UL_DB_NAME=${UL_DB_NAME:-postgres}
-      - UL_DB_PASS=${UL_DB_PASS:-postgres}
-      - UL_DB_HOST=${UL_DB_HOST:-urbanlens_db}
-      - UL_DB_PORT=${UL_DB_PORT:-5432}
-      - ENVIRONMENT=${ENVIRONMENT:-production}
-      - UL_GOOGLE_CLIENT_ID=${UL_GOOGLE_CLIENT_ID}
-      - UL_GOOGLE_CLIENT_SECRET=${UL_GOOGLE_CLIENT_SECRET}
-      - UL_DISCORD_CLIENT_ID=${UL_DISCORD_CLIENT_ID}
-      - UL_DISCORD_CLIENT_SECRET=${UL_DISCORD_CLIENT_SECRET}
-      - UL_GOOGLE_PLACES_API_KEY=${UL_GOOGLE_PLACES_API_KEY}
-      - UL_GOOGLE_MAPS_API_KEY=${UL_GOOGLE_MAPS_API_KEY}
-      - UL_GOOGLE_SEARCH_API_KEY=${UL_GOOGLE_SEARCH_API_KEY}
-      - UL_GOOGLE_SEARCH_TENANT=${UL_GOOGLE_SEARCH_TENANT}
-      - UL_GOOGLE_SEARCH_CX=${UL_GOOGLE_SEARCH_CX:-${UL_GOOGLE_SEARCH_TENANT}}
-      - UL_OPENWEATHERMAP_API_KEY=${UL_OPENWEATHERMAP_API_KEY}
-      - UL_NPS_API_KEY=${UL_NPS_API_KEY}
-      - UL_OPENAI_API_KEY=${UL_OPENAI_API_KEY}
-      - UL_SMITHSONIAN_API_KEY=${UL_SMITHSONIAN_API_KEY}
-      - UL_VALKEY_URL=${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      <<: *app-env
     logging:
       driver: "json-file"
       options:
@@ -174,15 +166,7 @@ services:
   celery-beat:
     container_name: urbanlens_celery_beat
     build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - ENVIRONMENT=${ENVIRONMENT:-production}
-        - UL_DATABASE_USER=${UL_DB_USER:-postgres}
-        - UL_DATABASE_NAME=${UL_DB_NAME:-postgres}
-        - UL_DATABASE_PASS=${UL_DB_PASS:-postgres}
-        - UL_DATABASE_HOST=${UL_DB_HOST:-urbanlens_db}
-        - UL_DATABASE_PORT=${UL_DB_PORT:-5432}
+      <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
     command: ["-A", "urbanlens.UrbanLens", "beat", "--loglevel=info", "--schedule=/var/log/urbanlens/celerybeat-schedule"]
     restart: on-failure
@@ -196,14 +180,7 @@ services:
     networks:
       - app_network
     environment:
-      - UL_DB_USER=${UL_DB_USER:-postgres}
-      - UL_DB_NAME=${UL_DB_NAME:-postgres}
-      - UL_DB_PASS=${UL_DB_PASS:-postgres}
-      - UL_DB_HOST=${UL_DB_HOST:-urbanlens_db}
-      - UL_DB_PORT=${UL_DB_PORT:-5432}
-      - ENVIRONMENT=${ENVIRONMENT:-production}
-      - UL_VALKEY_URL=${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      <<: *beat-env
     logging:
       driver: "json-file"
       options:

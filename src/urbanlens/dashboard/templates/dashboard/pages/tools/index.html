@@ -209,22 +209,24 @@
         </div>
 
 
-        {% if show_backup_tools %}
-        <div class="ul-card tools-card" id="backup-card">
+        {# ── Admin Tools card (admins only) ──────────────────────────────────── #}
+        {% if perms.dashboard.view_site_admin %}
+        <div class="ul-card tools-card" id="admin-tools-card">
             <div class="ul-card-header">
-                <i class="material-icons">backup</i>
-                <h3>Database Backup</h3>
+                <i class="material-icons">admin_panel_settings</i>
+                <h3>Admin Tools</h3>
             </div>
 
             <div class="ul-card-body">
-                <p class="tools-card-desc">Queue a manual database backup. You can monitor the task from the response in your browser developer tools or the Celery worker logs.</p>
+                <p class="tools-card-desc">
+                    Access site administration utilities, including database backups and other admin-only tools.
+                </p>
                 <div class="tools-card-actions">
-                    <button type="button" class="btn btn--primary" id="manual-backup-btn" data-url="{% url 'tools.backup.start' %}">
-                        <i class="material-icons">backup</i>
-                        <span>Run Backup</span>
-                    </button>
+                    <a href="{% url 'tools.admin.index' %}" class="btn btn--primary tools-admin-btn">
+                        <i class="material-icons">open_in_new</i>
+                        <span>Open Admin Tools</span>
+                    </a>
                 </div>
-                <div id="manual-backup-result" class="tools-card-desc" style="margin-top:1rem"></div>
             </div>
         </div>
         {% endif %}
@@ -461,6 +463,7 @@
 }
 
 .tools-invite-btn,
+.tools-admin-btn,
 .export-submit-btn {
     display: inline-flex;
     align-items: center;
@@ -859,24 +862,4 @@
 })();
 </script>
 
-<script>
-(function () {
-    var btn = document.getElementById('manual-backup-btn');
-    if (!btn) return;
-    btn.addEventListener('click', function () {
-        var result = document.getElementById('manual-backup-result');
-        result.textContent = 'Queueing backup…';
-        fetch(btn.dataset.url, {
-            method: 'POST',
-            headers: {'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''}
-        }).then(function (response) {
-            return response.json().then(function (data) { return {status: response.status, data: data}; });
-        }).then(function (payload) {
-            result.textContent = payload.data.message || (payload.status === 202 ? 'Backup queued.' : 'Backup request failed.');
-        }).catch(function () {
-            result.textContent = 'Backup request failed.';
-        });
-    });
-})();
-</script>
 {% endblock %}

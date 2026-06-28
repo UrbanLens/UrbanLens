@@ -691,6 +691,7 @@ urlpatterns = [
         include(
             [
                 path("", tools.ToolsIndexView.as_view(), name="tools.index"),
+                path("admin/", tools.AdminToolsView.as_view(), name="tools.admin.index"),
                 path("export/start/", tools.ExportStartView.as_view(), name="tools.export.start"),
                 path("export/status/<str:job_id>/", tools.ExportStatusView.as_view(), name="tools.export.status"),
                 path("export/download/<str:job_id>/", tools.ExportDownloadView.as_view(), name="tools.export.download"),
