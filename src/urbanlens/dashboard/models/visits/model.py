@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
-from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, Index, TextChoices, TextField
+from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, Index, TextChoices, TextField, UUIDField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.visits.queryset import VisitManager
@@ -33,6 +34,7 @@ class PinVisit(abstract.Model):
         source: Whether this was entered manually or imported from Google Takeout.
     """
 
+    uuid = UUIDField(default=uuid4, unique=True, editable=False)
     pin = ForeignKey(
         "dashboard.Pin",
         on_delete=CASCADE,
@@ -60,6 +62,7 @@ class PinVisit(abstract.Model):
         ordering = ["-visited_at"]
         get_latest_by = "visited_at"
         indexes = [
+            Index(fields=["uuid"], name="dashboard_pv_uuid_idx"),
             Index(fields=["pin"], name="dashboard_pv_pin_idx"),
             Index(fields=["pin", "visited_at"], name="dashboard_pv_pin_visited_idx"),
         ]

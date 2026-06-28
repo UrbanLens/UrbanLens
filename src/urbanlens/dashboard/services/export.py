@@ -120,7 +120,6 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
     """
     from django.contrib.auth import get_user_model
     from django.core.exceptions import ObjectDoesNotExist
-    from django.db import DatabaseError
 
     User = get_user_model()
     resolved_job_id = job_id or pathlib.Path(export_dir_path).name
@@ -166,7 +165,7 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
             base_url=base_url,
         )
         return True
-    except (OSError, DatabaseError, ValueError):
+    except Exception:
         logger.exception("Export failed for user %s", user_id)
         ExportJobStatus(resolved_job_id).write("error", 0, "Export failed. Please try again.")
         return False
@@ -477,6 +476,7 @@ def _export_visit_history(profile: Any, temp_dir: str, *, base_url: str = "") ->
 
     rows = [
         {
+            "uuid": str(v.uuid),
             "pin_uuid": str(v.pin.uuid),
             "visited_at": str(v.visited_at),
             "notes": v.notes or "",
@@ -503,7 +503,7 @@ def _export_comments(profile: Any, temp_dir: str, *, base_url: str = "") -> None
         target_type, target = _resolve_target(comment)
         rows.append(
             {
-                "id": comment.pk,
+                "uuid": str(comment.uuid),
                 "target_type": target_type,
                 "target_name": target,
                 "text": comment.text,
@@ -539,7 +539,7 @@ def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
 
         metadata.append(
             {
-                "id": image.pk,
+                "uuid": str(image.uuid),
                 "filename": filename,
                 "caption": image.caption or "",
                 "target_type": target_type,
@@ -568,7 +568,7 @@ def _export_trips(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     for trip in trips:
         rows.append(
             {
-                "id": trip.pk,
+                "uuid": str(trip.uuid),
                 "name": trip.name,
                 "description": trip.description or "",
                 "start_date": str(trip.start_date) if trip.start_date else None,

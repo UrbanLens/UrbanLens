@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from django.db import models
 
 from urbanlens.dashboard.models import abstract
@@ -15,6 +17,7 @@ class Comment(abstract.Model):
     ``parent`` is set only for replies (depth-1 threading).
     """
 
+    uuid = models.UUIDField(default=uuid4, unique=True, editable=False)
     pin = models.ForeignKey(
         "dashboard.Pin",
         on_delete=models.CASCADE,
@@ -53,3 +56,4 @@ class Comment(abstract.Model):
         db_table = "dashboard_comments"
         get_latest_by = "updated"
         ordering = ["created"]
+        indexes = [models.Index(fields=["uuid"], name="dashboard_comment_uuid_idx")]
