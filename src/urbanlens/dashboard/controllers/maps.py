@@ -186,7 +186,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         search_form = SearchForm(request.POST)
         if search_form.is_valid():
             profile, _ = Profile.objects.get_or_create(user=request.user)
-            query = Pin.objects.filter(profile=profile).filter_by_criteria(search_form.cleaned_data)
+            criteria = dict(search_form.cleaned_data)
+            # Prefer structured badge_groups (from formula bar) over legacy tag lists
+            parsed_groups = search_form.parse_badge_groups()
+            if parsed_groups is not None:
+                criteria["badge_groups"] = parsed_groups
+            query = Pin.objects.filter(profile=profile).filter_by_criteria(criteria)
             map_data = self.get_map_data(request, query)
             return render(request, "dashboard/pages/map/data.html", {"map_data": map_data})
 

@@ -270,11 +270,6 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 * tags = Badge.objects.tags() (and also .categories()) -> Cannot access attribute "categories" for class "Manager" [UL-126]
 * profile = user.profile -> Cannot access attribute "profile" for class "User" [UL-127]
 
-## Inconsistent Behavior
-Behavior that isn't consistent enough to diagnose or fix without looking at it more deeply.
-
-* Sometimes... In the import dialog ui, hovering over the drop files here or browse button has a css hover effect that makes it look clickable, but clicking on it doesn't do anything. The user has to click on the browse link. Clicking anywhere on the button should work just as if the user clicked on the browse link. [UL-141]
-
 ## From README Roadmap (migrated)
 Items previously listed in README.md that are not already tracked elsewhere in this file. Some of these may already be implemented, so this list should be looked over and pruned before being relied on.
 

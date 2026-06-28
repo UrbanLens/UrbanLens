@@ -1,0 +1,52 @@
+{% comment %}
+Dual-handle range slider — one track with min and max thumbs.
+
+Parameters:
+  min, max           — range bounds (required)
+  min_value          — initial low thumb (defaults to min)
+  max_value          — initial high thumb (defaults to max)
+  min_field          — name for the hidden min form field (required)
+  max_field          — name for the hidden max form field (required)
+  format             — "default" or "stars" (optional, default "default")
+  center_hint        — optional static label between min/max readouts
+  htmx_form          — form element id to trigger on change (optional)
+  accordion_id       — details element id for active-state styling (optional)
+  step               — range step (optional, default 1)
+{% endcomment %}
+<div class="ul-dual-range-slider"
+     data-ul-dual-range-slider
+     data-min="{{ min }}"
+     data-max="{{ max }}"
+     data-min-value="{{ min_value|default:min }}"
+     data-max-value="{{ max_value|default:max }}"
+     data-format="{{ format|default:'default' }}"
+     {% if step %}data-step="{{ step }}"{% endif %}
+     {% if htmx_form %}data-htmx-form="{{ htmx_form }}"{% endif %}
+     {% if accordion_id %}data-accordion="{{ accordion_id }}"{% endif %}>
+    <input type="hidden" name="{{ min_field }}" data-role="min-hidden" value="">
+    <input type="hidden" name="{{ max_field }}" data-role="max-hidden" value="">
+    <div class="ul-dual-range-slider__track">
+        <div class="ul-dual-range-slider__fill" data-role="fill" style="left:0%;width:100%"></div>
+    </div>
+    <input type="range"
+           data-role="min"
+           class="ul-dual-range-slider__input"
+           min="{{ min }}"
+           max="{{ max }}"
+           value="{{ min_value|default:min }}"
+           {% if step %}step="{{ step }}"{% endif %}
+           aria-label="Minimum value">
+    <input type="range"
+           data-role="max"
+           class="ul-dual-range-slider__input"
+           min="{{ min }}"
+           max="{{ max }}"
+           value="{{ max_value|default:max }}"
+           {% if step %}step="{{ step }}"{% endif %}
+           aria-label="Maximum value">
+    <div class="ul-dual-range-slider__labels">
+        <span data-role="min-label">Any</span>
+        {% if center_hint %}<span class="ul-dual-range-slider__center-hint">{{ center_hint }}</span>{% endif %}
+        <span data-role="max-label">Any</span>
+    </div>
+</div>

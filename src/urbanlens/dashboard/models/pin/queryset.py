@@ -92,12 +92,46 @@ class PinQuerySet(abstract.QuerySet):
         tag_ids = Badge.get_badge_and_descendants(tag_id)
         return self.filter(badges__id__in=tag_ids).distinct()
 
+    def apply_badge_groups(self, groups: list[dict]) -> PinQuerySet:
+        """Apply structured badge filter groups returned by ``SearchForm.parse_badge_groups()``.
+
+        Args:
+            groups: List of ``{"op": "and"|"or"|"not", "ids": [int, ...]}``.
+
+        Returns:
+            Filtered QuerySet (not yet distinct — caller must call ``.distinct()``).
+        """
+        from urbanlens.dashboard.models.badges.model import Badge as _Badge
+
+        qs = self
+        for group in groups:
+            op = group.get("op")
+            ids = group.get("ids", [])
+            if not ids:
+                continue
+            if op == "and":
+                for bid in ids:
+                    expanded = _Badge.get_badge_and_descendants(bid)
+                    qs = qs.filter(badges__id__in=expanded)
+            elif op == "or":
+                or_q = Q()
+                for bid in ids:
+                    expanded = _Badge.get_badge_and_descendants(bid)
+                    or_q |= Q(badges__id__in=expanded)
+                qs = qs.filter(or_q)
+            elif op == "not":
+                for bid in ids:
+                    expanded = _Badge.get_badge_and_descendants(bid)
+                    qs = qs.exclude(badges__id__in=expanded)
+        return qs
+
     def filter_by_criteria(self, criteria) -> Self:
         """Filter pins by the criteria dict produced by SearchForm.cleaned_data.
 
         Args:
             criteria: Dict with optional keys: name, status (list), tags (QuerySet),
-                exclude_tags (QuerySet), min_rating (int), max_rating (int),
+                exclude_tags (QuerySet), badge_groups (list of group dicts from
+                ``SearchForm.parse_badge_groups()``), min_rating (int), max_rating (int),
                 has_visits ('yes'|'no'|''), min_priority (int), max_priority (int),
                 created_after (date), created_before (date),
                 visited_after (date), visited_before (date).
@@ -112,18 +146,23 @@ class PinQuerySet(abstract.QuerySet):
             )
         if badge_statuses := criteria.get("status"):
             qs = qs.filter(badges__id__in=[s.id if hasattr(s, "id") else s for s in badge_statuses])
-        if tags := criteria.get("tags"):
-            from urbanlens.dashboard.models.badges.model import Badge as _Badge
 
-            for badge in tags:
-                badge_ids = _Badge.get_badge_and_descendants(badge.id)
-                qs = qs.filter(badges__id__in=badge_ids)
-        if exclude_tags := criteria.get("exclude_tags"):
-            from urbanlens.dashboard.models.badges.model import Badge as _Badge
+        # Structured badge_groups (from formula bar) supersedes legacy tags/exclude_tags.
+        if badge_groups := criteria.get("badge_groups"):
+            qs = qs.apply_badge_groups(badge_groups)
+        else:
+            if tags := criteria.get("tags"):
+                from urbanlens.dashboard.models.badges.model import Badge as _Badge
 
-            for badge in exclude_tags:
-                badge_ids = _Badge.get_badge_and_descendants(badge.id)
-                qs = qs.exclude(badges__id__in=badge_ids)
+                for badge in tags:
+                    badge_ids = _Badge.get_badge_and_descendants(badge.id)
+                    qs = qs.filter(badges__id__in=badge_ids)
+            if exclude_tags := criteria.get("exclude_tags"):
+                from urbanlens.dashboard.models.badges.model import Badge as _Badge
+
+                for badge in exclude_tags:
+                    badge_ids = _Badge.get_badge_and_descendants(badge.id)
+                    qs = qs.exclude(badges__id__in=badge_ids)
         if min_rating := criteria.get("min_rating"):
             with contextlib.suppress(ValueError, TypeError):
                 qs = qs.filter(reviews__rating__gte=int(min_rating))

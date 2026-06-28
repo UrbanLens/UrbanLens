@@ -1,0 +1,136 @@
+<script>
+(function () {
+    'use strict';
+
+    function parseIntAttr(el, name, fallback) {
+        const raw = el.getAttribute(name);
+        if (raw === null || raw === '') return fallback;
+        const value = parseInt(raw, 10);
+        return Number.isFinite(value) ? value : fallback;
+    }
+
+    function formatLabel(format, value, max, isFullRange, isMin) {
+        if (isFullRange) {
+            return isMin ? 'Any' : (format === 'stars' ? '' : 'Any');
+        }
+        if (format === 'stars') {
+            return '★'.repeat(value) + '☆'.repeat(max - value);
+        }
+        return String(value);
+    }
+
+    function syncSlider(root) {
+        const minSlider = root.querySelector('[data-role="min"]');
+        const maxSlider = root.querySelector('[data-role="max"]');
+        const fill = root.querySelector('[data-role="fill"]');
+        const minLabel = root.querySelector('[data-role="min-label"]');
+        const maxLabel = root.querySelector('[data-role="max-label"]');
+        const minHidden = root.querySelector('[data-role="min-hidden"]');
+        const maxHidden = root.querySelector('[data-role="max-hidden"]');
+        if (!minSlider || !maxSlider || !fill) return;
+
+        const MIN = parseInt(minSlider.min, 10);
+        const MAX = parseInt(maxSlider.max, 10);
+        const format = root.getAttribute('data-format') || 'default';
+
+        let lo = parseInt(minSlider.value, 10);
+        let hi = parseInt(maxSlider.value, 10);
+
+        if (lo > hi) {
+            if (document.activeElement === minSlider) {
+                lo = hi;
+                minSlider.value = String(lo);
+            } else {
+                hi = lo;
+                maxSlider.value = String(hi);
+            }
+        }
+
+        const span = MAX - MIN || 1;
+        fill.style.left = (((lo - MIN) / span) * 100) + '%';
+        fill.style.width = (((hi - lo) / span) * 100) + '%';
+
+        const fullRange = lo === MIN && hi === MAX;
+        if (minLabel) minLabel.textContent = formatLabel(format, lo, MAX, fullRange, true);
+        if (maxLabel) maxLabel.textContent = formatLabel(format, hi, MAX, fullRange, false);
+
+        if (minHidden) minHidden.value = lo === MIN ? '' : String(lo);
+        if (maxHidden) maxHidden.value = hi === MAX ? '' : String(hi);
+
+        const accordionId = root.getAttribute('data-accordion');
+        if (accordionId) {
+            const details = document.getElementById(accordionId);
+            if (details) details.classList.toggle('fp-acc-active', !fullRange);
+        }
+    }
+
+    function triggerHtmx(root) {
+        const formId = root.getAttribute('data-htmx-form');
+        if (!formId || typeof htmx === 'undefined') return;
+        const form = document.getElementById(formId);
+        if (form) htmx.trigger(form, 'change');
+    }
+
+    function initSlider(root) {
+        if (root.dataset.ulDualRangeReady === 'true') return;
+        root.dataset.ulDualRangeReady = 'true';
+
+        const minSlider = root.querySelector('[data-role="min"]');
+        const maxSlider = root.querySelector('[data-role="max"]');
+        if (!minSlider || !maxSlider) return;
+
+        function onInput() {
+            syncSlider(root);
+        }
+
+        function onChange() {
+            syncSlider(root);
+            triggerHtmx(root);
+        }
+
+        minSlider.addEventListener('input', onInput);
+        maxSlider.addEventListener('input', onInput);
+        minSlider.addEventListener('change', onChange);
+        maxSlider.addEventListener('change', onChange);
+
+        syncSlider(root);
+    }
+
+    function resetSlider(root) {
+        const minSlider = root.querySelector('[data-role="min"]');
+        const maxSlider = root.querySelector('[data-role="max"]');
+        if (!minSlider || !maxSlider) return;
+
+        const minValue = parseIntAttr(root, 'data-min-value', parseInt(minSlider.min, 10));
+        const maxValue = parseIntAttr(root, 'data-max-value', parseInt(maxSlider.max, 10));
+
+        minSlider.value = String(minValue);
+        maxSlider.value = String(maxValue);
+        syncSlider(root);
+    }
+
+    function initAll(scope) {
+        (scope || document).querySelectorAll('[data-ul-dual-range-slider]').forEach(initSlider);
+    }
+
+    window.UrbanLensDualRangeSlider = {
+        init: initSlider,
+        initAll: initAll,
+        sync: syncSlider,
+        reset: resetSlider,
+        resetAll(scope) {
+            (scope || document).querySelectorAll('[data-ul-dual-range-slider]').forEach(resetSlider);
+        },
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => initAll());
+    } else {
+        initAll();
+    }
+
+    document.body.addEventListener('htmx:afterSwap', (event) => {
+        initAll(event.detail.target);
+    });
+}());
+</script>
