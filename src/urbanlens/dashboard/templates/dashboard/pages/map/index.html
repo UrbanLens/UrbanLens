@@ -322,6 +322,12 @@
 
     <div id="loading-pins-message" aria-hidden="true" style="display:none"></div>
 
+    {# ── Offline indicator ─────────────────────────────────────────────────── #}
+    <div id="offline-indicator" aria-live="assertive" hidden>
+        <i class="material-icons">wifi_off</i>
+        <span>Offline</span>
+    </div>
+
     {% if show_pin_count or show_filtered_pin_count %}
     <div id="pin-counter" {% if not show_pin_count %}style="display:none"{% endif %}>
         <span id="pin-counter-value">0</span>
@@ -505,6 +511,8 @@
     let   pinsVisible        = true;
     // Server-authoritative total pin count (updated after a full refresh).
     let   _totalPins         = {{ pin_count|default:0 }};
+    let   _isOffline         = false;   // true when the meta poll returns an error/network failure
+    let   _searchMarker      = null;    // temporary Leaflet marker placed on search-result jump
 
     // ── Map ───────────────────────────────────────────────────────────────────
     const _MAP_CENTER_MODE   = '{{ map_center_mode|default:"gps" }}';
@@ -969,6 +977,81 @@
         }
     }
 
+    // ── Server connectivity ───────────────────────────────────────────────────
+    function _setOffline(offline) {
+        if (_isOffline === offline) return;
+        _isOffline = offline;
+        const el = document.getElementById('offline-indicator');
+        if (el) el.hidden = !offline;
+        if (offline) console.warn('[UL] Server appears to be offline');
+        else console.log('[UL] Server connectivity restored');
+    }
+
+    // ── Temporary search-result marker ────────────────────────────────────────
+    function _clearSearchMarker() {
+        if (!_searchMarker) return;
+        map.removeLayer(_searchMarker);
+        _searchMarker = null;
+    }
+
+    function _showSearchMarker(lat, lng, title) {
+        _clearSearchMarker();
+        _searchMarker = L.marker([lat, lng], {
+            icon: L.divIcon({
+                className: 'search-result-marker-wrap',
+                html: '<i class="material-icons search-result-marker-icon">place</i>',
+                iconSize: [32, 40],
+                iconAnchor: [16, 40],
+            }),
+            zIndexOffset: 2000,
+            title: title || '',
+        });
+        _searchMarker.on('click', function() {
+            map.closePopup();
+            document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
+            const latFmt = lat.toFixed(6), lngFmt = lng.toFixed(6);
+            const menu = document.createElement('div');
+            menu.className = 'map-context-menu';
+            const pt = map.latLngToContainerPoint([lat, lng]);
+            menu.style.top = `${pt.y}px`;
+            menu.style.left = `${pt.x}px`;
+
+            const coordItem = document.createElement('button');
+            coordItem.className = 'map-context-menu__item map-context-menu__coords';
+            coordItem.title = 'Click to copy coordinates';
+            coordItem.innerHTML = `<i class="material-icons">gps_fixed</i><span>${latFmt}, ${lngFmt}</span>`;
+            coordItem.addEventListener('click', () => {
+                navigator.clipboard.writeText(`${latFmt}, ${lngFmt}`)
+                    .then(() => toastr.success('Coordinates copied to clipboard'), () => toastr.error('Could not copy coordinates'));
+                menu.remove();
+            });
+            menu.appendChild(coordItem);
+
+            const sep = document.createElement('div');
+            sep.className = 'map-context-menu__sep';
+            menu.appendChild(sep);
+
+            const addPinItem = document.createElement('button');
+            addPinItem.className = 'map-context-menu__item';
+            addPinItem.innerHTML = '<i class="material-icons">add_location</i>Add Pin Here';
+            addPinItem.addEventListener('click', () => { menu.remove(); _clearSearchMarker(); openAddPinDialog(lat, lng); });
+            menu.appendChild(addPinItem);
+
+            const dismissItem = document.createElement('button');
+            dismissItem.className = 'map-context-menu__item';
+            dismissItem.innerHTML = '<i class="material-icons">close</i>Dismiss marker';
+            dismissItem.addEventListener('click', () => { menu.remove(); _clearSearchMarker(); });
+            menu.appendChild(dismissItem);
+
+            document.body.appendChild(menu);
+            const dismiss = (ev) => {
+                if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); }
+            };
+            setTimeout(() => document.addEventListener('click', dismiss), 0);
+        });
+        _searchMarker.addTo(map);
+    }
+
     // ── Background polling ────────────────────────────────────────────────────
     // Checks whether any pin has been updated since the cached timestamp.
     // Also detects mid-session DB wipes via app_uuid mismatch.
@@ -976,7 +1059,8 @@
     async function _pollForUpdates() {
         try {
             const resp = await fetch('{% url "map.pins.meta" %}', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-            if (!resp.ok) return;
+            if (!resp.ok) { _setOffline(true); return; }
+            _setOffline(false);
             const data = await resp.json();
             // App UUID changed mid-session (DB wiped while user had the map open).
             if (_APP_UUID && data.app_uuid && data.app_uuid !== _APP_UUID) {
@@ -993,7 +1077,7 @@
                     _lastKnownUpdated = data.last_updated;
                 }
             }
-        } catch { /* background poll failures are non-fatal */ }
+        } catch { _setOffline(true); }
     }
 
     // ── Marker builder ────────────────────────────────────────────────────────
@@ -2536,6 +2620,32 @@
                 return;
             }
 
+            // Geocode and jump directly (derived "Search for X near Y" type suggestions)
+            if (result.geocodeQuery) {
+                inputEl.value = result.geocodeQuery;
+                document.getElementById('addr-search-clear').classList.add('addr-search-clear--visible');
+                if (_updateHistoryBtn) _updateHistoryBtn();
+                _addToSearchHistory(result.geocodeQuery);
+                try {
+                    const gResp = await fetch(
+                        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(result.geocodeQuery)}&format=json&limit=1`,
+                        { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' } }
+                    );
+                    const gData = await gResp.json();
+                    if (gData && gData.length) {
+                        const gLat = parseFloat(gData[0].lat), gLng = parseFloat(gData[0].lon);
+                        _programmaticMove = true;
+                        map.setView([gLat, gLng], 14);
+                        _showSearchMarker(gLat, gLng, gData[0].display_name || result.title);
+                    } else {
+                        toastr.warning('No results found — try a different search.');
+                    }
+                } catch (_e) {
+                    toastr.error('Search failed — check your connection.');
+                }
+                return;
+            }
+
             // Derived / history: re-trigger search with an alternative query
             if (result.searchQuery) {
                 inputEl.value = result.searchQuery;
@@ -2572,6 +2682,8 @@
                             break;
                         }
                     }
+                } else {
+                    _showSearchMarker(result.lat, result.lng, result.title);
                 }
             } else if (result.place_id) {
                 try {
@@ -2585,6 +2697,7 @@
                             _programmaticMove = true;
                             map.setView([d.lat, d.lng], result.zoom || 15);
                             if (d.name) inputEl.value = d.name;
+                            _showSearchMarker(d.lat, d.lng, d.name || result.title);
                         }
                     } else {
                         toastr.error('Could not resolve location — try searching again.');
@@ -2654,15 +2767,15 @@
             results.push({
                 type: 'derived', icon: 'search',
                 title: `Search for "${rest}" near ${last}`,
-                subtitle: 'Alternative search',
-                searchQuery: `${rest} near ${last}`,
+                subtitle: 'Jump to result',
+                geocodeQuery: `${rest} near ${last}`,
             });
             if (words.length === 2) {
                 results.push({
                     type: 'derived', icon: 'search',
                     title: `Search for "${words[1]} ${words[0]}"`,
-                    subtitle: 'Alternative search',
-                    searchQuery: `${words[1]} ${words[0]}`,
+                    subtitle: 'Jump to result',
+                    geocodeQuery: `${words[1]} ${words[0]}`,
                 });
             }
         }
@@ -2730,6 +2843,7 @@
     }
 
     function clearAddrSearch() {
+        _clearSearchMarker();
         const input = document.getElementById('address-search-input');
         input.value = '';
         document.getElementById('addr-search-clear').classList.remove('addr-search-clear--visible');
@@ -2743,6 +2857,7 @@
 
     // ── Main multi-source search (typed query) ────────────────────────────────
     function _startMultiSearch(query) {
+        _clearSearchMarker();
         const seq = ++_addrSearchSeq;
         const input = document.getElementById('address-search-input');
         const box = document.getElementById('addr-search-suggestions');
@@ -2812,7 +2927,18 @@
             seq, 'Google Places',
             `{% url "map.autocomplete.places" %}?q=${encodeURIComponent(query)}`,
             (data) => data.disabled ? [] : (data.results || []),
-            input, box, placesSlot, _onPrimaryDone,
+            input, box, placesSlot,
+            (hasResults) => {
+                _onPrimaryDone(hasResults);
+                // Google Places already found the place, so the "Search Google Maps for..."
+                // entry would be redundant — remove it to avoid showing the same result twice.
+                if (hasResults) {
+                    derivedSlot.querySelectorAll('.addr-suggestion--external').forEach(el => el.remove());
+                    if (!derivedSlot.querySelector('.addr-suggestion')) {
+                        derivedSlot.querySelector('.addr-suggestion-group-hdr')?.remove();
+                    }
+                }
+            },
         );
 
         // 5. Derived suggestions — always present so there is always something actionable

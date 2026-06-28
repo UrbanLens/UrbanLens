@@ -1,6 +1,54 @@
 @use 'variables' as *;
 
 
+// ── Offline indicator (shown when the server is unreachable) ──────────────
+#offline-indicator {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .35rem .85rem;
+    background: rgba(220, 38, 38, 0.93);
+    color: #fff;
+    border-radius: 20px;
+    font-size: .8rem;
+    font-weight: 600;
+    letter-spacing: .01em;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .3);
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+    user-select: none;
+
+    .material-icons {
+        font-size: 1rem;
+    }
+
+    &[hidden] { display: none; }
+}
+
+// ── Temporary search-result marker (placed when user jumps to an address) ──
+.search-result-marker-wrap {
+    background: none !important;
+    border: none !important;
+
+    .search-result-marker-icon {
+        font-size: 36px;
+        color: $ui-blue-600;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .45));
+        display: block;
+        cursor: pointer;
+        transition: filter .15s;
+
+        &:hover {
+            filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .6)) brightness(1.1);
+        }
+    }
+}
+
 // Map pin icon (Material Icons rendered via Leaflet divIcon)
 .map-pin-icon-wrap {
     background: none !important;
@@ -50,6 +98,7 @@
 .map-pin-with-circle .map-pin-emoji {
     position: relative;
     z-index: 1;
+    color: #ffffff;
 }
 
 // ── Map bottom-left overlay controls ──────────────────────────────────────
