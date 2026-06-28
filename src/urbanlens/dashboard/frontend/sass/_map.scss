@@ -727,6 +727,18 @@
         gap: .35rem;
         flex: 1;
         min-width: 0;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        text-align: left;
+        color: inherit;
+        font-size: inherit;
+
+        &:hover {
+            i { color: darken($primary-color, 10%); }
+            span { text-decoration: underline; text-decoration-color: var(--ul-border); }
+        }
 
         i {
             font-size: 1rem !important;
@@ -1876,6 +1888,17 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 .view-full-pin:hover {
     text-decoration: underline;
     color: $ui-link-on-dark-hover;
+}
+
+.popup-actions .edit-pin-button {
+    @include icon-btn(24px);
+    color: rgba(255, 255, 255, .45);
+    margin-left: auto;
+
+    &:hover {
+        color: rgba(255, 255, 255, .9);
+        background: rgba(255, 255, 255, .1);
+    }
 }
 
 .popup-actions .delete-button {

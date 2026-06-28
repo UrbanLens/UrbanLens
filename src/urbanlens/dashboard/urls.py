@@ -100,6 +100,11 @@ urlpatterns = [
                     name="pin.add",
                 ),
                 path(
+                    "quick-edit/<slug:pin_slug>/",
+                    maps.MapController.as_view({"post": "patch_pin"}),
+                    name="pin.quick_edit",
+                ),
+                path(
                     "edit/<slug:pin_slug>/",
                     maps.MapController.as_view({"get": "get_edit_pin", "post": "edit_pin"}),
                     name="pin.edit",

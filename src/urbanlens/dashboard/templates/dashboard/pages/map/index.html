@@ -355,10 +355,11 @@
                 <div id="apdlg-addr-suggestions" class="apdlg-addr-suggestions" hidden></div>
             </div>
             <div class="apdlg-location-selected" id="apdlg-location-selected" hidden>
-                <div class="apdlg-location-selected__content">
+                <button type="button" class="apdlg-location-selected__content" id="apdlg-location-edit"
+                        title="Click to edit location" aria-label="Edit location">
                     <i class="material-icons">place</i>
                     <span id="apdlg-location-text"></span>
-                </div>
+                </button>
                 <button type="button" class="apdlg-location-clear" id="apdlg-location-clear"
                         aria-label="Clear location" title="Clear location">
                     <i class="material-icons">close</i>
@@ -1085,6 +1086,7 @@
                 ${tagChips ? `<div class="popup-tags">${tagChips}</div>` : ''}
                 <div class="popup-actions">
                     <a href="${pin.viewLocationUrl}" class="view-full-pin">View Details</a>
+                    <button class="edit-pin-button" onclick="openEditPinDialog('${pin.uuid}')" title="Edit pin"><i class="material-icons">edit</i></button>
                     <button class="delete-button" onclick="deletePin(this)" title="Delete pin"><i class="material-icons">delete</i></button>
                 </div>
             </div>`;
@@ -3755,13 +3757,14 @@
         }
     });
 
-    // ── Add-Pin dialog ────────────────────────────────────────────────────
+    // ── Add-Pin / Edit-Pin dialog ─────────────────────────────────────────
     let _addPinClickMode = false;
     let _addPinMarker = null;
+    let _editPinUuid = null;   // null = add mode; uuid string = edit mode
     window._addPinCustomIconFile = null;
 
-    function openAddPinDialog(lat = null, lng = null) {
-        // Reset all fields
+    function _resetAddPinDialog() {
+        _editPinUuid = null;
         document.getElementById('apdlg-addr').value = '';
         document.getElementById('apdlg-lat').value = '';
         document.getElementById('apdlg-lng').value = '';
@@ -3770,6 +3773,9 @@
         document.getElementById('apdlg-addr-wrap').hidden = false;
         document.getElementById('apdlg-location-selected').hidden = true;
         document.getElementById('apdlg-location-text').textContent = '';
+
+        const headerH2 = document.querySelector('#add-pin-dialog .apdlg-header h2');
+        if (headerH2) headerH2.innerHTML = '<i class="material-icons" style="font-size:1.1rem;vertical-align:-.15em;margin-right:.35rem;">add_location</i>Add Pin';
 
         // Reset icon picker
         const iconCurrent = document.getElementById('icon-current-add-pin');
@@ -3782,7 +3788,9 @@
         document.querySelectorAll('#icon-grid-add-pin .icon-picker-item').forEach(i => i.classList.remove('selected'));
 
         // Reset color picker
-        pickColor('apdlg-color-picker', 'apdlg-color-value', '', null);
+        document.querySelectorAll('#apdlg-color-picker .color-swatch').forEach(s => s.classList.remove('selected'));
+        const colorVal = document.getElementById('apdlg-color-value');
+        if (colorVal) colorVal.value = '';
 
         // Reset badge selector
         _apdlgSelectedBadges = [];
@@ -3802,6 +3810,10 @@
         const btn = document.getElementById('apdlg-submit');
         btn.disabled = false;
         btn.textContent = 'Add Pin';
+    }
+
+    function openAddPinDialog(lat = null, lng = null) {
+        _resetAddPinDialog();
 
         // Remove any previous preview marker
         if (_addPinMarker) { map.removeLayer(_addPinMarker); _addPinMarker = null; }
@@ -3816,7 +3828,68 @@
         document.getElementById('add-pin-dialog').showModal();
     }
 
+    function openEditPinDialog(pinUuid) {
+        const pin = _pinStore.get(pinUuid);
+        if (!pin) { toastr.error('Pin not found.'); return; }
+
+        _resetAddPinDialog();
+        _editPinUuid = pinUuid;
+
+        // Remove any previous preview marker
+        if (_addPinMarker) { map.removeLayer(_addPinMarker); _addPinMarker = null; }
+        _addPinClickMode = false;
+
+        // Update dialog header
+        const headerH2 = document.querySelector('#add-pin-dialog .apdlg-header h2');
+        if (headerH2) headerH2.innerHTML = '<i class="material-icons" style="font-size:1.1rem;vertical-align:-.15em;margin-right:.35rem;">edit_location</i>Edit Pin';
+
+        // Pre-fill name
+        document.getElementById('apdlg-name').value = pin.name || '';
+
+        // Pre-fill location (coordinates - we don't cache the address text)
+        if (pin.latitude && pin.longitude) {
+            const lat = parseFloat(pin.latitude), lng = parseFloat(pin.longitude);
+            _setAddPinLocation(lat, lng, `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        }
+
+        // Pre-fill icon
+        if (pin.icon) {
+            const iconValue = document.getElementById('icon-value-add-pin');
+            if (iconValue) iconValue.value = pin.icon;
+            const iconCurrent = document.getElementById('icon-current-add-pin');
+            if (iconCurrent) {
+                if (/^[a-z_]+$/.test(pin.icon)) {
+                    iconCurrent.innerHTML = `<i class="material-icons icon-picker-current-mi">${_escapeHtml(pin.icon)}</i>`;
+                } else {
+                    iconCurrent.innerHTML = `<span class="icon-picker-current-glyph">${_escapeHtml(pin.icon)}</span>`;
+                }
+            }
+        }
+
+        // Pre-fill color
+        if (pin.color) {
+            const swatch = document.querySelector(`#apdlg-color-picker .color-swatch[data-color="${pin.color}"]`);
+            pickColor('apdlg-color-picker', 'apdlg-color-value', pin.color, swatch);
+        }
+
+        // Pre-fill badges from cached tags_data, matched by name against the available list
+        const tagsData = pin.tags_data || [];
+        _apdlgSelectedBadges = tagsData.flatMap(tag => {
+            const found = _apdlgAllBadges.find(b => b.name.toLowerCase() === tag.name.toLowerCase());
+            return found ? [found] : [];
+        });
+        _apdlgRenderSelectedChips();
+
+        // Change submit button label
+        const btn = document.getElementById('apdlg-submit');
+        btn.disabled = false;
+        btn.textContent = 'Save Changes';
+
+        document.getElementById('add-pin-dialog').showModal();
+    }
+
     function closeAddPinDialog() {
+        _editPinUuid = null;
         _addPinClickMode = false;
         if (_addPinMarker) { map.removeLayer(_addPinMarker); _addPinMarker = null; }
         document.getElementById('add-pin-dialog').close();
@@ -3928,6 +4001,26 @@
     }
 
     document.getElementById('apdlg-location-clear').addEventListener('click', _clearAddPinLocation);
+
+    // Clicking the location pill (not the × button) switches the input back to edit mode
+    // with the existing location text pre-filled so the user can refine it.
+    function _switchToEditLocation() {
+        const currentText = document.getElementById('apdlg-location-text').textContent;
+        document.getElementById('apdlg-lat').value = '';
+        document.getElementById('apdlg-lng').value = '';
+        document.getElementById('apdlg-addr').value = currentText;
+        document.getElementById('apdlg-location-text').textContent = '';
+        document.getElementById('apdlg-addr-wrap').hidden = false;
+        document.getElementById('apdlg-location-selected').hidden = true;
+        document.getElementById('apdlg-addr-suggestions').hidden = true;
+        if (_addPinMarker) { map.removeLayer(_addPinMarker); _addPinMarker = null; }
+        _addPinClickMode = true;
+        const addrInput = document.getElementById('apdlg-addr');
+        addrInput.focus();
+        addrInput.select();
+        if (currentText) _fetchAddrSuggestions(currentText);
+    }
+    document.getElementById('apdlg-location-edit').addEventListener('click', _switchToEditLocation);
 
     // Hide address suggestions when input loses focus
     document.getElementById('apdlg-addr').addEventListener('blur', function() {
@@ -4107,78 +4200,122 @@
         });
     })();
 
+    // ── Shared helper: fetch updated pin data and refresh map marker ─────────
+    function _refreshPinInStore(pinSlug, onDone) {
+        fetch(`{% url "map.pin.json" pin_slug="placeholder-slug" %}`.replace('placeholder-slug', pinSlug), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d && d.pin) window.updateCachedPin(d.pin); onDone?.(); })
+        .catch(() => {
+            window.invalidatePinCache();
+            _refreshAllPins().then(onDone).catch(onDone);
+        });
+    }
+
     // Form submit
     document.getElementById('apdlg-submit').addEventListener('click', function() {
         const lat = document.getElementById('apdlg-lat').value.trim();
         const lng = document.getElementById('apdlg-lng').value.trim();
-        if (!lat || !lng) {
-            toastr.warning('Set a location first - click the map or enter an address.');
-            return;
-        }
-        const formData = new FormData();
-        formData.append('name', document.getElementById('apdlg-name').value.trim() || 'Unnamed Location');
-        formData.append('latitude', lat);
-        formData.append('longitude', lng);
 
-        // Icon
-        const iconVal = document.getElementById('icon-value-add-pin');
-        if (iconVal && iconVal.value) formData.append('icon', iconVal.value);
-        if (window._addPinCustomIconFile) formData.append('custom_icon', window._addPinCustomIconFile);
+        if (_editPinUuid) {
+            // ── Edit mode ──────────────────────────────────────────────────────
+            const formData = new FormData();
+            formData.append('name', document.getElementById('apdlg-name').value.trim());
+            if (lat) formData.append('latitude', lat);
+            if (lng) formData.append('longitude', lng);
+            const iconVal = document.getElementById('icon-value-add-pin');
+            formData.append('icon', (iconVal && iconVal.value) ? iconVal.value : '');
+            if (window._addPinCustomIconFile) formData.append('custom_icon', window._addPinCustomIconFile);
+            const colorVal = document.getElementById('apdlg-color-value');
+            formData.append('color', (colorVal && colorVal.value) ? colorVal.value : '');
+            _apdlgSelectedBadges.forEach(b => formData.append('badge_ids', b.id));
+            // Send badge_ids key even when empty so the server knows to clear badges
+            if (!_apdlgSelectedBadges.length) formData.append('badge_ids', '');
+            const privCb = document.getElementById('apdlg-private');
+            if (privCb && privCb.checked) formData.append('is_private', '1');
 
-        // Color
-        const colorVal = document.getElementById('apdlg-color-value');
-        if (colorVal && colorVal.value) formData.append('color', colorVal.value);
+            const uuid = _editPinUuid;
+            this.disabled = true;
+            this.textContent = 'Saving…';
+            fetch(`/dashboard/map/quick-edit/${uuid}/`, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+            })
+            .then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t || r.statusText)))
+            .then(data => {
+                toastr.success('Pin updated!');
+                closeAddPinDialog();
+                if (data && data.pin_slug) {
+                    _refreshPinInStore(data.pin_slug, null);
+                } else {
+                    _refreshPinInStore(uuid, null);
+                }
+                map.closePopup();
+            })
+            .catch(err => toastr.error('Failed to save pin: ' + err))
+            .finally(() => { this.disabled = false; this.textContent = 'Save Changes'; });
 
-        // Badges (unified tags/categories/statuses)
-        _apdlgSelectedBadges.forEach(b => formData.append('badge_ids', b.id));
+        } else {
+            // ── Add mode ───────────────────────────────────────────────────────
+            if (!lat || !lng) {
+                toastr.warning('Set a location first - click the map or enter an address.');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('name', document.getElementById('apdlg-name').value.trim() || 'Unnamed Location');
+            formData.append('latitude', lat);
+            formData.append('longitude', lng);
 
-        // Privacy
-        const privCb = document.getElementById('apdlg-private');
-        if (privCb && privCb.checked) formData.append('is_private', '1');
+            // Icon
+            const iconVal = document.getElementById('icon-value-add-pin');
+            if (iconVal && iconVal.value) formData.append('icon', iconVal.value);
+            if (window._addPinCustomIconFile) formData.append('custom_icon', window._addPinCustomIconFile);
 
-        this.disabled = true;
-        this.textContent = 'Saving…';
-        const pinLat = parseFloat(lat);
-        const pinLng = parseFloat(lng);
-        const pinName = formData.get('name') || 'New Pin';
-        fetch("{% url 'pin.add' %}", {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
-        })
-        .then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t || r.statusText)))
-        .then(data => {
-            toastr.success('Pin added!');
-            closeAddPinDialog();
-            // Fetch just the new pin's data and inject it into the store/map -
-            // avoids a full reload of all pins on every add.
-            const tempMarker = L.marker([pinLat, pinLng]).addTo(map);
-            tempMarker.bindPopup(`<strong>${pinName}</strong><br><em>Saving…</em>`);
-            if (data && data.pin_slug) {
-                fetch(`{% url "map.pin.json" pin_slug="placeholder-slug" %}`.replace('placeholder-slug', data.pin_slug), {
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                })
-                .then(r => r.ok ? r.json() : null)
-                .then(d => {
-                    if (d && d.pin) { window.updateCachedPin(d.pin); }
-                    map.removeLayer(tempMarker);
-                })
-                .catch(() => {
-                    // Fallback: full refresh if single-pin fetch fails
+            // Color
+            const colorVal = document.getElementById('apdlg-color-value');
+            if (colorVal && colorVal.value) formData.append('color', colorVal.value);
+
+            // Badges (unified tags/categories/statuses)
+            _apdlgSelectedBadges.forEach(b => formData.append('badge_ids', b.id));
+
+            // Privacy
+            const privCb = document.getElementById('apdlg-private');
+            if (privCb && privCb.checked) formData.append('is_private', '1');
+
+            this.disabled = true;
+            this.textContent = 'Saving…';
+            const pinLat = parseFloat(lat);
+            const pinLng = parseFloat(lng);
+            const pinName = formData.get('name') || 'New Pin';
+            fetch("{% url 'pin.add' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+            })
+            .then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t || r.statusText)))
+            .then(data => {
+                toastr.success('Pin added!');
+                closeAddPinDialog();
+                // Fetch just the new pin's data and inject it into the store/map -
+                // avoids a full reload of all pins on every add.
+                const tempMarker = L.marker([pinLat, pinLng]).addTo(map);
+                tempMarker.bindPopup(`<strong>${pinName}</strong><br><em>Saving…</em>`);
+                if (data && data.pin_slug) {
+                    _refreshPinInStore(data.pin_slug, () => map.removeLayer(tempMarker));
+                } else {
                     window.invalidatePinCache();
                     _refreshAllPins().then(() => map.removeLayer(tempMarker)).catch(() => map.removeLayer(tempMarker));
-                });
-            } else {
-                window.invalidatePinCache();
-                _refreshAllPins().then(() => map.removeLayer(tempMarker)).catch(() => map.removeLayer(tempMarker));
-            }
-            // When multiple locations cover the same coordinates, prompt the user to choose.
-            if (data && data.conflicting_locations && data.conflicting_locations.length > 1) {
-                _showLocationConflictPicker(data.pin_slug, data.conflicting_locations);
-            }
-        })
-        .catch(err => toastr.error('Failed to add pin: ' + err))
-        .finally(() => { this.disabled = false; this.textContent = 'Add Pin'; });
+                }
+                // When multiple locations cover the same coordinates, prompt the user to choose.
+                if (data && data.conflicting_locations && data.conflicting_locations.length > 1) {
+                    _showLocationConflictPicker(data.pin_slug, data.conflicting_locations);
+                }
+            })
+            .catch(err => toastr.error('Failed to add pin: ' + err))
+            .finally(() => { this.disabled = false; this.textContent = 'Add Pin'; });
+        }
     });
 
     // ── Location conflict picker ───────────────────────────────────────────────

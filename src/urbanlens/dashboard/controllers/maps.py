@@ -424,7 +424,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         """Return JSON data for a single pin - used for targeted cache updates after edits.
 
         Args:
-            pin_slug: Slug of the pin to return.
+            pin_slug: Slug or UUID string of the pin to return.
 
         Returns:
             JsonResponse: ``{"pin": {...}}`` or 404 if the pin doesn't belong to the user.
@@ -433,13 +433,73 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         try:
             pin = Pin.objects.filter(profile=profile).select_related("location").get(slug=pin_slug)
         except Pin.DoesNotExist:
-            return JsonResponse({"error": "not found"}, status=404)
+            try:
+                pin = Pin.objects.filter(profile=profile).select_related("location").get(uuid=pin_slug)
+            except (Pin.DoesNotExist, ValueError):
+                return JsonResponse({"error": "not found"}, status=404)
         map_data = self.get_map_data(request, Pin.objects.filter(pk=pin.pk).select_related("location"))
         if not map_data:
             return JsonResponse({"error": "not found"}, status=404)
         pin_dict = map_data[0]
         pin_dict["viewLocationUrl"] = f"/dashboard/map/pin/{pin.slug}/"
         return JsonResponse({"pin": pin_dict})
+
+    def patch_pin(self, request, pin_slug, *args, **kwargs):
+        """Quick-edit a pin from the map popup dialog.
+
+        Accepts the same FormData fields as ``post_add_pin`` and applies them to
+        an existing pin looked up by slug or UUID.  Badges are replaced (not merged)
+        when ``badge_ids`` is provided.
+
+        Args:
+            pin_slug: Slug or UUID string of the pin to update.
+
+        Returns:
+            JsonResponse: ``{"ok": True, "pin_slug": "..."}`` or an error response.
+        """
+        try:
+            try:
+                pin = Pin.objects.get(profile=request.user.profile, slug=pin_slug)
+            except Pin.DoesNotExist:
+                pin = Pin.objects.get(profile=request.user.profile, uuid=pin_slug)
+        except (Pin.DoesNotExist, ValueError):
+            return JsonResponse({"error": "not found"}, status=404)
+
+        name = request.POST.get("name")
+        latitude = request.POST.get("latitude") or None
+        longitude = request.POST.get("longitude") or None
+        icon = request.POST.get("icon")
+        color = request.POST.get("color")
+        custom_icon = request.FILES.get("custom_icon") or None
+        badge_ids = [bid for bid in request.POST.getlist("badge_ids") if bid]
+        is_private = request.POST.get("is_private") in {"1", "true", "on", "True"}
+
+        import contextlib
+
+        if name is not None:
+            pin.name = name or None
+        if latitude is not None:
+            with contextlib.suppress(ValueError):
+                pin.latitude = float(latitude)
+        if longitude is not None:
+            with contextlib.suppress(ValueError):
+                pin.longitude = float(longitude)
+        if icon is not None:
+            pin.icon = icon or None
+        if color is not None:
+            pin.color = color or None
+        if custom_icon:
+            pin.custom_icon = custom_icon
+        pin.is_private = is_private
+        pin.save()
+
+        if badge_ids:
+            from urbanlens.dashboard.models.badges.model import KIND_USER as _KIND_USER
+            pin.badges.set(Badge.objects.exclude(kind=_KIND_USER).filter(id__in=badge_ids))
+        elif "badge_ids" in request.POST:
+            pin.badges.clear()
+
+        return JsonResponse({"ok": True, "pin_slug": pin.slug or str(pin.uuid)})
 
     def init_map(self, request, *args, **kwargs):
         map_data = self.get_map_data(request)
