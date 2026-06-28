@@ -535,6 +535,15 @@ $z-nav: 1100;
     --ul-black-a: #{$color-grey-10a};
     --ul-black-b: #{$color-grey-10b};
 
+    // Semantic surface and control tokens keep nested UI from sharing one flat color.
+    --ul-surface-bg: var(--ul-grey-0);
+    --ul-surface-bg-elevated: var(--ul-grey-0a);
+    --ul-surface-bg-subtle: var(--ul-grey-1);
+    --ul-surface-header-bg: var(--ul-grey-1);
+    --ul-control-bg: var(--ul-grey-0a);
+    --ul-control-bg-hover: var(--ul-grey-0);
+    --ul-control-border: var(--ul-grey-1b);
+
     // Standard borders without specifying lightness. We'll probably replace references to these over time, using --ul-surface...b instead.
     --ul-border: var(--ul-grey-0b);
     --ul-border-strong: var(--ul-grey-1b);
@@ -626,9 +635,17 @@ $z-nav: 1100;
     --ul-grey-9a: #{$color-grey-0a};
     --ul-grey-9b: #{$color-grey-0b};
 
-    --ul-border: #{$color-grey-4b};
-    --ul-border-strong: #{$color-grey-6b};
-    --ul-button-hover-border: var(--ul-grey-0);
+    --ul-surface-bg: #242424;
+    --ul-surface-bg-elevated: #2b2b2b;
+    --ul-surface-bg-subtle: #303030;
+    --ul-surface-header-bg: #303030;
+    --ul-control-bg: #1b1b1b;
+    --ul-control-bg-hover: #202020;
+    --ul-control-border: #3f3f3f;
+
+    --ul-border: #3a3a3a;
+    --ul-border-strong: #505050;
+    --ul-button-hover-border: var(--ul-border-strong);
 
     --ul-shadow-sm: 0 1px 3px rgba(0, 0, 0, .3);
     --ul-shadow-md: 0 4px 16px rgba(0, 0, 0, .4);

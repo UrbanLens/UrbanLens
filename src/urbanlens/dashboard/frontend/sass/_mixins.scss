@@ -53,11 +53,11 @@
 	display: block;
 	width: 100%;
 	padding: 8px 12px;
-	border: 1px solid var(--ul-border);
+	border: 1px solid var(--ul-control-border);
 	border-radius: $radius-sm;
 	font-size: .9rem;
 	color: var(--ul-grey-8);
-	background: var(--ul-grey-0);
+	background: var(--ul-control-bg);
 	box-sizing: border-box;
 	transition: border-color .15s, box-shadow .15s;
 
@@ -78,7 +78,7 @@
 // ── Surfaces ──────────────────────────────────────────────────────────────────
 
 @mixin surface($radius: $radius-md) {
-	background: var(--ul-grey-0);
+	background: var(--ul-surface-bg);
 	border: 1px solid var(--ul-border);
 	border-radius: $radius;
 }
@@ -278,7 +278,7 @@
 	max-width: calc(100vw - 1rem);
 	max-height: calc(100dvh - 1rem);
 	overflow: visible;
-	background: var(--ul-grey-0);
+	background: var(--ul-surface-bg);
 	color: var(--ul-grey-8);
 
 	@include up($breakpoint-sm) {
@@ -339,7 +339,7 @@
 	align-items: center;
 	padding: $bar-padding-y $bar-padding-x;
 	border-top: 1px solid var(--ul-border);
-	background: var(--ul-grey-0);
+	background: var(--ul-surface-bg-subtle);
 }
 
 @mixin empty-state {
