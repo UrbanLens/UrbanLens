@@ -68,16 +68,32 @@ RUN pip install -e .
 # Install npm packages
 RUN npm install -y
 
-# Create a non-root user that will run the application processes.
-# /app stays root-owned; only the frontend source dirs that npm writes into at
-# startup (and the three volume-mount targets handled by docker-entrypoint.sh)
-# need to be writable by appuser.
+# Create a non-root user. Pre-create every directory written to at runtime so
+# appuser never needs write access to root-owned parent dirs.
+#
+# Three categories handled here (volume mounts are handled by docker-entrypoint.sh):
+#   - AppSettings.ensure_paths() dirs: /app/src/urbanlens/ (capital-U, legacy
+#     runtime-data tree distinct from the lowercase source), /app/src/logs/,
+#     /app/src/backups/
+#   - npm build output: dashboard/frontend and core/frontend inside the source tree
 RUN groupadd --gid 1001 appuser && \
     useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser && \
     mkdir -p \
+        /app/src/urbanlens/downloads/downloads \
+        /app/src/urbanlens/downloads/exports \
+        /app/src/urbanlens/frontend/static \
+        /app/src/backups \
+        /app/src/logs \
         /app/src/urbanlens/dashboard/frontend \
         /app/src/urbanlens/core/frontend && \
+    touch \
+        /app/src/logs/app.log \
+        /app/src/logs/debugging.log \
+        /app/src/logs/test.log && \
     chown -R appuser:appuser \
+        /app/src/urbanlens \
+        /app/src/backups \
+        /app/src/logs \
         /app/src/urbanlens/dashboard/frontend \
         /app/src/urbanlens/core/frontend
 

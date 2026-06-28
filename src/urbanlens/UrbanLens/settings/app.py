@@ -80,7 +80,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     static_url : str = Field(default = 'static/', description = "The static url")
 
     # Directory settings
-    base_dir: Path = Field(default=Path('UrbanLens'), description="The name of the base directory")
+    base_dir: Path = Field(default=Path('urbanlens'), description="The name of the base directory")
     media_root: Path = Field(default=Path('downloads'), description="The name of the media directory")
     downloads_dir: Path = Field(default=Path('downloads'), description="The name of the downloads directory")
     backups_dir: Path = Field(default=Path('backups'), description="The name of the backups directory")

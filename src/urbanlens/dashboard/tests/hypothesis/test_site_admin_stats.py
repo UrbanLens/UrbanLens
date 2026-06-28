@@ -241,8 +241,8 @@ class SiteAdminStatsViewContextTests(TestCase):
         ctx = self._get_context()
         self.assertIn("infrastructure_services", ctx)
         services = ctx["infrastructure_services"]
-        self.assertEqual(len(services), 3)
-        self.assertEqual([service.key for service in services], ["postgres", "valkey", "celery"])
+        self.assertEqual(len(services), 4)
+        self.assertEqual([service.key for service in services], ["postgres", "valkey", "celery", "nginx"])
         self.assertEqual(services[0].status, "healthy")
 
     def test_context_has_app_software_info(self) -> None:

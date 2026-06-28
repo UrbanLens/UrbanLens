@@ -82,7 +82,11 @@ class CollectCeleryStatsTests(TestCase):
     """collect_celery_stats reports broker and worker availability."""
 
     def test_returns_disabled_when_broker_missing(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.infrastructure_stats.django_settings.CELERY_BROKER_URL", "", create=True):
+        with (
+            mock.patch("urbanlens.dashboard.services.infrastructure_stats.django_settings.CELERY_BROKER_URL", "", create=True),
+            mock.patch("django.core.cache.cache.get", return_value=None),
+            mock.patch("django.core.cache.cache.set"),
+        ):
             stat = collect_celery_stats()
         self.assertEqual(stat.key, "celery")
         self.assertEqual(stat.status, "disabled")
@@ -104,6 +108,8 @@ class CollectCeleryStatsTests(TestCase):
         with (
             mock.patch("urbanlens.dashboard.services.infrastructure_stats.django_settings.CELERY_BROKER_URL", "redis://example:6379/0", create=True),
             mock.patch("urbanlens.dashboard.services.infrastructure_stats.current_app", fake_app),
+            mock.patch("django.core.cache.cache.get", return_value=None),
+            mock.patch("django.core.cache.cache.set"),
         ):
             stat = collect_celery_stats()
 

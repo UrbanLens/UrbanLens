@@ -69,6 +69,7 @@ services:
     volumes:
       - static_volume:/app/src/urbanlens/frontend/static
       - media_volume:/app/src/urbanlens/media
+      - ./src/urbanlens/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./src/urbanlens/config/nginx:/etc/nginx/conf.d
     ports:
       - "${NGINX_PORT:-21080}:8080"

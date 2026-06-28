@@ -73,11 +73,11 @@ class GetTaskProgressTests(TestCase):
 class SafelyEnqueueTaskTests(TestCase):
     """safely_enqueue_task delegates to Celery and handles broker errors."""
 
-    def test_uses_delay_without_countdown(self) -> None:
+    def test_uses_apply_async_without_countdown(self) -> None:
         task = mock.Mock()
-        task.delay.return_value = "async-result"
+        task.apply_async.return_value = "async-result"
         self.assertEqual(safely_enqueue_task(task, 1, named=True), "async-result")
-        task.delay.assert_called_once_with(1, named=True)
+        task.apply_async.assert_called_once_with(args=(1,), kwargs={"named": True})
 
     def test_uses_apply_async_with_countdown(self) -> None:
         task = mock.Mock()
@@ -87,5 +87,5 @@ class SafelyEnqueueTaskTests(TestCase):
 
     def test_returns_none_on_broker_exception(self) -> None:
         task = mock.Mock(name="broken_task")
-        task.delay.side_effect = KombuError("broker down")
+        task.apply_async.side_effect = KombuError("broker down")
         self.assertIsNone(safely_enqueue_task(task))
