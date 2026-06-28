@@ -354,37 +354,18 @@
                        placeholder="Address or coordinates (42.65, −73.75)…">
                 <div id="apdlg-addr-suggestions" class="apdlg-addr-suggestions" hidden></div>
             </div>
-            <div class="apdlg-coords-hint" id="apdlg-coords-hint" hidden>
-                <i class="material-icons">place</i>
-                <span id="apdlg-coords-text"></span>
+            <div class="apdlg-location-selected" id="apdlg-location-selected" hidden>
+                <div class="apdlg-location-selected__content">
+                    <i class="material-icons">place</i>
+                    <span id="apdlg-location-text"></span>
+                </div>
+                <button type="button" class="apdlg-location-clear" id="apdlg-location-clear"
+                        aria-label="Clear location" title="Clear location">
+                    <i class="material-icons">close</i>
+                </button>
             </div>
             <input type="hidden" id="apdlg-lat">
             <input type="hidden" id="apdlg-lng">
-        </div>
-
-        {# Icon — shared icon picker partial, same UI as organize page #}
-        <div class="form-field">
-            <label class="form-label">Icon</label>
-            {% with picker_id='add-pin' current_icon='' field_name='_apdlg_icon_unused' show_upload=True %}
-            {% include 'dashboard/partials/_icon_picker.html' %}
-            {% endwith %}
-        </div>
-
-        {# Color — same swatches as badges #}
-        <div class="form-field">
-            <label class="form-label">Color</label>
-            <div class="color-picker" id="apdlg-color-picker">
-                <input type="hidden" id="apdlg-color-value">
-                {% for hex, label in color_choices %}
-                <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}"
-                        style="background:{{ hex }};"
-                        onclick="pickColor('apdlg-color-picker','apdlg-color-value','{{ hex }}',this)"></button>
-                {% endfor %}
-                <button type="button" class="color-swatch color-clear" title="No color"
-                        onclick="pickColor('apdlg-color-picker','apdlg-color-value','',this)">
-                    <i class="material-icons" style="font-size:1rem;">block</i>
-                </button>
-            </div>
         </div>
 
         {# Badges — unified search across tags, categories, and statuses #}
@@ -403,6 +384,42 @@
         <script id="apdlg-badge-data" type="application/json">{{ filter_badges_json|safe }}</script>
         {% endif %}
 
+        {# Icon & color — optional per-pin override, collapsed by default #}
+        <details class="apdlg-customize" id="apdlg-customize">
+            <summary class="apdlg-customize-toggle">
+                <i class="material-icons">tune</i>
+                <span>Customize</span>
+                <i class="material-icons apdlg-customize-arrow">expand_more</i>
+            </summary>
+            <div class="apdlg-customize-body">
+                <p class="apdlg-customize-hint">
+                    Badges are usually the best way to group and style pins on your map.
+                    Use icon and color here only when you want this pin to override what your badges would show.
+                </p>
+                <div class="form-field">
+                    <label class="form-label">Icon</label>
+                    {% with picker_id='add-pin' current_icon='' field_name='_apdlg_icon_unused' show_upload=True %}
+                    {% include 'dashboard/partials/_icon_picker.html' %}
+                    {% endwith %}
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Color</label>
+                    <div class="color-picker" id="apdlg-color-picker">
+                        <input type="hidden" id="apdlg-color-value">
+                        {% for hex, label in color_choices %}
+                        <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}"
+                                style="background:{{ hex }};"
+                                onclick="pickColor('apdlg-color-picker','apdlg-color-value','{{ hex }}',this)"></button>
+                        {% endfor %}
+                        <button type="button" class="color-swatch color-clear" title="No color"
+                                onclick="pickColor('apdlg-color-picker','apdlg-color-value','',this)">
+                            <i class="material-icons" style="font-size:1rem;">block</i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </details>
+
         {# Privacy toggle #}
         <div class="apdlg-privacy-row">
             <label class="toggle-switch" title="Private pins are never shared or linked to the community wiki.">
@@ -412,7 +429,7 @@
             <span class="apdlg-privacy-label">
                 <i class="material-icons">lock</i>
                 Private pin
-                {% include "dashboard/partials/_tooltip_help.html" with text="Private pins are stored only on your account. They are never linked to a community wiki page and your pin's name, notes, and coordinates remain invisible to others." wide=True %}
+                {% include "dashboard/partials/_tooltip_help.html" with text="Private pins are never linked to a community wiki." wide=True %}
             </span>
         </div>
 
@@ -3139,10 +3156,9 @@
         document.getElementById('apdlg-lng').value = '';
         document.getElementById('apdlg-name').value = '';
         document.getElementById('apdlg-addr-suggestions').hidden = true;
-        const coordsHint = document.getElementById('apdlg-coords-hint');
-        if (coordsHint) coordsHint.hidden = true;
-        const clickHint = document.getElementById('apdlg-click-hint');
-        if (clickHint) clickHint.classList.remove('apdlg-click-hint--located');
+        document.getElementById('apdlg-addr-wrap').hidden = false;
+        document.getElementById('apdlg-location-selected').hidden = true;
+        document.getElementById('apdlg-location-text').textContent = '';
 
         // Reset icon picker
         const iconCurrent = document.getElementById('icon-current-add-pin');
@@ -3168,6 +3184,9 @@
         // Reset privacy
         const privCb = document.getElementById('apdlg-private');
         if (privCb) privCb.checked = false;
+
+        const customize = document.getElementById('apdlg-customize');
+        if (customize) customize.open = false;
 
         const btn = document.getElementById('apdlg-submit');
         btn.disabled = false;
@@ -3214,15 +3233,7 @@
     // Map click: place pin while dialog is open
     map.on('click', function(e) {
         if (!_addPinClickMode) return;
-        const lat = e.latlng.lat.toFixed(6);
-        const lng = e.latlng.lng.toFixed(6);
-        document.getElementById('apdlg-lat').value = lat;
-        document.getElementById('apdlg-lng').value = lng;
-        if (_addPinMarker) {
-            _addPinMarker.setLatLng(e.latlng);
-        } else {
-            _addPinMarker = L.marker(e.latlng).addTo(map);
-        }
+        _setAddPinLocation(e.latlng.lat, e.latlng.lng);
     });
 
     // Address autocomplete (Nominatim)
@@ -3261,8 +3272,7 @@
                 btn.textContent = r.display_name;
                 btn.addEventListener('mousedown', e => {
                     e.preventDefault();  // prevent input blur firing first
-                    document.getElementById('apdlg-addr').value = r.display_name;
-                    _setAddPinLocation(parseFloat(r.lat), parseFloat(r.lon));
+                    _setAddPinLocation(parseFloat(r.lat), parseFloat(r.lon), r.display_name);
                     box.hidden = true;
                 });
                 box.appendChild(btn);
@@ -3272,17 +3282,15 @@
         .catch(() => {});
     }
 
-    function _setAddPinLocation(lat, lng) {
+    function _setAddPinLocation(lat, lng, label = null) {
         document.getElementById('apdlg-lat').value = lat.toFixed(6);
         document.getElementById('apdlg-lng').value = lng.toFixed(6);
-        const coordsHint = document.getElementById('apdlg-coords-hint');
-        const coordsText = document.getElementById('apdlg-coords-text');
-        if (coordsHint && coordsText) {
-            coordsText.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-            coordsHint.hidden = false;
-        }
-        const clickHint = document.getElementById('apdlg-click-hint');
-        if (clickHint) clickHint.classList.add('apdlg-click-hint--located');
+        document.getElementById('apdlg-location-text').textContent =
+            label || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        document.getElementById('apdlg-addr-wrap').hidden = true;
+        document.getElementById('apdlg-location-selected').hidden = false;
+        document.getElementById('apdlg-addr-suggestions').hidden = true;
+        _addPinClickMode = false;
         const latlng = L.latLng(lat, lng);
         map.setView(latlng, Math.max(map.getZoom(), 15));
         if (_addPinMarker) {
@@ -3291,6 +3299,24 @@
             _addPinMarker = L.marker(latlng).addTo(map);
         }
     }
+
+    function _clearAddPinLocation() {
+        document.getElementById('apdlg-lat').value = '';
+        document.getElementById('apdlg-lng').value = '';
+        document.getElementById('apdlg-addr').value = '';
+        document.getElementById('apdlg-location-text').textContent = '';
+        document.getElementById('apdlg-addr-wrap').hidden = false;
+        document.getElementById('apdlg-location-selected').hidden = true;
+        document.getElementById('apdlg-addr-suggestions').hidden = true;
+        if (_addPinMarker) {
+            map.removeLayer(_addPinMarker);
+            _addPinMarker = null;
+        }
+        _addPinClickMode = true;
+        document.getElementById('apdlg-addr').focus();
+    }
+
+    document.getElementById('apdlg-location-clear').addEventListener('click', _clearAddPinLocation);
 
     // Hide address suggestions when input loses focus
     document.getElementById('apdlg-addr').addEventListener('blur', function() {

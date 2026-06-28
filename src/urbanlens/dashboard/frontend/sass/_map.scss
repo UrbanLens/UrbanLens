@@ -708,17 +708,60 @@
     }
 }
 
-.apdlg-coords-hint {
+.apdlg-location-selected {
     display: flex;
     align-items: center;
-    gap: .35rem;
-    margin-top: .3rem;
-    font-size: .78rem;
-    color: $text-secondary;
+    gap: .5rem;
+    padding: .55rem .65rem;
+    border: 1.5px solid var(--ul-border);
+    border-radius: $radius-sm;
+    background: var(--ul-grey-0);
+    font-size: .88rem;
+    color: $text-primary;
+
+    &__content {
+        display: flex;
+        align-items: flex-start;
+        gap: .35rem;
+        flex: 1;
+        min-width: 0;
+
+        i {
+            font-size: 1rem !important;
+            color: $primary-color;
+            flex-shrink: 0;
+            margin-top: .1rem;
+        }
+
+        span {
+            line-height: 1.35;
+            word-break: break-word;
+        }
+    }
+}
+
+.apdlg-location-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: none;
+    border-radius: $radius-sm;
+    background: transparent;
+    color: $text-muted;
+    cursor: pointer;
+    transition: color .1s, background .1s;
 
     i {
-        font-size: .95rem !important;
-        color: $primary-color;
+        font-size: 1.1rem !important;
+    }
+
+    &:hover {
+        color: $ui-red-500;
+        background: color-mix(in srgb, $ui-red-500 10%, transparent);
     }
 }
 
@@ -871,6 +914,65 @@
 }
 
 // ── Privacy row ─────────────────────────────────────────────────────────────
+
+.apdlg-customize {
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-sm;
+    background: var(--ul-grey-0);
+
+    &[open] .apdlg-customize-arrow {
+        transform: rotate(180deg);
+    }
+}
+
+.apdlg-customize-toggle {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .55rem .65rem;
+    cursor: pointer;
+    list-style: none;
+    font-size: .875rem;
+    font-weight: 500;
+    color: $text-secondary;
+    user-select: none;
+    transition: color .15s;
+
+    &::-webkit-details-marker {
+        display: none;
+    }
+
+    &:hover {
+        color: $text-primary;
+    }
+
+    .material-icons:first-child {
+        font-size: 1.05rem !important;
+        color: $text-muted;
+    }
+}
+
+.apdlg-customize-arrow {
+    margin-left: auto;
+    font-size: 1.1rem !important;
+    color: $text-muted;
+    transition: transform .2s;
+}
+
+.apdlg-customize-body {
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+    padding: 0 .65rem .75rem;
+    border-top: 1px solid var(--ul-border);
+}
+
+.apdlg-customize-hint {
+    margin: .65rem 0 0;
+    font-size: .8rem;
+    color: $text-muted;
+    line-height: 1.45;
+}
 
 .apdlg-privacy-row {
     display: flex;
