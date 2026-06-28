@@ -118,45 +118,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    def test_ai(self, request: HttpRequest, *args, **kwargs):
-        """
-        Test the AI. TODO Temporary function that can be deleted at any time with no side effects.
-        """
-        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
-
-        if not user_has_feature(request.user, SiteFeature.AI):
-            return JsonResponse({"error": "AI features require an active subscription."}, status=403)
-
-        profile = Profile.objects.get(pk=1)
-        pin, _created = Pin.objects.get_nearby_or_create(
-            latitude=43.0423439,
-            longitude=-76.1501928,
-            profile=profile,
-            defaults={
-                "name": "Syracuse Central High School",
-                "description": "",
-            },
-        )
-        logger.critical("Location: %s", pin)
-        return JsonResponse({"pin": pin.to_json()})
-
-        from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
-
-        instructions = (
-            ""
-            + "Look at the following information about a location and determine what category it belongs in. Example categories are:"
-            + "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, "
-            + "Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, Library, Lighthouse, Mall, Mansion, Military Base, "
-            + "Monument, Police Station, Power Plant, Prison, Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel"
-            + "If the Pin does not fit into any of these categories, provide a new category that is broad enough to include a variety "
-            + "of similar urbex locations. Do not answer with the name of the location; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
-        )
-
-        gateway = CloudflareGateway(instructions=instructions)
-        response = gateway.send_prompt("address: 312 Western Ave, Guilderland, NY 12084, USA, name: Master Cleaners")
-
-        return JsonResponse({"response": response})
-
     def init_map(self, request: HttpRequest):
         map_data = self.get_map_data()
 

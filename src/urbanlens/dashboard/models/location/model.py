@@ -92,40 +92,62 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
             return self.date_abandoned - timedelta(days=1)
         return None
 
-    def change_category(self, category_id: int) -> None:
-        # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
-        from urbanlens.dashboard.models.badges.model import Badge
-
-        category = Badge.objects.get(id=category_id, kind="category")
-        self.badges.remove(*self.badges.filter(kind="category"))
-        self.badges.add(category)
-        self.save()
-
     def suggest_category(self, append_suggestion: bool = False) -> str | None:
-        # TODO: This probably needs to be abstracted a bit due to the addition of generic badges (categories and tags). It should probably also live somewhere else.
+        """Suggest a category for this shared location using global badges and AI.
+
+        Location is not user-owned, so only global badges (profile=None) with
+        allow_ai=True are eligible. No user AI preference check is performed.
+        """
+        from urbanlens.dashboard.models.badges.model import Badge
         from urbanlens.dashboard.services.ai.factory import get_gateway
+        from urbanlens.dashboard.services.ai.keywords import categorize_by_keywords
+        from urbanlens.dashboard.services.ai.scanner import wrap_user_data
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
-        instructions = (
-            "Look at the following information about a location and determine what category it belongs in. Example categories are: "
-            "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, Firehouse, Fire Tower, "
-            "Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, Library, Lighthouse, Mall, Mansion, Military Base, "
-            "Monument, Police Station, Power Plant, Prison, Resort, Ruins, School, Stadium, Theater, Traincar, Train Station, Tunnel. "
-            "If the location does not fit into any of these categories, provide a new category that is broad enough to include a variety "
-            "of similar urbex locations. Do not answer with the name of the location; always answer with a category, like this: <ANSWER>Factory</ANSWER>."
-        )
+        # Try keyword matching first — no AI call needed.
+        keyword_parts = [p for p in (self.name, self.place_name if self.has_place_name() else None) if p]
+        if keyword_parts:
+            category_name = categorize_by_keywords(" ".join(keyword_parts))
+            if category_name:
+                allowed = Badge.objects.filter(
+                    name__iexact=category_name,
+                    kind="category",
+                    allow_ai=True,
+                    profile__isnull=True,
+                ).exclude(name__iexact="visited").exists()
+                if not allowed:
+                    logger.debug("Keyword category '%s' excluded by allow_ai=False", category_name)
+                    return None
+                logger.debug("Keyword-matched category '%s' for location %s", category_name, self.pk)
+                if append_suggestion:
+                    self.add_category(category_name, save=False)
+                return category_name
 
-        from urbanlens.dashboard.services.ai.scanner import wrap_user_data
+        # Build the list of global categories the AI is allowed to assign.
+        ai_allowed_qs = Badge.objects.filter(kind="category", allow_ai=True, profile__isnull=True).exclude(name__iexact="visited")
+        global_categories = list(ai_allowed_qs.values_list("name", flat=True).order_by("name"))
+
+        if not global_categories:
+            return None
+        
+        category_list_str = ", ".join(global_categories)
+        instructions = (
+            "Look at the following information about a location and determine what category it belongs in.\n\n"
+            "You MUST choose from the available categories. "
+            f"The available categories are: {category_list_str}.\n\n"
+            "Pick the single best match. If the location does not clearly fit any of these categories, "
+            "choose the closest one. Do not invent a new category name that is not in the list. "
+            "Do not answer with the name of the location; always answer with a category name exactly "
+            "as it appears in the list above, like this: <ANSWER>Factory</ANSWER>."
+        )
 
         prompt = ""
         if self.address:
             prompt += f"address: {self.address}\n"
         if self.has_place_name():
-            prompt += f"google maps description: {self.place_name}\n"
-            instructions += "\nThe google maps description may be helpful, but it also may be inaccurate. Use your best judgement.\n"
+            prompt += f"google maps place name: {self.place_name}\n"
+            instructions += "\nThe google maps place name may be helpful, but it can also be inaccurate. Use your best judgement.\n"
 
-        # User-supplied fields are wrapped in USER_DATA delimiters so the model
-        # treats them as inert data rather than executable instructions.
         user_fields = ""
         if is_meaningful_name(self.name):
             user_fields += f"location title: {self.name}\n"
@@ -143,6 +165,20 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
         category_name = gateway.send_prompt(prompt)
         if not category_name or len(category_name) < 3:
             return None
+
+        if category_name.lower() == "visited":
+            return None
+
+        if global_categories and category_name.lower() not in {c.lower() for c in global_categories}:
+            match = next((c for c in global_categories if c.lower() == category_name.lower()), None)
+            if not match:
+                logger.debug(
+                    "AI returned '%s' which is not in the allowed category list for location %s; discarding",
+                    category_name,
+                    self.pk,
+                )
+                return None
+            category_name = match
 
         if append_suggestion:
             self.add_category(category_name, save=False)
