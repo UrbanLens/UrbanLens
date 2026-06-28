@@ -57,42 +57,42 @@
             <button id="street-button" class="map-layer-btn"
                     onclick="toggleStreetView();" aria-label="Street view">
                 <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_street.png' %}" alt="" loading="lazy">
+                    <img src="{% static 'dashboard/images/map_layer_street.jpg' %}" alt="Street View" loading="lazy">
                 </span>
                 <span>Street</span>
             </button>
             <button id="topography-button" class="map-layer-btn"
                     onclick="toggleTopographyView();" aria-label="Topographic view">
                 <span class="map-layer-thumb">
-                    <img src="https://tile.opentopomap.org/12/2140/1447.png" alt="" loading="lazy">
+                    <img src="{% static 'dashboard/images/map_layer_topography.jpg' %}" alt="" loading="lazy">
                 </span>
                 <span>Terrain</span>
             </button>
             <button id="satellite-button" class="map-layer-btn"
                     onclick="toggleSatelliteView();" aria-label="Satellite view">
                 <span class="map-layer-thumb">
-                    <img src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/12/1447/2140" alt="" loading="lazy">
+                    <img src="{% static 'dashboard/images/map_layer_satellite.jpg' %}" alt="Satellite View" loading="lazy">
                 </span>
                 <span>Satellite</span>
             </button>
             <button id="weather-button" class="map-layer-btn"
                     onclick="toggleWeatherView();" aria-label="Weather overlay">
                 <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_weather.png' %}" alt="" loading="lazy">
+                    <img src="{% static 'dashboard/images/map_layer_weather.jpg' %}" alt="Weather View" loading="lazy">
                 </span>
                 <span>Weather</span>
             </button>
             <button id="toggle-pins-button" class="map-layer-btn"
                     onclick="togglePins();" aria-label="Show or hide pins">
                 <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_pins.png' %}" alt="" loading="lazy">
+                    <img src="{% static 'dashboard/images/map_layer_pins.jpg' %}" alt="Pins View" loading="lazy">
                 </span>
                 <span>Pins</span>
             </button>
             <button id="dark-mode-button" class="map-layer-btn"
                     onclick="_toggleMapDarkMode();" aria-label="Toggle map dark mode">
                 <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_dark.png' %}" alt="" loading="lazy">
+                    <img src="{% static 'dashboard/images/map_layer_dark.jpg' %}" alt="Dark Mode View" loading="lazy">
                 </span>
                 <span>Dark</span>
             </button>
@@ -120,7 +120,7 @@
     {# ── Filter panel ──────────────────────────────────────────────────── #}
     <div id="filter-panel">
         <div class="fp-header">
-            <span class="fp-title">Search &amp; Filter (F)</span>
+            <span class="fp-title">Filter (F)</span>
             {% include "dashboard/partials/_tooltip_help.html" with text="Filters apply instantly as you change them. Pins matching all selected criteria stay visible on the map." wide=True %}
             <button class="fp-close" onclick="toggleFilterPanel()" aria-label="Close">✕</button>
         </div>
@@ -990,11 +990,16 @@
     }
 
     // ── Temporary place markers (search jump + right-click context menu) ─────
-    function _createTempPlaceMarker(lat, lng, title = '') {
+    // isSearch=true uses amber styling so search markers are visually distinct from
+    // permanent pins and from the blue context-menu marker.
+    function _createTempPlaceMarker(lat, lng, title = '', isSearch = false) {
+        const iconClass = isSearch
+            ? 'material-icons search-result-marker-icon search-result-marker-icon--search'
+            : 'material-icons search-result-marker-icon';
         return L.marker([lat, lng], {
             icon: L.divIcon({
                 className: 'search-result-marker-wrap',
-                html: '<i class="material-icons search-result-marker-icon">place</i>',
+                html: `<i class="${iconClass}">place</i>`,
                 iconSize: [32, 40],
                 iconAnchor: [16, 40],
             }),
@@ -1035,7 +1040,7 @@
     function _showSearchMarker(lat, lng, title) {
         _clearSearchMarker();
         _clearContextMenuMarker();
-        _searchMarker = _createTempPlaceMarker(lat, lng, title || '');
+        _searchMarker = _createTempPlaceMarker(lat, lng, title || '', true /* isSearch */);
         _searchMarker.on('click', function() {
             map.closePopup();
             document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
@@ -1063,7 +1068,7 @@
 
             const addPinItem = document.createElement('button');
             addPinItem.className = 'map-context-menu__item';
-            addPinItem.innerHTML = '<i class="material-icons">add_location</i>Add Pin Here';
+            addPinItem.innerHTML = '<i class="material-icons">add_location</i>Create pin';
             addPinItem.addEventListener('click', () => { menu.remove(); _clearSearchMarker(); openAddPinDialog(lat, lng); });
             menu.appendChild(addPinItem);
 
@@ -2311,6 +2316,9 @@
 
         switch (key) {
             case 'f': toggleFilterPanel(); break;                    // F — Filter
+            case 'j':                                                // J — Jump to location
+                document.getElementById('address-search-input')?.focus();
+                break;
             case 'p': togglePins(); break;                           // P — Toggle pins
             case 'l': _toggleLayersPanel(); break;                   // L — Layers
             case 's': toggleSatelliteView(); break;                  // S — Satellite view
@@ -2635,6 +2643,56 @@
         return null;
     }
 
+    // ── No-results overlay (shown centered on the map when search finds nothing) ─
+    function _showNoResultsOverlay(message) {
+        const mapEl = document.getElementById('map');
+        if (!mapEl) return;
+        mapEl.querySelectorAll('.addr-no-results-overlay').forEach(el => el.remove());
+        const overlay = document.createElement('div');
+        overlay.className = 'addr-no-results-overlay';
+        overlay.innerHTML = `<div class="addr-no-results-card">
+            <i class="material-icons">search_off</i>
+            <p>${_escHtml(message)}</p>
+            <button type="button">×</button>
+        </div>`;
+        overlay.querySelector('button').addEventListener('click', () => overlay.remove());
+        mapEl.appendChild(overlay);
+        setTimeout(() => overlay.remove(), 6000);
+    }
+
+    // ── Map suggestion section key from label ─────────────────────────────────
+    function _sectionKey(label) {
+        const l = label.toLowerCase();
+        if (l.includes('pin') || l.includes('location')) return 'pins';
+        if (l.includes('google')) return 'places';
+        if (l.includes('place') || l.includes('address')) return 'suggestions';
+        if (l.includes('cit')) return 'cities';
+        if (l.includes('navigation') || l.includes('quick')) return 'navigation';
+        if (l.includes('recent') || l.includes('history')) return 'history';
+        if (l.includes('coord')) return 'coordinates';
+        return 'suggestions';
+    }
+
+    // ── Build a collapsible section header and wire its click handler ──────────
+    function _makeCollapsibleHdr(label, sectionKey, slot) {
+        const hdr = document.createElement('div');
+        hdr.className = 'addr-suggestion-group-hdr';
+        hdr.dataset.collapsible = '1';
+        hdr.dataset.section = sectionKey;
+        hdr.textContent = label;
+        const hint = document.createElement('span');
+        hint.className = 'addr-section-collapsed-hint';
+        hdr.appendChild(hint);
+        hdr.addEventListener('click', () => {
+            slot.classList.toggle('is-collapsed');
+            const collapsed = slot.classList.contains('is-collapsed');
+            hdr.dataset.collapsed = collapsed ? '1' : '';
+            const count = slot.querySelectorAll('.addr-suggestion').length;
+            hint.textContent = collapsed ? `${count} suggestion${count !== 1 ? 's' : ''}` : '';
+        });
+        return hdr;
+    }
+
     // ── Suggestion item builder ───────────────────────────────────────────────
     let _addrActiveIdx = -1;
     let _addrSearchSeq = 0;
@@ -2667,26 +2725,71 @@
 
             // Geocode and jump directly (derived "Search for X near Y" type suggestions)
             if (result.geocodeQuery) {
+                _clearSearchMarker(); // Clear any stale marker before the async fetch
                 inputEl.value = result.geocodeQuery;
                 document.getElementById('addr-search-clear').classList.add('addr-search-clear--visible');
                 if (_updateHistoryBtn) _updateHistoryBtn();
                 _addToSearchHistory(result.geocodeQuery);
+                _setFetching(true, 'Searching…');
                 try {
-                    const gResp = await fetch(
-                        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(result.geocodeQuery)}&format=json&limit=1`,
-                        { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' } }
-                    );
-                    const gData = await gResp.json();
-                    if (gData && gData.length) {
-                        const gLat = parseFloat(gData[0].lat), gLng = parseFloat(gData[0].lon);
-                        _programmaticMove = true;
-                        map.setView([gLat, gLng], 14);
-                        _showSearchMarker(gLat, gLng, gData[0].display_name || result.title);
+                    const nearMatch = result.geocodeQuery.match(/^(.+?) near (.+)$/i);
+                    if (nearMatch) {
+                        const searchTerm = nearMatch[1].trim();
+                        const anchorText = nearMatch[2].trim();
+                        // Geocode anchor location Y first
+                        const anchorResp = await fetch(
+                            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(anchorText)}&format=json&limit=1`,
+                            { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' } }
+                        );
+                        const anchorData = await anchorResp.json();
+                        const anchorLat = anchorData[0] ? parseFloat(anchorData[0].lat) : null;
+                        const anchorLon = anchorData[0] ? parseFloat(anchorData[0].lon) : null;
+                        // Search for X within viewbox around Y
+                        let searchData = [];
+                        if (anchorLat != null && anchorLon != null) {
+                            const pad = 0.5;
+                            const searchResp = await fetch(
+                                `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchTerm)}&format=json&limit=5` +
+                                `&viewbox=${anchorLon - pad},${anchorLat - pad},${anchorLon + pad},${anchorLat + pad}&bounded=0`,
+                                { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' } }
+                            );
+                            searchData = await searchResp.json();
+                        }
+                        if (searchData && searchData.length) {
+                            const first = searchData[0];
+                            const fLat = parseFloat(first.lat), fLon = parseFloat(first.lon);
+                            _programmaticMove = true;
+                            map.setView([fLat, fLon], 14);
+                            _showSearchMarker(fLat, fLon, first.display_name || searchTerm);
+                            if (searchData.length > 1) toastr.info(`Found ${searchData.length} results for "${searchTerm}"`);
+                        } else if (anchorLat != null) {
+                            // No hits — still center on the anchor so the user sees where they searched
+                            _programmaticMove = true;
+                            map.setView([anchorLat, anchorLon], 13);
+                            _showSearchMarker(anchorLat, anchorLon, anchorText);
+                            _showNoResultsOverlay(`No "${searchTerm}" found near ${anchorText}`);
+                        } else {
+                            _showNoResultsOverlay(`Couldn't find "${anchorText}" — try a more specific location`);
+                        }
                     } else {
-                        toastr.warning('No results found — try a different search.');
+                        const gResp = await fetch(
+                            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(result.geocodeQuery)}&format=json&limit=1`,
+                            { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' } }
+                        );
+                        const gData = await gResp.json();
+                        if (gData && gData.length) {
+                            const gLat = parseFloat(gData[0].lat), gLng = parseFloat(gData[0].lon);
+                            _programmaticMove = true;
+                            map.setView([gLat, gLng], 14);
+                            _showSearchMarker(gLat, gLng, gData[0].display_name || result.title);
+                        } else {
+                            _showNoResultsOverlay(`No results for "${result.geocodeQuery}"`);
+                        }
                     }
                 } catch (_e) {
                     toastr.error('Search failed — check your connection.');
+                } finally {
+                    _setFetching(false);
                 }
                 return;
             }
@@ -2787,10 +2890,7 @@
             if (seq !== _addrSearchSeq) return;
             const results = parser(raw);
             if (!results?.length) { onDone?.(false); return; }
-            const hdr = document.createElement('div');
-            hdr.className = 'addr-suggestion-group-hdr';
-            hdr.textContent = label;
-            slot.appendChild(hdr);
+            slot.appendChild(_makeCollapsibleHdr(label, _sectionKey(label), slot));
             for (const r of results) slot.appendChild(_buildSuggestionItem(r, inputEl, boxEl));
             boxEl.hidden = false;
             _addrHighlight(-1);
@@ -2841,16 +2941,28 @@
         }
         document.getElementById('addr-search-suggestions').hidden = true;
         const cached = _getCachedUserLocation();
-        if (cached) map.setView([cached.lat, cached.lng], _defaultZoom);
+        if (cached) {
+            // Immediately center on cached position — no visible wait
+            _programmaticMove = true;
+            map.setView([cached.lat, cached.lng], _defaultZoom);
+        } else {
+            // No cache — show a loading indicator so user knows we're working
+            _setFetching(true, 'Getting your location…');
+        }
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 _cacheUserLocation(pos.coords.latitude, pos.coords.longitude);
+                _programmaticMove = true;
                 map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom);
+                if (!cached) _setFetching(false);
             },
             () => {
-                if (!cached) toastr.warning('Could not get your location. Check permissions.');
+                if (!cached) {
+                    _setFetching(false);
+                    toastr.warning('Could not get your location. Check permissions.');
+                }
             },
-            { timeout: 8000, maximumAge: 0 },
+            { timeout: 8000, maximumAge: 300000 },
         );
     }
 
@@ -2932,10 +3044,7 @@
         // 1. Coordinates (instant — no network call)
         const coords = _parseCoordinates(query);
         if (coords) {
-            const hdr = document.createElement('div');
-            hdr.className = 'addr-suggestion-group-hdr';
-            hdr.textContent = 'Coordinates';
-            coordSlot.appendChild(hdr);
+            coordSlot.appendChild(_makeCollapsibleHdr('Coordinates', 'coordinates', coordSlot));
             coordSlot.appendChild(_buildSuggestionItem({
                 type: 'coordinates',
                 title: `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`,
@@ -2988,10 +3097,7 @@
 
         // 5. Derived suggestions — always present so there is always something actionable
         const derived = _generateDerivedSuggestions(query);
-        const dHdr = document.createElement('div');
-        dHdr.className = 'addr-suggestion-group-hdr';
-        dHdr.textContent = 'Search Suggestions';
-        derivedSlot.appendChild(dHdr);
+        derivedSlot.appendChild(_makeCollapsibleHdr('Search Suggestions', 'suggestions', derivedSlot));
         for (const r of derived) derivedSlot.appendChild(_buildSuggestionItem(r, input, box));
         box.hidden = false;
     }
@@ -3005,15 +3111,21 @@
         box.innerHTML = '';
         _addrActiveIdx = -1;
 
-        // Recent searches from this browser
+        // Helper: create a collapsible section slot and append it to box
+        function _emptySection(label, sectionKey) {
+            const slot = document.createElement('div');
+            slot.className = 'addr-source-slot';
+            slot.appendChild(_makeCollapsibleHdr(label, sectionKey, slot));
+            box.appendChild(slot);
+            return slot;
+        }
+
+        // Recent searches from this browser (capped at 3 in the visual list)
         const history = _getSearchHistory();
         if (history.length) {
-            const hdr = document.createElement('div');
-            hdr.className = 'addr-suggestion-group-hdr';
-            hdr.textContent = 'Recent Searches';
-            box.appendChild(hdr);
-            for (const q of history.slice(0, 5)) {
-                box.appendChild(_buildSuggestionItem({
+            const histSlot = _emptySection('Recent Searches', 'history');
+            for (const q of history.slice(0, 3)) {
+                histSlot.appendChild(_buildSuggestionItem({
                     type: 'history', icon: 'history',
                     title: q, subtitle: 'Recent search',
                     searchQuery: q,
@@ -3028,12 +3140,9 @@
         const hasHome = homeLat !== null && homeLng !== null && _MAP_CENTER_MODE !== 'gps';
 
         if (hasGeo || hasHome) {
-            const hdr2 = document.createElement('div');
-            hdr2.className = 'addr-suggestion-group-hdr';
-            hdr2.textContent = 'Quick Navigation';
-            box.appendChild(hdr2);
+            const navSlot = _emptySection('Quick Navigation', 'navigation');
             if (hasGeo) {
-                box.appendChild(_buildSuggestionItem({
+                navSlot.appendChild(_buildSuggestionItem({
                     type: 'mylocation', icon: 'my_location',
                     title: 'My Location',
                     subtitle: 'Jump to your current GPS position',
@@ -3041,7 +3150,7 @@
                 }, input, box));
             }
             if (hasHome) {
-                box.appendChild(_buildSuggestionItem({
+                navSlot.appendChild(_buildSuggestionItem({
                     type: 'home', icon: 'home',
                     title: 'Home',
                     subtitle: 'Default map center',
@@ -3053,12 +3162,9 @@
         // Recently viewed pins tracked client-side via popup open events
         const recentPins = _getRecentPins(2);
         if (recentPins.length) {
-            const hdr3 = document.createElement('div');
-            hdr3.className = 'addr-suggestion-group-hdr';
-            hdr3.textContent = 'Recently Viewed';
-            box.appendChild(hdr3);
+            const recentSlot = _emptySection('Recently Viewed', 'recent');
             for (const pin of recentPins) {
-                box.appendChild(_buildSuggestionItem({
+                recentSlot.appendChild(_buildSuggestionItem({
                     type: 'pin', icon: 'push_pin',
                     title: pin.name || 'Unnamed',
                     subtitle: 'Recently viewed',
@@ -3130,10 +3236,20 @@
             if (suggestions.children.length) suggestions.hidden = false;
         }
 
+        // Track whether pointer is inside the suggestions panel so scrollbar drags
+        // don't trigger the blur-hide timer.
+        let _mouseOverSuggestions = false;
+        suggestions.addEventListener('mouseenter', () => { _mouseOverSuggestions = true; });
+        suggestions.addEventListener('mouseleave', () => { _mouseOverSuggestions = false; });
+        // Refocus input after a scrollbar interaction so keyboard navigation still works.
+        suggestions.addEventListener('mouseup', () => {
+            if (_mouseOverSuggestions && document.activeElement !== input) input.focus();
+        });
+
         function _hideAddrSuggestionsSoon() {
             clearTimeout(_addrBlurTimer);
             _addrBlurTimer = setTimeout(() => {
-                if (!bar.contains(document.activeElement)) {
+                if (!bar.contains(document.activeElement) && !_mouseOverSuggestions) {
                     suggestions.hidden = true;
                     _addrActiveIdx = -1;
                 }
@@ -3153,6 +3269,12 @@
         suggestions.addEventListener('mousedown', function (e) {
             e.preventDefault();
         });
+
+        // Prevent wheel events over the suggestions list from being captured by the
+        // Leaflet map underneath (which would zoom instead of scrolling the list).
+        suggestions.addEventListener('wheel', function (e) {
+            e.stopPropagation();
+        }, { passive: true });
 
         // History button: each click fills the input with an older query.
         if (historyBtn) {
@@ -3190,7 +3312,22 @@
                 _addrHighlight(_addrActiveIdx + 1);
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                _addrHighlight(_addrActiveIdx - 1);
+                if (!this.value.trim() && _addrActiveIdx < 0) {
+                    // Terminal-style: fill input from history (up to 10 entries) on each press
+                    const hist = _getSearchHistory().slice(0, 10);
+                    if (!hist.length) { if (suggestions.hidden) _showEmptySuggestions(); return; }
+                    _addrHistoryNavIdx = _addrHistoryNavIdx < 0 ? 0 : (_addrHistoryNavIdx + 1) % hist.length;
+                    const chosen = hist[_addrHistoryNavIdx];
+                    this.value = chosen;
+                    clearBtn.classList.add('addr-search-clear--visible');
+                    _updateHistoryBtn();
+                    suggestions.hidden = true;
+                    _addrActiveIdx = -1;
+                    clearTimeout(_addrBarTimer);
+                    _addrBarTimer = setTimeout(() => _startMultiSearch(chosen), 200);
+                } else {
+                    _addrHighlight(_addrActiveIdx - 1);
+                }
             } else if (e.key === 'Enter') {
                 e.preventDefault();
                 if (_addrActiveIdx >= 0 && _addrActiveIdx < items.length) {

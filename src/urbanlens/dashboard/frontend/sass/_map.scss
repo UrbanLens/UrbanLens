@@ -46,6 +46,13 @@
         &:hover {
             filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .6)) brightness(1.1);
         }
+
+        // Search-result markers use amber to distinguish from permanent pins
+        &--search {
+            color: #f59e0b;
+            filter: drop-shadow(0 2px 5px rgba(245, 158, 11, .5));
+            &:hover { filter: drop-shadow(0 3px 7px rgba(245, 158, 11, .7)) brightness(1.1); }
+        }
     }
 }
 
@@ -784,6 +791,8 @@
     background: var(--ul-grey-0);
     font-size: .88rem;
     color: var(--ul-grey-9);
+
+    &[hidden] { display: none !important; }
 
     &__content {
         display: flex;
@@ -1668,6 +1677,48 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     color: var(--ul-grey-5);
     background: var(--ul-grey-0);
     border-bottom: 1px solid var(--ul-border);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    // Subtle per-section tints that adapt automatically to light/dark mode
+    &[data-section="pins"]        { background: color-mix(in srgb, var(--ul-primary) 5%, var(--ul-grey-0)); }
+    &[data-section="places"]      { background: color-mix(in srgb, #22c55e 4%, var(--ul-grey-0)); }
+    &[data-section="coordinates"] { background: color-mix(in srgb, #a855f7 4%, var(--ul-grey-0)); }
+    &[data-section="suggestions"] { background: color-mix(in srgb, var(--ul-grey-6) 5%, var(--ul-grey-0)); }
+    &[data-section="navigation"]  { background: color-mix(in srgb, #3b82f6 4%, var(--ul-grey-0)); }
+    &[data-section="history"]     { background: color-mix(in srgb, var(--ul-grey-5) 4%, var(--ul-grey-0)); }
+    &[data-section="recent"]      { background: color-mix(in srgb, var(--ul-grey-5) 3%, var(--ul-grey-0)); }
+    &[data-section="cities"]      { background: color-mix(in srgb, #f59e0b 4%, var(--ul-grey-0)); }
+
+    // Collapsible sections show pointer and a chevron
+    &[data-collapsible] {
+        cursor: pointer;
+        user-select: none;
+
+        &::after {
+            content: '▾';
+            margin-left: auto;
+            font-size: .65rem;
+            opacity: .45;
+            transition: transform .15s;
+        }
+
+        &[data-collapsed]::after { transform: rotate(-90deg); }
+    }
+}
+
+// Collapsed slot: hide suggestions, show count hint
+.addr-source-slot.is-collapsed {
+    .addr-suggestion { display: none; }
+}
+
+.addr-section-collapsed-hint {
+    padding: 2px 12px 4px;
+    font-size: .63rem;
+    color: var(--ul-grey-5);
+    opacity: .65;
+    font-style: italic;
 }
 
 .addr-suggestion {
@@ -1772,12 +1823,77 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     to { transform: rotate(360deg); }
 }
 
-// "No results" row
+// "No results" row inside the dropdown
 .addr-no-results {
     padding: 10px 14px;
     font-size: .8rem;
     color: var(--ul-grey-5);
     text-align: center;
+}
+
+// Prominent centered "no results" overlay on the map itself
+.addr-no-results-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1200;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: addr-overlay-fade-in .2s ease;
+
+    @keyframes addr-overlay-fade-in {
+        from { opacity: 0; transform: translate(-50%, -44%); }
+        to   { opacity: 1; transform: translate(-50%, -50%); }
+    }
+}
+
+.addr-no-results-card {
+    pointer-events: auto;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-border);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.22);
+    padding: 18px 24px 16px;
+    max-width: min(340px, 90vw);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+
+    .material-icons {
+        font-size: 2rem;
+        color: var(--ul-grey-5);
+        opacity: .7;
+    }
+
+    p {
+        margin: 0;
+        font-size: .85rem;
+        color: var(--ul-grey-7);
+        line-height: 1.4;
+    }
+
+    button {
+        position: absolute;
+        top: 8px;
+        right: 10px;
+        background: none;
+        border: none;
+        color: var(--ul-grey-5);
+        font-size: 1.2rem;
+        cursor: pointer;
+        line-height: 1;
+        padding: 2px 6px;
+        border-radius: 4px;
+
+        &:hover { color: var(--ul-grey-8); background: var(--ul-hover-bg); }
+    }
+
+    position: relative;
 }
 
 .leaflet-bar {
