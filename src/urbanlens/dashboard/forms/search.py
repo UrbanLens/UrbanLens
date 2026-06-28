@@ -46,6 +46,8 @@ class SearchForm(forms.Form):
     visited_before = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
     min_priority = forms.IntegerField(required=False, min_value=0)
     max_priority = forms.IntegerField(required=False, min_value=0)
+    min_danger = forms.IntegerField(required=False, min_value=0, max_value=5)
+    max_danger = forms.IntegerField(required=False, min_value=0, max_value=5)
     created_after = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
     created_before = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
 

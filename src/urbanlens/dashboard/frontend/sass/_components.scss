@@ -500,7 +500,6 @@
 .ul-dual-range-slider__fill {
     position: absolute;
     height: 100%;
-    background: $ui-fp-active;
     border-radius: 2px;
 }
 
@@ -538,6 +537,7 @@
         box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.5);
         transition: transform .12s, box-shadow .12s;
         outline: none !important;
+		z-index: 999999 !important;
 
         &:hover,
         &:active {

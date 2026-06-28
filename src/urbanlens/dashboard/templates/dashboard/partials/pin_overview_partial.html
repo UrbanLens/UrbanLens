@@ -62,7 +62,7 @@
                 </div>
                 <div class="pin-stat-item">
                     <span class="field-label">
-                        {% include "dashboard/partials/_tooltip_label.html" with label="Rating" help="Your personal quality rating for this location (1-5 stars)." %}
+                        {% include "dashboard/partials/_tooltip_label.html" with label="Rating" help="Your quality rating for this location." %}
                     </span>
                     <span class="field-value">
                         <span class="star-rating-interactive">
@@ -110,6 +110,33 @@
                                     hx-swap="outerHTML"
                                     hx-vals='{"vulnerability": 0}'
                                     title="Clear vulnerability">×</button>
+                            {% endif %}
+                        </span>
+                    </span>
+                </div>
+                <div class="pin-stat-item">
+                    <span class="field-label">
+                        {% include "dashboard/partials/_tooltip_label.html" with label="Danger" help="How hazardous this site feels — structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme)." wide=True %}
+                    </span>
+                    <span class="field-value">
+                        <span class="star-rating-interactive star-rating-interactive--danger">
+                            {% for i in "12345"|make_list %}
+                            <button type="button"
+                                    class="sr-star-btn {% if pin.danger and forloop.counter <= pin.danger %}sr-star-btn--on{% endif %}"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
+                                    hx-target="#pin-overview"
+                                    hx-swap="outerHTML"
+                                    hx-vals='{"danger": {{ forloop.counter }}}'
+                                    title="Danger {{ forloop.counter }}">★</button>
+                            {% endfor %}
+                            {% if pin.danger %}
+                            <button type="button"
+                                    class="sr-star-clear"
+                                    hx-post="{% url 'pin.edit' pin.slug %}"
+                                    hx-target="#pin-overview"
+                                    hx-swap="outerHTML"
+                                    hx-vals='{"danger": 0}'
+                                    title="Clear danger">×</button>
                             {% endif %}
                         </span>
                     </span>

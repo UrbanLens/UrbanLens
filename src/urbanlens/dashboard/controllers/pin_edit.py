@@ -170,6 +170,7 @@ class PinEditView(LoginRequiredMixin, View):
         priority_raw = body.get("priority")
         rating_raw = body.get("rating")
         vulnerability_raw = body.get("vulnerability")
+        danger_raw = body.get("danger")
         last_visited_raw = (body.get("last_visited") or "").strip() or None
 
         try:
@@ -201,6 +202,15 @@ class PinEditView(LoginRequiredMixin, View):
                 vulnerability = pin.vulnerability
         except (TypeError, ValueError):
             vulnerability = pin.vulnerability
+
+        try:
+            if danger_raw is not None and str(danger_raw).strip():
+                d = int(danger_raw)
+                danger = None if d == 0 else (d if 1 <= d <= 5 else pin.danger)
+            else:
+                danger = pin.danger
+        except (TypeError, ValueError):
+            danger = pin.danger
 
         last_visited = None
         if last_visited_raw:
@@ -250,6 +260,7 @@ class PinEditView(LoginRequiredMixin, View):
         pin.pin_type = pin_type
         pin.priority = priority
         pin.vulnerability = vulnerability
+        pin.danger = danger
         if last_visited is not None:
             pin.last_visited = last_visited
         for sf, val in security_values.items():
@@ -257,7 +268,7 @@ class PinEditView(LoginRequiredMixin, View):
         pin.date_abandoned = date_abandoned
         pin.date_last_active = date_last_active
         pin.save(update_fields=[
-            "name", "description", "pin_type", "priority", "vulnerability", "last_visited",
+            "name", "description", "pin_type", "priority", "vulnerability", "danger", "last_visited",
             "fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked",
             "date_abandoned", "date_last_active", "updated",
         ])

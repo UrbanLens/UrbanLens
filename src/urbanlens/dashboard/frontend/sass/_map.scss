@@ -1792,32 +1792,6 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     display: none !important;
 }
 
-/* ── Filter refresh overlay (sidebar open + HTMX pin refresh) ─────── */
-#filter-refresh-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 800;
-    pointer-events: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.1);
-    transition: opacity 0.2s ease;
-
-    &[hidden] {
-        display: none !important;
-    }
-}
-
-#map.filter-open #filter-refresh-overlay {
-    right: 272px;
-
-    @include down($breakpoint-sm) {
-        right: 0;
-        bottom: 80dvh;
-    }
-}
-
 .plo-card {
     background: rgba(10, 14, 24, 0.88);
     backdrop-filter: blur(18px);
@@ -2319,10 +2293,14 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     font-weight: 600;
     color: var(--ul-grey-8);
     opacity: 0.85;
-    transition: opacity .15s, box-shadow .15s;
+    transition: opacity .2s ease, box-shadow .2s ease, color .2s ease, border-color .2s ease;
     white-space: nowrap;
 
-    .material-icons { font-size: 1.1rem; color: var(--ul-grey-6); }
+    .material-icons {
+        font-size: 1.1rem;
+        color: var(--ul-grey-6);
+        transition: color .2s ease;
+    }
 
     &:hover, &.active { opacity: 1; box-shadow: 0 3px 10px rgba(0, 0, 0, .18); }
     &.active { color: $color-blue-700; .material-icons { color: $color-blue-500; } }
@@ -2342,15 +2320,39 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     flex-direction: row;
     gap: 4px;
     align-items: flex-end;
+    opacity: 0;
+    transform: translateX(-10px) scale(0.96);
+    pointer-events: none;
+    visibility: hidden;
+    transition:
+        opacity .22s cubic-bezier(.4, 0, .2, 1),
+        transform .22s cubic-bezier(.4, 0, .2, 1),
+        visibility 0s linear .22s;
 
     @include down($breakpoint-sm) {
         flex-wrap: wrap;
         left: 0;
         bottom: calc(100% + 8px);
         max-width: 220px;
+        transform: translateY(10px) scale(0.96);
     }
 
-    &[hidden] { display: none !important; }
+    &[hidden] { display: none; }
+
+    .map-layers-panel.is-open & {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+        pointer-events: auto;
+        visibility: visible;
+        transition:
+            opacity .22s cubic-bezier(.4, 0, .2, 1),
+            transform .22s cubic-bezier(.4, 0, .2, 1),
+            visibility 0s;
+
+        @include down($breakpoint-sm) {
+            transform: translateY(0) scale(1);
+        }
+    }
 }
 
 // Column layout: thumbnail on top, label below

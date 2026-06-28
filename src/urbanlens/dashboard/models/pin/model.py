@@ -81,6 +81,7 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
     description = TextField(null=True, blank=True)
     priority = IntegerField(default=0)
     vulnerability = IntegerField(default=0)
+    danger = IntegerField(default=0)
     last_visited = DateTimeField(null=True, blank=True)
     custom_icon = ImageField(upload_to="pin_custom_icons/", null=True, blank=True)
     pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
@@ -361,6 +362,8 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
             "state": self.state,
             "country": self.country,
             "priority": self.priority,
+            "vulnerability": self.vulnerability,
+            "danger": self.danger,
             "last_visited": self.last_visited.isoformat() if self.last_visited else "never",
             "latitude": self.effective_latitude,
             "longitude": self.effective_longitude,

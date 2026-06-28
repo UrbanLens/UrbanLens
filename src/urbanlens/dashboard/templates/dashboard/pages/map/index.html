@@ -53,23 +53,23 @@
             <span class="map-layers-label">Layers</span>
         </button>
         {# Menu flies out to the right. Tile thumbnails from Swiss Alps at z12 (good visual variety). #}
-        <div class="map-layers-menu" id="map-layers-menu" hidden>
+        <div class="map-layers-menu" id="map-layers-menu" hidden aria-hidden="true">
             <button id="street-button" class="map-layer-btn"
-                    onclick="toggleStreetView(); _closeLayersPanel();" aria-label="Street view">
+                    onclick="toggleStreetView();" aria-label="Street view">
                 <span class="map-layer-thumb">
                     <img src="{% static 'dashboard/images/map_layer_street.png' %}" alt="" loading="lazy">
                 </span>
                 <span>Street</span>
             </button>
             <button id="topography-button" class="map-layer-btn"
-                    onclick="toggleTopographyView(); _closeLayersPanel();" aria-label="Topographic view">
+                    onclick="toggleTopographyView();" aria-label="Topographic view">
                 <span class="map-layer-thumb">
                     <img src="https://tile.opentopomap.org/12/2140/1447.png" alt="" loading="lazy">
                 </span>
                 <span>Terrain</span>
             </button>
             <button id="satellite-button" class="map-layer-btn"
-                    onclick="toggleSatelliteView(); _closeLayersPanel();" aria-label="Satellite view">
+                    onclick="toggleSatelliteView();" aria-label="Satellite view">
                 <span class="map-layer-thumb">
                     <img src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/12/1447/2140" alt="" loading="lazy">
                 </span>
@@ -120,7 +120,7 @@
     {# ── Filter panel ──────────────────────────────────────────────────── #}
     <div id="filter-panel">
         <div class="fp-header">
-            <span class="fp-title">Search &amp; Filter</span>
+            <span class="fp-title">Search &amp; Filter (F)</span>
             {% include "dashboard/partials/_tooltip_help.html" with text="Filters apply instantly as you change them. Pins matching all selected criteria stay visible on the map." wide=True %}
             <button class="fp-close" onclick="toggleFilterPanel()" aria-label="Close">✕</button>
         </div>
@@ -144,6 +144,17 @@
                 </summary>
                 <div class="fp-accordion-body">
                     {% include "dashboard/partials/_dual_range_slider.html" with min=1 max=5 min_value=1 max_value=5 min_field="min_rating" max_field="max_rating" format="stars" center_hint="★ ★ ★ ★ ★" htmx_form="filter-form" accordion_id="fp-acc-rating" %}
+                </div>
+            </details>
+
+            {# Danger ── dual-handle slider (1–5 stars) ── #}
+            <details class="fp-accordion-item" id="fp-acc-danger">
+                <summary class="fp-accordion-summary">
+                    <span class="fp-accordion-label">Danger</span>
+                    <i class="material-icons fp-acc-arrow">expand_more</i>
+                </summary>
+                <div class="fp-accordion-body">
+                    {% include "dashboard/partials/_dual_range_slider.html" with min=1 max=5 min_value=1 max_value=5 min_field="min_danger" max_field="max_danger" format="stars" center_hint="★ ★ ★ ★ ★" htmx_form="filter-form" accordion_id="fp-acc-danger" %}
                 </div>
             </details>
 
@@ -306,14 +317,6 @@
         <div class="plo-card">
             <div class="plo-spinner"></div>
             <span class="plo-text" id="plo-text">Loading your pins…</span>
-        </div>
-    </div>
-
-    {# Map-area overlay while filter sidebar is open and pins are refreshing. #}
-    <div id="filter-refresh-overlay" aria-hidden="true" hidden>
-        <div class="plo-card">
-            <div class="plo-spinner"></div>
-            <span class="plo-text">Updating map…</span>
         </div>
     </div>
 
@@ -1829,22 +1832,62 @@
         _saveLayerState();
     }
 
+    const _LAYERS_PANEL_MS = 220;
+    let _layersPanelCloseTimer = null;
+
+    function _isLayersPanelOpen() {
+        return document.getElementById('map-layers-panel')?.classList.contains('is-open') ?? false;
+    }
+
     function _closeLayersPanel() {
+        const panel = document.getElementById('map-layers-panel');
         const menu = document.getElementById('map-layers-menu');
         const toggle = document.getElementById('map-layers-toggle');
-        if (menu) menu.hidden = true;
-        if (toggle) { toggle.classList.remove('active'); toggle.setAttribute('aria-expanded', 'false'); }
+        if (!panel?.classList.contains('is-open')) return;
+
+        panel.classList.remove('is-open');
+        if (toggle) {
+            toggle.classList.remove('active');
+            toggle.setAttribute('aria-expanded', 'false');
+        }
+        if (menu) {
+            menu.setAttribute('aria-hidden', 'true');
+            let closed = false;
+            const finishClose = (e) => {
+                if (e && e.target !== menu) return;
+                if (closed || panel.classList.contains('is-open')) return;
+                closed = true;
+                if (_layersPanelCloseTimer) {
+                    window.clearTimeout(_layersPanelCloseTimer);
+                    _layersPanelCloseTimer = null;
+                }
+                menu.hidden = true;
+                menu.removeEventListener('transitionend', finishClose);
+            };
+            menu.addEventListener('transitionend', finishClose);
+            _layersPanelCloseTimer = window.setTimeout(finishClose, _LAYERS_PANEL_MS + 40);
+        }
     }
+
     function _openLayersPanel() {
+        const panel = document.getElementById('map-layers-panel');
         const menu = document.getElementById('map-layers-menu');
         const toggle = document.getElementById('map-layers-toggle');
-        if (menu) menu.hidden = false;
-        if (toggle) { toggle.classList.add('active'); toggle.setAttribute('aria-expanded', 'true'); }
+        if (_layersPanelCloseTimer) {
+            window.clearTimeout(_layersPanelCloseTimer);
+            _layersPanelCloseTimer = null;
+        }
+        if (menu) {
+            menu.hidden = false;
+            menu.setAttribute('aria-hidden', 'false');
+        }
+        if (menu) void menu.offsetWidth;
+        if (panel) panel.classList.add('is-open');
+        if (toggle) {
+            toggle.classList.add('active');
+            toggle.setAttribute('aria-expanded', 'true');
+        }
     }
-    // Close when clicking outside the panel
-    document.addEventListener('click', function (e) {
-        if (!e.target.closest('#map-layers-panel')) _closeLayersPanel();
-    }, {capture: false});
 
     // ── Map dark mode toggle ──────────────────────────────────────────────────
     function _toggleMapDarkMode() {
@@ -1914,10 +1957,8 @@
 
     // ── Layers panel toggle ───────────────────────────────────────────────────
     function _toggleLayersPanel() {
-        const menu = document.getElementById('map-layers-menu');
-        if (menu && menu.hidden) { _openLayersPanel(); } else { _closeLayersPanel(); }
+        if (_isLayersPanelOpen()) { _closeLayersPanel(); } else { _openLayersPanel(); }
     }
-    // Close layers panel on outside click
     document.addEventListener('click', function (e) {
         const panel = document.getElementById('map-layers-panel');
         if (panel && !panel.contains(e.target)) { _closeLayersPanel(); }
@@ -1951,8 +1992,8 @@
             case 'escape':
                 if (document.getElementById('filter-panel')?.classList.contains('open')) {
                     toggleFilterPanel();
-                } else if (document.getElementById('map-layers-menu') && !document.getElementById('map-layers-menu').hidden) {
-                    _toggleLayersPanel();
+                } else if (_isLayersPanelOpen()) {
+                    _closeLayersPanel();
                 }
                 break;
         }
@@ -2064,20 +2105,12 @@
         radio.dataset.wasChecked = 'false';
     }, true);
 
-    // ── Filter refresh loading overlay (sidebar open only) ───────────────────
-    let _filterRefreshPending = false;
-    function _showFilterRefreshOverlay() {
-        const panel = document.getElementById('filter-panel');
-        const overlay = document.getElementById('filter-refresh-overlay');
-        if (!panel?.classList.contains('open') || !overlay) return;
-        overlay.hidden = false;
-        _filterRefreshPending = true;
+    // ── Filter refresh indicator (subtle bottom pill, same as pin fetch) ───────
+    function _showFilterFetchIndicator() {
+        _setFetching(true, 'Updating map…');
     }
-    function _hideFilterRefreshOverlay() {
-        if (!_filterRefreshPending) return;
-        const overlay = document.getElementById('filter-refresh-overlay');
-        if (overlay) overlay.hidden = true;
-        _filterRefreshPending = false;
+    function _hideFilterFetchIndicator() {
+        _setFetching(false);
     }
 
     // ── Skip server round-trip when no filters are active ────────────────────
@@ -2088,17 +2121,17 @@
             document.getElementById('search-pins-button').classList.remove('has-filters');
             return;
         }
-        _showFilterRefreshOverlay();
+        _showFilterFetchIndicator();
     });
-    document.getElementById('filter-form').addEventListener('htmx:afterRequest', _hideFilterRefreshOverlay);
-    document.getElementById('filter-form').addEventListener('htmx:responseError', _hideFilterRefreshOverlay);
+    document.getElementById('filter-form').addEventListener('htmx:afterSwap', _hideFilterFetchIndicator);
+    document.getElementById('filter-form').addEventListener('htmx:responseError', _hideFilterFetchIndicator);
 
     // ── Auto-expand filter accordion sections based on screen height ─────────
     // Expand all sections on tall screens, fewer on short screens
     (function _autoExpandSections() {
         const h = window.innerHeight;
         // Order to open: most-used first
-        const sections = ['fp-acc-rating', 'fp-acc-visits', 'fp-acc-badges', 'fp-acc-priority', 'fp-acc-date'];
+        const sections = ['fp-acc-rating', 'fp-acc-danger', 'fp-acc-visits', 'fp-acc-badges', 'fp-acc-priority', 'fp-acc-date'];
         let toOpen;
         if (h >= 800) { toOpen = sections.length; }       // all
         else if (h >= 650) { toOpen = 3; }                // top 3

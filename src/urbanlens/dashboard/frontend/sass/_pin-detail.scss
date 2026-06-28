@@ -787,6 +787,27 @@
     }
 }
 
+// Danger - orange scale (higher = more hazardous)
+.star-rating-interactive--danger .sr-star-btn {
+    &--on {
+        color: $ui-orange-500;
+    }
+}
+
+.star-rating-interactive--danger {
+    @for $i from 1 through 5 {
+        &:has(.sr-star-btn:nth-child(#{$i}):hover) {
+            .sr-star-btn:nth-child(-n+#{$i}) {
+                color: $ui-orange-500;
+            }
+
+            .sr-star-btn:not(:nth-child(-n+#{$i})) {
+                color: $ui-gray-300;
+            }
+        }
+    }
+}
+
 .sr-star-clear {
     background: none;
     border: none;
