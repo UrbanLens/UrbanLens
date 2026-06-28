@@ -23,26 +23,25 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
     echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-    build-essential \
-    locales \
-    unzip \
-    postgresql-client-17 \
-    git \
-    iputils-ping \
-    libgdal-dev \
-    wget \
-    gosu && \
-    locale-gen en_US.UTF-8 && \
-    update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 && \
+        build-essential \
+        locales \
+        unzip \
+        postgresql-client-17 \
+        git \
+        iputils-ping \
+        libgdal-dev \
+        wget \
+        gosu && \
+    sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
+    locale-gen && \
     pg_dump --version && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Now safe to set globally, since the locale exists on disk
 ENV LANG=en_US.UTF-8 \
-LANGUAGE=en_US.UTF-8 \
-LC_ALL=en_US.UTF-8 \
-LC_CTYPE=en_US.UTF-8
+    LANGUAGE=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8 \
+    LC_CTYPE=en_US.UTF-8
 
 # Install Bun (JS runtime + package manager) via the official Docker image.
 # This avoids the curl-to-bash NVM install and gives a reproducible binary.
