@@ -65,7 +65,7 @@
     .wx-temp {
         font-size: 1rem;
         font-weight: 700;
-        color: $ui-gray-900;
+        color: var(--ul-grey-9);
         line-height: 1.1;
 
         .wx-unit {
@@ -714,7 +714,7 @@
             }
 
             .sr-star-btn:not(:nth-child(-n+#{$i})) {
-                color: $ui-gray-300;
+                color: var(--ul-grey-3);
             }
         }
     }
@@ -726,7 +726,7 @@
     cursor: pointer;
     font-size: 2rem;
     line-height: 1;
-    color: $ui-gray-300;
+    color: var(--ul-grey-3);
     padding: 1px 2px;
     border-radius: 3px;
     transition: color .1s, transform .1s;
@@ -760,7 +760,7 @@
             }
 
             .sr-star-btn:not(:nth-child(-n+#{$i})) {
-                color: $ui-gray-300;
+                color: var(--ul-grey-3);
             }
         }
     }
@@ -781,7 +781,7 @@
             }
 
             .sr-star-btn:not(:nth-child(-n+#{$i})) {
-                color: $ui-gray-300;
+                color: var(--ul-grey-3);
             }
         }
     }
@@ -802,7 +802,7 @@
             }
 
             .sr-star-btn:not(:nth-child(-n+#{$i})) {
-                color: $ui-gray-300;
+                color: var(--ul-grey-3);
             }
         }
     }
@@ -814,7 +814,7 @@
     cursor: pointer;
     font-size: .9rem;
     font-weight: 700;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
     padding: 0 4px;
     line-height: 1;
     margin-left: 2px;
@@ -1065,12 +1065,12 @@ body.page-location-details {
         align-items: center;
         gap: .5rem;
         padding: .6rem .85rem;
-        color: $ui-gray-500;
+        color: var(--ul-grey-6);
         font-size: .84rem;
 
         .material-icons {
             font-size: 1.05rem;
-            color: $ui-gray-300;
+            color: var(--ul-grey-3);
         }
     }
 }
@@ -1101,7 +1101,7 @@ body.page-location-details {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .06em;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
 }
 
 .pin-location-name {
@@ -1165,14 +1165,14 @@ body.page-location-details {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .06em;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
 }
 
 .pin-loc-picker-close {
     background: none;
     border: none;
     cursor: pointer;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
     padding: 0;
     display: inline-flex;
 
@@ -1181,7 +1181,7 @@ body.page-location-details {
     }
 
     &:hover {
-        color: $ui-gray-700;
+        color: var(--ul-grey-7);
     }
 }
 
@@ -1190,7 +1190,7 @@ body.page-location-details {
     align-items: center;
     justify-content: space-between;
     padding: .45rem .85rem;
-    border-top: 1px solid $ui-gray-100;
+    border-top: 1px solid var(--ul-grey-1);
     gap: .5rem;
 
     &--current {
@@ -1234,7 +1234,7 @@ body.page-location-details {
 .pin-loc-picker-empty {
     padding: .65rem .85rem;
     font-size: .82rem;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
     display: flex;
     align-items: center;
     gap: .35rem;
@@ -1261,7 +1261,7 @@ body.page-location-details {
 
 .loc-conflict-intro {
     font-size: .83rem;
-    color: $ui-gray-600;
+    color: var(--ul-grey-6);
     margin: 0 0 .75rem;
 }
 
@@ -1337,7 +1337,7 @@ body.page-location-details {
 .wiki-lcn-body {
     flex: 1;
     font-size: .84rem;
-    color: $ui-gray-700;
+    color: var(--ul-grey-7);
 
     strong {
         color: $ui-amber-800;
@@ -1390,7 +1390,7 @@ body.page-location-details {
     background: none;
     border: none;
     cursor: pointer;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
     padding: 0;
     flex-shrink: 0;
     display: flex;
@@ -1401,7 +1401,7 @@ body.page-location-details {
     }
 
     &:hover {
-        color: $ui-gray-700;
+        color: var(--ul-grey-7);
     }
 }
 

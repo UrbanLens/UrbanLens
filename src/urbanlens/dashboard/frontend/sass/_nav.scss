@@ -729,7 +729,7 @@ nav .brand-logo img {
         th {
             padding: .4rem .6rem;
             text-align: center;
-            color: $ui-gray-500;
+            color: var(--ul-grey-6);
             font-weight: 600;
             font-size: .78rem;
             border-bottom: 1px solid var(--ul-border);
@@ -741,7 +741,7 @@ nav .brand-logo img {
     }
 
     &__row {
-        border-bottom: 1px solid $ui-gray-100;
+        border-bottom: 1px solid var(--ul-grey-1);
 
         &:hover {
             background: var(--ul-grey-0);
@@ -750,7 +750,7 @@ nav .brand-logo img {
 
     &__label {
         padding: .5rem .6rem;
-        color: $ui-gray-700;
+        color: var(--ul-grey-7);
         font-weight: 500;
     }
 

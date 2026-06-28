@@ -240,6 +240,18 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         results = search_google_places(q, api_key)
         return JsonResponse({"results": [r.to_dict() for r in results], "source": "places"})
 
+    def autocomplete_empty(self, request, *args, **kwargs):
+        """Suggestions shown when the search bar is focused but empty.
+
+        Returns top cities by pin count so the user can quickly jump to the
+        areas where they have the most pins.
+        """
+        from urbanlens.dashboard.services.map_pins.autocomplete import empty_suggestions
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        results = empty_suggestions(profile)
+        return JsonResponse({"results": [r.to_dict() for r in results], "source": "empty"})
+
     def resolve_place(self, request, *args, **kwargs):
         """Resolve a Google place_id to latitude/longitude coordinates.
 

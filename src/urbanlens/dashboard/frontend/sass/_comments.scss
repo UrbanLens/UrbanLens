@@ -22,7 +22,7 @@
     display: flex;
     gap: .65rem;
     padding: .75rem 1rem;
-    border-bottom: 1px solid $ui-gray-100;
+    border-bottom: 1px solid var(--ul-grey-1);
 
     &:last-child {
         border-bottom: none;
@@ -118,7 +118,7 @@
 
 .comment-date {
     font-size: .75rem;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
 }
 
 .comment-delete-btn {
@@ -132,7 +132,7 @@
 
 .comment-text {
     font-size: .85rem;
-    color: $ui-gray-700;
+    color: var(--ul-grey-7);
     line-height: 1.5;
     word-break: break-word;
 
@@ -179,7 +179,7 @@
     border: none;
     cursor: pointer;
     font-size: .78rem;
-    color: $ui-gray-500;
+    color: var(--ul-grey-6);
     display: inline-flex;
     align-items: center;
     gap: .2rem;
@@ -193,7 +193,7 @@
     }
 
     .reply-count {
-        color: $ui-gray-400;
+        color: var(--ul-grey-4);
         font-size: .73rem;
     }
 
@@ -243,7 +243,7 @@
 .reaction-count {
     font-size: .72rem;
     font-weight: 600;
-    color: $ui-gray-500;
+    color: var(--ul-grey-6);
 
     .reaction-pill--mine & {
         color: var(--ul-accent-purple-fg);
@@ -261,7 +261,7 @@
     border-radius: 20px;
     padding: .15rem .4rem;
     cursor: pointer;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
     font-size: .8rem;
     display: inline-flex;
     align-items: center;
@@ -273,7 +273,7 @@
 
     &:hover {
         background: var(--ul-grey-0);
-        color: $ui-gray-700;
+        color: var(--ul-grey-7);
     }
 }
 
@@ -315,7 +315,7 @@
 
 .comment-compose {
     padding: .75rem 1rem;
-    border-top: 1px solid $ui-gray-100;
+    border-top: 1px solid var(--ul-grey-1);
     display: flex;
     gap: .6rem;
     align-items: flex-start;
@@ -383,7 +383,7 @@
     border-radius: 6px;
     cursor: pointer;
     padding: .25rem .45rem;
-    color: $ui-gray-500;
+    color: var(--ul-grey-6);
     display: inline-flex;
     align-items: center;
     font-size: .8rem;
@@ -470,7 +470,7 @@
     display: inline-flex;
     align-items: center;
     gap: .25rem;
-    color: $ui-gray-700;
+    color: var(--ul-grey-7);
     backdrop-filter: blur(4px);
     transition: background .1s;
 
@@ -517,7 +517,7 @@
 
 .comment-map-composer-controls {
     padding: .5rem 1rem;
-    border-bottom: 1px solid $ui-gray-100;
+    border-bottom: 1px solid var(--ul-grey-1);
     display: flex;
     align-items: center;
     gap: .75rem;
@@ -527,7 +527,7 @@
 .cmcc-label {
     font-size: .78rem;
     font-weight: 600;
-    color: $ui-gray-500;
+    color: var(--ul-grey-6);
     white-space: nowrap;
 }
 
@@ -567,7 +567,7 @@
     border: 1px solid var(--ul-border);
     border-radius: 6px;
     background: var(--ul-grey-0);
-    color: $ui-gray-700;
+    color: var(--ul-grey-7);
     cursor: pointer;
     flex-shrink: 0;
     transition: background .12s, border-color .12s;
@@ -606,7 +606,7 @@
     padding: .45rem .75rem;
     font-size: .83rem;
     cursor: pointer;
-    color: $ui-gray-700;
+    color: var(--ul-grey-7);
 
     &:hover {
         background: var(--ul-grey-0);
@@ -625,7 +625,7 @@
     align-items: center;
     gap: .35rem;
     padding: .45rem .75rem;
-    border-top: 1px solid $ui-gray-100;
+    border-top: 1px solid var(--ul-grey-1);
     flex-shrink: 0;
     flex-wrap: wrap;
 }
@@ -633,7 +633,7 @@
 .cmc-toolbar-label {
     font-size: .72rem;
     font-weight: 600;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
     margin-right: .15rem;
 }
 
@@ -647,7 +647,7 @@
 .cmc-hint-text {
     margin-left: auto;
     font-size: .72rem;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
     font-style: italic;
     white-space: nowrap;
     pointer-events: none;
@@ -662,7 +662,7 @@
     border-radius: 6px;
     padding: .2rem .45rem;
     cursor: pointer;
-    color: $ui-gray-700;
+    color: var(--ul-grey-7);
     display: inline-flex;
     align-items: center;
     transition: background .1s, border-color .1s, color .1s;
@@ -687,7 +687,7 @@
     align-items: center;
     gap: .3rem;
     font-size: .78rem;
-    color: $ui-gray-500;
+    color: var(--ul-grey-6);
     cursor: pointer;
 
     input[type="color"] {
@@ -714,7 +714,7 @@
 
 .comment-image-label {
     cursor: pointer;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
     display: flex;
     align-items: center;
     padding: .2rem;
@@ -740,7 +740,7 @@
 
 .comment-image-preview {
     font-size: .75rem;
-    color: $ui-gray-500;
+    color: var(--ul-grey-6);
     max-width: 140px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -775,8 +775,8 @@
     padding: .45rem .75rem;
     font-size: .84rem;
     cursor: pointer;
-    color: $ui-gray-700;
-    border-bottom: 1px solid $ui-gray-50;
+    color: var(--ul-grey-7);
+    border-bottom: 1px solid var(--ul-grey-0);
 
     &:last-child {
         border-bottom: none;

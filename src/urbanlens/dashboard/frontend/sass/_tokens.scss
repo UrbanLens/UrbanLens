@@ -201,6 +201,7 @@ $color-grey-10b: #000000;
 // ── Supplementary UI colour palette ──────────────────────────────────────────
 // Tailwind-CSS-inspired palette for UI components. Named with the `$ui-` prefix
 // to avoid conflicts with the Material Design scale above.
+// TODO: This is deprecated. Use the Material Design scale instead, and replace these references over time.
 
 // Blue
 $ui-blue-50:  #eff6ff;
@@ -310,18 +311,6 @@ $ui-slate-600: #475569;
 $ui-slate-700: #334155;
 $ui-slate-800: #1e293b;
 $ui-slate-900: #0f172a;
-
-// Gray (Tailwind)
-$ui-gray-50:  #f9fafb;
-$ui-gray-100: #f3f4f6;
-$ui-gray-200: #e5e7eb;
-$ui-gray-300: #d1d5db;
-$ui-gray-400: #9ca3af;
-$ui-gray-500: #6b7280;
-$ui-gray-600: #4b5563;
-$ui-gray-700: #374151;
-$ui-gray-800: #1f2937;
-$ui-gray-900: #111827;
 
 // ── Material Blue interpolations ───────────────────────────────────────────────
 // Fills gaps between the existing 300/500/700 Material steps

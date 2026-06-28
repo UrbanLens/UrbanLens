@@ -80,7 +80,7 @@
     // see global .detail-pin-action-btn below
 
     &.detail-pin-type--building .detail-pin-type-icon {
-        color: $ui-gray-500;
+        color: var(--ul-grey-6);
     }
 
     &.detail-pin-type--entrance .detail-pin-type-icon {
@@ -107,13 +107,13 @@
 .detail-pin-no-location {
     margin: 0 1.25rem .5rem;
     font-size: .8rem;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
     font-style: italic;
 }
 
 .form-optional {
     font-weight: 400;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
     font-size: .8em;
 }
 
@@ -138,7 +138,7 @@
         gap: .5rem;
         margin: .5rem 1.25rem 0;
         font-size: .82rem;
-        color: $ui-gray-500;
+        color: var(--ul-grey-6);
     }
 
     #detail-pin-picker-map {
@@ -428,7 +428,7 @@
 
 .dp-opacity-val {
     font-size: .78rem;
-    color: $ui-gray-700;
+    color: var(--ul-grey-7);
     min-width: 2.2ch;
     text-align: right;
 }

@@ -76,7 +76,7 @@
     cursor: pointer;
     border: none;
     background: rgba(255, 255, 255, 0.93);
-    color: $ui-gray-700;
+    color: var(--ul-grey-7);
     box-shadow: 0 1px 5px rgba(0, 0, 0, .28);
     backdrop-filter: blur(4px);
     transition: background .12s, box-shadow .12s;
@@ -143,12 +143,12 @@
     cursor: pointer;
     font-size: .8rem;
     font-weight: 500;
-    color: $ui-gray-700;
+    color: var(--ul-grey-7);
     border-radius: 8px;
 
     .material-icons {
         font-size: 1rem;
-        color: $ui-gray-500;
+        color: var(--ul-grey-6);
     }
 
     .detail-pin-list-chevron {
@@ -187,7 +187,7 @@
     padding: .3rem .5rem;
     cursor: pointer;
     font-size: .78rem;
-    color: $ui-gray-700;
+    color: var(--ul-grey-7);
     transition: background .1s;
 
     &:hover {
@@ -255,7 +255,7 @@
     padding: .35rem .4rem;
     font-size: .72rem;
     font-weight: 500;
-    color: $ui-gray-500;
+    color: var(--ul-grey-6);
     background: none;
     border: none;
     border-bottom: 2px solid transparent;
@@ -268,7 +268,7 @@
     }
 
     &:hover {
-        color: $ui-gray-700;
+        color: var(--ul-grey-7);
         background: var(--ul-grey-0);
     }
 
@@ -376,7 +376,7 @@
     display: block;
     padding: .18rem .3rem;
     font-size: .62rem;
-    color: $ui-gray-500;
+    color: var(--ul-grey-6);
     @include truncate;
     background: rgba(255, 255, 255, .85);
 }
@@ -389,7 +389,7 @@
     justify-content: center;
     gap: .3rem;
     padding: 1.2rem .5rem;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
     font-size: .75rem;
 
     .material-icons {
@@ -445,12 +445,12 @@
     border: none;
     cursor: pointer;
     font-size: .8rem;
-    color: $ui-gray-700;
+    color: var(--ul-grey-7);
     text-align: left;
 
     .material-icons {
         font-size: .95rem;
-        color: $ui-gray-500;
+        color: var(--ul-grey-6);
     }
 
     &:hover {
@@ -493,7 +493,7 @@
     padding: .5rem .75rem;
     font-size: .82rem;
     font-weight: 600;
-    color: $ui-gray-700;
+    color: var(--ul-grey-7);
     border-bottom: 1px solid var(--ul-border);
 }
 
@@ -515,7 +515,7 @@
     flex-direction: column;
     gap: .25rem;
     font-size: .78rem;
-    color: $ui-gray-500;
+    color: var(--ul-grey-6);
     font-weight: 500;
 }
 
@@ -525,7 +525,7 @@
     border: 1px solid var(--ul-border);
     border-radius: 5px;
     font-size: .8rem;
-    color: $ui-gray-700;
+    color: var(--ul-grey-7);
     width: 100%;
     background: var(--ul-grey-0);
 
@@ -553,7 +553,7 @@
     &--active,
     &:hover {
         transform: scale(1.2);
-        border-color: $ui-gray-700;
+        border-color: var(--ul-grey-7);
     }
 }
 
@@ -1052,7 +1052,7 @@
     cursor: pointer;
     font-size: .84rem;
     font-weight: 500;
-    color: $ui-gray-700;
+    color: var(--ul-grey-6);
     text-align: left;
     transition: background .1s;
 
@@ -1079,7 +1079,7 @@
     font-family: monospace;
     font-size: .78rem;
     letter-spacing: .03em;
-    color: $ui-gray-600;
+    color: var(--ul-grey-6);
 
     span {
         font-family: monospace;
@@ -1113,7 +1113,7 @@
     transform: translateX(100%);
     transition: transform 0.22s cubic-bezier(.4, 0, .2, 1);
     font-size: 0.82rem;
-    color: $ui-gray-400;
+    color: var(--ul-grey-4);
 }
 
 #filter-panel.open {
@@ -1520,7 +1520,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-.addr-search-home,
+.addr-search-history,
 .addr-search-clear {
     background: none;
     border: none;
@@ -1544,11 +1544,16 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-.addr-search-home {
+.addr-search-history {
+    display: none;  // hidden by default; shown via .addr-search-history--visible
     padding: 2px;
 
     .material-icons {
         font-size: .82rem;
+    }
+
+    &.addr-search-history--visible {
+        display: flex;
     }
 }
 
@@ -1625,10 +1630,16 @@ details.fp-accordion-item[open] .fp-acc-arrow {
         margin-top: 1px;
     }
 
-    &--pin .addr-suggestion-icon    { color: $color-blue-500; }
-    &--location .addr-suggestion-icon { color: $color-green-500; }
+    &--pin .addr-suggestion-icon        { color: $color-blue-500; }
+    &--location .addr-suggestion-icon   { color: $color-green-500; }
     &--coordinates .addr-suggestion-icon { color: $color-purple-500; }
-    &--place .addr-suggestion-icon  { color: var(--ul-primary); }
+    &--place .addr-suggestion-icon      { color: var(--ul-primary); }
+    &--city .addr-suggestion-icon       { color: var(--ul-grey-7); }
+    &--home .addr-suggestion-icon       { color: var(--ul-primary); }
+    &--mylocation .addr-suggestion-icon { color: $color-blue-500; }
+    &--derived .addr-suggestion-icon    { color: var(--ul-grey-5); }
+    &--external .addr-suggestion-icon   { color: var(--ul-grey-5); }
+    &--history .addr-suggestion-icon    { color: var(--ul-grey-5); }
 }
 
 // Two-line suggestion layout: bold title + muted subtitle
@@ -2973,7 +2984,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 .map-toolbar-collapse,
 .map-layer-btn,
 .map-layers-toggle,
-.addr-search-home,
+.addr-search-history,
 .addr-search-clear,
 .leaflet-control-zoom a,
 .leaflet-control-attribution a,

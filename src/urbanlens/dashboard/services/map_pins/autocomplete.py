@@ -240,6 +240,72 @@ def search_google_places(query: str, api_key: str) -> list[AutocompleteResult]:
     return results
 
 
+def empty_suggestions(profile) -> list[AutocompleteResult]:
+    """Return suggestions for an empty search input: top cities by pin count.
+
+    Used when the search bar is focused but empty, giving the user quick
+    navigation shortcuts based on where they have the most pins.
+
+    Args:
+        profile: The requesting user's Profile instance.
+
+    Returns:
+        Up to 2 city suggestions ordered by descending pin count.
+    """
+    from django.db.models import Count
+
+    from urbanlens.dashboard.models.pin import Pin
+
+    results: list[AutocompleteResult] = []
+
+    city_rows = (
+        Pin.objects.filter(profile=profile)
+        .root_pins()
+        .filter(location__isnull=False)
+        .filter(location__locality__isnull=False)
+        .exclude(location__locality="")
+        .values(
+            "location__locality",
+            "location__administrative_area_level_1",
+        )
+        .annotate(pin_count=Count("id"))
+        .order_by("-pin_count")[:2]
+    )
+
+    for row in city_rows:
+        locality = row["location__locality"]
+        state = row["location__administrative_area_level_1"] or ""
+        count = row["pin_count"]
+
+        rep_pin = (
+            Pin.objects.filter(profile=profile, location__locality=locality)
+            .root_pins()
+            .select_related("location")
+            .first()
+        )
+        if rep_pin is None:
+            continue
+        lat = rep_pin.effective_latitude
+        lng = rep_pin.effective_longitude
+        if lat is None or lng is None:
+            continue
+
+        city_label = f"{locality}, {state}" if state else locality
+        results.append(
+            AutocompleteResult(
+                type="city",
+                title=city_label,
+                subtitle=f"{count} pin{'s' if count != 1 else ''}",
+                lat=float(lat),
+                lng=float(lng),
+                zoom=12,
+                icon="location_city",
+            ),
+        )
+
+    return results
+
+
 def resolve_google_place(
     place_id: str, api_key: str,
 ) -> tuple[float | None, float | None, str | None]:

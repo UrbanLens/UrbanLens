@@ -115,6 +115,11 @@ urlpatterns = [
                     name="map.autocomplete.local",
                 ),
                 path(
+                    "search/autocomplete/empty/",
+                    maps.MapController.as_view({"get": "autocomplete_empty"}),
+                    name="map.autocomplete.empty",
+                ),
+                path(
                     "search/autocomplete/places/",
                     maps.MapController.as_view({"get": "autocomplete_places"}),
                     name="map.autocomplete.places",
