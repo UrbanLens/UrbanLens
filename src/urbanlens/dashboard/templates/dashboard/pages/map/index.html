@@ -545,8 +545,100 @@
             ? [_cachedUserLoc.lat, _cachedUserLoc.lng]
             : (_GPS_FALLBACK_LAT !== null ? [_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG] : [40.7128, -74.0060]);
 
+    // ── Map viewport URL sync (lat/lng/zoom query params) ─────────────────────
+    const _MAP_VIEW_PARAM_KEYS = new Set(['lat', 'lng', 'zoom']);
+
+    function _parseMapViewFromUrl(search = location.search) {
+        const params = new URLSearchParams(search);
+        const lat = parseFloat(params.get('lat'));
+        const lng = parseFloat(params.get('lng'));
+        const zoom = parseInt(params.get('zoom'), 10);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+        return {
+            center: [lat, lng],
+            zoom: Number.isFinite(zoom) && zoom >= 2 && zoom <= 19 ? zoom : _defaultZoom,
+        };
+    }
+
+    function _mapViewSearchParams() {
+        const c = map.getCenter();
+        return {
+            lat: c.lat.toFixed(6),
+            lng: c.lng.toFixed(6),
+            zoom: String(map.getZoom()),
+        };
+    }
+
+    function _urlWithMapView(params) {
+        const p = params instanceof URLSearchParams ? new URLSearchParams(params) : new URLSearchParams(params || '');
+        const mv = _mapViewSearchParams();
+        p.set('lat', mv.lat);
+        p.set('lng', mv.lng);
+        p.set('zoom', mv.zoom);
+        const qs = p.toString();
+        return location.pathname + (qs ? '?' + qs : '');
+    }
+
+    function _mapViewKey() {
+        const c = map.getCenter();
+        return `${c.lat.toFixed(5)},${c.lng.toFixed(5)},${map.getZoom()}`;
+    }
+
+    const _urlMapView = _parseMapViewFromUrl();
+    const _initialCenter = _urlMapView ? _urlMapView.center : _serverCenter;
+    const _initialZoom = _urlMapView ? _urlMapView.zoom : _defaultZoom;
+
+    let _urlSyncReady = false;
+    let _programmaticMove = true;
+    let _urlSyncTid = null;
+    let _lastSyncedViewKey = _urlMapView
+        ? `${_urlMapView.center[0].toFixed(5)},${_urlMapView.center[1].toFixed(5)},${_urlMapView.zoom}`
+        : null;
+
+    function _syncMapViewToUrl({ push = false } = {}) {
+        const key = _mapViewKey();
+        if (key === _lastSyncedViewKey) return;
+        _lastSyncedViewKey = key;
+        const params = new URLSearchParams(location.search);
+        _MAP_VIEW_PARAM_KEYS.forEach(k => params.delete(k));
+        const mv = _mapViewSearchParams();
+        params.set('lat', mv.lat);
+        params.set('lng', mv.lng);
+        params.set('zoom', mv.zoom);
+        const newUrl = location.pathname + (params.toString() ? '?' + params.toString() : '');
+        const state = { mapView: true };
+        if (push) history.pushState(state, '', newUrl);
+        else history.replaceState(state, '', newUrl);
+    }
+
+    function _applyMapViewFromUrl(search = location.search) {
+        const view = _parseMapViewFromUrl(search);
+        if (!view) return false;
+        _programmaticMove = true;
+        map.setView(view.center, view.zoom);
+        _lastSyncedViewKey = `${view.center[0].toFixed(5)},${view.center[1].toFixed(5)},${view.zoom}`;
+        return true;
+    }
+
+    function _onMapViewUrlChange() {
+        if (_programmaticMove) {
+            _programmaticMove = false;
+            _syncMapViewToUrl({ push: false });
+            return;
+        }
+        if (!_urlSyncReady) return;
+        if (_urlSyncTid) clearTimeout(_urlSyncTid);
+        _urlSyncTid = setTimeout(() => _syncMapViewToUrl({ push: true }), 400);
+    }
+
+    window.addEventListener('popstate', () => {
+        if (_urlSyncTid) clearTimeout(_urlSyncTid);
+        _applyMapViewFromUrl(location.search);
+    });
+
     // minZoom: prevent zooming out past the point where the world-tile fills the container
-    const map = L.map('map', { maxZoom: 19, minZoom: 2 }).setView(_serverCenter, _defaultZoom);
+    const map = L.map('map', { maxZoom: 19, minZoom: 2 }).setView(_initialCenter, _initialZoom);
     // Dedicated pane for topo tiles so the invert filter never touches satellite or street.
     map.createPane('topoPane');
     map.getPane('topoPane').style.zIndex = 401;
@@ -556,15 +648,18 @@
     // GPS mode: refine the initial centre with a live geolocation read.
     // If we already used a cached position, the map won't visibly jump; we just
     // silently refresh the cache so the next load is accurate.
-    if (_MAP_CENTER_MODE === 'gps' && navigator.geolocation) {
+    // Skip when the URL already specifies a viewport (shareable / back-button link).
+    if (_MAP_CENTER_MODE === 'gps' && navigator.geolocation && !_urlMapView) {
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 _cacheUserLocation(pos.coords.latitude, pos.coords.longitude);
+                _programmaticMove = true;
                 map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom);
             },
             () => {
                 // Only apply the pin-centroid fallback when we had nothing better to show.
                 if (!_cachedUserLoc && _GPS_FALLBACK_LAT !== null && _GPS_FALLBACK_LNG !== null) {
+                    _programmaticMove = true;
                     map.setView([_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG], _defaultZoom);
                 }
             },
@@ -1286,6 +1381,10 @@
     map.on('moveend', _onViewportChange);
     map.on('zoomend', _onViewportChange);
 
+    map.on('moveend', _onMapViewUrlChange);
+    map.on('zoomend', _onMapViewUrlChange);
+    map.once('moveend', () => { _urlSyncReady = true; });
+
     // ── Remember last position ────────────────────────────────────────────────
     if (_MAP_CENTER_MODE === 'remember') {
         let _rememberTid = null;
@@ -1318,8 +1417,8 @@
     function _exitFilterMode() {
         if (!_filterMode) return;
         _filterMode = false;
-        // Clear filter params from URL
-        history.replaceState({}, '', location.pathname);
+        // Clear filter params from URL but keep map viewport
+        history.replaceState({}, '', _urlWithMapView(new URLSearchParams()));
         clusterGroup.clearLayers();
         _markerMap.clear();
         const layers = [];
@@ -2106,6 +2205,7 @@
         if (!form) return;
         let anySet = false;
         for (const [key, value] of params.entries()) {
+            if (_MAP_VIEW_PARAM_KEYS.has(key)) continue;
             const el = form.querySelector(`[name="${CSS.escape(key)}"]`);
             if (!el) continue;
             if (el.type === 'checkbox' || el.type === 'radio') {

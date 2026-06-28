@@ -12,8 +12,7 @@
             // Remove empty values
             const clean = new URLSearchParams();
             for (const [k, v] of params.entries()) { if (v !== '') clean.append(k, v); }
-            const qs = clean.toString();
-            history.replaceState({ filter: qs }, '', qs ? '?' + qs : location.pathname);
+            history.replaceState({ filter: clean.toString() }, '', _urlWithMapView(clean));
         }
     })();
 
