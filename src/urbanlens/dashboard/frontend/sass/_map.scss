@@ -4,7 +4,7 @@
 // ── Offline indicator (shown when the server is unreachable) ──────────────
 #offline-indicator {
     position: absolute;
-    top: 10px;
+    bottom: 2rem;
     left: 50%;
     transform: translateX(-50%);
     z-index: 1200;
@@ -2822,22 +2822,22 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     &.active { color: $color-blue-700; .material-icons { color: $color-blue-500; } }
 }
 
-// Opens to the RIGHT of the toggle in a row. On small screens wraps upward.
+// Opens upward on mobile; to the RIGHT of the toggle in a row on desktop.
 .map-layers-menu {
     position: absolute;
-    left: calc(100% + 8px);
-    bottom: 0;
+    left: 0;
+    bottom: calc(100% + 8px);
     background: var(--ul-grey-0);
     border: 1px solid var(--ul-border);
     border-radius: 10px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, .22);
-    padding: 6px;
-    display: flex;
-    flex-direction: row;
-    gap: 4px;
-    align-items: flex-end;
+    padding: 5px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 3px;
+    max-width: calc(100vw - 20px);
     opacity: 0;
-    transform: translateX(-10px) scale(0.96);
+    transform: translateY(10px) scale(0.96);
     pointer-events: none;
     visibility: hidden;
     transition:
@@ -2845,19 +2845,29 @@ details.fp-accordion-item[open] .fp-acc-arrow {
         transform .22s cubic-bezier(.4, 0, .2, 1),
         visibility 0s linear .22s;
 
-    @include down($breakpoint-sm) {
+    @include up($breakpoint-xs) {
+        display: flex;
+        flex-direction: row;
         flex-wrap: wrap;
-        left: 0;
-        bottom: calc(100% + 8px);
+        align-items: flex-end;
+        gap: 4px;
+        padding: 6px;
         max-width: 220px;
-        transform: translateY(10px) scale(0.96);
+    }
+
+    @include up($breakpoint-sm) {
+        left: calc(100% + 8px);
+        bottom: 0;
+        flex-wrap: nowrap;
+        max-width: none;
+        transform: translateX(-10px) scale(0.96);
     }
 
     &[hidden] { display: none; }
 
     .map-layers-panel.is-open & {
         opacity: 1;
-        transform: translateX(0) scale(1);
+        transform: translateY(0) scale(1);
         pointer-events: auto;
         visibility: visible;
         transition:
@@ -2865,8 +2875,8 @@ details.fp-accordion-item[open] .fp-acc-arrow {
             transform .22s cubic-bezier(.4, 0, .2, 1),
             visibility 0s;
 
-        @include down($breakpoint-sm) {
-            transform: translateY(0) scale(1);
+        @include up($breakpoint-sm) {
+            transform: translateX(0) scale(1);
         }
     }
 }
@@ -2876,18 +2886,25 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 5px;
-    padding: 6px 4px 5px;
+    gap: 3px;
+    padding: 4px 2px 3px;
     border: 1.5px solid transparent;
     border-radius: 9px;
     background: transparent;
     cursor: pointer;
-    font-size: .67rem;
+    font-size: .58rem;
     font-weight: 600;
     color: var(--ul-grey-7);
     text-align: center;
     transition: background .12s, color .12s, border-color .12s;
-    min-width: 62px;
+    min-width: 0;
+
+    @include up($breakpoint-xs) {
+        gap: 5px;
+        padding: 6px 4px 5px;
+        font-size: .67rem;
+        min-width: 62px;
+    }
 
     &:hover { background: var(--ul-grey-1); color: var(--ul-grey-9); }
 
@@ -2902,12 +2919,18 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 .map-layer-thumb {
     display: block;
     position: relative;
-    width: 54px;
-    height: 54px;
-    border-radius: 7px;
+    width: 30px;
+    height: 30px;
+    border-radius: 5px;
     overflow: hidden;
     flex-shrink: 0;
     background: var(--ul-grey-2);
+
+    @include up($breakpoint-xs) {
+        width: 54px;
+        height: 54px;
+        border-radius: 7px;
+    }
 
     img {
         display: block;
@@ -2938,11 +2961,15 @@ details.fp-accordion-item[open] .fp-acc-arrow {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 2rem;
+            font-size: 1rem;
             color: #fff;
             text-shadow: 0 2px 10px rgba(0, 0, 0, .95);
             pointer-events: none;
             z-index: 2;
+
+            @include up($breakpoint-xs) {
+                font-size: 2rem;
+            }
         }
     }
 }

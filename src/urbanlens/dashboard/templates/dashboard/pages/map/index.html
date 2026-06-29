@@ -1692,11 +1692,11 @@
             pane: 'overlayPane',
         }
     );
-    // Places layer group (VIP only — historical landmarks from Google Places)
+    // Places layer group (landmarks from external APIs, including Google Places)
     const _placesLayerGroup = L.layerGroup();
     const _placesMarkerMap = new Map();  // place_id → L.Marker
     let _placesLayerActive = false;
-    const _PLACES_MIN_ZOOM = 13;  // only fetch when zoom >= this level
+    const _PLACES_MIN_ZOOM = 10;  // only fetch when zoom >= this level
 
     // ── Dark map mode helpers ─────────────────────────────────────────────────
     function _isDarkMapActive() {
@@ -2410,8 +2410,9 @@
             _placesLayerGroup.addTo(map);
             btn?.classList.add('active');
             if (map.getZoom() < _PLACES_MIN_ZOOM) {
-                toastr.info(`Zoom in to level ${_PLACES_MIN_ZOOM}+ to see places.`);
+                console.log(`Zoom in to level ${_PLACES_MIN_ZOOM}+ to see places.`);
             } else {
+                console.log('Fetching places layer...')
                 _fetchAndShowPlaces();
             }
         } else {
