@@ -1917,7 +1917,7 @@
         .trip-weather-activity-time {
             font-size: .72rem;
             font-weight: 700;
-            color: $primary-color;
+            color: var(--primary-color);
             text-transform: uppercase;
             letter-spacing: .04em;
         }
@@ -2050,7 +2050,7 @@
     align-items: center;
     gap: .25rem;
     font-size: .78rem;
-    color: $primary-color;
+    color: var(--primary-color);
     margin-top: .1rem;
 
     .material-icons {
@@ -2168,7 +2168,7 @@
     user-select: none;
 
     input[type="checkbox"] {
-        accent-color: $primary-color;
+        accent-color: var(--primary-color);
         width: 15px;
         height: 15px;
         cursor: pointer;
@@ -2216,7 +2216,7 @@
 
     .material-icons {
         font-size: 1.1rem;
-        color: $primary-color;
+        color: var(--primary-color);
     }
 
     &:hover {
@@ -2260,7 +2260,7 @@
     background: var(--card-bg, #fff);
 
     input[type="radio"] {
-        accent-color: $primary-color;
+        accent-color: var(--primary-color);
         width: 15px;
         height: 15px;
         flex-shrink: 0;
@@ -2268,9 +2268,9 @@
 
     &:has(input:checked),
     &.active {
-        border-color: $primary-color;
+        border-color: var(--primary-color);
         background: var(--ul-grey-0);
-        color: $primary-color;
+        color: var(--primary-color);
         font-weight: 500;
     }
 
@@ -2288,7 +2288,7 @@
         &:has(input:checked),
         &.active {
             background: rgba(33, 150, 243, .15);
-            border-color: $primary-color;
+            border-color: var(--primary-color);
             color: $color-blue-300;
         }
     }

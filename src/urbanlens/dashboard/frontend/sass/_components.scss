@@ -25,7 +25,7 @@
 
 	.material-icons {
 		font-size: 1.1rem;
-		color: $primary-color;
+		color: var(--primary-color);
 		opacity: .85;
 	}
 
@@ -157,7 +157,7 @@
 	i,
 	.material-icons {
 		font-size: 1.1rem;
-		color: $primary-color;
+		color: var(--primary-color);
 	}
 }
 
@@ -195,7 +195,7 @@
 	}
 
 	&:hover {
-		color: $primary-color;
+		color: var(--primary-color);
 	}
 }
 
@@ -207,7 +207,7 @@
 	font-style: italic;
 
 	a {
-		color: $primary-color;
+		color: var(--primary-color);
 	}
 }
 
@@ -234,7 +234,7 @@
 	white-space: nowrap;
 
 	&--primary {
-		background: $primary-color;
+		background: var(--primary-color);
 		color: $color-blue-1700;
 		border-color: color.scale($primary-color, $lightness: -10%);
 	}
@@ -340,8 +340,8 @@
 
 	&--active,
 	&.active {
-		color: $primary-color;
-		border-bottom-color: $primary-color;
+		color: var(--primary-color);
+		border-bottom-color: var(--primary-color);
 		font-weight: 600;
 	}
 }

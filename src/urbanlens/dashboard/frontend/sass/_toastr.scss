@@ -14,7 +14,7 @@ $_accent-bar: 3px;
 // Semantic accent colours (progress bar + left stripe)
 $_success-accent: $success-color;
 $_error-accent:   $danger-color;
-$_info-accent:    $primary-color;
+$_info-accent:    var(--primary-color);
 $_warning-accent: $warning-color;
 
 // Inline SVG icons (24×24)

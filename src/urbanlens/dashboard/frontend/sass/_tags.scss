@@ -23,7 +23,7 @@
 
     i {
         font-size: 1.1rem;
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -67,7 +67,7 @@
 
     i {
         font-size: 1rem;
-        color: $primary-color;
+        color: var(--primary-color);
     }
 
     .pinlist-panel-icon-img {
@@ -104,11 +104,11 @@
 
     &:hover {
         background: $color-blue-50;
-        color: $primary-color;
+        color: var(--primary-color);
     }
 
     &.is-active {
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -119,7 +119,7 @@
     text-align: center;
 
     a {
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -140,7 +140,7 @@
     }
 
     &:hover {
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -225,17 +225,9 @@ dialog.tag-create-card.ul-dialog {
 
 // Tag cards
 .tag-card {
-    background: var(--ul-grey-0);
     border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     margin-bottom: 0.6rem;
-    overflow: hidden;
-    transition: box-shadow 0.15s ease, border-color 0.15s ease;
-
-    &:hover {
-        box-shadow: var(--ul-shadow-sm);
-        border-color: var(--ul-grey-3b);
-    }
 }
 
 .tag-card-view {
@@ -243,7 +235,6 @@ dialog.tag-create-card.ul-dialog {
     align-items: center;
     gap: 1rem;
     padding: 0.9rem 1rem;
-    background: var(--ul-grey-0a);
 }
 
 .tag-card-icon {
@@ -256,9 +247,10 @@ dialog.tag-create-card.ul-dialog {
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    background: var(--ul-grey-0);
 
     .tag-icon-std {
-        color: $primary-color;
+        color: var(--primary-color);
         font-size: 1.4rem;
     }
 
@@ -338,7 +330,7 @@ dialog.tag-create-card.ul-dialog {
     }
 
     &.tag-stat--children {
-        color: $primary-color;
+        color: var(--primary-color);
         background: var(--ul-grey-0a);
         border-color: $color-blue-200;
 
@@ -656,7 +648,7 @@ dialog.tag-create-card.ul-dialog {
     margin-bottom: .75rem;
 
     i {
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -698,7 +690,7 @@ dialog.tag-create-card.ul-dialog {
     background: var(--ul-grey-1);
 
     i {
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -736,7 +728,7 @@ dialog.tag-create-card.ul-dialog {
 
     i {
         font-size: 1rem;
-        color: $primary-color;
+        color: var(--primary-color);
     }
 
     .tag-panel-icon-img {
@@ -773,11 +765,11 @@ dialog.tag-create-card.ul-dialog {
     }
 
     &.is-active {
-        color: $primary-color;
+        color: var(--primary-color);
     }
 
     &:hover {
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -787,7 +779,7 @@ dialog.tag-create-card.ul-dialog {
     color: $text-secondary;
 
     a {
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -808,7 +800,7 @@ dialog.tag-create-card.ul-dialog {
     }
 
     &:hover {
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -900,53 +892,7 @@ dialog.tag-create-card.ul-dialog {
 .tag-card--ghost {
     opacity: 0.4;
     background: var(--ul-grey-0);
-    border-color: $primary-color;
-}
-
-// ── Tag header right-side controls ────────────────────────────────────────────
-.badge-header-right {
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-    flex-shrink: 0;
-}
-
-.tag-view-toggle {
-    display: flex;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-sm;
-    overflow: hidden;
-}
-
-.tag-view-btn {
-    background: var(--ul-grey-0);
-    border: none;
-    padding: 5px 9px;
-    cursor: pointer;
-    color: $text-muted;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background .12s, color .12s;
-    border-right: 1px solid var(--ul-grey-1a);
-
-    &:last-child {
-        border-right: none;
-    }
-
-    i {
-        font-size: 1.1rem;
-    }
-
-    &:hover {
-        background: var(--ul-grey-4);
-        color: var(--ul-grey-8);
-    }
-
-    &.active {
-        background: $primary-color;
-        color: var(--ul-grey-9);
-    }
+    border-color: var(--primary-color);
 }
 
 // Gallery view is desktop-only on the unified organize page
@@ -1071,7 +1017,7 @@ dialog.tag-create-card.ul-dialog {
         background: var(--ul-grey-4);
 
         .cat-select-check {
-            border-color: $primary-color;
+            border-color: var(--primary-color);
         }
     }
 
@@ -1105,8 +1051,8 @@ dialog.tag-create-card.ul-dialog {
     }
 
     input[type="checkbox"]:checked~.cat-select-check {
-        background: $primary-color;
-        border-color: $primary-color;
+        background: var(--primary-color);
+        border-color: var(--primary-color);
 
         &::after {
             opacity: 1;
@@ -1115,12 +1061,12 @@ dialog.tag-create-card.ul-dialog {
 }
 
 .tag-card--selected {
-    border-color: $primary-color !important;
+    border-color: var(--primary-color) !important;
     background: rgba(59, 130, 246, .08) !important;
 
     .cat-select-check {
-        background: $primary-color;
-        border-color: $primary-color;
+        background: var(--primary-color);
+        border-color: var(--primary-color);
 
         &::after {
             opacity: 1;
@@ -1158,7 +1104,7 @@ dialog.tag-create-card.ul-dialog {
 .cat-sel-count {
     font-size: .875rem;
     font-weight: 600;
-    color: $primary-color;
+    color: var(--primary-color);
     background: $color-blue-100;
     padding: 2px 10px;
     border-radius: 20px;
@@ -1216,8 +1162,8 @@ dialog.tag-create-card.ul-dialog {
 .cat-sel-edit-btn {
     &:hover:not(:disabled) {
         background: var(--ul-grey-0);
-        border-color: $primary-color;
-        color: $primary-color;
+        border-color: var(--primary-color);
+        color: var(--primary-color);
     }
 }
 
@@ -1291,7 +1237,7 @@ dialog.tag-create-card.ul-dialog {
     }
 
     i {
-        color: $primary-color;
+        color: var(--primary-color);
         font-size: 1.1rem;
         flex-shrink: 0;
     }
@@ -1362,8 +1308,8 @@ dialog.tag-create-card.ul-dialog {
 
     &:hover {
         background: var(--ul-color-accent-bg);
-        border-color: $primary-color;
-        color: $primary-color;
+        border-color: var(--primary-color);
+        color: var(--primary-color);
     }
 }
 
@@ -1618,8 +1564,8 @@ dialog.tag-create-card.ul-dialog {
     }
 
     &.active {
-        color: $primary-color;
-        border-bottom-color: $primary-color;
+        color: var(--primary-color);
+        border-bottom-color: var(--primary-color);
         font-weight: 600;
         background: color-mix(in srgb, $primary-color 7%, transparent);
     }
@@ -1637,7 +1583,7 @@ dialog.tag-create-card.ul-dialog {
     font-weight: 700;
     line-height: 1;
     background: color-mix(in srgb, $primary-color 14%, transparent);
-    color: $primary-color;
+    color: var(--primary-color);
     border: 1px solid color-mix(in srgb, $primary-color 30%, transparent);
 
     &[hidden] { display: none; }
@@ -1670,7 +1616,7 @@ dialog.tag-create-card.ul-dialog {
     padding: 0;
     font: inherit;
     font-size: .85rem;
-    color: $primary-color;
+    color: var(--primary-color);
     cursor: pointer;
     text-decoration: underline;
     text-underline-offset: 2px;
@@ -1706,7 +1652,7 @@ dialog.tag-create-card.ul-dialog {
     &.priority-item--ghost {
         opacity: .4;
         background: var(--ul-grey-0);
-        border-color: $primary-color;
+        border-color: var(--primary-color);
     }
 }
 
@@ -1843,7 +1789,7 @@ dialog.tag-create-card.ul-dialog {
     }
 
     &:focus-visible {
-        outline: 2px solid $primary-color;
+        outline: 2px solid var(--primary-color);
         outline-offset: 2px;
     }
 
@@ -2075,7 +2021,7 @@ dialog.tag-create-card.ul-dialog {
 
             &:checked+span,
             &:focus-visible+span {
-                border-color: $primary-color;
+                border-color: var(--primary-color);
                 background: color-mix(in srgb, $primary-color 10%, var(--ul-grey-0));
                 color: var(--ul-grey-9);
                 font-weight: 600;
@@ -2083,9 +2029,9 @@ dialog.tag-create-card.ul-dialog {
         }
 
         &.is-active span {
-            border-color: $primary-color;
+            border-color: var(--primary-color);
             background: color-mix(in srgb, $primary-color 10%, var(--ul-grey-0));
-            color: $primary-color;
+            color: var(--primary-color);
             font-weight: 600;
         }
 
@@ -2220,7 +2166,7 @@ dialog.tag-create-card.ul-dialog {
 .org-sel-cb {
     width: 16px;
     height: 16px;
-    accent-color: $primary-color;
+    accent-color: var(--primary-color);
     cursor: pointer;
 }
 
@@ -2544,7 +2490,7 @@ dialog.tag-create-card.ul-dialog {
     min-height: 30px;
     font-size: .78rem;
     font-weight: 700;
-    color: $primary-color;
+    color: var(--primary-color);
     padding: 0 12px;
     background: color-mix(in srgb, $primary-color 12%, transparent);
     border-radius: 999px;
@@ -2611,13 +2557,13 @@ dialog.tag-create-card.ul-dialog {
 .org-bulk-btn--edit:hover:not(:disabled) {
     background: color-mix(in srgb, $primary-color 10%, var(--ul-grey-0a));
     border-color: color-mix(in srgb, $primary-color 35%, transparent);
-    color: $primary-color;
+    color: var(--primary-color);
 }
 
 .org-bulk-btn--merge {
-    background: $primary-color;
+    background: var(--primary-color);
     color: var(--ul-grey-0);
-    border-color: $primary-color;
+    border-color: var(--primary-color);
     box-shadow: 0 1px 4px color-mix(in srgb, $primary-color 35%, transparent);
 
     &:hover:not(:disabled) {
@@ -2772,7 +2718,7 @@ dialog.tag-create-card.ul-dialog {
     min-height: 28px;
     font-size: .78rem;
     font-weight: 700;
-    color: $primary-color;
+    color: var(--primary-color);
     padding: 0 10px;
     background: color-mix(in srgb, $primary-color 12%, transparent);
     border-radius: 999px;
@@ -2785,11 +2731,11 @@ dialog.tag-create-card.ul-dialog {
 // ── Priority multi-drag selection ─────────────────────────────────────────────
 
 .priority-item--selected {
-    border-color: $primary-color !important;
+    border-color: var(--primary-color) !important;
     background: var(--ul-hover-bg-primary) !important;
 
     .priority-drag-handle {
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -2803,7 +2749,7 @@ dialog.tag-create-card.ul-dialog {
     cursor: pointer;
 
     &:hover .priority-sel-check {
-        border-color: $primary-color;
+        border-color: var(--primary-color);
     }
 }
 
@@ -2814,7 +2760,7 @@ dialog.tag-create-card.ul-dialog {
 .priority-sel-cb {
     width: 16px;
     height: 16px;
-    accent-color: $primary-color;
+    accent-color: var(--primary-color);
     cursor: pointer;
     flex-shrink: 0;
 }
@@ -2822,7 +2768,7 @@ dialog.tag-create-card.ul-dialog {
 #priority-sel-toggle.active {
     background: color-mix(in srgb, $primary-color 10%, var(--ul-grey-0));
     border-color: color-mix(in srgb, $primary-color 35%, transparent);
-    color: $primary-color;
+    color: var(--primary-color);
 }
 
 // ── Filter-bar open animation ─────────────────────────────────────────────────

@@ -87,20 +87,6 @@
         }
     }
 
-    .tag-view-toggle {
-        border-color: var(--ul-grey-7b);
-    }
-
-    .tag-view-btn {
-        color: var(--ul-grey-3b);
-        border-right-color: var(--ul-grey-7b);
-
-        &:hover {
-            background: var(--ul-grey-0);
-            color: var(--ul-grey-1);
-        }
-    }
-
     .tag-tree-children {
         border-left-color: var(--ul-grey-7b);
     }
@@ -155,7 +141,7 @@
 
         &.active {
             background: rgba($primary-color, 0.12);
-            border-color: $primary-color;
+            border-color: var(--primary-color);
         }
     }
 
@@ -185,7 +171,7 @@
 
     .icon-option.selected {
         background: rgba($primary-color, 0.18);
-        border-color: $primary-color;
+        border-color: var(--primary-color);
     }
 
     .tag-order-badge {
@@ -209,7 +195,7 @@
         }
 
         &.active {
-            color: $primary-color;
+            color: var(--primary-color);
         }
     }
 
@@ -297,7 +283,7 @@
     }
 
     .settings-cluster-slider-wrap input[type="range"] {
-        accent-color: $primary-color;
+        accent-color: var(--primary-color);
     }
 
     .settings-reset-btn {
@@ -431,8 +417,8 @@
         color: var(--ul-grey-3b);
 
         &:hover {
-            border-color: $primary-color;
-            color: $primary-color;
+            border-color: var(--primary-color);
+            color: var(--primary-color);
         }
     }
 
@@ -1274,7 +1260,7 @@
 
         &.priority-item--ghost {
             background: rgba($color-blue-500, .1);
-            border-color: $primary-color;
+            border-color: var(--primary-color);
         }
     }
 

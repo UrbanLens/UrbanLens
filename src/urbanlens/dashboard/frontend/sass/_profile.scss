@@ -158,7 +158,7 @@
     &--friend {
         background: color-mix(in srgb, $primary-color 10%, transparent);
         border-color: color-mix(in srgb, $primary-color 35%, transparent);
-        color: $primary-color;
+        color: var(--primary-color);
     }
 
     &--pending {
@@ -204,8 +204,8 @@
     }
 
     &--primary {
-        background: $primary-color;
-        border-color: $primary-color;
+        background: var(--primary-color);
+        border-color: var(--primary-color);
         color: var(--ul-grey-4);
 
         &:hover {
@@ -362,8 +362,8 @@
     }
 
     &:hover {
-        border-color: $primary-color;
-        color: $primary-color;
+        border-color: var(--primary-color);
+        color: var(--primary-color);
     }
 }
 
@@ -397,7 +397,7 @@
 
     .material-icons {
         font-size: 1.1rem;
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -462,7 +462,7 @@
 
     >.material-icons {
         font-size: 1.5rem;
-        color: $primary-color;
+        color: var(--primary-color);
         margin-top: 2px;
     }
 }
@@ -531,7 +531,7 @@
 
     &:focus {
         outline: none;
-        border-color: $primary-color;
+        border-color: var(--primary-color);
         box-shadow: 0 0 0 2px rgba($primary-color, 0.15);
     }
 }
@@ -544,7 +544,7 @@
     .settings-checkbox {
         width: 1.1rem;
         height: 1.1rem;
-        accent-color: $primary-color;
+        accent-color: var(--primary-color);
         cursor: pointer;
     }
 }
@@ -586,7 +586,7 @@
         margin-top: 3px;
         width: 1.1rem;
         height: 1.1rem;
-        accent-color: $primary-color;
+        accent-color: var(--primary-color);
         cursor: pointer;
     }
 
@@ -643,7 +643,7 @@
     input[type="range"] {
         flex: 1;
         max-width: 260px;
-        accent-color: $primary-color;
+        accent-color: var(--primary-color);
         cursor: pointer;
     }
 }
@@ -782,7 +782,7 @@
 
     &:focus {
         outline: none;
-        border-color: $primary-color;
+        border-color: var(--primary-color);
         box-shadow: 0 0 0 2px rgba($primary-color, 0.15);
     }
 }
@@ -823,15 +823,15 @@
     }
 
     &.active {
-        border-color: $primary-color;
+        border-color: var(--primary-color);
         background: rgba($primary-color, 0.06);
 
         i {
-            color: $primary-color;
+            color: var(--primary-color);
         }
 
         span {
-            color: $primary-color;
+            color: var(--primary-color);
         }
     }
 
@@ -864,7 +864,7 @@
     }
 
     &:hover {
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -992,11 +992,11 @@
     gap: 6px;
     padding: 8px 16px;
     background: var(--ul-grey-0);
-    border: 1px solid $primary-color;
+    border: 1px solid var(--primary-color);
     border-radius: $radius-sm;
     font-size: 0.875rem;
     font-weight: 600;
-    color: $primary-color;
+    color: var(--primary-color);
     cursor: pointer;
     transition: background 0.2s;
 
@@ -1023,7 +1023,7 @@ textarea.edit-textarea {
 
     &:focus {
         outline: none;
-        border-color: $primary-color;
+        border-color: var(--primary-color);
         box-shadow: 0 0 0 2px rgba($primary-color, 0.15);
     }
 }
@@ -1244,7 +1244,7 @@ body .edit-profile-page .edit-username-input {
     @include truncate;
 
     &:hover {
-        color: $primary-color;
+        color: var(--primary-color);
         text-decoration: underline;
     }
 }
@@ -1301,7 +1301,7 @@ body .edit-profile-page .edit-username-input {
 
     &:focus {
         outline: none;
-        border-color: $primary-color;
+        border-color: var(--primary-color);
         box-shadow: 0 0 0 2px rgba($primary-color, 0.15);
     }
 
@@ -1489,8 +1489,8 @@ body .edit-profile-page .edit-username-input {
     }
 
     &:hover {
-        border-color: $primary-color;
-        color: $primary-color;
+        border-color: var(--primary-color);
+        color: var(--primary-color);
     }
 }
 
@@ -1527,7 +1527,7 @@ body .edit-profile-page .edit-username-input {
 
     &:focus {
         outline: none;
-        border-color: $primary-color;
+        border-color: var(--primary-color);
     }
 }
 
@@ -1582,7 +1582,7 @@ body .edit-profile-page .edit-username-input {
     }
 
     &:focus-visible {
-        outline: 2px solid $primary-color;
+        outline: 2px solid var(--primary-color);
         outline-offset: 2px;
     }
 }
@@ -1682,7 +1682,7 @@ body .edit-profile-page .edit-username-input {
 
     &:focus {
         outline: none;
-        border-color: $primary-color;
+        border-color: var(--primary-color);
         box-shadow: 0 0 0 2px rgba($primary-color, 0.12);
     }
 }
@@ -1710,7 +1710,7 @@ body .edit-profile-page .edit-username-input {
     align-items: center;
     gap: .3rem;
     padding: .3rem .75rem;
-    background: $primary-color;
+    background: var(--primary-color);
     color: var(--ul-grey-5);
     border: none;
     border-radius: $radius-sm;
@@ -1803,7 +1803,7 @@ body .edit-profile-page .edit-username-input {
 
     &:focus {
         outline: none;
-        border-color: $primary-color;
+        border-color: var(--primary-color);
     }
 }
 
@@ -1836,7 +1836,7 @@ body .edit-profile-page .edit-username-input {
 
         &:focus {
             outline: none;
-            border-color: $primary-color;
+            border-color: var(--primary-color);
         }
     }
 
@@ -2047,7 +2047,7 @@ body .edit-profile-page .edit-username-input {
     overflow: hidden;
 
     .pinlist-icon-std {
-        color: $primary-color;
+        color: var(--primary-color);
         font-size: 1.4rem;
     }
 
@@ -2149,7 +2149,7 @@ body .edit-profile-page .edit-username-input {
 
     &:focus {
         outline: none;
-        border-color: $primary-color;
+        border-color: var(--primary-color);
     }
 
     &[type="number"] {
@@ -2177,11 +2177,11 @@ a.profile-stat--link {
     transition: border-color .15s, box-shadow .15s;
 
     &:hover {
-        border-color: $primary-color;
+        border-color: var(--primary-color);
         box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
 
         .stat-label {
-            color: $primary-color;
+            color: var(--primary-color);
         }
     }
 }
@@ -2213,7 +2213,7 @@ a.profile-stat--link {
     padding: 0 6px;
     border-radius: 99px;
     background: rgba($primary-color, .12);
-    color: $primary-color;
+    color: var(--primary-color);
     font-size: .72rem;
     font-weight: 700;
     margin-left: .4rem;
@@ -2224,7 +2224,7 @@ a.profile-stat--link {
     align-items: center;
     gap: .2rem;
     font-size: .8rem;
-    color: $primary-color;
+    color: var(--primary-color);
     text-decoration: none;
     font-weight: 600;
 
@@ -2315,7 +2315,7 @@ a.profile-stat--link {
 }
 
 .friend-avatar-placeholder {
-    background: $primary-color;
+    background: var(--primary-color);
     color: var(--ul-grey-7);
     display: flex;
     align-items: center;
@@ -2337,7 +2337,7 @@ a.profile-stat--link {
     font-size: .85rem;
 
     &.friend-avatar-placeholder {
-        background: $primary-color;
+        background: var(--primary-color);
         color: var(--ul-grey-7);
     }
 }
@@ -2453,7 +2453,7 @@ a.profile-stat--link {
 
     &:hover {
         text-decoration: underline;
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -2621,7 +2621,7 @@ a.profile-stat--link {
     align-items: center;
     gap: .3rem;
     font-size: .82rem;
-    color: $primary-color;
+    color: var(--primary-color);
     text-decoration: none;
     font-weight: 600;
 
@@ -2685,7 +2685,7 @@ a.profile-stat--link {
     padding: 0 8px;
     border-radius: 99px;
     background: rgba($primary-color, .12);
-    color: $primary-color;
+    color: var(--primary-color);
     font-size: .85rem;
     font-weight: 700;
 }

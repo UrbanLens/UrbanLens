@@ -17,20 +17,20 @@
             {% endif %}
         </div>
         <div class="organize-page-header-actions">
-            <div class="badge-header-right" id="org-header-actions">
-                <div class="tag-view-toggle" id="org-header-view-toggle" role="group" aria-label="View mode">
-                    <button type="button" class="tag-view-btn org-header-view-btn active" data-view="list" title="List view">
+            <div class="btn-group" id="org-header-actions">
+                <div class="tag-view-toggle btn-togl" id="org-view-toggle" role="group" aria-label="View mode">
+                    <button type="button" class="org-header-view-btn active" data-view="list" title="List view">
                         <i class="material-icons">view_list</i>
                     </button>
-                    <button type="button" class="tag-view-btn org-header-view-btn" data-view="gallery" title="Gallery view">
+                    <button type="button" class="org-header-view-btn" data-view="gallery" title="Gallery view">
                         <i class="material-icons">grid_view</i>
                     </button>
-                    <button type="button" class="tag-view-btn org-header-view-btn" data-view="tree" title="Tree view">
+                    <button type="button" class="org-header-view-btn" data-view="tree" title="Tree view">
                         <i class="material-icons">account_tree</i>
                     </button>
                 </div>
                 <div class="tag-view-toggle--sel">
-                    <button type="button" class="tag-view-btn--sel" id="org-header-sel-all" title="Select all">
+                    <button type="button" class="btn btn--sel" id="org-header-sel-all" title="Select all">
                         <i class="material-icons">checklist</i>
                     </button>
                 </div>
@@ -38,8 +38,8 @@
                     <i class="material-icons">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
                 </button>
-                <button type="button" class="btn btn--primary" id="org-header-create-btn" type="button" title="Create" style="padding:.4rem .55rem;min-width:0;">
-                    <i class="material-icons" style="font-size:1.2rem;">add</i>
+                <button type="button" class="btn btn--primary btn--sm" id="org-header-create-btn" type="button" title="Create">
+                    <i class="material-icons">add</i>
                 </button>
             </div>
         </div>
@@ -243,11 +243,11 @@
             ready: function () { return !!document.getElementById('priority-list'); },
         },
         {
-            id: 'view-modes', icon: 'grid_view', target: '#org-header-view-toggle',
+            id: 'view-modes', icon: 'grid_view', target: '#org-view-toggle',
             eyebrow: 'Work your way', title: 'Switch views depending on the cleanup job',
             body: 'List is fast for editing, gallery is visual, and tree view helps understand parent/child relationships.',
-            button: 'Show views', action: function () { document.getElementById('org-header-view-toggle')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
-            ready: function () { return !!document.getElementById('org-header-view-toggle'); },
+            button: 'Show views', action: function () { document.getElementById('org-view-toggle')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+            ready: function () { return !!document.getElementById('org-view-toggle'); },
         },
         {
             id: 'bulk-actions', icon: 'checklist', target: '#org-header-sel-all',
@@ -605,6 +605,12 @@ function _updateOrgFilterBtn() {
     filterBtn.classList.toggle('has-filter', !!hasActive);
 }
 
+function _syncOrgFilterBtnActive() {
+    var filterBtn = document.getElementById('org-header-filter-btn');
+    if (!filterBtn) return;
+    filterBtn.classList.toggle('btn--active', !!document.querySelector('.org-filter-bar.open'));
+}
+
 function applyAllOrgFilters(triggerNs) {
     if (triggerNs) {
         var si = document.getElementById(triggerNs + '-filter-search');
@@ -855,14 +861,14 @@ function _syncOrgFilterBarVisibility(activeNs) {
         var bar = document.getElementById(ns + '-filter-bar');
         if (bar) bar.classList.remove('open');
     });
-    if (!activeNs) return;
-    if (_orgFilterBarOpen || _hasAnyOrgFilter()) {
+    if (activeNs && (_orgFilterBarOpen || _hasAnyOrgFilter())) {
         var activeBar = document.getElementById(activeNs + '-filter-bar');
         if (activeBar) {
             activeBar.classList.add('open');
             _orgFilterBarOpen = true;
         }
     }
+    _syncOrgFilterBtnActive();
 }
 
 function toggleOrgFilter(ns) {
@@ -880,6 +886,7 @@ function toggleOrgFilter(ns) {
         _orgFilterBarOpen = false;
         clearOrgFilter(ns);
     }
+    _syncOrgFilterBtnActive();
 }
 
 function toggleOrgChip(btn, ns) {
@@ -1048,7 +1055,7 @@ window._orgHeader = (function() {
         filterBtn = document.getElementById('org-header-filter-btn');
         selAllBtn = document.getElementById('org-header-sel-all');
         createBtn = document.getElementById('org-header-create-btn');
-        viewToggle = document.getElementById('org-header-view-toggle');
+        viewToggle = document.getElementById('org-view-toggle');
 
         document.querySelectorAll('.org-header-view-btn').forEach(function(btn) {
             btn.addEventListener('click', function() {
@@ -1137,6 +1144,7 @@ window._orgHeader = (function() {
         if (anyOpen) {
             _orgFilterBarOpen = false;
             document.querySelectorAll('.org-filter-bar.open').forEach(function(bar) { bar.classList.remove('open'); });
+            _syncOrgFilterBtnActive();
             var activeTabEl = document.querySelector('.organize-tab.active[data-filter-ns]');
             var activeNs = activeTabEl ? activeTabEl.dataset.filterNs : (ORG_FILTER_NAMESPACES[0] || 'tag');
             clearOrgFilter(activeNs);

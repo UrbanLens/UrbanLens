@@ -17,9 +17,13 @@ button,
     }
 
     &:focus-visible {
-        outline: 2px solid $primary-color;
+        outline: 2px solid var(--primary-color);
         outline-offset: 2px;
     }
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: var(--ul-grey-9);
 }
 
 // - Pages
@@ -189,7 +193,7 @@ body {
 
             &:focus {
                 @include input-focus;
-                border-color: $primary-color !important;
+                border-color: var(--primary-color) !important;
                 box-shadow: 0 0 0 3px rgba($primary-color, .12) !important;
             }
         }

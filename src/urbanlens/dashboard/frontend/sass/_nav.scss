@@ -516,7 +516,7 @@ nav .brand-logo img {
     cursor: pointer;
     font-size: .76rem;
     font-weight: 600;
-    color: $primary-color;
+    color: var(--primary-color);
     padding: .25rem .55rem;
     border-radius: $radius-sm;
     transition: background .12s, color .12s;
@@ -611,7 +611,7 @@ nav .brand-logo img {
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: $primary-color;
+        background: var(--primary-color);
         margin-top: .5rem;
         box-shadow: 0 0 0 3px rgba($primary-color, .18);
     }
@@ -620,7 +620,7 @@ nav .brand-logo img {
     &--unread {
         cursor: pointer;
         background: linear-gradient(90deg, rgba($primary-color, .07) 0%, transparent 100%);
-        border-left-color: $primary-color;
+        border-left-color: var(--primary-color);
 
         &:hover {
             background: linear-gradient(90deg, rgba($primary-color, .11) 0%, transparent 100%);
@@ -630,7 +630,7 @@ nav .brand-logo img {
             background: var(--ul-accent-purple-bg);
 
             .material-icons {
-                color: $primary-color;
+                color: var(--primary-color);
             }
         }
 
@@ -863,7 +863,7 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
             pointer-events: auto !important;
             width: 15px;
             height: 15px;
-            accent-color: $primary-color;
+            accent-color: var(--primary-color);
             cursor: pointer;
             display: inline-block;
         }

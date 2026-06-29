@@ -754,7 +754,7 @@
 
     &:hover {
         background: var(--ul-grey-0a);
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -777,7 +777,7 @@
     }
 
     &--located {
-        color: $primary-color;
+        color: var(--primary-color);
     }
 }
 
@@ -815,7 +815,7 @@
 
         i {
             font-size: 1rem !important;
-            color: $primary-color;
+            color: var(--primary-color);
             flex-shrink: 0;
             margin-top: .1rem;
         }
@@ -865,7 +865,7 @@
     transition: border-color .15s;
 
     &:focus-within {
-        border-color: $primary-color;
+        border-color: var(--primary-color);
     }
 }
 
@@ -888,7 +888,7 @@
     background: color-mix(in srgb, $primary-color 12%, transparent);
     border: 1px solid color-mix(in srgb, $primary-color 35%, transparent);
     font-size: .78rem;
-    color: $primary-color;
+    color: var(--primary-color);
     font-weight: 500;
 
     .apdlg-chip-icon {
@@ -985,7 +985,7 @@
         letter-spacing: .03em;
         flex-shrink: 0;
 
-        &--tag      { background: $color-blue-50;                                     color: $primary-color; }
+        &--tag      { background: $color-blue-50;                                     color: var(--primary-color); }
         &--category { background: color-mix(in srgb, $color-green-500 12%, white); color: $color-green-700; }
         &--status   { background: color-mix(in srgb, $color-amber-500 12%, white); color: $color-amber-700; }
     }
@@ -998,10 +998,10 @@
 
         .material-icons {
             font-size: 1rem !important;
-            color: $primary-color;
+            color: var(--primary-color);
         }
 
-        &:hover { color: $primary-color; }
+        &:hover { color: var(--primary-color); }
     }
 }
 
@@ -1082,7 +1082,7 @@
     user-select: none;
 
     input[type="checkbox"] {
-        accent-color: $primary-color;
+        accent-color: var(--primary-color);
         width: 1rem;
         height: 1rem;
     }
