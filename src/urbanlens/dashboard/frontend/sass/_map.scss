@@ -1181,6 +1181,44 @@
     margin: .25rem 0;
 }
 
+
+.places-popup-details {
+    max-width: 280px;
+}
+
+.places-popup-detail {
+    display: flex;
+    align-items: flex-start;
+    gap: .45rem;
+    padding: .25rem .85rem;
+    color: var(--ul-grey-6);
+    font-size: .78rem;
+    line-height: 1.25;
+
+    .material-icons {
+        flex: 0 0 auto;
+        font-size: .95rem;
+        color: $ui-indigo-500;
+    }
+
+    span {
+        min-width: 0;
+    }
+}
+
+.places-popup-summary {
+    padding: .35rem .85rem .25rem;
+    color: var(--ul-grey-5);
+    font-size: .78rem;
+    line-height: 1.35;
+    max-height: 5.4em;
+    overflow: hidden;
+}
+
+.places-popup-website {
+    margin-top: .2rem;
+}
+
 /* ── Filter panel ─────────────────────────────────────────────────── */
 #filter-panel {
     position: absolute;
