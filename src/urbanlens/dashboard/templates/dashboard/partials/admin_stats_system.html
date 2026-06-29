@@ -1,0 +1,205 @@
+{# Partial: Application info, infrastructure services, and server health. Loaded via HTMX. #}
+
+{# ── Application Section ──────────────────────────────────────────────────── #}
+<div class="site-admin-card ul-section card">
+    <div class="card-header">
+        <i class="material-icons">apps</i>
+        <span>Application</span>
+    </div>
+    <div class="stats-health-grid">
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#6366f1">sell</i>
+            <div>
+                <div class="stats-health-value">v{{ app_version }}</div>
+                <div class="stats-health-label">App Version</div>
+            </div>
+        </div>
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#64748b">call_split</i>
+            <div>
+                {% if git_branch %}
+                <div class="stats-health-value"><code>{{ git_branch }}</code></div>
+                {% else %}
+                <div class="stats-health-value stats-health-value--muted">Unknown</div>
+                {% endif %}
+                <div class="stats-health-label">Git Branch</div>
+            </div>
+        </div>
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#64748b">commit</i>
+            <div>
+                <div class="stats-health-value"><code>{{ deployed_commit_short }}</code></div>
+                <div class="stats-health-label">Running Commit</div>
+            </div>
+        </div>
+        {% if git_available and current_commit_short != deployed_commit_short %}
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#64748b">commit</i>
+            <div>
+                <div class="stats-health-value"><code>{{ current_commit_short }}</code></div>
+                <div class="stats-health-label">Current HEAD</div>
+            </div>
+        </div>
+        {% endif %}
+        {% if git_available and upstream_commit_short and upstream_commit_short != current_commit_short and upstream_commit_short != deployed_commit_short %}
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#64748b">cloud</i>
+            <div>
+                <div class="stats-health-value"><code>{{ upstream_commit_short }}</code></div>
+                <div class="stats-health-label">Remote HEAD</div>
+            </div>
+        </div>
+        {% endif %}
+        <div class="stats-health-item">
+            {% if not git_available %}
+            <i class="material-icons stats-health-icon" style="color:#94a3b8">help_outline</i>
+            <div>
+                <div class="stats-health-value stats-health-value--muted">Unknown</div>
+                <div class="stats-health-label">Update Status</div>
+            </div>
+            {% elif git_has_newer_commits %}
+            <i class="material-icons stats-health-icon" style="color:#d97706">new_releases</i>
+            <div>
+                <div class="stats-health-value stats-health-value--warn">
+                    {{ git_commits_ahead }} newer commit{{ git_commits_ahead|pluralize }} available
+                </div>
+                <div class="stats-health-label">
+                    {% if git_remote_refreshed and upstream_commit_short and upstream_commit_short != current_commit_short %}
+                    Pull and redeploy to update
+                    {% else %}
+                    Rebuild or restart to deploy
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <i class="material-icons stats-health-icon" style="color:#16a34a">check_circle</i>
+            <div>
+                <div class="stats-health-value stats-health-value--ok">Up to date</div>
+                <div class="stats-health-label">Update Status</div>
+            </div>
+            {% endif %}
+        </div>
+        {% if show_git_pull_button %}
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#2563eb">download</i>
+            <div>
+                <button type="button" class="btn btn--primary btn--sm" id="git-pull-refresh-btn" data-url="{% url 'site_admin_pull_latest_code' %}">
+                    <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">sync</i>
+                    Pull &amp; Refresh
+                </button>
+                <div class="stats-health-label">Development tools</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Infrastructure services ──────────────────────────────────────────────── #}
+<div class="stats-services-grid">
+    {% for service in infrastructure_services %}
+    <div class="site-admin-card ul-section card stats-service-card">
+        <div class="card-header stats-service-card__header">
+            <div class="stats-service-card__title">
+                <i class="material-icons">{{ service.icon }}</i>
+                <span>{{ service.name }}</span>
+            </div>
+            <span class="stats-service-status stats-service-status--{{ service.status }}">
+                {% if service.status == "healthy" %}
+                <i class="material-icons">check_circle</i>
+                {% elif service.status == "unhealthy" %}
+                <i class="material-icons">error</i>
+                {% elif service.status == "disabled" %}
+                <i class="material-icons">remove_circle_outline</i>
+                {% else %}
+                <i class="material-icons">help_outline</i>
+                {% endif %}
+                {{ service.status_label }}
+            </span>
+        </div>
+        {% if service.metrics %}
+        <div class="stats-health-grid">
+            {% for metric in service.metrics %}
+            <div class="stats-health-item">
+                <div>
+                    <div class="stats-health-value">{{ metric.value }}</div>
+                    <div class="stats-health-label">{{ metric.label }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+{# ── Server health ─────────────────────────────────────────────────────────── #}
+<div class="site-admin-card ul-section card">
+    <div class="card-header">
+        <i class="material-icons">dns</i>
+        <span>Server Health</span>
+    </div>
+    <div class="stats-health-grid">
+        {% if uptime %}
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#16a34a">timer</i>
+            <div>
+                <div class="stats-health-value">{{ uptime }}</div>
+                <div class="stats-health-label">App Uptime</div>
+            </div>
+        </div>
+        {% endif %}
+        {% if media_size_mb is not None %}
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#d97706">storage</i>
+            <div>
+                <div class="stats-health-value">{{ media_size_mb }} MB</div>
+                <div class="stats-health-label">Media Storage</div>
+            </div>
+        </div>
+        {% endif %}
+        {% if backup_stats %}
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#2563eb">backup</i>
+            <div>
+                <div class="stats-health-value">{{ backup_stats.count }} file{{ backup_stats.count|pluralize }}</div>
+                <div class="stats-health-label">Database Backups</div>
+            </div>
+        </div>
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#7c3aed">schedule</i>
+            <div>
+                <div class="stats-health-value">Every {{ backup_stats.frequency_hours }}h</div>
+                <div class="stats-health-label">Backup Frequency ({% if backup_stats.enabled %}enabled{% else %}disabled{% endif %})</div>
+            </div>
+        </div>
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#0891b2">inventory_2</i>
+            <div>
+                <div class="stats-health-value">Keep {{ backup_stats.retention }}</div>
+                <div class="stats-health-label">Backup Retention</div>
+            </div>
+        </div>
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#d97706">folder</i>
+            <div>
+                <div class="stats-health-value">{{ backup_stats.total_size_mb }} MB</div>
+                <div class="stats-health-label">Backup Storage</div>
+            </div>
+        </div>
+        {% endif %}
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#7c3aed">code</i>
+            <div>
+                <div class="stats-health-value">Python {{ python_version }}</div>
+                <div class="stats-health-label">Runtime</div>
+            </div>
+        </div>
+        <div class="stats-health-item">
+            <i class="material-icons stats-health-icon" style="color:#0891b2">hub</i>
+            <div>
+                <div class="stats-health-value">Django {{ django_version }}</div>
+                <div class="stats-health-label">Framework</div>
+            </div>
+        </div>
+    </div>
+</div>

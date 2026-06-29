@@ -94,7 +94,7 @@
                         <span>Tools</span>
                     </a>
                     {% if user.is_superuser or perms.dashboard.view_site_admin %}
-                    <a href="{% url 'site_admin' %}" class="nav-dropdown-item" role="menuitem">
+                    <a href="{% url 'site_admin_home' %}" class="nav-dropdown-item" role="menuitem">
                         <i class="material-icons">admin_panel_settings</i>
                         <span>Site Admin</span>
                     </a>

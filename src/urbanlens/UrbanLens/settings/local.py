@@ -24,8 +24,8 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or get_random_secret_key()
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-# TODO: Change default
-ALLOWED_HOSTS = ["urbanlens.org", "localhost", "localhost:21080"]
+# TODO: Change default, and allow pulling from env vars
+ALLOWED_HOSTS = ["urbanlens.org", "localhost", "localhost:21080", "127.0.0.1"]
 
 # Application definition
 INSTALLED_APPS = [

@@ -6,7 +6,6 @@ import contextlib
 from datetime import timedelta
 import json
 import logging
-import operator
 import os
 import sys
 import time
@@ -14,7 +13,6 @@ import time
 import django
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.views import redirect_to_login
-from django.db import DatabaseError
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -94,8 +92,8 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
     Requires the ``dashboard.view_site_admin`` permission (superusers bypass
     this automatically via Django's permission system).
 
-    GET  /site-admin/  → settings page
-    POST /site-admin/  → save settings, re-render page
+    GET  /site-admin/settings/  → settings page
+    POST /site-admin/settings/  → save settings, re-render page
     """
 
     permission_required = "dashboard.view_site_admin"
@@ -342,151 +340,28 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         return super().handle_no_permission()
 
     def get(self, request):
-        from django.conf import settings as django_settings
         from django.contrib.auth.models import User
 
-        from urbanlens.dashboard.models.friendship.model import Friendship
-        from urbanlens.dashboard.models.images.model import Image
         from urbanlens.dashboard.models.location.model import Location
-        from urbanlens.dashboard.models.pin.model import Pin
-        from urbanlens.dashboard.models.profile.model import Profile
 
         now = timezone.now()
-        thirty_days_ago = now - timedelta(days=30)
 
-        # ── Totals ────────────────────────────────────────────────────────────
-        total_users = User.objects.count()
-        active_users_30d = User.objects.filter(last_login__gte=thirty_days_ago).count()
-        new_users_30d = User.objects.filter(date_joined__gte=thirty_days_ago).count()
-        total_locations = Location.objects.filter(pins__isnull=False).distinct().count()
-        new_locations_30d = Location.objects.filter(pins__isnull=False, created__gte=thirty_days_ago).distinct().count()
-        total_pins = Pin.objects.count()
-        total_photos = Image.objects.count()
-        total_friendships = Friendship.objects.count()
-        from urbanlens.dashboard.models.subscriptions import UserSubscription
-        total_subscriptions = UserSubscription.objects.filter(revoked_at__isnull=True).count()
-        total_site_admins = User.objects.filter(groups__name=SITE_ADMIN_GROUP_NAME).distinct().count()
-
-        # Reviews and trips are optional models - guard against missing tables.
-        try:
-            from urbanlens.dashboard.models.reviews.model import Review
-            total_reviews = Review.objects.count()
-        except (ImportError, DatabaseError):
-            total_reviews = None
-
-        try:
-            from urbanlens.dashboard.models.trips.model import Trip
-            total_trips = Trip.objects.count()
-            new_trips_30d = Trip.objects.filter(created__gte=thirty_days_ago).count()
-        except (ImportError, DatabaseError):
-            total_trips = None
-            new_trips_30d = None
-
-        avg_pins_per_user = round(total_pins / total_users, 1) if total_users else 0
-
-        # Top locations by pin count
-        top_locations = list(
-            Location.objects.filter(pins__isnull=False).distinct().annotate_pin_count()
-            .order_by("-pin_count")[:10]
-            .values("name", "slug", "pin_count"),
-        ) if hasattr(Location.objects, "annotate_pin_count") else []
-
-        # ── Time-series chart data ─────────────────────────────────────────────
+        # Only run fast chart queries here; heavy data is fetched by HTMX partials.
         user_labels, user_counts = _monthly_series(User.objects, "date_joined")
         location_labels, location_counts = _monthly_series(Location.objects, "created")
 
-        # ── Server stats ──────────────────────────────────────────────────────
-        uptime = _app_uptime()
-        media_root = getattr(django_settings, "MEDIA_ROOT", "")
-        media_size_mb = _dir_size_mb(media_root) if media_root else None
-
-        from urbanlens.core.version import (
-            format_short_commit,
-            get_current_git_branch,
-            get_git_commit_at_start,
-            get_git_update_status,
+        return render(
+            request,
+            "dashboard/pages/site_admin_stats.html",
+            {
+                "page_name": "site-admin-stats",
+                "server_time": now,
+                "chart_user_labels": json.dumps(user_labels),
+                "chart_user_counts": json.dumps(user_counts),
+                "chart_location_labels": json.dumps(location_labels),
+                "chart_location_counts": json.dumps(location_counts),
+            },
         )
-        from urbanlens.dashboard.services.backups import collect_backup_stats
-        from urbanlens.dashboard.services.infrastructure_stats import collect_infrastructure_service_stats
-
-        python_version = sys.version.split()[0]
-        django_version = django.__version__
-        app_version = app_settings.app_version
-        git_update = get_git_update_status(get_git_commit_at_start())
-
-        # ── External API usage ────────────────────────────────────────────────
-        api_usage: list[dict] = []
-        with contextlib.suppress(Exception):
-            from urbanlens.dashboard.models.api_call_log import ApiCallLog
-            from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
-
-            summaries_qs = ApiCallLog.objects.summary_by_service()
-            rate_configs = {r.service: r for r in ApiRateLimit.objects.all()}
-
-            for row in summaries_qs:
-                svc = row["service"]
-                cfg = rate_configs.get(svc)
-                api_usage.append({
-                    "service": svc,
-                    "display_name": cfg.display_name if cfg else svc.replace("_", " ").title(),
-                    "enabled": cfg.enabled if cfg else True,
-                    "calls_per_day": cfg.calls_per_day if cfg else None,
-                    "usa_only": cfg.usa_only if cfg else False,
-                    "total": row["total"],
-                    "blocked": row["blocked"],
-                    "geo_skipped": row["geo_skipped"],
-                    "errors": row["errors"],
-                    "avg_ms": round(row["avg_response_ms"] or 0),
-                })
-            api_usage.sort(key=operator.itemgetter("display_name"))
-
-        context = {
-            "page_name": "site-admin-stats",
-            # Totals
-            "total_users": total_users,
-            "active_users_30d": active_users_30d,
-            "new_users_30d": new_users_30d,
-            "total_locations": total_locations,
-            "new_locations_30d": new_locations_30d,
-            "total_pins": total_pins,
-            "total_photos": total_photos,
-            "total_friendships": total_friendships,
-            "total_subscriptions": total_subscriptions,
-            "total_site_admins": total_site_admins,
-            "total_reviews": total_reviews,
-            "total_trips": total_trips,
-            "new_trips_30d": new_trips_30d,
-            "avg_pins_per_user": avg_pins_per_user,
-            "top_locations": top_locations,
-            # Charts (JSON for JS)
-            "chart_user_labels": json.dumps(user_labels),
-            "chart_user_counts": json.dumps(user_counts),
-            "chart_location_labels": json.dumps(location_labels),
-            "chart_location_counts": json.dumps(location_counts),
-            # Server
-            "uptime": uptime,
-            "media_size_mb": media_size_mb,
-            "python_version": python_version,
-            "django_version": django_version,
-            "app_version": app_version,
-            "git_branch": get_current_git_branch(),
-            "deployed_commit_short": format_short_commit(git_update.deployed_commit),
-            "current_commit_short": format_short_commit(git_update.current_commit),
-            "upstream_commit_short": format_short_commit(git_update.upstream_commit),
-            "git_commits_ahead": git_update.commits_ahead,
-            "git_has_newer_commits": git_update.has_newer_commits,
-            "git_available": git_update.git_available,
-            "git_remote_refreshed": git_update.remote_refreshed,
-            "show_git_pull_button": (
-                SiteSettings.get_current().show_dev_admin_features(request.user)
-                and git_update.has_newer_commits
-            ),
-            "infrastructure_services": collect_infrastructure_service_stats(),
-            "backup_stats": collect_backup_stats(),
-            "server_time": now,
-            "api_usage": api_usage,
-        }
-        return render(request, "dashboard/pages/site_admin_stats.html", context)
 
 
 class SiteAdminPullLatestCodeView(LoginRequiredMixin, PermissionRequiredMixin, View):
@@ -704,6 +579,280 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             return response
 
         return HttpResponseRedirect(reverse("site_admin_api_limits") + "?saved=1")
+
+
+class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Admin dashboard homepage.
+
+    GET /site-admin/  → navigation hub with quick stats and health overview.
+    """
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+
+    def handle_no_permission(self) -> HttpResponse:
+        """Send anonymous users to login; return 403 for authenticated non-admins."""
+        if not self.request.user.is_authenticated:
+            return redirect_to_login(
+                self.request.get_full_path(),
+                login_url=self.get_login_url(),
+                redirect_field_name=self.get_redirect_field_name(),
+            )
+        return super().handle_no_permission()
+
+    def get(self, request):
+        from django.conf import settings as django_settings
+        from django.contrib.auth.models import User
+
+        from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.services.infrastructure_stats import collect_infrastructure_service_stats
+
+        now = timezone.now()
+        thirty_days_ago = now - timedelta(days=30)
+
+        total_users = User.objects.count()
+        active_users_30d = User.objects.filter(last_login__gte=thirty_days_ago).count()
+        new_users_30d = User.objects.filter(date_joined__gte=thirty_days_ago).count()
+        total_locations = Location.objects.filter(pins__isnull=False).distinct().count()
+        total_pins = Pin.objects.count()
+        total_photos = Image.objects.count()
+
+        total_subscriptions = 0
+        with contextlib.suppress(Exception):
+            from urbanlens.dashboard.models.subscriptions import UserSubscription
+            total_subscriptions = UserSubscription.objects.filter(revoked_at__isnull=True).count()
+
+        infra_services = collect_infrastructure_service_stats()
+        unhealthy_count = sum(1 for s in infra_services if s.status == "unhealthy")
+
+        site_settings = SiteSettings.get_current()
+
+        from urbanlens.core.version import (
+            format_short_commit,
+            get_current_git_branch,
+            get_git_commit_at_start,
+            get_git_update_status,
+        )
+
+        git_update = get_git_update_status(get_git_commit_at_start())
+
+        return render(
+            request,
+            "dashboard/pages/site_admin_home.html",
+            {
+                "page_name": "site-admin-home",
+                "server_time": now,
+                "total_users": total_users,
+                "active_users_30d": active_users_30d,
+                "new_users_30d": new_users_30d,
+                "total_locations": total_locations,
+                "total_pins": total_pins,
+                "total_photos": total_photos,
+                "total_subscriptions": total_subscriptions,
+                "unhealthy_services": unhealthy_count,
+                "total_services": len(infra_services),
+                "git_has_newer_commits": git_update.has_newer_commits,
+                "git_available": git_update.git_available,
+                "git_branch": get_current_git_branch(),
+                "app_version": app_settings.app_version,
+                "show_dev_toolbar": site_settings.show_dev_admin_features(request.user),
+            },
+        )
+
+
+class _AdminPermissionMixin(LoginRequiredMixin, PermissionRequiredMixin):
+    """Shared mixin for all site-admin HTMX partial views.
+
+    Enforces ``dashboard.view_site_admin`` permission and redirects anonymous
+    users to the login page rather than returning 403.
+    """
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+
+    def handle_no_permission(self) -> HttpResponse:
+        """Send anonymous users to login; return 403 for authenticated non-admins."""
+        if not self.request.user.is_authenticated:
+            return redirect_to_login(
+                self.request.get_full_path(),
+                login_url=self.get_login_url(),
+                redirect_field_name=self.get_redirect_field_name(),
+            )
+        return super().handle_no_permission()
+
+
+class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
+    """HTMX partial: KPI cards + top locations for the stats page.
+
+    GET /site-admin/stats/kpi/
+    """
+
+    def get(self, request):
+        from django.contrib.auth.models import User
+
+        from urbanlens.dashboard.models.friendship.model import Friendship
+        from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        now = timezone.now()
+        thirty_days_ago = now - timedelta(days=30)
+
+        total_users = User.objects.count()
+        active_users_30d = User.objects.filter(last_login__gte=thirty_days_ago).count()
+        new_users_30d = User.objects.filter(date_joined__gte=thirty_days_ago).count()
+        total_locations = Location.objects.filter(pins__isnull=False).distinct().count()
+        new_locations_30d = Location.objects.filter(pins__isnull=False, created__gte=thirty_days_ago).distinct().count()
+        total_pins = Pin.objects.count()
+        total_photos = Image.objects.count()
+        total_friendships = Friendship.objects.count()
+        avg_pins_per_user = round(total_pins / total_users, 1) if total_users else 0
+
+        total_subscriptions = 0
+        with contextlib.suppress(Exception):
+            from urbanlens.dashboard.models.subscriptions import UserSubscription
+            total_subscriptions = UserSubscription.objects.filter(revoked_at__isnull=True).count()
+
+        total_site_admins = User.objects.filter(groups__name=SITE_ADMIN_GROUP_NAME).distinct().count()
+
+        total_reviews = None
+        with contextlib.suppress(Exception):
+            from urbanlens.dashboard.models.reviews.model import Review
+            total_reviews = Review.objects.count()
+
+        total_trips = None
+        new_trips_30d = None
+        with contextlib.suppress(Exception):
+            from urbanlens.dashboard.models.trips.model import Trip
+            total_trips = Trip.objects.count()
+            new_trips_30d = Trip.objects.filter(created__gte=thirty_days_ago).count()
+
+        top_locations: list = []
+        with contextlib.suppress(Exception):
+            from urbanlens.dashboard.models.location.model import Location as Loc
+            if hasattr(Loc.objects, "annotate_pin_count"):
+                top_locations = list(
+                    Loc.objects.filter(pins__isnull=False)
+                    .distinct()
+                    .annotate_pin_count()
+                    .order_by("-pin_count")[:10]
+                    .values("name", "slug", "pin_count"),
+                )
+
+        return render(
+            request,
+            "dashboard/partials/admin_stats_kpi.html",
+            {
+                "total_users": total_users,
+                "active_users_30d": active_users_30d,
+                "new_users_30d": new_users_30d,
+                "total_locations": total_locations,
+                "new_locations_30d": new_locations_30d,
+                "total_pins": total_pins,
+                "total_photos": total_photos,
+                "total_friendships": total_friendships,
+                "total_subscriptions": total_subscriptions,
+                "total_site_admins": total_site_admins,
+                "total_reviews": total_reviews,
+                "total_trips": total_trips,
+                "new_trips_30d": new_trips_30d,
+                "avg_pins_per_user": avg_pins_per_user,
+                "top_locations": top_locations,
+            },
+        )
+
+
+class SiteAdminStatsSystemPartialView(_AdminPermissionMixin, View):
+    """HTMX partial: Application, infrastructure services, and server health.
+
+    GET /site-admin/stats/system/
+    """
+
+    def get(self, request):
+        from django.conf import settings as django_settings
+
+        from urbanlens.core.version import (
+            format_short_commit,
+            get_current_git_branch,
+            get_git_commit_at_start,
+            get_git_update_status,
+        )
+        from urbanlens.dashboard.services.backups import collect_backup_stats
+        from urbanlens.dashboard.services.infrastructure_stats import collect_infrastructure_service_stats
+
+        uptime = _app_uptime()
+        media_root = getattr(django_settings, "MEDIA_ROOT", "")
+        media_size_mb = _dir_size_mb(media_root) if media_root else None
+
+        git_update = get_git_update_status(get_git_commit_at_start())
+
+        return render(
+            request,
+            "dashboard/partials/admin_stats_system.html",
+            {
+                "uptime": uptime,
+                "media_size_mb": media_size_mb,
+                "python_version": sys.version.split()[0],
+                "django_version": django.__version__,
+                "app_version": app_settings.app_version,
+                "git_branch": get_current_git_branch(),
+                "deployed_commit_short": format_short_commit(git_update.deployed_commit),
+                "current_commit_short": format_short_commit(git_update.current_commit),
+                "upstream_commit_short": format_short_commit(git_update.upstream_commit),
+                "git_commits_ahead": git_update.commits_ahead,
+                "git_has_newer_commits": git_update.has_newer_commits,
+                "git_available": git_update.git_available,
+                "git_remote_refreshed": git_update.remote_refreshed,
+                "show_git_pull_button": (
+                    SiteSettings.get_current().show_dev_admin_features(request.user)
+                    and git_update.has_newer_commits
+                ),
+                "infrastructure_services": collect_infrastructure_service_stats(),
+                "backup_stats": collect_backup_stats(),
+            },
+        )
+
+
+class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
+    """HTMX partial: External API usage table for the stats page.
+
+    GET /site-admin/stats/api/
+    """
+
+    def get(self, request):
+        from urbanlens.dashboard.services.rate_limiter import SERVICE_REGISTRY
+
+        api_usage: list[dict] = []
+        with contextlib.suppress(Exception):
+            from urbanlens.dashboard.models.api_call_log import ApiCallLog
+            from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
+
+            summaries = {row["service"]: row for row in ApiCallLog.objects.summary_by_service()}
+            rate_configs = {r.service: r for r in ApiRateLimit.objects.all()}
+
+            for svc in sorted(SERVICE_REGISTRY):
+                cfg = rate_configs.get(svc)
+                row = summaries.get(svc, {})
+                api_usage.append({
+                    "service": svc,
+                    "display_name": cfg.display_name if cfg else SERVICE_REGISTRY[svc].display_name,
+                    "enabled": cfg.enabled if cfg else True,
+                    "calls_per_day": cfg.calls_per_day if cfg else SERVICE_REGISTRY[svc].calls_per_day,
+                    "usa_only": cfg.usa_only if cfg else SERVICE_REGISTRY[svc].usa_only,
+                    "total": row.get("total", 0),
+                    "blocked": row.get("blocked", 0),
+                    "geo_skipped": row.get("geo_skipped", 0),
+                    "errors": row.get("errors", 0),
+                    "avg_ms": round(row.get("avg_response_ms") or 0),
+                })
+
+        return render(
+            request,
+            "dashboard/partials/admin_stats_api_usage.html",
+            {"api_usage": api_usage},
+        )
 
 
 class CeleryTaskStatusView(LoginRequiredMixin, View):

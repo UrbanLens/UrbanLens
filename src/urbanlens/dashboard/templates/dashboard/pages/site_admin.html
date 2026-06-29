@@ -3,41 +3,18 @@
 {% block content %}
 <div class="site-admin-page page-content">
     <div class="site-admin-header">
-        <h1 class="site-admin-title">
-            <i class="material-icons">admin_panel_settings</i>
-            Site Administration
-        </h1>
-        <p class="site-admin-subtitle">Configure site-wide settings.</p>
-        <div class="site-admin-nav-links">
-            <a href="{% url 'site_admin_stats' %}" class="stats-nav-link btn btn--primary">
-                <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">bar_chart</i>
-                View Statistics
+        <div class="site-admin-breadcrumb">
+            <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
+                <i class="material-icons">arrow_back</i>
+                Admin Home
             </a>
-            <a href="{% url 'site_admin_subscriptions' %}" class="stats-nav-link btn btn--ghost">
-                <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">workspace_premium</i>
-                Subscriptions
-            </a>
-            <a href="{% url 'site_admin_api_limits' %}" class="stats-nav-link btn btn--ghost">
-                <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">tune</i>
-                API Limits
-            </a>
-            {% if show_dev_toolbar %}
-            <a href="{% url 'site_admin_ui_components' %}" class="stats-nav-link btn btn--ghost">
-                <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">palette</i>
-                UI Components
-            </a>
-            {% endif %}
         </div>
+        <h1 class="site-admin-title">
+            <i class="material-icons">tune</i>
+            Site Settings
+        </h1>
+        <p class="site-admin-subtitle">Configure site-wide behaviour, branding, and security.</p>
     </div>
-
-    <style>
-    .site-admin-nav-links {
-        display: flex;
-        flex-wrap: wrap;
-        gap: .5rem;
-        margin-top: .5rem;
-    }
-    </style>
 
     {% if saved %}
     <div class="site-admin-notice site-admin-notice--success">
@@ -76,7 +53,7 @@
                 </select>
             </div>
             <div class="form-actions">
-                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Settings</button>
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
             </div>
         </form>
     </div>
@@ -97,7 +74,7 @@
                        value="{{ settings.app_title }}" maxlength="100" placeholder="UrbanLens">
             </div>
             <div class="form-actions">
-                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Settings</button>
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
                 <span class="admin-autosave-indicator"></span>
             </div>
         </form>
@@ -117,7 +94,7 @@
                        value="{{ settings.max_trip_members }}" min="1" max="500">
             </div>
             <div class="form-actions">
-                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Settings</button>
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
             </div>
         </form>
     </div>
@@ -149,7 +126,7 @@
                        value="{{ settings.search_cache_hours }}" min="0" max="8760" step="1">
             </div>
             <div class="form-actions">
-                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Settings</button>
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
             </div>
         </form>
     </div>
@@ -183,7 +160,7 @@
                        value="{{ settings.backup_retention }}" min="1" max="1000" step="1">
             </div>
             <div class="form-actions">
-                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Settings</button>
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
             </div>
         </form>
     </div>
@@ -207,7 +184,7 @@
                 </select>
             </div>
             <div class="form-actions">
-                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Settings</button>
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
             </div>
         </form>
     </div>
@@ -238,7 +215,7 @@
                        value="{{ settings.login_lockout_minutes }}" min="1" max="1440" step="1">
             </div>
             <div class="form-actions">
-                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Settings</button>
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
             </div>
         </form>
     </div>
@@ -259,7 +236,7 @@
                        value="{{ settings.max_bbox_area_km2 }}" min="0.001" step="any">
             </div>
             <div class="form-actions">
-                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Settings</button>
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
             </div>
         </form>
     </div>
@@ -311,7 +288,7 @@
             ind.className = 'admin-autosave-indicator';
             ind.style.cssText = 'font-size:.8rem;color:var(--ul-accent,#0891b2);opacity:0;transition:opacity .3s;margin-left:.75rem;vertical-align:middle;';
             actions.appendChild(ind);
-            actions.querySelectorAll('.submit-button').forEach(function (b) { b.style.display = 'none'; });
+            actions.querySelectorAll('.btn--submit').forEach(function (b) { b.style.display = 'none'; });
         }
 
         form.addEventListener('change', function (e) {

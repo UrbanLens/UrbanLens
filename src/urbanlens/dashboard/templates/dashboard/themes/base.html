@@ -127,7 +127,7 @@
             function _submitBtns(el) {
                 if (!el) return [];
                 var form = el.tagName === 'FORM' ? el : (el.closest ? el.closest('form') : null);
-                return form ? Array.from(form.querySelectorAll('button[type="submit"].submit-button, input[type="submit"]')) : [];
+                return form ? Array.from(form.querySelectorAll('.btn--submit, input[type="submit"]')) : [];
             }
             document.body.addEventListener('htmx:beforeRequest', function (e) {
                 _submitBtns(e.target).forEach(function (btn) {

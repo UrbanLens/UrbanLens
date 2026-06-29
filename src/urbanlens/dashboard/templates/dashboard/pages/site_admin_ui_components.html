@@ -34,10 +34,10 @@
         <p class="site-admin-subtitle">
             Visual reference for reusable classes throughout the application.
         </p>
-        <div class="site-admin-nav-links" style="margin-top:.5rem">
-            <a href="{% url 'site_admin' %}" class="btn btn--ghost btn--sm">
+        <div class="site-admin-breadcrumb" style="margin-top:.5rem">
+            <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
                 <i class="material-icons">arrow_back</i>
-                Site Administration
+                Admin Home
             </a>
         </div>
     </div>
@@ -86,7 +86,7 @@
                 <div>
                     <span class="ui-kit-label">Legacy &amp; icon-only</span>
                     <div class="ui-kit-row">
-                        <button type="button" class="submit-button btn btn--primary btn--lg">Submit button</button>
+                        <button type="button" class="btn btn--primary btn--lg btn--submit">Submit button</button>
                         <button type="button" class="btn-icon" title="btn-icon">
                             <i class="material-icons">edit</i>
                         </button>

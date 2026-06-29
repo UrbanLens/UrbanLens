@@ -9,7 +9,7 @@
     <h1 class="error-page__title">{% block error_title %}Page Not Found{% endblock %}</h1>
     <p class="error-page__body">{% block error_body %}The page you're looking for doesn't exist or may have been moved.{% endblock %}</p>
     <div class="error-page__actions">
-        <a href="{% url 'home' %}" class="submit-button btn btn--primary btn--lg">
+        <a href="{% url 'home' %}" class="btn btn--primary btn--lg btn--submit">
             <i class="material-icons" style="font-size:1rem;vertical-align:middle">home</i>
             Go Home
         </a>

@@ -3,178 +3,78 @@
 {% block content %}
 <div class="site-admin-page page-content">
     <div class="site-admin-header">
+        <div class="site-admin-breadcrumb">
+            <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
+                <i class="material-icons">arrow_back</i>
+                Admin Home
+            </a>
+        </div>
         <h1 class="site-admin-title">
             <i class="material-icons">bar_chart</i>
             Site Statistics
         </h1>
         <p class="site-admin-subtitle">Usage metrics and server health at a glance.</p>
-        <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:.5rem">
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-top:.5rem">
             <span class="stats-timestamp">
                 <i class="material-icons" style="font-size:.9rem;vertical-align:-.1em">schedule</i>
                 {{ server_time|date:"N j, Y  g:i A" }} UTC
             </span>
+            <span class="stats-refresh-badge" id="stats-refresh-badge">
+                <i class="material-icons" style="font-size:.85rem;vertical-align:-.1em">autorenew</i>
+                Auto-refreshes every 60s
+            </span>
         </div>
     </div>
 
-    {# ── KPI cards ─────────────────────────────────────────────────────────── #}
-    <div class="stats-kpi-sections">
-
-        <section class="stats-kpi-section" aria-labelledby="stats-section-users">
-            <h2 class="stats-kpi-section-title" id="stats-section-users">
-                <i class="material-icons">people</i>
-                Community
-            </h2>
-            <div class="stats-kpi-grid">
-                <div class="stats-kpi-card">
-                    <div class="stats-kpi-icon" style="background:rgba(8,145,178,.12)">
-                        <i class="material-icons" style="color:#0891b2">people</i>
+    {# ── KPI cards (HTMX, lazy + polling) ─────────────────────────────────── #}
+    <div id="stats-kpi-region"
+         hx-get="{% url 'site_admin_stats_kpi' %}"
+         hx-trigger="load, every 60s"
+         hx-swap="innerHTML"
+         hx-indicator="#stats-kpi-region">
+        {# Skeleton placeholder #}
+        <div class="stats-kpi-sections">
+            {% for section in "xxx" %}
+            <section class="stats-kpi-section">
+                <div class="stats-skeleton stats-skeleton--title" style="width:120px"></div>
+                <div class="stats-kpi-grid">
+                    {% for card in "xxx" %}
+                    <div class="stats-kpi-card">
+                        <div class="stats-skeleton" style="width:44px;height:44px;border-radius:10px;flex-shrink:0"></div>
+                        <div style="flex:1">
+                            <div class="stats-skeleton stats-skeleton--value" style="width:70px"></div>
+                            <div class="stats-skeleton stats-skeleton--label" style="width:90px;margin-top:.4rem"></div>
+                            <div class="stats-skeleton stats-skeleton--sub" style="width:120px;margin-top:.3rem"></div>
+                        </div>
                     </div>
-                    <div class="stats-kpi-body">
-                        <div class="stats-kpi-value">{{ total_users }}</div>
-                        <div class="stats-kpi-label">Total Users</div>
-                        <div class="stats-kpi-sub">+{{ new_users_30d }} in last 30 days</div>
-                    </div>
+                    {% endfor %}
                 </div>
-
-                <div class="stats-kpi-card">
-                    <div class="stats-kpi-icon" style="background:rgba(22,163,74,.12)">
-                        <i class="material-icons" style="color:#16a34a">person</i>
-                    </div>
-                    <div class="stats-kpi-body">
-                        <div class="stats-kpi-value">{{ active_users_30d }}</div>
-                        <div class="stats-kpi-label">Active Users</div>
-                        <div class="stats-kpi-sub">logged in last 30 days</div>
-                    </div>
-                </div>
-
-                <div class="stats-kpi-card">
-                    <div class="stats-kpi-icon" style="background:rgba(20,184,166,.12)">
-                        <i class="material-icons" style="color:#14b8a6">people_alt</i>
-                    </div>
-                    <div class="stats-kpi-body">
-                        <div class="stats-kpi-value">{{ total_friendships }}</div>
-                        <div class="stats-kpi-label">Friendships</div>
-                        <div class="stats-kpi-sub">accepted connections</div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="stats-kpi-section" aria-labelledby="stats-section-content">
-            <h2 class="stats-kpi-section-title" id="stats-section-content">
-                <i class="material-icons">explore</i>
-                Content
-            </h2>
-            <div class="stats-kpi-grid">
-                <div class="stats-kpi-card">
-                    <div class="stats-kpi-icon" style="background:rgba(124,58,237,.12)">
-                        <i class="material-icons" style="color:#7c3aed">place</i>
-                    </div>
-                    <div class="stats-kpi-body">
-                        <div class="stats-kpi-value">{{ total_locations }}</div>
-                        <div class="stats-kpi-label">Locations</div>
-                        <div class="stats-kpi-sub">+{{ new_locations_30d }} in last 30 days</div>
-                    </div>
-                </div>
-
-                <div class="stats-kpi-card">
-                    <div class="stats-kpi-icon" style="background:rgba(217,119,6,.12)">
-                        <i class="material-icons" style="color:#d97706">push_pin</i>
-                    </div>
-                    <div class="stats-kpi-body">
-                        <div class="stats-kpi-value">{{ total_pins }}</div>
-                        <div class="stats-kpi-label">Pins</div>
-                        <div class="stats-kpi-sub">avg {{ avg_pins_per_user }} per user</div>
-                    </div>
-                </div>
-
-                <div class="stats-kpi-card">
-                    <div class="stats-kpi-icon" style="background:rgba(236,72,153,.12)">
-                        <i class="material-icons" style="color:#ec4899">photo_library</i>
-                    </div>
-                    <div class="stats-kpi-body">
-                        <div class="stats-kpi-value">{{ total_photos }}</div>
-                        <div class="stats-kpi-label">Photos</div>
-                        <div class="stats-kpi-sub">user-uploaded images</div>
-                    </div>
-                </div>
-
-                {% if total_reviews is not None %}
-                <div class="stats-kpi-card">
-                    <div class="stats-kpi-icon" style="background:rgba(251,191,36,.12)">
-                        <i class="material-icons" style="color:#f59e0b">star</i>
-                    </div>
-                    <div class="stats-kpi-body">
-                        <div class="stats-kpi-value">{{ total_reviews }}</div>
-                        <div class="stats-kpi-label">Reviews</div>
-                        <div class="stats-kpi-sub">location reviews</div>
-                    </div>
-                </div>
-                {% endif %}
-
-                {% if total_trips is not None %}
-                <div class="stats-kpi-card">
-                    <div class="stats-kpi-icon" style="background:rgba(99,102,241,.12)">
-                        <i class="material-icons" style="color:#6366f1">directions_car</i>
-                    </div>
-                    <div class="stats-kpi-body">
-                        <div class="stats-kpi-value">{{ total_trips }}</div>
-                        <div class="stats-kpi-label">Trips</div>
-                        <div class="stats-kpi-sub">{% if new_trips_30d %}+{{ new_trips_30d }} in last 30 days{% else %}planned adventures{% endif %}</div>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-        </section>
-
-        <section class="stats-kpi-section" aria-labelledby="stats-section-admin">
-            <h2 class="stats-kpi-section-title" id="stats-section-admin">
-                <i class="material-icons">admin_panel_settings</i>
-                Roles
-            </h2>
-            <div class="stats-kpi-grid">
-                <div class="stats-kpi-card">
-                    <div class="stats-kpi-icon" style="background:rgba(59,130,246,.12)">
-                        <i class="material-icons" style="color:#3b82f6">workspace_premium</i>
-                    </div>
-                    <div class="stats-kpi-body">
-                        <div class="stats-kpi-value">{{ total_subscriptions }}</div>
-                        <div class="stats-kpi-label">Subscriptions</div>
-                        <div class="stats-kpi-sub">active grants</div>
-                    </div>
-                </div>
-
-                <div class="stats-kpi-card">
-                    <div class="stats-kpi-icon" style="background:rgba(239,68,68,.12)">
-                        <i class="material-icons" style="color:#ef4444">admin_panel_settings</i>
-                    </div>
-                    <div class="stats-kpi-body">
-                        <div class="stats-kpi-value">{{ total_site_admins }}</div>
-                        <div class="stats-kpi-label">Site Admins</div>
-                        <div class="stats-kpi-sub">members of site_admin</div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
+            </section>
+            {% endfor %}
+        </div>
+        <div class="site-admin-card ul-section card" style="padding:1rem">
+            <div class="stats-skeleton stats-skeleton--title" style="width:200px;margin-bottom:1rem"></div>
+            {% for row in "xxxxx" %}
+            <div class="stats-skeleton" style="height:1.8rem;margin-bottom:.5rem;border-radius:4px"></div>
+            {% endfor %}
+        </div>
     </div>
 
-    {# ── Charts ────────────────────────────────────────────────────────────── #}
+    {# ── Charts (server-rendered, fast DB queries) ─────────────────────────── #}
     <div class="stats-charts-grid">
         <div class="site-admin-card ul-section card stats-chart-card">
             <div class="card-header">
                 <i class="material-icons">person_add</i>
-                <span>New User Signups - last 12 months</span>
+                <span>New User Signups — last 12 months</span>
             </div>
             <div class="stats-chart-wrap">
                 <canvas id="chart-users"></canvas>
             </div>
         </div>
-
         <div class="site-admin-card ul-section card stats-chart-card">
             <div class="card-header">
                 <i class="material-icons">add_location_alt</i>
-                <span>New Locations - last 12 months</span>
+                <span>New Locations — last 12 months</span>
             </div>
             <div class="stats-chart-wrap">
                 <canvas id="chart-locations"></canvas>
@@ -182,306 +82,58 @@
         </div>
     </div>
 
-    {# ── Top locations ─────────────────────────────────────────────────────── #}
-    {% if top_locations %}
-    <div class="site-admin-card ul-section card">
-        <div class="card-header">
-            <i class="material-icons">leaderboard</i>
-            <span>Most Pinned Locations</span>
-        </div>
-        <table class="stats-table">
-            <thead>
-                <tr><th>#</th><th>Location</th><th>Pins</th></tr>
-            </thead>
-            <tbody>
-                {% for loc in top_locations %}
-                <tr>
-                    <td class="stats-table-rank">{{ forloop.counter }}</td>
-                    <td>
-                        {% if loc.slug %}
-                        <a href="{% url 'location.wiki' loc.slug %}" class="stats-table-link">{{ loc.name }}</a>
-                        {% else %}
-                        {{ loc.name }}
-                        {% endif %}
-                    </td>
-                    <td class="stats-table-count">{{ loc.pin_count }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
-
-    {# ── Application Section ──────────────────────────────────────────────── #}
-    <div class="site-admin-card ul-section card">
-        <div class="card-header">
-            <i class="material-icons">apps</i>
-            <span>Application</span>
-        </div>
-        <div class="stats-health-grid">
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#6366f1">sell</i>
-                <div>
-                    <div class="stats-health-value">v{{ app_version }}</div>
-                    <div class="stats-health-label">App Version</div>
-                </div>
-            </div>
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#64748b">call_split</i>
-                <div>
-                    {% if git_branch %}
-                    <div class="stats-health-value"><code>{{ git_branch }}</code></div>
-                    {% else %}
-                    <div class="stats-health-value stats-health-value--muted">Unknown</div>
-                    {% endif %}
-                    <div class="stats-health-label">Git Branch</div>
-                </div>
-            </div>
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#64748b">commit</i>
-                <div>
-                    <div class="stats-health-value"><code>{{ deployed_commit_short }}</code></div>
-                    <div class="stats-health-label">Running Commit</div>
-                </div>
-            </div>
-            {% if git_available and current_commit_short != deployed_commit_short %}
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#64748b">commit</i>
-                <div>
-                    <div class="stats-health-value"><code>{{ current_commit_short }}</code></div>
-                    <div class="stats-health-label">Current HEAD</div>
-                </div>
-            </div>
-            {% endif %}
-            {% if git_available and upstream_commit_short and upstream_commit_short != current_commit_short and upstream_commit_short != deployed_commit_short %}
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#64748b">cloud</i>
-                <div>
-                    <div class="stats-health-value"><code>{{ upstream_commit_short }}</code></div>
-                    <div class="stats-health-label">Remote HEAD</div>
-                </div>
-            </div>
-            {% endif %}
-            <div class="stats-health-item">
-                {% if not git_available %}
-                <i class="material-icons stats-health-icon" style="color:#94a3b8">help_outline</i>
-                <div>
-                    <div class="stats-health-value stats-health-value--muted">Unknown</div>
-                    <div class="stats-health-label">Update Status</div>
-                </div>
-                {% elif git_has_newer_commits %}
-                <i class="material-icons stats-health-icon" style="color:#d97706">new_releases</i>
-                <div>
-                    <div class="stats-health-value stats-health-value--warn">
-                        {{ git_commits_ahead }} newer commit{{ git_commits_ahead|pluralize }} available
-                    </div>
-                    <div class="stats-health-label">
-                        {% if git_remote_refreshed and upstream_commit_short and upstream_commit_short != current_commit_short %}
-                        Pull and redeploy to update
-                        {% else %}
-                        Rebuild or restart to deploy
-                        {% endif %}
-                    </div>
-                </div>
-                {% else %}
-                <i class="material-icons stats-health-icon" style="color:#16a34a">check_circle</i>
-                <div>
-                    <div class="stats-health-value stats-health-value--ok">Up to date</div>
-                    <div class="stats-health-label">Update Status</div>
-                </div>
-                {% endif %}
-            </div>
-            {% if show_git_pull_button %}
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#2563eb">download</i>
-                <div>
-                    <button type="button" class="btn btn--primary btn--sm" id="git-pull-refresh-btn" data-url="{% url 'site_admin_pull_latest_code' %}">
-                        <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">sync</i>
-                        Pull &amp; Refresh
-                    </button>
-                    <div class="stats-health-label">Development tools</div>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-
-    {# ── Infrastructure services ──────────────────────────────────────────── #}
-    <div class="stats-services-grid">
-        {% for service in infrastructure_services %}
-        <div class="site-admin-card ul-section card stats-service-card">
-            <div class="card-header stats-service-card__header">
-                <div class="stats-service-card__title">
-                    <i class="material-icons">{{ service.icon }}</i>
-                    <span>{{ service.name }}</span>
-                </div>
-                <span class="stats-service-status stats-service-status--{{ service.status }}">
-                    {% if service.status == "healthy" %}
-                    <i class="material-icons">check_circle</i>
-                    {% elif service.status == "unhealthy" %}
-                    <i class="material-icons">error</i>
-                    {% elif service.status == "disabled" %}
-                    <i class="material-icons">remove_circle_outline</i>
-                    {% else %}
-                    <i class="material-icons">help_outline</i>
-                    {% endif %}
-                    {{ service.status_label }}
-                </span>
-            </div>
-            {% if service.metrics %}
+    {# ── System health (HTMX, lazy + polling) ─────────────────────────────── #}
+    <div id="stats-system-region"
+         hx-get="{% url 'site_admin_stats_system' %}"
+         hx-trigger="load, every 60s"
+         hx-swap="innerHTML"
+         hx-indicator="#stats-system-region">
+        {# Skeleton placeholder #}
+        <div class="site-admin-card ul-section card" style="padding:1.25rem">
+            <div class="stats-skeleton stats-skeleton--title" style="width:140px;margin-bottom:1rem"></div>
             <div class="stats-health-grid">
-                {% for metric in service.metrics %}
+                {% for item in "xxxxxx" %}
                 <div class="stats-health-item">
+                    <div class="stats-skeleton" style="width:2rem;height:2rem;border-radius:50%;flex-shrink:0"></div>
                     <div>
-                        <div class="stats-health-value">{{ metric.value }}</div>
-                        <div class="stats-health-label">{{ metric.label }}</div>
+                        <div class="stats-skeleton stats-skeleton--value" style="width:100px"></div>
+                        <div class="stats-skeleton stats-skeleton--label" style="width:70px;margin-top:.35rem"></div>
                     </div>
                 </div>
                 {% endfor %}
             </div>
-            {% endif %}
         </div>
-        {% endfor %}
-    </div>
-
-    {# ── Server health ─────────────────────────────────────────────────────── #}
-    <div class="site-admin-card ul-section card">
-        <div class="card-header">
-            <i class="material-icons">dns</i>
-            <span>Server Health</span>
-        </div>
-        <div class="stats-health-grid">
-            {% if uptime %}
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#16a34a">timer</i>
-                <div>
-                    <div class="stats-health-value">{{ uptime }}</div>
-                    <div class="stats-health-label">App Uptime</div>
+        <div class="stats-services-grid">
+            {% for svc in "xxxx" %}
+            <div class="site-admin-card ul-section card" style="padding:1rem 1.25rem">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div class="stats-skeleton" style="width:100px;height:1rem;border-radius:4px"></div>
+                    <div class="stats-skeleton" style="width:60px;height:.85rem;border-radius:4px"></div>
                 </div>
             </div>
-            {% endif %}
-            {% if media_size_mb is not None %}
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#d97706">storage</i>
-                <div>
-                    <div class="stats-health-value">{{ media_size_mb }} MB</div>
-                    <div class="stats-health-label">Media Storage</div>
-                </div>
-            </div>
-            {% endif %}
-
-            {% if backup_stats %}
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#2563eb">backup</i>
-                <div>
-                    <div class="stats-health-value">{{ backup_stats.count }} file{{ backup_stats.count|pluralize }}</div>
-                    <div class="stats-health-label">Database Backups</div>
-                </div>
-            </div>
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#7c3aed">schedule</i>
-                <div>
-                    <div class="stats-health-value">Every {{ backup_stats.frequency_hours }}h</div>
-                    <div class="stats-health-label">Backup Frequency ({% if backup_stats.enabled %}enabled{% else %}disabled{% endif %})</div>
-                </div>
-            </div>
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#0891b2">inventory_2</i>
-                <div>
-                    <div class="stats-health-value">Keep {{ backup_stats.retention }}</div>
-                    <div class="stats-health-label">Backup Retention</div>
-                </div>
-            </div>
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#d97706">folder</i>
-                <div>
-                    <div class="stats-health-value">{{ backup_stats.total_size_mb }} MB</div>
-                    <div class="stats-health-label">Backup Storage</div>
-                </div>
-            </div>
-            {% endif %}
-
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#7c3aed">code</i>
-                <div>
-                    <div class="stats-health-value">Python {{ python_version }}</div>
-                    <div class="stats-health-label">Runtime</div>
-                </div>
-            </div>
-            <div class="stats-health-item">
-                <i class="material-icons stats-health-icon" style="color:#0891b2">hub</i>
-                <div>
-                    <div class="stats-health-value">Django {{ django_version }}</div>
-                    <div class="stats-health-label">Framework</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    {# ── External API Usage ────────────────────────────────────────────────── #}
-    {% if api_usage %}
-    <div class="site-admin-card ul-section card">
-        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
-            <span style="display:flex;align-items:center;gap:.5rem">
-                <i class="material-icons">cloud</i>
-                External API Usage (last 30 days)
-            </span>
-            <a href="{% url 'site_admin_api_limits' %}" class="btn btn--ghost btn--sm">
-                <i class="material-icons" style="font-size:.9rem;vertical-align:-.1em">tune</i>
-                Configure limits
-            </a>
-        </div>
-        <table class="stats-table">
-            <thead>
-                <tr>
-                    <th>Service</th>
-                    <th style="text-align:right">Calls</th>
-                    <th style="text-align:right">Blocked</th>
-                    <th style="text-align:right">Geo-skipped</th>
-                    <th style="text-align:right">Errors</th>
-                    <th style="text-align:right">Avg&nbsp;ms</th>
-                    <th style="text-align:center">Daily&nbsp;limit</th>
-                    <th style="text-align:center">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for row in api_usage %}
-            <tr>
-                <td>
-                    <strong>{{ row.display_name }}</strong>
-                    <span style="font-size:.75rem;color:var(--ul-text-muted,#6b7280);margin-left:.4rem">{{ row.service }}</span>
-                </td>
-                <td style="text-align:right">{{ row.total }}</td>
-                <td style="text-align:right">{% if row.blocked %}<span style="color:#b91c1c">{{ row.blocked }}</span>{% else %}—{% endif %}</td>
-                <td style="text-align:right">{% if row.geo_skipped %}<span style="color:#0369a1">{{ row.geo_skipped }}</span>{% else %}—{% endif %}</td>
-                <td style="text-align:right">{% if row.errors %}<span style="color:#b91c1c">{{ row.errors }}</span>{% else %}—{% endif %}</td>
-                <td style="text-align:right">{% if row.avg_ms %}{{ row.avg_ms }}{% else %}—{% endif %}</td>
-                <td style="text-align:center">
-                    {% if row.calls_per_day %}
-                        <span title="{{ row.total }} of {{ row.calls_per_day }} daily limit used">
-                            {{ row.total }}&nbsp;/&nbsp;{{ row.calls_per_day }}
-                        </span>
-                    {% else %}
-                        <span style="color:var(--ul-text-muted,#6b7280)">unlimited</span>
-                    {% endif %}
-                </td>
-                <td style="text-align:center">
-                    {% if not row.enabled %}
-                        <span style="background:#f3f4f6;color:#6b7280;border-radius:4px;padding:2px 7px;font-size:.75rem">Disabled</span>
-                    {% elif row.calls_per_day and row.total >= row.calls_per_day %}
-                        <span style="background:#fee2e2;color:#b91c1c;border-radius:4px;padding:2px 7px;font-size:.75rem">Limit hit</span>
-                    {% else %}
-                        <span style="background:#d1fae5;color:#065f46;border-radius:4px;padding:2px 7px;font-size:.75rem">OK</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="8" style="text-align:center;color:var(--ul-text-muted,#6b7280);padding:1rem">No API calls recorded yet.</td></tr>
             {% endfor %}
-            </tbody>
-        </table>
+        </div>
     </div>
-    {% endif %}
+
+    {# ── External API usage (HTMX, lazy + polling) ────────────────────────── #}
+    <div id="stats-api-region"
+         hx-get="{% url 'site_admin_stats_api' %}"
+         hx-trigger="load, every 60s"
+         hx-swap="innerHTML"
+         hx-indicator="#stats-api-region">
+        {# Skeleton placeholder #}
+        <div class="site-admin-card ul-section card">
+            <div class="card-header">
+                <i class="material-icons">cloud</i>
+                <span>External API Usage (last 30 days)</span>
+            </div>
+            <div style="padding:.5rem 1rem 1rem">
+                {% for row in "xxxxxxxxxxxxxxxxx" %}
+                <div class="stats-skeleton" style="height:2rem;margin-bottom:.4rem;border-radius:4px"></div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -543,8 +195,11 @@
     makeBar('chart-users',     {{ chart_user_labels|safe }},     {{ chart_user_counts|safe }},     '#0891b2');
     makeBar('chart-locations', {{ chart_location_labels|safe }}, {{ chart_location_counts|safe }}, '#7c3aed');
 
-    var pullBtn = document.getElementById('git-pull-refresh-btn');
-    if (pullBtn) {
+    // Wire up git pull button whenever it appears after HTMX swap
+    document.addEventListener('htmx:afterSettle', function (e) {
+        var pullBtn = document.getElementById('git-pull-refresh-btn');
+        if (!pullBtn || pullBtn._wired) return;
+        pullBtn._wired = true;
         pullBtn.addEventListener('click', function () {
             var originalHtml = pullBtn.innerHTML;
             pullBtn.disabled = true;
@@ -563,9 +218,7 @@
                 return response.json().catch(function () {
                     return { ok: false, message: response.statusText || 'Unexpected server response.' };
                 }).then(function (payload) {
-                    if (!response.ok || !payload.ok) {
-                        throw new Error(payload.message || 'Could not pull latest code.');
-                    }
+                    if (!response.ok || !payload.ok) throw new Error(payload.message || 'Could not pull latest code.');
                     return payload;
                 });
             })
@@ -579,8 +232,15 @@
                 if (window.toastr) toastr.error(err.message || 'Could not pull latest code.');
             });
         });
-    }
+    });
+
+    // Flash the refresh badge on each HTMX swap
+    document.addEventListener('htmx:afterSwap', function () {
+        var badge = document.getElementById('stats-refresh-badge');
+        if (!badge) return;
+        badge.classList.add('stats-refresh-badge--active');
+        setTimeout(function () { badge.classList.remove('stats-refresh-badge--active'); }, 800);
+    });
 }());
 </script>
-
 {% endblock %}

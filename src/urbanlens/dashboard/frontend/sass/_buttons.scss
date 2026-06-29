@@ -140,6 +140,13 @@
 		background: var(--secondary-color);
 		color: var(--ul-grey-9);
 	}
+
+	&.is-loading {
+		opacity: .78;
+		pointer-events: none;
+		cursor: not-allowed;
+		@include btn-loading-spinner;
+	}
 }
 
 .btn-togl {
@@ -197,23 +204,11 @@
     flex-shrink: 0;
 }
 
-// Filled CTA used in legacy dialogs and forms
-.submit-button,
-.file-button {
-	@extend .btn;
-	@extend .btn--primary;
-	@extend .btn--lg;
-
-	&.is-loading {
-		opacity: .78;
-		pointer-events: none;
-		cursor: not-allowed;
-		@include btn-loading-spinner;
-	}
-}
-
 input[type="submit"] {
-	@extend .submit-button;
+	@extend .btn;
+	@extend .btn--lg;
+	@extend .btn--primary;
+	@extend .btn--submit;
 }
 
 // ── Icon-only buttons ─────────────────────────────────────────────────────────
@@ -280,7 +275,7 @@ input[type="submit"] {
 }
 
 .dialog {
-	.submit-button,
+	.btn--submit,
 	input[type="submit"] {
 		float: right;
 		margin-top: 6px;
