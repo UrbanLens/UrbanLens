@@ -22,7 +22,7 @@ def bootstrap(apps, schema_editor) -> None:
 
 
 def reverse_bootstrap(apps, schema_editor) -> None:
-    """Remove bootstrap data created by :func:`bootstrap`.
+    """Remove bootstrap data created by `bootstrap`.
 
     Args:
         apps: Django apps registry (historical models).

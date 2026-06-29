@@ -200,7 +200,7 @@ def search_google_places(query: str, api_key: str) -> list[AutocompleteResult]:
     """Proxy a Google Places Autocomplete request (hides the API key from the browser).
 
     Coordinates are intentionally omitted here; they are resolved lazily in
-    :func:`resolve_google_place` only when the user selects a suggestion.
+    `resolve_google_place` only when the user selects a suggestion.
 
     Args:
         query: User's search text.

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
@@ -22,7 +21,6 @@ from django.db.models import (
     UUIDField,
 )
 from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, DecimalField, IntegerField, SlugField, TextField
-from django.utils.text import slugify
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
@@ -45,7 +43,7 @@ class PinType(TextChoices):
     OTHER = "other", "Other"
 
 
-class Pin(abstract.SecurityModel, abstract.AddressableModel):
+class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
     """A user's personal record for a physical location.
 
     Pin is the *personal* half of the two-model design:
@@ -58,14 +56,10 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
     priority, and an optional coordinate override to reposition the marker.
     """
 
-    # Public-facing identifier. Non-sequential so users cannot enumerate other pins.
-    uuid = UUIDField(default=uuid4, unique=True, editable=False)
     # Optional per-user marker override. When unset, coordinates fall back to the
     # linked Location's canonical latitude/longitude.
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    # URL slug - unique per (profile, slug). Auto-generated from the effective name on first save.
-    slug = SlugField(max_length=255, null=True, blank=True)
 
     # When True this pin is entirely personal: it will not be linked to a shared
     # Location and will never contribute to the community wiki.  User-specific
@@ -338,19 +332,12 @@ class Pin(abstract.SecurityModel, abstract.AddressableModel):
             "border_opacity": self.detail_border_opacity,
         }
 
-    def _generate_slug(self) -> str:
-        """Derive a slug that is unique within this user's pins."""
-        base = slugify(self.effective_name)[:200] or "pin"
-        candidate = base
-        n = 2
+    def _slugify_qs(self):
         qs = Pin.objects.filter(profile_id=self.profile_id)
         if self.pk:
             qs = qs.exclude(pk=self.pk)
-        while qs.filter(slug=candidate).exists():
-            candidate = f"{base}-{n}"
-            n += 1
-        return candidate
-
+        return qs
+        
     class Meta(abstract.AddressableModel.Meta):
         db_table = "dashboard_user_pins"
         get_latest_by = "updated"

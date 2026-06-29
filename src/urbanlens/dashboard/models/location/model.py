@@ -11,7 +11,6 @@ from django.contrib.gis.geos import Point, Polygon
 from django.db import DatabaseError
 from django.db.models import Index, ManyToManyField, UUIDField
 from django.db.models.fields import CharField, DateField, DecimalField, SlugField, TextField
-from django.utils.text import slugify
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -30,7 +29,7 @@ _DEFAULT_BBOX_DEGREES = 0.00045
 logger = logging.getLogger(__name__)
 
 
-class Location(abstract.SecurityModel, abstract.AddressableModel):
+class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
     """Shared, globally recognised data about a physical place.
 
     Location is the *global* half of the two-model design:
@@ -53,12 +52,6 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
     AddressableMixin and accessed via the state/city/county/address properties
     defined there.
     """
-
-    # Public-facing identifier. Non-sequential so users cannot infer location counts
-    # or enumerate other locations from a known URL.
-    uuid = UUIDField(default=uuid4, unique=True, editable=False)
-    # URL slug - globally unique. Auto-generated from name on first save.
-    slug = SlugField(max_length=255, null=True, blank=True, unique=True)
 
     # Canonical name of the place - NOT a user's personal label (that's Pin.name).
     name = CharField(max_length=255)
@@ -126,30 +119,6 @@ class Location(abstract.SecurityModel, abstract.AddressableModel):
             "latitude": float(self.latitude),
             "longitude": float(self.longitude),
         }
-
-    def _generate_slug(self) -> str:
-        """Derive a slug that is globally unique across all locations."""
-        base = slugify(self.name or "location")[:255] or "location"
-        candidate = base
-        n = 2
-        qs = Location.objects.all()
-        if self.pk:
-            qs = qs.exclude(pk=self.pk)
-        while qs.filter(slug=candidate).exists():
-            candidate = f"{base}-{n}"
-            n += 1
-        return candidate
-
-    def ensure_slug(self) -> str:
-        """Ensure this location has a URL slug, generating one if needed.
-
-        Returns:
-            The location's slug (never empty).
-        """
-        if not self.slug:
-            self.slug = self._generate_slug()
-            self.save(update_fields=["slug", "updated"])
-        return self.slug
 
     def save(self, *args, **kwargs) -> None:
         """Auto-generate derived geographic fields before saving."""
