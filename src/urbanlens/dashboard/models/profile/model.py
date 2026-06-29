@@ -17,7 +17,6 @@ from django.db.models import (
     SlugField,
     TextChoices,
     TextField,
-    UUIDField,
 )
 
 from urbanlens.dashboard.models import abstract
@@ -78,6 +77,9 @@ class GuidanceLevel(TextChoices):
 
 
 class Profile(abstract.HasSlug):
+    # Global uniqueness with a shorter cap to fit within username length limits.
+    slug = SlugField(max_length=150, null=True, blank=True, unique=True)
+
     avatar = ImageField(upload_to="avatars/", null=True, blank=True)
     profile_setup_complete = BooleanField(default=True)
     bio = TextField(null=True, blank=True)
@@ -241,6 +243,9 @@ class Profile(abstract.HasSlug):
     @property
     def full_name(self):
         return self.user.get_full_name()
+
+    def _slugify_base(self) -> str:
+        return self.user.username or "user"
 
     def save(self, *args, **kwargs) -> None:
         """Auto-generate a unique slug from the username if not already set."""

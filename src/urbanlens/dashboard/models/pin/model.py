@@ -18,9 +18,8 @@ from django.db.models import (
     ManyToManyField,
     Q,
     UniqueConstraint,
-    UUIDField,
 )
-from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, DecimalField, IntegerField, SlugField, TextField
+from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, DecimalField, IntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
@@ -332,12 +331,15 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
             "border_opacity": self.detail_border_opacity,
         }
 
+    def _slugify_base(self) -> str:
+        return self.effective_name or "pin"
+
     def _slugify_qs(self):
         qs = Pin.objects.filter(profile_id=self.profile_id)
         if self.pk:
             qs = qs.exclude(pk=self.pk)
         return qs
-        
+
     class Meta(abstract.AddressableModel.Meta):
         db_table = "dashboard_user_pins"
         get_latest_by = "updated"

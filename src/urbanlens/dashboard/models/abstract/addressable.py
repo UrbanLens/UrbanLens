@@ -10,7 +10,7 @@ from django.contrib.gis.geos import Point
 from django.db.models import SET_NULL, ForeignKey
 from django.db.models.fields import CharField, DecimalField
 
-from urbanlens.dashboard.models.abstract import Model
+from urbanlens.dashboard.models.abstract.model import Model
 
 if TYPE_CHECKING:
     from decimal import Decimal

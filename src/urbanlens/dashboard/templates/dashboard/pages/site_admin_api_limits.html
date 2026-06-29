@@ -29,8 +29,10 @@
         border-radius: 10px;
         padding: 1.25rem 1.5rem;
         color: var(--ul-grey-9);
+        transition: border-color .2s;
     }
     .api-limit-card.disabled { opacity: .65; }
+    .api-limit-card.is-saving { border-color: var(--ul-accent, #0891b2); }
     .api-limit-header {
         display: flex;
         align-items: center;
@@ -62,14 +64,19 @@
     .api-limit-field textarea { resize:vertical; min-height:60px; }
     .api-limit-toggles { display:flex; gap:1.25rem; align-items:center; flex-wrap:wrap; }
     .toggle-row { display:flex; align-items:center; gap:.4rem; font-size:.875rem; }
-    .api-limit-saved {
+    .api-limit-status {
         font-size: .8rem;
-        color: var(--ul-accent, #0891b2);
         opacity: 0;
-        transition: opacity .3s;
+        transition: opacity .25s;
         margin-left: auto;
         white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: .25rem;
     }
+    .api-limit-status.saving { color: var(--ul-text-muted, #6b7280); opacity: 1; }
+    .api-limit-status.saved  { color: var(--ul-accent, #0891b2); opacity: 1; }
+    .api-limit-status.error  { color: #b91c1c; opacity: 1; }
     .badge-blocked { background:#fee2e2; color:#b91c1c; border-radius:4px; padding:1px 6px; font-size:.75rem; }
     .badge-geo { background:#e0f2fe; color:#0369a1; border-radius:4px; padding:1px 6px; font-size:.75rem; }
     .badge-disabled { background:#f3f4f6; color:#6b7280; border-radius:4px; padding:1px 6px; font-size:.75rem; }
@@ -79,6 +86,7 @@
         <i class="material-icons" style="font-size:.9rem;vertical-align:-.15em">info</i>
         Limits use a rolling window (per-minute) and a UTC calendar day (per-day).
         Leave a limit blank to remove it. Usage counts shown are for the last 30 days.
+        Changes are saved automatically.
     </p>
 
     <div class="api-limits-grid">
@@ -95,7 +103,7 @@
             </div>
             {% if not cfg.enabled %}<span class="badge-disabled">Disabled</span>{% endif %}
             {% if cfg.usa_only %}<span class="badge-geo">USA only</span>{% endif %}
-            <span class="api-limit-saved" aria-live="polite"></span>
+            <span class="api-limit-status" aria-live="polite" aria-atomic="true"></span>
         </div>
 
         <div class="api-limit-stats">
@@ -110,7 +118,7 @@
               action="{% url 'site_admin_api_limits' %}"
               class="api-limit-form"
               hx-post="{% url 'site_admin_api_limits' %}"
-              hx-trigger="change from:input[type=checkbox], input changed delay:700ms from:input[type=number], keyup changed delay:700ms from:textarea"
+              hx-trigger="change, input delay:700ms"
               hx-swap="none">
             {% csrf_token %}
             <input type="hidden" name="service" value="{{ cfg.service }}">
@@ -158,19 +166,57 @@
 {% block scripts %}
 <script>
 (function () {
-    function showSaved(card) {
-        var ind = card && card.querySelector('.api-limit-saved');
-        if (!ind) return;
-        ind.textContent = '✓ Saved';
-        ind.style.opacity = '1';
-        clearTimeout(ind._t);
-        ind._t = setTimeout(function () { ind.style.opacity = '0'; }, 2500);
+    function getCard(form) {
+        return form.closest('.api-limit-card');
     }
 
+    function setStatus(card, state, text) {
+        var el = card && card.querySelector('.api-limit-status');
+        if (!el) return;
+        el.className = 'api-limit-status ' + state;
+        el.textContent = text;
+        clearTimeout(el._t);
+        if (state === 'saved' || state === 'error') {
+            el._t = setTimeout(function () {
+                el.style.transition = 'opacity .5s';
+                el.style.opacity = '0';
+                el._t = setTimeout(function () {
+                    el.className = 'api-limit-status';
+                    el.style.transition = '';
+                    el.style.opacity = '';
+                }, 500);
+            }, 2500);
+        }
+    }
+
+    // Show "Saving…" while the HTMX request is in-flight.
+    document.body.addEventListener('htmx:beforeRequest', function (evt) {
+        var form = evt.target.closest('.api-limit-form');
+        if (!form) return;
+        var card = getCard(form);
+        card && card.classList.add('is-saving');
+        setStatus(card, 'saving', 'Saving…');
+    });
+
+    // Handle success (204) and server errors (4xx/5xx).
+    document.body.addEventListener('htmx:afterRequest', function (evt) {
+        var form = evt.target.closest('.api-limit-form');
+        if (!form) return;
+        var card = getCard(form);
+        if (card) card.classList.remove('is-saving');
+        var status = evt.detail && evt.detail.xhr && evt.detail.xhr.status;
+        if (status >= 200 && status < 300) {
+            // Success is announced via the apiLimitSaved HX-Trigger below.
+        } else {
+            setStatus(card, 'error', '✗ Save failed (' + (status || '?') + ')');
+        }
+    });
+
+    // Server fires HX-Trigger: {"apiLimitSaved": {"service": "..."}} on 204.
     document.body.addEventListener('apiLimitSaved', function (evt) {
         var svc = evt.detail && evt.detail.service;
-        if (!svc) return;
-        showSaved(document.querySelector('.api-limit-card[data-service="' + svc + '"]'));
+        var card = svc && document.querySelector('.api-limit-card[data-service="' + svc + '"]');
+        setStatus(card, 'saved', '✓ Saved');
     });
 }());
 </script>

@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 from django.contrib.gis.db.models import PointField, PolygonField
 from django.contrib.gis.geos import Point, Polygon
 from django.db import DatabaseError
-from django.db.models import Index, ManyToManyField, UUIDField
+from django.db.models import Index, ManyToManyField
 from django.db.models.fields import CharField, DateField, DecimalField, SlugField, TextField
 
 from urbanlens.dashboard.models import abstract
@@ -52,6 +51,9 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
     AddressableMixin and accessed via the state/city/county/address properties
     defined there.
     """
+
+    # Global uniqueness: each place has one canonical slug across all users.
+    slug = SlugField(max_length=255, null=True, blank=True, unique=True)
 
     # Canonical name of the place - NOT a user's personal label (that's Pin.name).
     name = CharField(max_length=255)
@@ -119,6 +121,9 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
             "latitude": float(self.latitude),
             "longitude": float(self.longitude),
         }
+
+    def _slugify_base(self) -> str:
+        return self.name or "location"
 
     def save(self, *args, **kwargs) -> None:
         """Auto-generate derived geographic fields before saving."""

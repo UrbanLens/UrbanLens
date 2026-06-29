@@ -166,7 +166,7 @@ def _git_fetch() -> bool:
         logger.debug("no git remotes configured; skipping fetch")
         return False
 
-    logger.info("git fetch --quiet --prune")
+    logger.debug("running git fetch --quiet --prune")
     try:
         result = subprocess.run(  # nosec B603
             [_GIT_EXECUTABLE, "fetch", "--quiet", "--prune"],
@@ -178,18 +178,12 @@ def _git_fetch() -> bool:
             env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
         )
     except (subprocess.SubprocessError, OSError) as exc:
-        logger.warning(
-            "git fetch failed (%s); update status will use local refs only",
-            exc,
-        )
+        logger.debug("git fetch unavailable (%s); update status will use local refs only", exc)
         return False
 
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
-        logger.warning(
-            "git fetch failed (%s); update status will use local refs only",
-            detail,
-        )
+        logger.debug("git fetch failed (%s); update status will use local refs only", detail)
         return False
 
     return True
