@@ -124,13 +124,15 @@ class PendingSubscriptionGrant(abstract.Model):
 def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeature | str) -> bool:
     """Return whether the user has an active role granting the feature.
 
-    Anonymous users never have subscription-backed features. Keeping this
-    guard in the helper lets callers use ``request.user`` directly without
-    duplicating authentication/type checks throughout controllers and context
-    processors.
+    Anonymous users never have subscription-backed features. Site admins are
+    treated as having every subscription tier and feature. Keeping this guard
+    in the helper lets callers use ``request.user`` directly without duplicating
+    authentication/type checks throughout controllers and context processors.
     """
     if not isinstance(user, User) or not user.is_authenticated:
         return False
+    if user.has_perm("dashboard.view_site_admin"):
+        return True
     now = timezone.now()
     subscriptions = UserSubscription.objects.filter(
         user=user,
