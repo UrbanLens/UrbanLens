@@ -341,7 +341,7 @@ def collect_nginx_stats() -> InfrastructureServiceStat:
         InfrastructureServiceStat for the nginx health endpoint configured by
         ``UL_NGINX_HEALTH_URL`` (default ``http://urbanlens_nginx/nginx-health``).
     """
-    health_url = os.getenv("UL_NGINX_HEALTH_URL", "http://urbanlens_nginx/nginx-health")
+    health_url = os.getenv("UL_NGINX_HEALTH_URL", "http://urbanlens_nginx:8080/nginx-health")
     try:
         started = time.monotonic()
         response = requests.get(health_url, timeout=2)

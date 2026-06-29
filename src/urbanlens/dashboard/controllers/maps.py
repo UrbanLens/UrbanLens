@@ -604,7 +604,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         # ── Google historical landmarks (Places API v1 — supports historical_landmark type) ──
         if use_google:
-            api_key = settings.google_maps_api_key or settings.google_places_api_key
+            api_key = settings.google_places_api_key or settings.google_maps_api_key
             if not api_key:
                 logger.info("Google Places skipped: no API key configured.")
             else:

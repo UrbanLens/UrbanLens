@@ -92,6 +92,11 @@ RUN groupadd --gid 1001 appuser && \
         /app/src/urbanlens/dashboard/frontend \
         /app/src/urbanlens/core/frontend
 
+# Git >= 2.35.2 refuses to run in directories not owned by the current user.
+# COPY . /app runs as root, so /app/.git is root-owned; the app runs as appuser.
+# Writing to /etc/gitconfig (--system) applies the exception to all users.
+RUN git config --system safe.directory /app
+
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
