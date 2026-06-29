@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 import logging
+import operator
 from typing import Any
 import urllib.parse
 import urllib.request
@@ -519,23 +520,20 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"ok": True, "pin_slug": pin.slug or str(pin.uuid)})
 
     def nearby_places(self, request, *args, **kwargs):
-        """Return Google Places results for historical landmarks near a given coordinate.
+        """Return Places layer results near a given coordinate, aggregated from enabled sources.
 
-        VIP-only endpoint.  Results are cached per coordinate tile + type for
-        ``SiteSettings.google_places_cache_days`` days to minimise API spending.
+        VIP-only endpoint.  Sources (Google, NPS, Wikipedia) are toggled per user
+        profile.  Results are cached per coordinate tile + source set.
 
         Query params:
             lat: Centre latitude (float).
             lng: Centre longitude (float).
-            type: Google Places type (default ``historical_landmark``).
-            radius: Search radius in metres (default 2000, max 5000).
+            radius: Search radius in metres for Google Places (default 2000, max 5000).
 
         Returns:
             JsonResponse: ``{"places": [...], "cached": bool}``
         """
-        from datetime import timedelta
-
-        from django.utils import timezone
+        from django.core.cache import cache as django_cache
 
         from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 
@@ -548,68 +546,117 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         except (TypeError, ValueError):
             return JsonResponse({"error": "invalid coordinates"}, status=400)
 
-        place_type = request.GET.get("type", "historical_landmark")
         try:
             radius = min(int(request.GET.get("radius", 2000)), 5000)
         except (TypeError, ValueError):
             radius = 2000
 
-        api_key = settings.google_maps_api_key or settings.google_places_api_key
-        if not api_key:
-            return JsonResponse({"places": [], "disabled": True})
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        use_google = profile.places_google_enabled
+        use_nps = profile.places_nps_enabled
+        use_wiki = profile.places_wikipedia_enabled
 
-        site = SiteSettings.get_current()
-        cache_days = site.google_places_cache_days
-
-        # Use a coarse grid key (0.02° ≈ 2 km) so nearby moves reuse the same cached bucket.
+        # Coarse grid key (0.02° ≈ 2 km) so nearby moves reuse the same cached bucket.
         lat_key = round(lat / 0.02) * 0.02
         lng_key = round(lng / 0.02) * 0.02
-        cache_key = f"places_nearby:{lat_key:.2f}:{lng_key:.2f}:{place_type}:{radius}"
+        source_key = f"{'g' if use_google else ''}{'n' if use_nps else ''}{'w' if use_wiki else ''}"
+        django_cache_key = f"ul_places:{lat_key:.2f}:{lng_key:.2f}:{radius}:{source_key}"
 
-        # Use a pseudo-location keyed to the grid tile for caching (no real location needed).
-        # We store results in a global cache table row keyed by a generated cache_key.
-        # Since LocationCache requires a Location FK, we cache under a sentinel location or
-        # use a direct DB cache approach via a simple dict stored in JSON.
-        # Simpler: use the django cache framework with a long TTL.
-        from django.core.cache import cache as django_cache
-
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.models.location.model import Location
-
-        django_cache_key = f"ul_nearby_{cache_key}"
         cached = django_cache.get(django_cache_key)
         if cached is not None:
             return JsonResponse({"places": cached, "cached": True})
 
-        try:
-            from urbanlens.dashboard.services.google.places import GooglePlacesGateway
+        site = SiteSettings.get_current()
+        cache_seconds = site.google_places_cache_days * 86400
+        places: list[dict] = []
 
-            gateway = GooglePlacesGateway(api_key=api_key)
-            raw_results = gateway.get_data(lat, lng, radius=radius, place_type=place_type)
-        except Exception as exc:
-            logger.warning("Google Places nearby search failed: %s", exc)
-            return JsonResponse({"places": [], "error": "upstream_error"})
+        # ── Google historical landmarks ──────────────────────────────────────
+        if use_google:
+            api_key = settings.google_maps_api_key or settings.google_places_api_key
+            if api_key:
+                try:
+                    from urbanlens.dashboard.services.google.places import GooglePlacesGateway
 
-        places = []
-        for r in raw_results:
-            geo = r.get("geometry", {}).get("location", {})
-            place_lat = geo.get("lat")
-            place_lng = geo.get("lng")
-            if place_lat is None or place_lng is None:
-                continue
-            places.append({
-                "place_id": r.get("place_id", ""),
-                "name": r.get("name", ""),
-                "lat": place_lat,
-                "lng": place_lng,
-                "rating": r.get("rating"),
-                "user_ratings_total": r.get("user_ratings_total"),
-                "vicinity": r.get("vicinity", ""),
-                "types": r.get("types", []),
-                "icon": r.get("icon", ""),
-            })
+                    gw = GooglePlacesGateway(api_key=api_key)
+                    raw_results = gw.get_data(lat, lng, radius=radius, place_type="historical_landmark")
+                    for r in raw_results:
+                        geo = r.get("geometry", {}).get("location", {})
+                        place_lat = geo.get("lat")
+                        place_lng = geo.get("lng")
+                        if place_lat is None or place_lng is None:
+                            continue
+                        places.append({
+                            "place_id": r.get("place_id", ""),
+                            "name": r.get("name", ""),
+                            "lat": place_lat,
+                            "lng": place_lng,
+                            "source": "google",
+                            "rating": r.get("rating"),
+                            "user_ratings_total": r.get("user_ratings_total"),
+                            "vicinity": r.get("vicinity", ""),
+                            "types": r.get("types", []),
+                            "icon": r.get("icon", ""),
+                            "description": "",
+                            "url": "",
+                        })
+                except Exception as exc:
+                    logger.warning("Google Places nearby search failed: %s", exc)
 
-        cache_seconds = cache_days * 86400
+        # ── National Park Service ────────────────────────────────────────────
+        if use_nps and settings.nps_api_key:
+            try:
+                from urbanlens.dashboard.services.nps.parks import (
+                    NPSGateway,
+                    _haversine_km as _nps_haversine,
+                    _parse_lat_long as _nps_parse_lat_long,
+                )
+
+                nps_cache_key = "ul_nps_all_parks"
+                all_parks = django_cache.get(nps_cache_key)
+                if all_parks is None:
+                    nps_gw = NPSGateway()
+                    all_parks = nps_gw.search_parks(limit=500)
+                    django_cache.set(nps_cache_key, all_parks, 86400)
+
+                # Filter cached park list by distance without re-hitting the API.
+                nearby_parks: list[tuple[float, dict]] = []
+                for park in all_parks or []:
+                    park_lat, park_lng = _nps_parse_lat_long(park.get("latLong", ""))
+                    if park_lat is None or park_lng is None:
+                        continue
+                    dist = _nps_haversine(lat, lng, park_lat, park_lng)
+                    if dist <= 100.0:
+                        nearby_parks.append((dist, park))
+                nearby_parks.sort(key=operator.itemgetter(0))
+                for _dist, park in nearby_parks[:20]:
+                    park_lat, park_lng = _nps_parse_lat_long(park.get("latLong", ""))
+                    places.append({
+                        "place_id": f"nps_{park.get('parkCode', '')}",
+                        "name": park.get("fullName", ""),
+                        "lat": park_lat,
+                        "lng": park_lng,
+                        "source": "nps",
+                        "description": park.get("description", ""),
+                        "url": park.get("url", ""),
+                        "types": ["national_park"],
+                        "rating": None,
+                        "vicinity": park.get("states", ""),
+                        "icon": "",
+                    })
+            except Exception as exc:
+                logger.warning("NPS nearby search failed: %s", exc)
+
+        # ── Wikipedia ────────────────────────────────────────────────────────
+        if use_wiki:
+            try:
+                from urbanlens.dashboard.services.wikipedia import WikipediaGateway
+
+                wiki_gw = WikipediaGateway()
+                wiki_places = wiki_gw.get_nearby_articles(lat, lng, radius_m=5000, limit=15)
+                places.extend(wiki_places)
+            except Exception as exc:
+                logger.warning("Wikipedia nearby search failed: %s", exc)
+
         django_cache.set(django_cache_key, places, cache_seconds)
         return JsonResponse({"places": places, "cached": False})
 

@@ -87,6 +87,9 @@ def add_feature_access(request: HttpRequest) -> dict[str, bool]:
     try:
         from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 
-        return {"can_use_ai_features": user_has_feature(request.user, SiteFeature.AI)}
+        return {
+            "can_use_ai_features": user_has_feature(request.user, SiteFeature.AI),
+            "show_places_layer": user_has_feature(request.user, SiteFeature.PLACES),
+        }
     except (ImportError, DatabaseError):
-        return {"can_use_ai_features": False}
+        return {"can_use_ai_features": False, "show_places_layer": False}

@@ -41,7 +41,7 @@
         font-weight: 800;
         line-height: 1.15;
         letter-spacing: -.03em;
-        color: var(--ul-grey-0);
+        color: var(--ul-grey-9);
         margin: 0 0 1rem;
 
         em {
@@ -62,6 +62,10 @@
 
         &--muted {
             background: var(--ul-surface-1, #{$ui-indigo-50});
+
+            .attr-section-title {
+                color: var(--ul-grey-1);
+            }
         }
     }
 
@@ -78,14 +82,14 @@
         font-size: clamp(1.5rem, 2.5vw, 2rem);
         font-weight: 700;
         letter-spacing: -.02em;
-        color: var(--ul-text-primary, #{$ui-indigo-950});
+        color: var(--ul-grey-8);
         margin: 0 0 .85rem;
     }
 
     .attr-section-lead {
         font-size: 1rem;
         line-height: 1.65;
-        color: var(--ul-text-secondary, #{$ui-indigo-700});
+        color: var(--ul-grey-5);
         max-width: 720px;
         margin: 0 0 2rem;
     }
@@ -250,10 +254,6 @@
         padding: 0 0 3.5rem;
     }
 
-    .attr-contributors-section {
-        padding-top: 0;
-    }
-
     .attr-contributors-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
@@ -341,14 +341,13 @@
         font-size: 1rem;
         font-weight: 700;
         margin: 0 0 .35rem;
-        color: var(--ul-text-primary, #{$ui-indigo-950});
     }
 
     .attr-note-body {
         font-size: .92rem;
         line-height: 1.6;
         margin: 0;
-        color: var(--ul-text-secondary, #{$ui-indigo-700});
+        color: var(--ul-grey-5);
 
         a {
             font-weight: 600;

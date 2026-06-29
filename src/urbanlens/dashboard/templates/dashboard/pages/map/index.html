@@ -519,7 +519,7 @@
             <span class="page-footer__attribution-text" id="map-footer-attribution-text"></span>
             <a href="{% url 'thanks' %}" class="page-footer__attribution-more">More info</a>
         </p>
-        <h5 id="github">This project is open source. Check out our <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.</h5>
+        <h5 class="page-footer__github">This project is open source. Check out our <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.</h5>
     </div>
 </footer>
 {% endblock %}
@@ -2261,12 +2261,19 @@
     const _SHOW_PLACES_LAYER = {{ show_places_layer|yesno:"true,false" }};
     let _placesFetchTid = null;
 
+    const _PLACES_SOURCE_ICONS = {
+        nps: { icon: 'park', cls: 'search-result-marker-icon--places-nps' },
+        wikipedia: { icon: 'menu_book', cls: 'search-result-marker-icon--places-wiki' },
+        google: { icon: 'star', cls: 'search-result-marker-icon--places' },
+    };
+
     function _buildPlacesMarker(place) {
         const lat = place.lat, lng = place.lng;
+        const src = _PLACES_SOURCE_ICONS[place.source] || _PLACES_SOURCE_ICONS.google;
         const marker = L.marker([lat, lng], {
             icon: L.divIcon({
                 className: 'search-result-marker-wrap',
-                html: `<i class="material-icons search-result-marker-icon search-result-marker-icon--places">star</i>`,
+                html: `<i class="material-icons search-result-marker-icon ${src.cls}">${src.icon}</i>`,
                 iconSize: [28, 28],
                 iconAnchor: [14, 28],
             }),
@@ -2335,7 +2342,7 @@
         const zoom = map.getZoom();
         if (zoom < _PLACES_MIN_ZOOM) return;
         const center = map.getCenter();
-        const url = `{% url "map.places.nearby" %}?lat=${center.lat.toFixed(5)}&lng=${center.lng.toFixed(5)}&type=historical_landmark`;
+        const url = `{% url "map.places.nearby" %}?lat=${center.lat.toFixed(5)}&lng=${center.lng.toFixed(5)}`;
         try {
             const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!resp.ok) return;
@@ -2364,9 +2371,21 @@
         const titleEl = panel.querySelector('.place-info-title');
         const bodyEl = panel.querySelector('.place-info-body');
         if (titleEl) titleEl.textContent = place.name;
-        if (bodyEl) bodyEl.innerHTML = '<span class="place-info-loading">Loading…</span>';
         panel.removeAttribute('hidden');
         panel.classList.add('is-open');
+
+        // NPS and Wikipedia carry all detail data inline — no extra fetch needed.
+        if (place.source === 'nps' || place.source === 'wikipedia') {
+            const parts = [];
+            if (place.vicinity) parts.push(`<div class="place-info-address"><i class="material-icons">location_on</i> ${place.vicinity}</div>`);
+            if (place.description) parts.push(`<div class="place-info-summary">${place.description}</div>`);
+            if (place.url) parts.push(`<div class="place-info-link"><a href="${place.url}" target="_blank" rel="noopener noreferrer">More information</a></div>`);
+            if (bodyEl) bodyEl.innerHTML = parts.join('') || '<em>No details available.</em>';
+            return;
+        }
+
+        // Google Places — fetch details from the server.
+        if (bodyEl) bodyEl.innerHTML = '<span class="place-info-loading">Loading…</span>';
         try {
             const resp = await fetch(`{% url "map.places.details" %}?place_id=${encodeURIComponent(place.place_id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!resp.ok) throw new Error();
@@ -2376,7 +2395,7 @@
             if (d.formatted_address) parts.push(`<div class="place-info-address"><i class="material-icons">location_on</i> ${d.formatted_address}</div>`);
             if (d.rating) parts.push(`<div class="place-info-rating">Rating: ${d.rating} ★</div>`);
             if (d.editorial_summary?.overview) parts.push(`<div class="place-info-summary">${d.editorial_summary.overview}</div>`);
-            if (d.website) parts.push(`<div class="place-info-link"><a href="${d.website}" target="_blank" rel="noopener">Website</a></div>`);
+            if (d.website) parts.push(`<div class="place-info-link"><a href="${d.website}" target="_blank" rel="noopener noreferrer">Website</a></div>`);
             if (bodyEl) bodyEl.innerHTML = parts.join('') || '<em>No details available.</em>';
         } catch (_) {
             if (bodyEl) bodyEl.innerHTML = '<em>Could not load details.</em>';
@@ -2391,7 +2410,7 @@
             _placesLayerGroup.addTo(map);
             btn?.classList.add('active');
             if (map.getZoom() < _PLACES_MIN_ZOOM) {
-                toastr.info(`Zoom in to level ${_PLACES_MIN_ZOOM}+ to see historical landmarks.`);
+                toastr.info(`Zoom in to level ${_PLACES_MIN_ZOOM}+ to see places.`);
             } else {
                 _fetchAndShowPlaces();
             }

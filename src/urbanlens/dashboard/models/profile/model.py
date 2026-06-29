@@ -205,6 +205,11 @@ class Profile(abstract.Model):
     ai_badge_categories = BooleanField(default=True, help_text="AI can automatically suggest and add categories when a pin is created.")
     ai_badge_statuses = BooleanField(default=True, help_text="AI can automatically suggest and add statuses when a pin is created.")
 
+    # Places layer source preferences (only relevant when the user has the PLACES feature).
+    places_google_enabled = BooleanField(default=True, help_text="Show Google historical landmarks in the Places layer.")
+    places_nps_enabled = BooleanField(default=True, help_text="Show National Park Service locations in the Places layer.")
+    places_wikipedia_enabled = BooleanField(default=True, help_text="Show Wikipedia-linked places in the Places layer.")
+
     user = OneToOneField(
         User,
         on_delete=CASCADE,

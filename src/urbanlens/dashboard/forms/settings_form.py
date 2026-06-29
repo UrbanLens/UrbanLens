@@ -295,6 +295,33 @@ class MapCenterForm(forms.ModelForm):
         return instance
 
 
+class PlacesLayerForm(forms.ModelForm):
+    """Which data sources contribute pins to the Places map layer."""
+
+    places_google_enabled = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Google Historical Landmarks",
+        help_text="Show cultural sites, monuments, and historic locations sourced from Google.",
+    )
+    places_nps_enabled = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="National Park Service",
+        help_text="Show US National Parks and monuments within 100 km of the map center.",
+    )
+    places_wikipedia_enabled = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Wikipedia",
+        help_text="Show Wikipedia-linked places within 5 km of the map center.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["places_google_enabled", "places_nps_enabled", "places_wikipedia_enabled"]
+
+
 class AISettingsForm(forms.ModelForm):
     """AI feature preferences - which badge kinds can be auto-assigned on pin creation."""
 

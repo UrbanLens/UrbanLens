@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 import logging
 import math
+import operator
 from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.services.gateway import Gateway
@@ -80,6 +81,62 @@ class NPSGateway(Gateway):
         except Exception:
             logger.exception("NPS park search failed (query=%r, state=%r)", query, state_code)
             return []
+
+    def get_parks_near_location(
+        self,
+        latitude: float,
+        longitude: float,
+        state_code: str = "",
+        radius_km: float = 100.0,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Return NPS park units within *radius_km* of the given coordinates.
+
+        Fetches parks by *state_code* (if provided) or all parks (capped at
+        500), then filters to those whose centre point falls within the radius.
+        Returns up to *limit* results sorted by distance.
+
+        Args:
+            latitude: Target latitude (WGS-84).
+            longitude: Target longitude (WGS-84).
+            state_code: Optional two-letter US state code to narrow the search.
+            radius_km: Maximum distance to accept a park.
+            limit: Maximum number of parks to return.
+
+        Returns:
+            List of place dicts compatible with the Places layer marker format.
+            Each has: ``place_id``, ``name``, ``lat``, ``lng``, ``source``,
+            ``description``, ``url``, ``types``, ``rating``, ``vicinity``.
+        """
+        parks = self.search_parks(state_code=state_code, limit=500)
+
+        nearby: list[tuple[float, dict]] = []
+        for park in parks:
+            park_lat, park_lng = _parse_lat_long(park.get("latLong", ""))
+            if park_lat is None or park_lng is None:
+                continue
+            dist = _haversine_km(latitude, longitude, park_lat, park_lng)
+            if dist <= radius_km:
+                nearby.append((dist, park))
+
+        nearby.sort(key=operator.itemgetter(0))
+
+        places = []
+        for _dist, park in nearby[:limit]:
+            park_lat, park_lng = _parse_lat_long(park.get("latLong", ""))
+            places.append({
+                "place_id": f"nps_{park.get('parkCode', '')}",
+                "name": park.get("fullName", ""),
+                "lat": park_lat,
+                "lng": park_lng,
+                "source": "nps",
+                "description": park.get("description", ""),
+                "url": park.get("url", ""),
+                "types": ["national_park"],
+                "rating": None,
+                "vicinity": park.get("states", ""),
+            })
+        return places
 
     def find_park_near_location(
         self,

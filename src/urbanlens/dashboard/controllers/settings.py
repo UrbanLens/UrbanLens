@@ -17,6 +17,7 @@ from urbanlens.dashboard.forms.settings_form import (
     MapCenterForm,
     MapDisplayForm,
     MarkupDefaultsForm,
+    PlacesLayerForm,
     PrivacySettingsForm,
     StyleSettingsForm,
 )
@@ -78,6 +79,7 @@ class SettingsView(LoginRequiredMixin, View):
             "style_form": StyleSettingsForm(instance=profile),
             "map_display_form": MapDisplayForm(instance=profile),
             "map_center_form": MapCenterForm(instance=profile),
+            "places_layer_form": PlacesLayerForm(instance=profile),
             "markup_defaults_form": MarkupDefaultsForm(instance=profile),
             "ai_form": AISettingsForm(instance=profile),
             "preview_zoom": profile.map_default_zoom or 13,
@@ -96,10 +98,19 @@ class SettingsView(LoginRequiredMixin, View):
         style_form = StyleSettingsForm(instance=profile)
         map_display_form = MapDisplayForm(instance=profile)
         map_center_form = MapCenterForm(instance=profile)
+        places_layer_form = PlacesLayerForm(instance=profile)
         markup_defaults_form = MarkupDefaultsForm(instance=profile)
         ai_form = AISettingsForm(instance=profile)
 
-        if section == "ai":
+        if section == "places_layer":
+            if user_has_feature(request.user, SiteFeature.PLACES):
+                places_layer_form = PlacesLayerForm(request.POST, instance=profile)
+                if places_layer_form.is_valid():
+                    places_layer_form.save()
+                    messages.success(request, "Places layer sources saved.")
+                    return redirect("settings.view")
+
+        elif section == "ai":
 
             if user_has_feature(request.user, SiteFeature.AI):
                 ai_form = AISettingsForm(request.POST, instance=profile)
@@ -152,6 +163,7 @@ class SettingsView(LoginRequiredMixin, View):
             "style_form": style_form,
             "map_display_form": map_display_form,
             "map_center_form": map_center_form,
+            "places_layer_form": places_layer_form,
             "markup_defaults_form": markup_defaults_form,
             "ai_form": ai_form,
             "preview_zoom": profile.map_default_zoom or 13,

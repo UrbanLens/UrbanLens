@@ -2118,6 +2118,18 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .55));
 }
 
+.search-result-marker-icon--places-nps {
+    font-size: 26px;
+    color: #4caf50;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .55));
+}
+
+.search-result-marker-icon--places-wiki {
+    font-size: 26px;
+    color: #42a5f5;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .55));
+}
+
 .map-layer-thumb--icon {
     display: flex;
     align-items: center;

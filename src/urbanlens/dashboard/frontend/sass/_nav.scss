@@ -341,12 +341,13 @@ footer,
         font-size: 0.6rem;
     }
 
-    #github {
-        float: right;
-        margin-right: 1rem;
+    &__github {
+        float: none;
+        margin: 0;
+        line-height: 1.35;
     }
 
-    .page-footer__version {
+    &__version {
         float: left;
         margin-left: 1rem;
         font-size: 0.72rem;
@@ -356,64 +357,60 @@ footer,
         opacity: 0.2;
         user-select: none;
     }
-}
 
-// Map page: attribution in footer instead of Leaflet overlay
-.page-footer--map {
-    height: auto;
-    min-height: 4rem;
-    line-height: 1.35;
-    padding: 0.35rem 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-
-    .page-footer__version {
-        float: none;
-        flex-shrink: 0;
-    }
-
-    .page-footer__meta {
-        flex: 1;
-        min-width: 0;
-        margin-right: 1rem;
-        text-align: right;
-    }
-
-    .page-footer__attribution {
-        margin: 0 0 0.1rem;
-        padding: 0;
-        font-size: 0.58rem;
+    &--map {
+        height: auto;
+        min-height: 4rem;
         line-height: 1.35;
-        color: var(--ul-grey-4);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
+        padding: 0.35rem 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
 
-    .page-footer__attribution-more {
-        margin-left: 0.35rem;
-        font-weight: 600;
-        white-space: nowrap;
+        // Nested .page-footer element
+        .page-footer {
+            &__version,
+            &__meta,
+            &__attribution
+            &__github {
+                font-size: 0.75rem;
+            }
+            
+            &__version {
+                float: none;
+                flex-shrink: 0;
+            }
 
-        &::before {
-            content: '·';
-            margin-right: 0.35rem;
-            font-weight: 400;
-            opacity: 0.65;
-        }
-    }
+            &__meta {
+                flex: 1;
+                min-width: 0;
+                margin-right: 1rem;
+                text-align: right;
+            }
 
-    #github {
-        float: none;
-        margin: 0;
-        line-height: 1.35;
-    }
+            &__attribution {
+                margin: 0 0 0.1rem;
+                padding: 0;
+                line-height: 1.35;
+                color: var(--ul-grey-4);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
 
-    @include up($breakpoint-sm) {
-        .page-footer__attribution {
-            font-size: 0.65rem;
+                &-more {
+                    margin-left: 0.35rem;
+                    font-weight: 600;
+                    white-space: nowrap;
+
+                    &::before {
+                        content: '·';
+                        margin-right: 0.35rem;
+                        font-weight: 400;
+                        opacity: 0.65;
+                    }
+                }
+            }
         }
     }
 }

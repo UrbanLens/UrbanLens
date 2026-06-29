@@ -31,6 +31,66 @@ class WikipediaGateway(Gateway):
     def __post_init__(self) -> None:
         self.session.headers.update({"User-Agent": _USER_AGENT})
 
+    def get_nearby_articles(
+        self,
+        latitude: float,
+        longitude: float,
+        radius_m: int = 5000,
+        limit: int = 15,
+    ) -> list[dict[str, Any]]:
+        """Return Wikipedia articles near the given coordinates as place dicts.
+
+        Unlike ``get_article_for_location``, this method skips address verification
+        and is intended for map-layer use where quantity and proximity matter more
+        than exact address matching.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_m: Search radius in metres (max 10 000 per Wikipedia API).
+            limit: Maximum articles to return.
+
+        Returns:
+            List of place dicts compatible with the Places layer marker format.
+            Each has: ``place_id``, ``name``, ``lat``, ``lng``, ``source``,
+            ``description``, ``url``, ``types``, ``rating``, ``vicinity``.
+        """
+        params = {
+            "action": "query",
+            "list": "geosearch",
+            "gscoord": f"{latitude}|{longitude}",
+            "gsradius": min(radius_m, 10_000),
+            "gslimit": limit,
+            "format": "json",
+        }
+        try:
+            resp = self.session.get(self.base_url, params=params, timeout=10)
+            resp.raise_for_status()
+            results = resp.json().get("query", {}).get("geosearch", [])
+        except Exception:
+            logger.exception("Wikipedia nearby search failed for %s,%s", latitude, longitude)
+            return []
+
+        places = []
+        for item in results:
+            title = item.get("title", "")
+            page_id = item.get("pageid")
+            if not title or page_id is None:
+                continue
+            places.append({
+                "place_id": f"wiki_{page_id}",
+                "name": title,
+                "lat": item.get("lat"),
+                "lng": item.get("lon"),
+                "source": "wikipedia",
+                "description": "",
+                "url": f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                "types": ["wikipedia"],
+                "rating": None,
+                "vicinity": "",
+            })
+        return places
+
     def get_article_for_location(
         self,
         latitude: float,

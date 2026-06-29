@@ -376,6 +376,67 @@
         </form>
     </section>
 
+    {# ── Places Layer Sources ────────────────────────────────────────────── #}
+    {% if show_places_layer %}
+    <section class="settings-section ul-section" id="places-layer-settings-section">
+        <div class="settings-section-header">
+            <i class="material-icons">place</i>
+            <div>
+                <h2 class="settings-section-title">Places Layer</h2>
+                <p class="settings-section-desc">Choose which data sources appear in the Places layer on the map.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="places-layer-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="places_layer">
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ places_layer_form.places_google_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ places_layer_form.places_google_enabled.label }}</strong>
+                        <span class="settings-help">{{ places_layer_form.places_google_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if places_layer_form.places_google_enabled.errors %}
+                <p class="settings-error">{{ places_layer_form.places_google_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ places_layer_form.places_nps_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ places_layer_form.places_nps_enabled.label }}</strong>
+                        <span class="settings-help">{{ places_layer_form.places_nps_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if places_layer_form.places_nps_enabled.errors %}
+                <p class="settings-error">{{ places_layer_form.places_nps_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ places_layer_form.places_wikipedia_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ places_layer_form.places_wikipedia_enabled.label }}</strong>
+                        <span class="settings-help">{{ places_layer_form.places_wikipedia_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if places_layer_form.places_wikipedia_enabled.errors %}
+                <p class="settings-error">{{ places_layer_form.places_wikipedia_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+    {% endif %}
+
     {# ── Pin Detail Defaults ─────────────────────────────────────────────── #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
