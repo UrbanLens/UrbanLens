@@ -509,6 +509,20 @@
 <div id="importPinsModal"></div>
 {% endblock %}
 
+{% block footer %}
+<footer class="page-footer page-footer--map">
+    {% if app_version %}
+    <span class="page-footer__version" aria-label="Application version">UrbanLens v{{ app_version }}</span>
+    {% endif %}
+    <div class="page-footer__meta">
+        <p class="page-footer__attribution" id="map-footer-attribution" aria-live="polite">
+            <span class="page-footer__attribution-text" id="map-footer-attribution-text"></span>
+            <a href="{% url 'thanks' %}" class="page-footer__attribution-more">More info</a>
+        </p>
+        <h5 id="github">This project is open source. Check out our <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.</h5>
+    </div>
+</footer>
+{% endblock %}
 
 {% block scripts %}
 <script>
@@ -676,7 +690,7 @@
     });
 
     // minZoom: prevent zooming out past the point where the world-tile fills the container
-    const map = L.map('map', { maxZoom: 19, minZoom: 2 }).setView(_initialCenter, _initialZoom);
+    const map = L.map('map', { maxZoom: 19, minZoom: 2, attributionControl: false }).setView(_initialCenter, _initialZoom);
     // Dedicated pane for topo tiles so the invert filter never touches satellite or street.
     map.createPane('topoPane');
     map.getPane('topoPane').style.zIndex = 401;
@@ -1722,6 +1736,32 @@
     if (_MAP_DARK_MODE === 'system') {
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', _syncBaseLayer);
     }
+
+    // ── Footer attribution (replaces Leaflet's on-map control) ────────────────
+    function _updateFooterAttribution() {
+        const el = document.getElementById('map-footer-attribution-text');
+        if (!el) return;
+        const parts = [];
+        if (map.hasLayer(satelliteLayer)) {
+            parts.push('© Esri');
+        } else if (map.hasLayer(topographyLayer)) {
+            parts.push('© OpenTopoMap');
+        } else if (map.hasLayer(darkLayer)) {
+            parts.push('© OSM · CARTO');
+        } else {
+            parts.push('© OpenStreetMap');
+        }
+        if (map.hasLayer(rainLayer) || map.hasLayer(cloudLayer)) {
+            parts.push('© OpenWeatherMap');
+        }
+        if (map.hasLayer(boundariesLayer) && !map.hasLayer(satelliteLayer)) {
+            parts.push('© Esri');
+        }
+        parts.push('Leaflet');
+        el.textContent = parts.join(' · ');
+    }
+
+    map.on('layeradd layerremove', _updateFooterAttribution);
 
     // Dev toolbar: apply map dark mode without a full page reload.
     window.applyMapDarkMode = function (mode) {

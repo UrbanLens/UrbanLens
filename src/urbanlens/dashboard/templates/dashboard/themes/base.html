@@ -37,7 +37,9 @@
     <div class="container">
         {% block content %}{% endblock %}
     </div>
+    {% block footer %}
     {% include 'dashboard/partials/footer.html' %}
+    {% endblock %}
 
     {% if show_dev_toolbar %}
     {% include 'dashboard/partials/_dev_toolbar.html' %}

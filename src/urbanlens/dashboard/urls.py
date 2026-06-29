@@ -28,6 +28,7 @@ from urbanlens.dashboard.controllers import (
     settings,
     setup,
     site_admin,
+    thanks,
     tools,
     trip,
     userprofile,
@@ -80,6 +81,7 @@ urlpatterns = [
         ),
         name="about",
     ),
+    path("thanks/", thanks.ThanksView.as_view(), name="thanks"),
     path(
         "map/",
         include(

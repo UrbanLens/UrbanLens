@@ -1,0 +1,291 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block page_title %}Thanks &amp; Credits - {{ site_title|default:"UrbanLens" }}{% endblock %}
+
+{% block content %}
+
+<section class="attr-hero">
+    <div class="attr-hero-inner">
+        <p class="attr-eyebrow">Credits &amp; acknowledgements</p>
+        <h1 class="attr-title">Standing on the shoulders<br><em>of open data &amp; open source.</em></h1>
+        <p class="attr-subtitle">
+            UrbanLens is built from community-maintained maps, geospatial datasets, and free software.
+            This page lists the projects and providers whose work makes the platform possible.
+        </p>
+    </div>
+</section>
+
+<section class="attr-section">
+    <div class="attr-section-inner">
+        <div class="attr-section-label">Map tiles &amp; geospatial data</div>
+        <h2 class="attr-section-title">What you see on the map</h2>
+        <p class="attr-section-lead">
+            Base layers and overlays on the main map draw from the sources below. Attribution
+            shown will vary by layer; the map footer shows credits for whichever layers are active.
+        </p>
+
+        <div class="attr-card-grid">
+            <article class="attr-card">
+                <div class="attr-card-icon"><i class="material-icons">map</i></div>
+                <h3 class="attr-card-title"><a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer" target="_blank">OpenStreetMap</a></h3>
+                <p class="attr-card-body">
+                    Community-maintained street map data used for the default street base layer and
+                    many location features. © OpenStreetMap contributors, available under the
+                    <a href="https://opendatacommons.org/licenses/odbl/" rel="noopener noreferrer" target="_blank">Open Database License (ODbL)</a>.
+                </p>
+            </article>
+
+            <article class="attr-card">
+                <div class="attr-card-icon"><i class="material-icons">terrain</i></div>
+                <h3 class="attr-card-title"><a href="https://opentopomap.org/" rel="noopener noreferrer" target="_blank">OpenTopoMap</a></h3>
+                <p class="attr-card-body">
+                    Topographic hillshade and contour tiles built from SRTM elevation data and
+                    OpenStreetMap. Map style © OpenTopoMap (CC-BY-SA); elevation data ©
+                    <a href="https://www2.jpl.nasa.gov/srtm/" rel="noopener noreferrer" target="_blank">SRTM</a>.
+                </p>
+            </article>
+
+            <article class="attr-card">
+                <div class="attr-card-icon"><i class="material-icons">satellite_alt</i></div>
+                <h3 class="attr-card-title"><a href="https://www.esri.com/" rel="noopener noreferrer" target="_blank">Esri</a></h3>
+                <p class="attr-card-body">
+                    Satellite imagery and geopolitical boundary reference layers. Tiles © Esri —
+                    sources include Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid,
+                    IGN, IGP, UPR-EGP, and the GIS User Community.
+                </p>
+            </article>
+
+            <article class="attr-card">
+                <div class="attr-card-icon"><i class="material-icons">dark_mode</i></div>
+                <h3 class="attr-card-title"><a href="https://carto.com/attributions" rel="noopener noreferrer" target="_blank">CARTO</a></h3>
+                <p class="attr-card-body">
+                    Dark Matter basemap tiles used when map dark mode is active on street and
+                    terrain views. © OpenStreetMap contributors ©
+                    <a href="https://carto.com/" rel="noopener noreferrer" target="_blank">CARTO</a>.
+                </p>
+            </article>
+
+            <article class="attr-card">
+                <div class="attr-card-icon"><i class="material-icons">cloud</i></div>
+                <h3 class="attr-card-title"><a href="https://openweathermap.org/" rel="noopener noreferrer" target="_blank">OpenWeatherMap</a></h3>
+                <p class="attr-card-body">
+                    Precipitation and cloud overlay tiles on the optional weather layer.
+                    Map data © OpenWeatherMap, subject to their
+                    <a href="https://openweathermap.org/terms" rel="noopener noreferrer" target="_blank">terms of use</a>.
+                </p>
+            </article>
+
+            <article class="attr-card">
+                <div class="attr-card-icon"><i class="material-icons">public</i></div>
+                <h3 class="attr-card-title"><a href="https://nominatim.org/" rel="noopener noreferrer" target="_blank">Nominatim / OpenStreetMap</a></h3>
+                <p class="attr-card-body">
+                    Reverse geocoding and address lookup via the Nominatim service, operated by
+                    OpenStreetMap contributors under the ODbL.
+                </p>
+            </article>
+        </div>
+    </div>
+</section>
+
+<section class="attr-section attr-section--muted">
+    <div class="attr-section-inner">
+        <div class="attr-section-label">Mapping libraries</div>
+        <h2 class="attr-section-title">Interactive map engine</h2>
+
+        <div class="attr-list">
+            <div class="attr-list-item">
+                <div class="attr-list-main">
+                    <h3><a href="https://leafletjs.com/" rel="noopener noreferrer" target="_blank">Leaflet</a></h3>
+                    <p>Open-source JavaScript library for mobile-friendly interactive maps (BSD-2-Clause).</p>
+                </div>
+                <span class="attr-list-tag">Maps</span>
+            </div>
+            <div class="attr-list-item">
+                <div class="attr-list-main">
+                    <h3><a href="https://github.com/Leaflet/Leaflet.markercluster" rel="noopener noreferrer" target="_blank">Leaflet.markercluster</a></h3>
+                    <p>Marker clustering plugin for grouping nearby pins at lower zoom levels (MIT).</p>
+                </div>
+                <span class="attr-list-tag">Maps</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="attr-section">
+    <div class="attr-section-inner">
+        <div class="attr-section-label">External data &amp; APIs</div>
+        <h2 class="attr-section-title">Enriched location information</h2>
+        <p class="attr-section-lead">
+            Pin and location pages may fetch supplementary data from third-party services.
+        </p>
+
+        <div class="attr-list">
+            <div class="attr-list-item">
+                <div class="attr-list-main">
+                    <h3><a href="https://developers.google.com/maps" rel="noopener noreferrer" target="_blank">Google Maps Platform</a></h3>
+                    <p>Places, geocoding, Street View imagery, and related location services where enabled.</p>
+                </div>
+                <span class="attr-list-tag">Places</span>
+            </div>
+            <div class="attr-list-item">
+                <div class="attr-list-main">
+                    <h3><a href="https://www.wikipedia.org/" rel="noopener noreferrer" target="_blank">Wikipedia / Wikimedia</a></h3>
+                    <p>Encyclopedia summaries and freely licensed media from Wikimedia Commons.</p>
+                </div>
+                <span class="attr-list-tag">Reference</span>
+            </div>
+            <div class="attr-list-item">
+                <div class="attr-list-main">
+                    <h3><a href="https://www.si.edu/" rel="noopener noreferrer" target="_blank">Smithsonian Institution</a></h3>
+                    <p>Historical photographs and collection records from Smithsonian open-access APIs.</p>
+                </div>
+                <span class="attr-list-tag">Archive</span>
+            </div>
+            <div class="attr-list-item">
+                <div class="attr-list-main">
+                    <h3><a href="https://www.nps.gov/subjects/digital/nps-data-api.htm" rel="noopener noreferrer" target="_blank">U.S. National Park Service</a></h3>
+                    <p>Park information and points of interest from NPS public data APIs.</p>
+                </div>
+                <span class="attr-list-tag">Parks</span>
+            </div>
+            <div class="attr-list-item">
+                <div class="attr-list-main">
+                    <h3><a href="https://openai.com/" rel="noopener noreferrer" target="_blank">OpenAI</a></h3>
+                    <p>
+                        The <a href="https://github.com/openai/openai-python" rel="noopener noreferrer" target="_blank">openai</a>
+                        Python client library powers our OpenAI-compatible API calls. We are not currently using
+                        OpenAI&rsquo;s GPT models, though we may enable them in the future.
+                    </p>
+                </div>
+                <span class="attr-list-tag">AI</span>
+            </div>
+            <div class="attr-list-item">
+                <div class="attr-list-main">
+                    <h3><a href="https://developers.cloudflare.com/workers-ai/" rel="noopener noreferrer" target="_blank">Cloudflare Workers AI</a></h3>
+                    <p>
+                        Optional AI-assisted features are routed through Cloudflare Workers AI.
+                    </p>
+                </div>
+                <span class="attr-list-tag">AI</span>
+            </div>
+            <div class="attr-list-item">
+                <div class="attr-list-main">
+                    <h3><a href="https://mistral.ai/" rel="noopener noreferrer" target="_blank">Mistral AI</a></h3>
+                    <p>
+                        The Mistral 7B Instruct model powers several AI-assisted features, hosted via
+                        Cloudflare Workers AI.
+                    </p>
+                </div>
+                <span class="attr-list-tag">AI</span>
+            </div>
+            <div class="attr-list-item">
+                <div class="attr-list-main">
+                    <h3><a href="https://www.anthropic.com/" rel="noopener noreferrer" target="_blank">Anthropic Claude</a></h3>
+                    <p>Claude models are also used for AI-assisted features where enabled by site settings.</p>
+                </div>
+                <span class="attr-list-tag">AI</span>
+            </div>
+            <div class="attr-list-item">
+                <div class="attr-list-main">
+                    <h3><a href="https://brave.com/search/api/" rel="noopener noreferrer" target="_blank">Brave Search</a></h3>
+                    <p>Web search results surfaced on pin detail pages when configured.</p>
+                </div>
+                <span class="attr-list-tag">Search</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="attr-section attr-section--muted">
+    <div class="attr-section-inner">
+        <div class="attr-section-label">Platform &amp; frontend</div>
+        <h2 class="attr-section-title">Software that runs UrbanLens</h2>
+
+        <div class="attr-chip-grid">
+            <a class="attr-chip" href="https://www.djangoproject.com/" rel="noopener noreferrer" target="_blank">Django</a>
+            <a class="attr-chip" href="https://www.django-rest-framework.org/" rel="noopener noreferrer" target="_blank">Django REST Framework</a>
+            <a class="attr-chip" href="https://channels.readthedocs.io/" rel="noopener noreferrer" target="_blank">Django Channels</a>
+            <a class="attr-chip" href="https://postgis.net/" rel="noopener noreferrer" target="_blank">PostGIS</a>
+            <a class="attr-chip" href="https://www.postgresql.org/" rel="noopener noreferrer" target="_blank">PostgreSQL</a>
+            <a class="attr-chip" href="https://gdal.org/" rel="noopener noreferrer" target="_blank">GDAL</a>
+            <a class="attr-chip" href="https://docs.celeryq.dev/" rel="noopener noreferrer" target="_blank">Celery</a>
+            <a class="attr-chip" href="https://valkey.io/" rel="noopener noreferrer" target="_blank">Valkey</a>
+            <a class="attr-chip" href="https://geopy.readthedocs.io/" rel="noopener noreferrer" target="_blank">GeoPy</a>
+            <a class="attr-chip" href="https://geopandas.org/" rel="noopener noreferrer" target="_blank">GeoPandas</a>
+            <a class="attr-chip" href="https://shapely.readthedocs.io/" rel="noopener noreferrer" target="_blank">Shapely</a>
+            <a class="attr-chip" href="https://pillow.readthedocs.io/" rel="noopener noreferrer" target="_blank">Pillow</a>
+            <a class="attr-chip" href="https://htmx.org/" rel="noopener noreferrer" target="_blank">HTMX</a>
+            <a class="attr-chip" href="https://bun.sh/" rel="noopener noreferrer" target="_blank">Bun</a>
+            <a class="attr-chip" href="https://nginx.org/" rel="noopener noreferrer" target="_blank">nginx</a>
+            <a class="attr-chip" href="https://gunicorn.org/" rel="noopener noreferrer" target="_blank">Gunicorn</a>
+        </div>
+
+        <h3 class="attr-subheading">Icons, fonts &amp; UI assets</h3>
+        <div class="attr-chip-grid">
+            <a class="attr-chip" href="https://fonts.google.com/icons" rel="noopener noreferrer" target="_blank">Material Icons</a>
+            <a class="attr-chip" href="https://materializecss.com/" rel="noopener noreferrer" target="_blank">Materialize CSS</a>
+            <a class="attr-chip" href="https://fontawesome.com/" rel="noopener noreferrer" target="_blank">Font Awesome</a>
+            <a class="attr-chip" href="https://fonts.google.com/" rel="noopener noreferrer" target="_blank">Google Fonts</a>
+            <a class="attr-chip" href="https://jquery.com/" rel="noopener noreferrer" target="_blank">jQuery</a>
+            <a class="attr-chip" href="https://github.com/CodeSeven/toastr" rel="noopener noreferrer" target="_blank">Toastr</a>
+        </div>
+    </div>
+</section>
+
+<section class="attr-section attr-contributors-section">
+    <div class="attr-section-inner">
+        <div class="attr-section-label">Community</div>
+        <h2 class="attr-section-title">GitHub contributors</h2>
+        <p class="attr-section-lead">
+            UrbanLens is open source. These people have contributed code in the
+            <a href="{{ github_repo_url }}" rel="noopener noreferrer" target="_blank">{{ github_repo_url|cut:"https://"|cut:"http://" }}</a>
+            repository. New contributors will be added to this list automatically.
+        </p>
+
+        {% if github_contributors %}
+        <ul class="attr-contributors-grid">
+            {% for contributor in github_contributors %}
+            <li class="attr-contributor-card">
+                <a href="{{ contributor.profile_url }}" class="attr-contributor-link" rel="noopener noreferrer" target="_blank">
+                    <img
+                        class="attr-contributor-avatar"
+                        src="{{ contributor.avatar_url }}"
+                        alt="{{ contributor.login }}"
+                        width="72"
+                        height="72"
+                        loading="lazy"
+                        decoding="async">
+                    <span class="attr-contributor-login">{{ contributor.login }}</span>
+                    <span class="attr-contributor-count">
+                        {{ contributor.contributions }} commit{{ contributor.contributions|pluralize }}
+                    </span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="attr-contributors-empty">
+            Contributor data is temporarily unavailable.
+            Visit the <a href="{{ github_repo_url }}" rel="noopener noreferrer" target="_blank">GitHub repository</a> directly.
+        </p>
+        {% endif %}
+    </div>
+</section>
+
+<section class="attr-note-section">
+    <div class="attr-section-inner">
+        <div class="attr-note">
+            <i class="material-icons attr-note-icon" aria-hidden="true">info</i>
+            <div>
+                <h2 class="attr-note-title">Corrections welcome</h2>
+                <p class="attr-note-body">
+                    If we have missed a required attribution or misstated a license, please
+                    <a href="https://github.com/UrbanLens/UrbanLens/issues" rel="noopener noreferrer" target="_blank">open an issue on GitHub</a>
+                    so we can fix it promptly.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
