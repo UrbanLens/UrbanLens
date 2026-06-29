@@ -326,7 +326,7 @@
     box-shadow: 3px 3px 10px rgba(0,0,0,.08);
 
     .card-header {
-        @include panel-header($bg: var(--ul-grey-1));
+        @include panel-header;
         border-radius: $radius-sm $radius-sm 0 0;
 
         .material-icons {

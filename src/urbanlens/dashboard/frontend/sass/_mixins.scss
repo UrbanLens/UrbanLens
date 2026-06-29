@@ -231,22 +231,20 @@
 
 // Header bar shared by cards, panels, and dialogs.
 // Pass $spread: true when actions should pin to opposite edges.
-@mixin panel-header($font-size: .95rem, $bg: null, $spread: false) {
+@mixin panel-header($spread: false) {
 	display: flex;
 	align-items: center;
 	gap: $space-sm;
 	padding: $bar-padding-y $bar-padding-x;
 	border-bottom: 1px solid var(--ul-grey-1a);
 	font-weight: 600;
-	font-size: $font-size;
+	font-size: 1rem;
 	flex-shrink: 0;
+	background-color: var(--ul-grey-1a);
+	color: var(--ul-grey-8);
 
 	@if $spread {
 		justify-content: space-between;
-	}
-
-	@if $bg {
-		background: $bg;
 	}
 }
 

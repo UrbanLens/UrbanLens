@@ -385,6 +385,7 @@ def _parse_bulk_payload(data: dict) -> dict:
         "description": data.get("description", ""),
         "order": _safe_int(data.get("order"), 0),
         "add_parent_ids": [int(x) for x in data.get("add_parent_ids", [])],
+        "add_child_ids": [int(x) for x in data.get("add_child_ids", [])],
     }
 
 
@@ -506,7 +507,14 @@ class BadgeCreateView(_BadgeKindMixin, LoginRequiredMixin, View):
             custom_icon=custom_icon,
             order=order,
         )
-        if parent_ids:
+        rel_type = request.POST.get("rel_type", "parent")
+        if rel_type == "child":
+            child_ids = request.POST.getlist("child_ids")
+            if child_ids:
+                valid_children = _parent_candidates(profile, self.kind).filter(id__in=child_ids).exclude(id=badge.id)
+                for child in valid_children:
+                    child.parents.add(badge)
+        elif parent_ids:
             valid_parents = _parent_candidates(profile, self.kind).filter(id__in=parent_ids).exclude(id=badge.id)
             badge.parents.set(valid_parents)
 
@@ -534,9 +542,10 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
 
         profile = _request_profile(request)
         parent_ids = set(badge.parents.values_list("id", flat=True))
+        child_ids = set(badge.children.values_list("id", flat=True))
         available_parents = _selected_parents_first(
             _parent_candidates(profile, self.kind, badge_id),
-            parent_ids,
+            parent_ids | child_ids,
         )
 
         return render(
@@ -550,6 +559,7 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
                 "singular_title": cfg.singular_title,
                 "available_parents": available_parents,
                 "parent_ids": parent_ids,
+                "child_ids": child_ids,
                 "is_global": badge.kind == KIND_TAG and badge.profile is None,
                 "show_kind_toggle": cfg.show_kind_toggle,
                 "can_use_ai_features": user_has_feature(request.user, SiteFeature.AI),
@@ -596,12 +606,15 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
         if kind_changed:
             badge.parents.clear()
         else:
-            parent_ids = request.POST.getlist("parent_ids")
-            if parent_ids:
+            rel_type = request.POST.get("rel_type", "parent")
+            if rel_type == "child":
+                child_ids = request.POST.getlist("child_ids")
+                valid_children = _parent_candidates(profile, self.kind).filter(id__in=child_ids).exclude(id=badge_id)
+                badge.children.set(valid_children)
+            else:
+                parent_ids = request.POST.getlist("parent_ids")
                 valid_parents = _parent_candidates(profile, self.kind).filter(id__in=parent_ids).exclude(id=badge_id)
                 badge.parents.set(valid_parents)
-            else:
-                badge.parents.clear()
 
         response = _render_rows(request, self.kind, profile)
         if kind_changed:
@@ -808,6 +821,11 @@ class BadgeBulkEditView(_BadgeKindMixin, LoginRequiredMixin, View):
             for badge in badges:
                 badge.parents.add(*[p for p in valid_parents if p.id != badge.id])
 
+        if payload["add_child_ids"]:
+            valid_children = list(Badge.objects.visible_to(profile).filter(id__in=payload["add_child_ids"]))
+            for child in valid_children:
+                child.parents.add(*[b for b in badges if b.id != child.id])
+
         return _render_rows(request, self.kind, profile)
 
 
@@ -864,6 +882,11 @@ class BadgeBulkConvertView(_BadgeKindMixin, LoginRequiredMixin, View):
             badge.save()
             if valid_parents:
                 badge.parents.add(*[p for p in valid_parents if p.id != badge.id])
+
+        if payload["add_child_ids"]:
+            valid_children = list(Badge.objects.visible_to(profile).filter(id__in=payload["add_child_ids"]))
+            for child in valid_children:
+                child.parents.add(*[b for b in badges if b.id != child.id])
 
         return _render_rows(request, self.kind, profile)
 

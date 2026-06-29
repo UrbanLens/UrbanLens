@@ -496,7 +496,6 @@ nav .brand-logo img {
         @include panel-header($spread: true);
         padding: .85rem 1rem .65rem;
         border-bottom: 1px solid var(--ul-grey-1a);
-        background: var(--ul-grey-0);
         position: sticky;
         top: 0;
         z-index: 1;

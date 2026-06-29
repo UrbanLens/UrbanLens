@@ -517,7 +517,24 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// Parent tag selector
+// Parent / child relationship selector
+.badge-rel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-bottom: .35rem;
+
+    .form-label {
+        margin-bottom: 0;
+    }
+
+    .badge-rel-toggle {
+        margin-top: 0;
+    }
+}
+
 .tag-parent-select {
     display: flex;
     flex-wrap: wrap;

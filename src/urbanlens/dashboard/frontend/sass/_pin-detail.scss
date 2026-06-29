@@ -855,10 +855,6 @@
     }
 }
 
-.panel-header {
-    background: var(--ul-grey-0);
-}
-
 // ── Pin details card theming (pin overview / location details page) ────────
 body.page-location-details {
     .location-details.card {
@@ -1560,9 +1556,7 @@ body.page-location-details {
 
     // Map section: slate
     .location-map.card .card-header {
-        @extend .panel-header;
-        background: var(--ul-grey-0);
-        color: var(--ul-grey-8);
+        @include panel-header;
         border-bottom-color: var(--ul-grey-2);
 
         .material-icons {

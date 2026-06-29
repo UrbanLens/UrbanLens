@@ -20,7 +20,8 @@
 }
 
 .ul-card-header {
-	@include panel-header($bg: var(--ul-grey-1a));
+	@include panel-header;
+	background-color: var(--ul-grey-1a);
 	color: var(--ul-grey-8);
 
 	.material-icons {
@@ -160,8 +161,8 @@
 }
 
 .ul-panel-header {
-	@include panel-header($font-size: .9rem, $bg: var(--ul-grey-1a));
-	color: var(--ul-grey-8);
+	@include panel-header;
+	font-size: 0.9rem;
 
 	i,
 	.material-icons {
