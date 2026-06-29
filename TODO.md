@@ -26,12 +26,12 @@ Features planned for this release.
 * Run bandit and AI vulnerability scans; integrate with CI/CD. [UL-31]
 
 ## Bug Fixes
-* When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]
+* ~~When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]~~
 * During import pins, checking "create badge", the badge is created, but the pins aren't added to it. (They are added to already existing badges you select, though) [UL-150]
 * UI Bug: Multi-select toolbar in dark mode [UL-151]
-* When changing a category to a tag, the tag is visually shown twice in the list until page refresh. [UL-152]
-* Organize > Categories Tab -> Merge button is missing from rows. [UL-153]
-* Organize > Categories Tab -> Edit / merge / delete button should be hidden when not in hover [UL-154]
+* ~~When changing a category to a tag, the tag is visually shown twice in the list until page refresh. [UL-152]~~
+* ~~Organize > Categories Tab -> Merge button is missing from rows. [UL-153]~~
+* ~~Organize > Categories Tab -> Edit / merge / delete button should be hidden when not in hover [UL-154]~~
 * ~~On pin details page, add badge dialog, the search bar doesn't work. [UL-195]~~
 * Organize Page: Occasionally, after editing or merging badges, the edit button for other rows no longer opens the edit dialog. I'm not sure exactly what circumstances this happens. [UL-197]
 * Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]
@@ -41,14 +41,14 @@ Features planned for this release.
 * Organize: Bulk edit button doesn't open dialog.
 * When filtering the map by rating, I saw a single pin without a rating.
 * I somehow got myself into a filter being active that I couldn't identify?
-* When right clicking on the search sidebar, the context menu for the map opens.
-* From badge filtering, you can't drag from "exclude"
-* When the filter formula is too long, you can't see the whole formula.
+* ~~When right clicking on the search sidebar, the context menu for the map opens.~~
+* ~~From badge filtering, you can't drag from "exclude"~~
+* ~~When the filter formula is too long, you can't see the whole formula.~~
 * When clearing a formula, it doesn't trigger a pin refresh.
 * Quickly switching between map layers sometimes is weird. Foggy sat view, etc. (Foggy may have just been loading indicator??)
 * After going to a suggested jump to point, clicking the temporary marker to create a pin, and submitting, the new pin doesn't show up on the map without a refresh. (maybe this was due to latency, which is a separate TODO item?)
 * Pin details page: Plus buttons don't look good again.
-* On main map, we need confirmation before allowing deleting a pin.
+* ~~On main map, we need confirmation before allowing deleting a pin.~~
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". 
@@ -168,7 +168,7 @@ Features planned for future releases.
 * UI: Tiny "saved" notice on settings pages should be better distinguished. [UL-184]
 * Map Layer: Show/Hide Street Details (otherwise does not show on sat view) [UL-185]
 * Main map: Some ability to go "back to home" quickly. [UL-187]
-* Organize Page: Create a new badge should probably open a dialog rather than an element inline. [UL-188]
+* ~~Organize Page: Create a new badge should probably open a dialog rather than an element inline. [UL-188]~~
 * Create badge dialog -> We can put the "upload custom icon" in the choose icon dropdown, so it doesn't look like it's a separate thing. [UL-189]
 * UI Bug: Bulk edit dialog -> visual bug for parent categories without an icon with respect to the tag chip and selector. [UL-190]
 * Organize page: Confirm before deleting badge with pins. [UL-192]
@@ -216,7 +216,7 @@ Features planned for future releases.
 * ~~Add site admin setting to make the site invite only, and suspend public signups. [UL-244]~~
 * Loopnet API or Scraping [UL-248]
 * Get pin / location bounding box from external service (i.e. property boundaries), or attempt ML building boundaries detection. [UL-249]
-* Organize Page > Priority Tab: Provide mechanism for shifting an item to a specific position (e.g. "go to position 20"), and allow multi-select before dragging to drag as a group. [UL-250]
+* ~~Organize Page > Priority Tab: Provide mechanism for shifting an item to a specific position (e.g. "go to position 20")~~p, and allow multi-select before dragging to drag as a group. [UL-250]
 * Consider feature: on main map, the icon and the circle could be pulled from different places, allowing 2 pieces of information to be displayed about each pin. [UL-251]
 * "Organize a meetup", which would encourage a larger audience, encourage invitees to invite friends, etc. To prevent abuse, possibly: meetup pin would only be shown to those who already had it, and invitees could vote on whether it was too vulnerable to share? Idk.
 * Only check US-centric APIs (like loopnet, NPS, etc) when the location is in the USA.

@@ -226,10 +226,16 @@ dialog.tag-create-card.ul-dialog {
 // Tag cards
 .tag-card {
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-0b);
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.6rem;
     overflow: hidden;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+
+    &:hover {
+        box-shadow: var(--ul-shadow-sm);
+        border-color: var(--ul-border-strong);
+    }
 }
 
 .tag-card-view {
@@ -1593,7 +1599,8 @@ dialog.tag-create-card.ul-dialog {
     display: flex;
     align-items: center;
     gap: .4rem;
-    transition: color .13s, border-color .13s;
+    transition: color .13s, border-color .13s, background .13s;
+    border-radius: $radius-xs $radius-xs 0 0;
 
     i {
         font-size: 1.05rem;
@@ -1601,12 +1608,14 @@ dialog.tag-create-card.ul-dialog {
 
     &:hover {
         color: var(--ul-grey-8);
+        background: var(--ul-hover-bg);
     }
 
     &.active {
         color: $primary-color;
         border-bottom-color: $primary-color;
         font-weight: 600;
+        background: color-mix(in srgb, $primary-color 7%, transparent);
     }
 }
 
@@ -1677,14 +1686,15 @@ dialog.tag-create-card.ul-dialog {
     align-items: center;
     gap: .75rem;
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-0b);
+    border: 1px solid var(--ul-border);
     border-radius: $radius-md;
     padding: .6rem .85rem;
     cursor: default;
-    transition: box-shadow .12s, background .12s;
+    transition: box-shadow .15s ease, background .12s, border-color .15s ease;
 
     &:hover {
-        box-shadow: 0 2px 8px rgba(0, 0, 0, .07);
+        box-shadow: var(--ul-shadow-sm);
+        border-color: var(--ul-border-strong);
     }
 
     &.priority-item--ghost {
@@ -2738,5 +2748,100 @@ dialog.tag-create-card.ul-dialog {
     .priority-item:first-child .priority-jump-btn.jump-top,
     .priority-item:last-child .priority-jump-btn.jump-bottom {
         display: none;
+    }
+}
+
+// ── Priority panel tools (header right side) ──────────────────────────────────
+
+.priority-panel-tools {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-shrink: 0;
+}
+
+.priority-sel-info {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    font-size: .78rem;
+    font-weight: 700;
+    color: $primary-color;
+    padding: 0 10px;
+    background: color-mix(in srgb, $primary-color 12%, transparent);
+    border-radius: 999px;
+    border: 1.5px solid color-mix(in srgb, $primary-color 28%, transparent);
+    white-space: nowrap;
+
+    &[hidden] { display: none; }
+}
+
+// ── Priority multi-drag selection ─────────────────────────────────────────────
+
+.priority-item--selected {
+    border-color: $primary-color !important;
+    background: var(--ul-hover-bg-primary) !important;
+
+    .priority-drag-handle {
+        color: $primary-color;
+    }
+}
+
+.priority-sel-cb-wrap {
+    display: none;
+    width: 22px;
+    height: 22px;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
+
+    &:hover .priority-sel-check {
+        border-color: $primary-color;
+    }
+}
+
+.priority-list.priority-select-mode .priority-sel-cb-wrap {
+    display: flex;
+}
+
+.priority-sel-cb {
+    width: 16px;
+    height: 16px;
+    accent-color: $primary-color;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+#priority-sel-toggle.active {
+    background: color-mix(in srgb, $primary-color 10%, var(--ul-grey-0));
+    border-color: color-mix(in srgb, $primary-color 35%, transparent);
+    color: $primary-color;
+}
+
+// ── Filter-bar open animation ─────────────────────────────────────────────────
+
+@keyframes org-filter-bar-open {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.organize-page .org-filter-bar.open {
+    animation: org-filter-bar-open 0.15s ease;
+}
+
+// ── Touch devices: always-visible row actions ─────────────────────────────────
+// On touch devices there is no hover state; keep action buttons permanently
+// visible at reduced opacity so they remain discoverable.
+
+@media (hover: none) and (pointer: coarse) {
+    .organize-page {
+        .tag-card-actions,
+        .tag-row-actions,
+        .priority-edit-btn,
+        .priority-jump-actions {
+            opacity: 0.6 !important;
+            pointer-events: auto !important;
+        }
     }
 }

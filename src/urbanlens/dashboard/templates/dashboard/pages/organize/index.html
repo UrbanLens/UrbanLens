@@ -97,6 +97,18 @@
                     {% include "dashboard/partials/_page_explainer_anchor.html" with explainer_id="priority-explainer" %}
                 </h2>
             </div>
+            <div class="priority-panel-tools">
+                <span id="priority-sel-info" class="priority-sel-info" hidden></span>
+                <button type="button" class="btn btn--ghost btn--sm" id="priority-sel-clear" hidden
+                        onclick="window._clearPrioritySelection&&_clearPrioritySelection()">
+                    <i class="material-icons">close</i> Clear
+                </button>
+                <button type="button" class="btn btn--ghost btn--sm" id="priority-sel-toggle"
+                        title="Select multiple items then drag any one to move them all together"
+                        onclick="window._togglePrioritySelectMode&&_togglePrioritySelectMode()">
+                    <i class="material-icons">checklist</i> Select
+                </button>
+            </div>
         </div>
 
         {% include "dashboard/partials/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent crowded or multi-labeled pins first." visual_template="dashboard/partials/explainers/_priority_visual.html" %}
@@ -107,6 +119,9 @@
                 <div class="priority-drag-handle" title="Drag to reorder">
                     <i class="material-icons">drag_indicator</i>
                 </div>
+                <label class="priority-sel-cb-wrap" title="Select for multi-drag">
+                    <input type="checkbox" class="priority-sel-cb" data-id="{{ item.id }}">
+                </label>
                 <div class="priority-item-icon" {% if item.color %}style="background:{{ item.color }}22;border-color:{{ item.color }}44;"{% endif %}>
                     {% if item.custom_icon %}
                         <img src="{{ item.custom_icon.url }}" alt="" class="tag-icon-img">
@@ -800,6 +815,39 @@ document.addEventListener('click', function(e) {
     if (!btn) return;
     var tabBtn = document.querySelector('.organize-tab[data-tab="' + btn.dataset.orgTab + '"]');
     if (tabBtn) tabBtn.click();
+});
+
+// ── Delegated filter-bar event handling (replaces inline onclick/oninput) ─────
+
+document.addEventListener('input', function(e) {
+    if (!e.target.classList.contains('org-filter-search')) return;
+    var bar = e.target.closest('.org-filter-bar');
+    var ns = bar && bar.dataset.filterNs;
+    if (ns) applyOrgFilter(ns);
+});
+
+document.addEventListener('click', function(e) {
+    // Chip or color-dot toggle
+    var chip = e.target.closest('.org-filter-chip, .org-filter-color-dot');
+    if (chip && !chip.classList.contains('org-filter-clear') && !chip.classList.contains('org-filter-close')) {
+        var bar = chip.closest('.org-filter-bar');
+        if (bar && bar.dataset.filterNs) toggleOrgChip(chip, bar.dataset.filterNs);
+        return;
+    }
+    // Clear all active filters
+    var clearBtn = e.target.closest('.org-filter-clear');
+    if (clearBtn) {
+        var bar = clearBtn.closest('.org-filter-bar');
+        if (bar && bar.dataset.filterNs) clearOrgFilter(bar.dataset.filterNs);
+        return;
+    }
+    // Close the filter bar
+    var closeBtn = e.target.closest('.org-filter-close');
+    if (closeBtn) {
+        var bar = closeBtn.closest('.org-filter-bar');
+        if (bar && bar.dataset.filterNs) toggleOrgFilter(bar.dataset.filterNs);
+        return;
+    }
 });
 
 function _syncOrgFilterBarVisibility(activeNs) {
@@ -2436,6 +2484,12 @@ window._orgBulkSync = function(n, opts) {
 (function() {
     var _prioritySortable = null;
     var _priorityOrderEditing = null;
+    var _prioritySelectMode = false;
+
+    // Mount MultiDrag plugin (ships with Sortable.min.js standard build)
+    if (window.Sortable && Sortable.MultiDrag) {
+        try { Sortable.mount(new Sortable.MultiDrag()); } catch (_) {}
+    }
 
     function _priorityOrderBadge(item) {
         var editor = item.querySelector('.priority-order-editor');
@@ -2452,9 +2506,7 @@ window._orgBulkSync = function(n, opts) {
             void badge.offsetWidth;
             badge.classList.add('priority-order-badge--flash');
         }
-        window.setTimeout(function() {
-            item.classList.remove('priority-item--order-saved');
-        }, 650);
+        window.setTimeout(function() { item.classList.remove('priority-item--order-saved'); }, 650);
     }
 
     function _closeOrderEditor(restoreValue) {
@@ -2495,10 +2547,7 @@ window._orgBulkSync = function(n, opts) {
         var total = list.querySelectorAll('.priority-item[data-id]').length;
         var newPos = parseInt(edit.input.value, 10);
 
-        if (isNaN(newPos)) {
-            _closeOrderEditor(edit.originalValue);
-            return;
-        }
+        if (isNaN(newPos)) { _closeOrderEditor(edit.originalValue); return; }
         newPos = Math.max(1, Math.min(total, newPos));
 
         var items = Array.from(list.querySelectorAll('.priority-item[data-id]'));
@@ -2506,7 +2555,6 @@ window._orgBulkSync = function(n, opts) {
         var targetIdx = newPos - 1;
 
         _closeOrderEditor(newPos);
-
         if (currentIdx === targetIdx) return;
 
         edit.item.remove();
@@ -2549,28 +2597,16 @@ window._orgBulkSync = function(n, opts) {
         editor.classList.add('is-editing');
         item.classList.add('priority-item--editing-order');
         _priorityOrderEditing = {
-            item: item,
-            editor: editor,
-            badge: badge,
-            input: input,
-            saveBtn: saveBtn,
-            originalValue: originalValue,
-            list: list,
-            cancelled: false,
+            item: item, editor: editor, badge: badge, input: input,
+            saveBtn: saveBtn, originalValue: originalValue, list: list, cancelled: false,
         };
 
-        window.requestAnimationFrame(function() {
-            input.focus();
-            input.select();
-        });
+        window.requestAnimationFrame(function() { input.focus(); input.select(); });
 
         input.onkeydown = function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                _commitOrderEditor();
-            } else if (e.key === 'Escape') {
-                e.preventDefault();
-                e.stopPropagation();
+            if (e.key === 'Enter') { e.preventDefault(); _commitOrderEditor(); }
+            else if (e.key === 'Escape') {
+                e.preventDefault(); e.stopPropagation();
                 if (_priorityOrderEditing) _priorityOrderEditing.cancelled = true;
                 _cancelOrderEditor();
             }
@@ -2587,33 +2623,101 @@ window._orgBulkSync = function(n, opts) {
         };
 
         saveBtn.onpointerdown = function(e) { e.preventDefault(); };
-        saveBtn.onclick = function(e) {
-            e.preventDefault();
-            _commitOrderEditor();
-        };
+        saveBtn.onclick = function(e) { e.preventDefault(); _commitOrderEditor(); };
     }
+
+    // ── Multi-select helpers ───────────────────────────────────────────────────
+
+    function _updatePrioritySelBar() {
+        var list = document.getElementById('priority-list');
+        if (!list) return;
+        var n = list.querySelectorAll('.priority-item--selected').length;
+        var infoEl = document.getElementById('priority-sel-info');
+        var clearBtn = document.getElementById('priority-sel-clear');
+        if (infoEl) { infoEl.textContent = n ? n + ' selected' : ''; infoEl.hidden = !n; }
+        if (clearBtn) clearBtn.hidden = !n;
+    }
+
+    window._clearPrioritySelection = function() {
+        var list = document.getElementById('priority-list');
+        if (!list) return;
+        list.querySelectorAll('.priority-item--selected').forEach(function(item) {
+            if (_prioritySortable && Sortable.utils) {
+                try { Sortable.utils.deselect(item); } catch (_) { item.classList.remove('priority-item--selected'); }
+            } else {
+                item.classList.remove('priority-item--selected');
+            }
+        });
+        list.querySelectorAll('.priority-sel-cb').forEach(function(cb) { cb.checked = false; });
+        _updatePrioritySelBar();
+    };
+
+    window._togglePrioritySelectMode = function() {
+        var list = document.getElementById('priority-list');
+        var btn = document.getElementById('priority-sel-toggle');
+        if (!list || !btn) return;
+        _prioritySelectMode = !_prioritySelectMode;
+        list.classList.toggle('priority-select-mode', _prioritySelectMode);
+        btn.classList.toggle('active', _prioritySelectMode);
+        if (!_prioritySelectMode) window._clearPrioritySelection();
+    };
+
+    // ── Sortable initialization ────────────────────────────────────────────────
 
     function _initPrioritySortable() {
         var list = document.getElementById('priority-list');
         if (!list) return;
         if (_prioritySortable) { _prioritySortable.destroy(); _prioritySortable = null; }
-        _prioritySortable = new Sortable(list, {
+
+        var opts = {
             animation: 150,
             handle: '.priority-drag-handle',
             ghostClass: 'priority-item--ghost',
+            fallbackTolerance: 3,
             onEnd: function() { _savePriorityOrder(list, null); },
-        });
+        };
+
+        // Enable MultiDrag if the plugin was successfully mounted
+        if (window.Sortable && Sortable.MultiDrag) {
+            opts.multiDrag = true;
+            opts.selectedClass = 'priority-item--selected';
+            opts.onSelect = function(evt) {
+                var cb = evt.item.querySelector('.priority-sel-cb');
+                if (cb) cb.checked = true;
+                _updatePrioritySelBar();
+            };
+            opts.onDeselect = function(evt) {
+                var cb = evt.item.querySelector('.priority-sel-cb');
+                if (cb) cb.checked = false;
+                _updatePrioritySelBar();
+            };
+        }
+
+        _prioritySortable = new Sortable(list, opts);
     }
+
+    // Checkbox → SortableJS selection sync
+    document.addEventListener('change', function(e) {
+        var cb = e.target.closest('.priority-sel-cb');
+        if (!cb) return;
+        var item = cb.closest('.priority-item');
+        if (!item || !_prioritySortable) return;
+        try {
+            if (cb.checked) Sortable.utils.select(item);
+            else Sortable.utils.deselect(item);
+        } catch (_) {
+            item.classList.toggle('priority-item--selected', cb.checked);
+        }
+        _updatePrioritySelBar();
+    });
 
     document.getElementById('priority-list').addEventListener('click', function(e) {
         var badge = e.target.closest('.priority-order-badge');
-        if (badge) {
-            e.preventDefault();
-            _beginPriorityOrderEdit(badge);
-            return;
-        }
-        var btn = e.target.closest('[data-priority-jump]'); if (!btn) return;
-        var item = btn.closest('.priority-item'); var list = document.getElementById('priority-list');
+        if (badge) { e.preventDefault(); _beginPriorityOrderEdit(badge); return; }
+        var btn = e.target.closest('[data-priority-jump]');
+        if (!btn) return;
+        var item = btn.closest('.priority-item');
+        var list = document.getElementById('priority-list');
         if (!item || !list) return;
         if (btn.dataset.priorityJump === 'top') list.insertBefore(item, list.firstElementChild);
         else list.appendChild(item);
