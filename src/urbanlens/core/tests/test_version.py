@@ -5,6 +5,7 @@ from unittest import mock
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.core.version import (
+    _git_fetch,
     format_short_commit,
     get_app_version,
     get_current_git_branch,
@@ -51,6 +52,28 @@ class GetCurrentGitBranchTests(TestCase):
     def test_git_failure_returns_none(self) -> None:
         with mock.patch("urbanlens.core.version.subprocess.run", side_effect=OSError("no git")):
             self.assertIsNone(get_current_git_branch())
+
+
+class GitFetchTests(TestCase):
+    """_git_fetch handles unreachable remotes without tracebacks."""
+
+    def setUp(self) -> None:
+        _git_fetch.cache_clear()
+
+    def test_no_remotes_skips_fetch(self) -> None:
+        completed = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch("urbanlens.core.version.subprocess.run", return_value=completed) as run:
+            self.assertFalse(_git_fetch())
+        run.assert_called_once()
+
+    def test_fetch_failure_returns_false(self) -> None:
+        remote_ok = mock.Mock(returncode=0, stdout="origin\n", stderr="")
+        fetch_failed = mock.Mock(returncode=128, stdout="", stderr="fatal: could not read from remote")
+        with mock.patch(
+            "urbanlens.core.version.subprocess.run",
+            side_effect=[remote_ok, fetch_failed],
+        ):
+            self.assertFalse(_git_fetch())
 
 
 class GitUpdateStatusTests(TestCase):

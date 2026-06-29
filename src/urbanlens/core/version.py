@@ -138,25 +138,58 @@ def get_current_git_branch() -> str | None:
     return branch or None
 
 
+@lru_cache(maxsize=1)
 def _git_fetch() -> bool:
     """Refresh remote-tracking refs from configured remotes.
+
+    The result is cached for the process lifetime so repeated admin stats
+    page loads do not re-run ``git fetch`` or spam logs when remotes are
+    unreachable (typical in Docker without credentials).
 
     Returns:
         ``True`` when ``git fetch`` completed successfully.
     """
+    try:
+        remote_check = subprocess.run(  # nosec B603
+            [_GIT_EXECUTABLE, "remote"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+            cwd=_GIT_CWD,
+        )
+    except (subprocess.SubprocessError, OSError):
+        logger.debug("git remotes unavailable; skipping fetch")
+        return False
+
+    if remote_check.returncode != 0 or not remote_check.stdout.strip():
+        logger.debug("no git remotes configured; skipping fetch")
+        return False
+
     logger.info("git fetch --quiet --prune")
     try:
-        subprocess.run(  # nosec B603
+        result = subprocess.run(  # nosec B603
             [_GIT_EXECUTABLE, "fetch", "--quiet", "--prune"],
             capture_output=True,
             text=True,
-            check=True,
+            check=False,
             timeout=30,
             cwd=_GIT_CWD,
             env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
         )
-    except (subprocess.SubprocessError, OSError):
-        logger.warning("git fetch failed; update status will use local refs only", exc_info=True)
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.warning(
+            "git fetch failed (%s); update status will use local refs only",
+            exc,
+        )
+        return False
+
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+        logger.warning(
+            "git fetch failed (%s); update status will use local refs only",
+            detail,
+        )
         return False
 
     return True
