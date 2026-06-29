@@ -185,7 +185,7 @@ def _pin_match_subtitle(pin, q_lower: str) -> str:
 
     # Location name match
     if q_lower in loc_name:
-        return pin.location.name  # type: ignore[return-value]
+        return pin.location.name
 
     # Location alias match
     if pin.location:

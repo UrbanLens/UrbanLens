@@ -41,8 +41,12 @@ class Gateway(ABC):  # noqa: B024 - Abstract so it cannot be instantiated direct
     session: requests.Session = field(default_factory=requests.Session)
 
     def __post_init__(self) -> None:
-        """Replace the plain session with a rate-limited wrapper when applicable."""
+        """Replace the plain session with a rate-limited wrapper when applicable.
+
+        A custom session (e.g. a test mock) is preserved as-is; only the
+        default ``requests.Session`` instance is swapped for a rate-limited one.
+        """
         key = type(self).service_key
-        if key:
+        if key and type(self.session) is requests.Session:
             from urbanlens.dashboard.services.rate_limiter import _RateLimitedSession
             object.__setattr__(self, "session", _RateLimitedSession(key))

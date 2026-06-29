@@ -58,7 +58,7 @@ class WikipediaGateway(Gateway):
             Each has: ``place_id``, ``name``, ``lat``, ``lng``, ``source``,
             ``description``, ``url``, ``types``, ``rating``, ``vicinity``.
         """
-        params = {
+        params: dict[str, str | int] = {
             "action": "query",
             "list": "geosearch",
             "gscoord": f"{latitude}|{longitude}",
@@ -124,7 +124,7 @@ class WikipediaGateway(Gateway):
 
     def _geo_search(self, lat: float, lng: float) -> list[dict]:
         """Return up to _MAX_CANDIDATES article stubs near the coordinates."""
-        params = {
+        params: dict[str, str | int] = {
             "action": "query",
             "list": "geosearch",
             "gscoord": f"{lat}|{lng}",

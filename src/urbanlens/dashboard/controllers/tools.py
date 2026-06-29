@@ -93,7 +93,9 @@ class ToolsIndexView(LoginRequiredMixin, View):
         Returns:
             Rendered tools page.
         """
-        return render(request, "dashboard/pages/tools/index.html")
+        return render(request, "dashboard/pages/tools/index.html", {
+            "show_backup_tools": request.user.has_perm("dashboard.view_site_admin"),
+        })
 
 
 class ExportStartView(LoginRequiredMixin, View):
@@ -245,7 +247,7 @@ class ImportStartView(LoginRequiredMixin, View):
                 status=400,
             )
 
-        if not upload.name.lower().endswith(".zip"):
+        if not (upload.name and upload.name.lower().endswith(".zip")):
             return HttpResponse(
                 '<p class="import-error"><i class="material-icons">error</i> Only .zip export files are accepted.</p>',
                 status=400,

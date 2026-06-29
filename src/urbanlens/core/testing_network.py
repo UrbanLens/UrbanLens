@@ -73,7 +73,7 @@ class LocalhostOnlyNetwork:
     def _guarded_create_connection(
         self,
         address: tuple[Any, int],
-        timeout: float | object = socket._GLOBAL_DEFAULT_TIMEOUT,  # noqa: SLF001
+        timeout: float | None = None,
         source_address: tuple[Any, int] | None = None,
         all_errors: bool = False,
     ) -> socket.socket:

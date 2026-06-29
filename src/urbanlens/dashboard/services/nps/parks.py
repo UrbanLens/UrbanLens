@@ -33,6 +33,8 @@ class NPSGateway(Gateway):
 
     @property
     def _headers(self) -> dict[str, str]:
+        if self.api_key is None:
+            raise RuntimeError("NPS API key is not configured")
         return {"X-Api-Key": self.api_key}
 
     def get_park_images(self, park_code: str) -> list:

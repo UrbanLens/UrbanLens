@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Self
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 
 from urbanlens.dashboard.models import abstract
@@ -54,8 +55,9 @@ class QuerySet(abstract.QuerySet):
             q2["from_profile"] = to_profile
 
         try:
-            return self.filter(Q(**q1) | Q(**q2)).get()
-        except self.model.DoesNotExist:
+            # TODO: type: ignore can be removed once abstract.QuerySet is made generic
+            return self.filter(Q(**q1) | Q(**q2)).get()  # type: ignore[return-value]
+        except ObjectDoesNotExist:
             return None
 
     def user(self, user: User) -> Self:

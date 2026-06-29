@@ -53,7 +53,7 @@ class WikimediaGateway(Gateway):
 
     def _search_files(self, query: str) -> list[str]:
         """Return up to _MAX_RESULTS file titles from a Commons full-text search."""
-        params = {
+        params: dict[str, str | int] = {
             "action": "query",
             "list": "search",
             "srsearch": query,
@@ -73,7 +73,7 @@ class WikimediaGateway(Gateway):
 
     def _fetch_image_info(self, titles: list[str]) -> list[dict[str, Any]]:
         """Batch-fetch image URLs and thumbnail URLs for the given file titles."""
-        params = {
+        params: dict[str, str | int] = {
             "action": "query",
             "titles": "|".join(titles),
             "prop": "imageinfo",

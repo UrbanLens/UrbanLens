@@ -92,7 +92,7 @@ class PinQuerySet(abstract.QuerySet):
         tag_ids = Badge.get_badge_and_descendants(tag_id)
         return self.filter(badges__id__in=tag_ids).distinct()
 
-    def apply_badge_groups(self, groups: list[dict]) -> PinQuerySet:
+    def apply_badge_groups(self, groups: list[dict]) -> Self:
         """Apply structured badge filter groups returned by ``SearchForm.parse_badge_groups()``.
 
         Args:

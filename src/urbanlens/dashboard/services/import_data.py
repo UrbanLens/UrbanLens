@@ -602,7 +602,7 @@ def _safe_set(
         return
     value = data[key]
     try:
-        field = model_class._meta.get_field(field_name)  # type: ignore[union-attr]  # noqa: SLF001
+        field = model_class._meta.get_field(field_name)  # noqa: SLF001
         choices = [c[0] for c in (field.choices or [])]
         if not choices or value in choices:
             update_fields[field_name] = value

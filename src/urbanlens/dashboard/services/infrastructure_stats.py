@@ -170,8 +170,8 @@ def _valkey_metrics(client: redis.Redis) -> tuple[ServiceMetric, ...]:
         ServiceMetric("Memory Peak", str(info.get("used_memory_peak_human", "Unknown"))),
         ServiceMetric("Memory Limit", maxmemory_label),
         ServiceMetric("Clients", str(info.get("connected_clients", "Unknown"))),
-        ServiceMetric("Keys", str(client.dbsize())),
         ServiceMetric("Hit Rate", hit_rate),
+        ServiceMetric("Keys", str(client.dbsize())),
     ]
     if evictions:
         metrics.append(ServiceMetric("Evictions", str(evictions)))
@@ -247,7 +247,7 @@ def collect_celery_stats() -> InfrastructureServiceStat:
     with contextlib.suppress(Exception):
         cached = cache.get(_CELERY_STATS_CACHE_KEY)
         if cached is not None:
-            return cached  # type: ignore[return-value]
+            return cached
 
     stat = _collect_celery_stats_live()
 
@@ -300,7 +300,7 @@ def _collect_celery_stats_live() -> InfrastructureServiceStat:
         )
         if celery_versions:
             metrics.append(ServiceMetric("Version", ", ".join(celery_versions)))
-        status = "healthy" if worker_count else "unavailable"
+        status: ServiceStatus = "healthy" if worker_count else "unavailable"
         return InfrastructureServiceStat(
             key="celery",
             name="Celery",

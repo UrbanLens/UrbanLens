@@ -44,16 +44,17 @@ class NominatimGateway(Gateway):
             Dict with place metadata, or None if no result or an error occurred.
         """
         try:
+            params: dict[str, str | int | float] = {
+                "lat": latitude,
+                "lon": longitude,
+                "format": "json",
+                "extratags": 1,
+                "namedetails": 1,
+                "addressdetails": 1,
+            }
             resp = self.session.get(
                 f"{self.base_url}/reverse",
-                params={
-                    "lat": latitude,
-                    "lon": longitude,
-                    "format": "json",
-                    "extratags": 1,
-                    "namedetails": 1,
-                    "addressdetails": 1,
-                },
+                params=params,
                 timeout=10,
             )
             resp.raise_for_status()

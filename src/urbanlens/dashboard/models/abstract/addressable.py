@@ -33,6 +33,7 @@ class AddressableModel(Model):
 
     latitude = DecimalField(max_digits=9, decimal_places=6)
     longitude = DecimalField(max_digits=9, decimal_places=6)
+
     street_number = CharField(max_length=50, null=True, blank=True)
     route = CharField(max_length=80, null=True, blank=True)
     locality = CharField(max_length=80, null=True, blank=True)
@@ -122,7 +123,7 @@ class AddressableModel(Model):
         stub = self.__dict__.get("_google_place_stub")
         if stub is not None and getattr(stub, "cached_place_name", None):
             return stub.cached_place_name
-        if self.google_place_id and self.google_place.cached_place_name:
+        if self.google_place_id and self.google_place is not None and self.google_place.cached_place_name:
             return self.google_place.cached_place_name
         return None
 
@@ -147,7 +148,7 @@ class AddressableModel(Model):
     @property
     def cid(self) -> Decimal | None:
         """Google Maps CID from the linked cache row, if any."""
-        if self.google_place_id and self.google_place.cid is not None:
+        if self.google_place_id and self.google_place is not None and self.google_place.cid is not None:
             return self.google_place.cid
         return None
 

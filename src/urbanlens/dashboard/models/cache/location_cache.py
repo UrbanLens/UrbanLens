@@ -25,12 +25,15 @@ class LocationCache(abstract.Model):
 
     STALE_AFTER_DAYS = 7
 
-    location: Location = models.ForeignKey(
+    location = models.ForeignKey(
         "dashboard.Location",
         on_delete=models.CASCADE,
         related_name="external_cache",
     )
     source = models.CharField(max_length=50)
+
+    if TYPE_CHECKING:
+        location_id: int
     data = models.JSONField(default=dict)
     query_key = models.CharField(max_length=255, blank=True)
 

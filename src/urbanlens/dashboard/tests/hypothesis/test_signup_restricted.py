@@ -51,7 +51,7 @@ class SignupRestrictedTests(TestCase):
 
     def setUp(self) -> None:
         self.factory = RequestFactory()
-        SiteSettings.objects.filter(pk=1).update(signup_restricted=True)
+        SiteSettings.objects.update_or_create(pk=1, defaults={"signup_restricted": True})
 
     def test_get_without_invite_returns_403(self) -> None:
         response = _get_response(self.factory)

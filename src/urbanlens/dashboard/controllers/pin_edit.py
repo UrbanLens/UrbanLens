@@ -7,7 +7,7 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
@@ -22,8 +22,11 @@ logger = logging.getLogger(__name__)
 
 
 def _pin_for_user(pin_slug, request) -> Pin | HttpResponse:
-    """Return the pin if it belongs to the requesting user, else 403."""
-    pin = get_object_or_404(Pin.objects.select_related("location", "profile__user"), slug=pin_slug)
+    """Return the pin if it belongs to the requesting user, 403 if forbidden, 404 if not found."""
+    try:
+        pin = get_object_or_404(Pin.objects.select_related("location", "profile__user"), slug=pin_slug)
+    except Http404:
+        return HttpResponse(status=404)
     if pin.profile.user != request.user:
         return HttpResponse("Forbidden", status=403)
     return pin

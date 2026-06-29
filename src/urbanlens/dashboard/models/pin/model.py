@@ -57,8 +57,11 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
 
     # Optional per-user marker override. When unset, coordinates fall back to the
     # linked Location's canonical latitude/longitude.
-    latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    # TODO: LSP violation — AddressableModel.latitude is non-nullable but Pin needs nullable
+    # for its coordinate-override feature. Proper fix: make AddressableModel.latitude nullable
+    # (requires a migration for Location and other subclasses).
+    latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)  # type: ignore[assignment]
+    longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)  # type: ignore[assignment]
 
     # When True this pin is entirely personal: it will not be linked to a shared
     # Location and will never contribute to the community wiki.  User-specific
@@ -339,6 +342,12 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         if self.pk:
             qs = qs.exclude(pk=self.pk)
         return qs
+
+    def save(self, *args, **kwargs) -> None:
+        """Auto-generate a unique slug from the pin name/location if not already set."""
+        if not self.slug:
+            self.slug = self._generate_slug()
+        super().save(*args, **kwargs)
 
     class Meta(abstract.AddressableModel.Meta):
         db_table = "dashboard_user_pins"

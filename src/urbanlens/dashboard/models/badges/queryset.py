@@ -75,15 +75,17 @@ class BadgeQuerySet(abstract.QuerySet):
 
     def with_pin_counts(self) -> Self:
         """Annotate pin_count / location_count and prefetch children (with their own pin_count) and parents."""
+        from urbanlens.dashboard.models.badges.model import Badge
+
         return self.annotate(
             pin_count=Count("pins", distinct=True),
             location_count=Count("locations", distinct=True),
         ).prefetch_related(
             Prefetch(
                 "children",
-                queryset=self.model.objects.annotate(pin_count=Count("pins", distinct=True)),
+                queryset=Badge.objects.annotate(pin_count=Count("pins", distinct=True)),
             ),
-            Prefetch("parents", queryset=self.model.objects.only("id", "name", "kind")),
+            Prefetch("parents", queryset=Badge.objects.only("id", "name", "kind")),
         )
 
     def ordered(self) -> Self:
