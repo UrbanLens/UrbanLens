@@ -13,34 +13,13 @@
 }
 
 .icon-picker-trigger {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 12px;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-sm;
-    background: var(--ul-grey-0);
-    cursor: pointer;
-    font-size: 0.9rem;
     min-width: 130px;
-    transition: border-color 0.15s;
+    border-color: var(--ul-grey-7b);
 
+    &:active,
     &:hover {
-        border-color: var(--primary-color);
-    }
-
-    .icon-picker-none-label {
-        color: $text-muted;
-        font-size: 0.85rem;
-    }
-
-    .icon-picker-current-glyph {
-        font-size: 1.25rem;
-    }
-
-    .icon-picker-current-mi {
-        font-size: 1.2rem !important;
-        color: $text-secondary;
+        background-color: var(--ul-grey-1a);
+        border-color: var(--ul-grey-8b);
     }
 }
 

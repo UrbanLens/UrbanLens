@@ -119,6 +119,15 @@
 	.dialog-header {
 		background-color: var(--ul-grey-1a);
 	}
+
+	.settings-toggle-label
+	{
+		color: var(--ul-grey-9);
+	}
+
+	.form-field {
+		margin-bottom: 1.25rem;
+	}
 }
 
 .ul-dialog-body {

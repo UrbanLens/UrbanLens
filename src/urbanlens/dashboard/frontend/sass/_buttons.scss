@@ -148,6 +148,7 @@
     border-radius: $radius-sm;
     overflow: hidden;
 
+	button,
     .btn {
         background: var(--ul-grey-0);
         border: none;
@@ -177,7 +178,9 @@
             background: var(--primary-color);
             color: var(--ul-grey-9);
         }
-    }
+	}
+	&--trigger {
+	}
 }
 
 .btn-group {	
@@ -186,6 +189,7 @@
     gap: .75rem;
     flex-shrink: 0;
 }
+
 
 .social-btn-icon {
     display: flex;
