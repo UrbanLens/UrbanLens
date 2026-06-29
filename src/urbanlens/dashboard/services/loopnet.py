@@ -58,6 +58,8 @@ class LoopNetGateway(Gateway):
 
     def _direct_search(self, address: str) -> dict[str, Any] | None:
         """Try fetching the LoopNet search results page directly."""
+        import requests.exceptions
+
         slug = quote_plus(address.replace(",", "").replace("  ", " "))
         url = _LOOPNET_SEARCH_TMPL.format(address=slug)
         headers = {
@@ -74,7 +76,7 @@ class LoopNetGateway(Gateway):
                 logger.debug("LoopNet direct fetch blocked (%s) for %r", resp.status_code, address)
                 return None
             resp.raise_for_status()
-        except Exception:
+        except requests.exceptions.RequestException:
             logger.debug("LoopNet direct fetch failed for %r", address)
             return None
 
@@ -83,11 +85,15 @@ class LoopNetGateway(Gateway):
     def _parse_search_page(self, html: str, search_url: str) -> dict[str, Any] | None:
         """Parse listing cards from the LoopNet search results HTML."""
         try:
-            from lxml import etree
+            from defusedxml.lxml import fromstring as defused_fromstring
+            from lxml.etree import HTMLParser, LxmlError  # nosec B410 — HTMLParser is config only; parsing uses defused_fromstring
+        except ImportError:
+            return None
 
-            parser = etree.HTMLParser()
-            tree = etree.fromstring(html.encode(), parser)
-        except Exception:
+        try:
+            parser = HTMLParser()
+            tree = defused_fromstring(html.encode(), parser=parser)
+        except LxmlError:
             logger.debug("LoopNet HTML parse failed")
             return None
 
@@ -129,10 +135,12 @@ class LoopNetGateway(Gateway):
             return None
 
         try:
+            import requests.exceptions
+
             gateway = get_search_gateway()
             query = _LOOPNET_SITE_SEARCH.format(address=address)
             results = gateway.search(query)
-        except Exception:
+        except (RuntimeError, requests.exceptions.RequestException, OSError):
             logger.debug("LoopNet web-search fallback failed for %r", address)
             return None
 
