@@ -42,12 +42,15 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         try:
             pin = Pin.objects.select_related("location").get(slug=kwargs["pin_slug"], profile__user=request.user)
         except Pin.DoesNotExist:
-            return render(
-                request,
-                "dashboard/pages/errors/pin_not_found.html",
-                {"pin_slug": kwargs.get("pin_slug")},
-                status=404,
-            )
+            try:
+                pin = Pin.objects.select_related("location").get(uuid=kwargs["pin_slug"], profile__user=request.user)
+            except (Pin.DoesNotExist, ValueError):
+                return render(
+                    request,
+                    "dashboard/pages/errors/pin_not_found.html",
+                    {"pin_slug": kwargs.get("pin_slug")},
+                    status=404,
+                )
 
         # Auto-link legacy pins that pre-date the Location requirement.
         # Private pins are intentionally unlinked - never create a wiki entry for them.
@@ -62,6 +65,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             pin.save(update_fields=["location"])
         elif pin.location and not pin.location.slug:
             pin.location.ensure_slug()
+
+        # Backfill slug for legacy pins created before slug generation was automatic.
+        if not pin.slug:
+            pin.slug = pin.ensure_slug()
+            pin.save(update_fields=["slug"])
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 

@@ -259,11 +259,17 @@ class Profile(abstract.Model):
             candidate = f"{base}-{n}"
             n += 1
         return candidate
+    
+    def ensure_slug(self) -> str:
+        """Ensure this profile has a URL slug, generating one if needed."""
+        if not self.slug:
+            self.slug = self._generate_slug()
+            self.save(update_fields=["slug"])
+        return self.slug
 
     def save(self, *args, **kwargs) -> None:
         """Auto-generate a unique slug from the username if not already set."""
-        if not self.slug:
-            self.slug = self._generate_slug()
+        self.ensure_slug()
         super().save(*args, **kwargs)
 
     def compute_map_center(self) -> tuple[float, float] | None:

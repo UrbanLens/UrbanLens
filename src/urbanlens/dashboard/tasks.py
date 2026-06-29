@@ -127,6 +127,82 @@ def suggest_pin_category(self, pin_id: int) -> list[str]:
     return [b.name for b in badges]
 
 
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def prefetch_location_external_data(location_id: int, google_place_id: str | None = None) -> None:
+    """Pre-warm LocationCache for a newly created Location.
+
+    Runs Wikipedia and NPS lookups so that the first time a user opens the pin
+    detail page the data is already cached.  Also migrates any Google Places
+    details already held in the Django request cache into LocationCache so the
+    pin detail page can skip the Places Details API call.
+
+    Args:
+        location_id: PK of the Location to prefetch data for.
+        google_place_id: Optional Google Places place_id already resolved by the
+            caller; used to copy existing Django-cache data into LocationCache.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.models.location.model import Location
+
+    location = Location.objects.filter(pk=location_id).first()
+    if not location:
+        logger.info("prefetch_location_external_data: location %s no longer exists", location_id)
+        return
+
+    lat = float(location.latitude or 0)
+    lng = float(location.longitude or 0)
+    if not lat and not lng:
+        return
+
+    # Wikipedia
+    if LocationCache.get_fresh(location, "wikipedia") is None:
+        try:
+            from urbanlens.dashboard.services.wikipedia import WikipediaGateway
+
+            address_components = {
+                "locality": location.locality or "",
+                "route": location.route or "",
+                "street_number": location.street_number or "",
+                "administrative_area_level_1": location.administrative_area_level_1 or "",
+            }
+            article = WikipediaGateway().get_article_for_location(lat, lng, address_components)
+            LocationCache.set(location, "wikipedia", article or {}, query_key=location.name or "")
+            logger.info("prefetch_location_external_data: cached Wikipedia for location %s", location_id)
+        except Exception:
+            logger.exception("prefetch_location_external_data: Wikipedia lookup failed for location %s", location_id)
+
+    # NPS (US locations only)
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    state_code = location.administrative_area_level_1 or ""
+    if state_code and app_settings.nps_api_key and LocationCache.get_fresh(location, "nps") is None:
+        try:
+            from urbanlens.dashboard.services.nps.parks import NPSGateway
+
+            park = NPSGateway().find_park_near_location(lat, lng, state_code=state_code, location_name=location.name or "")
+            LocationCache.set(location, "nps", park or {}, query_key=state_code)
+            logger.info("prefetch_location_external_data: cached NPS for location %s", location_id)
+        except Exception:
+            logger.exception("prefetch_location_external_data: NPS lookup failed for location %s", location_id)
+
+    # Google Places — migrate from Django request cache into LocationCache so the
+    # pin detail page can display it without a fresh API call.
+    if google_place_id and LocationCache.get_fresh(location, "google_places") is None:
+        try:
+            from django.core.cache import cache as django_cache
+
+            place_data = django_cache.get(f"ul_place_details_{google_place_id}")
+            if place_data:
+                LocationCache.set(location, "google_places", place_data, query_key=google_place_id)
+                logger.info(
+                    "prefetch_location_external_data: migrated Google Places cache for location %s", location_id,
+                )
+        except Exception:
+            logger.exception(
+                "prefetch_location_external_data: Google Places migration failed for location %s", location_id,
+            )
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def process_image_upload(self, image_id: int) -> bool:
     """Extract image metadata after upload and update the Image row."""

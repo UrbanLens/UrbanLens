@@ -4600,11 +4600,13 @@
     let _addPinMarker = null;
     let _editPinUuid = null;   // null = add mode; uuid string = edit mode
     let _addPinGooglePlaceId = null;   // set when adding a pin from a Places marker
+    let _addPinCanonicalName = null;   // canonical place name from the external marker (not user-edited)
     window._addPinCustomIconFile = null;
 
     function _resetAddPinDialog() {
         _editPinUuid = null;
         _addPinGooglePlaceId = null;
+        _addPinCanonicalName = null;
         document.getElementById('apdlg-addr').value = '';
         document.getElementById('apdlg-lat').value = '';
         document.getElementById('apdlg-lng').value = '';
@@ -4675,8 +4677,11 @@
             if (nameEl) nameEl.value = defaultName;
         }
 
-        // Store Google Place ID so it can be sent with the add-pin request
+        // Store Google Place ID and canonical name so they can be sent with the
+        // add-pin request.  The canonical name lets the server skip a geocoding
+        // API call when creating a new Location row.
         if (placeId) _addPinGooglePlaceId = placeId;
+        if (defaultName) _addPinCanonicalName = defaultName;
 
         document.getElementById('add-pin-dialog').showModal();
     }
@@ -5137,8 +5142,14 @@
             const privCb = document.getElementById('apdlg-private');
             if (privCb && privCb.checked) formData.append('is_private', '1');
 
-            // Pass Google Place ID when adding from a Places marker
+            // Pass Google Place ID and canonical name when adding from a Places marker.
+            // The canonical name lets the server skip a geocoding API call.
             if (_addPinGooglePlaceId) formData.append('google_place_id', _addPinGooglePlaceId);
+            if (_addPinCanonicalName) formData.append('place_canonical_name', _addPinCanonicalName);
+
+            // Capture the place_id now — it will be cleared by _resetAddPinDialog inside
+            // closeAddPinDialog, so we need a local copy for the success handler.
+            const submittedPlaceId = _addPinGooglePlaceId;
 
             this.disabled = true;
             this.textContent = 'Saving…';
@@ -5167,6 +5178,15 @@
                 // When multiple locations cover the same coordinates, prompt the user to choose.
                 if (data && data.conflicting_locations && data.conflicting_locations.length > 1) {
                     _showLocationConflictPicker(data.pin_slug, data.conflicting_locations);
+                }
+                // Remove the external-source marker that the user pinned — the user's
+                // own pin now represents this place, so showing both would be redundant.
+                if (submittedPlaceId) {
+                    const gpm = _placesMarkerMap.get(submittedPlaceId);
+                    if (gpm) {
+                        _placesLayerGroup.removeLayer(gpm);
+                        _placesMarkerMap.delete(submittedPlaceId);
+                    }
                 }
             })
             .catch(err => toastr.error('Failed to add pin: ' + err))

@@ -73,6 +73,19 @@ button,
     grid-column: 1 / -1;
 }
 
+
+body {
+    input[type="text"],
+    input[type="email"],
+    input[type="search"],
+    input[type="url"],
+    input[type="number"],
+    select,
+    textarea {
+        padding: 0.5em;
+    }
+}
+
 // ── Confirm dialog ────────────────────────────────────────────────────────────
 
 .confirm-dialog {

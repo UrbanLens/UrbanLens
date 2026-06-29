@@ -153,6 +153,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             category_ids = request.POST.getlist("category_ids")
             is_private = request.POST.get("is_private") in {"1", "true", "on", "True"}
             google_place_id = request.POST.get("google_place_id") or None
+            # Canonical name supplied by the client when adding from a Google Places or
+            # Wikipedia/NPS marker — avoids a synchronous geocoding API round-trip when
+            # creating a new Location.
+            place_canonical_name = request.POST.get("place_canonical_name") or None
 
             if not latitude or not longitude:
                 if not address:
@@ -176,7 +180,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 if all_locations:
                     location = all_locations[0]
                 else:
-                    location = _create_location_with_canonical_name(lat_f, lon_f)
+                    location = _create_location_with_canonical_name(lat_f, lon_f, place_name=place_canonical_name)
 
             pin = Pin.objects.create(
                 name=name,
@@ -199,7 +203,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 if category_ids:
                     pin.badges.remove(*pin.badges.filter(kind="category"))
                     pin.badges.add(*Badge.objects.categories().filter(id__in=category_ids))
-            pin.save()
+            # Generate slug immediately so the "View Details" URL resolves without a
+            # separate lookup — Pin.slug is nullable and is not auto-populated by create().
+            pin.slug = pin.ensure_slug()
+            pin.save(update_fields=["slug"])
 
             # When adding from a Places layer marker, pre-populate the GooglePlace
             # link on both the pin and its location so subsequent views avoid an
@@ -214,6 +221,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                         gp_service.ensure_linked_by_place_id(location, google_place_id)
                 except Exception as gp_exc:
                     logger.warning("Failed to link Google Place %s: %s", google_place_id, gp_exc)
+
+            # Pre-warm LocationCache for Wikipedia, NPS, and Google Places so the
+            # pin detail page doesn't need to hit the APIs on first load.
+            if location and not is_private:
+                from urbanlens.dashboard.services.celery import safely_enqueue_task
+                from urbanlens.dashboard.tasks import prefetch_location_external_data
+
+                safely_enqueue_task(prefetch_location_external_data, location.pk, google_place_id=google_place_id)
 
             from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 
@@ -483,7 +498,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not map_data:
             return JsonResponse({"error": "not found"}, status=404)
         pin_dict = map_data[0]
-        pin_dict["viewLocationUrl"] = f"/dashboard/map/pin/{pin.slug}/"
+        pin_dict["viewLocationUrl"] = f"/dashboard/map/pin/{pin.slug or str(pin.uuid)}/"
         return JsonResponse({"pin": pin_dict})
 
     def patch_pin(self, request, pin_slug, *args, **kwargs):
@@ -822,7 +837,7 @@ def _safe_positive_int(value: str | None) -> int | None:
     return parsed if parsed and parsed > 0 else None
 
 
-def _create_location_with_canonical_name(lat: float, lon: float) -> Location:
+def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: str | None = None) -> Location:
     """Create a new Location using its canonical Google place name.
 
     The user's custom pin name must never be used as a Location name because
@@ -833,6 +848,9 @@ def _create_location_with_canonical_name(lat: float, lon: float) -> Location:
     Args:
         lat: Latitude of the new location.
         lon: Longitude of the new location.
+        place_name: Optional canonical name already known by the caller (e.g. from
+            a Google Places marker).  When provided and meaningful, this skips an
+            outbound geocoding API call.
 
     Returns:
         The newly created Location instance.
@@ -840,9 +858,16 @@ def _create_location_with_canonical_name(lat: float, lon: float) -> Location:
     from urbanlens.dashboard.services.google.place_info import GooglePlaceService
     from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
-    google_place = GooglePlaceService().get_or_create_for_coordinates(lat, lon)
+    # When the caller already knows the canonical name we skip the geocoding
+    # round-trip by passing fetch_if_missing=False.
+    fetch_if_missing = not is_meaningful_name(place_name)
+    google_place = GooglePlaceService().get_or_create_for_coordinates(
+        lat, lon, place_name=place_name if is_meaningful_name(place_name) else None, fetch_if_missing=fetch_if_missing,
+    )
     canonical_name = "Unnamed Location"
-    if is_meaningful_name(google_place.cached_place_name):
+    if is_meaningful_name(place_name):
+        canonical_name = place_name.strip()  # type: ignore[union-attr]
+    elif is_meaningful_name(google_place.cached_place_name):
         canonical_name = (google_place.cached_place_name or canonical_name).strip()
 
     return Location.objects.create(
