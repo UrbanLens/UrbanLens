@@ -286,7 +286,7 @@
     }
 
     .edit-card-title {
-        border-bottom-color: var(--ul-border);
+        border-bottom-color: var(--ul-grey-1a);
     }
 
     .edit-username-hint--ok  { color: $color-green-400; }
@@ -866,7 +866,7 @@
     }
 
     .trip-activity-item {
-        border-bottom-color: var(--ul-border);
+        border-bottom-color: var(--ul-grey-1a);
 
         &.trip-activity--highlighted {
             background: $dk-cal-event-bg;
@@ -890,7 +890,7 @@
     }
 
     .trip-member-item {
-        border-bottom-color: var(--ul-border);
+        border-bottom-color: var(--ul-grey-1a);
     }
 
     .trip-member-avatar {
@@ -968,12 +968,12 @@
     .rsvp-pill-btn {
 
         &:hover {
-            border-color: var(--ul-border-strong);
+            border-color: var(--ul-grey-3b);
         }
     }
 
     .trip-comment-item {
-        border-bottom-color: var(--ul-border);
+        border-bottom-color: var(--ul-grey-1a);
 
         &:hover {
             background: rgba(255, 255, 255, .03);
@@ -990,7 +990,7 @@
     }
 
     .comment-item {
-        border-bottom-color: var(--ul-border);
+        border-bottom-color: var(--ul-grey-1a);
 
         &--reply {
             background: var(--ul-grey-1);
@@ -1032,7 +1032,7 @@
     }
 
     .comment-compose {
-        border-top-color: var(--ul-border);
+        border-top-color: var(--ul-grey-1a);
     }
 
     .comment-input {
@@ -1096,7 +1096,7 @@
 
     .mention-option {
         color: var(--ul-grey-7);
-        border-bottom-color: var(--ul-border);
+        border-bottom-color: var(--ul-grey-1a);
 
         &:hover,
         &.is-selected {
@@ -1135,11 +1135,11 @@
     }
 
     .comment-map-composer-controls {
-        border-color: var(--ul-border);
+        border-color: var(--ul-grey-1a);
     }
 
     .comment-map-composer-toolbar {
-        border-color: var(--ul-border);
+        border-color: var(--ul-grey-1a);
     }
 
     .cmcc-label {
@@ -1177,7 +1177,7 @@
     }
 
     .cmc-toolbar-sep {
-        background: var(--ul-border);
+        background: var(--ul-grey-1a);
     }
 
     .cmc-toolbar-label {
@@ -1196,7 +1196,7 @@
 
         &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
             background: var(--ul-grey-1);
-            border-color: var(--ul-border-strong);
+            border-color: var(--ul-grey-3b);
         }
 
         &--active {
@@ -1233,7 +1233,7 @@
     }
 
     .cat-sel-btn {
-        border-color: var(--ul-border-strong);
+        border-color: var(--ul-grey-3b);
 
         &:hover:not(:disabled) {
             background: var(--ul-grey-1);
@@ -1256,7 +1256,7 @@
         }
 
         .cat-select-check {
-            border-color: var(--ul-border-strong);
+            border-color: var(--ul-grey-3b);
         }
     }
 
@@ -1296,18 +1296,18 @@
 
         &:hover {
             background: var(--ul-grey-2);
-            color: var(--ul-accent);
+            color: var(--ul-color-accent);
         }
     }
 
     .priority-order-input {
         background: var(--ul-grey-0);
-        color: var(--ul-text);
+        color: var(--ul-grey-8);
     }
 
     .priority-order-save {
         background: var(--ul-grey-1);
-        color: var(--ul-accent);
+        color: var(--ul-color-accent);
     }
 
     .priority-item--editing-order {
@@ -1339,7 +1339,7 @@
 
     .site-admin-form input[type="number"] {
         background: var(--ul-grey-1);
-        border-color: var(--ul-border-strong);
+        border-color: var(--ul-grey-3b);
 
         &:focus {
             border-color: color.adjust($primary-color, $lightness: 10%);
@@ -1349,7 +1349,7 @@
     .wiki-page {
         .wiki-card-header {
             background: var(--ul-grey-1);
-            border-bottom-color: var(--ul-border);
+            border-bottom-color: var(--ul-grey-1a);
 
             h2 {
                 color: var(--ul-grey-8);
@@ -1377,22 +1377,22 @@
 
         .wiki-bbox-controls {
             background: var(--ul-grey-1);
-            border-top-color: var(--ul-border);
+            border-top-color: var(--ul-grey-1a);
         }
 
         .wiki-action-btn {
-            border-color: var(--ul-border-strong);
+            border-color: var(--ul-grey-3b);
             color: var(--ul-grey-8);
 
             &:hover {
                 background: var(--ul-grey-1);
-                border-color: var(--ul-border-strong);
+                border-color: var(--ul-grey-3b);
             }
         }
 
         .wiki-tabs {
             background: var(--ul-grey-1);
-            border-bottom-color: var(--ul-border);
+            border-bottom-color: var(--ul-grey-1a);
         }
 
         .wiki-tab {
@@ -1466,7 +1466,7 @@
         .location-map.card .card-header {
             background: var(--ul-grey-1);
             color: var(--ul-grey-8);
-            border-bottom-color: var(--ul-border);
+            border-bottom-color: var(--ul-grey-1a);
 
             .material-icons {
                 color: var(--ul-grey-7);
@@ -1513,7 +1513,7 @@
 
     .org-bulk-bar {
         background: color-mix(in srgb, var(--ul-grey-2) 88%, transparent);
-        border-color: var(--ul-border-strong);
+        border-color: var(--ul-grey-3b);
         box-shadow:
             0 12px 40px rgba(0, 0, 0, .45),
             0 2px 8px rgba(0, 0, 0, .3),
@@ -1535,7 +1535,7 @@
 
     .org-bulk-btn {
         background: var(--ul-grey-1);
-        border-color: var(--ul-border-strong);
+        border-color: var(--ul-grey-3b);
         color: var(--ul-grey-8);
     }
 
@@ -1572,8 +1572,8 @@
     input[type=search],
     textarea,
     select {
-        background-color: var(--ul-control-bg);
-        border-color: var(--ul-control-border);
+        background-color: var(--ul-grey-1);
+        border-color: var(--ul-grey-1a);
         color: var(--ul-grey-8);
     }
 
@@ -1584,8 +1584,8 @@
     .dialog,
     .ul-dialog,
     .confirm-dialog {
-        background-color: var(--ul-surface-bg);
-        border-color: var(--ul-border);
+        background-color: var(--ul-grey-1b);
+        border-color: var(--ul-grey-1a);
     }
 
     .dialog-header,
@@ -1595,13 +1595,13 @@
     .ul-panel-footer,
     .ul-dialog-footer,
     .dialog-footer {
-        background-color: var(--ul-surface-header-bg);
-        border-color: var(--ul-border);
+        background-color: var(--ul-grey-1a);
+        border-color: var(--ul-grey-1a);
     }
 
     .btn--ghost,
     .btn--link,
     .ul-radio-button {
-        border-color: var(--ul-border);
+        border-color: var(--ul-grey-1a);
     }
 }

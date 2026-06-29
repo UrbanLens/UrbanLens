@@ -250,7 +250,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
 // Separator
 .nav-dropdown-sep {
     height: 1px;
-    background: var(--ul-border);
+    background: var(--ul-grey-1a);
     margin: 4px 0;
 }
 
@@ -495,7 +495,7 @@ nav .brand-logo img {
     &__header {
         @include panel-header($spread: true);
         padding: .85rem 1rem .65rem;
-        border-bottom: 1px solid var(--ul-border);
+        border-bottom: 1px solid var(--ul-grey-1a);
         background: var(--ul-grey-0);
         position: sticky;
         top: 0;
@@ -541,7 +541,7 @@ nav .brand-logo img {
     cursor: default;
     transition: background .15s ease, border-color .15s ease, opacity .15s ease;
     border-left: 3px solid transparent;
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
     position: relative;
 
     &:last-child {
@@ -773,7 +773,7 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
 .notif-prefs {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid var(--ul-border);
+    border-top: 1px solid var(--ul-grey-1a);
 
     &__saved {
         display: flex;
@@ -800,7 +800,7 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
     }
 
     &__grid {
-        border: 1px solid var(--ul-border);
+        border: 1px solid var(--ul-grey-1a);
         border-radius: $radius-sm;
         overflow: hidden;
         font-size: .84rem;
@@ -815,7 +815,7 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
 
     &__header {
         background: var(--ul-grey-0);
-        border-bottom: 1px solid var(--ul-border);
+        border-bottom: 1px solid var(--ul-grey-1a);
     }
 
     &__hdr {

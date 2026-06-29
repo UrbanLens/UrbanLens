@@ -53,11 +53,11 @@
 	display: block;
 	width: 100%;
 	padding: 8px 12px;
-	border: 1px solid var(--ul-control-border);
+	border: 1px solid var(--ul-grey-1a);
 	border-radius: $radius-sm;
 	font-size: .9rem;
 	color: var(--ul-grey-8);
-	background: var(--ul-control-bg);
+	background: var(--ul-grey-1);
 	box-sizing: border-box;
 	transition: border-color .15s, box-shadow .15s;
 
@@ -78,8 +78,8 @@
 // ── Surfaces ──────────────────────────────────────────────────────────────────
 
 @mixin surface($radius: $radius-md) {
-	background: var(--ul-surface-bg);
-	border: 1px solid var(--ul-border);
+	background: var(--ul-grey-1b);
+	border: 1px solid var(--ul-grey-1a);
 	border-radius: $radius;
 }
 
@@ -133,7 +133,7 @@
 
 	&:hover {
 		background: var(--ul-button-hover-bg);
-		border-color: var(--ul-button-hover-border);
+		border-color: var(--ul-grey-3b);
 		color: var(--ul-button-hover-text);
 	}
 }
@@ -141,13 +141,13 @@
 // Outlined / ghost button.
 @mixin btn-ghost {
 	@include btn-base;
-	border-color: var(--ul-border);
+	border-color: var(--ul-grey-1a);
 	color: var(--ul-grey-7);
 
 	&:hover {
 		background: var(--ul-grey-1);
 		color: var(--ul-grey-8);
-		border-color: var(--ul-border-strong);
+		border-color: var(--ul-grey-3b);
 	}
 }
 
@@ -236,7 +236,7 @@
 	align-items: center;
 	gap: $space-sm;
 	padding: $bar-padding-y $bar-padding-x;
-	border-bottom: 1px solid var(--ul-border);
+	border-bottom: 1px solid var(--ul-grey-1a);
 	font-weight: 600;
 	font-size: $font-size;
 	flex-shrink: 0;
@@ -260,7 +260,7 @@
 	align-items: center;
 	gap: $space-sm;
 	padding: $space-sm $bar-padding-x;
-	border-bottom: 1px solid var(--ul-border);
+	border-bottom: 1px solid var(--ul-grey-1a);
 
 	&:last-child {
 		border-bottom: none;
@@ -278,7 +278,7 @@
 	max-width: calc(100vw - 1rem);
 	max-height: calc(100dvh - 1rem);
 	overflow: visible;
-	background: var(--ul-surface-bg);
+	background: var(--ul-grey-1b);
 	color: var(--ul-grey-8);
 
 	@include up($breakpoint-sm) {
@@ -305,7 +305,7 @@
 	justify-content: flex-end;
 	gap: $space-sm;
 	padding: $bar-padding-y $bar-padding-x $space-md;
-	border-top: 1px solid var(--ul-border);
+	border-top: 1px solid var(--ul-grey-1a);
 	flex-shrink: 0;
 }
 
@@ -338,8 +338,8 @@
 	gap: $space-sm;
 	align-items: center;
 	padding: $bar-padding-y $bar-padding-x;
-	border-top: 1px solid var(--ul-border);
-	background: var(--ul-surface-bg-subtle);
+	border-top: 1px solid var(--ul-grey-1a);
+	background: var(--ul-grey-1a);
 }
 
 @mixin empty-state {

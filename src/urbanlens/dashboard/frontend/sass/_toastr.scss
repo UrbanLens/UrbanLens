@@ -88,7 +88,7 @@ $_icon-warning-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
         margin:        0 0 $space-sm;
         padding:       $space-md $space-md $space-md calc(#{$space-md} + #{$_icon-size} + #{$space-sm});
         border-radius: $radius-md;
-        border:        1px solid var(--ul-border);
+        border:        1px solid var(--ul-grey-1a);
         border-left:   $_accent-bar solid transparent;
         box-shadow:    var(--ul-shadow-lg);
         backdrop-filter: blur(12px);

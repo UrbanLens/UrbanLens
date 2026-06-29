@@ -173,7 +173,7 @@
     // ── Card base ─────────────────────────────────────────────────────────
     .wiki-card {
         background: var(--ul-grey-0);
-        border: 1px solid var(--ul-border);
+        border: 1px solid var(--ul-grey-1a);
         ;
         border-radius: 14px;
         overflow: hidden;
@@ -207,7 +207,7 @@
         font-size: .83rem;
         color: var(--ul-grey-5);
         margin: 0;
-        border-bottom: 1px solid var(--ul-border);
+        border-bottom: 1px solid var(--ul-grey-1a);
     }
 
     // ── Details dl ────────────────────────────────────────────────────────
@@ -223,7 +223,7 @@
         padding: .5rem 1.1rem;
 
         &:not(:last-child) {
-            border-bottom: 1px solid var(--ul-border);
+            border-bottom: 1px solid var(--ul-grey-1a);
         }
 
         &.full {
@@ -371,7 +371,7 @@
     }
 
     .wiki-history-item {
-        border: 1px solid var(--ul-border);
+        border: 1px solid var(--ul-grey-1a);
         ;
         border-radius: 10px;
         padding: .75rem 1rem;
@@ -537,7 +537,7 @@
             input,
             textarea {
                 padding: .45rem .65rem;
-                border: 1px solid var(--ul-border);
+                border: 1px solid var(--ul-grey-1a);
                 border-radius: 8px;
                 font-size: .88rem;
                 outline: none;

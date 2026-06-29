@@ -5,7 +5,7 @@
 	max-width: 1000px;
 	margin: 2rem auto;
 	background: var(--ul-grey-0);
-	border: 1px solid var(--ul-border);
+	border: 1px solid var(--ul-grey-1a);
 	border-radius: 16px;
 	overflow: hidden;
 	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
@@ -62,7 +62,7 @@
 
 	&__progress {
 		height: 3px;
-		background: var(--ul-border);
+		background: var(--ul-grey-1a);
 		border-radius: 2px;
 		overflow: hidden;
 		margin-bottom: 2.25rem;
@@ -163,7 +163,7 @@
 	&__title {
 		font-size: 1.65rem;
 		font-weight: 700;
-		color: var(--ul-text);
+		color: var(--ul-grey-8);
 		margin: 0;
 		line-height: 1.2;
 	}
@@ -205,7 +205,7 @@
 		gap: 0.6rem;
 		padding: 0.85rem;
 		background: var(--ul-grey-1);
-		border: 1px solid var(--ul-border);
+		border: 1px solid var(--ul-grey-1a);
 		border-radius: 10px;
 
 		.material-icons {
@@ -219,7 +219,7 @@
 	&__label {
 		font-size: 0.82rem;
 		font-weight: 600;
-		color: var(--ul-text);
+		color: var(--ul-grey-8);
 		line-height: 1.3;
 	}
 
@@ -250,7 +250,7 @@
 		flex-shrink: 0;
 		padding: 0 0.25em 0 10px;
 		background: var(--ul-grey-1, #f3f4f6);
-		border: 1.5px solid var(--ul-border);
+		border: 1.5px solid var(--ul-grey-1a);
 		border-right: none;
 		border-radius: 8px 0 0 8px;
 		color: var(--ul-grey-6, #9aa0a6);
@@ -264,7 +264,7 @@
 		min-width: 0;
 		box-sizing: border-box;
 		border-radius: 0 8px 8px 0;
-		border: 1.5px solid var(--ul-border);
+		border: 1.5px solid var(--ul-grey-1a);
 		border-left: none;
 		padding: 8px 12px;
 		font-size: .9rem;
@@ -284,7 +284,7 @@
 	#setup-username-input {
 		padding: 4px 0 4px 0;
 		margin: 0;
-		border: 1.5px solid var(--ul-border);
+		border: 1.5px solid var(--ul-grey-1a);
 		border-radius: 0 8px 8px 0;
 		border-left: none;
 		background: var(--ul-grey-1);
@@ -313,10 +313,10 @@
 	input[type="text"] {
 		font-size: 1.05rem;
 		padding: 0.6rem 0.85rem;
-		border: 2px solid var(--ul-border);
+		border: 2px solid var(--ul-grey-1a);
 		border-radius: 8px;
 		background: var(--ul-grey-0);
-		color: var(--ul-text);
+		color: var(--ul-grey-8);
 		transition: border-color 0.2s;
 		width: 100%;
 
@@ -349,7 +349,7 @@
 	border-radius: 10px;
 	border: 1px solid rgba($color-amber-500, 0.45);
 	background: rgba($color-amber-500, 0.08);
-	color: var(--ul-text);
+	color: var(--ul-grey-8);
 
 	// display:flex overrides the HTML [hidden] attribute — be explicit
 	&[hidden] {
@@ -387,12 +387,12 @@
 }
 
 .setup-title-suggestion-btn {
-	border: 1px solid var(--ul-border);
+	border: 1px solid var(--ul-grey-1a);
 	border-radius: 999px;
 	padding: 0.28rem 0.75rem;
 	font-size: 0.78rem;
 	background: var(--ul-grey-0);
-	color: var(--ul-text);
+	color: var(--ul-grey-8);
 	cursor: pointer;
 	transition: border-color 0.15s, background-color 0.15s;
 
@@ -408,7 +408,7 @@
 	gap: 0.85rem;
 	padding: 1rem 1.15rem;
 	background: var(--ul-grey-1);
-	border: 1px solid var(--ul-border);
+	border: 1px solid var(--ul-grey-1a);
 	border-radius: 10px;
 
 	.preview-dot {
@@ -431,7 +431,7 @@
 		border: 1px solid var(--ul-grey-2);
 		border-radius: 6px 6px 0 0;
 		font-size: 0.78rem;
-		color: var(--ul-text);
+		color: var(--ul-grey-8);
 		max-width: 200px;
 
 		.material-icons { font-size: 0.85rem; color: var(--ul-accent, #0891b2); }
@@ -474,7 +474,7 @@
 }
 
 .setup-feature-card {
-	border: 1px solid var(--ul-border);
+	border: 1px solid var(--ul-grey-1a);
 	border-radius: 8px;
 	padding: 0.7rem 0.8rem;
 	background: var(--ul-grey-0);
@@ -492,7 +492,7 @@
 	&__name {
 		font-size: 0.82rem;
 		font-weight: 600;
-		color: var(--ul-text);
+		color: var(--ul-grey-8);
 	}
 
 	&__desc {
@@ -564,7 +564,7 @@
 	&__title {
 		font-size: 1.7rem;
 		font-weight: 700;
-		color: var(--ul-text);
+		color: var(--ul-grey-8);
 		margin: 0;
 	}
 

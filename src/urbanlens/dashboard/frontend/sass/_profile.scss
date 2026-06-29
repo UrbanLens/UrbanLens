@@ -14,7 +14,7 @@
 // Hero card - avatar + identity side by side
 .profile-hero {
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
     padding: 2rem;
@@ -45,7 +45,7 @@
     height: 96px;
     border-radius: 50%;
     object-fit: cover;
-    border: 3px solid var(--ul-border);
+    border: 3px solid var(--ul-grey-1a);
     display: block;
 }
 
@@ -169,7 +169,7 @@
 
     &--muted {
         background: var(--ul-grey-4);
-        border-color: var(--ul-border);
+        border-color: var(--ul-grey-1a);
         color: $text-muted;
     }
 
@@ -216,11 +216,11 @@
 
     &--ghost {
         background: var(--ul-grey-0);
-        border-color: var(--ul-border);
+        border-color: var(--ul-grey-1a);
         color: $text-secondary;
 
         &:hover {
-            border-color: var(--ul-border-strong);
+            border-color: var(--ul-grey-3b);
             color: var(--ul-grey-8);
             background: var(--ul-grey-4);
         }
@@ -280,7 +280,7 @@
 
 .profile-stat {
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
     padding: 1.25rem 2rem;
@@ -320,7 +320,7 @@
 // Generic profile section card
 .profile-section {
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
     padding: 1.5rem 2rem;
@@ -351,7 +351,7 @@
     gap: 7px;
     padding: 7px 16px;
     border-radius: 20px;
-    border: 1.5px solid var(--ul-border);
+    border: 1.5px solid var(--ul-grey-1a);
     font-size: 0.875rem;
     color: $text-secondary;
     text-decoration: none;
@@ -390,7 +390,7 @@
     gap: 8px;
     padding: 8px 12px;
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
@@ -435,7 +435,7 @@
             margin-bottom: 0;
             padding-bottom: 0;
             border-bottom: none;
-            border-right: 1px solid var(--ul-border);
+            border-right: 1px solid var(--ul-grey-1a);
             padding-right: 2rem;
             // Sticky within the section so it doesn't scroll away on tall forms
             position: sticky;
@@ -458,7 +458,7 @@
     gap: 1rem;
     margin-bottom: 1.5rem;
     padding-bottom: 1rem;
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
 
     >.material-icons {
         font-size: 1.5rem;
@@ -522,7 +522,7 @@
     width: 100%;
     max-width: 360px;
     padding: 8px 12px;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
@@ -669,7 +669,7 @@
     height: 44px;
     border-radius: 6px;
     overflow: hidden;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     flex-shrink: 0;
 }
 
@@ -720,7 +720,7 @@
             #bbb 0px, #bbb 4px,
             #fff 4px, #fff 8px);
     background-size: 100% 100%, 8px 8px;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
 
     &::-webkit-slider-thumb {
         appearance: none;
@@ -774,7 +774,7 @@
     width: 100%;
     max-width: 360px;
     padding: 8px 12px;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
@@ -799,7 +799,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 1rem 2rem;
-    border: 2px solid var(--ul-border);
+    border: 2px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     background: var(--ul-grey-0);
     cursor: pointer;
@@ -871,7 +871,7 @@
 .edit-profile-title {
     font-size: 1.75rem;
     font-weight: 700;
-    color: var(--ul-text);
+    color: var(--ul-grey-8);
     margin: 0;
 }
 
@@ -884,7 +884,7 @@
 
 .edit-card {
     background: var(--ul-grey-0a);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
@@ -894,15 +894,15 @@
 .edit-card-title {
     font-size: 1.1rem;
     font-weight: 600;
-    color: var(--ul-text);
+    color: var(--ul-grey-8);
     margin: 0 0 1.25rem;
     padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
 }
 
 .edit-card-desc {
     font-size: 0.875rem;
-    color: var(--ul-muted);
+    color: var(--ul-grey-6);
     margin: -0.5rem 0 1rem;
 }
 
@@ -921,7 +921,7 @@
     display: block;
     font-size: 0.85rem;
     font-weight: 600;
-    color: var(--ul-muted);
+    color: var(--ul-grey-6);
     margin-bottom: 0.3rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -967,7 +967,7 @@
     height: 80px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid var(--ul-border);
+    border: 2px solid var(--ul-grey-1a);
 }
 
 .edit-avatar-placeholder {
@@ -975,7 +975,7 @@
     height: 80px;
     border-radius: 50%;
     background: var(--ul-grey-4);
-    border: 2px solid var(--ul-border);
+    border: 2px solid var(--ul-grey-1a);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1014,7 +1014,7 @@ input.edit-input,
 textarea.edit-textarea {
     width: 100%;
     padding: 9px 12px;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: $text-color;
@@ -1046,7 +1046,7 @@ textarea.edit-textarea {
 .edit-actions {
     margin-top: 1.5rem;
     padding-top: 1rem;
-    border-top: 1px solid var(--ul-border);
+    border-top: 1px solid var(--ul-grey-1a);
 }
 
 .edit-save-btn {
@@ -1108,12 +1108,12 @@ textarea.edit-textarea {
     height: 3rem;
     flex: 0 0 auto;
     padding: 0 10px;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-right: none;
     border-radius: $radius-sm 0 0 $radius-sm;
     font-size: .9rem;
     background: var(--ul-grey-1);
-    color: var(--ul-muted);
+    color: var(--ul-grey-6);
     white-space: nowrap;
     user-select: none;
 }
@@ -1139,7 +1139,7 @@ body .edit-profile-page .edit-username-input {
 
 .edit-field-hint {
     font-size: .75rem;
-    color: var(--ul-muted);
+    color: var(--ul-grey-6);
     margin: 4px 0 0;
 }
 
@@ -1169,10 +1169,10 @@ body .edit-profile-page .edit-username-input {
     cursor: pointer;
     padding: 8px;
     border-radius: $radius-sm + 2;
-    border: 1.5px solid var(--ul-border);
+    border: 1.5px solid var(--ul-grey-1a);
     background: var(--ul-grey-0a);
     font-size: .75rem;
-    color: var(--ul-muted);
+    color: var(--ul-grey-6);
     min-width: 64px;
     transition: border-color .15s, box-shadow .15s;
 
@@ -1181,7 +1181,7 @@ body .edit-profile-page .edit-username-input {
         box-shadow: 0 0 0 3px rgba($color-indigo-600, .12);
     }
 
-    .material-icons { font-size: 1.6rem; color: var(--ul-muted); }
+    .material-icons { font-size: 1.6rem; color: var(--ul-grey-6); }
 }
 
 .edit-avatar-option-img {
@@ -1218,7 +1218,7 @@ body .edit-profile-page .edit-username-input {
     gap: 10px;
     padding: 9px 12px;
     background: var(--ul-grey-1);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
 }
 
@@ -1289,7 +1289,7 @@ body .edit-profile-page .edit-username-input {
 .edit-add-link-input {
     flex: 1;
     padding: 9px 12px;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     font-size: 0.9rem;
     color: $text-color;
@@ -1345,7 +1345,7 @@ body .edit-profile-page .edit-username-input {
 
 .profile-hero {
     background: linear-gradient(135deg, var(--ul-grey-0) 0%, var(--ul-grey-1) 100%);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     box-shadow: 0 2px 12px rgba(0, 0, 0, .08);
 }
@@ -1366,7 +1366,7 @@ body .edit-profile-page .edit-username-input {
 
 .profile-annotation-panel {
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-left: 3px solid color-mix(in srgb, $primary-color 50%, transparent);
     border-radius: $radius-md;
     padding: 1.1rem 1.25rem;
@@ -1397,7 +1397,7 @@ body .edit-profile-page .edit-username-input {
     font-weight: 600;
     color: $text-secondary;
     background: var(--ul-grey-1);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: 999px;
     padding: 2px 8px;
 }
@@ -1423,7 +1423,7 @@ body .edit-profile-page .edit-username-input {
     gap: 5px;
     padding: 4px 10px;
     border-radius: 999px;
-    border: 1px solid var(--badge-color, var(--ul-border));
+    border: 1px solid var(--badge-color, var(--ul-grey-1a));
     background: transparent;
     color: var(--badge-color, $text-color);
     font-size: 0.8rem;
@@ -1472,7 +1472,7 @@ body .edit-profile-page .edit-username-input {
     gap: 3px;
     padding: 4px 10px;
     border-radius: 999px;
-    border: 1px dashed var(--ul-border);
+    border: 1px dashed var(--ul-grey-1a);
     background: none;
     color: $text-muted;
     font-size: .8rem;
@@ -1500,7 +1500,7 @@ body .edit-profile-page .edit-username-input {
     left: 0;
     z-index: 50;
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
     padding: .5rem;
@@ -1516,10 +1516,10 @@ body .edit-profile-page .edit-username-input {
     width: 100%;
     min-height: 80px;
     resize: vertical;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     background: var(--ul-grey-1);
-    color: var(--ul-text);
+    color: var(--ul-grey-8);
     font-size: 0.875rem;
     padding: 0.6rem 0.75rem;
     box-sizing: border-box;
@@ -1562,7 +1562,7 @@ body .edit-profile-page .edit-username-input {
     border: none;
     padding: 2px;
     cursor: pointer;
-    color: var(--ul-border);
+    color: var(--ul-grey-1a);
     line-height: 1;
     border-radius: $radius-sm;
     transition: color 0.12s, transform 0.1s;
@@ -1619,7 +1619,7 @@ body .edit-profile-page .edit-username-input {
 
 .pan-note {
     background: var(--ul-grey-1);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     overflow: hidden;
 }
@@ -1629,7 +1629,7 @@ body .edit-profile-page .edit-username-input {
     align-items: center;
     justify-content: space-between;
     padding: .4rem .65rem;
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
     background: var(--ul-grey-4);
 }
 
@@ -1670,10 +1670,10 @@ body .edit-profile-page .edit-username-input {
     width: 100%;
     min-height: 70px;
     resize: vertical;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     background: var(--ul-grey-0);
-    color: var(--ul-text);
+    color: var(--ul-grey-8);
     font-size: 0.875rem;
     padding: 0.55rem 0.7rem;
     box-sizing: border-box;
@@ -1692,7 +1692,7 @@ body .edit-profile-page .edit-username-input {
     flex-direction: column;
     gap: .4rem;
     padding: .5rem 0 .1rem;
-    border-top: 1px dashed var(--ul-border);
+    border-top: 1px dashed var(--ul-grey-1a);
     margin-top: .25rem;
 }
 
@@ -1794,7 +1794,7 @@ body .edit-profile-page .edit-username-input {
 .invite-email-input {
     width: 100%;
     padding: 9px 12px;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     background: var(--ul-grey-1);
     color: var(--ul-grey-9);
@@ -1828,7 +1828,7 @@ body .edit-profile-page .edit-username-input {
 
     select {
         padding: 9px 12px;
-        border: 1px solid var(--ul-border);
+        border: 1px solid var(--ul-grey-1a);
         border-radius: $radius-sm;
         background: var(--ul-grey-1);
         color: var(--ul-grey-9);
@@ -1935,7 +1935,7 @@ body .edit-profile-page .edit-username-input {
     font-size: 0.85rem;
     color: $text-color;
     background: var(--ul-grey-1);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     padding: 8px 12px;
     word-break: break-all;
@@ -2008,7 +2008,7 @@ body .edit-profile-page .edit-username-input {
 // Create card
 .pinlist-create-card {
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
@@ -2018,7 +2018,7 @@ body .edit-profile-page .edit-username-input {
 // List cards
 .pinlist-card {
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     margin-bottom: 0.75rem;
     transition: box-shadow 0.15s;
@@ -2139,7 +2139,7 @@ body .edit-profile-page .edit-username-input {
 }
 
 .form-input {
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     padding: 8px 12px;
     font-size: 0.9rem;
@@ -2268,12 +2268,12 @@ a.profile-stat--link {
     gap: .65rem;
     padding: .5rem .65rem;
     border-radius: 10px;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     background: var(--ul-grey-0);
     transition: border-color .15s, box-shadow .15s;
 
     &:hover {
-        border-color: var(--ul-border-strong);
+        border-color: var(--ul-grey-3b);
         box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
     }
 
@@ -2435,7 +2435,7 @@ a.profile-stat--link {
 
 .friend-request-list--page .friend-request-item {
     padding: .65rem 0;
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
 }
 
 .friend-request-info {
@@ -2514,7 +2514,7 @@ a.profile-stat--link {
 
     &--remove {
         background: none;
-        border-color: var(--ul-border);
+        border-color: var(--ul-grey-1a);
         color: var(--ul-grey-5);
         padding: .25rem .5rem;
 

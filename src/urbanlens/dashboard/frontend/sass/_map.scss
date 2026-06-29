@@ -238,7 +238,7 @@
 }
 
 .detail-pin-list-drawer {
-    border-top: 1px solid var(--ul-border);
+    border-top: 1px solid var(--ul-grey-1a);
     max-height: 320px;
     overflow: hidden;
     display: flex;
@@ -313,7 +313,7 @@
 
 .map-panel-tabs {
     display: flex;
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
     flex-shrink: 0;
 }
 
@@ -565,7 +565,7 @@
     font-size: .82rem;
     font-weight: 600;
     color: var(--ul-grey-7);
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
 }
 
 .markup-form-body {
@@ -593,7 +593,7 @@
 .markup-form-input,
 .markup-form-select {
     padding: .3rem .5rem;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: 5px;
     font-size: .8rem;
     color: var(--ul-grey-7);
@@ -691,7 +691,7 @@
     align-items: center;
     justify-content: space-between;
     padding: .85rem 1.25rem;
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
     flex-shrink: 0;
     background-color: var(--ul-grey-1);
 
@@ -726,7 +726,7 @@
     left: 0;
     right: 0;
     background: var(--ul-grey-0);
-    border: 1.5px solid var(--ul-border);
+    border: 1.5px solid var(--ul-grey-1a);
     border-top: none;
     border-radius: 0 0 $radius-sm $radius-sm;
     box-shadow: 0 6px 18px rgba(0, 0, 0, .1);
@@ -786,7 +786,7 @@
     align-items: center;
     gap: .5rem;
     padding: .55rem .65rem;
-    border: 1.5px solid var(--ul-border);
+    border: 1.5px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     background: var(--ul-grey-0);
     font-size: .88rem;
@@ -810,7 +810,7 @@
 
         &:hover {
             i { color: darken($primary-color, 10%); }
-            span { text-decoration: underline; text-decoration-color: var(--ul-border); }
+            span { text-decoration: underline; text-decoration-color: var(--ul-grey-1a); }
         }
 
         i {
@@ -858,7 +858,7 @@
     display: flex;
     flex-direction: column;
     gap: .4rem;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     padding: .5rem .65rem .5rem;
     background: var(--ul-grey-0);
@@ -931,7 +931,7 @@
     right: -0.65rem;
     z-index: 600;
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     box-shadow: $shadow-dialog;
     max-height: 260px;
@@ -991,7 +991,7 @@
     }
 
     &.apdlg-badge-sugg-create {
-        border-top: 1px solid var(--ul-border);
+        border-top: 1px solid var(--ul-grey-1a);
         color: $text-secondary;
         font-style: italic;
         font-size: .82rem;
@@ -1008,7 +1008,7 @@
 // ── Privacy row ─────────────────────────────────────────────────────────────
 
 .apdlg-customize {
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     background: var(--ul-grey-0);
 
@@ -1056,7 +1056,7 @@
     flex-direction: column;
     gap: .85rem;
     padding: 0 .65rem .75rem;
-    border-top: 1px solid var(--ul-border);
+    border-top: 1px solid var(--ul-grey-1a);
 }
 
 .apdlg-customize-hint {
@@ -1094,7 +1094,7 @@
     align-items: center;
     gap: .6rem;
     padding: .85rem 1.25rem;
-    border-top: 1px solid var(--ul-border);
+    border-top: 1px solid var(--ul-grey-1a);
     flex-shrink: 0;
 }
 
@@ -1104,7 +1104,7 @@
     position: fixed;
     z-index: 10000;
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: 8px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, .18), 0 1px 4px rgba(0, 0, 0, .12);
     min-width: 150px;
@@ -1654,7 +1654,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 
 #addr-search-bar:focus-within {
     box-shadow: 0 2px 12px rgba(0, 0, 0, .24), 0 0 0 2px rgba(var(--ul-primary-rgb, 79, 70, 229), .18);
-    border-color: var(--ul-border-strong);
+    border-color: var(--ul-grey-3b);
 }
 
 .addr-search-icon {
@@ -1739,7 +1739,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     left: -1px;
     right: -1px;
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: 10px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, .16);
     z-index: 1100;
@@ -1758,13 +1758,13 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     text-transform: uppercase;
     color: var(--ul-grey-5);
     background: var(--ul-grey-0);
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
     display: flex;
     align-items: center;
     gap: 4px;
 
     // Subtle per-section tints that adapt automatically to light/dark mode
-    &[data-section="pins"]        { background: color-mix(in srgb, var(--ul-primary) 5%, var(--ul-grey-0)); }
+    &[data-section="pins"]        { background: color-mix(in srgb, var(--ul-primary-color) 5%, var(--ul-grey-0)); }
     &[data-section="places"]      { background: color-mix(in srgb, #22c55e 4%, var(--ul-grey-0)); }
     &[data-section="coordinates"] { background: color-mix(in srgb, #a855f7 4%, var(--ul-grey-0)); }
     &[data-section="suggestions"] { background: color-mix(in srgb, var(--ul-grey-6) 5%, var(--ul-grey-0)); }
@@ -1815,7 +1815,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     padding: 7px 12px;
     font-size: 0.8rem;
     cursor: pointer;
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
     transition: background .1s;
 
     &:last-child {
@@ -1842,9 +1842,9 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     &--pin .addr-suggestion-icon        { color: $color-blue-500; }
     &--location .addr-suggestion-icon   { color: $color-green-500; }
     &--coordinates .addr-suggestion-icon { color: $color-purple-500; }
-    &--place .addr-suggestion-icon      { color: var(--ul-primary); }
+    &--place .addr-suggestion-icon      { color: var(--ul-primary-color); }
     &--city .addr-suggestion-icon       { color: var(--ul-grey-7); }
-    &--home .addr-suggestion-icon       { color: var(--ul-primary); }
+    &--home .addr-suggestion-icon       { color: var(--ul-primary-color); }
     &--mylocation .addr-suggestion-icon { color: $color-blue-500; }
     &--derived .addr-suggestion-icon    { color: var(--ul-grey-5); }
     &--external .addr-suggestion-icon   { color: var(--ul-grey-5); }
@@ -1882,7 +1882,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     padding: 6px 12px;
     font-size: .72rem;
     color: var(--ul-grey-5);
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
 }
 
 .addr-source-loading-label {
@@ -1935,7 +1935,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 .addr-no-results-card {
     pointer-events: auto;
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0,0,0,.22);
     padding: 18px 24px 16px;
@@ -2948,7 +2948,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     left: 0;
     bottom: calc(100% + 8px);
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: 10px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, .22);
     padding: 5px;
@@ -3324,7 +3324,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     right: 0;
     z-index: 200;
     background: var(--ul-grey-1);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: 7px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
     overflow: hidden;

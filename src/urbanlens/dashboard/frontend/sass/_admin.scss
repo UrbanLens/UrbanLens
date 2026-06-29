@@ -65,7 +65,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         align-items: center;
         padding: .85rem;
         background: var(--ul-grey-0);
-        border: 1px solid var(--ul-border);
+        border: 1px solid var(--ul-grey-1a);
         border-radius: 10px;
         box-shadow: 0 4px 16px rgba(15, 23, 42, .06);
         transition: border-color .15s, box-shadow .15s;
@@ -118,7 +118,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         color: var(--ul-grey-6);
         font-size: .9rem;
         background: var(--ul-grey-0);
-        border: 1px dashed var(--ul-border);
+        border: 1px dashed var(--ul-grey-1a);
         border-radius: 10px;
 
         .material-icons {
@@ -157,7 +157,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     select {
         min-width: 7.5rem;
         padding: .45rem .65rem;
-        border: 1.5px solid var(--ul-border);
+        border: 1.5px solid var(--ul-grey-1a);
         border-radius: 8px;
         font-size: .85rem;
         color: var(--ul-grey-8);
@@ -256,7 +256,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     input[type="number"] {
         width: 120px;
         padding: .5rem .75rem;
-        border: 1.5px solid var(--ul-border);
+        border: 1.5px solid var(--ul-grey-1a);
         ;
         border-radius: 8px;
         font-size: .9rem;
@@ -311,7 +311,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     align-items: center;
     gap: .9rem;
     background: var(--ul-grey-1);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: 10px;
     padding: 1rem 1.1rem;
 }
@@ -374,7 +374,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     td {
         padding: .55rem .9rem;
         text-align: left;
-        border-bottom: 1px solid var(--ul-border);
+        border-bottom: 1px solid var(--ul-grey-1a);
     }
 
     th {
@@ -397,7 +397,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 }
 
 .stats-table-link {
-    color: var(--ul-accent);
+    color: var(--ul-color-accent);
     text-decoration: none;
 
     &:hover {
@@ -519,7 +519,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         &__item,
         &__empty {
             background: var(--ul-grey-1);
-            border-color: var(--ul-border-strong);
+            border-color: var(--ul-grey-3b);
             box-shadow: none;
 
             &:hover {
@@ -534,7 +534,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 
     .inline-sub-form select {
         background: var(--ul-grey-1);
-        border-color: var(--ul-border-strong);
+        border-color: var(--ul-grey-3b);
         color: var(--ul-grey-8);
 
         &:focus {

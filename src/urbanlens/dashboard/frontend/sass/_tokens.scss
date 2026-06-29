@@ -322,41 +322,38 @@ $accent-2-light: $color-amber-300;
 $accent-2-dark: $color-amber-700;
 
 // ── Dark-mode accent palette ──────────────────────────────────────────────────
-$dk-navy:         $color-blue-1500;                  // icon backgrounds, calendar cells
-$dk-panel-bg:     $color-deep-purple-1500;           // trip/weather panel background
-$dk-panel-border: rgba($color-deep-purple-1500, .5); // trip/weather panel border
+$dk-navy:         $color-blue-1500;                  
+$dk-panel-bg:     $color-deep-purple-1500;           
+$dk-panel-border: rgba($color-deep-purple-1500, .5); 
 
 // Extended dark-mode surface/state tokens
 $dk-nav-bg:             $color-blue-1700;
-$dk-info-link:          $color-blue-300;   // muted informational link on dark surfaces
-$dk-success-bg:         $color-green-900;   // accept/friend-request dark background
-$dk-accept-border:      $color-green-700;   // accept/friend-request dark border
-$dk-accept-hover:       $color-green-900;   // accept/friend-request dark hover
-$dk-reject-bg:          $color-red-900;   // reject/danger dark background
-$dk-reject-border:      $color-red-700;   // reject/danger dark border
-$dk-reject-hover:       $color-red-900;   // reject/danger dark hover
-$dk-friend-remove-hover: $color-red-900;  // friend remove hover background
-$dk-warning-amber-bg:   $color-amber-900;   // amber-warning dark background (friend requests)
-$dk-warning-amber-bd:   $color-amber-700;   // amber-warning dark border
-$dk-warning-amber-txt:  $color-amber-300;   // amber-warning dark text
-$dk-pending-bg:         $color-amber-900;   // pending-status dark background
-$dk-pending-border:     $color-amber-700;   // pending-status dark border
-$dk-notif-unread-bg:    $color-blue-900;   // unread notification background
-$dk-notif-unread-hover: $color-blue-700;   // unread notification hover
-$dk-comment-avatar-bg:  $color-indigo-900;   // comment avatar placeholder background
-$dk-comment-avatar-txt: $color-indigo-300;   // comment avatar placeholder text
-$dk-cal-event-bg:       $color-indigo-900;   // calendar has-events cell background
-$dk-panel-bg-alt:       $color-indigo-900;   // avatar-upload-btn & tag-stat-children bg
-$dk-tag-stat-border:    $color-indigo-700;   // tag-stat--children border
-$dk-danger-text:        $color-red-200;   // sign-out and danger muted text (Material Red 200)
+$dk-info-link:          $color-blue-300;   
+$dk-success-bg:         $color-green-900;
+$dk-accept-border:      $color-green-700;
+$dk-accept-hover:       $color-green-900;
+$dk-reject-bg:          $color-red-900;
+$dk-reject-border:      $color-red-700;
+$dk-reject-hover:       $color-red-900;
+$dk-friend-remove-hover: $color-red-900;
+$dk-warning-amber-bg:   $color-amber-900;
+$dk-warning-amber-bd:   $color-amber-700;
+$dk-warning-amber-txt:  $color-amber-300;
+$dk-pending-bg:         $color-amber-900;
+$dk-pending-border:     $color-amber-700;
+$dk-notif-unread-bg:    $color-blue-900;
+$dk-notif-unread-hover: $color-blue-700;
+$dk-comment-avatar-bg:  $color-indigo-900;
+$dk-comment-avatar-txt: $color-indigo-300;
+$dk-cal-event-bg:       $color-indigo-900;
+$dk-panel-bg-alt:       $color-indigo-900;
+$dk-tag-stat-border:    $color-indigo-700;
+$dk-danger-text:        $color-red-200;
 
 // ── Third-party brand colours ─────────────────────────────────────────────────
 $discord-brand:       #5865f2;   // Discord blurple
 $discord-brand-hover: #4752c4;   // Discord blurple hover
 $google-text:         #3c4043;   // Google button text (Material Bluegrey 700)
-
-// ── Gallery / dark canvas ─────────────────────────────────────────────────────
-$dk-true-black: $color-grey-10;   // near-black canvas background for full-screen gallery
 
 // ── Radius ────────────────────────────────────────────────────────────────────
 
@@ -500,12 +497,6 @@ $z-nav: 1100;
     --ul-tooltip-fg: #f0f4fc;
     --ul-tooltip-border: rgba(255, 255, 255, 0.09);
     --ul-tooltip-shadow: 0 4px 16px rgba(0, 0, 0, 0.24), 0 1px 4px rgba(0, 0, 0, 0.14);
-
-    // Convenience aliases for scattered references that use shorthand names.
-    --ul-text:    var(--ul-grey-8);
-    --ul-accent:  var(--ul-color-accent);
-    --ul-muted:   var(--ul-grey-6);
-    --ul-primary: var(--ul-primary-color);
 }
 
 [data-theme="dark"] {
@@ -539,18 +530,6 @@ $z-nav: 1100;
     --ul-grey-9: #{$color-grey-0};
     --ul-grey-9a: #{$color-grey-0a};
     --ul-grey-9b: #{$color-grey-0b};
-
-    --ul-surface-bg: #242424;
-    --ul-surface-bg-elevated: #2b2b2b;
-    --ul-surface-bg-subtle: #303030;
-    --ul-surface-header-bg: #303030;
-    --ul-control-bg: #1b1b1b;
-    --ul-control-bg-hover: #202020;
-    --ul-control-border: #3f3f3f;
-
-    --ul-border: #3a3a3a;
-    --ul-border-strong: #505050;
-    --ul-button-hover-border: var(--ul-border-strong);
 
     --ul-shadow-sm: 0 1px 3px rgba(0, 0, 0, .3);
     --ul-shadow-md: 0 4px 16px rgba(0, 0, 0, .4);

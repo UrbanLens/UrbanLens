@@ -195,7 +195,7 @@
     .tad-tabs {
         display: flex;
         gap: 0;
-        border-bottom: 2px solid var(--ul-border);
+        border-bottom: 2px solid var(--ul-grey-1a);
         padding: 0 .5rem;
         flex-shrink: 0;
         background: var(--ul-grey-0);
@@ -231,7 +231,7 @@
         width: calc(100% - 1.5rem);
         margin: .6rem .75rem;
         padding: .45rem .7rem;
-        border: 1px solid var(--ul-border);
+        border: 1px solid var(--ul-grey-1a);
         border-radius: 8px;
         font-size: .85rem;
         box-sizing: border-box;
@@ -326,7 +326,7 @@
 [data-theme="dark"] {
     .tag-add-dialog {
         .tad-tabs {
-            border-bottom-color: var(--ul-border);
+            border-bottom-color: var(--ul-grey-1a);
         }
 
         .tad-tab {
@@ -344,7 +344,7 @@
 
         .dialog-search {
             background: var(--ul-grey-1);
-            border-color: var(--ul-border);
+            border-color: var(--ul-grey-1a);
 
             &:focus {
                 border-color: $color-indigo-400;
@@ -378,7 +378,7 @@
         align-items: flex-start;
         gap: .5rem;
         padding: .5rem 1rem;
-        border-bottom: 1px solid var(--ul-border);
+        border-bottom: 1px solid var(--ul-grey-1a);
 
         &:last-child {
             border-bottom: none;
@@ -589,7 +589,7 @@
 
     // Footer stays pinned below the scrollable area.
     .pin-edit-form-actions {
-        border-top: 1px solid var(--ul-border);
+        border-top: 1px solid var(--ul-grey-1a);
         padding: .75rem 1.25rem .75rem;
         display: flex;
         flex-wrap: wrap;
@@ -660,7 +660,7 @@
 
 // Security field edit section
 .form-section-details {
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: 8px;
     padding: 0;
 
@@ -711,7 +711,7 @@
     select {
         font-size: .82rem;
         padding: .3rem .5rem;
-        border: 1px solid var(--ul-border);
+        border: 1px solid var(--ul-grey-1a);
         ;
         border-radius: 6px;
         background: var(--ul-grey-0);
@@ -862,14 +862,14 @@
 // ── Pin details card theming (pin overview / location details page) ────────
 body.page-location-details {
     .location-details.card {
-        border: 1px solid var(--ul-border);
+        border: 1px solid var(--ul-grey-1a);
         box-shadow: 0 2px 10px rgba(0, 0, 0, .07);
     }
 
     .details-grid {
         .detail-row {
             padding: .45rem .9rem;
-            border-bottom: 1px solid var(--ul-border);
+            border-bottom: 1px solid var(--ul-grey-1a);
             border-radius: 0;
 
             &:last-child {
@@ -893,7 +893,7 @@ body.page-location-details {
         justify-content: space-around;
         gap: .5rem 1rem;
         padding: .6rem .9rem;
-        border-bottom: 1px solid var(--ul-border);
+        border-bottom: 1px solid var(--ul-grey-1a);
     }
 
     .pin-stat-item {
@@ -928,7 +928,7 @@ body.page-location-details {
     }
 
     .security-indicators {
-        border-top-color: var(--ul-border);
+        border-top-color: var(--ul-grey-1a);
     }
 }
 
@@ -1036,11 +1036,11 @@ body.page-location-details {
 
 .pin-note-form {
     padding: .75rem 1rem;
-    border-top: 1px solid var(--ul-border);
+    border-top: 1px solid var(--ul-grey-1a);
 
     .pin-note-input {
         width: 100%;
-        border: 1px solid var(--ul-border);
+        border: 1px solid var(--ul-grey-1a);
         border-radius: 6px;
         padding: .5rem .75rem;
         font-size: .88rem;
@@ -1079,7 +1079,7 @@ body.page-location-details {
 }
 
 .pin-location-panel {
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: 10px;
     overflow: visible;
     background: var(--ul-grey-0);
@@ -1175,7 +1175,7 @@ body.page-location-details {
 // ── Location picker panel (inline in pin overview) ────────────────────────────
 
 .pin-loc-picker {
-    border-top: 1px solid var(--ul-border);
+    border-top: 1px solid var(--ul-grey-1a);
     background: var(--ul-grey-0);
     border-radius: 0 0 10px 10px;
 }
@@ -1299,7 +1299,7 @@ body.page-location-details {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: 8px;
     padding: .5rem .75rem;
     gap: .5rem;
@@ -1438,19 +1438,19 @@ body.page-location-details {
 
     .pin-location-panel {
         background: var(--ul-grey-0);
-        border-color: var(--ul-border);
+        border-color: var(--ul-grey-1a);
 
         &--unlinked {
-            color: var(--ul-muted);
+            color: var(--ul-grey-6);
 
             .material-icons {
-                color: var(--ul-border);
+                color: var(--ul-grey-1a);
             }
         }
     }
 
     .pin-location-label {
-        color: var(--ul-muted);
+        color: var(--ul-grey-6);
     }
 
     .pin-location-name {
@@ -1458,8 +1458,8 @@ body.page-location-details {
     }
 
     .pin-loc-change-btn {
-        color: var(--ul-text);
-        border-color: var(--ul-border);
+        color: var(--ul-grey-8);
+        border-color: var(--ul-grey-1a);
     }
 
     .pin-loc-detach-btn {
@@ -1474,15 +1474,15 @@ body.page-location-details {
 
     .pin-loc-picker {
         background: var(--ul-grey-0);
-        border-color: var(--ul-border);
+        border-color: var(--ul-grey-1a);
     }
 
     .pin-loc-picker-header {
-        color: var(--ul-muted);
+        color: var(--ul-grey-6);
     }
 
     .pin-loc-option {
-        border-color: var(--ul-border);
+        border-color: var(--ul-grey-1a);
 
         &--current {
             background: rgba(59, 130, 246, .08);
@@ -1490,15 +1490,15 @@ body.page-location-details {
     }
 
     .pin-loc-option-name {
-        color: var(--ul-text);
+        color: var(--ul-grey-8);
     }
 
     .loc-conflict-intro {
-        color: var(--ul-muted);
+        color: var(--ul-grey-6);
     }
 
     .loc-conflict-option {
-        border-color: var(--ul-border);
+        border-color: var(--ul-grey-1a);
 
         &--current {
             background: rgba(59, 130, 246, .08);
@@ -1507,7 +1507,7 @@ body.page-location-details {
     }
 
     .loc-conflict-option-name {
-        color: var(--ul-text);
+        color: var(--ul-grey-8);
     }
 
     .wiki-location-conflict {
@@ -1516,7 +1516,7 @@ body.page-location-details {
     }
 
     .wiki-lcn-body {
-        color: var(--ul-text);
+        color: var(--ul-grey-8);
 
         strong {
             color: $color-amber-400;
@@ -1537,10 +1537,10 @@ body.page-location-details {
     }
 
     .wiki-lcn-dismiss {
-        color: var(--ul-muted);
+        color: var(--ul-grey-6);
 
         &:hover {
-            color: var(--ul-text);
+            color: var(--ul-grey-8);
         }
     }
 
@@ -1711,7 +1711,7 @@ body.page-location-details div.section {
 
         .search-result {
             padding: .75rem 1rem;
-            border-bottom: 1px solid var(--ul-border);
+            border-bottom: 1px solid var(--ul-grey-1a);
             transition: background .12s;
 
             &:last-child {
@@ -1735,7 +1735,7 @@ body.page-location-details div.section {
             height: 54px;
             border-radius: 6px;
             overflow: hidden;
-            border: 1px solid var(--ul-border);
+            border: 1px solid var(--ul-grey-1a);
         }
 
         .search-result-thumb {
@@ -1779,13 +1779,13 @@ body.page-location-details div.section {
 
         .search-result-date {
             font-size: .7rem;
-            color: var(--ul-text-muted, #9ca3af);
+            color: var(--ul-grey-6, #9ca3af);
             font-weight: 500;
 
             &::before {
                 content: "·";
                 margin-right: .35rem;
-                color: var(--ul-border);
+                color: var(--ul-grey-1a);
             }
         }
 

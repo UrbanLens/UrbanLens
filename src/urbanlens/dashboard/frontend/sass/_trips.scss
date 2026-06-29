@@ -52,7 +52,7 @@
         margin: 0 auto 1.25rem;
         border-radius: 50%;
         background: linear-gradient(135deg, var(--ul-grey-0a));
-        border: 1px solid var(--ul-border);
+        border: 1px solid var(--ul-grey-1a);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -101,7 +101,7 @@
 
 .trip-card {
     position: relative;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     background-color: var(--ul-grey-0b);
     border-radius: 14px;
     overflow: hidden;
@@ -189,7 +189,7 @@
     &--past {
         background: var(--ul-grey-1);
         color: var(--ul-grey-6);
-        border-color: var(--ul-border);
+        border-color: var(--ul-grey-1a);
     }
 
     &--planning {
@@ -242,7 +242,7 @@
     padding: .12rem .45rem;
     border-radius: 999px;
     background: var(--ul-grey-1);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     font-size: .72rem;
     font-weight: 600;
     color: var(--ul-grey-7);
@@ -273,7 +273,7 @@
     padding: .28rem .55rem;
     border-radius: 999px;
     background: var(--ul-grey-1);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     font-size: .74rem;
     font-weight: 600;
     color: var(--ul-grey-7);
@@ -377,7 +377,7 @@
     justify-content: space-between;
     gap: 1rem;
     padding-bottom: 1.5rem;
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
     margin-bottom: 1.5rem;
     flex-wrap: wrap;
 }
@@ -481,7 +481,7 @@
     &--ghost {
         opacity: 0.3;
         border-radius: 10px;
-        outline: 2px dashed var(--ul-border);
+        outline: 2px dashed var(--ul-grey-1a);
     }
 
     &--chosen {
@@ -533,7 +533,7 @@
         font-size: .9rem;
 
         .badge {
-            background: var(--ul-border);
+            background: var(--ul-grey-1a);
             color: var(--ul-grey-7);
             border-radius: 99px;
             font-size: .72rem;
@@ -578,7 +578,7 @@
     }
 
     &:hover {
-        background: var(--ul-border);
+        background: var(--ul-grey-1a);
         color: var(--ul-grey-7);
     }
 
@@ -811,7 +811,7 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    border: 2px solid var(--ul-border);
+    border: 2px solid var(--ul-grey-1a);
     box-shadow: 0 1px 4px rgba($color-blue-500, .4);
 }
 
@@ -1070,7 +1070,7 @@
 
 .trip-comment-form {
     padding: .875rem 1rem;
-    border-top: 1px solid var(--ul-border);
+    border-top: 1px solid var(--ul-grey-1a);
     background: var(--ul-grey-1);
     border-radius: 0 0 $radius-md $radius-md;
 }
@@ -1093,7 +1093,7 @@
 
 .trip-comment-input {
     width: 100%;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     ;
     border-radius: 8px;
     padding: .55rem .75rem;
@@ -1161,7 +1161,7 @@
     left: 0;
     right: 0;
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     ;
     border-top: none;
     border-radius: 0 0 6px 6px;
@@ -1203,7 +1203,7 @@
     margin: 0 0 1.5rem;
     border-radius: 10px;
     overflow: hidden;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     ;
     position: relative;
 
@@ -1351,7 +1351,7 @@
 
 .activity-tabs {
     display: flex;
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
     padding: 0 .5rem;
     gap: .15rem;
 }
@@ -1429,7 +1429,7 @@
     &--none {
         background: var(--ul-grey-4);
         color: var(--ul-grey-6);
-        border: 1px solid var(--ul-border);
+        border: 1px solid var(--ul-grey-1a);
         ;
     }
 
@@ -1464,7 +1464,7 @@
     right: 0;
     top: calc(100% + 4px);
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     box-shadow: $shadow-md;
     padding: 4px;
@@ -1543,7 +1543,7 @@
 .rsvp-select {
     font-size: .78rem;
     padding: .2rem .5rem;
-    border: 1.5px solid var(--ul-border);
+    border: 1.5px solid var(--ul-grey-1a);
     ;
     border-radius: 6px;
     background: var(--ul-grey-0);
@@ -1571,7 +1571,7 @@
 
 .status-pill-toggle {
     display: inline-flex;
-    border: 1.5px solid var(--ul-border);
+    border: 1.5px solid var(--ul-grey-1a);
     ;
     border-radius: 8px;
     overflow: hidden;
@@ -1597,7 +1597,7 @@
     }
 
     &+& {
-        border-left: 1.5px solid var(--ul-border);
+        border-left: 1.5px solid var(--ul-grey-1a);
     }
 
     &:hover {
@@ -1624,7 +1624,7 @@
     gap: .75rem;
     padding: .55rem 1rem;
     background: var(--ul-grey-1);
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
     flex-wrap: wrap;
 }
 
@@ -1637,7 +1637,7 @@
 
 .trip-map-marker {
     background: $color-blue-500;
-    border: 2px solid var(--ul-border);
+    border: 2px solid var(--ul-grey-1a);
     border-radius: 50%;
     box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
     position: absolute; // must match Leaflet's .leaflet-marker-icon so transform-based positioning works
@@ -1709,7 +1709,7 @@
     border-radius: 999px;
     font-size: .8rem;
     font-weight: 600;
-    border: 1.5px solid var(--ul-border);
+    border: 1.5px solid var(--ul-grey-1a);
     ;
     background: transparent;
     color: var(--ul-grey-7);
@@ -1788,7 +1788,7 @@
     gap: .3rem;
     padding: .3rem .7rem;
     border-radius: 20px;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     background-color: var(--ul-grey-1a);
     font-size: .78rem;
     font-weight: 500;
@@ -1803,7 +1803,7 @@
 
     &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
         background: var(--ul-grey-4);
-        border-color: var(--ul-border);
+        border-color: var(--ul-grey-1a);
     }
 
     &--active {
@@ -1832,7 +1832,7 @@
 
 .cal-month-section-sep {
     height: 1px;
-    background: var(--ul-border);
+    background: var(--ul-grey-1a);
     margin: .75rem 0 .25rem;
 }
 
@@ -1905,7 +1905,7 @@
     padding: .65rem .75rem;
 
     &+& {
-        border-top: 1px solid var(--ul-border);
+        border-top: 1px solid var(--ul-grey-1a);
     }
 
     .trip-weather-activity-info {
@@ -2103,7 +2103,7 @@
     align-items: center;
     gap: .2rem;
     padding: .2rem .4rem;
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     background: transparent;
     color: $text-muted;
@@ -2192,7 +2192,7 @@
     position: absolute;
     z-index: 1200;
     background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
     padding: .25rem 0;
@@ -2251,7 +2251,7 @@
     align-items: center;
     gap: .6rem;
     padding: .55rem .85rem;
-    border: 1.5px solid var(--ul-border);
+    border: 1.5px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     cursor: pointer;
     font-size: .88rem;
@@ -2282,8 +2282,8 @@
     // Dark mode
     [data-theme="dark"] & {
         background: var(--ul-grey-9);
-        border-color: var(--ul-border);
-        color: var(--ul-border);
+        border-color: var(--ul-grey-1a);
+        color: var(--ul-grey-1a);
 
         &:has(input:checked),
         &.active {

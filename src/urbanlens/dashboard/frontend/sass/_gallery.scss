@@ -4,7 +4,7 @@
 
 .photo-gallery {
   .card-header {
-    border-bottom: 1px solid var(--ul-border);
+    border-bottom: 1px solid var(--ul-grey-1a);
     display: flex;
     align-items: center;
     gap: .4rem;
@@ -189,7 +189,7 @@
   max-width: 95vw;
   max-height: 95vh;
   width: 900px;
-  background: $dk-true-black;
+  background: var(--ul-black);
   border: none;
   border-radius: 8px;
   padding: 0;
