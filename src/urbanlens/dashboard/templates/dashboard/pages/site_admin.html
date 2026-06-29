@@ -190,6 +190,30 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
+            <i class="material-icons">person_add_disabled</i>
+            <span>Registration</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="signup-restricted">Sign-up mode</label>
+                <p class="form-help">
+                    When set to <strong>Invite-only</strong>, the public sign-up page shows an access-denied
+                    message unless the visitor arrives via an invitation link from an existing member.
+                </p>
+                <select name="signup_restricted" id="signup-restricted">
+                    <option value="0"{% if not settings.signup_restricted %} selected{% endif %}>Open (anyone can sign up)</option>
+                    <option value="1"{% if settings.signup_restricted %} selected{% endif %}>Invite-only (invitation link required)</option>
+                </select>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
             <i class="material-icons">lock_clock</i>
             <span>Login Security</span>
         </div>

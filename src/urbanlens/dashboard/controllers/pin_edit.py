@@ -358,6 +358,26 @@ class PinNoteDeleteView(LoginRequiredMixin, View):
         return HttpResponse("", status=200)
 
 
+class PinDeleteView(LoginRequiredMixin, View):
+    """Delete a pin owned by the current user.
+
+    DELETE /map/pin/<pin_slug>/delete/
+
+    Returns a 200 with an HX-Redirect header so HTMX navigates to the map after deletion.
+    """
+
+    def delete(self, request, pin_slug):
+        result = _pin_for_user(pin_slug, request)
+        if isinstance(result, HttpResponse):
+            return result
+        pin = result
+        logger.info("User %s deleted pin %s", request.user.id, pin.id)
+        pin.delete()
+        response = HttpResponse("", status=200)
+        response["HX-Redirect"] = reverse("map.view")
+        return response
+
+
 class PinRelinkView(LoginRequiredMixin, View):
     """Link a pin to a different Location, or detach it to its own bare Location.
 

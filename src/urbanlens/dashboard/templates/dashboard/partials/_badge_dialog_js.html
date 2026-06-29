@@ -52,7 +52,9 @@ if (!window._initBadgeDialog) {
         if (search) {
             var freshSearch = search.cloneNode(true);
             search.parentNode.replaceChild(freshSearch, search);
-            freshSearch.addEventListener('input', applyFilter);
+            // Update the closure reference so applyFilter reads from the live element.
+            search = freshSearch;
+            search.addEventListener('input', applyFilter);
         }
         applyFilter();
     };

@@ -506,7 +506,10 @@ class DjangoProjectInitializer:
         self.run_migrations()
 
         if not self.no_runserver:
-            self.run_prod_server()
+            if self.environment == "development":
+                self.run_dev_server()
+            else:
+                self.run_prod_server()
 
 
 def main():

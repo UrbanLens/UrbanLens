@@ -91,7 +91,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "filter_badges_json": filter_badges_json,
                 "icon_categories": ICON_CATEGORIES,
                 "color_choices": COLOR_CHOICES,
-                "profile_id": profile.id,
                 "profile_uuid": profile.uuid,
                 "profile_slug": profile.slug or str(profile.uuid),
                 "app_uuid": str(site.instance_uuid),

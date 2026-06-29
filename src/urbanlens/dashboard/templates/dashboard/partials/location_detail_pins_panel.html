@@ -33,7 +33,7 @@
                 <span class="detail-pin-wiki-meta">
                     {{ dp.effective_latitude|floatformat:5 }}, {{ dp.effective_longitude|floatformat:5 }}
                     {% if dp.profile and dp.profile.user %}
-                    &mdash; added by {{ dp.profile.user.username }}
+                    &mdash; added by {% if dp.profile.user == request.user %}you{% else %}{{ dp.profile.user.username }}{% endif %}
                     {% endif %}
                 </span>
             </div>

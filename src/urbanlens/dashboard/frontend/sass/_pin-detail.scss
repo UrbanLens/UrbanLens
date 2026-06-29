@@ -569,14 +569,33 @@
 
 .pin-edit-dialog {
     width: min(560px, 96vw);
-    max-height: 92vh;
-    overflow-y: auto;
 
+    // The form fills the dialog's flex column and relays the scroll to its body.
     .pin-edit-form {
-        padding: 1.25rem 1.5rem 1.5rem;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    // Scrollable field area; uses .ul-dialog-body for consistent padding/scroll.
+    .pin-edit-form-body {
+        // gap between form rows
         display: flex;
         flex-direction: column;
         gap: .9rem;
+    }
+
+    // Footer stays pinned below the scrollable area.
+    .pin-edit-form-actions {
+        border-top: 1px solid var(--ul-border);
+        padding: .75rem 1.25rem .75rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        flex-shrink: 0;
+        align-items: center;
     }
 }
 

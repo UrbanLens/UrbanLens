@@ -14,7 +14,7 @@ Features planned for this release.
 * UI: Bulk edit category dialog (buttons are awful) [UL-147]
 * Add descriptions to badges that are pre-populated. [UL-245]
 * Remove work account from github project. [UL-247]
-* Switch to gunicorn (or similar) instead of runserver in init.py, except for environment=development. [UL-258]
+* ~~Switch to gunicorn (or similar) instead of runserver in init.py, except for environment=development. [UL-258]~~
 * Pull additional google place info from some supported google takeout files (Reviews.json, and others?)
 * Consider: handle temporary markers when a user pin exists on that exact point.
 * Ensure proper attribution in the smaller maps we're showing around the site (main map should be correct already. Others may or may not need work, though.)
@@ -32,10 +32,10 @@ Features planned for this release.
 * When changing a category to a tag, the tag is visually shown twice in the list until page refresh. [UL-152]
 * Organize > Categories Tab -> Merge button is missing from rows. [UL-153]
 * Organize > Categories Tab -> Edit / merge / delete button should be hidden when not in hover [UL-154]
-* On pin details page, add badge dialog, the search bar doesn't work. [UL-195]
+* ~~On pin details page, add badge dialog, the search bar doesn't work. [UL-195]~~
 * Organize Page: Occasionally, after editing or merging badges, the edit button for other rows no longer opens the edit dialog. I'm not sure exactly what circumstances this happens. [UL-197]
 * Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]
-* On pin details page, clicking edit, the dialog doesn't scroll when overflowing page height. [UL-215]
+* ~~On pin details page, clicking edit, the dialog doesn't scroll when overflowing page height. [UL-215]~~
 * Trip Details > Adding Pin: The suggestions are only geocoded, not pin searches. [UL-227]
 * Starting map option: Remember doesn't appear to work. [UL-255]
 * Organize: Bulk edit button doesn't open dialog.
@@ -183,11 +183,11 @@ Features planned for future releases.
 * Create task to ensure vestigial assets are deleted (e.g. if they were supposed to be deleted already, but there was an error - such as for pin imports, exports, etc). [UL-205]
 * BUG: Map import dialog, existing pins still show "new" in the row. [UL-206]
 * Verify: User imports pins without names, then imports "Labelled Places.json" with the same pins, the names of the originally created pins are updated. [UL-207]
-* on client browser, const _PROFILE_ID = 1; is unnecessary and hints at vulnerabilities. [UL-208]
+* ~~on client browser, const _PROFILE_ID = 1; is unnecessary and hints at vulnerabilities. [UL-208]~~
 * Main map: add pin dialog -> tags and categories picker has them in 2 sections, instead of standardized picker with other badge kinds and a search. Icon section is empty (no options). No option to make it private. Overall: This dialog should reuse existing components instead of redefining the dialog features. [UL-210]
 * BUG: Something I did caused a new pin to be created with a badge named "Unknown". My workflow started with the creation of a new pin by right-clicking on the main map. [UL-212]
-* BUG: Developer toolbar only shows up when the ui admin setting for environment is set to development, but not when the env var is set to development and the ui setting is default. [UL-213]
-* Pin details page: There should be a button to delete the pin. [UL-214]
+* ~~BUG: Developer toolbar only shows up when the ui admin setting for environment is set to development, but not when the env var is set to development and the ui setting is default. [UL-213]~~
+* ~~Pin details page: There should be a button to delete the pin. [UL-214]~~
 * Add FAQ to about page. [UL-217]
 * Export Feature: Additional method of delivery in case the page is reloaded or closed. [UL-218]
 * Handle case where user has a comment, someone else replies to it, and then the original comment is deleted. [UL-219]
@@ -201,7 +201,7 @@ Features planned for future releases.
 * Ensure dialogs that are closed have their data cleared (this occurred on the trip details page) [UL-229]
 * Trip Detail Page > Add Pin Dialog: "Proposed / Confirmed" toggle looks weird. Hide location checkbox doesn't have an active state. Explanation of hide location should be a tooltip, not raw text below. The option for a Child Trip is great, but it should replace the pin selection area, not look like it's a separate option from pin selection. [UL-230]
 * Trip Detail Page > Activities: After adding an activity with "hidden", the user who added the activity can't see the pin. That user should be able to, regardless of privacy settings... but we should show a "hidden" icon to make it clear that others may not see it. [UL-231]
-* Replace "added by {username}" with nothing or "added by you" for the same user in order to reduce text and simplify the ui. [UL-232]
+* ~~Replace "added by {username}" with nothing or "added by you" for the same user in order to reduce text and simplify the ui. [UL-232]~~
 * UI Bug: Trip Details Page > Activity section: When no confirmed activities exist, and you click on the activity tab, the content section seems to disappear, rather than existing with no content. [UL-233]
 * Implement a few extra "undos". For instance: pin deletion, etc. [UL-234]
 * Handle case where a user is invited via one email address, but joins the site using a different email. [UL-235]
@@ -213,7 +213,7 @@ Features planned for future releases.
 * After accepting friend request, the old friend request notification shouldn't have accept or reject buttons anymore. [UL-241]
 * When all notifications are marked read, the notification counter above the bell doesn't update until page refresh. [UL-242]
 * When you are friends with a user, the "add friend" button on their profile shouldn't show up. Instead, it should be "remove friend". Implement the remove friend feature for this. [UL-243]
-* Add site admin setting to make the site invite only, and suspend public signups. [UL-244]
+* ~~Add site admin setting to make the site invite only, and suspend public signups. [UL-244]~~
 * Loopnet API or Scraping [UL-248]
 * Get pin / location bounding box from external service (i.e. property boundaries), or attempt ML building boundaries detection. [UL-249]
 * Organize Page > Priority Tab: Provide mechanism for shifting an item to a specific position (e.g. "go to position 20"), and allow multi-select before dragging to drag as a group. [UL-250]

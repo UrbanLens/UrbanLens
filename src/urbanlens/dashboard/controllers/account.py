@@ -155,6 +155,12 @@ class SignupView(generic.CreateView):
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated:
             return redirect("map.view")
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+        settings = SiteSettings.get_current()
+        if settings.signup_restricted:
+            invite_token = request.GET.get("invite") or request.POST.get("invite")
+            if not invite_token:
+                return render(request, "registration/signup_restricted.html", status=403)
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form: RegistrationForm) -> HttpResponse:

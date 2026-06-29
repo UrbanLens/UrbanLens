@@ -132,9 +132,15 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
             .order_by("pin_type", "name")
         )
         data = []
+        viewer = request.user if request.user.is_authenticated else None
         for dp in detail_pins:
             item = dp.to_detail_json()
-            item["added_by"] = dp.profile.user.username if dp.profile else "Unknown"
+            if dp.profile and dp.profile.user:
+                item["added_by"] = dp.profile.user.username
+                item["is_mine"] = viewer is not None and dp.profile.user_id == viewer.pk
+            else:
+                item["added_by"] = "Unknown"
+                item["is_mine"] = False
             data.append(item)
         return JsonResponse({"detail_pins": data})
 

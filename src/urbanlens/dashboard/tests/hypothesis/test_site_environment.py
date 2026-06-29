@@ -81,3 +81,61 @@ class SiteSettingsEnvironmentTests(TestCase):
         with patch.dict(os.environ, {"UL_ENVIRONMENT": "staging"}):
             effective = self.site.get_effective_environment_type()
             self.assertNotEqual(effective, EnvironmentTypes.STAGING)
+
+
+class IsDevelopmentEnvironmentTests(TestCase):
+    """is_development_environment() is True for DEVELOPMENT and LOCAL, False otherwise."""
+
+    def setUp(self) -> None:
+        self.site = SiteSettings.get_current()
+
+    def _set_override(self, override: str) -> None:
+        SiteSettings.objects.filter(pk=self.site.pk).update(environment_override=override)
+        self.site.refresh_from_db()
+
+    def test_development_override_is_dev(self) -> None:
+        self._set_override(EnvironmentOverrideChoice.DEVELOPMENT)
+        self.assertTrue(self.site.is_development_environment())
+
+    def test_production_override_is_not_dev(self) -> None:
+        self._set_override(EnvironmentOverrideChoice.PRODUCTION)
+        self.assertFalse(self.site.is_development_environment())
+
+    def test_staging_override_is_not_dev(self) -> None:
+        self._set_override(EnvironmentOverrideChoice.STAGING)
+        self.assertFalse(self.site.is_development_environment())
+
+    def test_testing_override_is_not_dev(self) -> None:
+        self._set_override(EnvironmentOverrideChoice.TESTING)
+        self.assertFalse(self.site.is_development_environment())
+
+    def test_default_with_local_env_var_is_dev(self) -> None:
+        self._set_override(EnvironmentOverrideChoice.DEFAULT)
+        stripped = {k: v for k, v in os.environ.items() if k != "UL_ENVIRONMENT"}
+        with patch.dict(os.environ, stripped, clear=True):
+            # No UL_ENVIRONMENT → resolves to LOCAL, which is treated as dev.
+            self.assertTrue(self.site.is_development_environment())
+
+    def test_default_with_ul_environment_local_is_dev(self) -> None:
+        self._set_override(EnvironmentOverrideChoice.DEFAULT)
+        with patch.dict(os.environ, {"UL_ENVIRONMENT": "local"}):
+            self.assertTrue(self.site.is_development_environment())
+
+    def test_default_with_ul_environment_production_is_not_dev(self) -> None:
+        self._set_override(EnvironmentOverrideChoice.DEFAULT)
+        with patch.dict(os.environ, {"UL_ENVIRONMENT": "production"}):
+            self.assertFalse(self.site.is_development_environment())
+
+    @given(st.sampled_from([EnvironmentTypes.PRODUCTION, EnvironmentTypes.STAGING, EnvironmentTypes.TESTING]))
+    @_hyp
+    def test_non_dev_environment_types_return_false(self, env_type: str) -> None:
+        """Hypothesis: none of the non-dev env types should pass is_development_environment."""
+        with patch.object(self.site, "get_effective_environment_type", return_value=env_type):
+            self.assertFalse(self.site.is_development_environment())
+
+    @given(st.sampled_from([EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL]))
+    @_hyp
+    def test_dev_environment_types_return_true(self, env_type: str) -> None:
+        """Hypothesis: both DEVELOPMENT and LOCAL are treated as dev environments."""
+        with patch.object(self.site, "get_effective_environment_type", return_value=env_type):
+            self.assertTrue(self.site.is_development_environment())

@@ -521,7 +521,6 @@
 {% block scripts %}
 <script>
     // ── Constants ─────────────────────────────────────────────────────────────
-    const _PROFILE_ID   = {{ profile_id|default:0 }};
     const _PROFILE_UUID = '{{ profile_uuid|default:"" }}';
     const _APP_UUID     = '{{ app_uuid|default:"" }}';   // server instance UUID - changes on DB wipe
     const _SHOW_FILTERED_PIN_COUNT = {{ show_filtered_pin_count|yesno:'true,false' }};
@@ -890,8 +889,6 @@
     // Flush the cache when the user navigates away so it's always saved
     window.addEventListener('beforeunload', _writeCache);
     // Purge stale keys from old cache versions
-    try { localStorage.removeItem(`ul_pins_v3_${_PROFILE_ID}`); } catch {}
-    try { localStorage.removeItem(`ul_pins_v4_${_PROFILE_ID}`); } catch {}
     if (_PROFILE_UUID) try { localStorage.removeItem(`ul_pins_v4_${_PROFILE_UUID}`); } catch {}
     // Call after any pin mutation (add/delete) to force a fresh fetch next time.
     // Always clears any existing localStorage entry regardless of _USE_CACHE,
@@ -904,7 +901,6 @@
     window.forceRefreshPinCache = async function() {
         console.log('[UL] Force clearing pin cache and refreshing from server');
         window.invalidatePinCache();
-        try { localStorage.removeItem(`ul_pins_v4_${_PROFILE_ID}`); } catch {}
         if (_PROFILE_UUID) try { localStorage.removeItem(`ul_pins_v4_${_PROFILE_UUID}`); } catch {}
         _pinStore.clear();
         _fetchedTiles.clear();
@@ -1328,7 +1324,7 @@
     // ── Gentle onboarding ───────────────────────────────────────────────────
     // Small, dismissible nudges teach powerful map actions in context without
     // blocking map use. Dismissals are stored per profile so users stay in control.
-    const _ONBOARDING_PREFIX = `ul_onboarding_v1_${_PROFILE_UUID || _PROFILE_ID}`;
+    const _ONBOARDING_PREFIX = `ul_onboarding_v1_${_PROFILE_UUID}`;
     const _ONBOARDING_SESSION_KEY = `${_ONBOARDING_PREFIX}_later`;
     const _onboardingCards = [
         {

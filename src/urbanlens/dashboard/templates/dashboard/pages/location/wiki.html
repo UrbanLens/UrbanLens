@@ -625,7 +625,7 @@
                         <i class="material-icons" style="font-size:16px">${icon}</i>
                     </span>
                     <span class="detail-pin-list-name">${dp.name || dp.pin_type}</span>
-                    <span class="detail-pin-list-meta">${dp.added_by ? 'by ' + dp.added_by : ''}</span>
+                    <span class="detail-pin-list-meta">${dp.added_by ? 'by ' + (dp.is_mine ? 'you' : dp.added_by) : ''}</span>
                 </button>
                 <button type="button" class="detail-pin-list-delete" data-uuid="${dp.uuid}" title="Delete">
                     <i class="material-icons" style="font-size:14px">close</i>
@@ -671,7 +671,7 @@
                         icon: _dpMarkerIcon(dp.pin_type, dp.icon, dp.color),
                         draggable: true,
                     });
-                    marker.bindPopup(`<strong>${dp.name || dp.pin_type}</strong> <em>(by ${dp.added_by || '?'})</em>${dp.description ? '<br>' + dp.description : ''}`);
+                    marker.bindPopup(`<strong>${dp.name || dp.pin_type}</strong> <em>(by ${dp.is_mine ? 'you' : (dp.added_by || '?')})</em>${dp.description ? '<br>' + dp.description : ''}`);
                     marker.on('dragend', function () {
                         const pos = marker.getLatLng();
                         fetch(_wikiDpEditBase + dp.uuid + '/edit/', {

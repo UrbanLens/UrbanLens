@@ -255,6 +255,11 @@ urlpatterns = [
                                 name="pin.edit",
                             ),
                             path(
+                                "<slug:pin_slug>/delete/",
+                                pin_edit.PinDeleteView.as_view(),
+                                name="pin.delete",
+                            ),
+                            path(
                                 "<slug:pin_slug>/notes/",
                                 pin_edit.PinNotesView.as_view(),
                                 name="pin.notes",

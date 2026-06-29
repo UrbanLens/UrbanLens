@@ -173,6 +173,9 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if environment in valid_environments:
             settings.environment_override = environment
 
+        if "signup_restricted" in request.POST:
+            settings.signup_restricted = request.POST.get("signup_restricted") in {"1", "true", "on", "True"}
+
         settings.save()
 
         return HttpResponseRedirect(reverse("site_admin") + "?saved=1")

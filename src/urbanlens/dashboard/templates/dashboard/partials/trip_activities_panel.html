@@ -118,7 +118,7 @@
                     <span class="trip-activity-notes">{{ act.notes }}</span>
                     {% endif %}
                     {% if act.added_by %}
-                    <span class="trip-activity-attr">Added by <a href="{% url 'profile.view_user' act.added_by.slug %}" class="trip-attr-link">{{ act.added_by.user.username }}</a></span>
+                    <span class="trip-activity-attr">Added by {% if act.added_by.user == request.user %}you{% else %}<a href="{% url 'profile.view_user' act.added_by.slug %}" class="trip-attr-link">{{ act.added_by.user.username }}</a>{% endif %}</span>
                     {% endif %}
 
                     {# ── Voting (proposed activities only) ────────────────── #}

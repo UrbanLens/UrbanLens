@@ -471,6 +471,7 @@
           class="pin-edit-form">
         {% csrf_token %}
 
+        <div class="pin-edit-form-body ul-dialog-body">
         <div class="form-row">
             <label for="pe-name">Name <span class="form-optional">(leave blank to use location name)</span></label>
             <input type="text" name="name" id="pe-name"
@@ -548,11 +549,20 @@
                 {% endfor %}
             </div>
         </div>
+        </div>{# end .pin-edit-form-body #}
 
-        <div class="form-actions">
+        <div class="form-actions pin-edit-form-actions">
             <button type="submit" class="submit-button btn btn--primary btn--lg">Save Changes</button>
             <button type="button" class="btn btn--ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="button" class="btn btn--danger pin-edit-delete-btn"
+                    hx-delete="{% url 'pin.delete' pin.slug %}"
+                    hx-confirm="Permanently delete this pin? This cannot be undone."
+                    hx-target="body"
+                    style="margin-left:auto">
+                <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">delete</i>
+                Delete Pin
+            </button>
         </div>
     </form>
 </dialog>

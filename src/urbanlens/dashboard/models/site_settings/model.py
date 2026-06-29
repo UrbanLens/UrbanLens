@@ -173,6 +173,17 @@ class SiteSettings(abstract.Model):
         validators=[MinValueValidator(1), MaxValueValidator(1000)],
     )
 
+    # --- Registration ---
+
+    signup_restricted = BooleanField(
+        default=False,
+        help_text=(
+            "When enabled, new accounts cannot be created via the public sign-up page. "
+            "Only users invited by an existing member can join."
+        ),
+        verbose_name="Restrict sign-ups (invite-only)",
+    )
+
     # --- Bootstrap admin ---
 
     bootstrap_admin_user = ForeignKey(
@@ -228,9 +239,11 @@ class SiteSettings(abstract.Model):
         """Return whether the site is running in development mode.
 
         Returns:
-            True when the effective environment type is ``development``.
+            True when the effective environment type is ``development`` or ``local``.
+            ``local`` is the default when ``UL_ENVIRONMENT`` is unset, and is treated
+            as a development environment for toolbar and debug-feature purposes.
         """
-        return self.get_effective_environment_type() == EnvironmentTypes.DEVELOPMENT
+        return self.get_effective_environment_type() in {EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL}
 
     def show_dev_admin_features(self, user) -> bool:
         """Return whether dev-only admin UI should be visible to ``user``.
