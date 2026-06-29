@@ -100,6 +100,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="apicalllog",
-            index=models.Index(fields=["service", "created"], name="api_call_log_service_created_idx"),
+            index=models.Index(fields=["service", "created"], name="api_log_service_created_idx"),
         ),
     ]
