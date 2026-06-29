@@ -29,6 +29,30 @@ from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
+_US_STATE_CODES: dict[str, str] = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+    "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho",
+    "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+    "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+    "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
+    "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+    "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+    "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
+    "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+    "WI": "Wisconsin", "WY": "Wyoming", "DC": "Washington, D.C.",
+}
+
+
+def _expand_state_codes(states_str: str) -> str:
+    """Expand comma-separated US state abbreviations to full state names."""
+    if not states_str:
+        return ""
+    codes = [s.strip().upper() for s in states_str.split(",") if s.strip()]
+    return ", ".join(_US_STATE_CODES.get(c, c) for c in codes)
+
 
 class MapController(LoginRequiredMixin, GenericViewSet):
     def view_map(self, request, *args, **kwargs):
@@ -613,7 +637,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                             "url": "",
                         })
                 except Exception as exc:
-                    logger.warning("Google Places nearby search failed: %s", exc)
+                    # TODO: Catch specific exception
+                    if "403" in str(exc):
+                        logger.warning(
+                            "Google Places API returned 403 Forbidden — enable 'Places API (New)' "
+                            "in Google Cloud Console and ensure the API key is authorized for places.googleapis.com. "
+                            "API key: %s...%s", api_key[:3], api_key[-3:],
+                        )
+                    else:
+                        logger.warning("Google Places nearby search failed: %s", exc)
         elif profile.places_google_enabled:
             logger.debug("Google Places skipped: zoom %d < minimum %d", zoom, GOOGLE_MIN_ZOOM)
 
@@ -655,7 +687,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                         "url": park.get("url", ""),
                         "types": ["national_park"],
                         "rating": None,
-                        "vicinity": park.get("states", ""),
+                        "vicinity": _expand_state_codes(park.get("states", "")),
                         "icon": "",
                     })
             except Exception as exc:

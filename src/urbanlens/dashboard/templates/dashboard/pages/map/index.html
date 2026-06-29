@@ -2293,24 +2293,37 @@
         const merged = { ...place, ...details };
         const website = details.website || merged.url || _placeFallbackUrl(place);
         const parts = [];
-        const source = _placeSourceLabel(place.source);
-        parts.push(`<div class="places-popup-detail"><i class="material-icons">travel_explore</i><span>${_escapeHtml(source)}</span></div>`);
+
+        if (place.source === 'nps') {
+            // Combine source label and website link into one row
+            parts.push(`<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-icons">travel_explore</i>National Park Service | More Information</a>`);
+        } else if (place.source === 'wikipedia') {
+            parts.push(`<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-icons">menu_book</i>Wikipedia | Read Article</a>`);
+        } else {
+            const source = _placeSourceLabel(place.source);
+            parts.push(`<div class="places-popup-detail"><i class="material-icons">travel_explore</i><span>${_escapeHtml(source)}</span></div>`);
+        }
+
         if (merged.formatted_address || merged.vicinity) {
             parts.push(`<div class="places-popup-detail"><i class="material-icons">location_on</i><span>${_escapeHtml(merged.formatted_address || merged.vicinity)}</span></div>`);
         }
         if (merged.rating) {
-            const total = merged.user_ratings_total ? ` (${_escapeHtml(merged.user_ratings_total)} reviews)` : '';
-            parts.push(`<div class="places-popup-detail"><i class="material-icons">star</i><span>${_escapeHtml(merged.rating)} ★${total}</span></div>`);
+            const total = merged.user_ratings_total ? ` (${_escapeHtml(String(merged.user_ratings_total))} reviews)` : '';
+            parts.push(`<div class="places-popup-detail"><i class="material-icons">star</i><span>${_escapeHtml(String(merged.rating))} ★${total}</span></div>`);
         }
         const typeLabel = _formatPlaceTypes(merged.types);
-        if (typeLabel) {
+        const suppressType = place.source === 'wikipedia' ||
+            (place.source === 'nps' && typeLabel.toLowerCase() === 'national park');
+        if (typeLabel && !suppressType) {
             parts.push(`<div class="places-popup-detail"><i class="material-icons">category</i><span>${_escapeHtml(typeLabel)}</span></div>`);
         }
         const summary = merged.editorial_summary?.overview || merged.description;
         if (summary) {
             parts.push(`<div class="places-popup-summary">${_escapeHtml(summary)}</div>`);
         }
-        parts.push(`<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-icons">open_in_new</i>Website / more information</a>`);
+        if (place.source !== 'nps' && place.source !== 'wikipedia') {
+            parts.push(`<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-icons">open_in_new</i>Website / more information</a>`);
+        }
         return parts.join('');
     }
 
@@ -2360,6 +2373,24 @@
                         }
                     })
                     .catch(() => {});
+            }
+            if (place.source === 'wikipedia') {
+                const wikiTitle = (place.name || '').replace(/ /g, '_');
+                fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiTitle)}`, {
+                    headers: { 'Accept': 'application/json' },
+                })
+                .then(resp => resp.ok ? resp.json() : null)
+                .then(data => {
+                    if (data && document.body.contains(detailsWrap)) {
+                        const extract = data.extract || '';
+                        const short = extract.length > 400 ? extract.slice(0, 397) + '…' : extract;
+                        detailsWrap.innerHTML = _buildPlaceDetailRows(place, {
+                            description: short,
+                            vicinity: data.description || place.vicinity || '',
+                        });
+                    }
+                })
+                .catch(() => {});
             }
             const sepDetails = document.createElement('div'); sepDetails.className = 'map-context-menu__sep'; menu.appendChild(sepDetails);
 
