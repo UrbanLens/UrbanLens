@@ -40,7 +40,7 @@ class BraveSearchGateway(Gateway):
     base_url: str = "https://api.search.brave.com/res/v1/web/search"
 
     def __post_init__(self) -> None:
-        super().__post_init__()
+        Gateway.__post_init__(self)
         if self.api_key is None:
             object.__setattr__(self, "api_key", settings.brave_search_api_key)
 

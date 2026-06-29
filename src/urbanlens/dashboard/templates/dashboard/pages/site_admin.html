@@ -17,6 +17,10 @@
                 <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">workspace_premium</i>
                 Subscriptions
             </a>
+            <a href="{% url 'site_admin_api_limits' %}" class="stats-nav-link btn btn--ghost">
+                <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">tune</i>
+                API Limits
+            </a>
             {% if show_dev_toolbar %}
             <a href="{% url 'site_admin_ui_components' %}" class="stats-nav-link btn btn--ghost">
                 <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">palette</i>

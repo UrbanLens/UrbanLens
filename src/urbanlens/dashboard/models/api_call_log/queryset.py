@@ -3,45 +3,46 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Self
 
 from django.db.models import Avg, Count, Q
 from django.utils import timezone
 
-from urbanlens.dashboard.models.abstract.queryset import Manager, QuerySet
+from urbanlens.dashboard.models import abstract
 
 
-class ApiCallLogQuerySet(QuerySet):
+class ApiCallLogQuerySet(abstract.QuerySet):
     """QuerySet for ApiCallLog."""
 
-    def for_service(self, service: str) -> ApiCallLogQuerySet:
+    def for_service(self, service: str) -> Self:
         """Filter to calls for a specific service."""
         return self.filter(service=service)
 
-    def since(self, delta: timedelta) -> ApiCallLogQuerySet:
+    def since(self, delta: timedelta) -> Self:
         """Filter to calls made within the last ``delta``."""
         return self.filter(created__gte=timezone.now() - delta)
 
-    def today(self) -> ApiCallLogQuerySet:
+    def today(self) -> Self:
         """Filter to calls made today (UTC calendar day)."""
         return self.filter(created__date=timezone.now().date())
 
-    def this_week(self) -> ApiCallLogQuerySet:
+    def this_week(self) -> Self:
         """Filter to calls made in the last 7 days."""
         return self.since(timedelta(days=7))
 
-    def this_month(self) -> ApiCallLogQuerySet:
+    def this_month(self) -> Self:
         """Filter to calls made in the last 30 days."""
         return self.since(timedelta(days=30))
 
-    def successful(self) -> ApiCallLogQuerySet:
+    def successful(self) -> Self:
         """Filter to successful calls."""
         return self.filter(success=True)
 
-    def rate_limited(self) -> ApiCallLogQuerySet:
+    def rate_limited(self) -> Self:
         """Filter to calls that were blocked by rate limiting."""
         return self.filter(was_rate_limited=True)
 
-    def geo_filtered(self) -> ApiCallLogQuerySet:
+    def geo_filtered(self) -> Self:
         """Filter to calls that were skipped due to geo filtering."""
         return self.filter(was_geo_filtered=True)
 
@@ -61,9 +62,5 @@ class ApiCallLogQuerySet(QuerySet):
         )
 
 
-class ApiCallLogManager(Manager):
-    """Manager for ApiCallLog."""
-
-    def get_queryset(self) -> ApiCallLogQuerySet:
-        """Return an ApiCallLogQuerySet."""
-        return ApiCallLogQuerySet(self.model, using=self._db)
+class ApiCallLogManager(abstract.Manager.from_queryset(ApiCallLogQuerySet)):
+    """Manager for ApiCallLog that proxies all ApiCallLogQuerySet methods."""

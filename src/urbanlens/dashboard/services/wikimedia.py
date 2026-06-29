@@ -30,7 +30,7 @@ class WikimediaGateway(Gateway):
     base_url: str = _API_URL
 
     def __post_init__(self) -> None:
-        super().__post_init__()
+        Gateway.__post_init__(self)
         self.session.headers.update({"User-Agent": _USER_AGENT})
 
     def search_images(self, query: str) -> list[dict[str, Any]]:

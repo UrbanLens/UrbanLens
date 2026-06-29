@@ -7,7 +7,9 @@ When ``service_key`` is set the plain ``requests.Session`` is replaced in
 every request and writes an ``ApiCallLog`` row after.
 
 Subclasses that override ``__post_init__`` **must** call
-``super().__post_init__()`` so the session swap takes effect.
+``Gateway.__post_init__(self)`` so the session swap takes effect.
+Do not use zero-argument ``super()`` — it fails in ``slots=True`` dataclasses
+when the ``__class__`` cell references the pre-slots class object.
 """
 
 from __future__ import annotations

@@ -21,7 +21,7 @@ class WeatherForecastGateway(Gateway):
     base_url: str = "http://api.openweathermap.org/data/2.5/forecast"
 
     def __post_init__(self):
-        super().__post_init__()
+        Gateway.__post_init__(self)
         if not self.api_key:
             raise ValueError("OpenWeatherMap API key must be provided.")
 

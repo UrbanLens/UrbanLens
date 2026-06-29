@@ -27,7 +27,7 @@ class NPSGateway(Gateway):
     base_url: str = "https://developer.nps.gov/api/v1"
 
     def __post_init__(self):
-        super().__post_init__()
+        Gateway.__post_init__(self)
         if not self.api_key:
             raise ValueError("NPS API key must be provided.")
 

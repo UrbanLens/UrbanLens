@@ -2675,10 +2675,14 @@
         if (e.metaKey || e.ctrlKey) return;
 
         switch (key) {
-            case 'f': {                                              // F — open filter panel and focus name search
+            case 'f': {                                              // F — toggle filter panel; focus name search when opening
                 const fp = document.getElementById('filter-panel');
-                if (!fp.classList.contains('open')) toggleFilterPanel();
-                setTimeout(() => document.getElementById('fp-search')?.focus(), 50);
+                if (fp.classList.contains('open')) {
+                    toggleFilterPanel();
+                } else {
+                    toggleFilterPanel();
+                    setTimeout(() => document.getElementById('fp-search')?.focus(), 50);
+                }
                 break;
             }
             case 'j':                                                // J — Jump to location

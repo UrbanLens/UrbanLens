@@ -31,7 +31,7 @@ class WikipediaGateway(Gateway):
     base_url: str = _GEO_SEARCH_URL
 
     def __post_init__(self) -> None:
-        super().__post_init__()
+        Gateway.__post_init__(self)
         self.session.headers.update({"User-Agent": _USER_AGENT})
 
     def get_nearby_articles(

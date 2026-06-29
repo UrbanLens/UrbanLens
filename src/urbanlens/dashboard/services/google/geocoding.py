@@ -30,7 +30,7 @@ class GoogleGeocodingGateway(Gateway):
     base_url: str = "https://maps.googleapis.com/maps/api/geocode/json"
 
     def __post_init__(self) -> None:
-        super().__post_init__()
+        Gateway.__post_init__(self)
         if not self.api_key:
             # TODO: Build k=>v pairs for all settings to help logging (temporarily for debugging)
             settings_dict = {k: v for k, v in settings.__dict__.items() if not k.startswith("_")}

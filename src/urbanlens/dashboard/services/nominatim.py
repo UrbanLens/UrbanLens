@@ -29,7 +29,7 @@ class NominatimGateway(Gateway):
     base_url: str = _API_URL
 
     def __post_init__(self) -> None:
-        super().__post_init__()
+        Gateway.__post_init__(self)
         self.session.headers.update({"User-Agent": _USER_AGENT})
 
     def reverse_geocode(self, latitude: float, longitude: float) -> dict[str, Any] | None:
