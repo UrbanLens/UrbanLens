@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
 from requests import HTTPError
 
@@ -34,10 +34,13 @@ class BraveSearchGateway(Gateway):
     Auth: X-Subscription-Token header.
     """
 
+    service_key: ClassVar[str] = "brave_search"
+
     api_key: str | None = None
     base_url: str = "https://api.search.brave.com/res/v1/web/search"
 
     def __post_init__(self) -> None:
+        super().__post_init__()
         if self.api_key is None:
             object.__setattr__(self, "api_key", settings.brave_search_api_key)
 

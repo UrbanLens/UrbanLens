@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+from typing import ClassVar
 
 import geopandas
 from shapely.geometry import Point
@@ -13,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NPSMapGateway(Gateway):
+    service_key: ClassVar[str] = "nps"
+
     base_url: str = "https://mapservices.nps.gov/arcgis/rest/services/ParkBoundaries/FeatureServer/0/query"
 
     def check_coordinates_within_park(self, latitude: float, longitude: float) -> str | None:

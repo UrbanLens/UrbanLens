@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 from urbanlens.dashboard.services.gateway import Gateway
 
@@ -10,6 +11,8 @@ class LOCJsonGateway(Gateway):
     """
     Gateway for accessing JSON data from the Library of Congress.
     """
+
+    service_key: ClassVar[str] = "library_of_congress"
 
     base_url: str = "https://loc.gov/api"
 

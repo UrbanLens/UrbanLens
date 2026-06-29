@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 import requests
 
@@ -12,6 +13,8 @@ class RealEstateSalesGateway(Gateway):
     """
     Gateway for accessing real estate sales data from data.gov
     """
+
+    service_key: ClassVar[str] = "datagov"
 
     base_url: str = "https://data.ct.gov/api/views/5mzw-sjtu/rows.json"
     data_dictionary_url: str = "https://data.ct.gov/api/views/5mzw-sjtu/columns.json"

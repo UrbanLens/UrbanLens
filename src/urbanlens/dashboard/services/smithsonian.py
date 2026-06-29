@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from django.core.cache import cache
 import requests
@@ -13,6 +14,8 @@ class SmithsonianGateway(Gateway):
     """
     Gateway for the Smithsonian Open Access API.
     """
+
+    service_key: ClassVar[str] = "smithsonian"
 
     api_key: str
     base_url: str = "https://api.si.edu/openaccess/api/v1.0/search"

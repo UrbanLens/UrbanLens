@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 import requests
 
@@ -10,6 +10,8 @@ from urbanlens.dashboard.services.gateway import Gateway
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class DigitalCommonwealthGateway(Gateway):
+    service_key: ClassVar[str] = "digital_commonwealth"
+
     def get_oai_metadata(self, identifier: str) -> bytes:
         oai_url = "https://oai.digitalcommonwealth.org/catalog/oai"
         params = {

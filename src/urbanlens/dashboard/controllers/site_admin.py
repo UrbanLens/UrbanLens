@@ -6,6 +6,7 @@ import contextlib
 from datetime import timedelta
 import json
 import logging
+import operator
 import os
 import sys
 import time
@@ -410,6 +411,32 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         app_version = app_settings.app_version
         git_update = get_git_update_status(get_git_commit_at_start())
 
+        # ── External API usage ────────────────────────────────────────────────
+        api_usage: list[dict] = []
+        with contextlib.suppress(Exception):
+            from urbanlens.dashboard.models.api_call_log import ApiCallLog
+            from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
+
+            summaries_qs = ApiCallLog.objects.summary_by_service()
+            rate_configs = {r.service: r for r in ApiRateLimit.objects.all()}
+
+            for row in summaries_qs:
+                svc = row["service"]
+                cfg = rate_configs.get(svc)
+                api_usage.append({
+                    "service": svc,
+                    "display_name": cfg.display_name if cfg else svc.replace("_", " ").title(),
+                    "enabled": cfg.enabled if cfg else True,
+                    "calls_per_day": cfg.calls_per_day if cfg else None,
+                    "usa_only": cfg.usa_only if cfg else False,
+                    "total": row["total"],
+                    "blocked": row["blocked"],
+                    "geo_skipped": row["geo_skipped"],
+                    "errors": row["errors"],
+                    "avg_ms": round(row["avg_response_ms"] or 0),
+                })
+            api_usage.sort(key=operator.itemgetter("display_name"))
+
         context = {
             "page_name": "site-admin-stats",
             # Totals
@@ -454,6 +481,7 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             "infrastructure_services": collect_infrastructure_service_stats(),
             "backup_stats": collect_backup_stats(),
             "server_time": now,
+            "api_usage": api_usage,
         }
         return render(request, "dashboard/pages/site_admin_stats.html", context)
 
@@ -571,6 +599,91 @@ def _parse_duration_months(raw: str | None) -> int | None:
         return max(1, int(raw))
     except (TypeError, ValueError):
         return None
+
+
+class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """API rate limit configuration page.
+
+    GET  /site-admin/api-limits/  → view and edit per-service rate limits
+    POST /site-admin/api-limits/  → save one or more service configs
+    """
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+
+    def handle_no_permission(self) -> HttpResponse:
+        """Send anonymous users to login; return 403 for authenticated users without permission."""
+        if not self.request.user.is_authenticated:
+            return redirect_to_login(
+                self.request.get_full_path(),
+                login_url=self.get_login_url(),
+                redirect_field_name=self.get_redirect_field_name(),
+            )
+        return super().handle_no_permission()
+
+    def _get_all_configs(self):
+        """Return ApiRateLimit rows for every known service, creating missing ones."""
+        from urbanlens.dashboard.services.rate_limiter import SERVICE_REGISTRY, get_limit_config
+
+        return [get_limit_config(key) for key in sorted(SERVICE_REGISTRY)]
+
+    def get(self, request):
+        from urbanlens.dashboard.models.api_call_log import ApiCallLog
+
+        configs = self._get_all_configs()
+
+        # Build a quick usage summary indexed by service key for the last 30 days
+        summaries = {row["service"]: row for row in ApiCallLog.objects.summary_by_service()}
+
+        enriched = []
+        for cfg in configs:
+            summary = summaries.get(cfg.service, {})
+            enriched.append({
+                "config": cfg,
+                "calls_30d": summary.get("total", 0),
+                "blocked_30d": summary.get("blocked", 0),
+                "geo_skipped_30d": summary.get("geo_skipped", 0),
+                "errors_30d": summary.get("errors", 0),
+                "avg_ms": round(summary.get("avg_response_ms") or 0),
+            })
+
+        return render(
+            request,
+            "dashboard/pages/site_admin_api_limits.html",
+            {
+                "page_name": "site-admin-api-limits",
+                "services": enriched,
+                "saved": request.GET.get("saved"),
+            },
+        )
+
+    def post(self, request):
+        from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
+
+        service = request.POST.get("service", "").strip()
+        cfg = ApiRateLimit.objects.filter(service=service).first()
+        if not cfg:
+            return HttpResponseRedirect(reverse("site_admin_api_limits") + "?saved=error")
+
+        cfg.enabled = request.POST.get("enabled") in {"1", "true", "on", "True"}
+        cfg.usa_only = request.POST.get("usa_only") in {"1", "true", "on", "True"}
+
+        try:
+            raw_per_min = request.POST.get("calls_per_minute", "").strip()
+            cfg.calls_per_minute = int(raw_per_min) if raw_per_min else None
+        except (ValueError, TypeError):
+            pass
+
+        try:
+            raw_per_day = request.POST.get("calls_per_day", "").strip()
+            cfg.calls_per_day = int(raw_per_day) if raw_per_day else None
+        except (ValueError, TypeError):
+            pass
+
+        cfg.notes = request.POST.get("notes", "").strip()
+        cfg.save()
+
+        return HttpResponseRedirect(reverse("site_admin_api_limits") + "?saved=1")
 
 
 class CeleryTaskStatusView(LoginRequiredMixin, View):

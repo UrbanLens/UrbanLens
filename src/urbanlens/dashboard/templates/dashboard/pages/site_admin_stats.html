@@ -417,6 +417,71 @@
             </div>
         </div>
     </div>
+
+    {# ── External API Usage ────────────────────────────────────────────────── #}
+    {% if api_usage %}
+    <div class="site-admin-card ul-section card">
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
+            <span style="display:flex;align-items:center;gap:.5rem">
+                <i class="material-icons">cloud</i>
+                External API Usage (last 30 days)
+            </span>
+            <a href="{% url 'site_admin_api_limits' %}" class="btn btn--ghost btn--sm">
+                <i class="material-icons" style="font-size:.9rem;vertical-align:-.1em">tune</i>
+                Configure limits
+            </a>
+        </div>
+        <table class="stats-table">
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th style="text-align:right">Calls</th>
+                    <th style="text-align:right">Blocked</th>
+                    <th style="text-align:right">Geo-skipped</th>
+                    <th style="text-align:right">Errors</th>
+                    <th style="text-align:right">Avg&nbsp;ms</th>
+                    <th style="text-align:center">Daily&nbsp;limit</th>
+                    <th style="text-align:center">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for row in api_usage %}
+            <tr>
+                <td>
+                    <strong>{{ row.display_name }}</strong>
+                    <span style="font-size:.75rem;color:var(--ul-text-muted,#6b7280);margin-left:.4rem">{{ row.service }}</span>
+                </td>
+                <td style="text-align:right">{{ row.total }}</td>
+                <td style="text-align:right">{% if row.blocked %}<span style="color:#b91c1c">{{ row.blocked }}</span>{% else %}—{% endif %}</td>
+                <td style="text-align:right">{% if row.geo_skipped %}<span style="color:#0369a1">{{ row.geo_skipped }}</span>{% else %}—{% endif %}</td>
+                <td style="text-align:right">{% if row.errors %}<span style="color:#b91c1c">{{ row.errors }}</span>{% else %}—{% endif %}</td>
+                <td style="text-align:right">{% if row.avg_ms %}{{ row.avg_ms }}{% else %}—{% endif %}</td>
+                <td style="text-align:center">
+                    {% if row.calls_per_day %}
+                        <span title="{{ row.total }} of {{ row.calls_per_day }} daily limit used">
+                            {{ row.total }}&nbsp;/&nbsp;{{ row.calls_per_day }}
+                        </span>
+                    {% else %}
+                        <span style="color:var(--ul-text-muted,#6b7280)">unlimited</span>
+                    {% endif %}
+                </td>
+                <td style="text-align:center">
+                    {% if not row.enabled %}
+                        <span style="background:#f3f4f6;color:#6b7280;border-radius:4px;padding:2px 7px;font-size:.75rem">Disabled</span>
+                    {% elif row.calls_per_day and row.total >= row.calls_per_day %}
+                        <span style="background:#fee2e2;color:#b91c1c;border-radius:4px;padding:2px 7px;font-size:.75rem">Limit hit</span>
+                    {% else %}
+                        <span style="background:#d1fae5;color:#065f46;border-radius:4px;padding:2px 7px;font-size:.75rem">OK</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" style="text-align:center;color:var(--ul-text-muted,#6b7280);padding:1rem">No API calls recorded yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 

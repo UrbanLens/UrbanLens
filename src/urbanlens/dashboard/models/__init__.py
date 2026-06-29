@@ -3,6 +3,8 @@ from urbanlens.dashboard.models.abstract import Manager, Model, QuerySet, Serial
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.models.aliases import LocationAlias, PinAlias
+from urbanlens.dashboard.models.api_call_log import ApiCallLog
+from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 from urbanlens.dashboard.models.badges import COLOR_CHOICES, ICON_CHOICES, Badge, BadgeCustomization, BadgeSerializer
 from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
 from urbanlens.dashboard.models.cache import GeocodedLocation

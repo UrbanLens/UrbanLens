@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -23,6 +24,8 @@ class RouteXLGateway(Gateway):
         print(optimized_route)
 
     """
+
+    service_key: ClassVar[str] = "routexl"
 
     username: str
     password: str

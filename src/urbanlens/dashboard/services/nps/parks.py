@@ -5,9 +5,10 @@ import json
 import logging
 import math
 import operator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.geo_filter import require_usa
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -20,10 +21,13 @@ logger = logging.getLogger(__name__)
 class NPSGateway(Gateway):
     """Gateway for the National Park Service public API."""
 
+    service_key: ClassVar[str] = "nps"
+
     api_key: str | None = settings.nps_api_key
     base_url: str = "https://developer.nps.gov/api/v1"
 
     def __post_init__(self):
+        super().__post_init__()
         if not self.api_key:
             raise ValueError("NPS API key must be provided.")
 
@@ -108,6 +112,9 @@ class NPSGateway(Gateway):
             Each has: ``place_id``, ``name``, ``lat``, ``lng``, ``source``,
             ``description``, ``url``, ``types``, ``rating``, ``vicinity``.
         """
+        if not require_usa("nps", latitude, longitude):
+            return []
+
         parks = self.search_parks(state_code=state_code, limit=500)
 
         nearby: list[tuple[float, dict]] = []
@@ -163,6 +170,9 @@ class NPSGateway(Gateway):
         Returns:
             Park data dict or None.
         """
+        if not require_usa("nps", latitude, longitude):
+            return None
+
         parks = self.search_parks(query=location_name, state_code=state_code, limit=10)
         if not parks:
             parks = self.search_parks(state_code=state_code, limit=10)

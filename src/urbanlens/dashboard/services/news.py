@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from urbanlens.dashboard.services.gateway import Gateway
 
@@ -10,6 +11,8 @@ class NewsGateway(Gateway):
     """
     Gateway for a News API.
     """
+
+    service_key: ClassVar[str] = "news"
 
     api_key: str
     base_url: str = "https://newsapi.google.com/v2/everything"  # Google News API URL

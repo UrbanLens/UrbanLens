@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.gateway import Gateway
 
@@ -26,9 +26,12 @@ class WikipediaGateway(Gateway):
     about the queried address rather than a nearby unrelated landmark.
     """
 
+    service_key: ClassVar[str] = "wikipedia"
+
     base_url: str = _GEO_SEARCH_URL
 
     def __post_init__(self) -> None:
+        super().__post_init__()
         self.session.headers.update({"User-Agent": _USER_AGENT})
 
     def get_nearby_articles(

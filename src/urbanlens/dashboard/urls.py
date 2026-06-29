@@ -754,6 +754,7 @@ urlpatterns = [
     path("site-admin/stats/", site_admin.SiteAdminStatsView.as_view(), name="site_admin_stats"),
     path("site-admin/stats/pull-latest-code/", site_admin.SiteAdminPullLatestCodeView.as_view(), name="site_admin_pull_latest_code"),
     path("site-admin/subscriptions/", site_admin.SiteAdminSubscriptionsView.as_view(), name="site_admin_subscriptions"),
+    path("site-admin/api-limits/", site_admin.SiteAdminApiLimitsView.as_view(), name="site_admin_api_limits"),
     path(
         "site-admin/ui-components/",
         site_admin.SiteAdminUIComponentsView.as_view(),

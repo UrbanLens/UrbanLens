@@ -2,9 +2,38 @@ from django.contrib import admin, messages
 from django.http import HttpRequest, HttpResponseRedirect
 from django.urls import reverse
 
+from urbanlens.dashboard.models.api_call_log import ApiCallLog
+from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.site_settings import SiteSettings
+
+
+@admin.register(ApiRateLimit)
+class ApiRateLimitAdmin(admin.ModelAdmin):
+    """Admin for ApiRateLimit — per-service rate limiting configuration."""
+
+    list_display = ["display_name", "service", "enabled", "calls_per_minute", "calls_per_day", "usa_only"]
+    list_editable = ["enabled", "calls_per_minute", "calls_per_day", "usa_only"]
+    search_fields = ["service", "display_name"]
+    ordering = ["display_name"]
+
+
+@admin.register(ApiCallLog)
+class ApiCallLogAdmin(admin.ModelAdmin):
+    """Admin for ApiCallLog — read-only view of API call history."""
+
+    list_display = ["service", "created", "success", "response_ms", "was_rate_limited", "was_geo_filtered"]
+    list_filter = ["service", "success", "was_rate_limited", "was_geo_filtered"]
+    search_fields = ["service", "endpoint"]
+    readonly_fields = ["service", "endpoint", "created", "updated", "success", "response_ms", "was_rate_limited", "was_geo_filtered"]
+    ordering = ["-created"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
 
 
 @admin.register(SiteSettings)

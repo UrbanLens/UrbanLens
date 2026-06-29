@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 import requests
 
@@ -12,6 +13,8 @@ class GooglePlacesGateway(Gateway):
     """
     Gateway for the Google Places API.
     """
+
+    service_key: ClassVar[str] = "google_places"
 
     api_key: str
 

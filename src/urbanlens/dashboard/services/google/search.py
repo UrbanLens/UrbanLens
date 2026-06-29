@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from requests import HTTPError
 
@@ -35,6 +35,8 @@ class GoogleCustomSearchGateway(Gateway):
     """
     Gateway for the Google Custom Search API.
     """
+
+    service_key: ClassVar[str] = "google_search"
 
     api_key: str | None = settings.google_search_api_key
     cx: str | None = settings.google_search_tenant

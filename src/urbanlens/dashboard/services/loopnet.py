@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 import re
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import quote_plus
 
 from urbanlens.dashboard.services.gateway import Gateway
@@ -32,6 +32,8 @@ class LoopNetGateway(Gateway):
 
     Both paths cache results via the LocationCache layer in the controller.
     """
+
+    service_key: ClassVar[str] = "loopnet"
 
     base_url: str = "https://www.loopnet.com"
 

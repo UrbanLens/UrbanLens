@@ -5,7 +5,7 @@ import json
 import logging
 import re
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.db import DatabaseError
 import s2sphere
@@ -24,10 +24,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GoogleGeocodingGateway(Gateway):
+    service_key: ClassVar[str] = "google_geocoding"
+
     api_key: str | None = settings.google_maps_api_key
     base_url: str = "https://maps.googleapis.com/maps/api/geocode/json"
 
     def __post_init__(self) -> None:
+        super().__post_init__()
         if not self.api_key:
             # TODO: Build k=>v pairs for all settings to help logging (temporarily for debugging)
             settings_dict = {k: v for k, v in settings.__dict__.items() if not k.startswith("_")}

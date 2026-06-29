@@ -3,6 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 import json
 import logging
+from typing import ClassVar
 
 import requests
 
@@ -14,10 +15,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class WeatherForecastGateway(Gateway):
+    service_key: ClassVar[str] = "openweathermap"
+
     api_key: str | None = settings.openweathermap_api_key
     base_url: str = "http://api.openweathermap.org/data/2.5/forecast"
 
     def __post_init__(self):
+        super().__post_init__()
         if not self.api_key:
             raise ValueError("OpenWeatherMap API key must be provided.")
 

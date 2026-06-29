@@ -6,7 +6,7 @@ import json
 import logging
 import math
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.db import DatabaseError
 from fastkml import kml
@@ -47,6 +47,8 @@ class GoogleMapsGateway(Gateway):
     """
     Gateway for the Google Maps API.
     """
+
+    service_key: ClassVar[str] = "google_maps"
 
     api_key: str
 
