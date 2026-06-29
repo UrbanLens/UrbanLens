@@ -62,23 +62,18 @@
     .api-limit-field textarea { resize:vertical; min-height:60px; }
     .api-limit-toggles { display:flex; gap:1.25rem; align-items:center; flex-wrap:wrap; }
     .toggle-row { display:flex; align-items:center; gap:.4rem; font-size:.875rem; }
-    .api-limit-actions { margin-top:.9rem; text-align:right; }
+    .api-limit-saved {
+        font-size: .8rem;
+        color: var(--ul-accent, #0891b2);
+        opacity: 0;
+        transition: opacity .3s;
+        margin-left: auto;
+        white-space: nowrap;
+    }
     .badge-blocked { background:#fee2e2; color:#b91c1c; border-radius:4px; padding:1px 6px; font-size:.75rem; }
     .badge-geo { background:#e0f2fe; color:#0369a1; border-radius:4px; padding:1px 6px; font-size:.75rem; }
     .badge-disabled { background:#f3f4f6; color:#6b7280; border-radius:4px; padding:1px 6px; font-size:.75rem; }
     </style>
-
-    {% if saved == "1" %}
-    <div class="site-admin-notice site-admin-notice--success">
-        <i class="material-icons">check_circle</i>
-        Rate limit configuration saved.
-    </div>
-    {% elif saved == "error" %}
-    <div class="site-admin-notice site-admin-notice--error">
-        <i class="material-icons">error</i>
-        Service not found — no changes saved.
-    </div>
-    {% endif %}
 
     <p style="font-size:.875rem;color:var(--ul-text-muted,#6b7280);margin-bottom:.25rem">
         <i class="material-icons" style="font-size:.9rem;vertical-align:-.15em">info</i>
@@ -89,7 +84,7 @@
     <div class="api-limits-grid">
     {% for svc in services %}
     {% with cfg=svc.config %}
-    <div class="api-limit-card{% if not cfg.enabled %} disabled{% endif %}">
+    <div class="api-limit-card{% if not cfg.enabled %} disabled{% endif %}" data-service="{{ cfg.service }}">
         <div class="api-limit-header">
             <i class="material-icons" style="color:{% if cfg.enabled %}var(--ul-primary,#6366f1){% else %}#9ca3af{% endif %}">
                 {% if cfg.enabled %}cloud{% else %}cloud_off{% endif %}
@@ -100,6 +95,7 @@
             </div>
             {% if not cfg.enabled %}<span class="badge-disabled">Disabled</span>{% endif %}
             {% if cfg.usa_only %}<span class="badge-geo">USA only</span>{% endif %}
+            <span class="api-limit-saved" aria-live="polite"></span>
         </div>
 
         <div class="api-limit-stats">
@@ -110,7 +106,12 @@
             {% if svc.avg_ms %}<span>~{{ svc.avg_ms }} ms avg</span>{% endif %}
         </div>
 
-        <form method="post" action="{% url 'site_admin_api_limits' %}">
+        <form method="post"
+              action="{% url 'site_admin_api_limits' %}"
+              class="api-limit-form"
+              hx-post="{% url 'site_admin_api_limits' %}"
+              hx-trigger="change from:input[type=checkbox], input changed delay:700ms from:input[type=number], keyup changed delay:700ms from:textarea"
+              hx-swap="none">
             {% csrf_token %}
             <input type="hidden" name="service" value="{{ cfg.service }}">
 
@@ -144,10 +145,6 @@
                               placeholder="Free-tier limits, billing info…">{{ cfg.notes }}</textarea>
                 </div>
             </div>
-
-            <div class="api-limit-actions">
-                <button type="submit" class="btn btn--primary btn--sm">Save</button>
-            </div>
         </form>
     </div>
     {% endwith %}
@@ -156,4 +153,25 @@
     {% endfor %}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    function showSaved(card) {
+        var ind = card && card.querySelector('.api-limit-saved');
+        if (!ind) return;
+        ind.textContent = '✓ Saved';
+        ind.style.opacity = '1';
+        clearTimeout(ind._t);
+        ind._t = setTimeout(function () { ind.style.opacity = '0'; }, 2500);
+    }
+
+    document.body.addEventListener('apiLimitSaved', function (evt) {
+        var svc = evt.detail && evt.detail.service;
+        if (!svc) return;
+        showSaved(document.querySelector('.api-limit-card[data-service="' + svc + '"]'));
+    });
+}());
+</script>
 {% endblock %}

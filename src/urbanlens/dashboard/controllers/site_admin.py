@@ -653,35 +653,52 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             {
                 "page_name": "site-admin-api-limits",
                 "services": enriched,
-                "saved": request.GET.get("saved"),
             },
         )
+
+    @staticmethod
+    def _apply_rate_limit_config(cfg, post_data) -> None:
+        """Apply POSTed rate-limit fields to an ``ApiRateLimit`` row."""
+        cfg.enabled = post_data.get("enabled") in {"1", "true", "on", "True"}
+        cfg.usa_only = post_data.get("usa_only") in {"1", "true", "on", "True"}
+
+        try:
+            raw_per_min = post_data.get("calls_per_minute", "").strip()
+            cfg.calls_per_minute = int(raw_per_min) if raw_per_min else None
+        except (ValueError, TypeError):
+            pass
+
+        try:
+            raw_per_day = post_data.get("calls_per_day", "").strip()
+            cfg.calls_per_day = int(raw_per_day) if raw_per_day else None
+        except (ValueError, TypeError):
+            pass
+
+        cfg.notes = post_data.get("notes", "").strip()
 
     def post(self, request):
         from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 
         service = request.POST.get("service", "").strip()
         cfg = ApiRateLimit.objects.filter(service=service).first()
+        is_htmx = bool(request.headers.get("HX-Request"))
+
         if not cfg:
+            if is_htmx:
+                response = HttpResponse(status=404)
+                response["HX-Trigger"] = json.dumps({
+                    "showToast": {"level": "error", "message": "Service not found — no changes saved."},
+                })
+                return response
             return HttpResponseRedirect(reverse("site_admin_api_limits") + "?saved=error")
 
-        cfg.enabled = request.POST.get("enabled") in {"1", "true", "on", "True"}
-        cfg.usa_only = request.POST.get("usa_only") in {"1", "true", "on", "True"}
-
-        try:
-            raw_per_min = request.POST.get("calls_per_minute", "").strip()
-            cfg.calls_per_minute = int(raw_per_min) if raw_per_min else None
-        except (ValueError, TypeError):
-            pass
-
-        try:
-            raw_per_day = request.POST.get("calls_per_day", "").strip()
-            cfg.calls_per_day = int(raw_per_day) if raw_per_day else None
-        except (ValueError, TypeError):
-            pass
-
-        cfg.notes = request.POST.get("notes", "").strip()
+        self._apply_rate_limit_config(cfg, request.POST)
         cfg.save()
+
+        if is_htmx:
+            response = HttpResponse(status=204)
+            response["HX-Trigger"] = json.dumps({"apiLimitSaved": {"service": service}})
+            return response
 
         return HttpResponseRedirect(reverse("site_admin_api_limits") + "?saved=1")
 
