@@ -21203,4 +21203,40 @@ body.page-index .home-cta-text {
   font-size: 0.8rem;
 }
 
+
+.places-popup-details {
+  max-width: 280px;
+}
+
+.places-popup-detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.25rem 0.85rem;
+  color: var(--ul-grey-6);
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+.places-popup-detail .material-icons {
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+  color: #6366f1;
+}
+.places-popup-detail span {
+  min-width: 0;
+}
+
+.places-popup-summary {
+  padding: 0.35rem 0.85rem 0.25rem;
+  color: var(--ul-grey-5);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  max-height: 5.4em;
+  overflow: hidden;
+}
+
+.places-popup-website {
+  margin-top: 0.2rem;
+}
+
 /*# sourceMappingURL=style.css.map */

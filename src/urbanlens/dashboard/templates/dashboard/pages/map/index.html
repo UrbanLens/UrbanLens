@@ -2273,6 +2273,53 @@
         google: { icon: 'star', cls: 'search-result-marker-icon--places' },
     };
 
+    function _placeSourceLabel(source) {
+        if (source === 'nps') return 'National Park Service';
+        if (source === 'wikipedia') return 'Wikipedia';
+        return 'Google Places';
+    }
+
+    function _placeFallbackUrl(place) {
+        if (place.url) return place.url;
+        if (place.source === 'wikipedia' && place.name) return `https://en.wikipedia.org/wiki/${encodeURIComponent(place.name.replace(/ /g, '_'))}`;
+        if (place.source === 'nps') return 'https://www.nps.gov/findapark/index.htm';
+        if (place.place_id && place.source === 'google') return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name || `${place.lat},${place.lng}`)}&query_place_id=${encodeURIComponent(place.place_id)}`;
+        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name || `${place.lat},${place.lng}`)}`;
+    }
+
+    function _formatPlaceTypes(types) {
+        return (types || [])
+            .filter(Boolean)
+            .slice(0, 3)
+            .map(t => String(t).replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase()))
+            .join(', ');
+    }
+
+    function _buildPlaceDetailRows(place, details = {}) {
+        const merged = { ...place, ...details };
+        const website = details.website || merged.url || _placeFallbackUrl(place);
+        const parts = [];
+        const source = _placeSourceLabel(place.source);
+        parts.push(`<div class="places-popup-detail"><i class="material-icons">travel_explore</i><span>${_escapeHtml(source)}</span></div>`);
+        if (merged.formatted_address || merged.vicinity) {
+            parts.push(`<div class="places-popup-detail"><i class="material-icons">location_on</i><span>${_escapeHtml(merged.formatted_address || merged.vicinity)}</span></div>`);
+        }
+        if (merged.rating) {
+            const total = merged.user_ratings_total ? ` (${_escapeHtml(merged.user_ratings_total)} reviews)` : '';
+            parts.push(`<div class="places-popup-detail"><i class="material-icons">star</i><span>${_escapeHtml(merged.rating)} ★${total}</span></div>`);
+        }
+        const typeLabel = _formatPlaceTypes(merged.types);
+        if (typeLabel) {
+            parts.push(`<div class="places-popup-detail"><i class="material-icons">category</i><span>${_escapeHtml(typeLabel)}</span></div>`);
+        }
+        const summary = merged.editorial_summary?.overview || merged.description;
+        if (summary) {
+            parts.push(`<div class="places-popup-summary">${_escapeHtml(summary)}</div>`);
+        }
+        parts.push(`<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-icons">open_in_new</i>Website / more information</a>`);
+        return parts.join('');
+    }
+
     function _buildPlacesMarker(place) {
         const lat = place.lat, lng = place.lng;
         const src = _PLACES_SOURCE_ICONS[place.source] || _PLACES_SOURCE_ICONS.google;
@@ -2302,6 +2349,25 @@
             nameRow.textContent = place.name;
             menu.appendChild(nameRow);
             const sep0 = document.createElement('div'); sep0.className = 'map-context-menu__sep'; menu.appendChild(sep0);
+
+            // Service-provided details. Google markers are enhanced below with
+            // Places Details data once it arrives, but the popup always includes
+            // a useful outbound link immediately.
+            const detailsWrap = document.createElement('div');
+            detailsWrap.className = 'places-popup-details';
+            detailsWrap.innerHTML = _buildPlaceDetailRows(place);
+            menu.appendChild(detailsWrap);
+            if (place.source === 'google' && place.place_id) {
+                fetch(`{% url "map.places.details" %}?place_id=${encodeURIComponent(place.place_id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then(resp => resp.ok ? resp.json() : null)
+                    .then(data => {
+                        if (data?.place && document.body.contains(detailsWrap)) {
+                            detailsWrap.innerHTML = _buildPlaceDetailRows(place, data.place);
+                        }
+                    })
+                    .catch(() => {});
+            }
+            const sepDetails = document.createElement('div'); sepDetails.className = 'map-context-menu__sep'; menu.appendChild(sepDetails);
 
             // Copy coordinates
             const coordItem = document.createElement('button');
