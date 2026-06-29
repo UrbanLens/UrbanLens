@@ -246,7 +246,7 @@
                     {% for radio in map_display_form.default_map_view %}
                     <label class="settings-map-view-option ul-radio-button {% if radio.data.value == map_display_form.instance.default_map_view %}active{% endif %}">
                         {{ radio.tag }}
-                        {% if radio.data.value == "satellite" %}<i class="material-icons">satellite_alt</i>
+                        {% if radio.data.value == "satellite" %}<i class="material-icons">globe</i>
                         {% elif radio.data.value == "topographic" %}<i class="material-icons">terrain</i>
                         {% elif radio.data.value == "remember" %}<i class="material-icons">history</i>
                         {% else %}<i class="material-icons">map</i>{% endif %}
@@ -580,30 +580,32 @@
             </div>
         </div>
 
-        <form method="post" class="settings-form" id="contact-form">
-            {% csrf_token %}
-            <input type="hidden" name="section" value="contact">
+        <div class="settings-section-body">
+            <form method="post" class="settings-form" id="contact-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="contact">
 
-            <div class="settings-field">
-                <label class="settings-label" for="{{ contact_form.email.id_for_label }}">
-                    {{ contact_form.email.label }}
-                </label>
-                <p class="settings-help">{{ contact_form.email.help_text }}</p>
-                {{ contact_form.email }}
-                {% if contact_form.email.errors %}
-                <p class="settings-error">{{ contact_form.email.errors|join:", " }}</p>
-                {% endif %}
+                <div class="settings-field">
+                    <label class="settings-label" for="{{ contact_form.email.id_for_label }}">
+                        {{ contact_form.email.label }}
+                    </label>
+                    <p class="settings-help">{{ contact_form.email.help_text }}</p>
+                    {{ contact_form.email }}
+                    {% if contact_form.email.errors %}
+                    <p class="settings-error">{{ contact_form.email.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+
+            <div hx-get="{% url 'notifications.preferences' %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <p class="loading-text">Loading…</p>
             </div>
-
-            <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save</button>
-            </div>
-        </form>
-
-        <div hx-get="{% url 'notifications.preferences' %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-            <p class="loading-text">Loading…</p>
         </div>
     </section>
 </div>

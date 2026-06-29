@@ -12,7 +12,7 @@
 {% block title %}Map{% endblock %}
 
 {% block content %}
-<div id="map" hx-boost="true">
+<div id="map" data-map-style="{% if map_dark_mode == 'dark' %}dark{% else %}light{% endif %}" hx-boost="true">
     {# ── Map toolbar (tools only) ──────────────────────────────────────────── #}
     <div class="map-buttons" id="map-buttons">
         <button id="toggle-map-buttons" class="map-toolbar-collapse" aria-label="Toggle map controls"
@@ -1714,6 +1714,11 @@
             : '';
     }
 
+    // Expose effective map style on #map for SCSS (e.g. #map[data-map-style="dark"]).
+    function _syncMapStyleAttribute() {
+        map.getContainer().dataset.mapStyle = _isDarkMapActive() ? 'dark' : 'light';
+    }
+
     // Swap between standardLayer and darkLayer without touching satellite/topo.
     function _syncBaseLayer() {
         const useDark = _isDarkMapActive();
@@ -1725,6 +1730,7 @@
             if (!map.hasLayer(standardLayer)) standardLayer.addTo(map);
         }
         _applyTopoFilter();
+        _syncMapStyleAttribute();
     }
 
     // Re-apply topo filter when the topo layer is toggled.

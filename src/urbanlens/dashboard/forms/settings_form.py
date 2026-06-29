@@ -329,7 +329,7 @@ class AISettingsForm(forms.ModelForm):
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Enable AI Features",
-        help_text="Turn all AI-assisted features on or off for your account.",
+        help_text="Turn all AI-assisted features on or off.",
     )
     ai_badge_categories = forms.BooleanField(
         required=False,

@@ -300,7 +300,7 @@
         letter-spacing: .03em;
         text-transform: uppercase;
         flex-shrink: 0;
-        color: $color-grey-0;
+        color: var(--ul-grey-0);
 
         &--tag {
             background-color: #{$color-purple-900};

@@ -2,7 +2,7 @@
 <div class="notif-prefs" id="notif-prefs">
     {% if saved %}
     <p class="notif-prefs__saved">
-        <i class="material-icons" style="font-size:1rem;vertical-align:-0.15em">check_circle</i>
+        <i class="material-icons notif-prefs__saved-icon">check_circle</i>
         Preferences saved.
     </p>
     {% endif %}
@@ -10,55 +10,59 @@
           hx-target="#notif-prefs"
           hx-swap="outerHTML"
           hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-        <table class="notif-prefs__table">
-            <thead>
-                <tr>
-                    <th class="notif-prefs__type-hdr">Event</th>
-                    <th class="notif-prefs__col-hdr">None</th>
-                    <th class="notif-prefs__col-hdr">Notification</th>
-                    <th class="notif-prefs__col-hdr">Email</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for field, title in pref_fields %}
-                {% with current=prefs|get_attr:field %}
-                <tr class="notif-prefs__row">
-                    <td class="notif-prefs__label">{{ title }}</td>
+        <p class="settings-label notif-prefs__heading">Event notifications</p>
+        <p class="settings-help notif-prefs__intro">Choose how you want to be notified for each event type.</p>
 
-                    {# None - decorative checkbox; no name, so it is never submitted.       #}
-                    {# Checked when neither site nor email is active.                        #}
-                    <td class="notif-prefs__cell">
-                        <input type="checkbox"
-                               class="notif-none-box"
-                               data-field="{{ field }}"
-                               {% if current == 'none' %}checked{% endif %}
-                               onchange="notifNone(this)">
-                    </td>
+        <div class="notif-prefs__grid" role="group" aria-label="Notification delivery preferences">
+            <div class="notif-prefs__header">
+                <span class="notif-prefs__hdr notif-prefs__hdr--event">Event</span>
+                <span class="notif-prefs__hdr">None</span>
+                <span class="notif-prefs__hdr">Notification</span>
+                <span class="notif-prefs__hdr">Email</span>
+            </div>
 
-                    {# In-app notification #}
-                    <td class="notif-prefs__cell">
-                        <input type="checkbox"
-                               name="{{ field }}__site"
-                               class="notif-delivery-box"
-                               data-field="{{ field }}"
-                               {% if current == 'site' or current == 'both' %}checked{% endif %}
-                               onchange="notifDelivery(this)">
-                    </td>
+            {% for field, title in pref_fields %}
+            {% with current=prefs|get_attr:field %}
+            <div class="notif-prefs__row">
+                <span class="notif-prefs__label">{{ title }}</span>
 
-                    {# Email #}
-                    <td class="notif-prefs__cell">
-                        <input type="checkbox"
-                               name="{{ field }}__email"
-                               class="notif-delivery-box"
-                               data-field="{{ field }}"
-                               {% if current == 'email' or current == 'both' %}checked{% endif %}
-                               onchange="notifDelivery(this)">
-                    </td>
-                </tr>
-                {% endwith %}
-                {% endfor %}
-            </tbody>
-        </table>
+                {# None - decorative checkbox; no name, so it is never submitted.       #}
+                {# Checked when neither site nor email is active.                        #}
+                <label class="notif-prefs__cell">
+                    <span class="notif-prefs__sr-only">{{ title }}: none</span>
+                    <input type="checkbox"
+                           class="notif-none-box"
+                           data-field="{{ field }}"
+                           {% if current == 'none' %}checked{% endif %}
+                           onchange="notifNone(this)">
+                </label>
+
+                {# In-app notification #}
+                <label class="notif-prefs__cell">
+                    <span class="notif-prefs__sr-only">{{ title }}: in-app notification</span>
+                    <input type="checkbox"
+                           name="{{ field }}__site"
+                           class="notif-delivery-box"
+                           data-field="{{ field }}"
+                           {% if current == 'site' or current == 'both' %}checked{% endif %}
+                           onchange="notifDelivery(this)">
+                </label>
+
+                {# Email #}
+                <label class="notif-prefs__cell">
+                    <span class="notif-prefs__sr-only">{{ title }}: email</span>
+                    <input type="checkbox"
+                           name="{{ field }}__email"
+                           class="notif-delivery-box"
+                           data-field="{{ field }}"
+                           {% if current == 'email' or current == 'both' %}checked{% endif %}
+                           onchange="notifDelivery(this)">
+                </label>
+            </div>
+            {% endwith %}
+            {% endfor %}
+        </div>
+
         <div class="notif-prefs__footer">
             <button type="submit" class="settings-save-btn">Save</button>
         </div>

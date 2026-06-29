@@ -448,6 +448,10 @@
     }
 }
 
+.settings-section-body {
+    min-width: 0;
+}
+
 .settings-section-header {
     display: flex;
     align-items: flex-start;
@@ -595,7 +599,6 @@
         strong {
             font-size: 0.9rem;
             font-weight: 600;
-            color: $text-color;
         }
 
         .settings-help {

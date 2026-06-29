@@ -151,8 +151,8 @@ $_icon-warning-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
     > .toast-success {
         @include toast-variant(
             $_success-accent,
-            var(--ul-color-success-bg),
-            var(--ul-color-success-border),
+            color: var(--ul-color-success-bg),
+            color: var(--ul-color-success-border),
             $_icon-success
         );
     }
@@ -160,8 +160,8 @@ $_icon-warning-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
     > .toast-error {
         @include toast-variant(
             $_error-accent,
-            var(--ul-color-danger-bg),
-            var(--ul-color-danger-border),
+            color: var(--ul-color-danger-bg),
+            color: var(--ul-color-danger-border),
             $_icon-error
         );
     }
@@ -169,8 +169,8 @@ $_icon-warning-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
     > .toast-info {
         @include toast-variant(
             $_info-accent,
-            var(--ul-toast-info-bg),
-            var(--ul-toast-info-border),
+            color: var(--ul-toast-info-bg),
+            color: var(--ul-toast-info-border),
             $_icon-info
         );
     }
@@ -178,8 +178,8 @@ $_icon-warning-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
     > .toast-warning {
         @include toast-variant(
             $_warning-accent,
-            var(--ul-color-warning-bg),
-            var(--ul-color-warning-border),
+            color: var(--ul-color-warning-bg),
+            color: var(--ul-color-warning-border),
             $_icon-warning
         );
     }

@@ -54,7 +54,7 @@
 
     body {
         background: var(--ul-grey-0);
-        color: $color-grey-1;
+        color: var(--ul-grey-1);
     }
     
     .app-nav {
@@ -83,7 +83,7 @@
         &.tag-stat--total {
             background: var(--ul-grey-0);
             border-color: var(--ul-grey-8b);
-            color: $color-grey-5;
+            color: var(--ul-grey-5);
         }
     }
 
@@ -97,7 +97,7 @@
 
         &:hover {
             background: var(--ul-grey-0);
-            color: $color-grey-1;
+            color: var(--ul-grey-1);
         }
     }
 
@@ -114,7 +114,7 @@
     .settings-toggle-label,
     .tag-card-name,
     .badge-title {
-        color: $color-grey-1;
+        color: var(--ul-grey-1);
     }
 
     .settings-section-desc,
@@ -129,7 +129,7 @@
     .settings-input,
     .form-input,
     textarea.form-input {
-        color: $color-grey-1;
+        color: var(--ul-grey-1);
         border-color: var(--ul-grey-7b);
     }
 
@@ -176,12 +176,12 @@
     }
 
     .icon-option {
-        color: $color-grey-2;
+        color: var(--ul-grey-2);
         border-color: var(--ul-grey-7b);
     }
 
     .icon-option:hover {
-        background: $color-grey-8;
+        background: var(--ul-grey-8);
     }
 
     .icon-option.selected {
@@ -195,18 +195,18 @@
 
     .icon-picker-trigger {
         border-color: var(--ul-grey-7b);
-        color: $color-grey-1;
+        color: var(--ul-grey-1);
     }
 
     .icon-picker-search-input {
-        color: $color-grey-1;
+        color: var(--ul-grey-1);
     }
 
     .icon-tab {
         color: $color-grey-5a;
 
         &:hover {
-            color: $color-grey-2;
+            color: var(--ul-grey-2);
         }
 
         &.active {
@@ -243,7 +243,7 @@
     .edit-input,
     input.edit-input,
     textarea.edit-textarea {
-        color: $color-grey-1;
+        color: var(--ul-grey-1);
         border-color: var(--ul-grey-7b);
     }
 
@@ -266,7 +266,7 @@
     }
 
     .edit-add-link-input {
-        color: $color-grey-1;
+        color: var(--ul-grey-1);
         border-color: var(--ul-grey-7b);
     }
 
@@ -378,16 +378,25 @@
         box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
     }
 
-    .notif-prefs__table th {
+    .notif-prefs__header {
+        background: var(--ul-grey-0);
+        border-bottom-color: var(--ul-grey-7b);
+    }
+
+    .notif-prefs__hdr {
         color: $color-grey-5a;
     }
 
     .notif-prefs__row {
         border-bottom-color: $color-grey-9a;
+
+        &:hover {
+            background: var(--ul-grey-0);
+        }
     }
 
     .notif-prefs__label {
-        color: $color-grey-2;
+        color: var(--ul-grey-2);
     }
 
     .notif-prefs__saved {
@@ -402,11 +411,11 @@
     }
 
     .profile-full-name {
-        color: $color-grey-1;
+        color: var(--ul-grey-1);
     }
 
     .profile-bio {
-        color: $color-grey-2;
+        color: var(--ul-grey-2);
 
         &.empty {
             color: $color-grey-6b;
@@ -430,7 +439,7 @@
 
     .shared-visited-item {
         border-color: var(--ul-grey-8b);
-        color: $color-grey-2;
+        color: var(--ul-grey-2);
     }
 
     .friend-card {
@@ -442,12 +451,12 @@
     }
 
     .friend-card-name {
-        color: $color-grey-1;
+        color: var(--ul-grey-1);
     }
 
     .friend-card-username,
     .friend-card-area {
-        color: $color-grey-6;
+        color: var(--ul-grey-6);
     }
 
     .friend-requests-section {
@@ -460,11 +469,11 @@
     }
 
     .friend-request-name {
-        color: $color-grey-2;
+        color: var(--ul-grey-2);
     }
 
     .friend-request-sub {
-        color: $color-grey-6;
+        color: var(--ul-grey-6);
     }
 
     .friend-request-item {
@@ -522,15 +531,15 @@
     }
 
     .friends-back-link {
-        color: $color-grey-6;
+        color: var(--ul-grey-6);
 
         &:hover {
-            color: $color-grey-2;
+            color: var(--ul-grey-2);
         }
     }
 
     .friends-page-title {
-        color: $color-grey-1;
+        color: var(--ul-grey-1);
     }
 
     .friends-section--requests {
@@ -543,7 +552,7 @@
         }
 
         p {
-            color: $color-grey-6;
+            color: var(--ul-grey-6);
         }
     }
 

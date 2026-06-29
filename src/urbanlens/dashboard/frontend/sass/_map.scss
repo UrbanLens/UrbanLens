@@ -37,7 +37,6 @@
 
     .search-result-marker-icon {
         font-size: 36px;
-        color: $ui-blue-600;
         filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .45));
         display: block;
         cursor: pointer;
@@ -2112,22 +2111,31 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 }
 
 /* ── Places layer ─────────────────────────────────────────────────── */
-.search-result-marker-icon--places {
-    font-size: 26px;
-    color: $ui-amber-400;
-    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .55));
-}
+.search-result-marker-icon {
+    color: var(--ul-grey-3);
+    opacity: 0.7;
+    font-size: 2rem;
 
-.search-result-marker-icon--places-nps {
-    font-size: 26px;
-    color: #4caf50;
-    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .55));
-}
+    &:hover {
+        opacity: 1;
+    }
 
-.search-result-marker-icon--places-wiki {
-    font-size: 26px;
-    color: #42a5f5;
-    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .55));
+    &--places {
+        font-size: 26px;
+        filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .55));
+    }
+
+    &--places-nps {
+        font-size: 26px;
+        color: $color-green-700;
+        filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .55));
+    }
+
+    &--places-wiki {
+        font-size: 26px;
+        color: $color-blue-900;
+        filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .55));
+    }
 }
 
 .map-layer-thumb--icon {
@@ -3356,6 +3364,20 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     .leaflet-container {
         .leaflet-control-attribution {
             background-color: rgba(0,0,0, 0.5);
+        }
+    }
+}
+
+// - Map Dark Mode
+[data-map-style="dark"] {
+    .search-result-marker-icon {
+        color: var(--ul-grey-8);
+
+        &--places-nps {
+            color: $color-green-500;
+        }
+        &--places-wiki {
+            color: $color-blue-700;
         }
     }
 }
