@@ -2905,14 +2905,41 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     transition: opacity .2s ease, box-shadow .2s ease, color .2s ease, border-color .2s ease;
     white-space: nowrap;
 
-    .material-icons {
+    .map-layers-toggle-thumb {
+        display: none;
+    }
+
+    .map-layers-toggle-icon {
         font-size: 1.1rem;
         color: var(--ul-grey-6);
         transition: color .2s ease;
     }
 
+    @include up($breakpoint-xs) {
+        flex-direction: column;
+        gap: 5px;
+        padding: 6px 4px 5px;
+        min-width: 62px;
+        font-size: .67rem;
+
+        .map-layers-toggle-thumb {
+            display: block;
+        }
+
+        .map-layers-toggle-icon {
+            display: none;
+        }
+    }
+
     &:hover, &.active { opacity: 1; box-shadow: 0 3px 10px rgba(0, 0, 0, .18); }
-    &.active { color: $color-blue-700; .material-icons { color: $color-blue-500; } }
+    &.active {
+        color: $color-blue-700;
+        border-color: rgba($color-blue-500, .35);
+        background: rgba($color-blue-500, .1);
+
+        .map-layers-toggle-icon { color: $color-blue-500; }
+        .map-layer-thumb img { opacity: 1; }
+    }
 }
 
 // Opens upward on mobile; to the RIGHT of the toggle in a row on desktop.

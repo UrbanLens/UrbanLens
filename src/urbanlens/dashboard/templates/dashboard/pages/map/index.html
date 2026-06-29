@@ -50,7 +50,10 @@
                 onclick="_toggleLayersPanel()"
                 aria-label="Toggle map layers"
                 aria-expanded="false">
-            <i class="material-icons">layers</i>
+            <span class="map-layer-thumb map-layers-toggle-thumb">
+                <img src="{% static 'dashboard/images/map_layers.jpg' %}" alt="" loading="lazy">
+            </span>
+            <i class="material-icons map-layers-toggle-icon">layers</i>
             <span class="map-layers-label">Layers</span>
         </button>
         {# Menu flies out to the right. Tile thumbnails from Swiss Alps at z12 (good visual variety). #}
