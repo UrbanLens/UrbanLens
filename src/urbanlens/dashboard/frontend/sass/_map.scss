@@ -1,3 +1,4 @@
+@use "sass:color";
 @use 'variables' as *;
 
 
@@ -1388,21 +1389,36 @@
     font-size: .9rem;
 }
 
-/* Active-filter dot on the search button */
+/* Active-filter badge on the search button */
 #search-pins-button {
     position: relative;
 }
 
+/* Remove the old dot — replaced by the count badge below */
 #search-pins-button.has-filters::after {
-    content: '';
+    display: none;
+}
+
+.fp-active-badge {
     position: absolute;
-    top: 5px;
-    right: 5px;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
+    top: 3px;
+    right: 3px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
     background: $ui-fp-active;
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
     pointer-events: none;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+#search-pins-button.has-filters {
+    color: color.adjust(#5082ff, $lightness: 20%);
 }
 
 
@@ -1435,6 +1451,11 @@
     color: var(--ul-grey-4);
 }
 
+/* Active accordion: label tinted to show a filter is set in this section */
+.fp-accordion-item.fp-acc-active > .fp-accordion-summary {
+    color: color.adjust(#5082ff, $lightness: 20%);
+}
+
 .fp-accordion-label {
     flex: 1;
 }
@@ -1452,6 +1473,28 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 
 .fp-accordion-body {
     padding-bottom: 12px;
+}
+
+/* ── Combined Scores section (rating, danger, priority, vulnerability) ── */
+.fp-scores-body {
+    padding-bottom: 4px;
+}
+
+.fp-score-group {
+    margin-bottom: 10px;
+
+    &:last-child {
+        margin-bottom: 4px;
+    }
+}
+
+.fp-score-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: rgba(255, 255, 255, 0.35);
+    margin-bottom: 4px;
 }
 
 /* ── Range layout (min / max) ─────────────────────────────────────── */

@@ -76,7 +76,16 @@
         const accordionId = root.getAttribute('data-accordion');
         if (accordionId) {
             const details = document.getElementById(accordionId);
-            if (details) details.classList.toggle('fp-acc-active', !fullRange);
+            if (details) {
+                // Active if ANY slider sharing this accordion is not at full range
+                const anyActive = Array.from(details.querySelectorAll('[data-ul-dual-range-slider]')).some(s => {
+                    const sMin = s.querySelector('[data-role="min"]');
+                    const sMax = s.querySelector('[data-role="max"]');
+                    if (!sMin || !sMax) return false;
+                    return !(parseInt(sMin.value, 10) === parseInt(sMin.min, 10) && parseInt(sMax.value, 10) === parseInt(sMax.max, 10));
+                });
+                details.classList.toggle('fp-acc-active', anyActive);
+            }
         }
     }
 

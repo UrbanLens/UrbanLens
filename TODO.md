@@ -16,9 +16,6 @@ Features planned for this release.
 * Remove work account from github project. [UL-247]
 * Switch to gunicorn (or similar) instead of runserver in init.py, except for environment=development. [UL-258]
 * Pull additional google place info from some supported google takeout files (Reviews.json, and others?)
-* Clicking the "F" shortcut on map should place cursor on name search.
-* On map filtering sidebar, better indicators when filters are active vs inactive, especially when sidebar is closed.
-* Consider: map filtering sidebar, date pinned starts closed. (Abstract this a bit into "less important panels" to close appropriate ones based on screen height.)
 * Consider: handle temporary markers when a user pin exists on that exact point.
 * Ensure proper attribution in the smaller maps we're showing around the site (main map should be correct already. Others may or may not need work, though.)
 
@@ -223,7 +220,6 @@ Features planned for future releases.
 * Consider feature: on main map, the icon and the circle could be pulled from different places, allowing 2 pieces of information to be displayed about each pin. [UL-251]
 * "Organize a meetup", which would encourage a larger audience, encourage invitees to invite friends, etc. To prevent abuse, possibly: meetup pin would only be shown to those who already had it, and invitees could vote on whether it was too vulnerable to share? Idk.
 * Only check US-centric APIs (like loopnet, NPS, etc) when the location is in the USA.
-* Map Filtering, allow filtering by more sliders, and put them in one section, or neighbors.
 * Max zoom out on the map still isn't quite right. Try clamping?
 * Undo pin deletion feature. (Initially mark the pin as deleted, but only realize the deletion in X days. User can undo the action in a new page.)
 

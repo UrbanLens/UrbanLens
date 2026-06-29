@@ -133,7 +133,7 @@ class PinQuerySet(abstract.QuerySet):
                 exclude_tags (QuerySet), badge_groups (list of group dicts from
                 ``SearchForm.parse_badge_groups()``), min_rating (int), max_rating (int),
                 has_visits ('yes'|'no'|''), min_priority (int), max_priority (int),
-                min_danger (int), max_danger (int),
+                min_danger (int), max_danger (int), min_vulnerability (int), max_vulnerability (int),
                 created_after (date), created_before (date),
                 visited_after (date), visited_before (date).
 
@@ -192,6 +192,12 @@ class PinQuerySet(abstract.QuerySet):
         if max_danger := criteria.get("max_danger"):
             with contextlib.suppress(ValueError, TypeError):
                 qs = qs.filter(danger__lte=int(max_danger))
+        if (min_vulnerability := criteria.get("min_vulnerability")) is not None:
+            with contextlib.suppress(ValueError, TypeError):
+                qs = qs.filter(vulnerability__gte=int(min_vulnerability))
+        if (max_vulnerability := criteria.get("max_vulnerability")) is not None:
+            with contextlib.suppress(ValueError, TypeError):
+                qs = qs.filter(vulnerability__lte=int(max_vulnerability))
         if created_after := criteria.get("created_after"):
             qs = qs.filter(created__date__gte=created_after)
         if created_before := criteria.get("created_before"):

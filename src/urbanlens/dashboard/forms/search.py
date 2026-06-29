@@ -48,6 +48,8 @@ class SearchForm(forms.Form):
     max_priority = forms.IntegerField(required=False, min_value=0)
     min_danger = forms.IntegerField(required=False, min_value=0, max_value=5)
     max_danger = forms.IntegerField(required=False, min_value=0, max_value=5)
+    min_vulnerability = forms.IntegerField(required=False, min_value=0)
+    max_vulnerability = forms.IntegerField(required=False, min_value=0)
     created_after = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
     created_before = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
 

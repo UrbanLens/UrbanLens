@@ -34,6 +34,47 @@ class GooglePlacesGateway(Gateway):
 
         return response.json().get("results", [])
 
+    def search_nearby(self, latitude, longitude, radius=2000, included_types=None, max_results=20):
+        """Search nearby places using the new Places API v1 (Nearby Search New).
+
+        This endpoint supports types like ``historical_landmark`` that are not available
+        in the legacy Nearby Search API.
+
+        Args:
+            latitude: Centre latitude.
+            longitude: Centre longitude.
+            radius: Search radius in metres (max 50000).
+            included_types: List of place type strings (e.g. ``["historical_landmark"]``).
+            max_results: Maximum number of results (1-20).
+
+        Returns:
+            List of place dicts with keys: id, displayName, location, types, rating,
+            userRatingCount, shortFormattedAddress.
+        """
+        url = "https://places.googleapis.com/v1/places:searchNearby"
+        body: dict = {
+            "locationRestriction": {
+                "circle": {
+                    "center": {"latitude": latitude, "longitude": longitude},
+                    "radius": float(radius),
+                },
+            },
+            "maxResultCount": max(1, min(int(max_results), 20)),
+        }
+        if included_types:
+            body["includedTypes"] = list(included_types)
+
+        field_mask = "places.id,places.displayName,places.location,places.types,places.rating,places.userRatingCount,places.shortFormattedAddress"
+        headers = {
+            "X-Goog-Api-Key": self.api_key,
+            "X-Goog-FieldMask": field_mask,
+            "Content-Type": "application/json",
+        }
+
+        response = self.session.post(url, json=body, headers=headers)
+        response.raise_for_status()
+        return response.json().get("places", [])
+
     def get_place_details(self, place_id, fields=None):
         details_url = "https://maps.googleapis.com/maps/api/place/details/json"
         params = {

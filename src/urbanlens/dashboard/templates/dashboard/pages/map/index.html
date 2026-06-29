@@ -39,6 +39,7 @@
                     aria-label="Filter and search pins"
                     onclick="toggleFilterPanel()">
                 <i class="material-icons">search</i>
+                <span class="fp-active-badge" id="fp-active-badge" aria-hidden="true" hidden></span>
             </button>
         </div>
     </div>
@@ -163,30 +164,34 @@
                 <input type="text" name="name" id="fp-search" class="fp-search" placeholder="Search pins..." autocomplete="off">
             </div>
 
-            {# Rating ── dual-handle slider (1–5 stars) ── #}
-            <details class="fp-accordion-item" id="fp-acc-rating">
+            {# Scores ── all numeric sliders combined ── #}
+            <details class="fp-accordion-item" id="fp-acc-scores" data-importance="high">
                 <summary class="fp-accordion-summary">
-                    <span class="fp-accordion-label">Rating</span>
+                    <span class="fp-accordion-label">Scores</span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
-                <div class="fp-accordion-body">
-                    {% include "dashboard/partials/_dual_range_slider.html" with min=1 max=5 min_value=1 max_value=5 min_field="min_rating" max_field="max_rating" format="stars" center_hint="★ ★ ★ ★ ★" htmx_form="filter-form" accordion_id="fp-acc-rating" %}
-                </div>
-            </details>
-
-            {# Danger ── dual-handle slider (1–5 stars) ── #}
-            <details class="fp-accordion-item" id="fp-acc-danger">
-                <summary class="fp-accordion-summary">
-                    <span class="fp-accordion-label">Danger</span>
-                    <i class="material-icons fp-acc-arrow">expand_more</i>
-                </summary>
-                <div class="fp-accordion-body">
-                    {% include "dashboard/partials/_dual_range_slider.html" with min=1 max=5 min_value=1 max_value=5 min_field="min_danger" max_field="max_danger" format="stars" center_hint="★ ★ ★ ★ ★" htmx_form="filter-form" accordion_id="fp-acc-danger" %}
+                <div class="fp-accordion-body fp-scores-body">
+                    <div class="fp-score-group">
+                        <div class="fp-score-label">Rating</div>
+                        {% include "dashboard/partials/_dual_range_slider.html" with min=1 max=5 min_value=1 max_value=5 min_field="min_rating" max_field="max_rating" format="stars" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
+                    </div>
+                    <div class="fp-score-group">
+                        <div class="fp-score-label">Danger</div>
+                        {% include "dashboard/partials/_dual_range_slider.html" with min=1 max=5 min_value=1 max_value=5 min_field="min_danger" max_field="max_danger" format="stars" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
+                    </div>
+                    <div class="fp-score-group">
+                        <div class="fp-score-label">Priority</div>
+                        {% include "dashboard/partials/_dual_range_slider.html" with min=0 max=100 min_value=0 max_value=100 min_field="min_priority" max_field="max_priority" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
+                    </div>
+                    <div class="fp-score-group">
+                        <div class="fp-score-label">Vulnerability</div>
+                        {% include "dashboard/partials/_dual_range_slider.html" with min=0 max=100 min_value=0 max_value=100 min_field="min_vulnerability" max_field="max_vulnerability" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
+                    </div>
                 </div>
             </details>
 
             {# Visit status ── collapsible ── #}
-            <details class="fp-accordion-item" id="fp-acc-visits">
+            <details class="fp-accordion-item" id="fp-acc-visits" data-importance="high">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Visits</span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
@@ -220,19 +225,8 @@
                 </div>
             </details>
 
-            {# Priority ── dual-handle slider ── #}
-            <details class="fp-accordion-item" id="fp-acc-priority">
-                <summary class="fp-accordion-summary">
-                    <span class="fp-accordion-label">Priority</span>
-                    <i class="material-icons fp-acc-arrow">expand_more</i>
-                </summary>
-                <div class="fp-accordion-body">
-                    {% include "dashboard/partials/_dual_range_slider.html" with min=0 max=100 min_value=0 max_value=100 min_field="min_priority" max_field="max_priority" htmx_form="filter-form" accordion_id="fp-acc-priority" %}
-                </div>
-            </details>
-
             {# Date pinned ── collapsible ── #}
-            <details class="fp-accordion-item" id="fp-acc-date">
+            <details class="fp-accordion-item" id="fp-acc-date" data-importance="low">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Date Pinned</span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
@@ -257,7 +251,7 @@
 
             {% if filter_badges %}
             {# Combined badges ── collapsible ── #}
-            <details class="fp-accordion-item" id="fp-acc-badges">
+            <details class="fp-accordion-item" id="fp-acc-badges" data-importance="medium">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Badges</span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
@@ -2412,9 +2406,10 @@
     async function _fetchAndShowPlaces() {
         if (!_placesLayerActive) return;
         const zoom = map.getZoom();
-        if (zoom < _PLACES_MIN_ZOOM) return;
         const center = map.getCenter();
-        const url = `{% url "map.places.nearby" %}?lat=${center.lat.toFixed(5)}&lng=${center.lng.toFixed(5)}`;
+        // Pass zoom so the server can apply the minimum zoom restriction per source
+        // (Google Places requires zoom ≥ 10; NPS and Wikipedia show at any zoom).
+        const url = `{% url "map.places.nearby" %}?lat=${center.lat.toFixed(5)}&lng=${center.lng.toFixed(5)}&zoom=${zoom}`;
         try {
             const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!resp.ok) return;
@@ -2481,12 +2476,7 @@
         if (_placesLayerActive) {
             _placesLayerGroup.addTo(map);
             btn?.classList.add('active');
-            if (map.getZoom() < _PLACES_MIN_ZOOM) {
-                console.log(`Zoom in to level ${_PLACES_MIN_ZOOM}+ to see places.`);
-            } else {
-                console.log('Fetching places layer...')
-                _fetchAndShowPlaces();
-            }
+            _fetchAndShowPlaces();
         } else {
             map.removeLayer(_placesLayerGroup);
             btn?.classList.remove('active');
@@ -2654,7 +2644,12 @@
         if (e.metaKey || e.ctrlKey) return;
 
         switch (key) {
-            case 'f': toggleFilterPanel(); break;                    // F — Filter
+            case 'f': {                                              // F — open filter panel and focus name search
+                const fp = document.getElementById('filter-panel');
+                if (!fp.classList.contains('open')) toggleFilterPanel();
+                setTimeout(() => document.getElementById('fp-search')?.focus(), 50);
+                break;
+            }
             case 'j':                                                // J — Jump to location
                 document.getElementById('address-search-input')?.focus();
                 break;
@@ -2700,31 +2695,57 @@
         // Reset badge selected area
         if (typeof _clearAllBadgeSelections === 'function') _clearAllBadgeSelections();
         _exitFilterMode();
-        document.getElementById('search-pins-button').classList.remove('has-filters');
+        _updateFilterBadge();
     }
 
-    function _hasActiveFilters() {
+    function _countActiveFilters() {
         const form = document.getElementById('filter-form');
-        if (!form) return false;
-        if ((form.querySelector('input[name=name]')?.value || '').trim()) return true;
-        if (form.querySelector('input[type=checkbox]:checked')) return true;
+        if (!form) return 0;
+        let n = 0;
+        if ((form.querySelector('input[name=name]')?.value || '').trim()) n++;
+        if (form.querySelector('input[type=checkbox]:checked')) n++;
         for (const el of form.querySelectorAll('input[type=date]')) {
-            if ((el.value || '').trim()) return true;
+            if ((el.value || '').trim()) { n++; break; }
         }
-        // Check hidden slider inputs (cleared when thumbs are at full range)
-        for (const el of form.querySelectorAll('input[type=hidden]')) {
-            if ((el.value || '').trim()) return true;
+        // Hidden slider inputs are cleared when at full range; non-empty means active
+        const seenSliders = new Set();
+        for (const el of form.querySelectorAll('input[type=hidden][data-role]')) {
+            // Group min/max pairs: count the pair as one filter
+            const base = el.name.replace(/^(min|max)_/, '');
+            if ((el.value || '').trim() && !seenSliders.has(base)) {
+                seenSliders.add(base);
+                n++;
+            }
         }
-        return false;
+        // Visit radio selection stored in the separate hidden input
+        const visitsHidden = form.querySelector('input[name=has_visits]');
+        if ((visitsHidden?.value || '').trim()) n++;
+        // Badge groups
+        const badgeGroups = form.querySelector('input[name=badge_groups]');
+        if ((badgeGroups?.value || '').trim()) n++;
+        return n;
     }
 
-    // Show the active-filters dot whenever any filter is set
-    document.getElementById('filter-form').addEventListener('change', function () {
-        document.getElementById('search-pins-button').classList.toggle('has-filters', _hasActiveFilters());
-    });
-    document.getElementById('filter-form').addEventListener('input', function () {
-        document.getElementById('search-pins-button').classList.toggle('has-filters', _hasActiveFilters());
-    });
+    function _hasActiveFilters() { return _countActiveFilters() > 0; }
+
+    function _updateFilterBadge() {
+        const count = _countActiveFilters();
+        const badge = document.getElementById('fp-active-badge');
+        const btn = document.getElementById('search-pins-button');
+        if (badge) {
+            if (count > 0) {
+                badge.textContent = String(count);
+                badge.hidden = false;
+            } else {
+                badge.hidden = true;
+            }
+        }
+        btn?.classList.toggle('has-filters', count > 0);
+    }
+
+    // Show the active-filter count badge whenever any filter changes
+    document.getElementById('filter-form').addEventListener('change', _updateFilterBadge);
+    document.getElementById('filter-form').addEventListener('input', _updateFilterBadge);
 
     // Restore filter state from URL params (supports Back button + page refresh)
     function _restoreFiltersFromUrl() {
@@ -2748,7 +2769,7 @@
             }
         }
         if (anySet) {
-            document.getElementById('search-pins-button').classList.add('has-filters');
+            _updateFilterBadge();
             // Open filter panel so user can see restored filters
             const mapEl = document.getElementById('map');
             if (mapEl && !mapEl.classList.contains('filter-open')) toggleFilterPanel();
@@ -2794,27 +2815,30 @@
         if (!_hasActiveFilters()) {
             e.preventDefault();
             _exitFilterMode();
-            document.getElementById('search-pins-button').classList.remove('has-filters');
+            _updateFilterBadge();
             return;
         }
         _showFilterFetchIndicator();
     });
     document.getElementById('filter-form').addEventListener('htmx:afterRequest', _hideFilterFetchIndicator);
 
-    // ── Auto-expand filter accordion sections based on screen height ─────────
-    // Expand all sections on tall screens, fewer on short screens
+    // ── Auto-expand filter accordion sections based on importance and screen height ──
+    // Panels carry data-importance="high|medium|low"; collapse least important first on
+    // shorter screens.  New panels added to the sidebar just need the attribute — no code change.
     (function _autoExpandSections() {
         const h = window.innerHeight;
-        // Order to open: most-used first
-        const sections = ['fp-acc-rating', 'fp-acc-danger', 'fp-acc-visits', 'fp-acc-badges', 'fp-acc-priority', 'fp-acc-date'];
-        let toOpen;
-        if (h >= 800) { toOpen = sections.length; }       // all
-        else if (h >= 650) { toOpen = 3; }                // top 3
-        else if (h >= 500) { toOpen = 1; }                // just rating
-        else { toOpen = 0; }                              // all collapsed
-        sections.slice(0, toOpen).forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.open = true;
+        // importance thresholds: only open panels whose importance <= maxImportance
+        // 1=high (always), 2=medium (tall screens), 3=low (very tall screens)
+        let maxImportance;
+        if (h >= 800) { maxImportance = 3; }        // all (including low-importance)
+        else if (h >= 650) { maxImportance = 2; }   // high + medium
+        else if (h >= 500) { maxImportance = 1; }   // high only
+        else { maxImportance = 0; }                 // all collapsed
+
+        const importanceMap = { high: 1, medium: 2, low: 3 };
+        document.querySelectorAll('#filter-panel .fp-accordion-item[data-importance]').forEach(el => {
+            const level = importanceMap[el.dataset.importance] ?? 99;
+            if (level <= maxImportance) el.open = true;
         });
     })();
 
@@ -2959,6 +2983,40 @@
             const list = raw ? JSON.parse(raw) : [];
             return list.slice(0, limit);
         } catch (_) { return []; }
+    }
+
+    // ── Plus Code (Open Location Code) detection and resolution ──────────────
+    // Matches full codes (XXXXXXXX+XX) and shortened codes (XXXX+XX City)
+    const _PLUS_CODE_RE = /^([23456789CFGHJMPQRVWXcfghjmpqrvwx]{4,8}\+[23456789CFGHJMPQRVWXcfghjmpqrvwx]{0,2})([\s,].*)?$/;
+
+    function _isPlusCode(q) {
+        return _PLUS_CODE_RE.test((q || '').trim());
+    }
+
+    async function _resolvePlusCode(q) {
+        // Prefer the Google Maps Geocoder if the Maps JS API is loaded (handles shortened codes)
+        if (typeof google !== 'undefined' && google.maps?.Geocoder) {
+            return new Promise((resolve) => {
+                new google.maps.Geocoder().geocode({ address: q.trim() }, (results, status) => {
+                    if (status === 'OK' && results && results.length > 0) {
+                        const loc = results[0].geometry.location;
+                        resolve({ lat: loc.lat(), lng: loc.lng() });
+                    } else {
+                        resolve(null);
+                    }
+                });
+            });
+        }
+        // Fall back to Nominatim (handles full codes reasonably, not shortened)
+        try {
+            const r = await fetch(
+                `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q.trim())}&format=json&limit=1`,
+                { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' } },
+            );
+            const data = await r.json();
+            if (data && data.length > 0) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+        } catch (_) {}
+        return null;
     }
 
     // ── Coordinate parser ─────────────────────────────────────────────────────
@@ -3374,6 +3432,20 @@
             return;
         }
 
+        if (_isPlusCode(q)) {
+            _setFetching(true, 'Resolving Plus Code…');
+            _resolvePlusCode(q).then(resolved => {
+                _setFetching(false);
+                if (resolved) {
+                    _programmaticMove = true;
+                    map.setView([resolved.lat, resolved.lng], 16);
+                } else {
+                    toastr.warning('Could not resolve Plus Code — try adding a city name.');
+                }
+            }).catch(() => { _setFetching(false); toastr.error('Plus Code resolution failed.'); });
+            return;
+        }
+
         _addToSearchHistory(q);
         fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`, {
             headers: { 'Accept': 'application/json', 'Accept-Language': 'en' },
@@ -3424,12 +3496,12 @@
         let primaryHits = 0;
         function _onPrimaryDone(hasResults) {
             if (hasResults) primaryHits++;
-            if (--pendingSources === 0 && primaryHits === 0 && !_parseCoordinates(query)) {
+            if (--pendingSources === 0 && primaryHits === 0 && !_parseCoordinates(query) && !_isPlusCode(query)) {
                 noMsgSlot.innerHTML = '<div class="addr-no-results">No exact matches found</div>';
             }
         }
 
-        // 1. Coordinates (instant — no network call)
+        // 1. Coordinates (instant — no network call) or Plus Code
         const coords = _parseCoordinates(query);
         if (coords) {
             coordSlot.appendChild(_makeCollapsibleHdr('Coordinates', 'coordinates', coordSlot));
@@ -3439,6 +3511,37 @@
                 subtitle: 'Jump to these exact coordinates',
                 lat: coords.lat, lng: coords.lng, zoom: 16, icon: 'my_location',
             }, input, box));
+            box.hidden = false;
+        } else if (_isPlusCode(query)) {
+            coordSlot.appendChild(_makeCollapsibleHdr('Plus Code', 'coordinates', coordSlot));
+            const pcBtn = _buildSuggestionItem({
+                type: 'plus_code',
+                title: query.trim(),
+                subtitle: 'Jump to this Plus Code location',
+                icon: 'pin_drop',
+                // lat/lng resolved asynchronously on click
+            }, input, box);
+            pcBtn.addEventListener('mousedown', async (e) => {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                box.hidden = true;
+                _addrActiveIdx = -1;
+                _setFetching(true, 'Resolving Plus Code…');
+                try {
+                    const resolved = await _resolvePlusCode(query);
+                    if (resolved) {
+                        _programmaticMove = true;
+                        map.setView([resolved.lat, resolved.lng], 16);
+                    } else {
+                        toastr.warning('Could not resolve Plus Code — try adding a city name.');
+                    }
+                } catch (_) {
+                    toastr.error('Plus Code resolution failed.');
+                } finally {
+                    _setFetching(false);
+                }
+            }, true);
+            coordSlot.appendChild(pcBtn);
             box.hidden = false;
         }
 

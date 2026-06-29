@@ -551,8 +551,16 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         except (TypeError, ValueError):
             radius = 2000
 
+        try:
+            zoom = int(request.GET.get("zoom", 10))
+        except (TypeError, ValueError):
+            zoom = 10
+
+        # Google Places is only useful when zoomed in enough for the radius to be meaningful.
+        GOOGLE_MIN_ZOOM = 10
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        use_google = profile.places_google_enabled
+        use_google = profile.places_google_enabled and zoom >= GOOGLE_MIN_ZOOM
         use_nps = profile.places_nps_enabled
         use_wiki = profile.places_wikipedia_enabled
 
@@ -570,37 +578,44 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         cache_seconds = site.google_places_cache_days * 86400
         places: list[dict] = []
 
-        # ── Google historical landmarks ──────────────────────────────────────
+        # ── Google historical landmarks (Places API v1 — supports historical_landmark type) ──
         if use_google:
             api_key = settings.google_maps_api_key or settings.google_places_api_key
-            if api_key:
+            if not api_key:
+                logger.info("Google Places skipped: no API key configured.")
+            else:
                 try:
                     from urbanlens.dashboard.services.google.places import GooglePlacesGateway
 
                     gw = GooglePlacesGateway(api_key=api_key)
-                    raw_results = gw.get_data(lat, lng, radius=radius, place_type="historical_landmark")
+                    raw_results = gw.search_nearby(lat, lng, radius=radius, included_types=["historical_landmark"])
+                    logger.info("Google Places (new API): found %d results near (%.4f, %.4f)", len(raw_results), lat, lng)
                     for r in raw_results:
-                        geo = r.get("geometry", {}).get("location", {})
-                        place_lat = geo.get("lat")
-                        place_lng = geo.get("lng")
+                        loc = r.get("location", {})
+                        place_lat = loc.get("latitude")
+                        place_lng = loc.get("longitude")
                         if place_lat is None or place_lng is None:
                             continue
+                        display_name = r.get("displayName", {})
+                        name = display_name.get("text", "") if isinstance(display_name, dict) else str(display_name)
                         places.append({
-                            "place_id": r.get("place_id", ""),
-                            "name": r.get("name", ""),
+                            "place_id": r.get("id", ""),
+                            "name": name,
                             "lat": place_lat,
                             "lng": place_lng,
                             "source": "google",
                             "rating": r.get("rating"),
-                            "user_ratings_total": r.get("user_ratings_total"),
-                            "vicinity": r.get("vicinity", ""),
+                            "user_ratings_total": r.get("userRatingCount"),
+                            "vicinity": r.get("shortFormattedAddress", ""),
                             "types": r.get("types", []),
-                            "icon": r.get("icon", ""),
+                            "icon": "",
                             "description": "",
                             "url": "",
                         })
                 except Exception as exc:
                     logger.warning("Google Places nearby search failed: %s", exc)
+        elif profile.places_google_enabled:
+            logger.debug("Google Places skipped: zoom %d < minimum %d", zoom, GOOGLE_MIN_ZOOM)
 
         # ── National Park Service ────────────────────────────────────────────
         if use_nps and settings.nps_api_key:
