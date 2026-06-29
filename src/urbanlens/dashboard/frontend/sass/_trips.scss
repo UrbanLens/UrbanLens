@@ -24,7 +24,7 @@
 
     .material-icons {
         font-size: 1.7rem;
-        color: $ui-blue-500;
+        color: $color-blue-500;
     }
 }
 
@@ -51,7 +51,7 @@
         height: 72px;
         margin: 0 auto 1.25rem;
         border-radius: 50%;
-        background: linear-gradient(135deg, var(--ul-grey-0a), var(--ul-grey-1));
+        background: linear-gradient(135deg, var(--ul-grey-0a));
         border: 1px solid var(--ul-border);
         display: flex;
         align-items: center;
@@ -60,7 +60,7 @@
 
     .trips-empty-icon {
         font-size: 2.2rem;
-        color: $ui-blue-500;
+        color: $color-blue-500;
     }
 
     .trips-empty-title {
@@ -140,19 +140,19 @@
 }
 
 .trip-card--upcoming .trip-card-accent {
-    background: linear-gradient(90deg, $ui-blue-400, $ui-blue-600);
+    background: linear-gradient(90deg, $color-blue-400, $color-blue-600);
 }
 
 .trip-card--active .trip-card-accent {
-    background: linear-gradient(90deg, $ui-green-400, $ui-green-600);
+    background: linear-gradient(90deg, $color-green-400, $color-green-600);
 }
 
 .trip-card--past .trip-card-accent {
-    background: linear-gradient(90deg, var(--ul-grey-5), var(--ul-grey-6));
+    background: linear-gradient(90deg, var(--ul-grey-5));
 }
 
 .trip-card--planning .trip-card-accent {
-    background: linear-gradient(90deg, $ui-amber-400, $ui-amber-500);
+    background: linear-gradient(90deg, $color-amber-400, $color-amber-500);
 }
 
 .trip-card-top {
@@ -175,15 +175,15 @@
     border: 1px solid transparent;
 
     &--upcoming {
-        background: rgba($ui-blue-500, .1);
-        color: $ui-blue-700;
-        border-color: rgba($ui-blue-500, .18);
+        background: rgba($color-blue-500, .1);
+        color: $color-blue-700;
+        border-color: rgba($color-blue-500, .18);
     }
 
     &--active {
-        background: rgba($ui-green-500, .1);
-        color: $ui-green-700;
-        border-color: rgba($ui-green-500, .18);
+        background: rgba($color-green-500, .1);
+        color: $color-green-700;
+        border-color: rgba($color-green-500, .18);
     }
 
     &--past {
@@ -193,9 +193,9 @@
     }
 
     &--planning {
-        background: rgba($ui-amber-500, .12);
-        color: $ui-amber-700;
-        border-color: rgba($ui-amber-500, .2);
+        background: rgba($color-amber-500, .12);
+        color: $color-amber-700;
+        border-color: rgba($color-amber-500, .2);
     }
 }
 
@@ -223,7 +223,7 @@
 
     .material-icons {
         font-size: 1rem;
-        color: $ui-blue-500;
+        color: $color-blue-500;
     }
 
     &--muted {
@@ -305,7 +305,7 @@
     border-radius: 50%;
     overflow: hidden;
     border: 2px solid var(--ul-grey-0);
-    background: $ui-sky-100;
+    background: $color-light-blue-100;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -325,7 +325,7 @@
 .trip-card-member-avatar-initial {
     font-weight: 700;
     font-size: .72rem;
-    color: $ui-blue-500;
+    color: $color-blue-500;
     text-transform: uppercase;
 }
 
@@ -355,7 +355,7 @@
 }
 
 .trip-card-role {
-    color: $ui-amber-700 !important;
+    color: $color-amber-700 !important;
     font-weight: 600;
 }
 
@@ -392,7 +392,7 @@
     margin-bottom: .5rem;
 
     &:hover {
-        color: $ui-blue-500;
+        color: $color-blue-500;
     }
 
     .material-icons {
@@ -584,7 +584,7 @@
 
     &.view-toggle-btn--active {
         background: var(--ul-grey-0);
-        color: $ui-blue-500;
+        color: $color-blue-500;
         box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
     }
 }
@@ -668,7 +668,7 @@
         background: var(--ul-grey-0a);
 
         .cal-day-num {
-            background: $ui-blue-500;
+            background: $color-blue-500;
             color: var(--ul-grey-5);
         }
     }
@@ -698,7 +698,7 @@
     align-items: center;
     gap: 3px;
     font-size: .66rem;
-    background: $ui-blue-500;
+    background: $color-blue-500;
     color: var(--ul-grey-5);
     border-radius: 3px;
     padding: 1px 4px;
@@ -707,7 +707,7 @@
     transition: background .1s;
 
     &:hover {
-        background: $ui-blue-600;
+        background: $color-blue-600;
     }
 }
 
@@ -773,7 +773,7 @@
 
     &.trip-activity--highlighted {
         background: var(--ul-grey-0a);
-        border-left: 3px solid $ui-blue-500;
+        border-left: 3px solid $color-blue-500;
         padding-left: calc(1rem - 3px);
     }
 
@@ -795,7 +795,7 @@
 
     .material-icons {
         font-size: 1.1rem;
-        color: $ui-blue-500;
+        color: $color-blue-500;
     }
 }
 
@@ -803,7 +803,7 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: $ui-blue-500;
+    background: $color-blue-500;
     color: var(--ul-grey-5);
     font-size: .78rem;
     font-weight: 700;
@@ -812,7 +812,7 @@
     justify-content: center;
     flex-shrink: 0;
     border: 2px solid var(--ul-border);
-    box-shadow: 0 1px 4px rgba($ui-blue-500, .4);
+    box-shadow: 0 1px 4px rgba($color-blue-500, .4);
 }
 
 .trip-activity-actions {
@@ -866,7 +866,7 @@
 
     &:hover {
         text-decoration: underline;
-        color: $ui-indigo-600;
+        color: $color-indigo-600;
     }
 }
 
@@ -902,7 +902,7 @@
     border-radius: 50%;
     overflow: hidden;
     flex-shrink: 0;
-    background: $ui-sky-100;
+    background: $color-light-blue-100;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -917,7 +917,7 @@
 .trip-member-avatar-initial {
     font-weight: 700;
     font-size: .9rem;
-    color: $ui-blue-500;
+    color: $color-blue-500;
     text-transform: uppercase;
 }
 
@@ -938,7 +938,7 @@
 
         &:hover {
             text-decoration: underline;
-            color: $ui-indigo-600;
+            color: $color-indigo-600;
         }
     }
 }
@@ -959,13 +959,13 @@
     &--creator {
         background: var(--ul-accent-amber-bg);
         color: var(--ul-accent-amber);
-        border: 1px solid $ui-amber-200;
+        border: 1px solid $color-amber-200;
     }
 
     &--organizer {
         background: var(--ul-accent-purple-bg);
-        color: $ui-violet-600;
-        border: 1px solid $ui-violet-300;
+        color: $color-indigo-600;
+        border: 1px solid $color-indigo-300;
     }
 }
 
@@ -973,7 +973,7 @@
     color: var(--ul-grey-6);
 
     &--active {
-        color: $ui-violet-600 !important;
+        color: $color-indigo-600 !important;
 
         &:hover {
             background: var(--ul-accent-purple-bg) !important;
@@ -1107,7 +1107,7 @@
 
     &:focus {
         outline: none;
-        border-color: $ui-blue-300;
+        border-color: $color-blue-300;
         box-shadow: 0 0 0 3px rgba(59, 130, 246, .12);
     }
 
@@ -1193,7 +1193,7 @@
     display: block;
     margin-top: .3rem;
     font-size: .82rem;
-    color: $ui-blue-500;
+    color: $color-blue-500;
     font-style: italic;
 }
 
@@ -1270,12 +1270,12 @@
     }
 
     &--active {
-        background: $ui-blue-500;
-        border-color: $ui-blue-600;
+        background: $color-blue-500;
+        border-color: $color-blue-600;
         color: var(--ul-grey-5);
 
         &:hover {
-            background: $ui-blue-600;
+            background: $color-blue-600;
         }
     }
 }
@@ -1284,12 +1284,12 @@
 
 .trip-activity-num--proposed {
     background: var(--ul-grey-6) !important;
-    box-shadow: 0 1px 4px rgba($ui-slate-400, .4) !important;
+    box-shadow: 0 1px 4px rgba(var(--ul-grey-4), .4) !important;
 }
 
 .trip-map-marker--proposed:not(.trip-map-marker--highlighted) {
     background: var(--ul-grey-6);
-    box-shadow: 0 2px 6px rgba($ui-slate-400, .5);
+    box-shadow: 0 2px 6px rgba(var(--ul-grey-4), .5);
     opacity: 0.75;
 }
 
@@ -1302,7 +1302,7 @@
     }
 
     &--confirmed {
-        color: $ui-blue-500;
+        color: $color-blue-500;
     }
 }
 
@@ -1332,18 +1332,18 @@
 
     .material-icons {
         font-size: 1.1rem;
-        color: $ui-green-500;
+        color: $color-green-500;
     }
 }
 
 .trip-complete-btn {
     opacity: 0;
     transition: opacity .15s;
-    color: $ui-green-500 !important;
+    color: $color-green-500 !important;
 
     &:hover {
-        background: $ui-green-100 !important;
-        color: $ui-green-600 !important;
+        background: $color-green-100 !important;
+        color: $color-green-600 !important;
     }
 }
 
@@ -1373,8 +1373,8 @@
     }
 
     &--active {
-        color: $ui-blue-500;
-        border-bottom-color: $ui-blue-500;
+        color: $color-blue-500;
+        border-bottom-color: $color-blue-500;
     }
 }
 
@@ -1394,8 +1394,8 @@
 }
 
 .cal-cell--drag-over {
-    background: $ui-blue-100 !important;
-    outline: 2px dashed $ui-blue-500;
+    background: $color-blue-100 !important;
+    outline: 2px dashed $color-blue-500;
 }
 
 // ── Member RSVP ───────────────────────────────────────────────────────────
@@ -1409,21 +1409,21 @@
     letter-spacing: .04em;
 
     &--yes {
-        background: $ui-green-100;
-        color: $ui-green-600;
-        border: 1px solid $ui-green-200;
+        background: $color-green-100;
+        color: $color-green-600;
+        border: 1px solid $color-green-200;
     }
 
     &--no {
         background: var(--ul-grey-0a);
-        color: $ui-red-600;
-        border: 1px solid $ui-red-200;
+        color: $color-red-600;
+        border: 1px solid $color-red-200;
     }
 
     &--maybe {
         background: var(--ul-accent-amber-bg);
         color: var(--ul-accent-amber);
-        border: 1px solid $ui-amber-200;
+        border: 1px solid $color-amber-200;
     }
 
     &--none {
@@ -1497,15 +1497,15 @@
     }
 
     &--yes {
-        color: $ui-green-600;
+        color: $color-green-600;
 
         &:hover {
-            background: $ui-green-100;
+            background: $color-green-100;
         }
     }
 
     &--no {
-        color: $ui-red-600;
+        color: $color-red-600;
 
         &:hover {
             background: var(--ul-grey-0a);
@@ -1554,15 +1554,15 @@
 
     &:focus,
     &:hover {
-        border-color: $ui-blue-500;
+        border-color: $color-blue-500;
     }
 }
 
 .trip-leave-btn {
-    color: $ui-red-500;
+    color: $color-red-500;
 
     &:hover {
-        color: $ui-red-600;
+        color: $color-red-600;
         background: var(--ul-grey-0a);
     }
 }
@@ -1611,7 +1611,7 @@
     }
 
     &.is-active[data-value="confirmed"] {
-        background: $ui-blue-500;
+        background: $color-blue-500;
         color: var(--ul-grey-5);
     }
 }
@@ -1636,7 +1636,7 @@
 }
 
 .trip-map-marker {
-    background: $ui-blue-500;
+    background: $color-blue-500;
     border: 2px solid var(--ul-border);
     border-radius: 50%;
     box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
@@ -1723,20 +1723,20 @@
 
     &.is-active {
         &[data-rsvp="yes"] {
-            background: $ui-green-500;
-            border-color: $ui-green-500;
+            background: $color-green-500;
+            border-color: $color-green-500;
             color: var(--ul-grey-5);
         }
 
         &[data-rsvp="no"] {
-            background: $ui-red-500;
-            border-color: $ui-red-500;
+            background: $color-red-500;
+            border-color: $color-red-500;
             color: var(--ul-grey-5);
         }
 
         &[data-rsvp="maybe"] {
-            background: $ui-amber-500;
-            border-color: $ui-amber-500;
+            background: $color-amber-500;
+            border-color: $color-amber-500;
             color: var(--ul-grey-5);
         }
 
@@ -1808,8 +1808,8 @@
 
     &--active {
         background: var(--ul-grey-0a);
-        border-color: $ui-blue-500;
-        color: $ui-blue-700;
+        border-color: $color-blue-500;
+        color: $color-blue-700;
     }
 
     &--disabled {
@@ -2124,13 +2124,13 @@
         border-color: transparent;
 
         &.activity-vote-btn--up {
-            background: $ui-green-100;
-            color: $ui-green-600;
+            background: $color-green-100;
+            color: $color-green-600;
         }
 
         &.activity-vote-btn--down {
             background: var(--ul-grey-0a);
-            color: $ui-red-600;
+            color: $color-red-600;
         }
     }
 
@@ -2289,7 +2289,7 @@
         &.active {
             background: rgba(33, 150, 243, .15);
             border-color: $primary-color;
-            color: $ui-blue-300;
+            color: $color-blue-300;
         }
     }
 }

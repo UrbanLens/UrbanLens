@@ -11,7 +11,7 @@ body.page-index {
         justify-content: center;
         text-align: center;
         padding: 4rem 1.5rem;
-        background: linear-gradient(160deg, $ui-indigo-950 0%, $ui-indigo-900 45%, $ui-indigo-700 75%, $ui-blue-500 100%);
+        background: linear-gradient(160deg, $color-indigo-900 0%, $color-indigo-900 45%, $color-indigo-700 75%, $color-blue-500 100%);
         color: var(--ul-grey-5);
     }
 
@@ -20,7 +20,7 @@ body.page-index {
         font-weight: 700;
         letter-spacing: .14em;
         text-transform: uppercase;
-        color: $ui-indigo-300;
+        color: $color-indigo-300;
         margin: 0 0 .9rem;
     }
 
@@ -35,13 +35,13 @@ body.page-index {
 
         em {
             font-style: normal;
-            color: $ui-indigo-300;
+            color: $color-indigo-300;
         }
     }
 
     .home-subtitle {
         font-size: 1.1rem;
-        color: $ui-indigo-200;
+        color: $color-indigo-200;
         max-width: 540px;
         margin: 0 0 2.75rem;
         line-height: 1.65;
@@ -67,7 +67,7 @@ body.page-index {
 
         &--primary {
             background: var(--ul-grey-0);
-            color: $ui-indigo-700;
+            color: $color-indigo-700;
 
             &:hover {
                 background: var(--ul-grey-0);
@@ -102,7 +102,7 @@ body.page-index {
         text-align: center;
         font-size: 1.8rem;
         font-weight: 700;
-        color: $ui-indigo-950;
+        color: $color-indigo-900;
         margin: 0 0 .5rem;
     }
 
@@ -136,7 +136,7 @@ body.page-index {
     .home-feature-icon {
         width: 56px;
         height: 56px;
-        background: linear-gradient(135deg, $ui-indigo-50, $ui-indigo-100);
+        background: linear-gradient(135deg, $color-indigo-50, $color-indigo-100);
         border-radius: 14px;
         display: flex;
         align-items: center;
@@ -144,7 +144,7 @@ body.page-index {
         margin: 0 auto 1.1rem;
 
         .material-icons {
-            color: $ui-indigo-600;
+            color: $color-indigo-600;
             font-size: 1.6rem;
         }
     }
@@ -152,7 +152,7 @@ body.page-index {
     .home-feature-title {
         font-size: 1.05rem;
         font-weight: 700;
-        color: $ui-indigo-950;
+        color: $color-indigo-900;
         margin: 0 0 .45rem;
     }
 
@@ -166,7 +166,7 @@ body.page-index {
     .home-cta-section {
         padding: 4rem 1.5rem;
         text-align: center;
-        background: linear-gradient(135deg, $ui-indigo-900, $ui-indigo-700);
+        background: linear-gradient(135deg, $color-indigo-900, $color-indigo-700);
         color: var(--ul-grey-5);
     }
 
@@ -178,7 +178,7 @@ body.page-index {
     }
 
     .home-cta-text {
-        color: $ui-indigo-200;
+        color: $color-indigo-200;
         margin: 0 0 1.75rem;
         font-size: .95rem;
     }

@@ -23,8 +23,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background-color: $dark-neutral-color;
-        color: $light-neutral-color;
+        background-color: var(--ul-grey-8);
+        color: var(--ul-grey-0);
         font-size: 2em;
     }
 
@@ -33,7 +33,7 @@
         bottom: 0;
         right: 0;
         background: rgba(0, 0, 0, .5);
-        color: $light-neutral-color;
+        color: var(--ul-grey-0);
         padding: 5px;
         border-radius: 50%;
         display: none;
@@ -60,7 +60,7 @@
     }
 
     label {
-        color: $ui-amber-400;
+        color: $color-amber-400;
         font-size: 20px;
         padding: 0 1px;
 
@@ -75,11 +75,11 @@
 
 
     input:checked+label {
-        color: $ui-amber-400;
+        color: $color-amber-400;
     }
 
     input:hover+label {
-        color: $ui-red-500;
+        color: $color-red-500;
     }
 
     &.rating-undefined,
@@ -91,7 +91,7 @@
 
     &:hover {
         label {
-            color: $ui-red-500;
+            color: $color-red-500;
         }
 
         label:hover~label {
@@ -106,7 +106,7 @@
     right: 10px;
     background: none;
     border: none;
-    color: $dark-neutral-color;
+    color: var(--ul-grey-8);
     opacity: 0.05;
     transition: opacity 0.3s ease;
     font-size: 24px;
@@ -145,7 +145,7 @@
 }
 
 .modern-style {
-    background-color: $light-neutral-color;
+    background-color: var(--ul-grey-0);
     border-radius: 10px;
     padding: 20px;
     margin-bottom: 20px;

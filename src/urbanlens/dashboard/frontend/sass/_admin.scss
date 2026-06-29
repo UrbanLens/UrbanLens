@@ -71,7 +71,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         transition: border-color .15s, box-shadow .15s;
 
         &:hover {
-            border-color: $ui-blue-300;
+            border-color: $color-blue-300;
             box-shadow: 0 6px 20px rgba(15, 23, 42, .08);
         }
     }
@@ -166,7 +166,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         transition: border-color .15s;
 
         &:focus {
-            border-color: $ui-blue-500;
+            border-color: $color-blue-500;
         }
     }
 }
@@ -195,7 +195,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 
     .material-icons {
         font-size: 1.6rem;
-        color: $ui-blue-500;
+        color: $color-blue-500;
     }
 }
 
@@ -220,9 +220,9 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     }
 
     &--success {
-        background: $ui-green-100;
-        color: $ui-green-600;
-        border: 1px solid $ui-green-200;
+        background: $color-green-100;
+        color: $color-green-600;
+        border: 1px solid $color-green-200;
     }
 }
 
@@ -265,7 +265,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         transition: border-color .15s;
 
         &:focus {
-            border-color: $ui-blue-500;
+            border-color: $color-blue-500;
         }
     }
 
@@ -296,7 +296,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 
     .material-icons {
         font-size: 1.15rem;
-        color: $ui-blue-500;
+        color: $color-blue-500;
     }
 }
 
@@ -428,7 +428,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     color: var(--ul-grey-8);
 
     &--ok {
-        color: $ui-green-600;
+        color: $color-green-600;
     }
 
     &--warn {
@@ -486,11 +486,11 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     }
 
     &--healthy {
-        color: $ui-green-600;
+        color: $color-green-600;
     }
 
     &--unhealthy {
-        color: $ui-red-500;
+        color: $color-red-500;
     }
 
     &--unavailable,
@@ -511,7 +511,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 [data-theme="dark"] {
     
     .subscription-admin-page .role-pill {
-        background: linear-gradient(135deg, rgba($ui-violet-600, .25), rgba($ui-blue-500, .2));
+        background: linear-gradient(135deg, rgba($color-indigo-600, .25), rgba($color-blue-500, .2));
         color: var(--ul-grey-8);
     }
 
@@ -523,7 +523,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
             box-shadow: none;
 
             &:hover {
-                border-color: rgba($ui-blue-500, .35);
+                border-color: rgba($color-blue-500, .35);
             }
         }
 

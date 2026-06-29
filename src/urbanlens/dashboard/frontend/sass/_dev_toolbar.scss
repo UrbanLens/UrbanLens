@@ -259,13 +259,13 @@
 
 .dev-toolbar--dark-active {
     .dev-toolbar__theme-icon--dark.is-active {
-        color: $ui-indigo-300;
+        color: $color-indigo-300;
     }
 }
 
 .dev-toolbar:not(.dev-toolbar--dark-active) {
     .dev-toolbar__theme-icon--light.is-active {
-        color: $ui-amber-500;
+        color: $color-amber-500;
     }
 }
 
@@ -314,13 +314,13 @@ html[data-theme='dark'] {
 
     .dev-toolbar--dark-active {
         .dev-toolbar__theme-icon--dark.is-active {
-            color: $ui-indigo-300;
+            color: $color-indigo-300;
         }
     }
 
     .dev-toolbar:not(.dev-toolbar--dark-active) {
         .dev-toolbar__theme-icon--light.is-active {
-            color: $ui-amber-400;
+            color: $color-amber-400;
         }
     }
 

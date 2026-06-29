@@ -12,7 +12,7 @@ body.page-auth {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(145deg, $ui-indigo-950 0%, $ui-indigo-900 40%, $ui-indigo-700 70%, $ui-indigo-500 100%);
+    background: linear-gradient(145deg, $color-indigo-900 0%, $color-indigo-900 40%, $color-indigo-700 70%, $color-indigo-500 100%);
     padding: 2rem 1rem;
 }
 
@@ -29,7 +29,7 @@ body.page-auth {
 .auth-card-header {
     text-align: center;
     padding: 2.25rem 2rem 1rem;
-    background: linear-gradient(160deg, $ui-indigo-50 0%, var(--ul-grey-0), 100%);
+    background: linear-gradient(160deg, $color-indigo-50 0%, var(--ul-grey-0), 100%);
     border-bottom: 1px solid var(--ul-border);
 }
 
@@ -40,7 +40,7 @@ body.page-auth {
     gap: .5rem;
     margin-bottom: 1.25rem;
     text-decoration: none;
-    color: $ui-indigo-900;
+    color: $color-indigo-900;
 
     img {
         width: 34px;
@@ -52,7 +52,7 @@ body.page-auth {
         font-size: 1.25rem;
         font-weight: 800;
         letter-spacing: -.03em;
-        color: $ui-indigo-900;
+        color: $color-indigo-900;
     }
 }
 
@@ -111,7 +111,7 @@ body.page-auth {
 
         &:focus {
             outline: none;
-            border-color: $ui-indigo-500;
+            border-color: $color-indigo-500;
             background: var(--ul-grey-0);
             box-shadow: 0 0 0 3px rgba(99, 102, 241, .15);
         }
@@ -129,7 +129,7 @@ body.page-auth {
 
     .field-error {
         font-size: .8rem;
-        color: $ui-red-600;
+        color: $color-red-600;
     }
 
     ul.errorlist {
@@ -139,7 +139,7 @@ body.page-auth {
 
         li {
             font-size: .8rem;
-            color: $ui-red-600;
+            color: $color-red-600;
         }
     }
 }
@@ -147,7 +147,7 @@ body.page-auth {
 // ── Non-field errors ──────────────────────────────────────────────────────
 .auth-errors {
     background: var(--ul-grey-0);
-    border: 1px solid $ui-red-200;
+    border: 1px solid $color-red-200;
     border-radius: 9px;
     padding: .75rem 1rem;
     margin-bottom: .25rem;
@@ -159,24 +159,24 @@ body.page-auth {
 
         li {
             font-size: .875rem;
-            color: $ui-red-600;
+            color: $color-red-600;
         }
     }
 
     p {
         font-size: .875rem;
-        color: $ui-red-600;
+        color: $color-red-600;
         margin: 0;
     }
 }
 
 // ── Submit button ─────────────────────────────────────────────────────────
 .auth-submit-btn {
-    background-color: $ui-indigo-600;
+    background-color: $color-indigo-600;
     font-size: 1rem;
 
     &:hover {
-        background: $ui-indigo-700;
+        background: $color-indigo-700;
         box-shadow: 0 4px 12px rgba(79, 70, 229, .4);
     }
 
@@ -220,7 +220,7 @@ body.page-auth {
     gap: .4rem;
 
     a {
-        color: $ui-indigo-600;
+        color: $color-indigo-600;
         font-weight: 600;
         text-decoration: none;
 
@@ -231,7 +231,7 @@ body.page-auth {
 }
 
 .auth-inline-link {
-    color: $ui-indigo-600;
+    color: $color-indigo-600;
     font-weight: 600;
     text-decoration: underline;
 }
@@ -243,7 +243,7 @@ body.page-auth {
 
     .material-icons {
         font-size: 3.5rem;
-        color: $ui-indigo-600;
+        color: $color-indigo-600;
     }
 }
 
@@ -265,18 +265,18 @@ body.page-auth {
 
 .auth-info-email {
     font-weight: 600;
-    color: $ui-indigo-600;
+    color: $color-indigo-600;
 }
 
 // Debug-only verification link block
 .auth-debug-block {
     background: var(--ul-grey-0);
-    border: 1px solid $ui-green-200;
+    border: 1px solid $color-green-200;
     border-radius: 9px;
     padding: .85rem 1rem;
     margin: 1rem 0;
     font-size: .82rem;
-    color: $ui-green-800;
+    color: $color-green-800;
     word-break: break-all;
 
     strong {
@@ -285,7 +285,7 @@ body.page-auth {
     }
 
     a {
-        color: $ui-green-800;
+        color: $color-green-800;
         font-weight: 700;
     }
 }

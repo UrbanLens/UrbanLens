@@ -80,8 +80,8 @@
     width: 100%;
     height: 100%;
     border-radius: 50%;
-    background: $ui-indigo-100;
-    color: $ui-indigo-700;
+    background: $color-indigo-100;
+    color: $color-indigo-700;
     font-weight: 700;
     font-size: .8rem;
 }
@@ -111,7 +111,7 @@
 
         &:hover {
             text-decoration: underline;
-            color: $ui-indigo-600;
+            color: $color-indigo-600;
         }
     }
 }
@@ -141,7 +141,7 @@
         text-decoration: none;
 
         &--location {
-            color: $ui-violet-600;
+            color: $color-indigo-600;
 
             &:hover {
                 text-decoration: underline;
@@ -149,7 +149,7 @@
         }
 
         &--activity {
-            color: $ui-sky-700;
+            color: $color-light-blue-700;
 
             &:hover {
                 text-decoration: underline;
@@ -198,7 +198,7 @@
     }
 
     &:hover {
-        color: $ui-indigo-600;
+        color: $color-indigo-600;
         background: var(--ul-grey-0);
     }
 }
@@ -235,7 +235,7 @@
 
     &--mine {
         background: var(--ul-accent-purple-bg);
-        border-color: $ui-violet-400;
+        border-color: $color-indigo-400;
         color: var(--ul-accent-purple-fg);
     }
 }
@@ -362,7 +362,7 @@
 
     &:focus {
         outline: none;
-        border-color: $ui-indigo-500;
+        border-color: $color-indigo-500;
         box-shadow: 0 0 0 3px rgba(99, 102, 241, .1);
     }
 }
@@ -396,8 +396,8 @@
 
     &:hover {
         background: var(--ul-accent-purple-bg);
-        border-color: $ui-violet-400;
-        color: $ui-violet-700;
+        border-color: $color-indigo-400;
+        color: $color-indigo-700;
     }
 }
 
@@ -406,7 +406,7 @@
     align-items: center;
     gap: .35rem;
     background: var(--ul-accent-purple-bg);
-    border: 1px solid $ui-violet-400;
+    border: 1px solid $color-indigo-400;
     border-radius: 6px;
     padding: .2rem .5rem;
     font-size: .78rem;
@@ -427,7 +427,7 @@
     background: none;
     border: none;
     cursor: pointer;
-    color: $ui-violet-600;
+    color: $color-indigo-600;
     padding: 0;
     display: inline-flex;
     align-items: center;
@@ -437,7 +437,7 @@
     }
 
     &:hover {
-        color: $ui-violet-900;
+        color: $color-indigo-900;
     }
 }
 
@@ -550,7 +550,7 @@
 
     &:focus {
         outline: none;
-        border-color: $ui-indigo-500;
+        border-color: $color-indigo-500;
     }
 
     &:disabled {
@@ -577,8 +577,8 @@
     }
 
     &:hover {
-        background: $ui-indigo-500;
-        border-color: $ui-indigo-500;
+        background: $color-indigo-500;
+        border-color: $color-indigo-500;
         color: var(--ul-grey-5);
     }
 }
@@ -677,7 +677,7 @@
 
     &.is-active {
         background: var(--ul-accent-purple-bg);
-        border-color: $ui-violet-400;
+        border-color: $color-indigo-400;
         color: var(--ul-accent-purple-fg);
     }
 }
@@ -726,7 +726,7 @@
     }
 
     &:hover {
-        color: $ui-indigo-500;
+        color: $color-indigo-500;
     }
 
     input[type="file"] {
@@ -785,7 +785,7 @@
     &:hover,
     &.is-selected {
         background: var(--ul-grey-0);
-        color: $ui-indigo-700;
+        color: $color-indigo-700;
     }
 
     &__name {

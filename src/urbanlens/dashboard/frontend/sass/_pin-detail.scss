@@ -210,18 +210,18 @@
         background: transparent;
         font-size: .8rem;
         font-weight: 500;
-        color: $ui-slate-500;
+        color: var(--ul-grey-5);
         cursor: pointer;
         transition: color .12s, border-color .12s;
         white-space: nowrap;
 
         &:hover {
-            color: $ui-indigo-500;
+            color: $color-indigo-500;
         }
 
         &--active {
-            color: $ui-indigo-500;
-            border-bottom-color: $ui-indigo-500;
+            color: $color-indigo-500;
+            border-bottom-color: $color-indigo-500;
         }
     }
 
@@ -241,7 +241,7 @@
         color: inherit;
 
         &:focus {
-            border-color: $ui-indigo-500;
+            border-color: $color-indigo-500;
             box-shadow: 0 0 0 3px rgba(99, 102, 241, .12);
         }
     }
@@ -333,12 +333,12 @@
             color: var(--ul-grey-6);
 
             &:hover {
-                color: $ui-indigo-400;
+                color: $color-indigo-400;
             }
 
             &--active {
-                color: $ui-indigo-400;
-                border-bottom-color: $ui-indigo-400;
+                color: $color-indigo-400;
+                border-bottom-color: $color-indigo-400;
             }
         }
 
@@ -347,7 +347,7 @@
             border-color: var(--ul-border);
 
             &:focus {
-                border-color: $ui-indigo-400;
+                border-color: $color-indigo-400;
                 box-shadow: 0 0 0 3px rgba(129, 140, 248, .15);
             }
         }
@@ -510,10 +510,10 @@
     align-items: center;
     gap: .65rem;
     padding: .65rem 1rem;
-    background: linear-gradient(90deg, $ui-cyan-50 0%, $ui-sky-50 100%);
-    border-bottom: 1px solid $ui-sky-200;
+    background: linear-gradient(90deg, var(--ul-grey-0) 0%, $color-light-blue-50 100%);
+    border-bottom: 1px solid $color-light-blue-200;
     font-size: .83rem;
-    color: $ui-sky-700;
+    color: $color-light-blue-700;
 
     .material-icons {
         font-size: 1rem;
@@ -531,7 +531,7 @@
     gap: .3rem;
     white-space: nowrap;
     padding: .3rem .7rem;
-    background: $ui-cyan-600;
+    background: $color-cyan-600;
     color: var(--ul-grey-5);
     border-radius: 7px;
     font-size: .8rem;
@@ -544,7 +544,7 @@
     }
 
     &:hover {
-        background: $ui-cyan-700;
+        background: $color-cyan-700;
     }
 }
 
@@ -610,7 +610,7 @@
 
 .security-indicators {
     padding: .5rem 1rem .75rem;
-    border-top: 1px solid $ui-slate-100;
+    border-top: 1px solid var(--ul-grey-1);
     display: flex;
     flex-direction: column;
     gap: .4rem;
@@ -621,7 +621,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .04em;
-    color: $ui-slate-500;
+    color: var(--ul-grey-5);
 }
 
 .security-chips {
@@ -640,21 +640,21 @@
     border: 1px solid transparent;
 
     &--no {
-        background: $ui-green-100;
-        color: $ui-green-800;
-        border-color: $ui-green-200;
+        background: $color-green-100;
+        color: $color-green-800;
+        border-color: $color-green-200;
     }
 
     &--some {
         background: var(--ul-accent-amber-bg);
-        color: $ui-amber-800;
-        border-color: $ui-amber-200;
+        color: $color-amber-800;
+        border-color: $color-amber-200;
     }
 
     &--everywhere {
         background: var(--ul-grey-0a);
         color: -red-800;
-        border-color: $ui-red-300;
+        border-color: $color-red-300;
     }
 }
 
@@ -665,7 +665,7 @@
     padding: 0;
 
     &[open] .form-section-summary {
-        border-bottom: 1px solid $ui-slate-200;
+        border-bottom: 1px solid var(--ul-grey-2);
         border-radius: 8px 8px 0 0;
     }
 
@@ -674,7 +674,7 @@
         padding: .55rem .9rem;
         font-size: .85rem;
         font-weight: 600;
-        color: $ui-slate-600;
+        color: var(--ul-grey-6);
         background: var(--ul-grey-0);
         border-radius: 8px;
         cursor: pointer;
@@ -685,7 +685,7 @@
         }
 
         &::marker {
-            color: $ui-slate-400;
+            color: var(--ul-grey-4);
         }
     }
 }
@@ -705,7 +705,7 @@
     label {
         font-size: .78rem;
         font-weight: 600;
-        color: $ui-slate-600;
+        color: var(--ul-grey-6);
     }
 
     select {
@@ -718,7 +718,7 @@
 
         &:focus {
             outline: none;
-            border-color: $ui-blue-300;
+            border-color: $color-blue-300;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
         }
     }
@@ -734,7 +734,7 @@
     @for $i from 1 through 5 {
         &:has(.sr-star-btn:nth-child(#{$i}):hover) {
             .sr-star-btn:nth-child(-n+#{$i}) {
-                color: $ui-amber-500;
+                color: $color-amber-500;
             }
 
             .sr-star-btn:not(:nth-child(-n+#{$i})) {
@@ -757,7 +757,7 @@
     outline: none;
 
     &--on {
-        color: $ui-amber-500;
+        color: $color-amber-500;
     }
 
     &:hover {
@@ -772,7 +772,7 @@
 
 .star-rating-interactive--priority .sr-star-btn {
     &--on {
-        color: $ui-indigo-500;
+        color: $color-indigo-500;
     }
 }
 
@@ -780,7 +780,7 @@
     @for $i from 1 through 5 {
         &:has(.sr-star-btn:nth-child(#{$i}):hover) {
             .sr-star-btn:nth-child(-n+#{$i}) {
-                color: $ui-indigo-500;
+                color: $color-indigo-500;
             }
 
             .sr-star-btn:not(:nth-child(-n+#{$i})) {
@@ -793,7 +793,7 @@
 // Vulnerability - red scale (higher = more exposed/risky)
 .star-rating-interactive--vulnerability .sr-star-btn {
     &--on {
-        color: $ui-red-500;
+        color: $color-red-500;
     }
 }
 
@@ -801,7 +801,7 @@
     @for $i from 1 through 5 {
         &:has(.sr-star-btn:nth-child(#{$i}):hover) {
             .sr-star-btn:nth-child(-n+#{$i}) {
-                color: $ui-red-500;
+                color: $color-red-500;
             }
 
             .sr-star-btn:not(:nth-child(-n+#{$i})) {
@@ -814,7 +814,7 @@
 // Danger - orange scale (higher = more hazardous)
 .star-rating-interactive--danger .sr-star-btn {
     &--on {
-        color: $ui-orange-500;
+        color: $color-orange-500;
     }
 }
 
@@ -822,7 +822,7 @@
     @for $i from 1 through 5 {
         &:has(.sr-star-btn:nth-child(#{$i}):hover) {
             .sr-star-btn:nth-child(-n+#{$i}) {
-                color: $ui-orange-500;
+                color: $color-orange-500;
             }
 
             .sr-star-btn:not(:nth-child(-n+#{$i})) {
@@ -846,7 +846,7 @@
     outline: none;
 
     &:hover {
-        color: $ui-red-600;
+        color: $color-red-600;
         outline: none;
     }
 
@@ -941,8 +941,8 @@ body.page-location-details {
     padding: .55rem .9rem;
     border-radius: 8px;
     background: var(--ul-grey-0a);
-    border: 1px solid $ui-blue-200;
-    color: $ui-blue-700;
+    border: 1px solid $color-blue-200;
+    color: $color-blue-700;
     text-decoration: none;
     font-size: .83rem;
     font-weight: 600;
@@ -959,9 +959,9 @@ body.page-location-details {
     }
 
     &:hover {
-        background: $ui-blue-100;
-        border-color: $ui-blue-300;
-        color: $ui-blue-800;
+        background: $color-blue-100;
+        border-color: $color-blue-300;
+        color: $color-blue-800;
     }
 }
 
@@ -974,8 +974,8 @@ body.page-location-details {
 
     .card-header {
         .badge {
-            background: $ui-slate-200;
-            color: $ui-slate-500;
+            background: var(--ul-grey-2);
+            color: var(--ul-grey-5);
             border-radius: 99px;
             font-size: .72rem;
             font-weight: 700;
@@ -995,7 +995,7 @@ body.page-location-details {
     align-items: flex-start;
     gap: .65rem;
     padding: .75rem 1rem;
-    border-bottom: 1px solid $ui-slate-100;
+    border-bottom: 1px solid var(--ul-grey-1);
     transition: opacity .2s;
 
     &:last-child {
@@ -1016,19 +1016,19 @@ body.page-location-details {
 .pin-note-text {
     margin: 0 0 .25rem;
     font-size: .88rem;
-    color: $ui-slate-800;
+    color: var(--ul-grey-8);
     white-space: pre-wrap;
     word-break: break-word;
 }
 
 .pin-note-date {
     font-size: .75rem;
-    color: $ui-slate-400;
+    color: var(--ul-grey-4);
 }
 
 .pin-notes-empty {
     padding: 1.25rem 1rem;
-    color: $ui-slate-400;
+    color: var(--ul-grey-4);
     font-size: .85rem;
     font-style: italic;
     margin: 0;
@@ -1050,7 +1050,7 @@ body.page-location-details {
 
         &:focus {
             outline: none;
-            border-color: $ui-blue-300;
+            border-color: $color-blue-300;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
         }
     }
@@ -1108,7 +1108,7 @@ body.page-location-details {
 
 .pin-location-icon {
     font-size: 1.2rem;
-    color: $ui-indigo-500;
+    color: $color-indigo-500;
     flex-shrink: 0;
 }
 
@@ -1131,7 +1131,7 @@ body.page-location-details {
 .pin-location-name {
     font-size: .88rem;
     font-weight: 600;
-    color: $ui-blue-800;
+    color: $color-blue-800;
     text-decoration: none;
     display: inline-flex;
     align-items: center;
@@ -1163,12 +1163,12 @@ body.page-location-details {
 .pin-loc-detach-btn {
     font-size: .75rem;
     padding: .2rem .5rem;
-    color: $ui-red-600;
-    border-color: $ui-red-300;
+    color: $color-red-600;
+    border-color: $color-red-300;
 
     &:hover {
         background: var(--ul-grey-0);
-        border-color: $ui-red-600;
+        border-color: $color-red-600;
     }
 }
 
@@ -1241,8 +1241,8 @@ body.page-location-details {
     font-size: .65rem;
     font-weight: 700;
     text-transform: uppercase;
-    background: $ui-blue-100;
-    color: $ui-blue-700;
+    background: $color-blue-100;
+    color: $color-blue-700;
     border-radius: 8px;
     padding: .1rem .4rem;
     white-space: nowrap;
@@ -1306,7 +1306,7 @@ body.page-location-details {
 
     &--current {
         background: var(--ul-grey-0);
-        border-color: $ui-sky-200;
+        border-color: $color-light-blue-200;
     }
 }
 
@@ -1322,8 +1322,8 @@ body.page-location-details {
 .loc-conflict-badge {
     font-size: .65rem;
     font-weight: 700;
-    background: $ui-blue-100;
-    color: $ui-blue-700;
+    background: $color-blue-100;
+    color: $color-blue-700;
     border-radius: 8px;
     padding: .1rem .4rem;
     margin-left: .4rem;
@@ -1344,7 +1344,7 @@ body.page-location-details {
     align-items: flex-start;
     gap: .75rem;
     background: var(--ul-grey-0);
-    border: 1px solid $ui-amber-300;
+    border: 1px solid $color-amber-300;
     border-radius: 10px;
     padding: .85rem 1rem;
     margin-bottom: 1.25rem;
@@ -1353,7 +1353,7 @@ body.page-location-details {
 
 .wiki-lcn-icon {
     font-size: 1.2rem;
-    color: $ui-amber-500;
+    color: $color-amber-500;
     flex-shrink: 0;
     margin-top: .05rem;
 }
@@ -1364,7 +1364,7 @@ body.page-location-details {
     color: var(--ul-grey-7);
 
     strong {
-        color: $ui-amber-800;
+        color: $color-amber-800;
     }
 }
 
@@ -1380,7 +1380,7 @@ body.page-location-details {
     align-items: center;
     gap: .3rem;
     background: var(--ul-grey-0);
-    border: 1px solid $ui-amber-300;
+    border: 1px solid $color-amber-300;
     border-radius: 8px;
     padding: .2rem .55rem;
 }
@@ -1388,7 +1388,7 @@ body.page-location-details {
 .wiki-lcn-link {
     font-size: .82rem;
     font-weight: 500;
-    color: $ui-blue-700;
+    color: $color-blue-700;
     text-decoration: none;
 
     &:hover {
@@ -1402,7 +1402,7 @@ body.page-location-details {
     cursor: pointer;
     font-size: .75rem;
     font-weight: 600;
-    color: $ui-violet-700;
+    color: $color-indigo-700;
     padding: 0;
 
     &:hover {
@@ -1454,7 +1454,7 @@ body.page-location-details {
     }
 
     .pin-location-name {
-        color: $ui-blue-300;
+        color: $color-blue-300;
     }
 
     .pin-loc-change-btn {
@@ -1463,12 +1463,12 @@ body.page-location-details {
     }
 
     .pin-loc-detach-btn {
-        color: $ui-red-400;
-        border-color: rgba($ui-red-400, .3);
+        color: $color-red-400;
+        border-color: rgba($color-red-400, .3);
 
         &:hover {
             background: rgba(220, 38, 38, .1);
-            border-color: $ui-red-400;
+            border-color: $color-red-400;
         }
     }
 
@@ -1502,7 +1502,7 @@ body.page-location-details {
 
         &--current {
             background: rgba(59, 130, 246, .08);
-            border-color: $ui-blue-500;
+            border-color: $color-blue-500;
         }
     }
 
@@ -1519,7 +1519,7 @@ body.page-location-details {
         color: var(--ul-text);
 
         strong {
-            color: $ui-amber-400;
+            color: $color-amber-400;
         }
     }
 
@@ -1529,11 +1529,11 @@ body.page-location-details {
     }
 
     .wiki-lcn-link {
-        color: $ui-blue-300;
+        color: $color-blue-300;
     }
 
     .wiki-lcn-switch-btn {
-        color: $ui-violet-300;
+        color: $color-indigo-300;
     }
 
     .wiki-lcn-dismiss {
@@ -1562,17 +1562,17 @@ body.page-location-details {
     .location-map.card .card-header {
         @extend .panel-header;
         background: var(--ul-grey-0);
-        color: $ui-slate-800;
-        border-bottom-color: $ui-slate-200;
+        color: var(--ul-grey-8);
+        border-bottom-color: var(--ul-grey-2);
 
         .material-icons {
-            color: $ui-slate-500;
+            color: var(--ul-grey-5);
             opacity: 1;
         }
 
         span,
         h3 {
-            color: $ui-slate-800;
+            color: var(--ul-grey-8);
         }
     }
 }

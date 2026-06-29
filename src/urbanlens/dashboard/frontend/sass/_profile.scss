@@ -162,8 +162,8 @@
     }
 
     &--pending {
-        background: color-mix(in srgb, $ui-amber-500 10%, transparent);
-        border-color: color-mix(in srgb, $ui-amber-500 35%, transparent);
+        background: color-mix(in srgb, $color-amber-500 10%, transparent);
+        border-color: color-mix(in srgb, $color-amber-500 35%, transparent);
         color: var(--ul-accent-amber-fg);
     }
 
@@ -174,9 +174,9 @@
     }
 
     &--blocked {
-        background: color-mix(in srgb, $ui-red-500 8%, transparent);
-        border-color: color-mix(in srgb, $ui-red-500 25%, transparent);
-        color: $ui-red-700;
+        background: color-mix(in srgb, $color-red-500 8%, transparent);
+        border-color: color-mix(in srgb, $color-red-500 25%, transparent);
+        color: $color-red-700;
     }
 }
 
@@ -227,14 +227,14 @@
     }
 
     &--danger {
-        background: color-mix(in srgb, $ui-red-500 8%, transparent);
-        border-color: color-mix(in srgb, $ui-red-500 25%, transparent);
-        color: $ui-red-700;
+        background: color-mix(in srgb, $color-red-500 8%, transparent);
+        border-color: color-mix(in srgb, $color-red-500 25%, transparent);
+        color: $color-red-700;
 
         &:hover {
-            background: color-mix(in srgb, $ui-red-500 15%, transparent);
-            border-color: $ui-red-500;
-            color: $ui-red-800;
+            background: color-mix(in srgb, $color-red-500 15%, transparent);
+            border-color: $color-red-500;
+            color: $color-red-800;
         }
     }
 }
@@ -650,7 +650,7 @@
 
 .settings-cluster-value {
     font-size: .85rem;
-    color: $ui-slate-500;
+    color: var(--ul-grey-5);
     min-width: 4rem;
 }
 
@@ -1061,7 +1061,7 @@ textarea.edit-textarea {
     display: flex;
     align-items: center;
     gap: 12px;
-    background: linear-gradient(135deg, $ui-indigo-900, $ui-indigo-700);
+    background: linear-gradient(135deg, $color-indigo-900, $color-indigo-700);
     color: #fff;
     border-radius: $radius-md;
     padding: 14px 18px;
@@ -1177,8 +1177,8 @@ body .edit-profile-page .edit-username-input {
     transition: border-color .15s, box-shadow .15s;
 
     &:hover {
-        border-color: $ui-indigo-600;
-        box-shadow: 0 0 0 3px rgba($ui-indigo-600, .12);
+        border-color: $color-indigo-600;
+        box-shadow: 0 0 0 3px rgba($color-indigo-600, .12);
     }
 
     .material-icons { font-size: 1.6rem; color: var(--ul-muted); }
@@ -1984,7 +1984,7 @@ body .edit-profile-page .edit-username-input {
     border: none;
     background: transparent;
     cursor: pointer;
-    color: $ui-slate-400;
+    color: var(--ul-grey-4);
     padding: .2rem;
     border-radius: 4px;
     display: inline-flex;
@@ -2000,7 +2000,7 @@ body .edit-profile-page .edit-username-input {
     &:hover,
     &:focus {
         background: var(--ul-grey-0a);
-        color: $ui-red-600;
+        color: $color-red-600;
         outline: none;
     }
 }
@@ -2387,7 +2387,7 @@ a.profile-stat--link {
 
 .friend-requests-section {
     background: var(--ul-grey-0);
-    border: 1px solid $ui-amber-200;
+    border: 1px solid $color-amber-200;
     border-radius: 10px;
     padding: .75rem 1rem;
     margin-bottom: .5rem;
@@ -2399,7 +2399,7 @@ a.profile-stat--link {
     gap: .35rem;
     font-size: .82rem;
     font-weight: 600;
-    color: $ui-amber-800;
+    color: $color-amber-800;
     margin: 0 0 .6rem;
 
     .material-icons {
@@ -2484,18 +2484,18 @@ a.profile-stat--link {
 
     &--accept {
         background: var(--ul-grey-0);
-        border-color: $ui-green-300;
-        color: $ui-green-800;
+        border-color: $color-green-300;
+        color: $color-green-800;
 
         &:hover {
-            background: $ui-green-200;
+            background: $color-green-200;
         }
     }
 
     &--reject {
         background: var(--ul-grey-0);
-        border-color: $ui-red-300;
-        color: $ui-red-800;
+        border-color: $color-red-300;
+        color: $color-red-800;
 
         &:hover {
             background: var(--ul-grey-0a);
@@ -2504,8 +2504,8 @@ a.profile-stat--link {
 
     &--ignore {
         background: var(--ul-grey-0);
-        border-color: $ui-slate-200;
-        color: $ui-slate-500;
+        border-color: var(--ul-grey-2);
+        color: var(--ul-grey-5);
 
         &:hover {
             background: var(--ul-grey-0);
@@ -2515,13 +2515,13 @@ a.profile-stat--link {
     &--remove {
         background: none;
         border-color: var(--ul-border);
-        color: $ui-slate-500;
+        color: var(--ul-grey-5);
         padding: .25rem .5rem;
 
         &:hover {
             background: var(--ul-grey-0a);
-            border-color: $ui-red-300;
-            color: $ui-red-800;
+            border-color: $color-red-300;
+            color: $color-red-800;
         }
     }
 }
@@ -2541,18 +2541,18 @@ a.profile-stat--link {
 
 .btn-friend-accept {
     background: var(--ul-grey-0);
-    border-color: $ui-green-300;
-    color: $ui-green-800;
+    border-color: $color-green-300;
+    color: $color-green-800;
 
     &:hover {
-        background: $ui-green-200;
+        background: $color-green-200;
     }
 }
 
 .btn-friend-reject {
     background: var(--ul-grey-0);
-    border-color: $ui-red-300;
-    color: $ui-red-800;
+    border-color: $color-red-300;
+    color: $color-red-800;
 
     &:hover {
         background: var(--ul-grey-0a);
@@ -2561,8 +2561,8 @@ a.profile-stat--link {
 
 .btn-friend-ignore {
     background: var(--ul-grey-0);
-    border-color: $ui-slate-200;
-    color: $ui-slate-500;
+    border-color: var(--ul-grey-2);
+    color: var(--ul-grey-5);
 
     &:hover {
         background: var(--ul-grey-0);
@@ -2599,15 +2599,15 @@ a.profile-stat--link {
     }
 
     &--friends {
-        background: $ui-green-100;
-        color: $ui-green-800;
-        border: 1px solid $ui-green-300;
+        background: $color-green-100;
+        color: $color-green-800;
+        border: 1px solid $color-green-300;
     }
 
     &--pending {
         background: var(--ul-accent-amber-bg);
-        color: $ui-amber-800;
-        border: 1px solid $ui-yellow-300;
+        color: $color-amber-800;
+        border: 1px solid $color-yellow-300;
     }
 }
 
@@ -2695,7 +2695,7 @@ a.profile-stat--link {
 }
 
 .friends-section--requests {
-    border-color: $ui-amber-200;
+    border-color: $color-amber-200;
 }
 
 .friends-empty {

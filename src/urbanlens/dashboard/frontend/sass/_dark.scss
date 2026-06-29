@@ -92,8 +92,8 @@
     }
 
     .tag-view-btn {
-        color: $color-grey-3b;
-        border-right-color: $color-grey-7b;
+        color: var(--ul-grey-3b);
+        border-right-color: var(--ul-grey-7b);
 
         &:hover {
             background: var(--ul-grey-0);
@@ -102,7 +102,7 @@
     }
 
     .tag-tree-children {
-        border-left-color: $color-grey-7b;
+        border-left-color: var(--ul-grey-7b);
     }
 
     .settings-title {
@@ -112,7 +112,6 @@
     .settings-section-title,
     .settings-label,
     .settings-toggle-label,
-    .tag-card-name,
     .badge-title {
         color: var(--ul-grey-1);
     }
@@ -122,14 +121,14 @@
     .settings-help,
     .tag-card-desc,
     .tag-subtitle {
-        color: $color-grey-4a;
+        color: var(--ul-grey-4a);
     }
 
     .settings-select,
     .settings-input,
     .form-input,
     textarea.form-input {
-        color: var(--ul-grey-1);
+        color: var(--ul-grey-9);
         border-color: var(--ul-grey-7b);
     }
 
@@ -142,15 +141,15 @@
         border-color: var(--ul-grey-7b);
 
         span {
-            color: $color-grey-3a;
+            color: var(--ul-grey-3a);
         }
 
         i {
-            color: $color-grey-5a;
+            color: var(--ul-grey-5a);
         }
 
         &:hover:not(.active) {
-            background: $color-grey-8a;
+            background: var(--ul-grey-8a);
             border-color: var(--ul-grey-6b);
         }
 
@@ -161,8 +160,8 @@
     }
 
     .tag-global-badge {
-        background: $color-grey-8a;
-        color: $color-grey-3b;
+        background: var(--ul-grey-8a);
+        color: var(--ul-grey-3b);
     }
 
     .tag-parent-select,
@@ -172,7 +171,7 @@
     }
 
     .tag-parent-option:hover {
-        background: $color-grey-8a;
+        background: var(--ul-grey-8a);
     }
 
     .icon-option {
@@ -190,7 +189,7 @@
     }
 
     .tag-order-badge {
-        color: $color-grey-3b;
+        color: var(--ul-grey-3b);
     }
 
     .icon-picker-trigger {
@@ -203,7 +202,7 @@
     }
 
     .icon-tab {
-        color: $color-grey-5a;
+        color: var(--ul-grey-5a);
 
         &:hover {
             color: var(--ul-grey-2);
@@ -219,16 +218,16 @@
     }
 
     .icon-picker-item-label {
-        color: $color-grey-5b;
+        color: var(--ul-grey-5b);
     }
 
     .icon-picker-mi {
-        color: $color-grey-3b;
+        color: var(--ul-grey-3b);
     }
 
     .icon-custom-upload-btn {
         border-color: var(--ul-grey-7b);
-        color: $color-grey-5a;
+        color: var(--ul-grey-5a);
     }
 
     .dialog-overlay {
@@ -291,7 +290,7 @@
     }
 
     .edit-username-hint--ok  { color: $color-green-400; }
-    .edit-username-hint--bad { color: $ui-red-400; }
+    .edit-username-hint--bad { color: $color-red-400; }
 
     .settings-cluster-value {
         color: var(--ul-grey-7);
@@ -303,7 +302,7 @@
 
     .settings-reset-btn {
         border-color: var(--ul-grey-7b);
-        color: $color-grey-3b;
+        color: var(--ul-grey-3b);
 
         &:hover {
             border-color: var(--ul-grey-6b);
@@ -317,7 +316,7 @@
     }
 
     .trip-map-ctx-item {
-        color: $ui-slate-200;
+        color: var(--ul-grey-2);
 
         &:hover {
             background: rgba(255, 255, 255, .06);
@@ -357,21 +356,21 @@
         border-top-color: $dk-panel-border;
 
         .trip-weather-activity-name {
-            color: $ui-slate-200;
+            color: var(--ul-grey-2);
         }
     }
 
     .trip-weather-slot-temp {
-        color: $ui-slate-200;
+        color: var(--ul-grey-2);
     }
 
     .trip-weather-slot-desc,
     .trip-weather-slot-feels {
-        color: $ui-slate-400;
+        color: var(--ul-grey-4);
     }
 
     body.page-location-details {
-        background: $color-grey-10a;
+        background: var(--ul-grey-10a);
     }
 
     body.page-location-details .card {
@@ -384,11 +383,11 @@
     }
 
     .notif-prefs__hdr {
-        color: $color-grey-5a;
+        color: var(--ul-grey-5a);
     }
 
     .notif-prefs__row {
-        border-bottom-color: $color-grey-9a;
+        border-bottom-color: var(--ul-grey-9a);
 
         &:hover {
             background: var(--ul-grey-0);
@@ -401,7 +400,7 @@
 
     .notif-prefs__saved {
         background: $dk-success-bg;
-        color: $ui-green-300;
+        color: $color-green-300;
     }
 
     .profile-stat,
@@ -418,18 +417,18 @@
         color: var(--ul-grey-2);
 
         &.empty {
-            color: $color-grey-6b;
+            color: var(--ul-grey-6b);
         }
     }
 
     .profile-username,
     .profile-meta-item {
-        color: $color-grey-5a;
+        color: var(--ul-grey-5a);
     }
 
     .social-link {
         border-color: var(--ul-grey-7b);
-        color: $color-grey-3b;
+        color: var(--ul-grey-3b);
 
         &:hover {
             border-color: $primary-color;
@@ -483,7 +482,7 @@
     .btn-friend-accept {
         background: $dk-success-bg;
         border-color: $dk-accept-border;
-        color: $ui-green-300;
+        color: $color-green-300;
 
         &:hover {
             background: $dk-accept-hover;
@@ -493,7 +492,7 @@
     .btn-friend-reject {
         background: $dk-reject-bg;
         border-color: $dk-reject-border;
-        color: $ui-red-300;
+        color: $color-red-300;
 
         &:hover {
             background: $dk-reject-hover;
@@ -502,32 +501,32 @@
 
     .btn-friend-ignore {
         border-color: var(--ul-grey-7b);
-        color: $color-grey-5a;
+        color: var(--ul-grey-5a);
     }
 
     .btn-friend-remove:hover {
-        color: $ui-red-300;
+        color: $color-red-300;
         background: $dk-friend-remove-hover;
     }
 
     .friend-status-badge--friends {
         background: $dk-success-bg;
-        color: $ui-green-300;
+        color: $color-green-300;
         border-color: $dk-accept-border;
     }
 
     .friend-status-badge--pending {
         background: $dk-pending-bg;
-        color: $ui-amber-400;
+        color: $color-amber-400;
         border-color: $dk-pending-border;
     }
 
     .profile-section-title {
-        color: $color-grey-5a;
+        color: var(--ul-grey-5a);
     }
 
     .profile-section-empty {
-        color: $color-grey-6b;
+        color: var(--ul-grey-6b);
     }
 
     .friends-back-link {
@@ -548,7 +547,7 @@
 
     .friends-empty {
         .material-icons {
-            color: $color-grey-7b;
+            color: var(--ul-grey-7b);
         }
 
         p {
@@ -559,7 +558,7 @@
     .btn-friend--accept {
         background: $dk-success-bg;
         border-color: $dk-accept-border;
-        color: $ui-green-300;
+        color: $color-green-300;
 
         &:hover {
             background: $dk-accept-hover;
@@ -569,7 +568,7 @@
     .btn-friend--reject {
         background: $dk-reject-bg;
         border-color: $dk-reject-border;
-        color: $ui-red-300;
+        color: $color-red-300;
 
         &:hover {
             background: $dk-reject-hover;
@@ -578,17 +577,17 @@
 
     .btn-friend--ignore {
         border-color: var(--ul-grey-7b);
-        color: $color-grey-5a;
+        color: var(--ul-grey-5a);
     }
 
     .btn-friend--remove {
         border-color: var(--ul-grey-7b);
-        color: $color-grey-5a;
+        color: var(--ul-grey-5a);
 
         &:hover {
             background: $dk-friend-remove-hover;
             border-color: $dk-reject-border;
-            color: $ui-red-300;
+            color: $color-red-300;
         }
     }
 
@@ -659,15 +658,15 @@
     }
 
     .notif-item--unread {
-        background: linear-gradient(90deg, rgba($ui-violet-600, .14) 0%, transparent 100%);
-        border-left-color: $ui-violet-600;
+        background: linear-gradient(90deg, rgba($color-indigo-600, .14) 0%, transparent 100%);
+        border-left-color: $color-indigo-600;
 
         &:hover {
-            background: linear-gradient(90deg, rgba($ui-violet-600, .2) 0%, transparent 100%);
+            background: linear-gradient(90deg, rgba($color-indigo-600, .2) 0%, transparent 100%);
         }
 
         .notif-item__icon-wrap {
-            background: rgba($ui-violet-600, .15);
+            background: rgba($color-indigo-600, .15);
 
             .material-icons {
                 color: $color-deep-purple-300;
@@ -685,16 +684,16 @@
 
     .notif-item--unread .notif-item__icon-wrap--friend_request,
     .notif-item--unread .notif-item__icon-wrap--friend_accepted {
-        background: rgba($ui-green-600, .15);
+        background: rgba($color-green-600, .15);
 
         .material-icons {
-            color: $ui-green-400;
+            color: $color-green-400;
         }
     }
 
     .notif-item--unread .notif-item__icon-wrap--added_to_trip,
     .notif-item--unread .notif-item__icon-wrap--trip_updated {
-        background: rgba($ui-blue-600, .15);
+        background: rgba($color-blue-600, .15);
 
         .material-icons {
             color: $color-blue-500;
@@ -703,26 +702,26 @@
 
     .notif-item--unread .notif-item__icon-wrap--comment_reply,
     .notif-item--unread .notif-item__icon-wrap--comment_liked {
-        background: rgba($ui-pink-600, .15);
+        background: rgba($color-pink-600, .15);
 
         .material-icons {
-            color: $ui-pink-400;
+            color: $color-pink-400;
         }
     }
 
     .notif-item--unread .notif-item__icon-wrap--error {
-        background: rgba($ui-red-600, .15);
+        background: rgba($color-red-600, .15);
 
         .material-icons {
-            color: $ui-red-400;
+            color: $color-red-400;
         }
     }
 
     .notif-item--unread .notif-item__icon-wrap--warning {
-        background: rgba($ui-amber-600, .15);
+        background: rgba($color-amber-600, .15);
 
         .material-icons {
-            color: $ui-amber-400;
+            color: $color-amber-400;
         }
     }
 
@@ -740,7 +739,7 @@
     }
 
     .btn--danger {
-        color: $ui-red-300;
+        color: $color-red-300;
         background: rgba($dk-danger-text, .07);
         border-color: rgba($dk-danger-text, .25);
 
@@ -773,20 +772,20 @@
     .trip-card-status {
         &--upcoming {
             background: rgba($color-blue-500, .15);
-            color: $ui-blue-300;
+            color: $color-blue-300;
             border-color: rgba($color-blue-500, .25);
         }
 
         &--active {
-            background: rgba($ui-green-500, .15);
-            color: $ui-green-300;
-            border-color: rgba($ui-green-500, .25);
+            background: rgba($color-green-500, .15);
+            color: $color-green-300;
+            border-color: rgba($color-green-500, .25);
         }
 
         &--planning {
-            background: rgba($ui-amber-500, .15);
-            color: $ui-amber-300;
-            border-color: rgba($ui-amber-500, .25);
+            background: rgba($color-amber-500, .15);
+            color: $color-amber-300;
+            border-color: rgba($color-amber-500, .25);
         }
     }
 
@@ -801,7 +800,7 @@
     }
 
     .trip-card-role {
-        color: $ui-amber-300 !important;
+        color: $color-amber-300 !important;
     }
 
     .trip-back-link:hover {
@@ -904,15 +903,15 @@
 
     .trip-member-badge {
         &--creator {
-            background: rgba($ui-amber-400, .12);
-            color: $ui-amber-400;
-            border-color: rgba($ui-amber-400, .25);
+            background: rgba($color-amber-400, .12);
+            color: $color-amber-400;
+            border-color: rgba($color-amber-400, .25);
         }
 
         &--organizer {
-            background: rgba($ui-violet-400, .12);
+            background: rgba($color-indigo-400, .12);
             color: $color-deep-purple-300;
-            border-color: rgba($ui-violet-400, .25);
+            border-color: rgba($color-indigo-400, .25);
         }
     }
 
@@ -921,7 +920,7 @@
             color: $color-deep-purple-300 !important;
 
             &:hover {
-                background: rgba($ui-violet-400, .1) !important;
+                background: rgba($color-indigo-400, .1) !important;
             }
         }
     }
@@ -938,15 +937,15 @@
         }
 
         &--yes {
-            color: $ui-green-400;
+            color: $color-green-400;
 
             &:hover {
-                background: rgba($ui-green-500, .1);
+                background: rgba($color-green-500, .1);
             }
         }
 
         &--no {
-            color: $ui-red-400;
+            color: $color-red-400;
 
             &:hover {
                 background: rgba(220, 38, 38, .1);
@@ -954,10 +953,10 @@
         }
 
         &--maybe {
-            color: $ui-amber-400;
+            color: $color-amber-400;
 
             &:hover {
-                background: rgba($ui-amber-500, .1);
+                background: rgba($color-amber-500, .1);
             }
         }
 
@@ -987,7 +986,7 @@
 
     .trip-comment-input:focus {
         border-color: $color-blue-500;
-        box-shadow: 0 0 0 3px rgba($ui-blue-400, .12);
+        box-shadow: 0 0 0 3px rgba($color-blue-400, .12);
     }
 
     .comment-item {
@@ -1015,7 +1014,7 @@
         color: var(--ul-grey-6);
 
         &:hover {
-            color: $ui-red-400;
+            color: $color-red-400;
         }
     }
 
@@ -1045,8 +1044,8 @@
         }
 
         &:focus {
-            border-color: $ui-indigo-500;
-            box-shadow: 0 0 0 3px rgba($ui-indigo-500, .1);
+            border-color: $color-indigo-500;
+            box-shadow: 0 0 0 3px rgba($color-indigo-500, .1);
         }
     }
 
@@ -1064,7 +1063,7 @@
         }
 
         &--mine {
-            background: rgba($ui-violet-600, .15);
+            background: rgba($color-indigo-600, .15);
             border-color: rgba(124, 58, 237, .4);
             color: $color-deep-purple-300;
         }
@@ -1116,14 +1115,14 @@
         &:hover {
             background: rgba(167, 139, 250, .15);
             border-color: $color-deep-purple-300;
-            color: $ui-violet-300;
+            color: $color-indigo-300;
         }
     }
 
     .comment-map-chip {
-        background: rgba($ui-violet-700, .2);
-        border-color: $ui-violet-600;
-        color: $ui-violet-300;
+        background: rgba($color-indigo-700, .2);
+        border-color: $color-indigo-600;
+        color: $color-indigo-300;
     }
 
     .comment-map-expand-btn {
@@ -1171,9 +1170,9 @@
         }
 
         &.is-active {
-            background: rgba($ui-violet-700, .25);
-            border-color: $ui-violet-600;
-            color: $ui-violet-300;
+            background: rgba($color-indigo-700, .25);
+            border-color: $color-indigo-600;
+            color: $color-indigo-300;
         }
     }
 
@@ -1202,7 +1201,7 @@
 
         &--active {
             background: $dk-navy;
-            border-color: $ui-blue-500;
+            border-color: $color-blue-500;
             color: $color-blue-500;
         }
     }
@@ -1224,13 +1223,13 @@
     }
 
     .cat-sel-bar.cat-sel-bar--active {
-        background: rgba($ui-blue-500, .1);
-        border-color: rgba($ui-blue-500, .35);
+        background: rgba($color-blue-500, .1);
+        border-color: rgba($color-blue-500, .35);
     }
 
     .cat-sel-count {
-        background: rgba($ui-blue-500, .15);
-        color: $ui-blue-300;
+        background: rgba($color-blue-500, .15);
+        color: $color-blue-300;
     }
 
     .cat-sel-btn {
@@ -1242,12 +1241,12 @@
     }
 
     .cat-sel-delete-btn {
-        border-color: rgba($ui-red-600, .45);
-        color: $ui-red-400;
+        border-color: rgba($color-red-600, .45);
+        color: $color-red-400;
 
         &:hover:not(:disabled) {
-            background: rgba($ui-red-600, .08);
-            border-color: $ui-red-400;
+            background: rgba($color-red-600, .08);
+            border-color: $color-red-400;
         }
     }
 
@@ -1333,9 +1332,9 @@
     }
 
     .site-admin-notice--success {
-        background: rgba($ui-green-600, .15);
-        border-color: rgba($ui-green-600, .3);
-        color: $ui-green-300;
+        background: rgba($color-green-600, .15);
+        border-color: rgba($color-green-600, .3);
+        color: $color-green-300;
     }
 
     .site-admin-form input[type="number"] {
@@ -1401,8 +1400,8 @@
 
             &--active,
             &:hover {
-                color: $ui-cyan-400;
-                border-bottom-color: $ui-cyan-400;
+                color: $color-cyan-400;
+                border-bottom-color: $color-cyan-400;
             }
         }
 
@@ -1426,8 +1425,8 @@
         }
 
         .wiki-history-badge--reverted {
-            background: rgba($ui-amber-800, .3);
-            color: $ui-amber-300;
+            background: rgba($color-amber-800, .3);
+            color: $color-amber-300;
         }
 
         .wiki-change-field {
@@ -1439,22 +1438,22 @@
         }
 
         .wiki-change-from {
-            background: rgba($ui-red-700, .18);
-            color: $ui-red-300;
+            background: rgba($color-red-700, .18);
+            color: $color-red-300;
         }
 
         .wiki-change-to {
-            background: rgba($ui-green-700, .18);
-            color: $ui-green-300;
+            background: rgba($color-green-700, .18);
+            color: $color-green-300;
         }
 
         .wiki-revert-btn {
-            border-color: rgba($ui-red-600, .4);
-            color: $ui-red-400;
+            border-color: rgba($color-red-600, .4);
+            color: $color-red-400;
 
             &:hover {
-                background: rgba($ui-red-600, .08);
-                border-color: $ui-red-400;
+                background: rgba($color-red-600, .08);
+                border-color: $color-red-400;
             }
         }
 
@@ -1553,7 +1552,7 @@
     }
 
     .org-bulk-btn--delete:hover:not(:disabled) {
-        background: color-mix(in srgb, $ui-red-500 14%, var(--ul-grey-1));
+        background: color-mix(in srgb, $color-red-500 14%, var(--ul-grey-1));
     }
 }
 // Theme-level refinements for shared surfaces and controls. These catch legacy

@@ -229,10 +229,10 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    border: 1px solid var(--ul-border, $ui-slate-200);
+    border: 1px solid var(--ul-border);
     background: transparent;
     cursor: pointer;
-    color: var(--ul-text-muted, $ui-slate-400);
+    color: var(--ul-text-muted);
     transition: background .12s, border-color .12s, color .12s;
     flex-shrink: 0;
 
@@ -242,8 +242,8 @@
 
     &:hover {
         background: var(--ul-grey-0);
-        border-color: $ui-red-300;
-        color: $ui-red-600;
+        border-color: $color-red-300;
+        color: $color-red-600;
     }
 }
 

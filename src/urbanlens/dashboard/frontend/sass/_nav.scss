@@ -5,7 +5,7 @@
 $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($color-grey-9, 0.1);
 
 .app-nav {
-    background: #{$ui-indigo-950};
+    background: #{$color-indigo-900};
     height: 4rem;
     position: relative;
     z-index: 1100; // must exceed Leaflet's control-container (1000)
@@ -117,7 +117,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     display: flex;
     align-items: center;
     justify-content: center;
-    background: $ui-avatar-neutral;
+    background: var(--ul-grey-4);
 }
 
 // Top-level so it works inside .nav-avatar, .nav-dropdown-avatar, and any other circular container
@@ -221,7 +221,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     display: flex;
     align-items: center;
     justify-content: center;
-    background: $ui-avatar-neutral;
+    background: var(--ul-grey-4);
 }
 
 .nav-dropdown-user-text {
@@ -290,7 +290,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
 }
 
 .page-footer {
-    background-color: #{$ui-indigo-950};
+    background-color: #{$color-indigo-900};
     color: var(--ul-grey-4);
     position: sticky;
     bottom: 0;
@@ -636,7 +636,7 @@ nav .brand-logo img {
 
         .notif-item__title {
             font-weight: 650;
-            color: var(--ul-grey-9, var(--ul-grey-8));
+            color: var(--ul-grey-9);
         }
 
         .notif-item__msg {
@@ -652,28 +652,28 @@ nav .brand-logo img {
     // ── Icon colour variants by type (unread only) ───────────────────────
     &--unread &__icon-wrap--friend_request,
     &--unread &__icon-wrap--friend_accepted {
-        background: $ui-green-100;
+        background: $color-green-100;
 
         .material-icons {
-            color: $ui-green-600;
+            color: $color-green-600;
         }
     }
 
     &--unread &__icon-wrap--added_to_trip,
     &--unread &__icon-wrap--trip_updated {
-        background: $ui-blue-100;
+        background: $color-blue-100;
 
         .material-icons {
-            color: $ui-blue-600;
+            color: $color-blue-600;
         }
     }
 
     &--unread &__icon-wrap--comment_reply,
     &--unread &__icon-wrap--comment_liked {
-        background: $ui-pink-100;
+        background: $color-pink-100;
 
         .material-icons {
-            color: $ui-pink-600;
+            color: $color-pink-600;
         }
     }
 
@@ -681,7 +681,7 @@ nav .brand-logo img {
         background: var(--ul-grey-0a);
 
         .material-icons {
-            color: $ui-red-600;
+            color: $color-red-600;
         }
     }
 
@@ -747,11 +747,11 @@ nav .brand-logo img {
     }
 
     &--accept {
-        background: $ui-green-100;
-        color: $ui-green-700;
+        background: $color-green-100;
+        color: $color-green-700;
 
         &:hover {
-            background: $ui-green-200;
+            background: $color-green-200;
         }
     }
 
@@ -761,7 +761,7 @@ nav .brand-logo img {
 
         &:hover {
             background: var(--ul-grey-0a);
-            color: $ui-red-600;
+            color: $color-red-600;
         }
     }
 }
@@ -779,8 +779,8 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
         display: flex;
         align-items: center;
         gap: .35rem;
-        background: $ui-green-100;
-        color: $ui-green-800;
+        background: $color-green-100;
+        color: $color-green-800;
         border-radius: 6px;
         padding: .5rem .85rem;
         font-size: .84rem;

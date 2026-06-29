@@ -22,7 +22,7 @@
         min-height: 60vh;
         padding: 3rem 1.5rem 2.5rem;
         text-align: center;
-        background: linear-gradient(145deg, $ui-indigo-950 0%, $ui-indigo-900 50%, $ui-indigo-700 80%, $ui-blue-500 100%);
+        background: linear-gradient(145deg, $color-indigo-900 0%, $color-indigo-900 50%, $color-indigo-700 80%, $color-blue-500 100%);
         color: var(--ul-grey-4);
 
         @include up($breakpoint-sm) {
@@ -37,7 +37,7 @@
         font-weight: 700;
         letter-spacing: .16em;
         text-transform: uppercase;
-        color: $ui-indigo-300;
+        color: $color-indigo-300;
         margin: 0 0 1rem;
     }
 
@@ -51,13 +51,13 @@
 
         em {
             font-style: normal;
-            color: $ui-indigo-300;
+            color: $color-indigo-300;
         }
     }
 
     .about-subtitle {
         font-size: 1.05rem;
-        color: $ui-indigo-200;
+        color: $color-indigo-200;
         line-height: 1.7;
         max-width: 500px;
         margin: 0 auto 2rem;
@@ -428,7 +428,7 @@
 
     // ── CTA ───────────────────────────────────────────────────────────────────
     .about-cta-section {
-        background: linear-gradient(135deg, $ui-indigo-950 0%, $ui-indigo-700 100%);
+        background: linear-gradient(135deg, $color-indigo-900 0%, $color-indigo-700 100%);
         padding: 5rem 1.5rem;
         text-align: center;
         color: var(--ul-grey-4);
@@ -444,7 +444,7 @@
 
     .about-cta-body {
         font-size: 1.05rem;
-        color: $ui-indigo-200;
+        color: $color-indigo-200;
         margin: 0 0 2rem;
     }
 }

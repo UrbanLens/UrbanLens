@@ -15,9 +15,9 @@
         text-align: center;
         background: linear-gradient(
             145deg,
-            $ui-indigo-950 0%,
-            $ui-indigo-900 45%,
-            $ui-indigo-800 100%
+            $color-indigo-900 0%,
+            $color-indigo-900 45%,
+            $color-indigo-800 100%
         );
         color: var(--ul-grey-4);
     }
@@ -32,7 +32,7 @@
         font-weight: 700;
         letter-spacing: .16em;
         text-transform: uppercase;
-        color: $ui-indigo-300;
+        color: $color-indigo-300;
         margin: 0 0 1rem;
     }
 
@@ -46,13 +46,13 @@
 
         em {
             font-style: normal;
-            color: $ui-indigo-300;
+            color: $color-indigo-300;
         }
     }
 
     .attr-subtitle {
         font-size: 1.05rem;
-        color: $ui-indigo-200;
+        color: $color-indigo-200;
         line-height: 1.7;
         margin: 0;
     }
@@ -61,7 +61,7 @@
         padding: 3.5rem 0;
 
         &--muted {
-            background: var(--ul-surface-1, #{$ui-indigo-50});
+            background: var(--ul-surface-1, #{$color-indigo-50});
 
             .attr-section-title {
                 color: var(--ul-grey-1);
@@ -74,7 +74,7 @@
         font-weight: 700;
         letter-spacing: .14em;
         text-transform: uppercase;
-        color: $ui-indigo-500;
+        color: $color-indigo-500;
         margin-bottom: .65rem;
     }
 
@@ -97,7 +97,7 @@
     .attr-subheading {
         font-size: 1rem;
         font-weight: 700;
-        color: var(--ul-text-primary, #{$ui-indigo-950});
+        color: var(--ul-text-primary, #{$color-indigo-900});
         margin: 2.25rem 0 1rem;
     }
 
@@ -117,23 +117,23 @@
 
     .attr-card {
         background: var(--ul-surface-0, #fff);
-        border: 1px solid var(--ul-border-subtle, rgba($ui-indigo-900, .08));
+        border: 1px solid var(--ul-border-subtle, rgba($color-indigo-900, .08));
         border-radius: .85rem;
         padding: 1.35rem 1.25rem 1.25rem;
-        box-shadow: 0 1px 2px rgba($ui-indigo-950, .04);
+        box-shadow: 0 1px 2px rgba($color-indigo-900, .04);
         transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 
         &:hover {
-            border-color: rgba($ui-indigo-500, .25);
-            box-shadow: 0 8px 24px rgba($ui-indigo-950, .08);
+            border-color: rgba($color-indigo-500, .25);
+            box-shadow: 0 8px 24px rgba($color-indigo-900, .08);
             transform: translateY(-2px);
         }
 
         a {
-            color: $ui-indigo-600;
+            color: $color-indigo-600;
 
             &:hover {
-                color: $ui-indigo-800;
+                color: $color-indigo-800;
             }
         }
     }
@@ -145,8 +145,8 @@
         width: 2.5rem;
         height: 2.5rem;
         border-radius: .65rem;
-        background: rgba($ui-indigo-500, .1);
-        color: $ui-indigo-600;
+        background: rgba($color-indigo-500, .1);
+        color: $color-indigo-600;
         margin-bottom: .85rem;
 
         .material-icons {
@@ -164,7 +164,7 @@
     .attr-card-body {
         font-size: .9rem;
         line-height: 1.6;
-        color: var(--ul-text-secondary, #{$ui-indigo-700});
+        color: var(--ul-text-secondary, #{$color-indigo-700});
         margin: 0;
     }
 
@@ -182,7 +182,7 @@
         padding: 1rem 1.1rem;
         border-radius: .75rem;
         background: var(--ul-surface-0, #fff);
-        border: 1px solid var(--ul-border-subtle, rgba($ui-indigo-900, .08));
+        border: 1px solid var(--ul-border-subtle, rgba($color-indigo-900, .08));
 
         h3 {
             font-size: .98rem;
@@ -190,10 +190,10 @@
             margin: 0 0 .25rem;
 
             a {
-                color: $ui-indigo-700;
+                color: $color-indigo-700;
 
                 &:hover {
-                    color: $ui-indigo-900;
+                    color: $color-indigo-900;
                 }
             }
         }
@@ -201,7 +201,7 @@
         p {
             font-size: .88rem;
             line-height: 1.55;
-            color: var(--ul-text-secondary, #{$ui-indigo-700});
+            color: var(--ul-text-secondary, #{$color-indigo-700});
             margin: 0;
         }
     }
@@ -216,8 +216,8 @@
         font-weight: 700;
         letter-spacing: .06em;
         text-transform: uppercase;
-        color: $ui-indigo-600;
-        background: rgba($ui-indigo-500, .1);
+        color: $color-indigo-600;
+        background: rgba($color-indigo-500, .1);
         border-radius: 999px;
         padding: .25rem .55rem;
         line-height: 1.2;
@@ -237,16 +237,16 @@
         border-radius: 999px;
         font-size: .82rem;
         font-weight: 600;
-        color: $ui-indigo-700;
+        color: $color-indigo-700;
         background: var(--ul-surface-0, #fff);
-        border: 1px solid rgba($ui-indigo-500, .18);
+        border: 1px solid rgba($color-indigo-500, .18);
         text-decoration: none;
         transition: background .15s ease, border-color .15s ease, color .15s ease;
 
         &:hover {
-            color: $ui-indigo-900;
-            border-color: rgba($ui-indigo-500, .35);
-            background: rgba($ui-indigo-500, .06);
+            color: $color-indigo-900;
+            border-color: rgba($color-indigo-500, .35);
+            background: rgba($color-indigo-500, .06);
         }
     }
 
@@ -276,14 +276,14 @@
         padding: 1.1rem .85rem;
         border-radius: .85rem;
         background: var(--ul-surface-0, #fff);
-        border: 1px solid var(--ul-border-subtle, rgba($ui-indigo-900, .08));
+        border: 1px solid var(--ul-border-subtle, rgba($color-indigo-900, .08));
         text-decoration: none;
         text-align: center;
         transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 
         &:hover {
-            border-color: rgba($ui-indigo-500, .28);
-            box-shadow: 0 8px 24px rgba($ui-indigo-950, .08);
+            border-color: rgba($color-indigo-500, .28);
+            box-shadow: 0 8px 24px rgba($color-indigo-900, .08);
             transform: translateY(-2px);
         }
     }
@@ -293,13 +293,13 @@
         height: 4.5rem;
         border-radius: 999px;
         object-fit: cover;
-        border: 2px solid rgba($ui-indigo-500, .12);
+        border: 2px solid rgba($color-indigo-500, .12);
     }
 
     .attr-contributor-login {
         font-size: .92rem;
         font-weight: 700;
-        color: $ui-indigo-800;
+        color: $color-indigo-800;
         line-height: 1.25;
         word-break: break-word;
     }
@@ -308,7 +308,7 @@
         font-size: .72rem;
         font-weight: 600;
         letter-spacing: .02em;
-        color: var(--ul-text-secondary, #{$ui-indigo-700});
+        color: var(--ul-text-secondary, #{$color-indigo-700});
     }
 
     .attr-contributors-empty {
@@ -316,8 +316,8 @@
         padding: 1rem 1.1rem;
         border-radius: .75rem;
         background: var(--ul-surface-0, #fff);
-        border: 1px dashed rgba($ui-indigo-500, .22);
-        color: var(--ul-text-secondary, #{$ui-indigo-700});
+        border: 1px dashed rgba($color-indigo-500, .22);
+        color: var(--ul-text-secondary, #{$color-indigo-700});
         line-height: 1.6;
     }
 
@@ -327,12 +327,12 @@
         gap: 1rem;
         padding: 1.25rem 1.35rem;
         border-radius: .85rem;
-        background: linear-gradient(135deg, rgba($ui-indigo-500, .08), rgba($ui-blue-500, .06));
-        border: 1px solid rgba($ui-indigo-500, .15);
+        background: linear-gradient(135deg, rgba($color-indigo-500, .08), rgba($color-blue-500, .06));
+        border: 1px solid rgba($color-indigo-500, .15);
     }
 
     .attr-note-icon {
-        color: $ui-indigo-600;
+        color: $color-indigo-600;
         font-size: 1.35rem;
         margin-top: .1rem;
     }

@@ -18,7 +18,7 @@
 	&__sidebar {
 		width: 230px;
 		flex-shrink: 0;
-		background: linear-gradient(160deg, $ui-slate-900 0%, $ui-slate-800 100%);
+		background: linear-gradient(160deg, var(--ul-grey-9) 0%, var(--ul-grey-8) 100%);
 		padding: 2rem 1.5rem;
 		display: flex;
 		flex-direction: column;
@@ -39,7 +39,7 @@
 		.brand-name {
 			font-size: 1.15rem;
 			font-weight: 700;
-			color: $ui-slate-100;
+			color: var(--ul-grey-1);
 			line-height: 1.2;
 			word-break: break-word;
 		}
@@ -48,7 +48,7 @@
 			font-size: 0.68rem;
 			text-transform: uppercase;
 			letter-spacing: 0.1em;
-			color: $ui-slate-500;
+			color: var(--ul-grey-5);
 		}
 	}
 
@@ -91,11 +91,11 @@
 		gap: 0.75rem;
 		padding: 0.55rem 0.6rem;
 		border-radius: 8px;
-		color: $ui-slate-600;
+		color: var(--ul-grey-6);
 		transition: color 0.15s, background 0.15s;
 
 		&--active {
-			color: $ui-slate-100;
+			color: var(--ul-grey-1);
 			background: rgba(255, 255, 255, 0.07);
 
 			.step-icon {
@@ -106,12 +106,12 @@
 		}
 
 		&--done {
-			color: $ui-slate-500;
+			color: var(--ul-grey-5);
 
 			.step-icon {
-				border-color: $ui-slate-700;
-				background: $ui-slate-700;
-				color: $ui-slate-400;
+				border-color: var(--ul-grey-7);
+				background: var(--ul-grey-7);
+				color: var(--ul-grey-4);
 			}
 		}
 	}
@@ -120,7 +120,7 @@
 		width: 22px;
 		height: 22px;
 		border-radius: 50%;
-		border: 2px solid $ui-slate-700;
+		border: 2px solid var(--ul-grey-7);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -204,7 +204,7 @@
 		align-items: flex-start;
 		gap: 0.6rem;
 		padding: 0.85rem;
-		background: var(--ul-grey-1, $ui-slate-50);
+		background: var(--ul-grey-1);
 		border: 1px solid var(--ul-border);
 		border-radius: 10px;
 
@@ -326,13 +326,13 @@
 		}
 
 		&[aria-invalid="true"] {
-			border-color: $ui-red-500;
+			border-color: $color-red-500;
 		}
 	}
 
 	.setup-save-status {
 		font-size: 0.78rem;
-		color: $ui-emerald-500;
+		color: $color-green-500;
 		opacity: 0;
 		transition: opacity 0.3s;
 		height: 1.1em;
@@ -347,8 +347,8 @@
 	margin-top: 1rem;
 	padding: 0.85rem 1rem;
 	border-radius: 10px;
-	border: 1px solid rgba($ui-amber-500, 0.45);
-	background: rgba($ui-amber-500, 0.08);
+	border: 1px solid rgba($color-amber-500, 0.45);
+	background: rgba($color-amber-500, 0.08);
 	color: var(--ul-text);
 
 	// display:flex overrides the HTML [hidden] attribute — be explicit
@@ -359,7 +359,7 @@
 	&__icon {
 		flex-shrink: 0;
 		font-size: 1.2rem;
-		color: $ui-amber-600;
+		color: $color-amber-600;
 		margin-top: 0.1rem;
 	}
 
@@ -398,7 +398,7 @@
 
 	&:hover {
 		border-color: var(--ul-accent, #0891b2);
-		background: var(--ul-grey-1, $ui-slate-50);
+		background: var(--ul-grey-1);
 	}
 }
 
@@ -407,7 +407,7 @@
 	align-items: center;
 	gap: 0.85rem;
 	padding: 1rem 1.15rem;
-	background: var(--ul-grey-1, $ui-slate-50);
+	background: var(--ul-grey-1);
 	border: 1px solid var(--ul-border);
 	border-radius: 10px;
 
@@ -415,11 +415,11 @@
 		width: 12px;
 		height: 12px;
 		border-radius: 50%;
-		background: $ui-slate-200;
+		background: var(--ul-grey-2);
 		flex-shrink: 0;
 
-		& + .preview-dot { background: $ui-amber-400; }
-		& + .preview-dot + .preview-dot { background: $ui-emerald-400; }
+		& + .preview-dot { background: $color-amber-400; }
+		& + .preview-dot + .preview-dot { background: $color-green-400; }
 	}
 
 	.preview-tab {
@@ -428,7 +428,7 @@
 		gap: 0.4rem;
 		padding: 0.3rem 0.75rem;
 		background: var(--ul-grey-0);
-		border: 1px solid $ui-slate-200;
+		border: 1px solid var(--ul-grey-2);
 		border-radius: 6px 6px 0 0;
 		font-size: 0.78rem;
 		color: var(--ul-text);
@@ -523,13 +523,13 @@
 
 		.setup-feature-card__badge {
 			background: rgba(16, 185, 129, 0.12);
-			color: $ui-emerald-600;
+			color: $color-green-600;
 		}
 	}
 
 	&--missing {
 		.setup-feature-card__badge {
-			background: var(--ul-grey-1, $ui-slate-100);
+			background: var(--ul-grey-1);
 			color: var(--ul-grey-6);
 		}
 	}

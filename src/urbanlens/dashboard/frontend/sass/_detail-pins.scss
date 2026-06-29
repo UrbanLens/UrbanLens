@@ -84,7 +84,7 @@
     }
 
     &.detail-pin-type--entrance .detail-pin-type-icon {
-        color: $ui-green-600;
+        color: $color-green-600;
     }
 
     &.detail-pin-type--poi .detail-pin-type-icon {
@@ -92,15 +92,15 @@
     }
 
     &.detail-pin-type--danger .detail-pin-type-icon {
-        color: $ui-red-600;
+        color: $color-red-600;
     }
 
     &.detail-pin-type--other .detail-pin-type-icon {
-        color: $ui-violet-600;
+        color: $color-indigo-600;
     }
 
     &.detail-pin-type--location .detail-pin-type-icon {
-        color: $ui-blue-600;
+        color: $color-blue-600;
     }
 }
 
@@ -203,15 +203,15 @@
 
     &:hover {
         background: var(--ul-grey-0a);
-        border-color: $ui-blue-300;
+        border-color: $color-blue-300;
     }
 
     &.dp-icon-btn--active {
-        background: $ui-blue-100;
-        border-color: $ui-blue-600;
+        background: $color-blue-100;
+        border-color: $color-blue-600;
 
         .material-icons {
-            color: $ui-blue-600;
+            color: $color-blue-600;
         }
     }
 }
@@ -236,7 +236,7 @@
     }
 
     &.dp-color-swatch--active {
-        border-color: $ui-slate-800;
+        border-color: var(--ul-grey-8);
         box-shadow: 0 0 0 2px #fff inset;
     }
 }
@@ -267,7 +267,7 @@
     .detail-pin-wiki-attr {
         margin-left: auto;
         font-size: .75rem;
-        color: $ui-slate-400;
+        color: var(--ul-grey-4);
         white-space: nowrap;
         flex-shrink: 0;
     }
@@ -304,8 +304,8 @@
     gap: .25rem;
     padding: .25rem .35rem .25rem .65rem;
     border-radius: 20px;
-    background: color-mix(in srgb, $ui-indigo-500 12%, transparent);
-    border: 1px solid color-mix(in srgb, $ui-indigo-500 25%, transparent);
+    background: color-mix(in srgb, $color-indigo-500 12%, transparent);
+    border: 1px solid color-mix(in srgb, $color-indigo-500 25%, transparent);
     font-size: .8rem;
     font-weight: 500;
     color: var(--ul-grey-8);
@@ -379,7 +379,7 @@
         outline: none;
 
         &:focus {
-            border-color: $ui-indigo-500;
+            border-color: $color-indigo-500;
             box-shadow: 0 0 0 2px rgba(99, 102, 241, .15);
         }
     }
@@ -389,7 +389,7 @@
         align-items: center;
         justify-content: center;
         padding: .35rem .6rem;
-        background: $ui-indigo-500;
+        background: $color-indigo-500;
         color: var(--ul-grey-5);
         border: none;
         border-radius: 6px;
@@ -401,7 +401,7 @@
         }
 
         &:hover {
-            background: $ui-indigo-600;
+            background: $color-indigo-600;
         }
     }
 }
@@ -415,14 +415,14 @@
 
     .dp-opacity-label {
         font-size: .78rem;
-        color: $ui-slate-500;
+        color: var(--ul-grey-5);
         white-space: nowrap;
         flex-shrink: 0;
     }
 
     input[type=range] {
         flex: 1;
-        accent-color: $ui-indigo-500;
+        accent-color: $color-indigo-500;
     }
 }
 
@@ -443,7 +443,7 @@
     background: rgba(15, 23, 42, .88);
     border: none;
     border-radius: 6px;
-    color: $ui-slate-50;
+    color: var(--ul-grey-0);
     font-size: .78rem;
     font-weight: 500;
     padding: .25rem .5rem;

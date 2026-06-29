@@ -162,23 +162,23 @@
     }
 
     &--boundary {
-        color: $ui-slate-600;
+        color: var(--ul-grey-6);
     }
 
     &--save {
-        color: $ui-green-600;
+        color: $color-green-600;
     }
 
     &--clear {
-        color: $ui-red-600;
+        color: $color-red-600;
     }
 
     &--cancel {
-        color: $ui-slate-500;
+        color: var(--ul-grey-5);
     }
 
     &--add-pin {
-        color: $ui-blue-600;
+        color: $color-blue-600;
     }
 
     &-group {
@@ -269,7 +269,7 @@
         background: var(--ul-grey-0a);
 
         .detail-pin-list-item-name {
-            color: $ui-blue-700;
+            color: $color-blue-700;
             font-weight: 600;
         }
     }
@@ -288,7 +288,7 @@
         border: none;
         background: none;
         cursor: pointer;
-        color: $ui-slate-400;
+        color: var(--ul-grey-4);
         padding: .1rem;
         border-radius: 3px;
         display: flex;
@@ -302,7 +302,7 @@
 
         &:hover,
         &:focus {
-            color: $ui-red-600;
+            color: $color-red-600;
             background: var(--ul-grey-0a);
             outline: none;
         }
@@ -344,8 +344,8 @@
     }
 
     &.is-active {
-        color: $ui-blue-600;
-        border-bottom-color: $ui-blue-600;
+        color: $color-blue-600;
+        border-bottom-color: $color-blue-600;
         background: var(--ul-grey-0);
     }
 }
@@ -354,7 +354,7 @@
     position: absolute;
     top: 2px;
     right: 4px;
-    background: $ui-blue-600;
+    background: $color-blue-600;
     color: var(--ul-grey-4);
     border-radius: 8px;
     font-size: .6rem;
@@ -393,8 +393,8 @@
 
     &:hover,
     &.is-highlighted {
-        border-color: $ui-blue-600;
-        box-shadow: 0 0 0 1px $ui-blue-300;
+        border-color: $color-blue-600;
+        box-shadow: 0 0 0 1px $color-blue-300;
         transform: scale(1.03);
         z-index: 2;
     }
@@ -435,11 +435,11 @@
     }
 
     &.has-gps {
-        color: $ui-green-300;
+        color: $color-green-300;
     }
 
     &.no-gps {
-        color: $ui-red-300;
+        color: $color-red-300;
     }
 }
 
@@ -474,8 +474,8 @@
     content: 'Drop to set location';
     position: absolute;
     inset: 0;
-    background: rgba($ui-blue-600, .18);
-    border: 3px dashed $ui-blue-600;
+    background: rgba($color-blue-600, .18);
+    border: 3px dashed $color-blue-600;
     border-radius: 4px;
     z-index: 9999;
     display: flex;
@@ -483,7 +483,7 @@
     justify-content: center;
     font-size: 1rem;
     font-weight: 600;
-    color: $ui-blue-700;
+    color: $color-blue-700;
     pointer-events: none;
 }
 
@@ -529,7 +529,7 @@
     }
 
     &+& {
-        border-top: 1px solid $ui-slate-100;
+        border-top: 1px solid var(--ul-grey-1);
     }
 }
 
@@ -601,7 +601,7 @@
     background: var(--ul-grey-0);
 
     &:focus {
-        border-color: $ui-blue-300;
+        border-color: $color-blue-300;
         outline: none;
     }
 }
@@ -633,7 +633,7 @@
     align-items: center;
     gap: .3rem;
     font-size: .78rem;
-    color: $ui-blue-600;
+    color: $color-blue-600;
     margin: 0;
 
     .material-icons {
@@ -742,7 +742,7 @@
     text-align: left;
     background: none;
     border: none;
-    border-bottom: 1px solid $ui-slate-100;
+    border-bottom: 1px solid var(--ul-grey-1);
     font-size: .83rem;
     color: $text-primary;
     cursor: pointer;
@@ -847,8 +847,8 @@
     }
 
     &:hover {
-        color: $ui-red-500;
-        background: color-mix(in srgb, $ui-red-500 10%, transparent);
+        color: $color-red-500;
+        background: color-mix(in srgb, $color-red-500 10%, transparent);
     }
 }
 
@@ -906,7 +906,7 @@
         margin-left: .1rem;
         transition: color .1s;
 
-        &:hover { color: $ui-red-500; }
+        &:hover { color: $color-red-500; }
     }
 }
 
@@ -1128,15 +1128,15 @@
 
         .material-icons {
             font-size: 1rem;
-            color: $ui-indigo-500;
+            color: $color-indigo-500;
         }
 
         &:hover {
             background: var(--ul-grey-0);
-            color: $ui-indigo-700;
+            color: $color-indigo-700;
 
             .material-icons {
-                color: $ui-indigo-700;
+                color: $color-indigo-700;
             }
         }
 
@@ -1156,7 +1156,7 @@
         }
 
         &:hover {
-            color: $ui-indigo-700;
+            color: $color-indigo-700;
         }
     }
 
@@ -1201,7 +1201,7 @@
     .material-icons {
         flex: 0 0 auto;
         font-size: .95rem;
-        color: $ui-indigo-500;
+        color: $color-indigo-500;
     }
 
     span {
@@ -1385,7 +1385,7 @@
 .fp-reset:hover {
     background: rgba(255, 70, 70, 0.18);
     border-color: rgba(255, 70, 70, 0.35);
-    color: $ui-red-300;
+    color: $color-red-300;
 }
 
 .fp-reset .material-icons {
@@ -2061,22 +2061,22 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 
 .popup-status--visited {
     background: rgba(34, 197, 94, .15);
-    color: $ui-green-300;
+    color: $color-green-300;
 }
 
 .popup-status--not-visited {
     background: rgba(148, 163, 184, .1);
-    color: $ui-slate-400;
+    color: var(--ul-grey-4);
 }
 
 .popup-status--wish-to-visit {
     background: rgba(99, 102, 241, .2);
-    color: $ui-indigo-300;
+    color: $color-indigo-300;
 }
 
 .popup-status--demolished {
     background: rgba(239, 68, 68, .15);
-    color: $ui-red-300;
+    color: $color-red-300;
 }
 
 .popup-visited {
@@ -2103,11 +2103,11 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 }
 
 .popup-star--on {
-    color: $ui-amber-400;
+    color: $color-amber-400;
 }
 
 .popup-star--preview {
-    color: $ui-amber-500;
+    color: $color-amber-500;
     transform: scale(1.1);
 }
 
@@ -2174,7 +2174,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     color: rgba(255, 100, 100, .5);
 
     &:hover {
-        color: rgba($ui-red-500, .8);
+        color: rgba($color-red-500, .8);
         background: rgba(255, 70, 70, .12);
     }
 }
@@ -3181,7 +3181,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 
     &:hover {
         background: rgba(255, 70, 70, .18);
-        color: $ui-red-300;
+        color: $color-red-300;
     }
 }
 
@@ -3210,7 +3210,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     &.fp-drag-over {
         background: rgba(239, 68, 68, .1);
         border-color: rgba(239, 68, 68, .7);
-        color: $ui-red-300;
+        color: $color-red-300;
     }
 }
 
@@ -3348,7 +3348,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 .fp-formula-errors {
     margin-top: 3px;
     font-size: .68rem;
-    color: $ui-red-300;
+    color: $color-red-300;
     padding: 2px 4px;
 
     &[hidden] { display: none; }
@@ -3389,7 +3389,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     &:hover {
         background: rgba(255, 70, 70, .15);
         border-color: rgba(255, 70, 70, .35);
-        color: $ui-red-300;
+        color: $color-red-300;
     }
 }
 

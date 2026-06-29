@@ -1,26 +1,37 @@
 @use "sass:color";
 
 // - Material Color Options, extended to near-black.
+$color-red-50: #FFEBEE;
 $color-red-100: #FFCDD2;
+$color-red-200: #FFB3B3;
 $color-red-300: #E57373;
+$color-red-400: #EF5350;
 $color-red-500: #F44336;
+$color-red-600: #E53935;
 $color-red-700: #D32F2F;
+$color-red-800: #C62828;
 $color-red-900: #B71C1C;
 $color-red-1100: #7D1313;
 $color-red-1300: #460B0B;
 $color-red-1500: #2A0606;
 $color-red-1700: #120303;
 
+$color-pink-50: #FCE4EC;
 $color-pink-100: #F8BBD0;
+$color-pink-200: #F48FB1;
 $color-pink-300: #F06292;
+$color-pink-400: #EC407A;
 $color-pink-500: #E91E63;
+$color-pink-600: #D81B60;
 $color-pink-700: #C2185B;
+$color-pink-800: #AD1457;
 $color-pink-900: #880E4F;
 $color-pink-1100: #5F0A37;
 $color-pink-1300: #450728;
 $color-pink-1500: #290417;
 $color-pink-1700: #11020A;
 
+$color-purple-50: #F3E5F5;
 $color-purple-100: #E1BEE7;
 $color-purple-300: #BA68C8;
 $color-purple-500: #9C27B0;
@@ -31,6 +42,7 @@ $color-purple-1300: #2F0D58;
 $color-purple-1500: #1C0835;
 $color-purple-1700: #0C0317;
 
+$color-deep-purple-50: #F3E5F5;
 $color-deep-purple-100: #D1C4E9;
 $color-deep-purple-300: #9575CD;
 $color-deep-purple-500: #673AB7;
@@ -41,46 +53,67 @@ $color-deep-purple-1300: #201260;
 $color-deep-purple-1500: #140C3A;
 $color-deep-purple-1700: #090518;
 
+$color-indigo-50:  #eef2ff;
 $color-indigo-100: #C5CAE9;
+$color-indigo-200: #9FA8DA;
 $color-indigo-300: #7986CB;
+$color-indigo-400: #5C6BC0;
 $color-indigo-500: #3F51B5;
+$color-indigo-600: #3949AB;
 $color-indigo-700: #303F9F;
+$color-indigo-800: #283593;
 $color-indigo-900: #1A237E;
 $color-indigo-1100: #161D69;
 $color-indigo-1300: #13195A;
 $color-indigo-1500: #0C1038;
 $color-indigo-1700: #050719;
 
+$color-blue-50:  #e3f2fd;
 $color-blue-100: #BBDEFB;
+$color-blue-200: #90CAF9;
 $color-blue-300: #64B5F6;
+$color-blue-400: #42A5F5;
 $color-blue-500: #2196F3;
+$color-blue-600: #1E88E5;
 $color-blue-700: #1976D2;
+$color-blue-800: #1565C0;
 $color-blue-900: #0D47A1;
 $color-blue-1100: #093374;
 $color-blue-1300: #062049;
 $color-blue-1500: #041631;
 $color-blue-1700: #020A16;
 
+$color-light-blue-50: #E1F5FE;
 $color-light-blue-100: #B3E5FC;
+$color-light-blue-200: #81D4FA;
 $color-light-blue-300: #4FC3F7;
+$color-light-blue-400: #29B6F6;
 $color-light-blue-500: #03A9F4;
+$color-light-blue-600: #039BE5;
 $color-light-blue-700: #0288D1;
+$color-light-blue-800: #0277BD;
 $color-light-blue-900: #01579B;
 $color-light-blue-1100: #013D6D;
 $color-light-blue-1300: #00233F;
 $color-light-blue-1500: #00172A;
 $color-light-blue-1700: #000A12;
 
+$color-cyan-50: #E0F7FA;
 $color-cyan-100: #B2EBF2;
+$color-cyan-200: #80DEEA;
 $color-cyan-300: #4DD0E1;
+$color-cyan-400: #00BCD4;
 $color-cyan-500: #00BCD4;
+$color-cyan-600: #00A3A3;
 $color-cyan-700: #0097A7;
+$color-cyan-800: #00838F;
 $color-cyan-900: #006064;
 $color-cyan-1100: #004345;
 $color-cyan-1300: #002728;
 $color-cyan-1500: #00191A;
 $color-cyan-1700: #000B0B;
 
+$color-teal-50: #E0F2F1;
 $color-teal-100: #B2DFDB;
 $color-teal-300: #4DB6AC;
 $color-teal-500: #009688;
@@ -91,16 +124,22 @@ $color-teal-1300: #002721;
 $color-teal-1500: #001714;
 $color-teal-1700: #000A09;
 
+$color-green-50: #E8F5E9;
 $color-green-100: #C8E6C9;
+$color-green-200: #A5D6A7;
 $color-green-300: #81C784;
+$color-green-400: #66BB6A;
 $color-green-500: #4CAF50;
+$color-green-600: #43A047;
 $color-green-700: #388E3C;
+$color-green-800: #388E3C;
 $color-green-900: #1B5E20;
 $color-green-1100: #134216;
 $color-green-1300: #0B270D;
 $color-green-1500: #071806;
 $color-green-1700: #030A03;
 
+$color-lime-50: #F9FBE7;
 $color-lime-100: #F0F4C3;
 $color-lime-300: #DCE775;
 $color-lime-500: #CDDC39;
@@ -111,6 +150,7 @@ $color-lime-1300: #252207;
 $color-lime-1500: #171504;
 $color-lime-1700: #090801;
 
+$color-yellow-50: #FFFDE7;
 $color-yellow-100: #FFF9C4;
 $color-yellow-300: #FFF176;
 $color-yellow-500: #FFEB3B;
@@ -121,26 +161,37 @@ $color-yellow-1300: #351C05;
 $color-yellow-1500: #201103;
 $color-yellow-1700: #0D0701;
 
+$color-amber-50: #FFF8E1;
 $color-amber-100: #FFECB3;
+$color-amber-200: #FFE082;
 $color-amber-300: #FFD54F;
+$color-amber-400: #FFD600;
 $color-amber-500: #FFC107;
+$color-amber-600: #FFB300;
 $color-amber-700: #FFA000;
+$color-amber-800: #FF8F00;
 $color-amber-900: #FF6F00;
 $color-amber-1100: #B04D00;
 $color-amber-1300: #391900;
 $color-amber-1500: #220F00;
 $color-amber-1700: #0E0600;
 
+$color-orange-50: #FFE0B2;
 $color-orange-100: #FFE0B2;
+$color-orange-200: #FFCC80;
 $color-orange-300: #FFB74D;
+$color-orange-400: #FFA726;
 $color-orange-500: #FF9800;
+$color-orange-600: #FF8C00;
 $color-orange-700: #F57C00;
+$color-orange-800: #EF6C00;
 $color-orange-900: #E65100;
 $color-orange-1100: #9E3800;
 $color-orange-1300: #3E1600;
 $color-orange-1500: #260D00;
 $color-orange-1700: #100500;
 
+$color-deep-orange-50: #FFCCBC;
 $color-deep-orange-100: #FFCCBC;
 $color-deep-orange-300: #FF8A65;
 $color-deep-orange-500: #FF5722;
@@ -151,6 +202,7 @@ $color-deep-orange-1300: #411204;
 $color-deep-orange-1500: #280B02;
 $color-deep-orange-1700: #100401;
 
+$color-brown-50: #EFEBE9;
 $color-brown-100: #D7CCC8;
 $color-brown-300: #A1887F;
 $color-brown-500: #795548;
@@ -203,159 +255,35 @@ $color-grey-10b: #000000;
 // to avoid conflicts with the Material Design scale above.
 // TODO: This is deprecated. Use the Material Design scale instead, and replace these references over time.
 
-// Blue
-$ui-blue-50:  #eff6ff;
-$ui-blue-100: #dbeafe;
-$ui-blue-200: #bfdbfe;
-$ui-blue-300: #93c5fd;
-$ui-blue-400: #60a5fa;
-$ui-blue-500: #3b82f6;
-$ui-blue-600: #2563eb;
-$ui-blue-700: #1d4ed8;
-$ui-blue-800: #1e40af;
-$ui-blue-900: #1e3a8a;
-
-// Indigo
-$ui-indigo-50:  #eef2ff;
-$ui-indigo-100: #e0e7ff;
-$ui-indigo-200: #c7d2fe;
-$ui-indigo-300: #a5b4fc;
-$ui-indigo-400: #818cf8;
-$ui-indigo-500: #6366f1;
-$ui-indigo-600: #4f46e5;
-$ui-indigo-700: #4338ca;
-$ui-indigo-800: #3730a3;
-$ui-indigo-900: #312e81;
-$ui-indigo-950: #1e1b4b;
-
-// Violet
-$ui-violet-300: #c4b5fd;
-$ui-violet-400: #a78bfa;
-$ui-violet-600: #7c3aed;
-$ui-violet-700: #6d28d9;
-$ui-violet-900: #4c1d95;
-
-// Green (Tailwind)
-$ui-green-50:  #f0fdf4;
-$ui-green-100: #dcfce7;
-$ui-green-200: #bbf7d0;
-$ui-green-300: #86efac;
-$ui-green-400: #4ade80;
-$ui-green-500: #22c55e;
-$ui-green-600: #16a34a;
-$ui-green-700: #15803d;
-$ui-green-800: #166534;
-$ui-green-900: #14532d;
-
-// Red (Tailwind)
-$ui-red-50:  #fef2f2;
-$ui-red-100: #fee2e2;
-$ui-red-200: #fecaca;
-$ui-red-300: #fca5a5;
-$ui-red-400: #f87171;
-$ui-red-500: #ef4444;
-$ui-red-600: #dc2626;
-$ui-red-700: #b91c1c;
-$ui-red-800: #991b1b;
-$ui-red-900: #7f1d1d;
-
-// Amber (Tailwind)
-$ui-amber-100: #fef3c7;
-$ui-amber-200: #fde68a;
-$ui-amber-300: #fcd34d;
-$ui-amber-400: #fbbf24;
-$ui-amber-500: #f59e0b;
-$ui-amber-600: #d97706;
-$ui-amber-700: #b45309;
-$ui-amber-800: #92400e;
-$ui-amber-900: #78350f;
-
-// Orange (Tailwind)
-$ui-orange-400: #fb923c;
-$ui-orange-500: #f97316;
-
-// Pink (Tailwind)
-$ui-pink-50:  #fdf2f8;
-$ui-pink-100: #fce7f3;
-$ui-pink-500: #ec4899;
-$ui-pink-600: #db2777;
-$ui-pink-700: #be185d;
-
-// Cyan (Tailwind)
-$ui-cyan-300: #67e8f9;
-$ui-cyan-400: #22d3ee;
-$ui-cyan-500: #06b6d4;
-$ui-cyan-600: #0891b2;
-$ui-cyan-700: #0e7490;
-$ui-cyan-800: #155e75;
-$ui-cyan-900: #164e63;
-
-// Sky (Tailwind)
-$ui-sky-50:  #f0f9ff;
-$ui-sky-100: #e0f2fe;
-$ui-sky-200: #bae6fd;
-$ui-sky-600: #0284c7;
-$ui-sky-700: #0369a1;
-
-// Cyan light
-$ui-cyan-50: #ecfeff;
-
-// Slate (Tailwind)
-$ui-slate-50:  #f8fafc;
-$ui-slate-100: #f1f5f9;
-$ui-slate-200: #e2e8f0;
-$ui-slate-300: #cbd5e1;
-$ui-slate-400: #94a3b8;
-$ui-slate-500: #64748b;
-$ui-slate-600: #475569;
-$ui-slate-700: #334155;
-$ui-slate-800: #1e293b;
-$ui-slate-900: #0f172a;
-
-// ── Material Blue interpolations ───────────────────────────────────────────────
-// Fills gaps between the existing 300/500/700 Material steps
-$color-blue-50:  #e3f2fd;   // Material Blue 50
-$color-blue-800: #1565c0;   // map button hover text
-
 // ── Map filter-panel & cluster-marker colours ────────────────────────────────
 // Intentionally static — filter panel and map clusters always render on dark
 // backdrops and must not invert in dark mode.
-$ui-fp-active:   #5082ff;   // filter panel active accent / range-slider fill
-$ui-fp-spinner:  #5a8fff;   // progress spinner / dot glow
-$ui-fp-chip-txt: #c8d8ff;   // active-chip label on dark panel
+$ui-fp-active:   $color-indigo-500;   // filter panel active accent / range-slider fill
+$ui-fp-spinner:  $color-indigo-300;   // progress spinner / dot glow
+$ui-fp-chip-txt: $color-indigo-100;   // active-chip label on dark panel
 
 // ── Toast-notification backgrounds ────────────────────────────────────────────
 // Dark saturated colours designed for legibility against white/light text.
-$toast-success-bg: #1c6e35;
-$toast-error-bg:   #b02d20;
-$toast-info-bg:    #1558b0;
-$toast-warning-bg: #b36a00;
-
-// ── Neutral avatar placeholder ─────────────────────────────────────────────────
-$ui-avatar-neutral: #9aa0a6;
-
-// ── Material colour interpolations (missing from base scale) ───────────────────
-$color-green-800: #2e7d32;   // Material Green 800
-$color-red-800:   #c62828;   // Material Red 800
+$toast-success-bg: $color-green-900;
+$toast-error-bg:   $color-red-900;
+$toast-info-bg:    $color-blue-900;
+$toast-warning-bg: $color-amber-900;
 
 // ── Star / trust-rating gold ────────────────────────────────────────────────────
-$ui-star-gold: #f5a623;
-
-// ── Tailwind Yellow 300 ─────────────────────────────────────────────────────────
-$ui-yellow-300: #fde047;
+$ui-star-gold: $color-amber-500;
 
 // ── Link colour on always-dark surfaces (map popups, overlays) ─────────────────
-$ui-link-on-dark:       #7eb0ff;
-$ui-link-on-dark-hover: #a8c8ff;
+$ui-link-on-dark:       $color-blue-300;
+$ui-link-on-dark-hover: $color-blue-400;
 
 // ── Pin cluster marker gradients ────────────────────────────────────────────────
 // Always rendered on the map; these colours never invert with dark mode.
-$cluster-s-start: #3b70e8;
-$cluster-s-end:   #2250c2;
-$cluster-m-start: $ui-violet-600;
-$cluster-m-end:   #5418b8;
-$cluster-l-start: $ui-pink-600;
-$cluster-l-end:   #9c124a;
+$cluster-s-start: $color-indigo-500;
+$cluster-s-end:   $color-indigo-600;
+$cluster-m-start: $color-indigo-600;
+$cluster-m-end:   $color-indigo-700;
+$cluster-l-start: $color-pink-600;
+$cluster-l-end:   $color-pink-700;
 
 // - Brand palette ─────────────────────────────────────────────────────────────
 $primary-color: $color-blue-500;
@@ -363,9 +291,6 @@ $primary-color-dark: $color-blue-700;
 $primary-color-light: $color-blue-300;
 $secondary-color: $color-amber-500;
 $dark-primary: $color-blue-1700;
-$dark-neutral-color: var(--ul-grey-8);
-$light-neutral-color: var(--ul-grey-0);
-$inactive-button-color: var(--ul-grey-8);
 $highlight-color: $color-amber-300;
 $selected-color: $color-blue-300;
 $section-header-bg: $color-blue-300;
@@ -402,37 +327,28 @@ $dk-panel-bg:     $color-deep-purple-1500;           // trip/weather panel backg
 $dk-panel-border: rgba($color-deep-purple-1500, .5); // trip/weather panel border
 
 // Extended dark-mode surface/state tokens
-$dk-nav-bg:             #040a14;   // always-dark nav/footer background
-$dk-info-link:          #7cb9e8;   // muted informational link on dark surfaces
-$dk-success-bg:         #1a2e1a;   // accept/friend-request dark background
-$dk-accept-border:      #2d6a2d;   // accept/friend-request dark border
-$dk-accept-hover:       #1f3a1f;   // accept/friend-request dark hover
-$dk-reject-bg:          #2e1a1a;   // reject/danger dark background
-$dk-reject-border:      #6a2d2d;   // reject/danger dark border
-$dk-reject-hover:       #3a2020;   // reject/danger dark hover
-$dk-friend-remove-hover: #3a1a1a;  // friend remove hover background
-$dk-warning-amber-bg:   #1e1a0e;   // amber-warning dark background (friend requests)
-$dk-warning-amber-bd:   #4a3a10;   // amber-warning dark border
-$dk-warning-amber-txt:  #d4a44c;   // amber-warning dark text
-$dk-pending-bg:         #2a1e08;   // pending-status dark background
-$dk-pending-border:     #5a3e10;   // pending-status dark border
-$dk-notif-unread-bg:    #1e1a30;   // unread notification background
-$dk-notif-unread-hover: #221d38;   // unread notification hover
-$dk-comment-avatar-bg:  #1e1936;   // comment avatar placeholder background
-$dk-comment-avatar-txt: #7c6fcd;   // comment avatar placeholder text
-$dk-cal-event-bg:       #192030;   // calendar has-events cell background
-$dk-panel-bg-alt:       #1a2a3a;   // avatar-upload-btn & tag-stat-children bg
-$dk-tag-stat-border:    #2a4a6a;   // tag-stat--children border
-$dk-danger-text:        #ef9a9a;   // sign-out and danger muted text (Material Red 200)
-
-// ── Supplementary Tailwind colours ────────────────────────────────────────────
-$ui-pink-400:       #f472b6;   // Tailwind pink-400 (notification icons, hover)
-$color-green-400:   #66bb6a;   // Material Green 400 (field-status saved in dark)
-
-// ── Tailwind Emerald ──────────────────────────────────────────────────────────
-$ui-emerald-400: #34d399;
-$ui-emerald-500: #10b981;
-$ui-emerald-600: #059669;
+$dk-nav-bg:             $color-blue-1700;
+$dk-info-link:          $color-blue-300;   // muted informational link on dark surfaces
+$dk-success-bg:         $color-green-900;   // accept/friend-request dark background
+$dk-accept-border:      $color-green-700;   // accept/friend-request dark border
+$dk-accept-hover:       $color-green-900;   // accept/friend-request dark hover
+$dk-reject-bg:          $color-red-900;   // reject/danger dark background
+$dk-reject-border:      $color-red-700;   // reject/danger dark border
+$dk-reject-hover:       $color-red-900;   // reject/danger dark hover
+$dk-friend-remove-hover: $color-red-900;  // friend remove hover background
+$dk-warning-amber-bg:   $color-amber-900;   // amber-warning dark background (friend requests)
+$dk-warning-amber-bd:   $color-amber-700;   // amber-warning dark border
+$dk-warning-amber-txt:  $color-amber-300;   // amber-warning dark text
+$dk-pending-bg:         $color-amber-900;   // pending-status dark background
+$dk-pending-border:     $color-amber-700;   // pending-status dark border
+$dk-notif-unread-bg:    $color-blue-900;   // unread notification background
+$dk-notif-unread-hover: $color-blue-700;   // unread notification hover
+$dk-comment-avatar-bg:  $color-indigo-900;   // comment avatar placeholder background
+$dk-comment-avatar-txt: $color-indigo-300;   // comment avatar placeholder text
+$dk-cal-event-bg:       $color-indigo-900;   // calendar has-events cell background
+$dk-panel-bg-alt:       $color-indigo-900;   // avatar-upload-btn & tag-stat-children bg
+$dk-tag-stat-border:    $color-indigo-700;   // tag-stat--children border
+$dk-danger-text:        $color-red-200;   // sign-out and danger muted text (Material Red 200)
 
 // ── Third-party brand colours ─────────────────────────────────────────────────
 $discord-brand:       #5865f2;   // Discord blurple
@@ -440,7 +356,7 @@ $discord-brand-hover: #4752c4;   // Discord blurple hover
 $google-text:         #3c4043;   // Google button text (Material Bluegrey 700)
 
 // ── Gallery / dark canvas ─────────────────────────────────────────────────────
-$dk-true-black: #0a0a0a;   // near-black canvas background for full-screen gallery
+$dk-true-black: $color-grey-10;   // near-black canvas background for full-screen gallery
 
 // ── Radius ────────────────────────────────────────────────────────────────────
 
