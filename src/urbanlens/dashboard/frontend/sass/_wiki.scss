@@ -14,7 +14,7 @@
         align-items: flex-start;
         justify-content: space-between;
         gap: 1.5rem;
-        background: linear-gradient(135deg, $color-cyan-700 0%, $color-cyan-600 50%, var(--ul-grey-0)0 100%);
+        background: $color-cyan-700;
         border-radius: 16px;
         padding: 1.75rem 2rem;
         color: var(--ul-grey-9);
