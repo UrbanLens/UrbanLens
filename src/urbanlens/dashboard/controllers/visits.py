@@ -12,8 +12,29 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.pagination import get_page
 
 logger = logging.getLogger(__name__)
+
+_VISITS_PAGE_SIZE = 6
+
+
+def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
+    """Render the visit history panel for a pin, paginated newest-first.
+
+    Args:
+        request: Incoming HTTP request (read for an optional ``page`` param).
+        pin: Pin whose visit history should be rendered.
+
+    Returns:
+        Rendered HTML partial.
+    """
+    page_obj = get_page(request, pin.visit_history.all(), _VISITS_PAGE_SIZE)
+    return render(
+        request,
+        "dashboard/partials/_visit_history.html",
+        {"pin": pin, "page_obj": page_obj, "visits": page_obj.object_list},
+    )
 
 
 def _add_visited_status(pin: Pin) -> None:
@@ -60,11 +81,7 @@ class VisitHistoryView(LoginRequiredMixin, View):
             Rendered HTML partial.
         """
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        return render(
-            request,
-            "dashboard/partials/_visit_history.html",
-            {"pin": pin, "visits": pin.visit_history.all()},
-        )
+        return _render_visit_history(request, pin)
 
     def post(self, request: HttpRequest, pin_slug) -> HttpResponse:
         """Create a new manual visit entry and return the updated panel.
@@ -94,11 +111,7 @@ class VisitHistoryView(LoginRequiredMixin, View):
         _sync_last_visited(pin)
         _add_visited_status(pin)
 
-        return render(
-            request,
-            "dashboard/partials/_visit_history.html",
-            {"pin": pin, "visits": pin.visit_history.all()},
-        )
+        return _render_visit_history(request, pin)
 
 
 class VisitDeleteView(LoginRequiredMixin, View):
@@ -128,8 +141,4 @@ class VisitDeleteView(LoginRequiredMixin, View):
         visit.delete()
         _sync_last_visited(pin)
 
-        return render(
-            request,
-            "dashboard/partials/_visit_history.html",
-            {"pin": pin, "visits": pin.visit_history.all()},
-        )
+        return _render_visit_history(request, pin)

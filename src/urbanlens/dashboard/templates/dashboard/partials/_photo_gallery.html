@@ -13,7 +13,7 @@ Context:
   <div class="card-header">
     <i class="material-icons">photo_library</i>
     <span>Photos</span>
-    {% if images %}<span class="badge">{{ images|length }}</span>{% endif %}
+    {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
     {# Compact upload button - always visible in the header #}
     <label class="gallery-upload-compact-btn" title="Upload photos">
       <i class="material-icons">add_photo_alternate</i>
@@ -58,6 +58,7 @@ Context:
     </li>
     {% endfor %}
   </ul>
+  {% include "dashboard/partials/_pagination_controls.html" %}
 </div>
 
 {# ── Lightbox ───────────────────────────────────────────────────────────────── #}

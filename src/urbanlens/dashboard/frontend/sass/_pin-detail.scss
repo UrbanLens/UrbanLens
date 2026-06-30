@@ -372,6 +372,7 @@
     list-style: none;
     margin: 0;
     padding: .25rem 0;
+    min-height: 15rem;
 
     .visit-item {
         display: flex;
@@ -1431,7 +1432,7 @@ body.page-location-details {
         box-shadow: 0 2px 10px rgba(0, 0, 0, .09);
     }
 
-    .section {
+    .pin-detail-grid {
         margin: 1rem 0;
 
         > .card {
@@ -1459,11 +1460,7 @@ body.page-location-details {
     background: var(--ul-grey-0);
 }
 
-body.page-location-details div.section {
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-
+body.page-location-details .pin-detail-grid {
     .location-title {
         text-align: center;
         margin: .5rem 0;
@@ -1542,6 +1539,7 @@ body.page-location-details div.section {
             grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
             gap: .5rem;
             padding: .75rem;
+            min-height: 260px;
 
             .smithsonian-image {
                 a {
@@ -1572,6 +1570,7 @@ body.page-location-details div.section {
             padding: .25rem 0;
             list-style: none;
             margin: 0;
+            min-height: 26rem;
         }
 
         .search-result {
@@ -1690,15 +1689,104 @@ body.page-location-details div.section {
 }
 
 // ── Pin detail layout ─────────────────────────────────────────────────────────
-.page-location-details {
-    .section {
-        padding-top: 0;
-        padding-bottom: 0;
+//
+// .pin-detail-grid holds every "always present" section as a direct child
+// (overview, map, satellite/street view, visit history, categories, aliases,
+// the .pin-aux-grid block of optional cards, gallery, comments) and lays
+// them out with explicit `grid-column: span N` + `order` per breakpoint -
+// a deliberately designed layout, not an auto-fit reflow. `.pin-aux-grid`
+// (the cards that may or may not render at all - Smithsonian, Web Results,
+// Wikipedia, Nominatim, NPS, Wikimedia, LoopNet) is itself one such child,
+// and keeps its own nested auto-fit grid so it can "fit in however it can"
+// regardless of which of those optional cards end up present.
+.pin-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    padding: 0 1rem;
+    align-items: start;
+
+    // Onboarding tips banner isn't part of the designed layout - just let it
+    // span full width wherever it lands.
+    > .page-onboarding {
+        grid-column: 1 / -1;
+    }
+
+    > #pin-overview { order: 10; }
+    > .location-map { order: 20; }
+    > .satellite-view { order: 30; min-width: 260px; }
+    > .street-view { order: 40; min-width: 260px; }
+    > .visit-history { order: 50; }
+    > .tag-panel { order: 60; }
+    > .aliases-panel { order: 70; }
+    > .pin-aux-grid { order: 80; }
+    > .photo-gallery,
+    > #pin-gallery-panel { order: 90; }
+    > .comment-panel,
+    > #comment-panel { order: 100; }
+
+    // min-width: 0 is required on grid items - without it, image/text content
+    // can force a track wider than its assigned span and break the layout.
+    > * {
+        min-width: 0;
+    }
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: repeat(12, 1fr);
+
+        > #pin-overview,
+        > .location-map,
+        > .pin-aux-grid {
+            grid-column: span 12;
+        }
+
+        > .satellite-view,
+        > .street-view {
+            grid-column: span 6;
+        }
+
+        > .visit-history,
+        > .tag-panel,
+        > .aliases-panel {
+            grid-column: span 4;
+        }
+
+        // Gallery gets the wider share; comments stay at a third of the row
+        // width (well within "half width or less").
+        > .photo-gallery,
+        > #pin-gallery-panel {
+            grid-column: span 8;
+        }
+
+        > .comment-panel,
+        > #comment-panel {
+            grid-column: span 4;
+        }
+    }
+
+    // Ultra-wide: the gallery moves up to join satellite + street view below
+    // the map, freeing comments to take the full row on its own.
+    @include up($breakpoint-xl) {
+        > .satellite-view,
+        > .street-view,
+        > .photo-gallery,
+        > #pin-gallery-panel {
+            grid-column: span 4;
+        }
+
+        > .photo-gallery,
+        > #pin-gallery-panel {
+            order: 45;
+        }
+
+        > .comment-panel,
+        > #comment-panel {
+            grid-column: span 12;
+        }
     }
 }
 
-// A single adaptive grid for every secondary card (visit history, categories,
-// aliases, satellite/street view, archive lookups, external-data lookups).
+// A single adaptive grid for the cards that may or may not render at all.
 // `auto-fit` (not `auto-fill`) collapses any track left empty by a card that
 // never rendered or was removed at runtime, so remaining cards stretch to
 // fill the row instead of leaving a gap - regardless of which subset of
@@ -1711,30 +1799,5 @@ body.page-location-details div.section {
 
     @include up($breakpoint-xs) {
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    }
-}
-
-// Gallery + comments sit side by side; comments are capped to roughly half
-// width (and never wider) so the wider gallery doesn't get squeezed.
-.pin-bottom-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: start;
-
-    > .photo-gallery,
-    > #pin-gallery-panel {
-        flex: 2 1 420px;
-        min-width: 0;
-    }
-
-    > .comment-panel,
-    > #comment-panel {
-        flex: 1 1 320px;
-        min-width: 0;
-
-        @include up($breakpoint-md) {
-            max-width: 48%;
-        }
     }
 }

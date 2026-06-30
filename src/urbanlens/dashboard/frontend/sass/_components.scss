@@ -596,13 +596,42 @@
 }
 
 
+// ── Pagination bar ────────────────────────────────────────────────────────────
+// Shared Prev/Next control for any paginated card (see _pagination_controls.html).
+
+.pagination-bar {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: .6rem;
+	padding: .5rem;
+	border-top: 1px solid var(--ul-grey-1a);
+}
+
+.pagination-btn {
+	@include icon-btn(28px);
+
+	&:disabled {
+		opacity: .35;
+		cursor: default;
+		pointer-events: none;
+	}
+}
+
+.pagination-label {
+	font-size: .78rem;
+	font-weight: 500;
+	color: var(--ul-grey-6);
+	user-select: none;
+}
+
 // - Dark Mode
 [data-theme="dark"] {
-	
+
 	.ul-dropdown-item {
 		&--danger {
 			color: $color-red-100;
-			
+
 			.material-icons {
 				color: $color-red-100;
 			}

@@ -17,11 +17,16 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.search import build_pin_search_query, format_search_date, get_search_gateway
 from urbanlens.dashboard.services.smithsonian import SmithsonianGateway
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
+
+_WIKIMEDIA_PAGE_SIZE = 12
+_WEB_SEARCH_PAGE_SIZE = 5
+_SMITHSONIAN_PAGE_SIZE = 12
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):
@@ -193,12 +198,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         # Get historic images from the Smithsonian's API; discard entries without a usable URL
         smithsonian_images = [img for img in smithsonian_gateway.get_data(pin.effective_name) if img.get("url")]
+        page_obj = get_page(request, smithsonian_images, _SMITHSONIAN_PAGE_SIZE)
 
         return render(
             request,
             "dashboard/pages/location/smithsonian.html",
             {
-                "images": smithsonian_images,
+                "images": page_obj.object_list,
+                "page_obj": page_obj,
             },
         )
 
@@ -227,7 +234,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if cache_hours > 0:
             cached = cache.get(cache_key)
             if cached is not None:
-                return render(request, "dashboard/pages/location/web_search.html", {"search_results": cached})
+                page_obj = get_page(request, cached, _WEB_SEARCH_PAGE_SIZE)
+                return render(
+                    request,
+                    "dashboard/pages/location/web_search.html",
+                    {"search_results": page_obj.object_list, "page_obj": page_obj},
+                )
 
         try:
             search_gateway = get_search_gateway()
@@ -251,7 +263,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if cache_hours > 0:
             cache.set(cache_key, search_results, cache_hours * 3600)
 
-        return render(request, "dashboard/pages/location/web_search.html", {"search_results": search_results})
+        page_obj = get_page(request, search_results, _WEB_SEARCH_PAGE_SIZE)
+        return render(
+            request,
+            "dashboard/pages/location/web_search.html",
+            {"search_results": page_obj.object_list, "page_obj": page_obj},
+        )
 
     def satellite_view_google_image(self, request: HttpRequest, **kwargs):
         """
@@ -569,7 +586,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("wikimedia_assets: no images found for pin %s (query=%r)", pin_slug, query)
             return HttpResponse(status=204)
 
-        return render(request, "dashboard/partials/pin_wikimedia.html", {"images": data, "query": query})
+        page_obj = get_page(request, data, _WIKIMEDIA_PAGE_SIZE)
+        return render(
+            request,
+            "dashboard/partials/pin_wikimedia.html",
+            {"images": page_obj.object_list, "page_obj": page_obj, "query": query},
+        )
 
     def loopnet_info(self, request: HttpRequest, pin_slug: str):
         """

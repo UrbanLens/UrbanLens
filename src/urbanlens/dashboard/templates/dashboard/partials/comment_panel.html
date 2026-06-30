@@ -4,7 +4,7 @@
   <div class="card-header">
     <i class="material-icons">chat</i>
     <span>Comments</span>
-    {% if rendered_comments %}<span class="badge">{{ rendered_comments|length }}</span>{% endif %}
+    {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
   </div>
 
   {% if rendered_comments %}
@@ -18,6 +18,7 @@
     {% endfor %}
   </ul>
   {% endif %}
+  {% include "dashboard/partials/_pagination_controls.html" %}
 
   {# ── Compose form ── #}
   {% include "dashboard/partials/_comment_compose.html" with context_type=context_type pin=pin location=location profile=profile parent_id="" %}

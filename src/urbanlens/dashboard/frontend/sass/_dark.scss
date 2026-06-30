@@ -223,6 +223,12 @@
     .page-footer {
         background-color: $dk-nav-bg;
         color: var(--ul-grey-6);
+
+        &__github {
+            a {
+                color: var(--ul-grey-8);
+            }
+        }
     }
 
     .edit-input,

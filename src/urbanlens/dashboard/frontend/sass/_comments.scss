@@ -18,6 +18,10 @@
     padding: 0;
 }
 
+.comment-list {
+    min-height: 12rem;
+}
+
 .comment-item {
     display: flex;
     gap: .65rem;

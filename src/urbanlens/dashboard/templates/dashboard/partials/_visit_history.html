@@ -48,6 +48,7 @@
     {% else %}
     <p class="visit-empty">No visits recorded yet.</p>
     {% endif %}
+    {% include "dashboard/partials/_pagination_controls.html" %}
 
     {# ── Log-a-visit dialog ──────────────────────────────────────────── #}
     <dialog id="visit-add-dialog-{{ pin.slug }}" class="visit-add-dialog ul-dialog">

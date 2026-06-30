@@ -1,0 +1,30 @@
+{% comment %}
+Reusable pagination bar for any card rendered by a single HTMX-loaded view.
+
+Context:
+  page_obj - a django.core.paginator.Page
+
+Conventions relied on:
+  - The card this is included into has the .card class.
+  - The view that rendered this card is reachable at request.path and reads
+    a `page` GET/POST parameter (see urbanlens.dashboard.services.pagination).
+{% endcomment %}
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="pagination-bar">
+    <button type="button" class="pagination-btn"
+            hx-get="{{ request.path }}?page={{ page_obj.previous_page_number|default:1 }}"
+            hx-target="closest .card" hx-swap="outerHTML"
+            {% if not page_obj.has_previous %}disabled{% endif %}
+            aria-label="Previous page">
+        <i class="material-icons">chevron_left</i>
+    </button>
+    <span class="pagination-label">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    <button type="button" class="pagination-btn"
+            hx-get="{{ request.path }}?page={{ page_obj.next_page_number|default:page_obj.paginator.num_pages }}"
+            hx-target="closest .card" hx-swap="outerHTML"
+            {% if not page_obj.has_next %}disabled{% endif %}
+            aria-label="Next page">
+        <i class="material-icons">chevron_right</i>
+    </button>
+</div>
+{% endif %}

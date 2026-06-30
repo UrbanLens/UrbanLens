@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="section">
+<div class="pin-detail-grid">
     <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
 
     {# ── Title + details (swappable) ──────────────────────────────────── #}
@@ -240,74 +240,75 @@
     </div>{# end .map-wrapper #}
     </div>{# end .location-map #}
 
+    {# ── Satellite / street view: always present, directly below the map ──── #}
+    <div id="satellite-view-section" class="satellite-view card"
+        hx-get="{% url 'pin.satellite_view' pin.slug %}"
+        hx-trigger="load"
+        hx-swap="outerHTML">
+        <div class="card-header">
+            <i class="material-icons">globe</i>
+            <h3>Satellite View</h3>
+        </div>
+        <div class="view-loading">
+            <i class="material-icons spin">autorenew</i>
+            Loading…
+        </div>
+    </div>
+
+    <div id="street-view-section" class="street-view card"
+        hx-get="{% url 'pin.street_view' pin.slug %}"
+        hx-trigger="load"
+        hx-swap="outerHTML">
+        <div class="card-header">
+            <i class="material-icons">streetview</i>
+            <h3>Street View</h3>
+        </div>
+        <div class="view-loading">
+            <i class="material-icons spin">autorenew</i>
+            Loading…
+        </div>
+    </div>
+
+    {# ── Visits / categories / aliases: always present ─────────────────── #}
+    <div hx-get="{% url 'pin.visits' pin.slug %}"
+        hx-trigger="load"
+        hx-swap="outerHTML"
+        class="visit-history card">
+        <div class="card-header">
+            <i class="material-icons">history</i>
+            <span>Visit History</span>
+        </div>
+        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+    </div>
+
+    <div hx-get="{% url 'badge.pin' badge_kind='category' pin_slug=pin.slug %}"
+        hx-trigger="load"
+        hx-swap="outerHTML"
+        class="tag-panel">
+        <div class="tag-panel-header">
+            <i class="material-icons">category</i>
+            <span>Categories</span>
+        </div>
+        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+    </div>
+
+    <div hx-get="{% url 'pin.aliases' pin.slug %}"
+        hx-trigger="load"
+        hx-swap="outerHTML"
+        id="pin-aliases-panel"
+        class="aliases-panel card">
+        <div class="card-header">
+            <i class="material-icons">label_important</i>
+            <span>Aliases</span>
+        </div>
+        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+    </div>
+
     {# ── Auxiliary cards: a single adaptive grid that reflows to fill the ──── #}
     {# space left by any card that doesn't render (optional cards, or cards ── #}
     {# removed at runtime when their HTMX request returns 204 - see the ────── #}
     {# htmx:afterOnLoad handler near the bottom of this file). ──────────────── #}
-    <div class="section">
-        <div class="pin-aux-grid">
-
-            <div hx-get="{% url 'pin.visits' pin.slug %}"
-                hx-trigger="load"
-                hx-swap="outerHTML"
-                class="visit-history card">
-                <div class="card-header">
-                    <i class="material-icons">history</i>
-                    <span>Visit History</span>
-                </div>
-                <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
-            </div>
-
-            <div hx-get="{% url 'badge.pin' badge_kind='category' pin_slug=pin.slug %}"
-                hx-trigger="load"
-                hx-swap="outerHTML"
-                class="tag-panel">
-                <div class="tag-panel-header">
-                    <i class="material-icons">category</i>
-                    <span>Categories</span>
-                </div>
-                <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
-            </div>
-
-            <div hx-get="{% url 'pin.aliases' pin.slug %}"
-                hx-trigger="load"
-                hx-swap="outerHTML"
-                id="pin-aliases-panel"
-                class="aliases-panel card">
-                <div class="card-header">
-                    <i class="material-icons">label_important</i>
-                    <span>Aliases</span>
-                </div>
-                <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
-            </div>
-
-            <div id="satellite-view-section" class="satellite-view card"
-                hx-get="{% url 'pin.satellite_view' pin.slug %}"
-                hx-trigger="load"
-                hx-swap="outerHTML">
-                <div class="card-header">
-                    <i class="material-icons">globe</i>
-                    <h3>Satellite View</h3>
-                </div>
-                <div class="view-loading">
-                    <i class="material-icons spin">autorenew</i>
-                    Loading…
-                </div>
-            </div>
-
-            <div id="street-view-section" class="street-view card"
-                hx-get="{% url 'pin.street_view' pin.slug %}"
-                hx-trigger="load"
-                hx-swap="outerHTML">
-                <div class="card-header">
-                    <i class="material-icons">streetview</i>
-                    <h3>Street View</h3>
-                </div>
-                <div class="view-loading">
-                    <i class="material-icons spin">autorenew</i>
-                    Loading…
-                </div>
-            </div>
+    <div class="pin-aux-grid">
 
             <div id="smithsonian-section" class="smithsonian-images card"
                 hx-get="{% url 'smithsonian_images' pin.slug %}"
@@ -405,40 +406,35 @@
                     <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
                 </div>
             </div>
-        </div>
-    </div>{# end .section for .pin-aux-grid #}
+    </div>{# end .pin-aux-grid #}
 
-    {# ── Gallery + comments: side by side, comments capped to half width ──── #}
-    <div class="section">
-        <div class="pin-bottom-row">
-            <div id="pin-gallery-panel"
-             hx-get="{% url 'pin.gallery' pin.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-                <div class="card">
-                    <div class="card-header">
-                        <i class="material-icons">photo_library</i>
-                        <span>Photos</span>
-                    </div>
-                    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
-                </div>
+    {# ── Gallery + comments: always present ─────────────────────────────── #}
+    <div id="pin-gallery-panel"
+     hx-get="{% url 'pin.gallery' pin.slug %}"
+     hx-trigger="load"
+     hx-swap="outerHTML">
+        <div class="card">
+            <div class="card-header">
+                <i class="material-icons">photo_library</i>
+                <span>Photos</span>
             </div>
-
-            <div id="comment-panel"
-             hx-get="{% url 'pin.comments' pin.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-                <div class="card">
-                    <div class="card-header">
-                        <i class="material-icons">chat</i>
-                        <span>Comments</span>
-                    </div>
-                    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
-                </div>
-            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
         </div>
-    </div>{# end .section for .pin-bottom-row #}
-</div>{# end .section #}
+    </div>
+
+    <div id="comment-panel"
+     hx-get="{% url 'pin.comments' pin.slug %}"
+     hx-trigger="load"
+     hx-swap="outerHTML">
+        <div class="card">
+            <div class="card-header">
+                <i class="material-icons">chat</i>
+                <span>Comments</span>
+            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+        </div>
+    </div>
+</div>{# end .pin-detail-grid #}
 
 {# ── Pin edit dialog ────────────────────────────────────────────────────── #}
 <dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog">

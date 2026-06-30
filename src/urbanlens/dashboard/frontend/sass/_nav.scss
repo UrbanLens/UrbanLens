@@ -390,6 +390,10 @@ nav {
             font-size: 1rem;
             opacity: 0.7;
         }
+
+        a {
+            color: var(--ul-grey-8);
+        }
     }
 
     // ── Map page modifier: adds a live tile-attribution slot between the

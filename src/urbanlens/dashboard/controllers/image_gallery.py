@@ -17,11 +17,14 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.images import extract_gps_coords
+from urbanlens.dashboard.services.pagination import get_page
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
+
+_GALLERY_PAGE_SIZE = 12
 
 
 def _image_to_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None) -> dict:
@@ -46,8 +49,9 @@ class PinGalleryView(LoginRequiredMixin, View):
     def _get_context(self, request: HttpRequest, pin_slug: str) -> dict:
         pin = get_object_or_404(Pin, slug=pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        images = Image.objects.filter(pin=pin).select_related("profile").visible_to(profile)
-        return {"pin": pin, "images": images, "profile": profile, "context_type": "pin"}
+        images = Image.objects.filter(pin=pin).select_related("profile").visible_to(profile).order_by("-created")
+        page_obj = get_page(request, images, _GALLERY_PAGE_SIZE)
+        return {"pin": pin, "images": page_obj.object_list, "page_obj": page_obj, "profile": profile, "context_type": "pin"}
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         ctx = self._get_context(request, pin_slug)
@@ -126,8 +130,9 @@ class WikiGalleryView(LoginRequiredMixin, View):
     def _get_context(self, request: HttpRequest, location_slug: str) -> dict:
         location = get_object_or_404(Location, slug=location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        images = Image.objects.filter(location=location).select_related("profile").visible_to(profile)
-        return {"location": location, "images": images, "profile": profile, "context_type": "wiki"}
+        images = Image.objects.filter(location=location).select_related("profile").visible_to(profile).order_by("-created")
+        page_obj = get_page(request, images, _GALLERY_PAGE_SIZE)
+        return {"location": location, "images": page_obj.object_list, "page_obj": page_obj, "profile": profile, "context_type": "wiki"}
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
         ctx = self._get_context(request, location_slug)

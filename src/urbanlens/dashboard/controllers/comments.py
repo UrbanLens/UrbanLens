@@ -8,7 +8,7 @@ import re
 from typing import TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import NoReverseMatch, reverse
 from django.views import View
@@ -19,10 +19,12 @@ from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
 from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
+from urbanlens.dashboard.services.pagination import get_page
 
 logger = logging.getLogger(__name__)
 
 _ALLOWED_EMOJIS = {"👍", "👎", "❤️", "😂", "😮", "😢", "🔥", "🏚️"}
+_COMMENTS_PAGE_SIZE = 8
 
 
 def _profile(request) -> Profile:
@@ -34,17 +36,21 @@ def _render_comments(request, context: dict) -> HttpResponse:
     return render(request, "dashboard/partials/comment_panel.html", context)
 
 
-def _build_context(comments_qs, profile: Profile, **extra) -> dict:
+def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra) -> dict:
     pinned = viewer_pinned_uuids(profile)
-    top_level = list(
+    top_level_qs = (
         comments_qs.filter(parent__isnull=True)
         .select_related("profile__user")
         .prefetch_related(
             "reactions__profile",
             "replies__reactions__profile",
             "replies__profile__user",
-        ),
+        )
     )
+    # Default to the last page so the most recent activity (comments are
+    # ordered oldest-to-newest) is what a viewer sees without paging back.
+    page_obj = get_page(request, top_level_qs, _COMMENTS_PAGE_SIZE, default_last=True)
+    top_level = list(page_obj.object_list)
     # Collect all unique commenter profiles so we can check photo visibility once.
     all_commenters: set[Profile] = set()
     for c in top_level:
@@ -80,6 +86,7 @@ def _build_context(comments_qs, profile: Profile, **extra) -> dict:
         )
     return {
         "rendered_comments": rendered,
+        "page_obj": page_obj,
         "profile": profile,
         "blurred_profiles": blurred_profiles,
         "allowed_emojis": sorted(_ALLOWED_EMOJIS),
@@ -98,7 +105,7 @@ class PinCommentsView(LoginRequiredMixin, View):
 
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _profile(request)
-        ctx = _build_context(pin.comments.all(), profile, pin=pin, context_type="pin")
+        ctx = _build_context(pin.comments.all(), profile, request, pin=pin, context_type="pin")
         return _render_comments(request, ctx)
 
     def post(self, request, pin_slug):
@@ -121,7 +128,7 @@ class PinCommentsView(LoginRequiredMixin, View):
             comment.save(update_fields=["image"])
         if parent and parent.profile != profile:
             _notify_reply(profile, parent, reply=comment)
-        ctx = _build_context(pin.comments.all(), profile, pin=pin, context_type="pin")
+        ctx = _build_context(pin.comments.all(), profile, request, pin=pin, context_type="pin")
         return _render_comments(request, ctx)
 
 
@@ -161,7 +168,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
         profile, location, _loc = self._get_location_and_profile(request, location_slug)
         if profile is None:
             return HttpResponse("You must have this location pinned to view wiki comments.", status=403)
-        ctx = _build_context(location.comments.all(), profile, location=location, context_type="wiki")
+        ctx = _build_context(location.comments.all(), profile, request, location=location, context_type="wiki")
         return _render_comments(request, ctx)
 
     def post(self, request, location_slug):
@@ -185,7 +192,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
             comment.save(update_fields=["image"])
         if parent and parent.profile != profile:
             _notify_reply(profile, parent, reply=comment)
-        ctx = _build_context(location.comments.all(), profile, location=location, context_type="wiki")
+        ctx = _build_context(location.comments.all(), profile, request, location=location, context_type="wiki")
         return _render_comments(request, ctx)
 
 
