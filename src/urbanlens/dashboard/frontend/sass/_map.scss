@@ -1343,6 +1343,7 @@
     position: relative;
     display: flex;
     align-items: stretch;
+    border-bottom: 1px solid rgba(255,255,255,.06);
 }
 
 .pin-list-item-btn {
@@ -1354,7 +1355,6 @@
     padding: .55rem 8px .55rem 15px;
     background: transparent;
     border: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     color: inherit;
     text-align: left;
     cursor: pointer;
@@ -2394,7 +2394,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     font-size: .7rem;
     padding: 2px 7px;
     border-radius: 10px;
-    border: 1px solid;
+    border: 1px solid var(--ul-grey-2);
     color: rgba(255, 255, 255, .75);
     white-space: nowrap;
 }

@@ -116,29 +116,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    def edit_pin(self, request, pin_slug, *args, **kwargs):
-        pin: Pin = Pin.objects.get(slug=pin_slug)
-        # Update the pin based on the form data
-        pin.name = request.POST.get("name")
-        pin.description = request.POST.get("description")
-        pin.latitude = request.POST.get("latitude")
-        pin.longitude = request.POST.get("longitude")
-        tags = request.POST.get("tags").split(",")
-        for tag_name in tags:
-            tag, _created = Badge.objects.get_or_create(name=tag_name)
-            pin.badges.add(tag)
-        icon = request.FILES.get("icon", None)
-        if icon:
-            pin.icon = icon
-        pin.save()
-        return HttpResponseRedirect(reverse("map.view"))
-
-    def get_edit_pin(self, request, pin_slug, *args, **kwargs):
-        pin = Pin.objects.get(slug=pin_slug)
-        # Render the edit form
-        categories = Badge.objects.categories().ordered()
-        return render(request, "dashboard/pages/map/edit_location.html", {"pin": pin, "categories": categories})
-
     def add_pin(self, request, *args, **kwargs):
         # Render the add form
         return render(request, "dashboard/pages/map/add_location.html")

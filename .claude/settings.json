@@ -39,7 +39,10 @@
       "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/controllers/maps.py src/urbanlens/dashboard/urls.py)",
       "PowerShell(.venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\controllers\\\\maps.py src\\\\urbanlens\\\\dashboard\\\\urls.py; echo \"exit:$LASTEXITCODE\")",
       "Bash(wsl.exe -l -v)",
-      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/controllers/maps.py; .venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\controllers\\\\maps.py; echo \"exit:$LASTEXITCODE\")"
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/controllers/maps.py; .venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\controllers\\\\maps.py; echo \"exit:$LASTEXITCODE\")",
+      "PowerShell(Remove-Item -Path \"src\\\\urbanlens\\\\dashboard\\\\templates\\\\dashboard\\\\pages\\\\map\\\\edit_location.html\" -Confirm:$false)",
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/controllers/maps.py src/urbanlens/dashboard/urls.py; .venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\controllers\\\\maps.py src\\\\urbanlens\\\\dashboard\\\\urls.py; echo \"exit:$LASTEXITCODE\")",
+      "PowerShell(Select-String -Path \"src\\\\urbanlens\\\\dashboard\\\\urls.py\" -Pattern 'name=\"\\([^\"]+\\)\"' | ForEach-Object { $_.Matches.Groups[1].Value } | Group-Object | Where-Object { $_.Count -gt 1 } | Select-Object Name, Count)"
     ]
   }
 }

@@ -40,10 +40,11 @@ resend the filter-form fields on every page click, so filters stay applied.
                 <span class="pin-list-visited material-icons" title="Visited">check_circle</span>
                 {% endif %}
             </button>
-            <a href="{% url 'pin.edit' pin.slug %}" hx-boost="false" class="pin-list-edit-btn"
-               title="Edit pin" aria-label="Edit pin" onclick="event.stopPropagation()">
+            <button type="button" class="pin-list-edit-btn"
+                    title="Edit pin" aria-label="Edit pin"
+                    onclick="event.stopPropagation(); openEditPinDialog('{{ pin.uuid|escapejs }}')">
                 <i class="material-icons">edit</i>
-            </a>
+            </button>
         </li>
         {% endfor %}
     </ul>

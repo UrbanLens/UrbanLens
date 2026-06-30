@@ -93,13 +93,6 @@
                 </span>
                 <span>Pins</span>
             </button>
-            <button id="pin-list-button" class="map-layer-btn"
-                    onclick="_togglePinListPanel();" aria-label="Show pin list">
-                <span class="map-layer-thumb map-layer-thumb--icon">
-                    <i class="material-icons">format_list_bulleted</i>
-                </span>
-                <span>List</span>
-            </button>
             <button id="dark-mode-button" class="map-layer-btn"
                     onclick="_toggleMapDarkMode();" aria-label="Toggle Dark Mode">
                 <span class="map-layer-thumb">
@@ -377,12 +370,6 @@
         <span>Offline</span>
     </div>
 
-    {% if show_pin_count or show_filtered_pin_count %}
-    <div id="pin-counter" {% if not show_pin_count %}style="display:none"{% endif %}>
-        <span id="pin-counter-value">0</span>
-        <span id="pin-counter-label">pins</span>
-    </div>
-    {% endif %}
     <span id="cache-status" aria-hidden="true"></span>
     <div id="map-onboarding" class="map-onboarding" aria-live="polite"></div>
     <div id="map-body"></div>
@@ -993,6 +980,7 @@
         _totalPins = _pinStore.size;
         updatePinCounter();
         _scheduleCache();
+        _refreshPinList();
     };
 
     // ── Cache status display ──────────────────────────────────────────────────
