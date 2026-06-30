@@ -250,17 +250,14 @@
 
 // Header bar shared by cards, panels, and dialogs.
 // Pass $spread: true when actions should pin to opposite edges.
-@mixin panel-header-grid($areas: 'header-icon header-title header-meta header-actions', $columns: 'auto minmax(0, 1fr) auto auto') {
+@mixin panel-header-grid($areas: 'header-icon header-title header-meta header-actions') {
 	display: grid;
-	grid-template-columns: $columns;
+	grid-template-columns: auto minmax(0, 1fr) auto auto;
 	grid-template-areas: $areas;
 	align-items: center;
 	gap: $space-sm;
 	padding: $bar-padding-y $bar-padding-x;
 	border-bottom: 1px solid var(--ul-grey-1a);
-	font-weight: 600;
-	font-size: 1rem;
-	flex-shrink: 0;
 	background-color: var(--ul-grey-1a);
 	color: var(--ul-grey-8);
 	
@@ -275,15 +272,13 @@
 		margin: 0;
 		font-size: .95rem;
 		font-weight: 600;
-		min-width: 0;
+		text-align: left;
 	}
 
 	> .card-header-actions {
 		grid-area: header-actions;
 		display: flex;
 		align-items: center;
-		gap: .4rem;
-		justify-self: end;
 	}
 
 	> .btn--icon-sm,
