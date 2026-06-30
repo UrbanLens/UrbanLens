@@ -44,3 +44,6 @@ src/urbanlens/frontend/static/dashboard/images/
 .claude/settings.local.json
 .vscode/settings.json
 .cursor/
+
+# Temporary files that aren't in the project long term. This section can be deleted at any time.
+unused_functions.txt
